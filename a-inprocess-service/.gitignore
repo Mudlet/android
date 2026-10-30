@@ -1,0 +1,8 @@
+build-desktop/
+build-android/
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.kotlin/

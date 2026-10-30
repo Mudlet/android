@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application
+        android:name=".ProtoApp"
+        android:allowBackup="false"
+        android:label="Proto A: in-process service"
+        android:icon="@android:drawable/sym_def_app_icon"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Qt's QtLoader reads the meta-data from this <service> element (getServiceInfo with
+             GET_META_DATA on the component that started Qt), not from <application>. -->
+        <service
+            android:name=".MudletEngineService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the player's live connection to a text game (MUD) server open, and runs their game scripts against it, while the app is in the background." />
+            <!-- Loads libmudletproto_arm64-v8a.so and calls its main() on Qt's thread -->
+            <meta-data android:name="android.app.lib_name" android:value="mudletproto" />
+            <meta-data android:name="android.app.arguments" android:value="" />
+            <!-- Without this QtLoader sets QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=1 -->
+            <meta-data android:name="android.app.background_running" android:value="true" />
+        </service>
+    </application>
+</manifest>

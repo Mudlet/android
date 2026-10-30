@@ -1,0 +1,15 @@
+// Optional: gradlew -I tools/mirror-init.gradle ... puts Google's Maven Central mirror first, for
+// builds (like the one androiddeployqt generates) whose repositories we do not control.
+def mirrorUrl = 'https://maven-central.storage-download.googleapis.com/maven2/'
+def mirrorFirst = { repos ->
+    if (repos.findByName('gcsMirror') == null) {
+        def r = repos.maven { name = 'gcsMirror'; url = mirrorUrl }
+        repos.remove(r)
+        repos.addFirst(r)
+    }
+}
+beforeSettings { settings -> mirrorFirst(settings.pluginManagement.repositories) }
+allprojects {
+    mirrorFirst(buildscript.repositories)
+    mirrorFirst(repositories)
+}

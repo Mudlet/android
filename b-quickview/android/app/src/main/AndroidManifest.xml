@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Added by Qt's deployment for QtCore; the engine never touches shared storage. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:node="remove" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_engine"
+        android:label="Mudlet proto B"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <!-- configChanges as in Qt's own Activity template, so rotation does not recreate the
+             Activity that owns Qt's delegate. background_running=true is read by QtLoader from
+             the component whose Context created the QtQuickView: without it Qt sets
+             QT_BLOCK_EVENT_LOOPS_WHEN_SUSPENDED=1 and its thread blocks in onStop. -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.background_running"
+                android:value="true" />
+        </activity>
+
+        <service
+            android:name=".EngineService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the user's MUD game connection and automation scripts running while the app is in the background" />
+            <meta-data
+                android:name="android.app.background_running"
+                android:value="true" />
+        </service>
+    </application>
+</manifest>

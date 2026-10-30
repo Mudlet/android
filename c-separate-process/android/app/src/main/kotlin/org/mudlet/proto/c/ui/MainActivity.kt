@@ -51,8 +51,9 @@ import kotlinx.coroutines.delay
 import org.mudlet.proto.c.engine.EngineService
 import org.mudlet.proto.c.protocol.Requests
 
+// ANSI black is lifted to dark grey so it stays readable on the black output pane
 private val ansi = listOf(
-    0xFF000000, 0xFFCD0000, 0xFF00CD00, 0xFFCDCD00, 0xFF2060EE, 0xFFCD00CD, 0xFF00CDCD, 0xFFE5E5E5,
+    0xFF5C5C5C, 0xFFCD0000, 0xFF00CD00, 0xFFCDCD00, 0xFF2060EE, 0xFFCD00CD, 0xFF00CDCD, 0xFFE5E5E5,
     0xFF7F7F7F, 0xFFFF0000, 0xFF00FF00, 0xFFFFFF00, 0xFF5C5CFF, 0xFFFF00FF, 0xFF00FFFF, 0xFFFFFFFF,
 ).map { Color(it) }
 private val defaultFg = Color(0xFFC0C0C0)
@@ -131,7 +132,7 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
         val small = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, color = Color(0xFFDDDDDD))
         Text(
             "Qt up ${s["qtStartMsAfterAppOnCreate"] ?: "?"} ms after Application.onCreate (:engine), " +
-                "${s["qtStartMsAfterServiceOnCreate"] ?: "?"} ms after Service.onCreate; UI start->hello ${c.startToHelloMs} ms",
+                "${s["qtStartMsAfterServiceOnCreate"] ?: "?"} ms after Service.onCreate; UI start->hello ${if (c.startToHelloMs >= 0) "${c.startToHelloMs} ms" else "- (engine was already up)"}",
             style = small,
         )
         Text(

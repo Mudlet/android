@@ -33,6 +33,8 @@ class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val mark
  */
 object EngineClient {
     const val MAX_LINES = 2000
+    // About 300 ms of failed connects at EngineLink's fast retry interval
+    private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
     val lines = mutableStateListOf<UiLine>()
     val status = mutableStateMapOf<String, String>()
@@ -65,6 +67,7 @@ object EngineClient {
     private val pendingLock = Any()
     private var pendingLines = ArrayList<UiLine>()
     private var pendingStatus = HashMap<String, String>()
+    private var pendingStatusReset = false
     private var flushPosted = false
 
     var engineWanted: Boolean
@@ -81,6 +84,7 @@ object EngineClient {
         engineWanted = true
         startRequestedAt = SystemClock.elapsedRealtime()
         app.startForegroundService(Intent(app, EngineService::class.java))
+        link.wake()
     }
 
     fun stopEngine() {
@@ -161,6 +165,8 @@ object EngineClient {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
             // The engine forgets nothing across a reattach, but a new engine instance needs the width again
             if (viewWidthPx > 0) link.send(Requests.setViewWidthPx(viewWidthPx))
+            // The engine resends its whole status after hello, so the old instance's values must go first
+            if (!sameInstance) resetStatus()
             post {
                 val now = SystemClock.elapsedRealtime()
                 enginePid = hello.pid
@@ -175,6 +181,11 @@ object EngineClient {
                     lostAt = 0
                 }
                 restartRequestedForThisOutage = false
+                if (!sameInstance) {
+                    notifyCount = 0
+                    lastLuaResult = ""
+                    pingResult = ""
+                }
                 linkState = "attached to pid ${hello.pid} (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 if (!sameInstance && lines.isNotEmpty()) {
                     lines.add(UiLine("--- new engine instance ${hello.instance} ---", IntArray(0), false, marker = true))
@@ -206,6 +217,7 @@ object EngineClient {
         }
 
         override fun onDetached(reason: String) {
+            resetStatus()
             post {
                 engineLosses++
                 lostAt = SystemClock.elapsedRealtime()
@@ -220,12 +232,19 @@ object EngineClient {
                 linkState = "engine not reachable (attempt $attempt: ${error.message})"
                 // The engine is gone (stopped from its notification, crashed, or killed). While a
                 // UI is started we may start a foreground service again.
-                if (attempt >= 3 && engineWanted && !restartRequestedForThisOutage && attached) {
+                if (attempt >= RESTART_AFTER_FAILED_ATTEMPTS && engineWanted && !restartRequestedForThisOutage && attached) {
                     restartRequestedForThisOutage = true
                     startEngine()
                 }
             }
         }
+    }
+
+    // Runs on the reader thread, ahead of any status the next engine sends
+    private fun resetStatus() = synchronized(pendingLock) {
+        pendingStatus.clear()
+        pendingStatusReset = true
+        scheduleFlush()
     }
 
     private fun post(block: () -> Unit) {
@@ -241,13 +260,17 @@ object EngineClient {
     private fun flush() {
         val newLines: List<UiLine>
         val newStatus: Map<String, String>
+        val statusReset: Boolean
         synchronized(pendingLock) {
             newLines = pendingLines
             newStatus = pendingStatus
+            statusReset = pendingStatusReset
             pendingLines = ArrayList()
             pendingStatus = HashMap()
+            pendingStatusReset = false
             flushPosted = false
         }
+        if (statusReset) status.clear()
         status.putAll(newStatus)
         newStatus["luaResult"]?.let { lastLuaResult = it }
         if (newLines.size >= MAX_LINES) {

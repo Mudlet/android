@@ -22,12 +22,12 @@ Every prototype aborted in `luaL_openlibs` with `FORTIFY: strchr: prevented read
 | Lua onLine = lines | pass | pass | pass |
 | Tells notification | pass | pass | pass |
 | Screen off 30+ min + force-idle | pass: max gap 30132 ms, 7/7 tells | pass (ACTIVITY mode): max gap 30087 ms, 7/7 tells | pass: max gap 30180 ms, 7/7 tells |
-| Rotation | pass | pass (resize only) | connected, but the engine kept the portrait width |
+| Rotation | pass | pass (resize only) | pass on re-run: reattach in 83-89 ms, columns 87 -> 197 -> 87 |
 | Kill UI | pass, same pid | Qt's `main()` returns and the engine is dead | pass, delta replay |
 | Kill UI process | n/a (one process) | n/a | pass, engine survives |
 | Recents swipe | pass | not run separately | pass |
 | Stop engine | Qt left running; Start reattaches | `main()` returns | only `:engine` exits (`System.exit(0)`); the UI reports it |
-| Restart Qt after it stopped | yes (reattach, or Stop + exit then relaunch) | **no**: JNI abort in `QtNative.runPendingCppRunnables` | yes, new process. Kill to attach: 701 ms (AM restart ~305 ms + backoff) |
+| Restart Qt after it stopped | yes (reattach, or Stop + exit then relaunch) | **no**: JNI abort in `QtNative.runPendingCppRunnables` | yes, new process. Kill to attach: 500-607 ms after the retry fix (was 701 ms); the engine itself listens ~460 ms after the kill |
 | Engine without an Activity | yes | **no**: SERVICE mode crashes 3/3 with `ClassCastException` in `QtDisplayManager.getDisplay` | yes |
 | `am kill` with FGS | survives | survives | UI killed, engine survives |
 | Memory (PSS) | - | - | engine 59.3 MB, UI 57.5 MB |
@@ -50,7 +50,6 @@ The device evidence supports keeping C's engine on A's start path: `QtServiceBas
 
 Smaller items for C, from its RESULTS:
 
-- Reconnect: EngineLink's exponential backoff (100, 200, 400 ms) puts the reattach at 700 ms, though the engine is ready at about 395 ms.
-- Rotation doesn't send the new width to the engine.
-- The UI keeps a dead engine's counters.
+- Fixed after the first run: EngineLink retries every 50 ms for 2 s before backing off, and Start engine wakes it, so kill to attach is ~500 ms and Start to attach ~250 ms. The UI drops a lost engine's counters. ANSI black is drawn dark grey.
+- Rotation was not a bug: the first run's emulator never rotated, and a re-run sends the new width.
 - Offscreen QPA saves about 10 MB PSS but has no fonts, so the metrics are wrong.

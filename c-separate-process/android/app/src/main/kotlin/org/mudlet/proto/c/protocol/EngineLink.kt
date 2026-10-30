@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -36,6 +37,7 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
     private var thread: Thread? = null
     private val pending = ConcurrentHashMap<Long, Pair<CountDownLatch, LongArray>>()
     private val nextId = AtomicLong(1)
+    private val wakeSignal = Semaphore(0)
 
     // What this UI already has, so a reattach to the same engine only gets the rest
     @Volatile var instance: String? = null
@@ -88,11 +90,15 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
         return if (ok) slot[0] - t0 else null
     }
 
+    /** Retries a failed connect now and restarts the fast retry phase, e.g. right after asking for the engine to start. */
+    fun wake() {
+        wakeSignal.release()
+    }
+
     private fun live(g: Int) = running && generation == g
 
     private fun runLoop(g: Int) {
         var attempt = 0
-        var backoffMs = 100L
         while (live(g)) {
             val t = try {
                 connector()
@@ -100,8 +106,7 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
                 if (!live(g)) break
                 attempt++
                 listener.onConnectFailed(attempt, e)
-                sleepQuietly(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(2000)
+                if (waitForRetry(retryDelayMs(attempt))) attempt = 0
                 continue
             }
             if (!live(g)) {
@@ -110,7 +115,6 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
             }
             transport = t
             attempt = 0
-            backoffMs = 100
             try {
                 val w = FrameWriter(t.output)
                 val reader = FrameReader(t.input)
@@ -151,10 +155,24 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
         }
     }
 
-    private fun sleepQuietly(ms: Long) {
-        try {
-            Thread.sleep(ms)
-        } catch (_: InterruptedException) {
+    /** True when woken by [wake] rather than by the timeout or stop(). */
+    private fun waitForRetry(ms: Long): Boolean = try {
+        wakeSignal.tryAcquire(ms, TimeUnit.MILLISECONDS).also { if (it) wakeSignal.drainPermits() }
+    } catch (_: InterruptedException) {
+        false
+    }
+
+    companion object {
+        // A killed engine is restarted by ActivityManager in ~300 ms and is ready ~100 ms later,
+        // so poll briefly at a short interval before backing off to spare a long-gone engine's battery
+        const val FAST_RETRY_MS = 50L
+        const val FAST_RETRY_ATTEMPTS = 40
+        const val MAX_RETRY_MS = 2000L
+
+        fun retryDelayMs(attempt: Int): Long {
+            if (attempt <= FAST_RETRY_ATTEMPTS) return FAST_RETRY_MS
+            val doublings = (attempt - FAST_RETRY_ATTEMPTS).coerceAtMost(6)
+            return (FAST_RETRY_MS shl doublings).coerceAtMost(MAX_RETRY_MS)
         }
     }
 }

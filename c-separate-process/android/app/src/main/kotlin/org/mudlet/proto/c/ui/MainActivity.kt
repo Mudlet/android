@@ -147,6 +147,7 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
     var host by rememberSaveable { mutableStateOf("aardmud.org") }
     var port by rememberSaveable { mutableStateOf("23") }
     var command by rememberSaveable { mutableStateOf("") }
+    var showDebug by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember { context.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE) }
@@ -168,48 +169,50 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
         Modifier.fillMaxSize().background(Color(0xFF101010)).safeDrawingPadding().imePadding().padding(6.dp),
     ) {
         val small = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, color = Color(0xFFDDDDDD))
-        Text(
-            "Qt up ${s["qtStartMsAfterAppOnCreate"] ?: "?"} ms after Application.onCreate (:engine), " +
-                "${s["qtStartMsAfterServiceOnCreate"] ?: "?"} ms after Service.onCreate; UI start->hello ${if (c.startToHelloMs >= 0) "${c.startToHelloMs} ms" else "- (engine was already up)"}",
-            style = small,
-        )
-        Text(
-            "Font ${s["fontFamily"] ?: "?"}, 'M' ${s["advanceM"] ?: "?"} px @14px, columns ${s["columns"] ?: "?"} " +
-                "(${s["viewWidthPx"] ?: "?"} px), QPA ${s["platform"] ?: "?"}",
-            style = small,
-        )
-        Text(
-            "Lines ${s["linesReceived"] ?: 0}, prompts ${s["promptsReceived"] ?: 0}, Lua onLine ${s["luaOnLineCalls"] ?: 0}, " +
-                "notifications posted ${s["notificationsPosted"] ?: 0} (UI saw ${c.notifyCount})",
-            style = small,
-        )
-        Text(
-            "Heartbeat ticks ${s["heartbeatTicks"] ?: 0}, last gap ${s["heartbeatLastGapMs"] ?: "-"} ms, " +
-                "largest gap ${s["heartbeatMaxGapMs"] ?: "-"} ms",
-            style = small,
-        )
-        Text(
-            "Qt appState ${s["appState"] ?: "?"} (Qt::ApplicationState; 1 = Hidden), " +
-                "service-ready handshake ${s["serviceReadyWait"] ?: "?"}",
-            style = small,
-        )
-        Text("FGS (type specialUse): ${c.fgsState}", style = small)
-        Text("PIDs: UI ${Process.myPid()}, engine ${c.enginePid}; game: ${s["connection"] ?: "?"}", style = small)
-        Text(
-            "Link: ${c.linkState}; attaches ${c.attachCount} (last ${c.lastAttachMs} ms), engine losses ${c.engineLosses} " +
-                "(loss->attach ${c.lastLossToAttachMs} ms), lines skipped ${c.gapLines}",
-            style = small,
-        )
-        if (s["engineKind"] == "libmudlet") {
+        if (showDebug) {
             Text(
-                "libmudlet: ${s["profile"] ?: "?"}, start ${s["startMs"] ?: "-"} ms, loaded after ${s["profileLoadMs"] ?: "-"} ms; " +
-                    "Lua files ${s["luaFiles"] ?: "?"}; local lines ${s["localLines"] ?: 0}, error console ${s["errorConsoleLines"] ?: 0}",
+                "Qt up ${s["qtStartMsAfterAppOnCreate"] ?: "?"} ms after Application.onCreate (:engine), " +
+                    "${s["qtStartMsAfterServiceOnCreate"] ?: "?"} ms after Service.onCreate; UI start->hello ${if (c.startToHelloMs >= 0) "${c.startToHelloMs} ms" else "- (engine was already up)"}",
                 style = small,
             )
-            s["luaError"]?.let { Text("Last error: $it", style = small.copy(color = Color(0xFFFF8080))) }
+            Text(
+                "Font ${s["fontFamily"] ?: "?"}, 'M' ${s["advanceM"] ?: "?"} px @14px, columns ${s["columns"] ?: "?"} " +
+                    "(${s["viewWidthPx"] ?: "?"} px), QPA ${s["platform"] ?: "?"}",
+                style = small,
+            )
+            Text(
+                "Lines ${s["linesReceived"] ?: 0}, prompts ${s["promptsReceived"] ?: 0}, Lua onLine ${s["luaOnLineCalls"] ?: 0}, " +
+                    "notifications posted ${s["notificationsPosted"] ?: 0} (UI saw ${c.notifyCount})",
+                style = small,
+            )
+            Text(
+                "Heartbeat ticks ${s["heartbeatTicks"] ?: 0}, last gap ${s["heartbeatLastGapMs"] ?: "-"} ms, " +
+                    "largest gap ${s["heartbeatMaxGapMs"] ?: "-"} ms",
+                style = small,
+            )
+            Text(
+                "Qt appState ${s["appState"] ?: "?"} (Qt::ApplicationState; 1 = Hidden), " +
+                    "service-ready handshake ${s["serviceReadyWait"] ?: "?"}",
+                style = small,
+            )
+            Text("FGS (type specialUse): ${c.fgsState}", style = small)
+            Text("PIDs: UI ${Process.myPid()}, engine ${c.enginePid}; game: ${s["connection"] ?: "?"}", style = small)
+            Text(
+                "Link: ${c.linkState}; attaches ${c.attachCount} (last ${c.lastAttachMs} ms), engine losses ${c.engineLosses} " +
+                    "(loss->attach ${c.lastLossToAttachMs} ms), lines skipped ${c.gapLines}",
+                style = small,
+            )
+            if (s["engineKind"] == "libmudlet") {
+                Text(
+                    "libmudlet: ${s["profile"] ?: "?"}, start ${s["startMs"] ?: "-"} ms, loaded after ${s["profileLoadMs"] ?: "-"} ms; " +
+                        "Lua files ${s["luaFiles"] ?: "?"}; local lines ${s["localLines"] ?: 0}, error console ${s["errorConsoleLines"] ?: 0}",
+                    style = small,
+                )
+                s["luaError"]?.let { Text("Last error: $it", style = small.copy(color = Color(0xFFFF8080))) }
+            }
+            if (c.pingResult.isNotEmpty()) Text("Ping: ${c.pingResult}", style = small)
+            if (c.lastLuaResult.isNotEmpty()) Text("Lua: ${c.lastLuaResult}", style = small)
         }
-        if (c.pingResult.isNotEmpty()) Text("Ping: ${c.pingResult}", style = small)
-        if (c.lastLuaResult.isNotEmpty()) Text("Lua: ${c.lastLuaResult}", style = small)
 
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             OutlinedTextField(host, { host = it }, Modifier.weight(1f), label = { Text("Host") }, singleLine = true)
@@ -221,6 +224,9 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Button({ c.send(Requests.connect(host.trim(), port.toIntOrNull() ?: 23)) }) { Text("Connect") }
             Button({ c.send(Requests.disconnect()) }) { Text("Disconnect") }
+            OutlinedButton({ showDebug = !showDebug }) { Text(if (showDebug) "Hide debug" else "Debug") }
+        }
+        if (showDebug) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedButton({ c.runPings() }) { Text("Ping x300") }
             OutlinedButton(onKillUi) { Text("Kill UI") }
             OutlinedButton({ Process.killProcess(Process.myPid()) }) { Text("Kill UI process") }

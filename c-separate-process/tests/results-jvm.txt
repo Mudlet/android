@@ -1,0 +1,29 @@
+# tests/run_jvm_client_test.sh: the app's Kotlin EngineLink/FrameReader against the desktop engine (3 runs on a shared machine)
+JVM: columns for 1080 px = 135
+JVM: ping n=2700 median=114us p99=374us max=38767us
+JVM: paced 25000 lines/s for 1 s: delivered 25001, skipped 0
+JVM: paced 50000 lines/s for 1 s: delivered 50001, skipped 0
+JVM: paced 100000 lines/s for 1 s: delivered 62126, skipped 37875
+JVM: paced 200000 lines/s for 1 s: delivered 35848, skipped 164153
+JVM: a new link (no instance) re-synced; seq before detach was 375010
+JVM: stop()+start() back to back reattached once, with no reconnect fight
+JVM: engine killed -> EOF seen in 6609us; link reattached to the restarted engine 108ms after the kill
+
+JVM: columns for 1080 px = 135
+JVM: ping n=2700 median=45us p99=268us max=7664us
+JVM: paced 25000 lines/s for 1 s: delivered 25001, skipped 0
+JVM: paced 50000 lines/s for 1 s: delivered 50001, skipped 0
+JVM: paced 100000 lines/s for 1 s: delivered 66616, skipped 33385
+JVM: paced 200000 lines/s for 1 s: delivered 40626, skipped 159375
+JVM: a new link (no instance) re-synced; seq before detach was 375010
+JVM: stop()+start() back to back reattached once, with no reconnect fight
+JVM: engine killed -> EOF seen in 10367us; link reattached to the restarted engine 112ms after the kill
+
+JVM: columns for 1080 px = 135
+JVM: ping n=2700 median=46us p99=397us max=15848us
+JVM: paced 25000 lines/s for 1 s: delivered 25001, skipped 0
+JVM: paced 50000 lines/s for 1 s: delivered 50001, skipped 0
+JVM: paced 100000 lines/s for 1 s: delivered 53133, skipped 46868
+JVM: paced 200000 lines/s for 1 s: delivered 31401, skipped 168600
+JVM: a new link (no instance) re-synced; seq before detach was 375010
+JVM: engine killed -> EOF seen in 15697us; link reattached to the restarted engine 112ms after the kill

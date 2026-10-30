@@ -1,0 +1,76 @@
+#pragma once
+
+#include "IFrontend.h"
+
+#include <QByteArray>
+#include <QHash>
+#include <QJsonObject>
+#include <QObject>
+#include <QPointer>
+#include <deque>
+
+class Engine;
+class QLocalServer;
+class QLocalSocket;
+
+// IFrontend over a QLocalServer. Wire format: 4-byte big-endian length, then
+// one UTF-8 JSON object with a "t" type field. See REPORT.md for the messages.
+//
+// The engine never waits for the UI: Android freezes a cached UI process, so a
+// UI that stops reading only stops getting lines. They stay in a ring buffer and
+// are sent, with a "gap" marker if the ring overflowed, once the UI drains.
+class SocketBridge : public QObject, public IFrontend
+{
+    Q_OBJECT
+
+public:
+    static constexpr int protocolVersion = 1;
+    static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
+    static constexpr qsizetype scrollbackLines = 2000;
+    static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
+    static constexpr qint64 lowWaterBytes = 256 * 1024;
+
+    explicit SocketBridge(QObject* parent = nullptr);
+    void setEngine(Engine* engine) { mEngine = engine; }
+    bool listen(const QString& path);
+
+    void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
+    void notify(const QString& title, const QString& text) override;
+    void status(const QString& key, const QString& value) override;
+
+private:
+    struct StoredLine
+    {
+        qint64 seq;
+        QString text;
+        QList<ColorRun> runs;
+        bool prompt;
+    };
+
+    void onNewConnection();
+    void onReadyRead();
+    void onBytesWritten();
+    void handleMessage(const QJsonObject& message);
+    void greet(const QJsonObject& hello);
+    void sendLinesAfter(qint64 seq, bool replay);
+    void sendAllStatus();
+    void sendFrame(const QJsonObject& message);
+    void dropClient(const QString& reason);
+    bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
+    static QJsonObject lineMessage(const StoredLine& stored, bool replay);
+
+    QLocalServer* mServer = nullptr;
+    QPointer<QLocalSocket> mClient;
+    bool mClientGreeted = false;
+    bool mClientLagging = false;
+    qint64 mLastSentSeq = 0;
+    QByteArray mReadBuffer;
+    Engine* mEngine = nullptr;
+    QHash<QString, QString> mStatus;
+    std::deque<StoredLine> mScrollback;
+    qint64 mNextSeq = 1;
+    // Distinguishes a restarted engine, whose sequence numbers start again
+    QString mInstance;
+    // Request id of the command being executed, echoed on the status frames it causes
+    QJsonValue mCurrentRequestId;
+};

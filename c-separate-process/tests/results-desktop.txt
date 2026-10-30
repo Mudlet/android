@@ -1,0 +1,75 @@
+engine pid 7713, socket ready after 42 ms (process spawn to accepted connect)
+PASS hello reply carries v=1 and engine pid
+PASS initial connection status replayed
+PASS font check: family='DejaVu Sans Mono' advanceM=8 platform=offscreen
+PASS hello with v=99 gets an error frame
+PASS and the connection is closed
+PASS columns for 1080px = 135
+PASS connection status 'connected'
+PASS ANSI stripped from text: 'Red bold normal green'
+PASS runs for bold red/default/green: [[0, 8, 9], [8, 8, -1], [16, 5, 2]]
+PASS UTF-8 decoded, CR dropped
+PASS tell line
+PASS IAC IAC kept as a literal 0xFF byte (invalid UTF-8 -> U+FFFD)
+PASS 38;5;n colour and non-SGR CSI dropped: [[0, 15, 12], [15, 6, -1]]
+PASS GA-terminated prompt flagged isPrompt
+PASS ordinary lines not flagged as prompts
+PASS Lua onLine called notify() for the tell
+PASS DO->WONT, WILL->DONT replies: fffc18fffe01fffec9
+PASS un-terminated prompt emitted after silence (476 ms)
+PASS runLua result echoes request id: {'key': 'luaResult', 're': 7, 't': 'status', 'value': '6\t2'}
+PASS runLua error reported
+PASS luaOnLineCalls counter = 6
+PASS heartbeat ticks (1 s interval in the test)
+     ping (UI->engine->UI, protocol only): n=2800 median=83us p99=211us max=5294us
+     runLua round trip: n=900 median=106us p99=226us max=470us
+     send -> game echo -> line (incl. telnet hop): n=900 median=160us p99=401us max=1952us
+     paced  10000 lines/s for 1 s: delivered 10001, skipped 0, engine CPU 18% of a core
+PASS paced 10000: every line delivered or counted in a gap
+     paced  25000 lines/s for 1 s: delivered 25001, skipped 0, engine CPU 32% of a core
+PASS paced 25000: every line delivered or counted in a gap
+     paced  50000 lines/s for 1 s: delivered 50001, skipped 0, engine CPU 59% of a core
+PASS paced 50000: every line delivered or counted in a gap
+     paced 100000 lines/s for 1 s: delivered 82182, skipped 17819, engine CPU 89% of a core
+PASS paced 100000: every line delivered or counted in a gap
+     paced 200000 lines/s for 1 s: delivered 31401, skipped 168600, engine CPU 99% of a core
+PASS paced 200000: every line delivered or counted in a gap
+     unpaced flood 200000: done in 0.99 s, UI got 30953, skipped 169048, engine 4.05 us CPU/line
+PASS unpaced flood: every line delivered or counted in a gap
+     unpaced flood 200000 with no UI attached: consumed at 908,174 lines/s, 2.65 us CPU/line
+PASS every line reached Lua onLine with no UI attached
+PASS fresh UI (no lastSeq) gets the 2000-line ring + statuses in 44 ms
+PASS replay ends with the last line seen
+PASS and a gap marker for what fell out of the ring
+PASS UI that sends instance+lastSeq gets only the missing lines [786013, 786014, 786015]
+PASS game connection survived the UI detaching
+PASS a new client replaces (closes) the previous one
+PASS stalled UI: engine kept running (RSS 42-59 MB while stalled), UI later got 1999 lines + gap of 784016
+PASS engine SIGKILL seen by the client as EOF after 3.6 ms
+     connect to the dead engine: ConnectionRefusedError (stale socket file left: True)
+PASS connecting while the engine is dead fails fast
+PASS restarted engine reachable after 33 ms; game connection and scrollback are lost
+
+  startup_ms: 41.67898800005787
+  rss_idle_kb: 30568
+  pss_idle_kb: 15537
+  font: ('DejaVu Sans Mono', '8')
+  ping (UI->engine->UI, protocol only): (83.18100003634754, 210.54799981357064, 5294.196000022566)
+  runLua round trip: (106.17050008931983, 226.0350001961342, 470.11299989208055)
+  send -> game echo -> line (incl. telnet hop): (160.44350002175634, 401.3230000055046, 1952.2850000157632)
+  paced_10000: (10001, 0, 18)
+  paced_25000: (25001, 0, 32)
+  paced_50000: (50001, 0, 59)
+  paced_100000: (82182, 17819, 89)
+  paced_200000: (31401, 168600, 99)
+  sustained_lines_per_s_python_ui: 50000
+  engine_cpu_us_per_line: {'ui_attached': 4.05, 'no_ui': 2.65}
+  engine_alone_lines_per_s: 908174
+  rss_after_flood_kb: 43672
+  pss_after_flood_kb: 28609
+  reattach_full_ms: 44.13702200008629
+  rss_stalled_kb: 60444
+  death_detect_ms: 3.5753399999975954
+  restart_reconnect_ms: 33.46189199987748
+
+0 failure(s)

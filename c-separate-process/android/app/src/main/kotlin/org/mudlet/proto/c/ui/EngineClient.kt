@@ -37,6 +37,8 @@ object EngineClient {
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
     val lines = mutableStateListOf<UiLine>()
+    // The engine's line still being written, such as a prompt, shown below the others
+    var tail by mutableStateOf<UiLine?>(null)
     val status = mutableStateMapOf<String, String>()
     var linkState by mutableStateOf("not attached")
     var enginePid by mutableStateOf(0)
@@ -66,6 +68,8 @@ object EngineClient {
     // Reader-thread batches, drained on the main thread
     private val pendingLock = Any()
     private var pendingLines = ArrayList<UiLine>()
+    private var pendingTail: UiLine? = null
+    private var pendingTailSet = false
     private var pendingStatus = HashMap<String, String>()
     private var pendingStatusReset = false
     private var flushPosted = false
@@ -187,6 +191,7 @@ object EngineClient {
                     pingResult = ""
                 }
                 linkState = "attached to pid ${hello.pid} (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
+                if (!sameInstance) tail = null
                 if (!sameInstance && lines.isNotEmpty()) {
                     lines.add(UiLine("--- new engine instance ${hello.instance} ---", IntArray(0), false, marker = true))
                 }
@@ -197,6 +202,11 @@ object EngineClient {
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt))
+                    scheduleFlush()
+                }
+                is EngineMessage.Tail -> synchronized(pendingLock) {
+                    pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt)
+                    pendingTailSet = true
                     scheduleFlush()
                 }
                 is EngineMessage.Status -> synchronized(pendingLock) {
@@ -261,7 +271,13 @@ object EngineClient {
         val newLines: List<UiLine>
         val newStatus: Map<String, String>
         val statusReset: Boolean
+        val newTail: UiLine?
+        val tailSet: Boolean
         synchronized(pendingLock) {
+            newTail = pendingTail
+            tailSet = pendingTailSet
+            pendingTail = null
+            pendingTailSet = false
             newLines = pendingLines
             newStatus = pendingStatus
             statusReset = pendingStatusReset
@@ -281,5 +297,6 @@ object EngineClient {
             val excess = lines.size - MAX_LINES
             if (excess > 0) lines.removeRange(0, excess)
         }
+        if (tailSet) tail = newTail
     }
 }

@@ -12,10 +12,19 @@ import java.io.OutputStream
 // Kept free of android.* imports so the JVM unit test can run it against the desktop engine.
 const val PROTOCOL_VERSION = 1
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
+// A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
+const val RUN_STRIDE = 5
+const val RUN_RGB = 0x1000000
+const val RUN_BOLD = 1
+const val RUN_ITALIC = 2
+const val RUN_UNDERLINE = 4
+const val RUN_STRIKE = 8
+const val RUN_REVERSE = 16
 
 sealed interface EngineMessage {
     data class Hello(val version: Int, val pid: Int, val instance: String) : EngineMessage
     data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val replay: Boolean) : EngineMessage
+    data class Tail(val text: String, val runs: IntArray, val prompt: Boolean) : EngineMessage
     data class Notify(val title: String, val text: String) : EngineMessage
     data class Status(val key: String, val value: String, val replyTo: Any?) : EngineMessage
     data class Pong(val id: Long) : EngineMessage
@@ -73,6 +82,7 @@ class FrameReader(input: InputStream) {
                 o.getLong("seq"), o.getString("text"), flattenRuns(o.optJSONArray("runs")),
                 o.optBoolean("prompt"), o.optBoolean("replay"),
             )
+            "tail" -> EngineMessage.Tail(o.optString("text"), flattenRuns(o.optJSONArray("runs")), o.optBoolean("prompt"))
             "notify" -> EngineMessage.Notify(o.optString("title"), o.optString("text"))
             "status" -> EngineMessage.Status(o.getString("key"), o.optString("value"), o.opt("re"))
             "pong" -> EngineMessage.Pong(o.optLong("id"))
@@ -82,15 +92,18 @@ class FrameReader(input: InputStream) {
             else -> EngineMessage.Unknown(t)
         }
 
-        // [[start, length, fg], ...] -> [start0, length0, fg0, start1, ...]
+        // [[start, length, fg(, bg, attributes)], ...] -> [start0, length0, fg0, bg0, attributes0, start1, ...]
         private fun flattenRuns(runs: JSONArray?): IntArray {
             if (runs == null) return IntArray(0)
-            val flat = IntArray(runs.length() * 3)
+            val flat = IntArray(runs.length() * RUN_STRIDE)
             for (i in 0 until runs.length()) {
                 val run = runs.getJSONArray(i)
-                flat[i * 3] = run.getInt(0)
-                flat[i * 3 + 1] = run.getInt(1)
-                flat[i * 3 + 2] = run.getInt(2)
+                val at = i * RUN_STRIDE
+                flat[at] = run.getInt(0)
+                flat[at + 1] = run.getInt(1)
+                flat[at + 2] = run.getInt(2)
+                flat[at + 3] = run.optInt(3, -1)
+                flat[at + 4] = run.optInt(4, 0)
             }
             return flat
         }

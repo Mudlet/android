@@ -37,8 +37,22 @@ qt_add_executable(engine ${HOST_SOURCES})
 if(MUDLET_BUILD_DIR)
     find_package(Qt6 REQUIRED COMPONENTS Concurrent Core5Compat Multimedia OpenGL Svg TextToSpeech)
     set(keychain "${MUDLET_BUILD_DIR}/bin/libqt6keychain.so")
-    target_compile_definitions(engine PRIVATE ENGINE_LIBMUDLET)
-    target_include_directories(engine PRIVATE "${MUDLET_SOURCE_DIR}/src/headless" "${MUDLET_SOURCE_DIR}/3rdparty/lua51/src")
+    # MudletEngine reads Host and the console model, so it must see their classes as mudlet_core was built:
+    # the same defines and headers
+    target_compile_definitions(engine PRIVATE ENGINE_LIBMUDLET
+        HUNSPELL_STATIC INCLUDE_OWN_QT6_KEYCHAIN INCLUDE_VARIABLE_SPLASH_SCREEN IRC_STATIC PCRE2_STATIC QTKEYCHAIN_NO_EXPORT)
+    target_include_directories(engine PRIVATE
+        "${MUDLET_SOURCE_DIR}/src/headless"
+        "${MUDLET_SOURCE_DIR}/src"
+        "${MUDLET_BUILD_DIR}/src"
+        "${MUDLET_BUILD_DIR}/src/mudlet_core_autogen/include"
+        "${MUDLET_SOURCE_DIR}/3rdparty/qtkeychain"
+        "${MUDLET_BUILD_DIR}/3rdparty/qtkeychain/qtkeychain"
+        "${MUDLET_SOURCE_DIR}/3rdparty/communi/include/IrcCore"
+        "${MUDLET_SOURCE_DIR}/3rdparty/communi/include/IrcModel"
+        "${MUDLET_SOURCE_DIR}/3rdparty/communi/include/IrcUtil"
+        "${MUDLET_SOURCE_DIR}/3rdparty/lua51/src"
+        "${MUDLET_DEPS_PREFIX}/include")
     target_link_libraries(engine PRIVATE engine_api lua_modules
         "${MUDLET_BUILD_DIR}/src/headless/libmudlet_headless.a"
         "${MUDLET_BUILD_DIR}/src/libmudlet_core.a"

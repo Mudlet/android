@@ -117,6 +117,9 @@ void SocketBridge::onBytesWritten()
     mClientLagging = false;
     sendAllStatus();
     sendLinesAfter(mLastSentSeq, false);
+    if (!mClientLagging) {
+        sendFrame(tailMessage());
+    }
 }
 
 void SocketBridge::greet(const QJsonObject& hello)
@@ -134,6 +137,7 @@ void SocketBridge::greet(const QJsonObject& hello)
                {QStringLiteral("instance"), mInstance}});
     sendAllStatus();
     sendLinesAfter(after, true);
+    sendFrame(tailMessage());
     sendFrame({{QStringLiteral("t"), QStringLiteral("synced")}, {QStringLiteral("seq"), mNextSeq - 1}});
 }
 
@@ -205,19 +209,37 @@ void SocketBridge::handleMessage(const QJsonObject& message)
 
 QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
 {
-    QJsonArray runs;
-    for (const ColorRun& run : stored.runs) {
-        runs.append(QJsonArray{run.start, run.length, run.fg});
-    }
     QJsonObject message{{QStringLiteral("t"), QStringLiteral("line")},
                         {QStringLiteral("seq"), stored.seq},
                         {QStringLiteral("text"), stored.text},
-                        {QStringLiteral("runs"), runs},
+                        {QStringLiteral("runs"), runsJson(stored.runs)},
                         {QStringLiteral("prompt"), stored.prompt}};
     if (replay) {
         message.insert(QStringLiteral("replay"), true);
     }
     return message;
+}
+
+// [start, length, fg], with bg and attributes only when a run has them
+QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
+{
+    QJsonArray json;
+    for (const ColorRun& run : runs) {
+        if (run.bg == -1 && run.attributes == 0) {
+            json.append(QJsonArray{run.start, run.length, run.fg});
+        } else {
+            json.append(QJsonArray{run.start, run.length, run.fg, run.bg, run.attributes});
+        }
+    }
+    return json;
+}
+
+QJsonObject SocketBridge::tailMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("tail")},
+            {QStringLiteral("text"), mTail.text},
+            {QStringLiteral("runs"), runsJson(mTail.runs)},
+            {QStringLiteral("prompt"), mTail.prompt}};
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)
@@ -244,6 +266,14 @@ void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool i
     if (clientLive()) {
         sendFrame(lineMessage(mScrollback.back(), false));
         mLastSentSeq = mScrollback.back().seq;
+    }
+}
+
+void SocketBridge::tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt)
+{
+    mTail = {0, text, runs, isPrompt};
+    if (clientLive()) {
+        sendFrame(tailMessage());
     }
 }
 

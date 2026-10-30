@@ -4,6 +4,7 @@
 
 #include <QByteArray>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
@@ -35,6 +36,7 @@ public:
     bool listen(const QString& path);
 
     void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
+    void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
     void notify(const QString& title, const QString& text) override;
     void status(const QString& key, const QString& value) override;
 
@@ -58,6 +60,8 @@ private:
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     static QJsonObject lineMessage(const StoredLine& stored, bool replay);
+    static QJsonArray runsJson(const QList<ColorRun>& runs);
+    QJsonObject tailMessage() const;
 
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
@@ -68,6 +72,7 @@ private:
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     std::deque<StoredLine> mScrollback;
+    StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;
     // Distinguishes a restarted engine, whose sequence numbers start again
     QString mInstance;

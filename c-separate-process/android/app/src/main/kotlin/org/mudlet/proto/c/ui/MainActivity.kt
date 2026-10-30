@@ -43,12 +43,22 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.proto.c.engine.EngineService
+import org.mudlet.proto.c.protocol.RUN_BOLD
+import org.mudlet.proto.c.protocol.RUN_ITALIC
+import org.mudlet.proto.c.protocol.RUN_REVERSE
+import org.mudlet.proto.c.protocol.RUN_RGB
+import org.mudlet.proto.c.protocol.RUN_STRIDE
+import org.mudlet.proto.c.protocol.RUN_STRIKE
+import org.mudlet.proto.c.protocol.RUN_UNDERLINE
 import org.mudlet.proto.c.protocol.Requests
 
 // ANSI black is lifted to dark grey so it stays readable on the black output pane
@@ -85,6 +95,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun runColour(code: Int): Color? = when {
+    code in 0..15 -> ansi[code]
+    code >= RUN_RGB -> Color(0xFF000000.toInt() or (code and 0xFFFFFF))
+    else -> null
+}
+
 private fun render(line: UiLine): AnnotatedString = buildAnnotatedString {
     if (line.marker) {
         pushStyle(SpanStyle(color = Color(0xFFFFB000)))
@@ -94,12 +110,32 @@ private fun render(line: UiLine): AnnotatedString = buildAnnotatedString {
     }
     append(line.text)
     var i = 0
-    while (i + 2 < line.runs.size) {
+    while (i + RUN_STRIDE - 1 < line.runs.size) {
         val start = line.runs[i]
         val end = (start + line.runs[i + 1]).coerceAtMost(line.text.length)
-        val fg = line.runs[i + 2]
-        addStyle(SpanStyle(color = if (fg in 0..15) ansi[fg] else defaultFg), start, end)
-        i += 3
+        val attributes = line.runs[i + 4]
+        var fg = runColour(line.runs[i + 2]) ?: defaultFg
+        var bg = runColour(line.runs[i + 3])
+        if (attributes and RUN_REVERSE != 0) {
+            val swapped = bg ?: Color.Black
+            bg = fg
+            fg = swapped
+        }
+        val decorations = listOfNotNull(
+            TextDecoration.Underline.takeIf { attributes and RUN_UNDERLINE != 0 },
+            TextDecoration.LineThrough.takeIf { attributes and RUN_STRIKE != 0 },
+        )
+        addStyle(
+            SpanStyle(
+                color = fg,
+                background = bg ?: Color.Unspecified,
+                fontWeight = if (attributes and RUN_BOLD != 0) FontWeight.Bold else null,
+                fontStyle = if (attributes and RUN_ITALIC != 0) FontStyle.Italic else null,
+                textDecoration = if (decorations.isEmpty()) null else TextDecoration.combine(decorations),
+            ),
+            start, end,
+        )
+        i += RUN_STRIDE
     }
 }
 
@@ -122,8 +158,10 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
             delay(2000)
         }
     }
-    LaunchedEffect(c.lines.size) {
-        if (c.lines.isNotEmpty()) listState.scrollToItem(c.lines.size - 1)
+    val tail = c.tail
+    val itemCount = c.lines.size + if (tail != null) 1 else 0
+    LaunchedEffect(itemCount, tail) {
+        if (itemCount > 0) listState.scrollToItem(itemCount - 1)
     }
 
     Column(
@@ -199,8 +237,9 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
             Modifier.weight(1f).fillMaxWidth().background(Color.Black).onSizeChanged { c.setViewWidth(it.width) },
             state = listState,
         ) {
-            items(c.lines.size) { i ->
-                Text(render(c.lines[i]), fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = defaultFg)
+            items(itemCount) { i ->
+                val line = if (i < c.lines.size) c.lines[i] else tail ?: return@items
+                Text(render(line), fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = defaultFg)
             }
         }
 

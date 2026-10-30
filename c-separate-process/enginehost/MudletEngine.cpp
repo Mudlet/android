@@ -1,5 +1,8 @@
 #include "MudletEngine.h"
 
+#include "Host.h"
+#include "TBuffer.h"
+#include "TConsoleModel.h"
 #include "THeadlessSession.h"
 
 #include <QCoreApplication>
@@ -18,9 +21,6 @@ extern void qInitResources_mudlet();
 extern void qInitResources_qm();
 
 namespace {
-
-// ANSI palette index the UI draws text Mudlet shows only locally in (echo, print, commands)
-constexpr int localTextFg = 6;
 
 QString luaLongString(const QString& text)
 {
@@ -122,13 +122,14 @@ bool MudletEngine::ensureStarted(const QString& host, quint16 port, bool connect
     }
     if (!mSession) {
         mSession = new THeadlessSession(this);
-        QObject::connect(mSession, &THeadlessSession::outputLine, this, [this](const QString&, const QString& text, bool isPrompt) {
+        // Counted only: what the UI shows comes from the console model once triggers have had their go
+        QObject::connect(mSession, &THeadlessSession::outputLine, this, [this](const QString&, const QString&, bool isPrompt) {
             ++(isPrompt ? mPromptsReceived : mLinesReceived);
             markCountersDirty();
-            mFrontend->line(text, {}, isPrompt);
         });
         QObject::connect(mSession, &THeadlessSession::localText, this, [this](const QString&, const QString& text) {
-            takeLocalText(text);
+            mLocalLines += text.count(QLatin1Char('\n'));
+            markCountersDirty();
         });
         QObject::connect(mSession, &THeadlessSession::errorConsoleText, this, [this](const QString&, const QString& text) {
             mErrorPending += text;
@@ -172,7 +173,148 @@ bool MudletEngine::ensureStarted(const QString& host, quint16 port, bool connect
         return false;
     }
     mStarted = true;
+    watchConsole();
     return true;
+}
+
+void MudletEngine::watchConsole()
+{
+    Host* host = mSession->host();
+    if (!host) {
+        return;
+    }
+    mSentLines = 0;
+    TConsoleModelNotifier& notifier = host->mainConsoleModel().mNotifier;
+    // Most of these fire mid-write or mid-trigger-pass; the sync waits for the event loop, when the line's
+    // triggers have run
+    for (auto signal : {&TConsoleModelNotifier::lineCommitted, &TConsoleModelNotifier::linesAppended}) {
+        QObject::connect(&notifier, signal, this, &MudletEngine::scheduleSync);
+    }
+    for (auto signal : {&TConsoleModelNotifier::newLinesWritten, &TConsoleModelNotifier::serverWrapLineHeld}) {
+        QObject::connect(&notifier, signal, this, &MudletEngine::scheduleSync);
+    }
+    QObject::connect(&notifier, &TConsoleModelNotifier::linesChanged, this, &MudletEngine::scheduleSync);
+    QObject::connect(&notifier, &TConsoleModelNotifier::textPrinted, this, &MudletEngine::scheduleSync);
+    QObject::connect(&notifier, &TConsoleModelNotifier::bufferCleared, this, [this] {
+        mSentLines = 0;
+        scheduleSync();
+    });
+    QObject::connect(&notifier, &TConsoleModelNotifier::linesRemoved, this, [this](int first, int last) {
+        if (last < mSentLines) {
+            mSentLines -= last - first + 1;
+        } else if (first < mSentLines) {
+            mSentLines = first;
+        }
+        scheduleSync();
+    });
+    scheduleSync();
+}
+
+void MudletEngine::scheduleSync()
+{
+    if (mSyncPending) {
+        return;
+    }
+    mSyncPending = true;
+    QTimer::singleShot(0, this, &MudletEngine::syncConsole);
+}
+
+namespace {
+
+int colourCode(QRgb colour, QRgb defaultColour)
+{
+    return (colour & RGB_MASK) == (defaultColour & RGB_MASK) ? -1 : int(ColorRun::rgbFlag | (colour & RGB_MASK));
+}
+
+int attributeBits(const TChar& c)
+{
+    return (c.isBold() ? ColorRun::bold : 0) | (c.isItalic() ? ColorRun::italic : 0) | (c.isUnderlined() ? ColorRun::underline : 0)
+         | (c.isStruckOut() ? ColorRun::strikeOut : 0) | (c.isReversed() ? ColorRun::reverse : 0);
+}
+
+// One logical line: buffer lines first..last, the ones after the first split off it by word wrapping
+void appendLogicalLine(const TBuffer& buffer, int first, int last, QRgb fg, QRgb bg, QString& text, QList<ColorRun>& runs)
+{
+    auto addChar = [&](QChar ch, int cFg, int cBg, int cAttributes) {
+        const int at = int(text.size());
+        text.append(ch);
+        if (!runs.isEmpty()) {
+            ColorRun& run = runs.last();
+            if (run.fg == cFg && run.bg == cBg && run.attributes == cAttributes && run.start + run.length == at) {
+                ++run.length;
+                return;
+            }
+        }
+        if (cFg != -1 || cBg != -1 || cAttributes != 0) {
+            runs.append(ColorRun{at, 1, cFg, cBg, cAttributes});
+        }
+    };
+    for (int y = first; y <= last; ++y) {
+        const QString& lineText = buffer.lineBuffer.at(y);
+        const auto& chars = buffer.buffer.at(y);
+        int from = 0;
+        if (y > first) {
+            for (int gap = buffer.wrapGapBefore(y); gap > 0; --gap) {
+                addChar(QLatin1Char(' '), -1, -1, 0);
+            }
+            from = std::min(int(lineText.size()), buffer.wrapIndentWidth(y));
+        }
+        for (int x = from; x < lineText.size(); ++x) {
+            if (x < int(chars.size())) {
+                const TChar& c = chars.at(x);
+                addChar(lineText.at(x), colourCode(c.foregroundRgba(), fg), colourCode(c.backgroundRgba(), bg), attributeBits(c));
+            } else {
+                addChar(lineText.at(x), -1, -1, 0);
+            }
+        }
+    }
+}
+
+} // namespace
+
+// Sends the main console's finished lines as they stand after their triggers ran, gagged ones gone, and the
+// open line at the bottom as the tail
+void MudletEngine::syncConsole()
+{
+    mSyncPending = false;
+    Host* host = mSession ? mSession->host() : nullptr;
+    if (!host) {
+        return;
+    }
+    const TBuffer& buffer = host->mainConsoleModel().buffer;
+    const QRgb fg = host->mFgColor.rgba();
+    const QRgb bg = host->mBgColor.rgba();
+    const int size = int(buffer.lineBuffer.size());
+    mSentLines = std::clamp(mSentLines, 0, size);
+    int y = mSentLines;
+    while (y < size) {
+        int last = y;
+        while (last + 1 < size && buffer.wrapsFromPreviousLine(last + 1)) {
+            ++last;
+        }
+        QString text;
+        QList<ColorRun> runs;
+        appendLogicalLine(buffer, y, last, fg, bg, text, runs);
+        const bool prompt = buffer.promptBuffer.at(last);
+        if (last == size - 1) {
+            if (text != mTailText || runs != mTailRuns || prompt != mTailPrompt) {
+                mTailText = text;
+                mTailRuns = runs;
+                mTailPrompt = prompt;
+                mFrontend->tail(text, runs, prompt);
+            }
+            break;
+        }
+        mFrontend->line(text, runs, prompt);
+        y = last + 1;
+    }
+    mSentLines = y;
+    if (y >= size && !mTailText.isEmpty()) {
+        mTailText.clear();
+        mTailRuns.clear();
+        mTailPrompt = false;
+        mFrontend->tail({}, {}, false);
+    }
 }
 
 void MudletEngine::connectTo(const QString& host, quint16 port)
@@ -220,20 +362,6 @@ void MudletEngine::setViewWidthPx(int px)
     const int columns = mAdvancePx > 0 ? px / mAdvancePx : 0;
     mFrontend->status(QStringLiteral("viewWidthPx"), QString::number(px));
     mFrontend->status(QStringLiteral("columns"), QString::number(columns));
-}
-
-// Pieces that need not end a line; shown as whole lines in the local colour
-void MudletEngine::takeLocalText(const QString& text)
-{
-    mLocalPending += text;
-    qsizetype end;
-    while ((end = mLocalPending.indexOf(QLatin1Char('\n'))) >= 0) {
-        const QString line = mLocalPending.left(end);
-        mLocalPending.remove(0, end + 1);
-        ++mLocalLines;
-        markCountersDirty();
-        mFrontend->line(line, {ColorRun{0, int(line.size()), localTextFg}}, false);
-    }
 }
 
 void MudletEngine::markCountersDirty()

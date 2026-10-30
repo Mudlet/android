@@ -18,7 +18,9 @@ Run on 2026-10-30, following the REPORT's on-device checklist.
 | 6 | Rotate | pass (re-run) | First run: attaches stayed 1 and columns stayed 87, because the emulator never actually rotated. Re-run with `user_rotation` 1 then 0 and auto-rotate off: the Activity is recreated, the link reattaches to the same engine (`same engine, delta replay`, 89 and 83 ms), and the engine gets the new width: columns 87 -> 197 (2368 px) -> 87. Same pids, still connected. |
 | 7 | Kill UI, reopen after 35 s | pass | WARM. `same engine, delta replay`, attaches 2 (172 ms). Heartbeat ticks 4, still connected. |
 | 8 | Kill UI process, reopen | pass | Engine 9879 survived. Cold reopen 571 ms; new UI 10457 attached; game still connected and scrollback replayed. |
-| 9 | Kill engine process | pass | New engine 10531. `engine losses 1 (loss->attach 700 ms)`. Game disconnected, as expected.<br>**UI issue (fixed):** the UI kept showing the old instance's counters (Lines 57, heartbeat 5). The UI now drops the engine's status when the link is lost or a new instance attaches; the new engine resends its own after hello. Re-run: Lines 22 -> 0 after the kill. |
+| 9 | Triggers | Temp, regex (with captures), permanent, and `send()` from a trigger all fire. |
+| What the UI shows | Lines come from the main console model once their triggers have run, so `deleteLine()` gags, `replace()`, `selectString()` + `fg`/`bg`/`setUnderline`, and a trigger's `echo()` all show as in Mudlet. ANSI, 256-colour and Mudlet's own coloured messages keep their colours. A line Mudlet wrapped at 100 columns arrives whole. The open bottom line (a prompt) is sent as a provisional "tail". |
+| Kill engine process | pass | New engine 10531. `engine losses 1 (loss->attach 700 ms)`. Game disconnected, as expected.<br>**UI issue (fixed):** the UI kept showing the old instance's counters (Lines 57, heartbeat 5). The UI now drops the engine's status when the link is lost or a new instance attaches; the new engine resends its own after hello. Re-run: Lines 22 -> 0 after the kill. |
 | 9b | `kill <enginepid>` from `run-as`, 3 trials | pass, ~700 ms | loss->attach 701 ms every time.<br>**Timing breakdown:**<br>- ActivityManager restarts `:engine` 300-310 ms after the death (`Start proc ... for service EngineService`).<br>- The restarted Qt is up 89-90 ms after Application.onCreate.<br>- The engine is ready at about 395 ms, but EngineLink's backoff (EngineLink.kt:95-104) retries at 100, 200 and 400 ms. The attach therefore lands at 100+200+400 = 700 ms.<br>Linear or capped-low backoff would get close to the ~400 ms floor. The host's ~110 ms had no AM restart delay.<br>**Fixed:** EngineLink now retries every 50 ms for the first 2 s, then backs off 100 ms -> 2 s. Re-run, 3 trials: loss->attach 607, 500 and 504 ms. In the 504 ms trial the engine died at 54.786, AM started the new process at 55.043 and it listened at 55.248 (462 ms), so the attach lands within one 50 ms poll of the floor. JVM test on the host: 112 -> 53 ms. |
 | 10 | Stop engine, Start engine | pass | **Stop:**<br>- logcat `onDestroy: QtServiceBase terminates Qt and calls System.exit(0) on this process`, `main() returned 0`, Zygote `Process 10646 exited cleanly (0)`.<br>- `ps -A`: only the UI (10457) left. The UI reads `FGS: not running`, `engine not reachable (attempt 7 ...)`.<br>**Start:** new engine 10830. The attach took up to 2 s, since the backoff is capped at 2000 ms while the engine is down.<br>**Fixed:** Start engine now wakes the link and restarts its fast retry phase. Re-run after 10 s stopped (attempt 48): `UI start->hello 253 ms`. |
 | 11 | Screen off 30+ min, then force-idle | pass (emulator) | Screen off 20:51:27-21:28:33 (37 min) with the battery unplugged. Light Doze reached IDLE at about t+20 min. Then `deviceidle force-idle` (deep IDLE) for 6 min, then `unforce`. The push server sent a tell every 300 s, 7 in total, the last one during forced deep idle. The emulator's logcat shows each tell's notification at the same constant offset from the server's send time, so none was delayed. The freezer never froze an `org.mudlet` process.<br>Afterwards: `Heartbeat ticks 80, largest gap 30180 ms`. `Lines 31, Lua onLine 31, notifications posted 7`. `game: connected`. Same engine 11308 and UI 11558; reopening gave `same engine, delta replay`. |
@@ -37,7 +39,7 @@ All three are fixed:
 ## libmudlet as the engine (2026-10-30)
 
 C's engine process ran libmudlet in place of the stand-in. `MudletEngine` drives one
-`THeadlessSession` behind the same socket protocol, so the Compose UI is unchanged.
+`THeadlessSession` behind the same socket protocol.
 
 **Build:**
 - Mudlet: the tip of the libmudlet PR stack (Mudlet/Mudlet#12005, d2eb6cb2f4) plus
@@ -51,7 +53,8 @@ C's engine process ran libmudlet in place of the stand-in. `MudletEngine` drives
   - skips DBus on Android;
   - adds `-U_FORTIFY_SOURCE` to the bundled Lua, the same FORTIFY abort as the stand-in;
   - looks for `mudlet-lua` in the app's files dir;
-  - adds a weak `mudlet_preload_lua_modules()` hook.
+  - adds a weak `mudlet_preload_lua_modules()` hook;
+  - adds a `linesRemoved` signal to the console model's notifier, for deleted and trimmed lines.
 - Mudlet builds with ASan by default on every non-Windows platform. Android needs `-DUSE_SANITIZER=`.
 - Lua C modules are compiled into the engine and put in `package.preload`: lfs, lpeg, rex_pcre2,
   lua-utf8, yajl, brimworks.zip and luasql.sqlite3, plus sqlite and yajl themselves.
@@ -68,14 +71,19 @@ C's engine process ran libmudlet in place of the stand-in. `MudletEngine` drives
 | aardmud.org:23 | Connected; 24 lines including the login banner and "What be thy name". Error console empty. |
 | Lua modules | `lfs.currentdir()`, `utf8.len`, `rex.match`, `yajl.to_string`, `zip`, `luasql.sqlite3` and `lpeg.version` all work. `db:create` + `db:add` + `db:fetch` gives 1 row. |
 | Fake server | Connected through `connectToServer()`. ANSI, UTF-8, GA prompts (2) and the `tells you` line all worked. Mudlet's GMCP `Core.Hello` reaches the server. |
-| Flood 20,000 lines | All 20,036 lines arrived; 20,000 were `FLOOD DONE` in under 2.5 s, including the UI polling |
+| Flood 20,000 lines | All 20,036 lines arrived; 20,000 were `FLOOD DONE` in under 2.5 s, including the UI polling. Read from the console model: all in order across the buffer's trims, none skipped, engine 96 MB PSS after. |
+| Triggers | Temp, regex (with captures), permanent, and `send()` from a trigger all fire. |
+| What the UI shows | Lines come from the main console model once their triggers have run, so `deleteLine()` gags, `replace()`, `selectString()` + `fg`/`bg`/`setUnderline`, and a trigger's `echo()` all show as in Mudlet. ANSI, 256-colour and Mudlet's own coloured messages keep their colours. A line Mudlet wrapped at 100 columns arrives whole. The open bottom line (a prompt) is sent as a provisional "tail". |
 | Kill engine process | The UI reattached in 600 ms, and the Lua files were left as they were. The profile isn't restarted or reconnected. |
 | Memory (TOTAL PSS) | Engine: 80 MB idle, 98 MB after the flood. Stand-in engine: 59 MB. UI process: 56 MB. |
 | APK (debug, x86_64) | 112 MB. The engine `.so` is 139 MB unstripped. Multimedia pulls in FFmpeg (~20 MB). |
 
 **Gaps:**
-- Lines reach the UI as plain text. `outputLine` has no colours, so libmudlet needs to expose
-  the line's format runs.
+- `THeadlessSession::outputLine` fires before triggers run and carries no formatting, so it
+  can't drive a UI. The engine reads the console model instead, which needs Mudlet's defines
+  and headers at build time, plus the `linesRemoved` signal from the patch.
+- A line already sent isn't updated: a later restyle or `deleteLine()` of an earlier line
+  doesn't reach the UI. Links aren't marked.
 - Mudlet's own notifications don't exist yet: the stand-in's Lua `notify()` has no Mudlet counterpart.
 - No profile restart after the engine is killed.
 - No bundled fonts (`WITH_FONTS=NO`), so Geyser falls back from Ubuntu: debug lines only.

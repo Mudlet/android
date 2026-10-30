@@ -4,6 +4,7 @@
 #include "IFrontend.h"
 
 #include <QElapsedTimer>
+#include <QList>
 #include <QObject>
 #include <QTimer>
 
@@ -32,14 +33,21 @@ private:
     void onHeartbeat();
     void flushCounters();
     void markCountersDirty();
-    void takeLocalText(const QString& text);
+    void watchConsole();
+    void scheduleSync();
+    void syncConsole();
 
     IFrontend* mFrontend;
     THeadlessSession* mSession = nullptr;
     QString mProfile;
     bool mStarted = false;
-    QString mLocalPending;
     QString mErrorPending;
+    // Main console lines above this one went to the frontend; the rest are still open to triggers
+    int mSentLines = 0;
+    bool mSyncPending = false;
+    QString mTailText;
+    QList<ColorRun> mTailRuns;
+    bool mTailPrompt = false;
 
     QTimer mHeartbeat;
     QTimer mCounterTimer;

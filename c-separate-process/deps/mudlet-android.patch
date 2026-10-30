@@ -39,6 +39,44 @@ index 80d6ce1bd7..860faf435e 100644
    find_package(Qt6 COMPONENTS DBus REQUIRED)
    list(APPEND QT_APP_LIBS Qt6::DBus)
  endif()
+diff --git a/src/TBuffer.cpp b/src/TBuffer.cpp
+index c9568f51f0..d2ee23ffb6 100644
+--- a/src/TBuffer.cpp
++++ b/src/TBuffer.cpp
+@@ -7599,6 +7599,9 @@ void TBuffer::shrinkBuffer()
+         }
+     }
+     mLinesRemovedTotal += mBatchDeleteSize;
++    if (mpModel) {
++        emit mpModel->mNotifier.linesRemoved(0, mBatchDeleteSize - 1);
++    }
+     // Enter runs the focused link, so a trim that removes that one sweeps at once
+     sweepLinks = sweepLinks || (mCurrentFocusedLinkIndex && mLinkIdsRemovedSinceSweep.contains(mCurrentFocusedLinkIndex));
+ 
+@@ -7709,6 +7712,9 @@ bool TBuffer::deleteLines(int from, int to)
+         }
+         // Lines above the deleted ones now read as later than they are, which only records more
+         mLinesRemovedTotal += delta;
++        if (mpModel) {
++            emit mpModel->mNotifier.linesRemoved(from, to);
++        }
+         return true;
+     }
+     return false;
+diff --git a/src/TConsoleModelNotifier.h b/src/TConsoleModelNotifier.h
+index 5d331561b2..f6e752e010 100644
+--- a/src/TConsoleModelNotifier.h
++++ b/src/TConsoleModelNotifier.h
+@@ -41,6 +41,9 @@ signals:
+     // Before triggers run on the line; read it now, as a buffer shrink moves it. The commit is half
+     // done, so a handler may neither add a line nor run the event loop.
+     void lineCommitted(int lineIndex);
++    // These lines, as numbered just before, left the buffer: deleted, or trimmed off its top. The buffer is
++    // mid-change, so a handler may only note it.
++    void linesRemoved(int firstLine, int lastLine);
+     // Client output (echo(), print(), the command echo, Mudlet's messages), in pieces that need not end
+     // a line; also an echo() or command echo written into a trigger's or a prompt's line, which --mirror
+     // does not copy.
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
 index 7cbe7b623d..64cdd207f5 100644
 --- a/src/TLuaInterpreter.cpp

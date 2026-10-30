@@ -33,3 +33,52 @@ All three are fixed:
 - **Tells counter:** "notifications posted 2 (UI saw 0)" after an engine restart; the UI's count is per UI process. It now resets with the engine's counters when a new instance attaches.
 - **Hello time:** "UI start->hello -1 ms" in a UI process started while the engine was already up. It now reads "- (engine was already up)".
 - **ANSI black:** colour 0 was invisible on the black pane, as in A and B. C now draws it as dark grey (#5C5C5C).
+
+## libmudlet as the engine (2026-10-30)
+
+C's engine process ran libmudlet in place of the stand-in. `MudletEngine` drives one
+`THeadlessSession` behind the same socket protocol, so the Compose UI is unchanged.
+
+**Build:**
+- Mudlet: the tip of the libmudlet PR stack (Mudlet/Mudlet#12005, d2eb6cb2f4) plus
+  [`deps/mudlet-android.patch`](deps/mudlet-android.patch).
+- Steps:
+  1. `deps/build-deps.sh`
+  2. `MUDLET_SOURCE_DIR=... deps/build-mudlet.sh`
+  3. `MUDLET_SOURCE_DIR=... MUDLET_BUILD_DIR=build-mudlet-<abi> ./build-apk.sh`
+- The patch:
+  - builds the bundled qtkeychain;
+  - skips DBus on Android;
+  - adds `-U_FORTIFY_SOURCE` to the bundled Lua, the same FORTIFY abort as the stand-in;
+  - looks for `mudlet-lua` in the app's files dir;
+  - adds a weak `mudlet_preload_lua_modules()` hook.
+- Mudlet builds with ASan by default on every non-Windows platform. Android needs `-DUSE_SANITIZER=`.
+- Lua C modules are compiled into the engine and put in `package.preload`: lfs, lpeg, rex_pcre2,
+  lua-utf8, yajl, brimworks.zip and luasql.sqlite3, plus sqlite and yajl themselves.
+  They are Mudlet's own modules, linked statically. Users still can't load native modules.
+- `mudlet-lua` and `translations/lua` ship as assets: 65 files. The engine copies them out
+  when their stamp changes: 151 ms the first time, nothing after that.
+
+**Results on the emulator:**
+
+| Check | Result |
+|---|---|
+| Engine start | Qt up 165-237 ms after Application.onCreate, as with the stand-in |
+| Profile start | `THeadlessSession::start()` with the profile loaded: 55-79 ms. The first start also installs Mudlet's default packages. |
+| aardmud.org:23 | Connected; 24 lines including the login banner and "What be thy name". Error console empty. |
+| Lua modules | `lfs.currentdir()`, `utf8.len`, `rex.match`, `yajl.to_string`, `zip`, `luasql.sqlite3` and `lpeg.version` all work. `db:create` + `db:add` + `db:fetch` gives 1 row. |
+| Fake server | Connected through `connectToServer()`. ANSI, UTF-8, GA prompts (2) and the `tells you` line all worked. Mudlet's GMCP `Core.Hello` reaches the server. |
+| Flood 20,000 lines | All 20,036 lines arrived; 20,000 were `FLOOD DONE` in under 2.5 s, including the UI polling |
+| Kill engine process | The UI reattached in 600 ms, and the Lua files were left as they were. The profile isn't restarted or reconnected. |
+| Memory (TOTAL PSS) | Engine: 80 MB idle, 98 MB after the flood. Stand-in engine: 59 MB. UI process: 56 MB. |
+| APK (debug, x86_64) | 112 MB. The engine `.so` is 139 MB unstripped. Multimedia pulls in FFmpeg (~20 MB). |
+
+**Gaps:**
+- Lines reach the UI as plain text. `outputLine` has no colours, so libmudlet needs to expose
+  the line's format runs.
+- Mudlet's own notifications don't exist yet: the stand-in's Lua `notify()` has no Mudlet counterpart.
+- No profile restart after the engine is killed.
+- No bundled fonts (`WITH_FONTS=NO`), so Geyser falls back from Ubuntu: debug lines only.
+- No TLS: `qt.network.ssl: No functional TLS backend`, since the APK ships no OpenSSL.
+- The test server was naive: it took Mudlet's GMCP subnegotiation as part of the command
+  line. `tests/fake_telnet.py` now strips subnegotiation.

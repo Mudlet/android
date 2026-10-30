@@ -1,6 +1,6 @@
 #include "SocketBridge.h"
 
-#include "Engine.h"
+#include "IEngine.h"
 
 #include <QCoreApplication>
 #include <QDateTime>

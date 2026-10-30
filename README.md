@@ -62,7 +62,8 @@ Costs and open items:
 - report the `QtDisplayManager` cast to Qt;
 - repeat the screen-off run on a phone, since an emulator doesn't suspend its CPU;
 - measure A's and C's memory and survival under memory pressure on a phone;
-- replace the stand-in engine with libmudlet (`mudlet_core`).
+- libmudlet now runs in C's engine process (see [`c-separate-process/RESULTS.md`](c-separate-process/RESULTS.md)).
+  Still to do: colour runs through the session API, TLS, fonts, and restarting the profile after the engine is killed.
 
 ## Status
 

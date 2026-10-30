@@ -7,7 +7,10 @@ target_compile_definitions(lua51 PRIVATE LUA_USE_POSIX)
 # Lua 5.1's getstr() is (TString*)+1, which clang's FORTIFY object-size check reads as a 0-byte buffer: bionic aborts in luaL_openlibs
 target_compile_options(lua51 PRIVATE -U_FORTIFY_SOURCE)
 
-add_library(engine_core STATIC Engine.cpp Engine.h IFrontend.h)
+add_library(engine_api INTERFACE)
+target_include_directories(engine_api INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_library(engine_core STATIC Engine.cpp Engine.h IEngine.h IFrontend.h)
 target_include_directories(engine_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(engine_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network PRIVATE lua51)
 set_target_properties(engine_core PROPERTIES AUTOMOC ON POSITION_INDEPENDENT_CODE ON)

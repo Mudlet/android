@@ -30,6 +30,8 @@ android {
         getByName("main") {
             jniLibs.srcDirs(qtDeployDir.resolve("libs"))
             res.srcDirs("src/main/res", "$qtAndroidDir/res", qtDeployDir.resolve("res"))
+            // Mudlet's Lua files, staged by build-apk.sh when it builds libmudlet in
+            assets.srcDirs(qtDeployDir.resolve("assets"))
         }
     }
 

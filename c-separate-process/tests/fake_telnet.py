@@ -42,6 +42,7 @@ class Session(threading.Thread):
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         conn.sendall(BANNER)
         buf = bytearray()
+        in_sb = False
         try:
             while True:
                 data = conn.recv(65536)
@@ -50,6 +51,18 @@ class Session(threading.Thread):
                 i = 0
                 while i < len(data):
                     b = data[i]
+                    # Subnegotiation (Mudlet answers the GMCP offer with Core.Hello), possibly split across reads
+                    if in_sb:
+                        self.negotiation.append(b)
+                        if b == SE and self.negotiation[-2:-1] == bytes([IAC]):
+                            in_sb = False
+                        i += 1
+                        continue
+                    if b == IAC and i + 1 < len(data) and data[i + 1] == SB:
+                        in_sb = True
+                        self.negotiation += data[i:i + 2]
+                        i += 2
+                        continue
                     if b == IAC and i + 2 < len(data) and data[i + 1] in (DO, DONT, WILL, WONT):
                         self.negotiation += data[i:i + 3]
                         i += 3

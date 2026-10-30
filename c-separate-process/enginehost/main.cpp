@@ -1,4 +1,8 @@
+#ifdef ENGINE_LIBMUDLET
+#include "MudletEngine.h"
+#else
 #include "Engine.h"
+#endif
 #include "SocketBridge.h"
 #ifdef Q_OS_ANDROID
 #include "AndroidServiceSetup.h"
@@ -60,7 +64,11 @@ int main(int argc, char* argv[])
             parser.value(QStringLiteral("heartbeat-ms")).isEmpty() ? envOr("MUDLET_HEARTBEAT_MS", QStringLiteral("30000")).toInt() : parser.value(QStringLiteral("heartbeat-ms")).toInt();
 
     SocketBridge bridge;
+#ifdef ENGINE_LIBMUDLET
+    MudletEngine engine(&bridge, heartbeatMs);
+#else
     Engine engine(&bridge, heartbeatMs);
+#endif
     bridge.setEngine(&engine);
 
     bridge.status(QStringLiteral("enginePid"), QString::number(QCoreApplication::applicationPid()));

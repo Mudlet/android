@@ -162,6 +162,14 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
                 "(loss->attach ${c.lastLossToAttachMs} ms), lines skipped ${c.gapLines}",
             style = small,
         )
+        if (s["engineKind"] == "libmudlet") {
+            Text(
+                "libmudlet: ${s["profile"] ?: "?"}, start ${s["startMs"] ?: "-"} ms, loaded after ${s["profileLoadMs"] ?: "-"} ms; " +
+                    "Lua files ${s["luaFiles"] ?: "?"}; local lines ${s["localLines"] ?: 0}, error console ${s["errorConsoleLines"] ?: 0}",
+                style = small,
+            )
+            s["luaError"]?.let { Text("Last error: $it", style = small.copy(color = Color(0xFFFF8080))) }
+        }
         if (c.pingResult.isNotEmpty()) Text("Ping: ${c.pingResult}", style = small)
         if (c.lastLuaResult.isNotEmpty()) Text("Lua: ${c.lastLuaResult}", style = small)
 

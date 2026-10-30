@@ -9,7 +9,7 @@
 #include <QPointer>
 #include <deque>
 
-class Engine;
+class IEngine;
 class QLocalServer;
 class QLocalSocket;
 
@@ -31,7 +31,7 @@ public:
     static constexpr qint64 lowWaterBytes = 256 * 1024;
 
     explicit SocketBridge(QObject* parent = nullptr);
-    void setEngine(Engine* engine) { mEngine = engine; }
+    void setEngine(IEngine* engine) { mEngine = engine; }
     bool listen(const QString& path);
 
     void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
@@ -65,7 +65,7 @@ private:
     bool mClientLagging = false;
     qint64 mLastSentSeq = 0;
     QByteArray mReadBuffer;
-    Engine* mEngine = nullptr;
+    IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     std::deque<StoredLine> mScrollback;
     qint64 mNextSeq = 1;

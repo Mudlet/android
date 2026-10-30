@@ -1,5 +1,6 @@
 #pragma once
 
+#include "IEngine.h"
 #include "IFrontend.h"
 
 #include <QByteArray>
@@ -9,7 +10,7 @@
 
 struct lua_State;
 
-class Engine : public QObject
+class Engine : public QObject, public IEngine
 {
     Q_OBJECT
 
@@ -18,11 +19,11 @@ public:
     explicit Engine(IFrontend* frontend, int heartbeatMs = 30000, QObject* parent = nullptr);
     ~Engine() override;
 
-    void connectTo(const QString& host, quint16 port);
-    void send(const QString& line);
-    void disconnectFromGame();
-    void runLua(const QString& code);
-    void setViewWidthPx(int px);
+    void connectTo(const QString& host, quint16 port) override;
+    void send(const QString& line) override;
+    void disconnectFromGame() override;
+    void runLua(const QString& code) override;
+    void setViewWidthPx(int px) override;
 
     // Called from Lua's notify()
     void luaNotify(const QString& title, const QString& text);

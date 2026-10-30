@@ -116,6 +116,7 @@ private fun render(line: UiLine): AnnotatedString = buildAnnotatedString {
         val attributes = line.runs[i + 4]
         var fg = runColour(line.runs[i + 2]) ?: defaultFg
         var bg = runColour(line.runs[i + 3])
+        if (bg == null && fg == Color.Black) fg = ansi[0]
         if (attributes and RUN_REVERSE != 0) {
             val swapped = bg ?: Color.Black
             bg = fg
@@ -245,7 +246,7 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
         ) {
             items(itemCount) { i ->
                 val line = if (i < c.lines.size) c.lines[i] else tail ?: return@items
-                Text(render(line), fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = defaultFg)
+                Text(render(line), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = defaultFg)
             }
         }
 

@@ -28,12 +28,49 @@ Each directory has a `REPORT.md` covering:
 - an on-device checklist;
 - problems hit along the way.
 
+## Decision: C, with A's Qt start-up
+
+Mudlet for Android builds on C's layout:
+- a Compose UI process that loads no Qt;
+- Qt and the engine in a `specialUse` foreground service in its own `:engine` process;
+- a local socket between them.
+
+The engine process starts Qt the way A does: `QtServiceBase`, plus the two private
+`QtAndroidPrivate` calls, with `QGuiApplication` constructed only after `onCreate()` returns.
+It uses the `android` QPA; `offscreen` saves ~10 MB but has no fonts.
+
+Why C over A:
+- **Smaller protected footprint in the background.** Only the engine (~59 MB PSS on the
+  emulator) runs at foreground-service priority. Android can freeze or drop the UI process
+  while Mudlet is backgrounded. A keeps the whole app, Compose included, resident at that priority.
+- **It fits libmudlet.** Every frontend call must already work over a socket, so the
+  socket protocol is that boundary rather than an extra JNI layer. It also leads into the
+  proxy and relay options for staying connected.
+
+Crash isolation is not a reason. Native Lua modules aren't allowed on Android, so the engine
+dying realistically means Android killing it. The UI then reattaches to the restarted engine
+in ~500 ms.
+
+Why not B: Qt 6.12.0's public embedded path can't run without an Activity (a
+`ClassCastException` in `QtDisplayManager.getDisplay`), and Qt can't be restarted in the
+same process.
+
+Installed size is not a deciding factor.
+
+Costs and open items:
+- the private Qt API means pinning the Qt version and keeping a shim, so a rename fails the build;
+- report the `QtDisplayManager` cast to Qt;
+- repeat the screen-off run on a phone, since an emulator doesn't suspend its CPU;
+- measure A's and C's memory and survival under memory pressure on a phone;
+- replace the stand-in engine with libmudlet (`mudlet_core`).
+
 ## Status
 
-All three build for arm64-v8a with Qt 6.12.0, NDK 28.2 and compileSdk/targetSdk 36. All
-pass the 16 KB page alignment checks and their desktop engine tests. **None has run on a
-device yet.** The builds ran in a container without an emulator, so every lifecycle
-statement in the reports comes from reading Qt's sources, not from running them.
+All three build for arm64-v8a and x86_64 with Qt 6.12.0, NDK 28.2 and compileSdk/targetSdk 36,
+and pass the 16 KB page alignment checks and their desktop engine tests. All three were
+run on an Android 16 emulator on 2026-10-30; see [`RESULTS.md`](RESULTS.md) for the
+side-by-side results. The tables below are from before that run, and some of their
+lifecycle statements come from reading Qt's sources.
 
 | | A: in-process | B: QtQuickView | C: separate process |
 |---|---|---|---|

@@ -35,6 +35,8 @@ Every prototype aborted in `luaL_openlibs` with `FORTIFY: strchr: prevented read
 
 ## Recommendation for C: start Qt the A way
 
+**Decided:** Mudlet for Android uses C's layout with A's Qt start-up; the reasons are in the README's Decision section.
+
 The device evidence supports keeping C's engine on A's start path: `QtServiceBase` plus the private `QtAndroidPrivate::acuqireServiceSetup(0)` / `setOnBindListener()` release. Don't move it to B's public embedded API.
 
 1. **The public path doesn't work without an Activity in Qt 6.12.0.** C's `:engine` process never has an Activity, so B's route would have to be `QtServiceEmbeddedDelegate` with a Service context. On the device that crashes on every start: `QtDisplayManager.getDisplay(Context)` does an unconditional `checkcast android/app/Activity` (QtDisplayManager.java:128, confirmed with `javap`). No app-side change avoids it.

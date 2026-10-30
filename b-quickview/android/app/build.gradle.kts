@@ -16,7 +16,7 @@ android {
         versionCode = 1
         versionName = "0.1"
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters += providers.gradleProperty("androidAbi").get()
         }
     }
 
@@ -37,6 +37,10 @@ android {
 
 kotlin {
     jvmToolchain(21)
+}
+
+QtBuild {
+    ninjaPath = rootProject.file("../tools/ninja-j2").absolutePath
 }
 
 dependencies {

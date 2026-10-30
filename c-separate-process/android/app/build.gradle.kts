@@ -7,7 +7,9 @@ plugins {
 // Output of build-apk.sh: androiddeployqt --aux-mode copies the engine .so, its Qt
 // dependencies, Qt's jars and the generated libs.xml here
 val qtDeployDir = file("../qtdeploy")
-val qtAndroidDir = "/opt/android-toolchain/qt/6.12.0/android_arm64_v8a/src/android/java"
+val androidAbi = providers.gradleProperty("androidAbi").get()
+val qtRoot = providers.gradleProperty("qtRoot").get()
+val qtAndroidDir = "$qtRoot/android_${androidAbi.replace('-', '_')}/src/android/java"
 
 android {
     namespace = "org.mudlet.proto.c"
@@ -21,7 +23,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1"
-        ndk { abiFilters += "arm64-v8a" }
+        ndk { abiFilters += androidAbi }
     }
 
     sourceSets {

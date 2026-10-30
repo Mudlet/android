@@ -16,6 +16,8 @@ list(FILTER LUA_SOURCES EXCLUDE REGEX ".*/(lua|luac|print)\\.c$")
 add_library(lua51 STATIC ${LUA_SOURCES})
 target_include_directories(lua51 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua-5.1.5/src)
 target_compile_definitions(lua51 PRIVATE LUA_USE_POSIX)
+# Lua 5.1's getstr() is (TString*)+1, which clang's FORTIFY object-size check reads as a 0-byte buffer: bionic aborts in luaL_openlibs
+target_compile_options(lua51 PRIVATE -U_FORTIFY_SOURCE)
 set_target_properties(lua51 PROPERTIES POSITION_INDEPENDENT_CODE ON C_VISIBILITY_PRESET hidden)
 
 add_library(engine_core STATIC

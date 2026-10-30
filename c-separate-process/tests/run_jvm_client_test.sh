@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runs the app's Kotlin protocol client (JVM unit test) against the desktop engine.
 set -euo pipefail
-export ANDROID_HOME=${ANDROID_HOME:-/opt/android-toolchain/sdk}
+export ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk}
 export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}
 here="$(cd "$(dirname "$0")/.." && pwd)"
 engine="$here/build-desktop/enginehost/engine"

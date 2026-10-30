@@ -74,7 +74,7 @@ Starting Qt itself uses only public API: QtQuickView, loadContent, the generated
 8. **The main lib `mudengine_arm64-v8a` is loaded by System.loadLibrary on the UI thread.** JNI_OnLoad and RegisterNatives depend on this.
 9. **The JNIEnv on Qt's thread is attached by Qt.**
 10. **Plugin 1.4 behaviour:**
-    - It runs ninja with no -j, so CMAKE_MAKE_PROGRAM is set to `tools/ninja-j2`.
+    - It runs ninja with no -j, so `QtBuild.ninjaPath` points at the `tools/ninja-j2/` directory (the plugin appends `/ninja`). This was an absolute CMAKE_MAKE_PROGRAM before; see RESULTS.md.
     - The NDK version comes from Core.json (27.2), so ANDROID_NDK_ROOT must be passed.
     - qtProjectPath is resolved against the root project.
     - The task's only inputs are qtProjectPath.
@@ -157,7 +157,7 @@ Everything here is **expected, from reading the Qt 6.12.0 sources**. Nothing ran
 ## Problems hit
 - **QT_HOST_PATH required.** Pass `-DQT_HOST_PATH=.../gcc_64`.
 - **NDK 27.2 vs 28.2.** Pass `-DANDROID_NDK_ROOT` explicitly.
-- **The plugin runs ninja without -j.** Set `-DCMAKE_MAKE_PROGRAM=tools/ninja-j2`.
+- **The plugin runs ninja without -j.** Set `QtBuild { ninjaPath = .../tools/ninja-j2 }`, a directory holding the `ninja` wrapper.
 - **The inner Gradle asks for -Xmx3200m and parallel.** Bound it with GRADLE_OPTS.
 - **Maven Central 429.** Add the GCS mirror to settings and use `tools/mirror-init.gradle` for the inner build. Its repository must be named "gcsMirror", because the name "maven" already exists.
 - **qtProjectPath is relative to the root project.** Use `../qtapp`.

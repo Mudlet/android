@@ -1,5 +1,5 @@
 # Desktop build of the stand-in engine plus a host-side test against a fake telnet server.
-#   cmake -S desktop -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH=/opt/android-toolchain/qt/6.12.0/gcc_64
+#   cmake -S desktop -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$HOME/Programs/Qt/6.12.0/gcc_64
 #   ninja -C build-desktop -j2 && ctest --test-dir build-desktop --output-on-failure
 cmake_minimum_required(VERSION 3.21)
 project(protoengine_desktop LANGUAGES C CXX)

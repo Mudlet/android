@@ -4,7 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val qtAndroidDir: String = providers.gradleProperty("qtAndroidDir").get()
+val qtRoot: String = providers.gradleProperty("qtRoot").get()
+val androidAbi: String = providers.gradleProperty("androidAbi").get()
+val qtAndroidDir = "$qtRoot/android_${androidAbi.replace('-', '_')}"
 val nativeStage = rootProject.layout.projectDirectory.dir("build-android/stage")
 
 android {
@@ -20,7 +22,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1-a"
-        ndk { abiFilters += "arm64-v8a" }
+        ndk { abiFilters += androidAbi }
     }
 
     buildFeatures { compose = true }
@@ -84,6 +86,9 @@ val buildNative = tasks.register<Exec>("buildNative") {
     workingDir = rootProject.projectDir
     commandLine("bash", rootProject.file("scripts/build-native.sh").absolutePath)
     environment("ANDROID_SDK_ROOT", android.sdkDirectory.absolutePath)
+    environment("QT_ROOT", qtRoot)
+    environment("ANDROID_ABI", androidAbi)
+    inputs.property("androidAbi", androidAbi)
     inputs.dir(rootProject.file("engine"))
     inputs.dir(rootProject.file("native"))
     inputs.file(rootProject.file("scripts/build-native.sh"))

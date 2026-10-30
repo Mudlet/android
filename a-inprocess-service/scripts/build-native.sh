@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Builds libmudletproto for arm64-v8a and stages it with its Qt dependencies for Gradle:
-#   build-android/stage/libs/arm64-v8a/*.so    -> app jniLibs
+# Builds libmudletproto for $ANDROID_ABI (default arm64-v8a) and stages it with its Qt dependencies for Gradle:
+#   build-android/stage/libs/<abi>/*.so        -> app jniLibs
 #   build-android/stage/res/values/libs.xml    -> app res (read by Qt's QtLoader)
 #   build-android/stage/assets/                -> app assets (Qt asset cache, if any)
 # Gradle's buildNative task runs this; it can also be run by hand. Bounded to -j2.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
-QT_ANDROID="${QT_ANDROID:-/opt/android-toolchain/qt/6.12.0/android_arm64_v8a}"
-QT_HOST="${QT_HOST:-/opt/android-toolchain/qt/6.12.0/gcc_64}"
-SDK="${ANDROID_SDK_ROOT:-/opt/android-toolchain/sdk}"
+ABI="${ANDROID_ABI:-arm64-v8a}"
+QT_ROOT="${QT_ROOT:-$HOME/Programs/Qt/6.12.0}"
+QT_ANDROID="${QT_ANDROID:-$QT_ROOT/android_${ABI//-/_}}"
+QT_HOST="${QT_HOST:-$QT_ROOT/gcc_64}"
+SDK="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
 NDK="${ANDROID_NDK_ROOT:-$SDK/ndk/28.2.13676358}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
-out="$here/build-android"
-stage="$out/stage"
+out="$here/build-android/$ABI"
+stage="$here/build-android/stage"
 
 if [ ! -f "$out/build.ninja" ]; then
   "$QT_ANDROID/bin/qt-cmake" -S "$here/native" -B "$out" -G Ninja \
@@ -29,7 +31,7 @@ settings="$out/android-mudletproto-deployment-settings.json"
 
 rm -rf "$stage"
 mkdir -p "$stage/libs" "$stage/res/values" "$stage/assets"
-cp -r "$out/android-build/libs/arm64-v8a" "$stage/libs/"
+cp -r "$out/android-build/libs/$ABI" "$stage/libs/"
 cp "$out/android-build/res/values/libs.xml" "$stage/res/values/"
 if [ -d "$out/android-build/assets" ]; then cp -r "$out/android-build/assets/." "$stage/assets/"; fi
-echo "staged: $(ls "$stage/libs/arm64-v8a" | wc -l) libraries"
+echo "staged: $(ls "$stage/libs/$ABI" | wc -l) libraries"

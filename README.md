@@ -70,8 +70,10 @@ checklist. The main things to watch:
 
 ## Building
 
-The toolchain paths in `BRIEF.md` and the build scripts (`/opt/android-toolchain/...`) are
-from the machine these were built on; point them at your own install. You need:
+`BRIEF.md` describes the machine these were written on (`/opt/android-toolchain/...`). The build
+files now default to `~/Programs/Qt/6.12.0` and `~/Android/Sdk`, and build arm64-v8a; override with
+`-PqtRoot=...` / `-PandroidAbi=x86_64` (A, C's Gradle), `qtPath` in `b-quickview/android/gradle.properties`,
+or `QT_ROOT` / `ANDROID_ABI` / `ANDROID_SDK_ROOT` (A's `build-native.sh`, C's `build-apk.sh`). You need:
 
 - Qt 6.12.0 for `gcc_64` (host) and `android_arm64_v8a`, with qtwebsockets;
 - an Android SDK with NDK 28.2.13676358, build-tools 37.0.0 and platform android-36;

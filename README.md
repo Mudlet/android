@@ -118,3 +118,29 @@ or `QT_ROOT` / `ANDROID_ABI` / `ANDROID_SDK_ROOT` (A's `build-native.sh`, C's `b
 - JDK 21 and Gradle 8.14.
 
 Each prototype vendors Lua 5.1.5 (MIT, see its `COPYRIGHT`).
+
+## CI
+
+GitHub Actions runs two workflows, each on pushes to `main` and pull requests that touch its files, and on
+demand:
+
+- **libmudlet for Android** (`.github/workflows/libmudlet.yml`) checks out Mudlet's `development` branch
+  (or any ref given to a manual run), cross-builds its dependencies for arm64-v8a with
+  [`scripts/build-mudlet-deps.sh`](scripts/build-mudlet-deps.sh) (pinned versions and checksums), then builds
+  `mudlet_core`, `mudlet_headless` and the `mudlet-headless` runner with
+  [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh), and fails if they use desktop-only APIs or the
+  runner lacks Mudlet's built-in Lua files and Lua C modules. The job summary gives the Mudlet commit it built
+  and the library sizes, stripped and not.
+  - Nightly: it also runs every night, so a change on Mudlet's side that stops these compiling or linking for
+    Android shows up; a nightly that fails or times out opens or updates an issue here. GitHub pauses the
+    nightly after 60 days without activity in this repository; re-enable it from the Actions tab.
+  - A red check on a pull request can come from Mudlet's side too.
+  - Not covered yet: C's engine built against libmudlet.
+- **Prototype APKs** (`.github/workflows/apks.yml`) runs each prototype's desktop engine test, then builds a debug
+  APK of A, B and C, each with its stand-in engine, checks that it holds Qt and the engine and that its
+  libraries are 16 KB aligned (their offsets in the APK and their load segments), and uploads it as an
+  artifact.
+
+Both use the versions under [Building](#building), installed by `.github/actions/android-toolchain`
+(Qt through a pinned aqtinstall). Qt, the NDK, the dependencies, Gradle and ccache are cached between runs.
+The two scripts also run on their own: set `ANDROID_NDK_ROOT` and `QT_ROOT` and see each script's header.

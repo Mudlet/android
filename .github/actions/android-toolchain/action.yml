@@ -1,0 +1,141 @@
+name: Android toolchain
+description: >
+  Qt for Android with its host Qt (aqtinstall), the NDK and SDK packages, JDK, ninja and ccache, the same
+  versions BRIEF.md names. Qt and the NDK are cached between runs. Sets QT_ROOT, ANDROID_SDK_ROOT and
+  ANDROID_NDK_ROOT for the steps after it.
+inputs:
+  qt-version:
+    description: Qt for the host and for Android
+    default: "6.12.0"
+  ndk-version:
+    description: Android NDK
+    default: "28.2.13676358"
+  platform:
+    description: SDK platform
+    default: android-36
+  build-tools:
+    description: SDK build-tools
+    default: "37.0.0"
+  java-version:
+    description: Temurin JDK
+    default: "21"
+  aqtinstall-version:
+    description: aqtinstall, pinned
+    default: "3.3.0"
+  # lrelease (Mudlet's translations), qmlimportscanner and Qt Quick's tools (prototype B), androiddeployqt
+  qt-host-archives:
+    description: Host Qt archives
+    default: icu qtbase qtdeclarative qttools
+  qt-android-archives:
+    description: Qt for Android archives
+    default: qtbase qtdeclarative qtsvg qttools
+  # Core5Compat, Multimedia and TextToSpeech for mudlet_core
+  qt-android-modules:
+    description: Qt for Android add-on modules
+    default: qt5compat qtmultimedia qtspeech
+  apt-packages:
+    description: More apt packages the job needs
+    default: ""
+outputs:
+  qt-version:
+    description: The Qt version installed
+    value: ${{ inputs.qt-version }}
+  ndk-version:
+    description: The NDK version installed
+    value: ${{ inputs.ndk-version }}
+  build-tools-dir:
+    description: The SDK build-tools directory (zipalign, apksigner)
+    value: ${{ steps.paths.outputs.build-tools-dir }}
+runs:
+  using: composite
+  steps:
+    - name: Paths
+      id: paths
+      shell: bash
+      run: |
+        sdk=${ANDROID_SDK_ROOT:-$ANDROID_HOME}
+        qt_root=$HOME/Qt/${{ inputs.qt-version }}
+        ndk=$sdk/ndk/${{ inputs.ndk-version }}
+        qt_set=$(echo "${{ inputs.aqtinstall-version }}|${{ inputs.qt-host-archives }}|${{ inputs.qt-android-archives }}|${{ inputs.qt-android-modules }}" | sha256sum | cut -c1-12)
+        {
+          echo "ndk=$ndk"
+          echo "qt-set=$qt_set"
+          echo "build-tools-dir=$sdk/build-tools/${{ inputs.build-tools }}"
+          if [ -f "$ndk/source.properties" ]; then echo "ndk-preinstalled=true"; fi
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "QT_ROOT=$qt_root"
+          echo "ANDROID_SDK_ROOT=$sdk"
+          echo "ANDROID_NDK_ROOT=$ndk"
+        } >> "$GITHUB_ENV"
+
+    - name: apt packages
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --no-install-recommends ninja-build ccache ${{ inputs.apt-packages }} > /dev/null
+
+    - uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    # restore and save are separate steps so a job that fails later still keeps what it installed
+    - name: Restore Qt
+      id: qt-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/Qt/${{ inputs.qt-version }}
+        key: qt-${{ inputs.qt-version }}-${{ runner.os }}-${{ steps.paths.outputs.qt-set }}
+
+    - name: Install Qt ${{ inputs.qt-version }}
+      if: steps.qt-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        python3 -m venv "$RUNNER_TEMP/aqt"
+        "$RUNNER_TEMP/aqt/bin/pip" install -q "aqtinstall==${{ inputs.aqtinstall-version }}"
+        aqt="$RUNNER_TEMP/aqt/bin/aqt"
+        # aqt writes aqtinstall.log into the current directory
+        cd "$RUNNER_TEMP"
+        "$aqt" install-qt linux desktop ${{ inputs.qt-version }} linux_gcc_64 \
+          --outputdir "$HOME/Qt" --archives ${{ inputs.qt-host-archives }}
+        "$aqt" install-qt all_os android ${{ inputs.qt-version }} android_arm64_v8a \
+          --outputdir "$HOME/Qt" --archives ${{ inputs.qt-android-archives }} -m ${{ inputs.qt-android-modules }}
+
+    - name: Save Qt
+      if: steps.qt-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: ~/Qt/${{ inputs.qt-version }}
+        key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+
+    - name: Restore NDK ${{ inputs.ndk-version }}
+      if: steps.paths.outputs.ndk-preinstalled != 'true'
+      id: ndk-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ steps.paths.outputs.ndk }}
+        key: ndk-${{ inputs.ndk-version }}-${{ runner.os }}
+
+    - name: SDK packages
+      shell: bash
+      run: |
+        sdkmanager="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        packages=("platforms;${{ inputs.platform }}" "build-tools;${{ inputs.build-tools }}")
+        [ -f "$ANDROID_NDK_ROOT/source.properties" ] || packages+=("ndk;${{ inputs.ndk-version }}")
+        log="$RUNNER_TEMP/sdkmanager.log"
+        # yes always ends on SIGPIPE once sdkmanager stops reading; only sdkmanager's status counts
+        { (yes || true) | "$sdkmanager" --licenses && "$sdkmanager" --install "${packages[@]}"; } > "$log" 2>&1 \
+          || { cat "$log"; exit 1; }
+        for f in "$ANDROID_SDK_ROOT/platforms/${{ inputs.platform }}/android.jar" \
+                 "${{ steps.paths.outputs.build-tools-dir }}/zipalign" "$ANDROID_NDK_ROOT/source.properties"; do
+          [ -f "$f" ] || { cat "$log"; echo "::error::sdkmanager did not install $f"; exit 1; }
+        done
+        grep Pkg.Revision "$ANDROID_NDK_ROOT/source.properties"
+
+    - name: Save NDK ${{ inputs.ndk-version }}
+      if: steps.paths.outputs.ndk-preinstalled != 'true' && steps.ndk-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ steps.paths.outputs.ndk }}
+        key: ${{ steps.ndk-cache.outputs.cache-primary-key }}

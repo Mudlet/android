@@ -1,0 +1,140 @@
+name: libmudlet for Android
+
+# Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a.
+# The nightly run builds Mudlet's latest development, so it catches a change there that stops these
+# compiling or linking for Android; a failed nightly opens or updates an issue here.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - scripts/build-mudlet-deps.sh
+      - scripts/build-libmudlet.sh
+      - .github/actions/**
+      - .github/workflows/libmudlet.yml
+  pull_request:
+    paths: *paths
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mudlet_ref:
+        description: Mudlet/Mudlet branch, tag or full commit SHA to build
+        default: development
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MUDLET_REF: ${{ inputs.mudlet_ref || 'development' }}
+
+jobs:
+  libmudlet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1500M
+      # the NDK comes out of a cache or an unpacked zip, so its mtime says nothing
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Mudlet/Mudlet
+          ref: ${{ env.MUDLET_REF }}
+          path: mudlet
+
+      - id: toolchain
+        uses: ./.github/actions/android-toolchain
+        with:
+          # lua5.1 writes the translation statistics that mudlet.qrc embeds
+          apt-packages: lua5.1
+
+      # restore and save are separate steps so the prefix is kept even when Mudlet then fails to build
+      - name: Restore dependencies
+        id: deps-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: deps/prefix
+          key: mudlet-deps-qt${{ steps.toolchain.outputs.qt-version }}-ndk${{ steps.toolchain.outputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
+
+      - name: Build dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: scripts/build-mudlet-deps.sh deps/prefix
+
+      - name: Save dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: deps/prefix
+          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: .ccache
+          key: ccache-libmudlet-${{ github.run_id }}
+          restore-keys: ccache-libmudlet-
+
+      - name: Build libmudlet
+        run: |
+          ccache -z > /dev/null
+          scripts/build-libmudlet.sh mudlet build deps/prefix
+
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .ccache
+          key: ccache-libmudlet-${{ github.run_id }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### libmudlet for Android"
+            echo
+            echo "Mudlet/Mudlet \`$MUDLET_REF\` at $(git -C mudlet log -1 --format='[`%h`](https://github.com/Mudlet/Mudlet/commit/%H) %s' 2>/dev/null || echo '(not checked out)')"
+            echo
+            if [ -f build/size-report.md ]; then cat build/size-report.md; else echo "No size report: the build did not finish."; fi
+            echo
+            echo "Qt ${{ steps.toolchain.outputs.qt-version }}, NDK ${{ steps.toolchain.outputs.ndk-version }}; dependencies:"
+            echo
+            sed 's/^/    /' deps/prefix/versions.txt 2>/dev/null || true
+            echo
+            echo "ccache $(ccache --show-stats 2>/dev/null | grep -m1 'Hits:')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # GitHub mails a failed scheduled run only to whoever last edited the cron line
+  report-nightly-failure:
+    needs: libmudlet
+    # a job that hits timeout-minutes is cancelled, not failed
+    if: always() && github.event_name == 'schedule' && needs.libmudlet.result != 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly libmudlet for Android build fails"
+          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\"))[0].number // empty")
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Failed or timed out again against \`$MUDLET_REF\`: $RUN_URL"
+          else
+            gh issue create --title "$title" \
+              --body "The nightly build against Mudlet's \`$MUDLET_REF\` failed or timed out: $RUN_URL. Close this once it is green again."
+          fi

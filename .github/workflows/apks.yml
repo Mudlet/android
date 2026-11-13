@@ -1,0 +1,125 @@
+name: Prototype APKs
+
+# Debug APKs of the three hosting prototypes, each with its stand-in engine, for arm64-v8a, after each
+# prototype's desktop engine test.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - a-inprocess-service/**
+      - b-quickview/**
+      - c-separate-process/**
+      - .github/actions/**
+      - .github/workflows/apks.yml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  apk:
+    name: ${{ matrix.prototype }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - prototype: a-inprocess-service
+            gradle: "8.14.3"
+            desktop-test: |
+              cmake -S desktop -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
+              cmake --build build-desktop
+              ctest --test-dir build-desktop --output-on-failure
+            build: gradle --no-daemon -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a :app:assembleDebug
+            engine: libmudletproto
+            apk: a-inprocess-service/app/build/outputs/apk/debug
+          - prototype: b-quickview
+            gradle: wrapper
+            desktop-test: |
+              cmake -S engine -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
+              cmake --build build-desktop
+              ctest --test-dir build-desktop --output-on-failure
+            build: |
+              cd android
+              ./gradlew --no-daemon -PqtPath="$QT_ROOT" -PandroidAbi=arm64-v8a \
+                -PqtExtraCMakeArguments="-DCMAKE_BUILD_TYPE=Release,-DQT_HOST_PATH=$QT_ROOT/gcc_64,-DANDROID_NDK_ROOT=$ANDROID_NDK_ROOT" \
+                :app:assembleDebug
+            engine: libmudengine
+            apk: b-quickview/android/app/build/outputs/apk/debug
+          - prototype: c-separate-process
+            gradle: "8.14.3"
+            desktop-test: |
+              cmake -S . -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
+              cmake --build build-desktop --target engine
+              python3 tests/test_engine.py build-desktop/enginehost/engine
+            build: ./build-apk.sh
+            engine: libengine
+            apk: c-separate-process/android/app/build/outputs/apk/debug
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: toolchain
+        uses: ./.github/actions/android-toolchain
+        with:
+          # host Qt Gui, which the desktop engines link, needs the OpenGL headers to configure and the rest to run
+          apt-packages: libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
+
+      # A and C build with this Gradle (they have no wrapper); B uses its own wrapper
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: ${{ matrix.gradle }}
+
+      - name: Desktop engine test
+        working-directory: ${{ matrix.prototype }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ${{ matrix.desktop-test }}
+
+      - name: Build APK
+        working-directory: ${{ matrix.prototype }}
+        run: ${{ matrix.build }}
+
+      # Gradle packages whatever androiddeployqt staged, so a partial deploy still gives an APK
+      - name: Check APK
+        working-directory: ${{ matrix.apk }}
+        run: |
+          readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          printf '### %s\n\n' "${{ matrix.prototype }}" >> "$GITHUB_STEP_SUMMARY"
+          for apk in *.apk; do
+            libs="$RUNNER_TEMP/$apk/lib/arm64-v8a"
+            unzip -q -o "$apk" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/$apk" \
+              || { echo "::error::cannot extract lib/arm64-v8a/*.so from $apk"; exit 1; }
+            for lib in libQt6Core_arm64-v8a.so libplugins_platforms_qtforandroid_arm64-v8a.so libc++_shared.so \
+                       ${{ matrix.engine }}_arm64-v8a.so; do
+              [ -f "$libs/$lib" ] || { echo "::error::$apk has no lib/arm64-v8a/$lib"; exit 1; }
+            done
+            # a 16 KB page device needs both: each library at a 16 KB offset in the APK, and 16 KB aligned segments
+            "${{ steps.toolchain.outputs.build-tools-dir }}/zipalign" -c -P 16 4 "$apk" \
+              || { echo "::error::$apk does not store its libraries at 16 KB offsets"; exit 1; }
+            for so in "$libs"/*.so; do
+              aligns=$("$readelf" -lW "$so" | awk '$1 == "LOAD" { print $NF }')
+              [ -n "$aligns" ] || { echo "::error::no LOAD segments read from $so"; exit 1; }
+              for a in $aligns; do
+                (( a >= 0x4000 )) || { echo "::error::$apk: $(basename "$so") has segments aligned to $a, below 16 KB"; exit 1; }
+              done
+            done
+            echo "- \`$apk\`: $(du -h "$apk" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.prototype }}-debug-apk
+          path: ${{ matrix.apk }}/*.apk
+          if-no-files-found: error
+          retention-days: 14

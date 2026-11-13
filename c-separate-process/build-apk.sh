@@ -28,7 +28,7 @@ rm -rf "$deploy"
 mkdir -p "$deploy/libs/$abi"
 cp "$build/enginehost/libengine_$abi.so" "$deploy/libs/$abi/"
 "$qt/gcc_64/bin/androiddeployqt" --input "$build/enginehost/android-engine-deployment-settings.json" \
-    --output "$deploy" --aux-mode --android-platform android-36 2>&1 | grep -v -i locale || true
+    --output "$deploy" --aux-mode --android-platform android-36 2>&1 | { grep -v -i locale || true; }
 # aux mode also writes a Gradle project and manifest template we do not use
 rm -f "$deploy/build.gradle" "$deploy/settings.gradle" "$deploy/AndroidManifest.xml"
 if [ -n "${MUDLET_BUILD_DIR:-}" ]; then

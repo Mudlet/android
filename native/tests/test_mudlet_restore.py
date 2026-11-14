@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Host test of the session restore of the engine with libmudlet (MudletEngine, SessionStore): the engine is killed
 (SIGKILL) mid-session and started again, as Android does, and must bring the profile back and reconnect it to
-fake_telnet.py, with the TLS choice it was started with; it must not after an orderly stop, the app's stop marker or
-the user's disconnect, nor keep restoring in a crash loop. Build the engine as for test_mudlet_engine.py.
+fake_telnet.py, with the TLS choice it was started with, or the profile the UI opened by name; it must not after an
+orderly stop, the app's stop marker or the user's disconnect, nor keep restoring in a crash loop. Build the engine as
+for test_mudlet_engine.py.
 
 usage: test_mudlet_restore.py <path-to-engine-binary>
 """
@@ -109,6 +110,12 @@ class Engine:
 
     def send(self, msg):
         self.client.send(msg)
+
+    def ask(self, msg):
+        """A request with an id, and the profiles or error frame that answers it."""
+        request_id = f"ask{time.monotonic_ns()}"
+        self.send(dict(msg, id=request_id))
+        return self.wait(lambda m: m["t"] in ("profiles", "error") and m.get("re") == request_id)
 
     def connect(self, port):
         self.send({"t": "connect", "host": "127.0.0.1", "port": port})
@@ -221,6 +228,35 @@ def tls_choice_restored(e, port):
     e.drain(QUIET_S)
     value = e.status.get("connection", "")
     check(not value.startswith("error"), f"and a connect with the same choice is taken: {value}")
+    return e
+
+
+def opened_profile_restored(e, port):
+    """A profile the UI opened by name, switching from the one running, is the one a kill brings back, connected to its
+    own address, and without the password it was opened with."""
+    other = "Opened Profile"
+    password = "pw-Restore-never-kept"
+    e.connect(port)
+    m = e.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": port, "tls": False, "login": "",
+               "autoReconnect": False})
+    check(m["t"] == "profiles", f"a second profile is saved: {m}")
+    m = e.ask({"t": "openProfile", "name": other, "password": password})
+    check(m["t"] == "profiles" and m["profiles"][0]["name"] == other, f"and opened: {m}")
+    e.status.pop("connection", None)
+    check(e.wait_status("profile", lambda v: v == f"{other} loaded") == f"{other} loaded", f"{PROFILE} is closed for it")
+    e.wait_status("connection", lambda v: v == "connected")
+    kept = state()
+    check(kept is not None and kept["profile"] == other and kept["connect"] and kept["host"] == "",
+          f"the opened profile is kept on disk, to connect to its own address: {kept}")
+    with open(STATE) as f:
+        check(password not in f.read(), "without its password")
+    e.kill()
+    e = Engine()
+    value = e.wait_status("restore", lambda v: v.startswith("reconnected"))
+    check(value == f"reconnected {other}", f"the restore reopens the profile the UI opened: {value}")
+    check(e.wait_status("profile", lambda v: v.endswith("loaded")) == f"{other} loaded", "and loads it")
+    with open(LOG, errors="replace") as f:
+        check(password not in f.read(), "nor is the password in the engine's log")
     return e
 
 
@@ -383,6 +419,8 @@ def main():
     e = game_down(e, autoreconnect=False)
     e = orderly_stop(e)
     e = game_down(e, autoreconnect=True)
+    e = orderly_stop(e)
+    e = opened_profile_restored(e, port)
     e = orderly_stop(e)
     e = crash_loop(e, port)
     e.stop()

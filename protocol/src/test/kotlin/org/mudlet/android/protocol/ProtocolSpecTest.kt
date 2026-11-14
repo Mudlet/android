@@ -78,6 +78,7 @@ class ProtocolSpecTest {
                         Int::class.javaPrimitiveType -> 1
                         Long::class.javaPrimitiveType -> 1L
                         Boolean::class.javaPrimitiveType -> true
+                        Profile::class.java -> Profile("x", "x", 1, true, "x", true)
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }
@@ -103,7 +104,7 @@ class ProtocolSpecTest {
         val parsed = toUi.map { (type, fields) ->
             val message = JSONObject().put("t", type)
             for (field in fields) {
-                message.put(field, if (field == "runs") JSONArray() else "1")
+                message.put(field, if (field in setOf("runs", "profiles", "lines")) JSONArray() else "1")
             }
             FrameReader.parse(message)
         }

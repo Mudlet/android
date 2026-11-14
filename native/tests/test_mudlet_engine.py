@@ -257,6 +257,7 @@ def main():
     profile_requests(port)
     input_line()
     console()
+    links()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -505,6 +506,100 @@ def console():
     colours = [m["value"] for m in msgs if m["t"] == "status" and m["key"] == "consoleColors"]
     check(len(colours) == 1 and colours[0].endswith(" #0a141e"), f"a UI that attaches is told the colours: {colours}")
     check(not any(m["t"] == "announce" for m in msgs), "but not the announcements it missed")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def link_ids(m):
+    """The link ids of a line's or tail's runs, in order."""
+    return [r[5] for r in m["runs"] if len(r) == 6 and r[5] > 0]
+
+
+def wait_received(line, timeout=5):
+    """Whether the game gets line within timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if line in fake_telnet.RECEIVED:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def links():
+    """getLink and followLink on a script's echoLink() and on a game's MXP <send> menu, linksChanged when a link
+    changes, link ids a profile opened later keeps apart from the earlier one's, and the changes a UI missed."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    proc, c = start_engine("Links Test")
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
+
+    def ask_link(request):
+        c.send(dict(request, id="link"))
+        return c.wait_for(lambda m: m.get("re") == "link" and m["t"] in ("link", "error"), collect=msgs)
+
+    def linked_line(text):
+        return c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].endswith(text) and link_ids(m), timeout=10, collect=msgs)
+
+    c.send({"t": "runLua", "id": "echoLink", "code": 'echo("links: ") echoLink("x", [[send("y")]], "tip") echo("\\n")'})
+    echo_id = link_ids(linked_line("links: x"))[-1]
+    m = ask_link({"t": "getLink", "link": echo_id})
+    check(m.get("t") == "link" and m["link"] == echo_id and m["tooltip"] == "tip" and not m["menu"] and not m["visited"]
+          and m["items"] == [{"label": "tip", "enabled": True, "separator": False}], f"getLink gives echoLink()'s tooltip: {m}")
+    msgs = []
+    c.send({"t": "followLink", "link": echo_id, "id": "follow"})
+    m = c.wait_for(lambda m: m["t"] == "linksChanged", timeout=10, collect=msgs)
+    check(echo_id in m["ids"], f"followLink leaves it visited, which linksChanged tells: {m}")
+    check(wait_received("y"), f"followLink runs its send(\"y\"), which reaches the game: {fake_telnet.RECEIVED[-3:]}")
+    check(not any(m.get("re") == "follow" for m in msgs), f"a followLink that ran is not answered: {msgs}")
+    m = ask_link({"t": "getLink", "link": echo_id})
+    check(m.get("visited") is True, f"getLink then gives it visited: {m}")
+
+    c.send({"t": "send", "text": "mxp"})
+    mxp_id = link_ids(linked_line("Food: stew"))[-1]
+    m = ask_link({"t": "getLink", "link": mxp_id})
+    check(m.get("t") == "link" and m["menu"] and m["tooltip"] == "the stew"
+          and m["items"] == [{"label": "Look", "enabled": True, "separator": False}, {"label": "Eat", "enabled": True, "separator": False}],
+          f"getLink gives an MXP <send>'s menu: {m}")
+    c.send({"t": "followLink", "link": mxp_id, "item": 1})
+    check(wait_received("eat stew"), f"followLink with an item runs that item: {fake_telnet.RECEIVED[-3:]}")
+    for request, message in [({"t": "followLink", "link": mxp_id, "item": 2}, "followLink: noSuchItem"),
+                             ({"t": "getLink", "link": 99999}, "getLink: unknown"),
+                             ({"t": "followLink", "link": 99999}, "followLink: unknown")]:
+        m = ask_link(request)
+        check(m == {"t": "error", "message": message, "re": "link"}, f"{request} gets {message!r}: {m}")
+
+    m = c.ask({"t": "saveProfile", "name": "Links Other", "host": "127.0.0.1", "port": game, "tls": False, "login": "",
+               "autoReconnect": False})
+    check(m["t"] == "profiles", f"saveProfile: {m}")
+    m = c.ask({"t": "openProfile", "name": "Links Other", "connect": False})
+    check(m["t"] == "profiles", f"openProfile: {m}")
+    wait_status(c, "profile", lambda v: v == "Links Other loaded", msgs, timeout=60)
+    c.send({"t": "runLua", "id": "echoLink2", "code": 'echo("other: ") echoLink("z", [[send("w")]], "other tip") echo("\\n")'})
+    other_id = link_ids(linked_line("other: z"))[-1]
+    check(other_id not in (echo_id, mxp_id), f"the next profile's link ids are not the last one's: {other_id}, {echo_id}, {mxp_id}")
+    m = ask_link({"t": "getLink", "link": echo_id})
+    check(m == {"t": "error", "message": "getLink: unknown", "re": "link"}, f"an id from the profile before names no link: {m}")
+    m = ask_link({"t": "getLink", "link": other_id})
+    check(m.get("tooltip") == "other tip", f"one of this profile's does: {m}")
+
+    # Emptying the console lets go of the link while no UI is attached
+    c.send({"t": "runLua", "id": "clear", "code": 'tempTimer(0.5, [[clearWindow()]])'})
+    wait_status(c, "luaResult", lambda v: True, msgs)
+    c.close()
+    time.sleep(1.5)
+    for missed in (True, False):
+        c = Client(SOCK)
+        msgs = []
+        c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+        changed = [m for m in msgs if m["t"] == "linksChanged"]
+        if missed:
+            check(changed == [{"t": "linksChanged", "ids": []}], f"a UI that attaches after a change it missed is told any link may have changed: {changed}")
+        else:
+            check(changed == [], f"one that missed nothing is not: {changed}")
+        c.close()
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

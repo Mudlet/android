@@ -13,6 +13,8 @@ Commands a client may send (one per line):
                      IAC WONT ECHO and "Password accepted"
   naws            -> IAC DO NAWS, then "NAWS asked"
   size            -> "SIZE: <columns>x<rows>" of the client's last NAWS, or "SIZE: none"
+  mxp             -> IAC WILL MXP, then "Food: stew" in MXP's secure line mode, "stew" a <SEND> link whose menu is
+                     "Look" (sends "look stew") and "Eat" (sends "eat stew"), with the tooltip "the stew"
   quit            -> close
 Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
@@ -26,7 +28,7 @@ import threading
 import time
 
 IAC, DONT, DO, WONT, WILL, SB, GA, SE = 255, 254, 253, 252, 251, 250, 249, 240
-TTYPE, ECHO, NAWS, GMCP = 24, 1, 31, 201
+TTYPE, ECHO, NAWS, MXP, GMCP = 24, 1, 31, 91, 201
 # (lines, start, end) of each flood, as seen by the sender
 FLOOD_TIMES = []
 # When each game connection was accepted (time.monotonic())
@@ -182,6 +184,9 @@ class Session(threading.Thread):
             conn.sendall(bytes([IAC, DO, NAWS]) + b"NAWS asked\r\n")
         elif line == "size":
             conn.sendall(f"SIZE: {self.size[0]}x{self.size[1]}\r\n".encode() if self.size else b"SIZE: none\r\n")
+        elif line == "mxp":
+            conn.sendall(bytes([IAC, WILL, MXP])
+                         + b'\x1b[1zFood: <SEND href="look stew|eat stew" hint="the stew|Look|Eat">stew</SEND>\r\n')
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False

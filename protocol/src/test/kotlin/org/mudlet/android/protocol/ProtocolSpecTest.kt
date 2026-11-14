@@ -75,7 +75,7 @@ class ProtocolSpecTest {
                 val args: List<Any> = method.parameterTypes.map { type ->
                     when (type) {
                         String::class.java -> "x"
-                        Int::class.javaPrimitiveType -> 1
+                        Int::class.javaPrimitiveType, Int::class.javaObjectType -> 1
                         Long::class.javaPrimitiveType -> 1L
                         Boolean::class.javaPrimitiveType -> true
                         Profile::class.java -> Profile("x", "x", 1, true, "x", true)
@@ -104,7 +104,7 @@ class ProtocolSpecTest {
         val parsed = toUi.map { (type, fields) ->
             val message = JSONObject().put("t", type)
             for (field in fields) {
-                message.put(field, if (field in setOf("runs", "profiles", "lines")) JSONArray() else "1")
+                message.put(field, if (field in setOf("runs", "profiles", "lines", "items", "ids")) JSONArray() else "1")
             }
             FrameReader.parse(message)
         }

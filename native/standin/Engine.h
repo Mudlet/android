@@ -28,6 +28,9 @@ public:
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
     void setScreenSize(int columns, int rows) override;
+    // The stand-in's runs carry no links
+    QString link(int, Link&) const override { return QStringLiteral("not supported"); }
+    QString followLink(int, std::optional<int>) override { return QStringLiteral("not supported"); }
     QList<Profile> profiles() const override { return mProfiles; }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;

@@ -260,6 +260,7 @@ def main():
     console()
     links()
     app_state()
+    script_windows()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -712,6 +713,143 @@ def app_state():
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
+
+def window_of(msgs, name, kind):
+    """The last state the windows messages gave of a script window, or None."""
+    found = None
+    for m in msgs:
+        if m["t"] == "windows":
+            found = next((w for w in m["windows"] if w["name"] == name and w["kind"] == kind), found)
+    return found
+
+
+def windows_with(name, kind, pred=lambda w: True):
+    return lambda m: m["t"] == "windows" and any(w["name"] == name and w["kind"] == kind and pred(w) for w in m["windows"])
+
+
+def script_windows():
+    """What scripts draw: a Geyser MiniConsole and UserWindow as windows, with the console's text as windowText; the
+    main window's size from setMainWindowSize, and the borders a script sets, as mainArea; placeUserWindow raising
+    the resize event a script handles; a console's own command line both ways; hiding, closing and deleting; and all
+    of it again for a UI that attaches."""
+    game = fake_telnet.start_in_thread()
+    proc, c = start_engine("Window Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "windows", "full": True, "windows": []} in seen and not any(m["t"] == "mainArea" for m in seen),
+          "with no profile open, a UI that attaches is told of no script windows, and no main area")
+    m = c.ask({"t": "getWindowText", "window": "chat", "first": 0, "count": 5}, answers=("windowText", "error"), collect=seen)
+    check(m["t"] == "error", f"getWindowText with no profile open is refused: {m}")
+    c.send({"t": "placeUserWindow", "name": "side", "x": 0, "y": 0, "w": 10, "h": 10, "floating": False})
+    m = c.wait_for(lambda m: m["t"] == "error", collect=seen)
+    check(m["message"] == "placeUserWindow: no profile running", f"placeUserWindow with no profile open is refused: {m}")
+
+    # Kept until the profile loads, which takes it
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    m = c.wait_for(lambda m: m["t"] == "mainArea", timeout=30, collect=seen)
+    check(m["w"] == 1000 and m["h"] == 800 and (m["textX"], m["textY"], m["textW"], m["textH"]) == (0, 0, 1000, 800)
+          and m["columns"] > 0 and m["rows"] > 0, f"the profile takes the size the UI gave before it loaded: {m}")
+    columns = m["columns"]
+    wait_status(c, "connection", lambda v: v == "connected", seen)
+
+    c.send({"t": "runLua", "code": "\n".join([
+        'chat = Geyser.MiniConsole:new({name = "chat", x = 0, y = 0, width = "30%", height = "40%"})',
+        'chat:cecho("<red>red<reset> plain\\n")',
+        'side = Geyser.UserWindow:new({name = "side"})',
+        'registerAnonymousEventHandler("sysUserWindowResizeEvent", function(_, width, height, window)',
+        '  echo(string.format("resized %s %dx%d\\n", window, width, height))',
+        'end)',
+        'local mw, mh = getMainWindowSize()',
+        'echo(string.format("main window %dx%d\\n", mw, mh))',
+    ])})
+    m = c.wait_for(lambda m: m["t"] == "windowText" and m["window"] == "chat" and m["lines"]
+                   and m["lines"][0]["text"] == "red plain", collect=seen)
+    check("re" not in m and m["first"] == 0 and m["lineCount"] >= 1, f"chat:cecho() gives the console's text: {m}")
+    runs = m["lines"][0]["runs"]
+    check(bool(runs) and runs[0][:3] == [0, 3, 0x1000000 | 0xFF0000], f"with its colours: {runs}")
+    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("main window "), collect=seen)
+    check(m["text"] == "main window 1000x800", f"scripts read the size the UI gave as the main window's: {m['text']}")
+    chat = window_of(seen, "chat", "miniConsole")
+    check(chat is not None and (chat["x"], chat["y"], chat["w"], chat["h"]) == (0, 0, 300, 320) and chat["parent"] == ""
+          and chat["shown"] and chat["visible"] and not chat["inDock"] and chat.get("columns", 0) > 0 and chat.get("fontSize", 0) > 0,
+          f"a Geyser MiniConsole is a miniConsole at its place in the main window: {chat}")
+    side = window_of(seen, "side", "userWindow")
+    check(side is not None and side["inDock"] and "dockArea" in side and "columns" in side,
+          f"a Geyser UserWindow is a userWindow in a dock: {side}")
+
+    c.send({"t": "placeUserWindow", "name": "side", "x": 10, "y": 20, "w": 250, "h": 400, "floating": False})
+    c.wait_for(shown("resized side 250x400"), collect=seen)
+    c.wait_for(windows_with("side", "userWindow", lambda w: w["w"] == 250), collect=seen)
+    side = window_of(seen, "side", "userWindow")
+    check((side["x"], side["y"], side["w"], side["h"]) == (10, 20, 250, 400),
+          f"placeUserWindow places it, and raises sysUserWindowResizeEvent: {side}")
+    c.send({"t": "placeUserWindow", "name": "chat", "x": 0, "y": 0, "w": 10, "h": 10, "floating": False})
+    m = c.wait_for(lambda m: m["t"] == "error", collect=seen)
+    check(m["message"].startswith("placeUserWindow: ") and "chat" in m["message"], f"a mini console is no user window: {m}")
+
+    c.send({"t": "runLua", "code": "setBorderLeft(100)"})
+    m = c.wait_for(lambda m: m["t"] == "mainArea", collect=seen)
+    check(m["w"] == 1000 and (m["textX"], m["textW"]) == (100, 900) and m["columns"] < columns,
+          f"setBorderLeft() moves the main console's text: {m}")
+    c.send({"t": "setMainWindowSize", "w": 1, "h": 1})
+    m = c.wait_for(lambda m: m["t"] in ("error", "mainArea"), collect=seen)
+    check(m["t"] == "error" and m["message"].startswith("setMainWindowSize: "), f"a size with no room for a character is refused: {m}")
+    c.send({"t": "setMainWindowSize", "w": 1200, "h": 800})
+    m = c.wait_for(lambda m: m["t"] == "mainArea", collect=seen)
+    check((m["w"], m["h"], m["textX"], m["textW"]) == (1200, 800, 100, 1100), f"a size given while the profile runs is taken at once: {m}")
+
+    c.send({"t": "runLua", "code": "\n".join([
+        'enableCommandLine("chat")',
+        'setCmdLineAction("chat", function(text) echo("acted " .. text .. "\\n") end)',
+        'printCmdLine("chat", "typed")',
+    ])})
+    m = c.wait_for(lambda m: m["t"] == "windowCommandLine" and m["text"], collect=seen)
+    check(m == {"t": "windowCommandLine", "name": "chat", "text": "typed"}, f"printCmdLine() on a console's line: {m}")
+    line = window_of(seen, "chat", "commandLine")
+    check(line is not None and line["parent"] == "chat" and line.get("parentKind") == "miniConsole" and line["shown"],
+          f"enableCommandLine() gives the console a commandLine: {line}")
+    c.send({"t": "sendWindowCommandLine", "name": "chat", "text": "look"})
+    c.wait_for(shown("acted look"), collect=seen)
+    check(True, "sendWindowCommandLine runs the line's action")
+
+    m = c.ask({"t": "getWindowText", "window": "chat", "first": 0, "count": 10}, answers=("windowText", "error"), collect=seen)
+    check(m["t"] == "windowText" and m["window"] == "chat" and m["first"] == 0 and m["lines"][0]["text"] == "red plain",
+          f"getWindowText answers with the rows: {m}")
+    m = c.ask({"t": "getWindowText", "window": "nonesuch", "first": 0, "count": 10}, answers=("windowText", "error"),
+              collect=seen)
+    check(m["t"] == "error" and "nonesuch" in m["message"], f"and refuses a console there is not: {m}")
+
+    c.send({"t": "runLua", "code": "chat:hide()"})
+    c.wait_for(windows_with("chat", "miniConsole", lambda w: not w["shown"]), collect=seen)
+    chat = window_of(seen, "chat", "miniConsole")
+    line = window_of(seen, "chat", "commandLine")
+    check(not chat["visible"] and line is not None and line["visible"] and not line["shown"],
+          f"hiding it hides what it holds: {chat} {line}")
+    c.send({"t": "closeUserWindow", "name": "side"})
+    c.wait_for(windows_with("side", "userWindow", lambda w: not w["visible"]), collect=seen)
+    check(True, "closeUserWindow hides the user window")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen += msgs
+    full = [m for m in msgs if m["t"] == "windows"]
+    keys = {(w["name"], w["kind"]) for w in full[0]["windows"]} if full else set()
+    check(len(full) == 1 and full[0]["full"] and {("chat", "miniConsole"), ("chat", "commandLine"), ("side", "userWindow")} <= keys,
+          f"a UI that attaches gets every window: {full}")
+    texts = {m["window"]: m for m in msgs if m["t"] == "windowText"}
+    check("chat" in texts and "side" in texts and texts["chat"]["lines"][0]["text"] == "red plain",
+          f"and each console's text: {list(texts)}")
+    areas = [m for m in msgs if m["t"] == "mainArea"]
+    check(len(areas) == 1 and (areas[0]["w"], areas[0]["textX"]) == (1200, 100), f"and the main area: {areas}")
+
+    c.send({"t": "runLua", "code": 'deleteMiniConsole("chat")'})
+    m = c.wait_for(lambda m: m["t"] == "windows" and m.get("removed"), collect=seen)
+    check({"name": "chat", "kind": "miniConsole"} in m["removed"], f"a deleted console is removed: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 if __name__ == "__main__":
     main()

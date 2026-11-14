@@ -142,6 +142,72 @@ class ProtocolTest {
     }
 
     @Test
+    fun scriptWindowsParseWithTheirOptionalParts() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"windows","full":true,"windows":[""" +
+                    """{"name":"side","kind":"userWindow","parent":"","x":0,"y":0,"w":300,"h":200,"visible":true,"shown":true,"stack":0,""" +
+                    """"bg":${RUN_RGB or 0x102030},"fontFamily":"Mono","fontSize":10.5,"inDock":true,"autoDock":false,"dockArea":"left",""" +
+                    """"dockFloating":true,"dockTitle":"Side","scrolledBackTo":12,"columns":40,"rows":10,"scrollBar":true,"timeStamps":false},""" +
+                    """{"name":"side","kind":"commandLine","parent":"side","parentKind":"userWindow","x":0,"y":0,"w":0,"h":0,""" +
+                    """"visible":true,"shown":false,"stack":1,"inDock":false},""" +
+                    """{"name":"later","kind":"hologram","parent":"","x":0,"y":0,"w":1,"h":1,"visible":true,"shown":true,"stack":2,"inDock":false}],""" +
+                    """"removed":[{"name":"chat","kind":"miniConsole"},{"name":"x","kind":"hologram"}]}""",
+            ),
+        ) as EngineMessage.Windows
+        assertTrue(message.full)
+        val side = ScriptWindow(
+            "side", WindowKind.USER_WINDOW, "", null, 0, 0, 300, 200, true, true, 0, RUN_RGB or 0x102030, "Mono", 10.5, true,
+            ScriptWindow.Dock(false, "left", true, "Side"), ScriptWindow.Console(12, 40, 10, true, false),
+        )
+        val line = ScriptWindow("side", WindowKind.COMMAND_LINE, "side", WindowKind.USER_WINDOW, 0, 0, 0, 0, true, false, 1, -1, null, 0.0, false, null, null)
+        // A kind the app does not know is left out
+        assertEquals(listOf(side, line), message.windows)
+        assertEquals(WindowKey("side", WindowKind.COMMAND_LINE), line.key)
+        assertEquals(listOf(WindowKey("chat", WindowKind.MINI_CONSOLE)), message.removed)
+        val update = FrameReader.parse(JSONObject("""{"t":"windows","windows":[]}""")) as EngineMessage.Windows
+        assertEquals(EngineMessage.Windows(false, emptyList(), emptyList()), update)
+    }
+
+    @Test
+    fun windowTextMainAreaAndCommandLinesParse() {
+        val text = FrameReader.parse(
+            JSONObject(
+                """{"t":"windowText","window":"chat","lineCount":3,"first":1,"re":"w1","lines":[""" +
+                    """{"text":"hello","runs":[[0,5,${RUN_RGB or 0xff0000}]],"prompt":false,"wrapped":false},""" +
+                    """{"text":"HP>","runs":[],"prompt":true,"wrapped":true}]}""",
+            ),
+        ) as EngineMessage.WindowText
+        assertEquals("chat", text.window)
+        assertEquals(3, text.lineCount)
+        assertEquals(1, text.first)
+        assertEquals("w1", text.replyTo)
+        assertEquals(listOf("hello", "HP>"), text.lines.map { it.text })
+        assertArrayEquals(intArrayOf(0, 5, RUN_RGB or 0xff0000, -1, 0, 0), text.lines[0].runs)
+        assertTrue(text.lines[1].prompt && text.lines[1].wrapped)
+        assertEquals(
+            EngineMessage.MainArea(800, 600, 90, 30, 10, 0, 780, 600),
+            FrameReader.parse(JSONObject("""{"t":"mainArea","w":800,"h":600,"columns":90,"rows":30,"textX":10,"textY":0,"textW":780,"textH":600}""")),
+        )
+        assertEquals(EngineMessage.WindowCommandLine("chat", "say hi"), FrameReader.parse(JSONObject("""{"t":"windowCommandLine","name":"chat","text":"say hi"}""")))
+    }
+
+    @Test
+    fun theScriptWindowRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "setMainWindowSize", "w" to 800, "h" to 600), Requests.setMainWindowSize(800, 600).toMap())
+        assertEquals(
+            mapOf("t" to "getWindowText", "window" to "chat", "first" to -300, "count" to 300, "id" to 8L),
+            Requests.getWindowText("chat", -300, 300, 8).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "placeUserWindow", "name" to "side", "x" to 1, "y" to 2, "w" to 3, "h" to 4, "floating" to true),
+            Requests.placeUserWindow("side", 1, 2, 3, 4, true).toMap(),
+        )
+        assertEquals(mapOf("t" to "closeUserWindow", "name" to "side"), Requests.closeUserWindow("side").toMap())
+        assertEquals(mapOf("t" to "sendWindowCommandLine", "name" to "chat", "text" to "look"), Requests.sendWindowCommandLine("chat", "look").toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

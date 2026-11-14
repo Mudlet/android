@@ -209,6 +209,11 @@ keeps the profiles' passwords in the KeyStore.
 | `hiddenInputWanted` | `hiddenInput` |
 | `commandHistory()`, read at `profileLoaded` and when a UI attaches | `history` |
 | `commandLineTextRequested` (`printCmdLine()` and the like) | `commandLine` |
+| `scriptWindows()`, read at `profileLoaded`, then at each `scriptWindowsChanged` | `windows`, only the windows that changed and those `removed`; all of them, with `full`, to a UI that attaches. A close sends an empty list |
+| `windowLines()`, the last 300 rows, at `profileLoaded` and at each `windowTextChanged` | `windowText`; any rows on request with `getWindowText` |
+| `setMainWindowSize()`, then `mainConsoleGrid()` and `mainConsoleTextRect()` at `profileLoaded` and at each `mainConsoleAreaChanged` | `setMainWindowSize`, kept and given again to each profile as it loads; `mainArea` |
+| `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
+| `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -264,6 +269,12 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
   `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
   history, and `printCmdLine()` as `commandLine`;
+- script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
+  colours; a Geyser `UserWindow` placed by `placeUserWindow`, which raises `sysUserWindowResizeEvent`; the size from
+  `setMainWindowSize` before the profile loads, and `setBorderLeft()`, as `mainArea`; `enableCommandLine()` with
+  `printCmdLine()` as `windowCommandLine` and `sendWindowCommandLine` running `setCmdLineAction()`'s function;
+  `getWindowText`; hiding, `closeUserWindow`, a `full` `windows` and each console's text to a UI that attaches, and
+  `removed`;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

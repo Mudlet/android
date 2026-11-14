@@ -10,6 +10,7 @@
 #include <QPointer>
 #include <QStringList>
 #include <deque>
+#include <optional>
 
 class IEngine;
 class QLocalServer;
@@ -26,11 +27,13 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 6;
+    static constexpr int protocolVersion = 7;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
     static constexpr qint64 lowWaterBytes = 256 * 1024;
+    // The most rows one getWindowText is answered with
+    static constexpr int maxWindowTextRows = 1000;
 
     explicit SocketBridge(QObject* parent = nullptr);
     void setEngine(IEngine* engine) { mEngine = engine; }
@@ -48,6 +51,10 @@ public:
     void linksChanged(const QList<int>& ids) override;
     void attention(int ms) override;
     void moveTypedLine() override;
+    void windows(const QList<ScriptWindowInfo>& windows) override;
+    void windowText(const QString& window, const WindowText& text) override;
+    void mainArea(const MainArea& area) override;
+    void windowCommandLine(const QString& name, const QString& text) override;
 
 private:
     struct StoredLine
@@ -64,7 +71,7 @@ private:
     void handleMessage(const QJsonObject& message);
     void greet(const QJsonObject& hello);
     void sendLinesAfter(qint64 seq, bool replay);
-    // Every status, then the input line's state, as a UI attaching or catching up needs them
+    // Every status, then the input line's state and the script windows', as a UI attaching or catching up needs them
     void sendState();
     void sendFrame(const QJsonObject& message);
     // An answer to the request being handled: it carries that request's id as re, and is sent even to a lagging UI
@@ -72,6 +79,8 @@ private:
     void sendError(const QString& message);
     void sendProfiles();
     void answerProfiles(const QString& request, const QString& problem);
+    // An error naming the request, for a problem that is not empty
+    void refuse(const QString& request, const QString& problem);
     QString saveProfile(const QJsonObject& message);
     QString openProfile(const QJsonObject& message);
     void complete(const QJsonObject& message);
@@ -79,6 +88,9 @@ private:
     void getLink(const QJsonObject& message);
     void followLink(const QJsonObject& message);
     void setAppState(const QJsonObject& message);
+    QString setMainWindowSize(const QJsonObject& message);
+    void getWindowText(const QJsonObject& message);
+    QString placeUserWindow(const QJsonObject& message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
@@ -88,6 +100,9 @@ private:
     QJsonObject hiddenInputMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
     static QJsonObject linksChangedMessage(const QList<int>& ids);
+    static QJsonObject windowJson(const ScriptWindowInfo& window);
+    static QJsonObject windowTextMessage(const QString& window, const WindowText& text);
+    static QJsonObject mainAreaMessage(const MainArea& area);
 
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
@@ -100,6 +115,10 @@ private:
     bool mHiddenInput = false;
     // A linksChanged went to no live UI, so the next to attach or catch up is told any link may have changed
     bool mLinksMissed = false;
+    // As IFrontend::windows() last gave them
+    QList<ScriptWindowInfo> mWindows;
+    // None until the engine has sent one
+    std::optional<MainArea> mMainArea;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

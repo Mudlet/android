@@ -28,6 +28,7 @@ void showProfileInNotification([[maybe_unused]] const QString& profile)
 #endif
 }
 
+using ScriptWindow = THeadlessSession::ScriptWindow;
 using TextRun = THeadlessSession::TextRun;
 using TextStyle = THeadlessSession::TextStyle;
 
@@ -65,13 +66,14 @@ int attributeBits(THeadlessSession::TextStyles styles)
 
 // Runs that are the profile's own colours with no style or link are left out, as the stand-in leaves them. A link's id
 // is the session's plus linkBase; linkTop is raised to the highest one.
-QList<ColorRun> colorRuns(const QList<TextRun>& runs, int linkBase, int& linkTop)
+// exactForeground: the default foreground as its colour too, as for a script window, whose own the UI does not know.
+QList<ColorRun> colorRuns(const QList<TextRun>& runs, int linkBase, int& linkTop, bool exactForeground = false)
 {
     QList<ColorRun> out;
     for (const TextRun& run : runs) {
         const ColorRun converted{run.start,
                                  run.length,
-                                 colourCode(run.foreground, run.defaultForeground),
+                                 colourCode(run.foreground, run.defaultForeground && !exactForeground),
                                  colourCode(run.background, run.defaultBackground),
                                  attributeBits(run.styles),
                                  run.link == 0 ? 0 : linkBase + run.link};
@@ -97,6 +99,77 @@ QList<ColorRun> sliceRuns(const QList<ColorRun>& runs, int from, int to)
         }
     }
     return out;
+}
+
+QString kindName(ScriptWindow::Kind kind)
+{
+    switch (kind) {
+    case ScriptWindow::Kind::miniConsole:
+        return QStringLiteral("miniConsole");
+    case ScriptWindow::Kind::userWindow:
+        return QStringLiteral("userWindow");
+    case ScriptWindow::Kind::label:
+        return QStringLiteral("label");
+    case ScriptWindow::Kind::commandLine:
+        return QStringLiteral("commandLine");
+    case ScriptWindow::Kind::textBox:
+        return QStringLiteral("textBox");
+    case ScriptWindow::Kind::scrollBox:
+        return QStringLiteral("scrollBox");
+    case ScriptWindow::Kind::mapper:
+        return QStringLiteral("mapper");
+    case ScriptWindow::Kind::mxpFrame:
+        return QStringLiteral("mxpFrame");
+    }
+    return {};
+}
+
+QString dockAreaName(Qt::DockWidgetArea area)
+{
+    switch (area) {
+    case Qt::LeftDockWidgetArea:
+        return QStringLiteral("left");
+    case Qt::TopDockWidgetArea:
+        return QStringLiteral("top");
+    case Qt::BottomDockWidgetArea:
+        return QStringLiteral("bottom");
+    default:
+        return QStringLiteral("right");
+    }
+}
+
+bool isConsole(ScriptWindow::Kind kind)
+{
+    return kind == ScriptWindow::Kind::miniConsole || kind == ScriptWindow::Kind::userWindow || kind == ScriptWindow::Kind::mxpFrame;
+}
+
+ScriptWindowInfo windowInfo(const ScriptWindow& window)
+{
+    ScriptWindowInfo info;
+    info.name = window.name;
+    info.kind = kindName(window.kind);
+    info.parent = window.parent;
+    if (!window.parent.isEmpty()) {
+        info.parentKind = kindName(window.parentKind);
+    }
+    info.geometry = window.geometry;
+    info.visible = window.visible;
+    info.shown = window.shown;
+    info.stackOrder = window.stackOrder;
+    info.background = colourCode(window.background, false);
+    // The other kinds have a default QFont, which draws nothing
+    if (isConsole(window.kind) || window.kind == ScriptWindow::Kind::label || window.kind == ScriptWindow::Kind::textBox) {
+        info.fontFamily = window.font.family();
+        info.fontSize = std::max(window.font.pointSizeF(), 0.0);
+    }
+    info.inDock = window.inDock;
+    if (window.dock) {
+        info.dock = ScriptWindowInfo::Dock{window.dock->autoDock, dockAreaName(window.dock->area), window.dock->floating, window.dock->title};
+    }
+    if (isConsole(window.kind)) {
+        info.console = ScriptWindowInfo::Console{window.scrolledBackTo, window.grid.width(), window.grid.height(), window.scrollBar, window.timeStamps};
+    }
+    return info;
 }
 
 QString settleConfigDir()
@@ -272,12 +345,39 @@ void MudletEngine::connectSession()
         reportConsoleColors(mSession->consoleForeground(), mSession->consoleBackground());
         // As early as the profile takes it, so a game that asks as it connects is not first told 90 by 25
         applyScreenSize();
+        mLoaded = true;
+        if (!mMainWindowSize.isEmpty() && !mSession->setMainWindowSize(mMainWindowSize)) {
+            qWarning("MudletEngine: the main window's size %dx%d was refused: %s", mMainWindowSize.width(), mMainWindowSize.height(), qPrintable(mSession->errorString()));
+            // So mainArea does not give it as the profile's
+            mMainWindowSize = {0, 0};
+        }
+        pushMainArea();
+        pushWindows(true);
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
     });
     connect(session, &THeadlessSession::commandLineTextRequested, this, [this](const QString&, const QString& text) {
         mFrontend->commandLine(text);
+    });
+    // The script windows' signals come from the event loop, so these may call the session
+    connect(session, &THeadlessSession::scriptWindowsChanged, this, [this] {
+        pushWindows(false);
+    });
+    connect(session, &THeadlessSession::windowTextChanged, this, [this](const QString&, const QStringList& windows) {
+        for (const QString& window : windows) {
+            pushWindowText(window);
+        }
+    });
+    connect(session, &THeadlessSession::windowCommandLineTextChanged, this, [this](const QString&, const QStringList& commandLines) {
+        for (const QString& name : commandLines) {
+            if (const std::optional<QString> text = mSession->windowCommandLineText(name)) {
+                mFrontend->windowCommandLine(name, *text);
+            }
+        }
+    });
+    connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
+        mFrontend->mainArea({mMainWindowSize, grid, textRect});
     });
     connect(session, &THeadlessSession::connecting, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting"));
@@ -327,6 +427,7 @@ void MudletEngine::connectSession()
         mKept = {};
         persist();
         mRestoring = false;
+        onProfileClosed();
     });
 }
 
@@ -444,6 +545,7 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     mKept.tls = tls;
     persist();
     mState = State::starting;
+    mLoaded = false;
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
     mSession->startAsync(options);
@@ -761,6 +863,7 @@ void MudletEngine::onShutdownFinished(bool saved, const QString& error)
     }
     mState = State::idle;
     showProfileInNotification({});
+    onProfileClosed();
     if (saved) {
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));
     } else {
@@ -790,6 +893,96 @@ void MudletEngine::keepPending()
     }
     mKept = mPendingOpen->kept();
     persist();
+}
+
+void MudletEngine::onProfileClosed()
+{
+    mLoaded = false;
+    mFrontend->windows({});
+}
+
+void MudletEngine::pushWindows(bool withText)
+{
+    QList<ScriptWindowInfo> windows;
+    for (const ScriptWindow& window : mSession->scriptWindows()) {
+        windows.append(windowInfo(window));
+    }
+    mFrontend->windows(windows);
+    if (!withText) {
+        return;
+    }
+    for (const ScriptWindowInfo& window : std::as_const(windows)) {
+        if (window.console) {
+            pushWindowText(window.name);
+        }
+    }
+}
+
+void MudletEngine::pushWindowText(const QString& window)
+{
+    if (const std::optional<WindowText> text = windowText(window, -WindowText::recentRows, WindowText::recentRows)) {
+        mFrontend->windowText(window, *text);
+    }
+}
+
+// Also when only the size the UI gave changed, which mainConsoleAreaChanged does not tell
+void MudletEngine::pushMainArea()
+{
+    mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect()});
+}
+
+QString MudletEngine::setMainWindowSize(int width, int height)
+{
+    const QSize before = std::exchange(mMainWindowSize, QSize(width, height));
+    // Otherwise taken as the profile loads
+    if (!profileOpen()) {
+        return {};
+    }
+    if (!mSession->setMainWindowSize(mMainWindowSize)) {
+        mMainWindowSize = before;
+        return mSession->errorString();
+    }
+    pushMainArea();
+    return {};
+}
+
+std::optional<WindowText> MudletEngine::windowText(const QString& window, int first, int count) const
+{
+    const std::optional<THeadlessSession::WindowText> lines = mSession->windowLines(window, first, count);
+    if (!lines) {
+        return std::nullopt;
+    }
+    WindowText text{lines->lineCount, lines->first, {}};
+    // A window's link ids are its own, not offset as the main console's are
+    int linkTop = 0;
+    for (const THeadlessSession::WindowLine& line : lines->lines) {
+        text.rows.append({line.text, colorRuns(line.runs, 0, linkTop, true), line.isPrompt, line.wrapped});
+    }
+    return text;
+}
+
+QString MudletEngine::placeUserWindow(const QString& name, const QRect& geometry, bool floating)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setUserWindowGeometry(name, geometry, floating) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::closeUserWindow(const QString& name)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->closeUserWindow(name) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::sendWindowCommandLine(const QString& name, const QString& text)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->submitWindowCommandLine(name, text) ? QString() : mSession->errorString();
 }
 
 void MudletEngine::setScreenSize(int columns, int rows)

@@ -3,8 +3,8 @@ name: CI
 # The one workflow that pull requests and pushes to main start. It looks at which files changed and calls only the
 # workflows those files need (checks.yml, apks.yml, libmudlet.yml), then reports one result, "CI result", which is
 # the check to require: a workflow a path filter left out never reports, and a skipped job counts as passed. The nightly
-# and a manual run build everything, the nightly against Mudlet's latest development; a failed nightly opens or
-# updates an issue here.
+# runs the libmudlet jobs against Mudlet's latest development, the only ones that can break with no change here, and
+# opens or updates an issue when they fail; a manual run runs everything.
 #
 # What runs for what changed (the filters in "changes" below say it exactly):
 #   docs, README and the like     nothing but this workflow's own small jobs (docs/protocol.md: the APKs, whose
@@ -147,14 +147,20 @@ jobs:
               - .github/workflows/libmudlet.yml
               - *everything
 
-      # A nightly or manual run runs everything
+      # The nightly runs what builds Mudlet's development; a manual run runs everything
       - name: Decide
         id: decide
         env:
-          FILTERED: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+          EVENT: ${{ github.event_name }}
           CHANGES: ${{ toJSON(steps.filter.outputs) }}
         run: |
-          wanted() { if [ "$FILTERED" != true ]; then echo true; else jq -r --arg k "$1" '.[$k] // "false"' <<< "$CHANGES"; fi; }
+          wanted() {
+            case "$EVENT" in
+              push | pull_request) jq -r --arg k "$1" '.[$k] // "false"' <<< "$CHANGES" ;;
+              schedule) case "$1" in libmudlet-android | desktop-engine | emulator) echo true ;; *) echo false ;; esac ;;
+              *) echo true ;;
+            esac
+          }
           checks=()
           for check in clang-format shellcheck actionlint; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
@@ -227,11 +233,9 @@ jobs:
 
   # GitHub mails a failed scheduled run only to whoever last edited the cron line
   report-nightly-failure:
-    needs: [checks, apks, libmudlet]
+    needs: libmudlet
     # a job that hits timeout-minutes is cancelled, not failed
-    if: >-
-      always() && github.event_name == 'schedule'
-      && (needs.checks.result != 'success' || needs.apks.result != 'success' || needs.libmudlet.result != 'success')
+    if: always() && github.event_name == 'schedule' && needs.libmudlet.result != 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

@@ -127,11 +127,12 @@ are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## CI
 
-One workflow, **CI** (`.github/workflows/ci.yml`), runs on pull requests, pushes to `main`, every night and on
-demand. Its first job sorts the changed files with a path filter and calls only the workflows they need, down to the
-job; the nightly and a manual run call everything. **PTB**, below, is a workflow of its own. Its last job, **CI result**, passes when every job the changes
-called for passed and every other one was skipped, so it is the one check to require: a workflow a path filter left
-out never reports, and a skipped job counts as passed. A newer push to a pull request cancels its older run.
+One workflow, **CI** (`.github/workflows/ci.yml`), runs on pull requests, pushes to `main`, every night and on demand.
+Its first job sorts the changed files with a path filter and calls only the workflows they need, down to the job; the
+nightly runs the libmudlet jobs, and a manual run everything. **PTB**, below, is a workflow of its own. Its last job,
+**CI result**, passes when every job the changes called for passed and every other one was skipped, so it is the one
+check to require: a workflow a path filter left out never reports, and a skipped job counts as passed. A newer push to a
+pull request cancels its older run.
 
 | Changed | Runs |
 |---|---|
@@ -203,11 +204,12 @@ The workflows it calls:
   clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the workflows, as
   four short jobs, each when a file it checks changed.
 
-Every night CI runs everything against Mudlet's latest `development`, so a change on Mudlet's side that breaks the
-Android build shows up; a nightly that fails or times out opens or updates an issue here. GitHub pauses the nightly
-after 60 days without activity in this repository; re-enable it from the Actions tab. A red check on a pull request
-can come from Mudlet's side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on any branch, with
-any Mudlet ref; `apks.yml` and `libmudlet.yml` can also be run on their own, the latter with a choice of its jobs.
+Every night CI runs the libmudlet jobs against Mudlet's latest `development` (the other jobs build only from this
+repository, which pushes to `main` already check), so a change on Mudlet's side that breaks the Android build shows up;
+a nightly that fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without
+activity in this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's
+side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on any branch, with any Mudlet ref;
+`apks.yml` and `libmudlet.yml` can also be run on their own, the latter with a choice of its jobs.
 
 **PTB** (`.github/workflows/ptb.yml`), outside CI, runs every night and on pull requests that change how the release
 is built. It builds the release from Mudlet's `development` for arm64-v8a and x86_64, as the separate app Mudlet PTB

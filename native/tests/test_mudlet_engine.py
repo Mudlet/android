@@ -198,6 +198,31 @@ def main():
     tails = sum(1 for m in msgs if m["t"] == "tail")
     check(tails < 50, f"the tail is synced once a turn, not once a line: {tails} tail frames")
 
+    # A line that neither a line feed nor GA has ended. While the game has sent no GA, Mudlet ends it once the game
+    # has been quiet for the profile's network packet timeout (300 ms by default), and lineShown sends it, not as a
+    # prompt: here a new connection, to a game that sends no GA
+    login_port = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": login_port})
+    m = c.wait_for(shown("Login: "), timeout=10)
+    delay = time.perf_counter() - fake_telnet.SENT["banner"]
+    check(not m["prompt"] and 0.2 <= delay < 1.5,
+          f"a prompt without GA is shown after 300 ms of quiet, not as a prompt: {delay * 1000:.0f} ms, {m}")
+
+    # Once the game has sent a GA, a line it leaves unfinished is shown only when it ends, as in the desktop GUI
+    msgs = []
+    first_seen = []
+
+    def until_last_line(m):
+        if m["t"] in ("line", "tail") and m["text"].startswith("Press return") and not first_seen:
+            first_seen.append(time.perf_counter())
+        return shown("last line")(m)
+
+    c.send({"t": "send", "text": "ga-partial"})
+    c.wait_for(until_last_line, timeout=10, collect=msgs)
+    check(any(m["t"] == "tail" and m["prompt"] and m["text"] == "Ready> " for m in msgs), "the GA prompt is the tail")
+    check("Press return: " in texts_of(msgs) and first_seen[0] >= fake_telnet.SENT["line-end"],
+          f"after a GA, the unfinished line waits for its end: {texts_of(msgs)}")
+
     # Errors from Lua reach the UI as status
     c.send({"t": "runLua", "id": 5, "code": "error('boom')"})
     # The error console prints it over two lines: where, then the message

@@ -1,8 +1,9 @@
 name: Checks
 
-# The static checks in scripts/lint.sh: ktlint and clang-format. They are quick, so they run on every pull request and
-# push to main, without path filters: a required check whose workflow a path filter skipped would leave the pull
-# request waiting. Android lint needs the staged Qt jars, so it runs in apks.yml after the APK is built.
+# The static checks in scripts/lint.sh: ktlint, clang-format, ShellCheck and actionlint. They are quick, so they run
+# on every pull request and push to main, without path filters: a required check whose workflow a path filter
+# skipped would leave the pull request waiting. Android lint needs the staged Qt jars, so it runs in
+# apks.yml after the APK is built.
 on:
   push:
     branches: [main]
@@ -45,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clang-format]
+        check: [clang-format, shellcheck, actionlint]
     steps:
       - uses: actions/checkout@v6
 

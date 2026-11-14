@@ -2,18 +2,20 @@
 # The static checks CI runs (.github/workflows/checks.yml), each on the files it covers:
 #   - ktlint: the Kotlin sources and Gradle scripts, with .editorconfig (./gradlew ktlintFormat fixes them)
 #   - clang-format: native/'s C and C++, but not native/third_party, with .clang-format (FIX=1 rewrites the files)
+#   - shellcheck: the shell scripts
+#   - actionlint: the workflows, and ShellCheck on their run: steps
 # Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in apks.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
-# Usage: scripts/lint.sh [ktlint] [clang-format]   (both when none is named)
-# clang-format is the version in scripts/lint-requirements.txt, installed into LINT_VENV (.lint-venv) on first use.
-# ktlint runs through Gradle, with JDK 21.
+# Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint]   (all four when none is named)
+# clang-format, ShellCheck and actionlint are the versions in scripts/lint-requirements.txt, installed into
+# LINT_VENV (.lint-venv) on first use. ktlint runs through Gradle, with JDK 21.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 venv=${LINT_VENV:-$root/.lint-venv}
 checks=("$@")
-[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format)
+[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint)
 
 # The pinned linters, installed once per run
 tools_ready=0
@@ -41,8 +43,14 @@ for check in "${checks[@]}"; do
             else
                 native_files | xargs -0 "$venv/bin/clang-format" --dry-run --Werror || failed+=("$check")
             fi ;;
+        shellcheck)
+            tools
+            files '*.sh' | xargs -0 "$venv/bin/shellcheck" || failed+=("$check") ;;
+        actionlint)
+            tools
+            "$venv/bin/actionlint" -shellcheck="$venv/bin/shellcheck" || failed+=("$check") ;;
         *)
-            echo "unknown check '$check': ktlint or clang-format" >&2
+            echo "unknown check '$check': ktlint, clang-format, shellcheck or actionlint" >&2
             exit 2 ;;
     esac
 done

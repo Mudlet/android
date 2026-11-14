@@ -48,7 +48,6 @@ import java.util.Locale
  */
 @RunWith(Parameterized::class)
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.TIRAMISU)
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 class PseudoLocaleTest(private val locale: String) {
     private val fake = FakeEngineRule()
     private val compose = createAndroidComposeRule<MainActivity>()

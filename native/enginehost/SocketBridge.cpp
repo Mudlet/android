@@ -231,7 +231,7 @@ QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
     return message;
 }
 
-// [start, length, fg], with bg and attributes, then link, only when a run has them
+// [start, length, fg], with bg and attributes, then link, only when a run has any
 QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
 {
     QJsonArray json;

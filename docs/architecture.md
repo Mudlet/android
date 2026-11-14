@@ -26,9 +26,9 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console with the windows the game's scripts draw around it, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
-| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
+| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`). Its tests run on the JVM, against the desktop engine too |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
 | `native/standin/` | The stand-in engine for fast tests: minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
@@ -219,6 +219,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
   (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;
 - that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
+- that a Geyser `MiniConsole` and the line a script `cecho()`s on it reach the UI;
 - that after `:engine` is killed, the UI starts a new engine and attaches to it.
 
 If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
@@ -233,7 +234,9 @@ device shows, below the UI's debug hook:
 - `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
   way from the start screen to the game screen and the self-test and back, through the labels and click actions
   TalkBack uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
-  reattach to a new engine after one is lost, and to the same one; and the notification permission, asked on Android
+  reattach to a new engine after one is lost, and to the same one; the script windows: a mini console at its scaled
+  place in the fitted and the stacked layout, the size the game screen gives Mudlet's main window, the window
+  switcher, a window's command line both ways and a user window's close button; and the notification permission, asked on Android
   13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
   (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
   library needs API 34, so they run on the API 36 emulator only.
@@ -724,6 +727,16 @@ Item 13 of the on-device checklist covers this.
       when nothing matches.
     - `lua printCmdLine("say hi")` puts "say hi" on the line. Type a command and start the next one at once: what
       was typed is not wiped when the game answers.
+17. Script windows, with the libmudlet APK and a game's own GUI package (a Geyser layout with a chat mini console and
+    a docked user window, for example), in portrait and in landscape, on a phone and on a tablet or a foldable.
+    - At 600 dp and wider the windows sit where the package put them, the console in the space it left, and the
+      game's lines fill the console's width without wrapping early or leaving a gap (the game is told the console's
+      grid). Narrower, the borders become bands above and below the console, and the side windows and docks become
+      tabs below it; a tab opens its window over the console, its back button or the system's Back closes it.
+    - A window's text is readable, its newest line in view; scrolled back, it stays put.
+    - With TalkBack on: swiping goes from the console to the input line and the bar, then the windows, each read as
+      "<name> window", then the tabs; a window's command line, its Send button and a user window's close button read
+      their names.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

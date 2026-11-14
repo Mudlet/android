@@ -37,7 +37,7 @@ runs:
 
     - name: Restore the libmudlet build
       id: build-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: |
           build
@@ -47,7 +47,7 @@ runs:
     # restore and save are separate steps so the prefix is kept even when Mudlet then fails to build
     - name: Restore dependencies
       id: deps-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: deps/prefix
         key: ${{ inputs.abi == 'arm64-v8a' && 'mudlet-deps' || format('mudlet-deps-{0}', inputs.abi) }}-qt${{ inputs.qt-version }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
@@ -61,14 +61,14 @@ runs:
 
     - name: Save dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: deps/prefix
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
     - name: Restore ccache
       if: steps.build-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: .ccache
         key: ccache-libmudlet-${{ inputs.abi }}-${{ github.run_id }}
@@ -92,7 +92,7 @@ runs:
     # Only main and the nightly keep a compiler cache: a pull request's could serve only that pull request
     - name: Save ccache
       if: ${{ steps.build-cache.outputs.cache-hit != 'true' && !cancelled() && github.event_name != 'pull_request' }}
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: .ccache
         key: ccache-libmudlet-${{ inputs.abi }}-${{ github.run_id }}
@@ -100,7 +100,7 @@ runs:
     # A pull request's too, so its next push that leaves Mudlet's build alone does not build it again
     - name: Save the libmudlet build
       if: steps.build-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: |
           build

@@ -30,9 +30,12 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
     }
 
     @Volatile private var running = false
+
     // A stop() then start() (an Activity rotating) must not leave the old reader thread looping
     @Volatile private var generation = 0
+
     @Volatile private var transport: Transport? = null
+
     @Volatile private var writer: FrameWriter? = null
     private var thread: Thread? = null
     private val pending = ConcurrentHashMap<Long, Pair<CountDownLatch, LongArray>>()
@@ -42,6 +45,7 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
     // What this UI already has, so a reattach to the same engine only gets the rest
     @Volatile var instance: String? = null
         private set
+
     @Volatile var lastSeq: Long = 0
         private set
 
@@ -52,7 +56,10 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
         if (running) return
         running = true
         val g = ++generation
-        thread = Thread({ runLoop(g) }, "engine-link").apply { isDaemon = true; start() }
+        thread = Thread({ runLoop(g) }, "engine-link").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     @Synchronized
@@ -132,11 +139,14 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
                     val m = reader.read()
                     when (m) {
                         is EngineMessage.Line -> lastSeq = m.seq
+
                         is EngineMessage.Synced -> lastSeq = maxOf(lastSeq, m.seq)
+
                         is EngineMessage.Pong -> pending[m.id]?.let { (latch, slot) ->
                             slot[0] = System.nanoTime()
                             latch.countDown()
                         }
+
                         else -> {}
                     }
                     listener.onMessage(m)

@@ -1,5 +1,6 @@
 package org.mudlet.android.ui
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
@@ -8,11 +9,14 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
@@ -33,34 +37,43 @@ class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val mark
  * Activity is started, so a backgrounded (and later frozen) UI holds no connection.
  * State is Compose snapshot state, written only on the main thread.
  */
+// It holds only the application's Context (app), which leaks nothing
+@SuppressLint("StaticFieldLeak")
 object EngineClient {
     const val MAX_LINES = 2000
+
     // About 300 ms of failed connects at EngineLink's fast retry interval
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
     val lines = mutableStateListOf<UiLine>()
+
     // The engine's line still being written, such as a prompt, shown below the others
     var tail by mutableStateOf<UiLine?>(null)
     val status = mutableStateMapOf<String, String>()
     var linkState by mutableStateOf("not attached")
-    var enginePid by mutableStateOf(0)
+    var enginePid by mutableIntStateOf(0)
     var fgsState by mutableStateOf("?")
-    var notifyCount by mutableStateOf(0)
-    var gapLines by mutableStateOf(0L)
-    var attachCount by mutableStateOf(0)
-    var engineLosses by mutableStateOf(0)
-    var lastAttachMs by mutableStateOf(-1L)
-    var startToHelloMs by mutableStateOf(-1L)
-    var lastLossToAttachMs by mutableStateOf(-1L)
+    var notifyCount by mutableIntStateOf(0)
+    var gapLines by mutableLongStateOf(0L)
+    var attachCount by mutableIntStateOf(0)
+    var engineLosses by mutableIntStateOf(0)
+    var lastAttachMs by mutableLongStateOf(-1L)
+    var startToHelloMs by mutableLongStateOf(-1L)
+    var lastLossToAttachMs by mutableLongStateOf(-1L)
     var pingResult by mutableStateOf("")
     var lastLuaResult by mutableStateOf("")
 
     private val main = Handler(Looper.getMainLooper())
+
+    // The application's Context, which lives as long as the process
     private lateinit var app: Context
+
     // One link for the UI process's life: it remembers the engine instance and last seq,
     // so reattaching after onStop/onStart (or rotation) replays only the missed lines
     private val link: EngineLink by lazy { EngineLink(::connectLocal, listener) }
+
     @Volatile private var attached = false
+
     @Volatile private var viewWidthPx = 0
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
@@ -79,7 +92,7 @@ object EngineClient {
 
     var engineWanted: Boolean
         get() = prefs().getBoolean("wanted", true)
-        set(value) = prefs().edit().putBoolean("wanted", value).apply()
+        set(value) = prefs().edit { putBoolean("wanted", value) }
 
     private fun prefs() = app.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
 
@@ -138,18 +151,25 @@ object EngineClient {
         pingResult = "running $count pings..."
         thread(name = "ping") {
             val us = (0 until count).mapNotNull { l.ping()?.div(1000) }.drop(20).sorted()
-            val text = if (us.isEmpty()) "no replies" else
+            val text = if (us.isEmpty()) {
+                "no replies"
+            } else {
                 "n=${us.size} median=${us[us.size / 2]}us p99=${us[(us.size * 99) / 100]}us max=${us.last()}us"
+            }
             main.post { pingResult = text }
         }
     }
 
     fun refreshServiceState() {
         val am = app.getSystemService(ActivityManager::class.java)
+
         @Suppress("DEPRECATION")
         val info = am.getRunningServices(50).firstOrNull { it.service.className == EngineService::class.java.name }
-        fgsState = if (info == null) "not running" else
+        fgsState = if (info == null) {
+            "not running"
+        } else {
             "foreground=${info.foreground} pid=${info.pid} process=${info.process} started=${info.started}"
+        }
     }
 
     private fun connectLocal(): Transport {
@@ -212,6 +232,7 @@ object EngineClient {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt))
                     scheduleFlush()
                 }
+
                 is EngineMessage.Clear -> synchronized(pendingLock) {
                     pendingLines.clear()
                     pendingClear = true
@@ -219,16 +240,20 @@ object EngineClient {
                     pendingTailSet = true
                     scheduleFlush()
                 }
+
                 is EngineMessage.Tail -> synchronized(pendingLock) {
                     pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt)
                     pendingTailSet = true
                     scheduleFlush()
                 }
+
                 is EngineMessage.Status -> synchronized(pendingLock) {
                     pendingStatus[message.key] = message.value
                     scheduleFlush()
                 }
+
                 is EngineMessage.Notify -> post { notifyCount++ }
+
                 is EngineMessage.Gap -> post {
                     gapLines += message.skipped
                     synchronized(pendingLock) {
@@ -236,7 +261,9 @@ object EngineClient {
                         scheduleFlush()
                     }
                 }
+
                 is EngineMessage.Error -> post { linkState = "engine error: ${message.message}" }
+
                 else -> {}
             }
         }

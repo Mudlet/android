@@ -26,7 +26,7 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, and their tests |
 | [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
-| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`decisions/`](docs/decisions) |
+| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`decisions/`](docs/decisions) |
 
 Versions for every Gradle module are in [`gradle/libs.versions.toml`](gradle/libs.versions.toml). The package
 names are `org.mudlet.android.*`; the application id is `org.mudlet.mudlet`, as Mudlet's macOS bundle identifier.
@@ -37,7 +37,7 @@ You need:
 
 - Qt 6.12.0 for `gcc_64` (host) and `android_arm64_v8a`;
 - an Android SDK with NDK 28.2.13676358, build-tools 37.0.0 and platform android-36;
-- JDK 21, Gradle 8.14 (the build uses AGP 8.13.2 and Kotlin 2.3.21), CMake and Ninja;
+- JDK 21, CMake and Ninja (Gradle is the wrapper's, `./gradlew`: 8.14.3, with AGP 8.13.2 and Kotlin 2.3.21);
 - Perl and make for OpenSSL's build;
 - Python 3 and the `openssl` command for the host tests.
 
@@ -58,7 +58,7 @@ prefix that script made (see "TLS" in [`docs/architecture.md`](docs/architecture
 name: `-PextractNativeLibs=true` has the installer extract the native libraries (see "Native libraries" in
 [`docs/architecture.md`](docs/architecture.md)).
 
-Gradle on its own (`gradle :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
+Gradle on its own (`./gradlew :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
 first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
 
 ### The APK with libmudlet
@@ -75,6 +75,14 @@ LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 [`docs/architecture.md`](docs/architecture.md)). Each script's header lists its options. On a device, libmudlet's
 Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet; until it does, `build-libmudlet.sh` adds it to
 the checkout (see "Lua 5.1 FORTIFY fix" under [CI](#ci)).
+
+### The release
+
+The release is an AAB for Google Play with arm64-v8a and x86_64, and an APK for each, minified with R8:
+`STAGE_ONLY=1 scripts/build-apk.sh` stages each ABI's engine, and
+[`scripts/build-release.sh`](scripts/build-release.sh) merges them and builds it, signed with the upload key
+`MUDLET_KEYSTORE` names. Nightly public test builds of it go to Google Play's open testing track and a GitHub
+pre-release: [`docs/ptb.md`](docs/ptb.md).
 
 ### Tests
 
@@ -101,15 +109,18 @@ python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debu
     --symbols native/build-android-x86_64-mudlet/enginehost
 ```
 
-`gradle :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
+`./gradlew :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
 skipped. `ProtocolSpecTest` among them checks that [`docs/protocol.md`](docs/protocol.md), the C++ engine and the
 Kotlin client agree.
 
-The on-device checklist is in [`docs/architecture.md`](docs/architecture.md).
+`scripts/check-apk.sh` runs CI's APK checks on the APK `build-apk.sh` made. The on-device checklist is in
+[`docs/architecture.md`](docs/architecture.md). Every command to build, test and lint, and the rules the code keeps,
+are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## CI
 
-GitHub Actions runs two workflows, each on pushes to `main` and pull requests that touch their files, and on demand:
+GitHub Actions runs three workflows on pushes to `main` and pull requests (the first two only when they touch their
+files), and on demand, and a fourth, **PTB**, every night and on pull requests that change how the release is built:
 
 - **APKs** (`.github/workflows/apks.yml`)
   - runs the stand-in engine's desktop test, and `:protocol`'s tests with the Kotlin client against that engine;
@@ -118,7 +129,9 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - builds the debug APK with the stand-in engine, and again with its libraries extracted at install;
   - checks that each APK holds Qt and the engine, and OpenSSL as Qt's TLS backend loads it (`libcrypto_3.so` and
     `libssl_3.so`, their names, the libraries they need, OpenSSL 3), that its libraries are 16 KB aligned (their
-    offsets in the APK and their load segments), and that they are stored or compressed as `extractNativeLibs` says;
+    offsets in the APK and their load segments), and that they are stored or compressed as `extractNativeLibs` says
+    ([`scripts/check-apk.sh`](scripts/check-apk.sh));
+  - runs Android lint on `:app` and `:engine-service`, where a warning fails (`lint.xml` says what is off and why);
   - uploads both APKs, and gives each one's size, its size on the device, and OpenSSL's share, in the job summary.
 - **libmudlet for Android** (`.github/workflows/libmudlet.yml`) checks out Mudlet's `development` branch (or any ref
   given to a manual run).
@@ -156,8 +169,20 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - It also runs every night, so a change on Mudlet's side that breaks the Android build shows up; a nightly that
     fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without activity in
     this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.
+- **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh) on every pull request: ktlint
+  on the Kotlin, clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the
+  workflows, as four short jobs.
 
-Both install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
+- **PTB** (`.github/workflows/ptb.yml`) builds the release from Mudlet's `development` for arm64-v8a and x86_64,
+  as the separate app Mudlet PTB (`org.mudlet.mudlet.ptb`), runs its minified x86_64 build through the emulator smoke
+  test, and from `main` uploads it to Google Play's open testing track and replaces the `ptb` GitHub pre-release. It
+  skips a night when neither Mudlet nor this repository changed, and publishes nothing without its secrets or off
+  `main`. See [`docs/ptb.md`](docs/ptb.md).
+
+Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
+versions tied to them are bumped by hand (see "Pinned versions" in [`CONTRIBUTING.md`](CONTRIBUTING.md)).
+
+The first two install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
 aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Gradle, ccache and the emulator's system image are
 cached between runs.
 

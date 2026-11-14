@@ -33,10 +33,14 @@ int colourCode(const QColor& colour, bool profileDefault)
 int attributeBits(THeadlessSession::TextStyles styles)
 {
     static constexpr std::pair<TextStyle, int> bits[] = {
-            {TextStyle::Bold, ColorRun::bold},           {TextStyle::Italic, ColorRun::italic},
-            {TextStyle::Underline, ColorRun::underline}, {TextStyle::StrikeOut, ColorRun::strikeOut},
-            {TextStyle::Reverse, ColorRun::reverse},     {TextStyle::Overline, ColorRun::overline},
-            {TextStyle::Blink, ColorRun::blink},         {TextStyle::FastBlink, ColorRun::fastBlink},
+            {TextStyle::Bold, ColorRun::bold},
+            {TextStyle::Italic, ColorRun::italic},
+            {TextStyle::Underline, ColorRun::underline},
+            {TextStyle::StrikeOut, ColorRun::strikeOut},
+            {TextStyle::Reverse, ColorRun::reverse},
+            {TextStyle::Overline, ColorRun::overline},
+            {TextStyle::Blink, ColorRun::blink},
+            {TextStyle::FastBlink, ColorRun::fastBlink},
             {TextStyle::Concealed, ColorRun::concealed},
     };
     int attributes = 0;
@@ -53,8 +57,7 @@ QList<ColorRun> colorRuns(const QList<TextRun>& runs)
 {
     QList<ColorRun> out;
     for (const TextRun& run : runs) {
-        const ColorRun converted{run.start, run.length, colourCode(run.foreground, run.defaultForeground),
-                                 colourCode(run.background, run.defaultBackground), attributeBits(run.styles), run.link};
+        const ColorRun converted{run.start, run.length, colourCode(run.foreground, run.defaultForeground), colourCode(run.background, run.defaultBackground), attributeBits(run.styles), run.link};
         if (converted.length > 0 && (converted.fg != -1 || converted.bg != -1 || converted.attributes != 0 || converted.link != 0)) {
             out.append(converted);
         }
@@ -172,10 +175,9 @@ void MudletEngine::connectSession()
         ++(isPrompt ? mPromptsReceived : mLinesReceived);
         markCountersDirty();
     });
-    connect(session, &THeadlessSession::lineShown, this,
-            [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64, bool continuesLine) {
-                onLineShown(text, isPrompt, colorRuns(runs), continuesLine);
-            });
+    connect(session, &THeadlessSession::lineShown, this, [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64, bool continuesLine) {
+        onLineShown(text, isPrompt, colorRuns(runs), continuesLine);
+    });
     connect(session, &THeadlessSession::localTextStyled, this, [this](const QString&, const QString& text, const QList<TextRun>& runs, bool continuesLine) {
         mLocalLines += text.count(QLatin1Char('\n'));
         markCountersDirty();
@@ -250,8 +252,10 @@ void MudletEngine::takeRestore()
     case SessionStore::Restore::Kind::none:
         return;
     case SessionStore::Restore::Kind::gaveUp:
-        qWarning("MudletEngine: not restoring %s: the engine stopped unexpectedly %d times in %lld minutes", qPrintable(restore.session.profile),
-                 restore.attempt, SessionStore::restoreWindowMs / 60000);
+        qWarning("MudletEngine: not restoring %s: the engine stopped unexpectedly %d times in %lld minutes",
+                 qPrintable(restore.session.profile),
+                 restore.attempt,
+                 SessionStore::restoreWindowMs / 60000);
         restoreStatus(QStringLiteral("gaveUp"), QStringLiteral("%1 %2").arg(restore.attempt).arg(SessionStore::restoreWindowMs / 60000));
         return;
     case SessionStore::Restore::Kind::restore:
@@ -405,9 +409,7 @@ void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bo
         if (mProfileTls.has_value()) {
             started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
         }
-        mFrontend->status(QStringLiteral("connection"),
-                          QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it")
-                                  .arg(started));
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it").arg(started));
         return;
     }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);

@@ -12,6 +12,6 @@ fake=$!
 trap 'kill $fake 2>/dev/null' EXIT
 sleep 0.5
 cd "$native/.."
-gradle --no-daemon :protocol:test --rerun \
+./gradlew :protocol:test --rerun \
     -Dorg.gradle.workers.max=2 \
     -PengineBin="$engine" -PfakePort="$port" "$@"

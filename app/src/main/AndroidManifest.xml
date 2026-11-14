@@ -7,7 +7,9 @@
         android:label="@string/app_name"
         android:icon="@drawable/ic_engine"
         android:theme="@android:style/Theme.Material.NoActionBar"
-        android:allowBackup="false">
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
 
         <activity
             android:name=".ui.MainActivity"

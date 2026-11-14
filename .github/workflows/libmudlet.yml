@@ -15,12 +15,14 @@ on:
       - scripts/build-libmudlet-desktop.sh
       - scripts/export-libmudlet.py
       - scripts/build-apk.sh
+      - scripts/check-apk.sh
       - scripts/build-openssl.sh
       - app/**
       - engine-service/**
       - protocol/**
       - native/**
       - gradle/**
+      - gradlew
       - "*.gradle.kts"
       - gradle.properties
       - .github/actions/**
@@ -117,9 +119,8 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-arm64-v8a-${{ github.run_id }}
 
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: "8.14.3"
 
       - uses: ./.github/actions/android-openssl
         with:
@@ -159,6 +160,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          # shellcheck disable=SC2016 # the backticks in git's --format are Markdown
           {
             echo "### libmudlet for Android"
             echo
@@ -308,9 +310,8 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-x86_64-${{ github.run_id }}
 
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: "8.14.3"
 
       - uses: ./.github/actions/android-openssl
         with:
@@ -381,6 +382,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          # shellcheck disable=SC2016 # the backticks in git's --format are Markdown
           {
             echo "### Emulator smoke test (x86_64, API $EMULATOR_API)"
             echo

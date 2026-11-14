@@ -10,3 +10,11 @@ local.properties
 # Python tests
 __pycache__/
 *.pyc
+# scripts/lint.sh
+/.lint-venv/
+# The libmudlet builds and the emulator smoke test, as CONTRIBUTING.md runs them
+/deps/
+/build-desktop/
+/smoke-test/
+# A release's staged engines, as CONTRIBUTING.md and docs/ptb.md stage them
+/staged/

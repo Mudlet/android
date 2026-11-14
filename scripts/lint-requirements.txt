@@ -1,0 +1,4 @@
+# The linters scripts/lint.sh installs into .lint-venv (Dependabot bumps them; a new clang-format can reformat native/)
+clang-format==23.1.5
+shellcheck-py==0.11.0.1
+actionlint-py==1.7.12.25

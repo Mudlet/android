@@ -17,6 +17,8 @@ androidx-activity = "1.11.0"
 compose-bom = "2025.12.01"
 junit = "4.13.2"
 json = "20250517"
+# Kotlin style checks: ./gradlew ktlintCheck (build.gradle.kts), with the rules in .editorconfig
+ktlint = "1.8.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
@@ -29,6 +31,7 @@ junit = { module = "junit:junit", version.ref = "junit" }
 # :protocol compiles against this org.json and runs on Android's own copy
 json = { module = "org.json:json", version.ref = "json" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

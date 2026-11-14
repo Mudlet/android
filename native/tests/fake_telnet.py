@@ -5,6 +5,7 @@ Commands a client may send (one per line):
   echo <text>     -> "You said: <text>"
   flood <n>       -> n coloured lines, then "FLOOD DONE"
   prompt-nogo     -> "Silent prompt> " with no GA, to exercise the 500 ms rule
+  ga-partial      -> a GA prompt, then "Press return: " with no newline, which "\r\nlast line\r\n" ends 1.5 s later
   negotiation     -> "NEG: <hex>" of every telnet byte the client sent so far
   tell            -> another "tells you" line
   quit            -> close
@@ -18,6 +19,8 @@ IAC, DONT, DO, WONT, WILL, SB, GA, SE = 255, 254, 253, 252, 251, 250, 249, 240
 TTYPE, ECHO, GMCP = 24, 1, 201
 # (lines, start, end) of each flood, as seen by the sender
 FLOOD_TIMES = []
+# time.perf_counter() just before the latest "banner" went out, and before ga-partial's "line-end"
+SENT = {}
 
 BANNER = (
     bytes([IAC, DO, TTYPE, IAC, WILL, ECHO, IAC, WILL, GMCP])
@@ -29,18 +32,22 @@ BANNER = (
     + b"\x1b[38;5;12mbright blue 256\x1b[39m plain\x1b[2J\r\n"
     + b"HP:100> " + bytes([IAC, GA])
 )
+# A game that has sent no GA (yet): its prompt has neither a line feed nor GA after it
+LOGIN_BANNER = b"Welcome\r\nLogin: "
 
 
 class Session(threading.Thread):
-    def __init__(self, conn):
+    def __init__(self, conn, banner):
         super().__init__(daemon=True)
         self.conn = conn
+        self.banner = banner
         self.negotiation = bytearray()
 
     def run(self):
         conn = self.conn
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        conn.sendall(BANNER)
+        SENT["banner"] = time.perf_counter()
+        conn.sendall(self.banner)
         buf = bytearray()
         in_sb = False
         try:
@@ -113,6 +120,13 @@ class Session(threading.Thread):
             FLOOD_TIMES.append((n, start, time.perf_counter()))
         elif line == "prompt-nogo":
             conn.sendall(b"Silent prompt> ")
+        elif line == "ga-partial":
+            conn.sendall(b"Ready> " + bytes([IAC, GA]))
+            time.sleep(0.05)
+            conn.sendall(b"Press return: ")
+            time.sleep(1.5)
+            SENT["line-end"] = time.perf_counter()
+            conn.sendall(b"\r\nlast line\r\n")
         elif line == "negotiation":
             conn.sendall(f"NEG: {self.negotiation.hex()}\r\n".encode())
         elif line == "tell":
@@ -125,7 +139,7 @@ class Session(threading.Thread):
         return True
 
 
-def serve(port=0, ready=None):
+def serve(port=0, ready=None, banner=BANNER):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", port))
@@ -134,10 +148,10 @@ def serve(port=0, ready=None):
         ready(srv.getsockname()[1])
     while True:
         conn, _ = srv.accept()
-        Session(conn).start()
+        Session(conn, banner).start()
 
 
-def start_in_thread():
+def start_in_thread(banner=BANNER):
     got = {}
     ev = threading.Event()
 
@@ -145,7 +159,7 @@ def start_in_thread():
         got["port"] = port
         ev.set()
 
-    threading.Thread(target=serve, args=(0, ready), daemon=True).start()
+    threading.Thread(target=serve, args=(0, ready, banner), daemon=True).start()
     ev.wait(5)
     return got["port"]
 

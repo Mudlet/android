@@ -58,7 +58,7 @@ object Announcer {
     val touchExploration: Boolean get() = touchExplorationOverride ?: systemTouchExploration
 
     private val main = Handler(Looper.getMainLooper())
-    private var resources: Resources? = null
+    private lateinit var resources: Resources
     private var saidAt = 0L
 
     // The lines waiting to be read: the last BURST_LINES of them, and how many there are
@@ -67,12 +67,12 @@ object Announcer {
     private var waitingSince = 0L
 
     fun init(context: Context) {
-        if (resources != null) return
+        if (::resources.isInitialized) return
         val app = context.applicationContext
         resources = app.resources
         val accessibility = app.getSystemService(AccessibilityManager::class.java)
         systemTouchExploration = accessibility.isTouchExplorationEnabled
-        // Called on the main thread
+        // Called on the main thread, so it may set Compose state
         accessibility.addTouchExplorationStateChangeListener { systemTouchExploration = it }
     }
 
@@ -100,12 +100,11 @@ object Announcer {
         waiting.clear()
         waitingCount = 0
         waitingSince = 0L
-        val res = resources
-        if (!reading() || count == 0 || res == null) return@Runnable
+        if (!reading()) return@Runnable
         val text = if (count <= BURST_LINES) {
             lines.joinToString("\n")
         } else {
-            res.getQuantityString(R.plurals.announce_burst, count, count, lines.takeLast(BURST_TAIL).joinToString("\n"))
+            resources.getQuantityString(R.plurals.announce_burst, count, count, lines.takeLast(BURST_TAIL).joinToString("\n"))
         }
         announce(text, assertive = false)
     }

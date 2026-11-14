@@ -120,9 +120,9 @@ class Device:
                                     capture_output=True, text=True)
             with open(os.path.join(self.out, "crash-symbolised.txt"), "w") as f:
                 f.write(result.stdout + result.stderr)
-            symbolised = [line for line in result.stdout.splitlines() if re.match(r"#\d+ ", line)][:25]
+            symbolised = ndk_stack_frames(result.stdout)
             if symbolised:
-                frames = ["symbolised by ndk-stack:", *symbolised]
+                frames += ["ndk-stack, for the frames it could name (innermost function first):", *symbolised]
         return "\n".join([fatal.group(0), *aborts, *frames])
 
     def wait(self, what, pred, timeout):
@@ -146,6 +146,21 @@ class Device:
     def screenshot(self, name):
         with open(os.path.join(self.out, name), "wb") as f:
             subprocess.run(["adb", "exec-out", "screencap", "-p"], stdout=f, timeout=60)
+
+
+def ndk_stack_frames(text):
+    """ndk-stack's output as one line a frame: "#03 strchr (string.h:244:16) <- traversetable (lgc.c:167:16)".
+
+    Below each "#NN ..." line, ndk-stack gives a function and its source line for each function inlined there."""
+    frames = []
+    for line in text.splitlines():
+        if re.match(r"#\d+ ", line):
+            frames.append([line.split()[0]])
+        elif frames and line.startswith(" ") and line.strip():
+            frames[-1].append(line.strip())
+    return [f"{frame[0]} " + " <- ".join(f"{function} ({os.path.basename(where)})"
+                                        for function, where in zip(frame[1::2], frame[2::2]))
+            for frame in frames if len(frame) > 2]
 
 
 def summary(state):

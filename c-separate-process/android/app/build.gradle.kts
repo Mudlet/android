@@ -51,8 +51,11 @@ android {
     }
 
     packaging {
-        // Uncompressed and page-aligned in the APK, loaded in place
-        jniLibs { useLegacyPackaging = false }
+        // By default uncompressed and page-aligned in the APK, loaded in place. -PextractNativeLibs=true has the
+        // installer extract them, which Lua's require() needs to find a C module on package.cpath (see REPORT.md)
+        jniLibs {
+            useLegacyPackaging = providers.gradleProperty("extractNativeLibs").map { it.toBooleanStrict() }.getOrElse(false)
+        }
     }
 
     testOptions {

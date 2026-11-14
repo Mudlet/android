@@ -154,7 +154,7 @@ data class WindowLayout(
                 val sx = if (mainArea != null) main.w / mainArea.w else (scale ?: 1.0).toFloat()
                 val sy = if (mainArea != null) main.h / mainArea.h else (scale ?: 1.0).toFloat()
                 console = mainArea?.textRect()?.let { PxRect(main.x + it.x * sx, main.y + it.y * sy, it.w * sx, it.h * sy).intersect(main) } ?: main
-                for (window in inArea) place(window, PxRect(main.x + window.x * sx, main.y + window.y * sy, window.w * sx, window.h * sy), main)
+                for (window in inArea) place(window, PxRect(main.x + window.x, main.y + window.y, window.w * sx, window.h * sy), main)
                 pane = main
                 mainWindowSize = scale?.let { MudletSize((main.w / it).roundToInt().coerceAtLeast(1), (main.h / it).roundToInt().coerceAtLeast(1)) }
             } else {
@@ -197,7 +197,7 @@ data class WindowLayout(
                 }
                 pane = console
                 pages.addAll(docks)
-                mainWindowSize = scale?.let { MudletSize((area.h / it).roundToInt().coerceAtLeast(1), (area.w / it).roundToInt().coerceAtLeast(1)) }
+                mainWindowSize = scale?.let { MudletSize((area.w / it).roundToInt().coerceAtLeast(1), (area.h / it).roundToInt().coerceAtLeast(1)) }
             }
 
             // A page's window fills the pane below its header

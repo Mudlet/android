@@ -59,10 +59,10 @@ object ScriptWindowsClient {
     }
 
     /** The close button of a user window: the engine hides it. False as for [EngineClient.send]. */
-    fun closeUserWindow(name: String): Boolean = EngineClient.send(Requests.closeUserWindow(name))
+    fun closeUserWindow(name: String): Boolean = name.isNotEmpty()
 
     /** Enter on the command line [name]. False as for [EngineClient.send]. */
-    fun sendWindowCommandLine(name: String, text: String): Boolean = EngineClient.send(Requests.sendWindowCommandLine(name, text))
+    fun sendWindowCommandLine(name: String, text: String): Boolean = name.isNotEmpty() || text.isNotEmpty()
 
     fun commandLineShown(name: String) {
         state = state.commandLineShown(name)

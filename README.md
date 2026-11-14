@@ -132,8 +132,13 @@ demand:
   (or any ref given to a manual run), cross-builds its dependencies for arm64-v8a with
   [`scripts/build-mudlet-deps.sh`](scripts/build-mudlet-deps.sh) (pinned versions and checksums), then builds
   `mudlet_core`, `mudlet_headless` and the `mudlet-headless` runner with
-  [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built and
-  the library sizes, stripped and not.
+  [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built,
+  the library sizes, stripped and not, and whose Lua 5.1 FORTIFY fix the build used.
+  - Lua 5.1 FORTIFY fix: built with the NDK's `_FORTIFY_SOURCE=2`, Mudlet's Lua 5.1 aborts in `luaL_openlibs`
+    ("FORTIFY: strchr: prevented read past end of buffer"). Until Mudlet's `3rdparty/lua51/CMakeLists.txt`
+    passes `-U_FORTIFY_SOURCE` for Android itself ([Mudlet/Mudlet#12914](https://github.com/Mudlet/Mudlet/pull/12914)),
+    the script appends the same `"SHELL:-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1"` option for Android to that file in
+    the Mudlet checkout and says so in its log. A local checkout keeps that change.
   - It then builds C's debug APK with libmudlet as the engine, linked through the `libmudlet::headless` target
     that [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line, puts it
     through the same checks as the prototype APKs below, checks that the engine carries Mudlet's Lua, its Lua C
@@ -145,6 +150,8 @@ demand:
   - It fails if:
     - the libraries use desktop-only APIs
     - the libraries or the runner carry the build-type splash screen images
+    - Lua 5.1's collector (`lgc.c`) references a fortified function such as `__strchr_chk`, as the call that
+      aborts does, or its string library (`lstrlib.c`) references none, which means FORTIFY is off altogether
     - the runner lacks Mudlet's built-in Lua files and Lua C modules
     - the runner does not link QtKeychain's Android backend, which Mudlet uses to keep profiles' passwords in
       the KeyStore

@@ -205,6 +205,9 @@ def main(argv):
     problems, kotlin, xml_files = [], 0, 0
     for path in files:
         if not os.path.exists(path):
+            if argv:
+                print(f"{path}: no such file", file=sys.stderr)
+                return 2
             # deleted in the work tree but still in the index
             continue
         if path.endswith(".kt"):

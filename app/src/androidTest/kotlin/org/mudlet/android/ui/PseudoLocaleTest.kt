@@ -118,11 +118,13 @@ class PseudoLocaleTest(private val locale: String) {
         val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
         val width = root.size.width
         val problems = ArrayList<String>()
+        var checked = 0
         fun visit(node: SemanticsNode) {
             val text = node.config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { it.text }
                 ?: node.config.getOrNull(SemanticsProperties.EditableText)?.text
             val layouts = ArrayList<TextLayoutResult>()
             if (!text.isNullOrEmpty()) node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+            checked += layouts.size
             for (layout in layouts) {
                 if (layout.hasVisualOverflow) problems += "\"$text\" does not fit its ${layout.size} box"
                 if ((0 until layout.lineCount).any { layout.isLineEllipsized(it) }) problems += "\"$text\" is cut short"
@@ -134,6 +136,8 @@ class PseudoLocaleTest(private val locale: String) {
             node.children.forEach(::visit)
         }
         visit(root)
+        // A screen with no text laid out would pass without being checked
+        assertTrue("$locale, $where: no text on the screen gave its layout", checked > 0)
         assertTrue("$locale, $where: ${problems.joinToString("; ")}", problems.isEmpty())
     }
 

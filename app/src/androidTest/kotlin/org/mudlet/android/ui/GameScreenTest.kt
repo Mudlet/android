@@ -4,6 +4,8 @@ import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -11,6 +13,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -26,6 +29,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
@@ -37,6 +41,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.protocol.RUN_REVERSE
 
 /**
  * The game screen against a fake engine: the console's lines and how it follows them, the input line, the connection
@@ -214,6 +219,24 @@ class GameScreenTest {
         }
         assertTrue("connection bar $reconnect below the input line $inputBounds", reconnect.top >= inputBounds.bottom)
         compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun theConsoleTakesItsColoursFromTheEngine() {
+        // Reversed, the spaces are drawn in the console's foreground colour
+        val reversed = "[    ]"
+        session.line(1, reversed, listOf(listOf(0, reversed.length, -1, -1, RUN_REVERSE)))
+        session.status("consoleColors", "#102030 #405060")
+        waitUntilDisplayed(reversed)
+        compose.waitUntil(WAIT_MS) {
+            val image = compose.onNode(console).captureToImage().toPixelMap()
+            image[image.width - 2, image.height - 2] == Color(0xFF405060)
+        }
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(reversed).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        val space = results.single().getBoundingBox(2).center
+        val image = compose.onNodeWithText(reversed).captureToImage().toPixelMap()
+        assertEquals(Color(0xFF102030), image[space.x.toInt(), space.y.toInt()])
     }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)

@@ -57,6 +57,9 @@ object EngineClient {
     // How long after a send the engine's emptying of its line (an empty commandLine) is taken as that send's
     private const val SEND_CLEAR_WINDOW_MS = 3000L
 
+    // How long after a send, sendHidden or dismissHidden a status sendError is taken as its answer
+    private const val SEND_ERROR_WINDOW_MS = 5000L
+
     val lines = mutableStateListOf<UiLine>()
 
     /**
@@ -98,6 +101,10 @@ object EngineClient {
     var commandLine by mutableStateOf<String?>(null)
         private set
 
+    /** Why the engine could not send the last input request (status `sendError`), until the screen shows it and calls [sendErrorShown]. */
+    var sendError by mutableStateOf<String?>(null)
+        private set
+
     private val main = Handler(Looper.getMainLooper())
 
     // The application's Context, which lives as long as the process
@@ -113,8 +120,16 @@ object EngineClient {
 
     @Volatile private var attached = false
 
-    // The console's columns and rows, as setScreenSize last sent them; null until the UI has measured it
-    @Volatile private var screenSize: Pair<Int, Int>? = null
+    /** The console's columns and rows, as [setScreenSize] last had them; null until the UI has measured it. */
+    @Volatile
+    var screenSize: Pair<Int, Int>? = null
+        private set
+
+    // When an input request last went out; the engine keeps sendError in its status, which it sends again on attach
+    @Volatile private var inputSentAt = 0L
+
+    // Reader thread only: from hello to synced, the engine resends what it holds, which is not news
+    private var replaying = false
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
     private var lostAt = 0L
@@ -189,9 +204,16 @@ object EngineClient {
         return sent
     }
 
+    // A request the engine answers with status sendError when it cannot carry it out
+    private fun sendInput(message: org.json.JSONObject): Boolean {
+        if (!send(message)) return false
+        inputSentAt = SystemClock.elapsedRealtime()
+        return true
+    }
+
     /** A command typed on the input line: sent, and put first in [history]. False as for [send]. */
     fun sendCommand(line: String): Boolean {
-        if (!send(Requests.send(line))) return false
+        if (!sendInput(Requests.send(line))) return false
         val now = SystemClock.elapsedRealtime()
         dropExpiredSends(now)
         sendsAwaitingClear.addLast(now)
@@ -200,9 +222,9 @@ object EngineClient {
     }
 
     /** What the player typed while [hiddenInput] holds. False as for [send]. */
-    fun sendHidden(text: String): Boolean = send(Requests.sendHidden(text))
+    fun sendHidden(text: String): Boolean = sendInput(Requests.sendHidden(text))
 
-    fun dismissHidden(): Boolean = send(Requests.dismissHidden())
+    fun dismissHidden(): Boolean = sendInput(Requests.dismissHidden())
 
     /** Asks the engine to complete [text]; [onResult] gets the completed line, or empty for none. False as for [send]. */
     fun complete(text: String, onResult: (String) -> Unit): Boolean {
@@ -214,6 +236,10 @@ object EngineClient {
 
     fun commandLineShown() {
         commandLine = null
+    }
+
+    fun sendErrorShown() {
+        sendError = null
     }
 
     /** Connects the engine to a game and remembers the address for [reconnect]. False as for [send]. */
@@ -236,7 +262,9 @@ object EngineClient {
     fun disconnect(): Boolean = send(Requests.disconnect())
 
     fun setScreenSize(columns: Int, rows: Int) {
-        screenSize = columns to rows
+        val size = columns to rows
+        if (size == screenSize) return
+        screenSize = size
         if (attached) link.send(Requests.setScreenSize(columns, rows))
     }
 
@@ -290,6 +318,7 @@ object EngineClient {
 
     private val listener = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
+            replaying = true
             // The engine forgets nothing across a reattach, but a new engine instance needs the size again
             screenSize?.let { (columns, rows) -> link.send(Requests.setScreenSize(columns, rows)) }
             // The engine resends its whole status after hello, so the old instance's values must go first
@@ -344,10 +373,15 @@ object EngineClient {
                     scheduleFlush()
                 }
 
+                is EngineMessage.Synced -> replaying = false
+
                 is EngineMessage.Status -> if (message.key == "completion") {
                     val id = (message.replyTo as? Number)?.toLong()
                     if (id != null) post { completions.remove(id)?.invoke(message.value) }
                 } else {
+                    if (message.key == "sendError" && !replaying && inputSentAt > 0 && SystemClock.elapsedRealtime() - inputSentAt < SEND_ERROR_WINDOW_MS) {
+                        post { sendError = message.value }
+                    }
                     synchronized(pendingLock) {
                         pendingStatus[message.key] = message.value
                         scheduleFlush()

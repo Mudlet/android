@@ -10,10 +10,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import org.mudlet.android.R
 
-/** Every screen's title bar, with a Back button when [onBack] is given. */
+/** Every screen's title bar, with a Back button when [onBack] is given, and the screen's own buttons, [actions], at its end. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MudletTopBar(title: String, onBack: (() -> Unit)? = null) {
+fun MudletTopBar(title: String, onBack: (() -> Unit)? = null, actions: @Composable () -> Unit = {}) {
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
@@ -23,5 +23,6 @@ fun MudletTopBar(title: String, onBack: (() -> Unit)? = null) {
                 }
             }
         },
+        actions = { actions() },
     )
 }

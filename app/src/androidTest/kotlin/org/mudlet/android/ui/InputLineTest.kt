@@ -13,6 +13,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -42,7 +43,7 @@ import org.mudlet.android.R
 
 /**
  * The input line's engine features against a fake engine: the masked field while the game hides input, the engine's
- * history, a line a script sets, and completion. Controls are found by the labels TalkBack reads and activated through
+ * history, a line a script sets, completion, and why the engine could not send. Controls are found by the labels TalkBack reads and activated through
  * their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
@@ -154,6 +155,30 @@ class InputLineTest {
         session.reply("completion", "", again.get("id"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(string(R.string.input_no_completion)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(input).assertIsFocused().assert(editableText("look"))
+    }
+
+    @Test
+    fun whyTheEngineCouldNotSendIsShownAndReadOut() {
+        session.synced(0)
+        compose.onNode(input).performTextInput("north")
+        compose.onNode(input).performImeAction()
+        session.receive("send")
+        session.status("sendError", "not connected")
+        val shown = compose.activity.getString(R.string.send_error, "not connected")
+        // Inside a live region, so TalkBack reads it without moving focus
+        val readOut = hasText(shown) and hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(readOut, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        // A new engine connection resends the engine's status, the old sendError with it: that is not news
+        session.close()
+        session = fake.engine.nextSession()
+        session.status("sendError", "an old reason")
+        session.synced(0)
+        session.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(string(R.string.connection_connected)).fetchSemanticsNodes().isNotEmpty() }
+        val old = compose.activity.getString(R.string.send_error, "an old reason")
+        assertTrue("a resent sendError is not shown", compose.onAllNodesWithText(old, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)

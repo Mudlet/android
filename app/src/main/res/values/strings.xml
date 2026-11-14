@@ -9,6 +9,17 @@
 
     <string name="game_title">Game</string>
 
+    <!-- The settings screen, reached from the game screen's title bar -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_text_size">Text size</string>
+    <string name="settings_text_size_hint">The size of the game\'s text. Pinching the text with two fingers changes it too, and the system\'s font size scales it.</string>
+    <!-- %1$d is the text size, a whole number (in sp, which players need not know) -->
+    <string name="settings_text_size_value">Size %1$d</string>
+    <string name="settings_text_smaller">Smaller text</string>
+    <string name="settings_text_larger">Larger text</string>
+    <!-- A line of the kind a game sends, to show the text size -->
+    <string name="settings_text_size_sample">You see a brass lantern here.</string>
+
     <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
     <string name="console_jump_to_bottom">Jump to the bottom</string>
     <plurals name="console_jump_new_lines">
@@ -28,6 +39,9 @@
     <!-- The masked field that takes the input line's place while the game asks for a password -->
     <string name="input_password_label">Password</string>
     <string name="input_password_close">Close the password field</string>
+    <!-- Shown over the game's text when the engine could not send what the player entered. %1$s is the engine's
+         reason, in English -->
+    <string name="send_error">Not sent: %1$s</string>
 
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>

@@ -16,9 +16,22 @@ import org.mudlet.android.protocol.RUN_STRIDE
 import org.mudlet.android.protocol.RUN_STRIKE
 import org.mudlet.android.protocol.RUN_UNDERLINE
 
-/** The colours game text is drawn in: on [CONSOLE_BACKGROUND], in [CONSOLE_FOREGROUND] where a run sets none. */
+/** The colours game text is drawn in until the engine says otherwise: on [CONSOLE_BACKGROUND], in [CONSOLE_FOREGROUND]. */
 val CONSOLE_BACKGROUND = Color.Black
 val CONSOLE_FOREGROUND = Color(0xFFC0C0C0)
+
+/** The console's colours where a run sets none (its -1): status `consoleColors`, or the defaults above. */
+data class ConsoleColors(val foreground: Color = CONSOLE_FOREGROUND, val background: Color = CONSOLE_BACKGROUND) {
+    companion object {
+        private val format = Regex("#([0-9a-fA-F]{6}) #([0-9a-fA-F]{6})")
+
+        /** Status `consoleColors`, `<fg> <bg>` each `#rrggbb`; the defaults when it is missing or malformed. */
+        fun of(status: String?): ConsoleColors {
+            val (fg, bg) = status?.let { format.matchEntire(it) }?.destructured ?: return ConsoleColors()
+            return ConsoleColors(Color(0xFF000000 or fg.toLong(16)), Color(0xFF000000 or bg.toLong(16)))
+        }
+    }
+}
 
 // ANSI black is lifted to dark grey so it stays readable on the black console
 private val ansi = listOf(
@@ -33,8 +46,11 @@ private fun runColour(code: Int): Color? = when {
     else -> null
 }
 
-/** A line with its runs' colours and styles (docs/protocol.md, "Runs"); the app's own marker lines in amber. */
-fun ansiText(line: UiLine): AnnotatedString = buildAnnotatedString {
+/**
+ * A line with its runs' colours and styles (docs/protocol.md, "Runs"), on [colors] where they set none; the app's own
+ * marker lines in amber.
+ */
+fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors()): AnnotatedString = buildAnnotatedString {
     if (line.marker) {
         pushStyle(SpanStyle(color = markerColour))
         append(line.text)
@@ -47,11 +63,11 @@ fun ansiText(line: UiLine): AnnotatedString = buildAnnotatedString {
         val start = line.runs[i]
         val end = (start + line.runs[i + 1]).coerceAtMost(line.text.length)
         val attributes = line.runs[i + 4]
-        var fg = runColour(line.runs[i + 2]) ?: CONSOLE_FOREGROUND
+        var fg = runColour(line.runs[i + 2]) ?: colors.foreground
         var bg = runColour(line.runs[i + 3])
         if (bg == null && fg == Color.Black) fg = ansi[0]
         if (attributes and RUN_REVERSE != 0) {
-            val swapped = bg ?: CONSOLE_BACKGROUND
+            val swapped = bg ?: colors.background
             bg = fg
             fg = swapped
         }

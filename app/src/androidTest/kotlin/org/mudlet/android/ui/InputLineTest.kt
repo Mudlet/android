@@ -3,6 +3,7 @@ package org.mudlet.android.ui
 import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -31,6 +32,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -75,6 +77,11 @@ class InputLineTest {
         // A password field: TalkBack says "password", not what is typed
         compose.onNode(password).assertIsFocused().assert(hasText(string(R.string.input_password_label)))
         compose.onRoot().tryPerformAccessibilityChecks()
+        // TalkBack's order: the field, then its buttons
+        val field = bounds(password)
+        val close = bounds(hasContentDescription(string(R.string.input_password_close)))
+        val send = bounds(hasContentDescription(string(R.string.input_send)))
+        assertTrue("field $field, close $close, send $send left to right", field.right <= close.left && close.right <= send.left)
 
         compose.onNode(password).performTextInput("hunter2")
         compose.onNode(password).performImeAction()
@@ -159,6 +166,8 @@ class InputLineTest {
     private fun editableText(text: String) = SemanticsMatcher("EditableText = '$text'") {
         it.config.getOrNull(SemanticsProperties.EditableText)?.text == text
     }
+
+    private fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
 
     private fun hasEditableText(text: String) = compose.onAllNodes(input and editableText(text)).fetchSemanticsNodes().isNotEmpty()
 

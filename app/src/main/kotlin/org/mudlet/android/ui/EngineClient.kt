@@ -84,6 +84,7 @@ object EngineClient {
     var startToHelloMs by mutableLongStateOf(-1L)
     var lastLossToAttachMs by mutableLongStateOf(-1L)
     var pingResult by mutableStateOf("")
+    var lastLuaResult by mutableStateOf("")
 
     /** The game hides what the player types, as for a password: the input line masks it and sends it with [sendHidden]. */
     var hiddenInput by mutableStateOf(false)
@@ -96,7 +97,6 @@ object EngineClient {
     /** What a script set the input line to, until the line shows it and calls [commandLineShown]. */
     var commandLine by mutableStateOf<String?>(null)
         private set
-    var lastLuaResult by mutableStateOf("")
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -191,7 +191,9 @@ object EngineClient {
     /** A command typed on the input line: sent, and put first in [history]. False as for [send]. */
     fun sendCommand(line: String): Boolean {
         if (!send(Requests.send(line))) return false
-        sendsAwaitingClear.addLast(SystemClock.elapsedRealtime())
+        val now = SystemClock.elapsedRealtime()
+        dropExpiredSends(now)
+        sendsAwaitingClear.addLast(now)
         if (line.isNotBlank()) history = listOf(line) + history.filter { it != line }
         return true
     }
@@ -343,7 +345,7 @@ object EngineClient {
 
                 is EngineMessage.Status -> if (message.key == "completion") {
                     val id = (message.replyTo as? Number)?.toLong()
-                    post { completions.remove(id)?.invoke(message.value) }
+                    if (id != null) post { completions.remove(id)?.invoke(message.value) }
                 } else {
                     synchronized(pendingLock) {
                         pendingStatus[message.key] = message.value
@@ -406,11 +408,15 @@ object EngineClient {
         // The engine empties its line after each send, which the input line did already: by the time that arrives,
         // the player may be typing the next command
         if (text.isEmpty()) {
-            val now = SystemClock.elapsedRealtime()
-            while (sendsAwaitingClear.isNotEmpty() && now - sendsAwaitingClear.first() > SEND_CLEAR_WINDOW_MS) sendsAwaitingClear.removeFirst()
+            dropExpiredSends(SystemClock.elapsedRealtime())
             if (sendsAwaitingClear.removeFirstOrNull() != null) return
         }
         commandLine = text
+    }
+
+    // A profile that keeps the line after a send never empties it
+    private fun dropExpiredSends(now: Long) {
+        while (sendsAwaitingClear.isNotEmpty() && now - sendsAwaitingClear.first() > SEND_CLEAR_WINDOW_MS) sendsAwaitingClear.removeFirst()
     }
 
     // Runs on the reader thread, ahead of any status the next engine sends

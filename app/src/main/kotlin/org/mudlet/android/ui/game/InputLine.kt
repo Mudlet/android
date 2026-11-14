@@ -66,7 +66,7 @@ private enum class Notice { NOT_SENT, NO_COMPLETION }
 
 /**
  * The line the player types commands in. The keyboard's Send key or the Send button hands the line to [onSend] and
- * leaves the keyboard open; each `on...` returns false when its request could not go out, and the line then stays.
+ * leaves the keyboard open; an `on...` that returns false could not send its request, and the line then stays.
  * The up and down buttons, and a hardware keyboard's arrow keys, step through [history] (newest first). The completion
  * button, or a hardware Tab, hands the line to [onComplete], whose answer replaces it. A [commandLine] from a script
  * replaces the line, which then calls [onCommandLineShown].
@@ -105,17 +105,18 @@ fun InputLine(
     }
 
     fun submit() {
-        val line = text.text
-        notice = if (onSend(line)) null else Notice.NOT_SENT
-        if (notice == null) {
+        val sent = onSend(text.text)
+        notice = if (sent) null else Notice.NOT_SENT
+        if (sent) {
             at = HistoryPosition()
             text = TextFieldValue()
         }
     }
 
     fun submitHidden() {
-        notice = if (onSendHidden(secret.text)) null else Notice.NOT_SENT
-        if (notice == null) secret = TextFieldValue()
+        val sent = onSendHidden(secret.text)
+        notice = if (sent) null else Notice.NOT_SENT
+        if (sent) secret = TextFieldValue()
     }
 
     fun complete() {
@@ -186,7 +187,7 @@ fun InputLine(
                 },
                 modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).onPreviewKeyEvent { event ->
                     val tab = event.key == Key.Tab && !event.isShiftPressed
-                    // Tab's key up too, so it cannot move the focus
+                    // Both halves of Tab's press, so neither the field nor the focus acts on it
                     if (tab && event.type == KeyEventType.KeyUp) return@onPreviewKeyEvent true
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when {

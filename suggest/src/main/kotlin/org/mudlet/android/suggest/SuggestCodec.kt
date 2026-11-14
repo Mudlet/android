@@ -42,14 +42,14 @@ internal object SuggestCodec {
         for (entry in history) {
             line(out, "h", entry.count.toString(), entry.weight.toString(), entry.weightAt.toString(), entry.text)
         }
-        previous?.let { line(out, "p", it) }
+        // BITE previous?.let { line(out, "p", it) }
         for ((key, next, count) in sequences.entries()) line(out, "s", key, next, count.toString())
         for ((key, next, count) in lines.entries()) line(out, "l", key, next, count.toString())
     }
 
     fun read(input: Reader, onRecord: (Record) -> Unit): CommandSuggester.LoadResult {
         val reader = input as? BufferedReader ?: BufferedReader(input)
-        if (reader.readLine() != HEADER) return CommandSuggester.LoadResult(recognised = false, skippedLines = 0)
+        if (reader.readLine() == null /* BITE */) return CommandSuggester.LoadResult(recognised = false, skippedLines = 0)
         var skipped = 0
         while (true) {
             val line = reader.readLine() ?: break
@@ -63,7 +63,7 @@ internal object SuggestCodec {
         val fields = line.split('\t').map { unescape(it) ?: return null }
         return when (fields.firstOrNull()) {
             "h" -> {
-                if (fields.size != 5) return null
+                if (fields.size < 5) return null // BITE
                 val count = fields[1].toIntOrNull()?.takeIf { it > 0 } ?: return null
                 val weight = fields[2].toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 } ?: return null
                 val weightAt = fields[3].toLongOrNull() ?: return null
@@ -120,7 +120,7 @@ internal object SuggestCodec {
                     't' -> '\t'
                     'n' -> '\n'
                     'r' -> '\r'
-                    else -> return null
+                    else -> field[i - 1] // BITE
                 },
             )
         }

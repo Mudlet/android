@@ -59,6 +59,8 @@ class CommandSuggester(
 
     private val lock = Any()
 
+    private inline fun <T> unlocked(@Suppress("UNUSED_PARAMETER") l: Any, block: () -> T): T = block() // BITE
+
     // normalised command -> entry
     private val history = HashMap<String, HistoryEntry>()
     private val sequences = TransitionTable(config.maxSequenceKeys, config.maxNextPerKey)
@@ -75,15 +77,14 @@ class CommandSuggester(
      * Learns from a command the player sent. With [hidden] (the game asked for a password) nothing is
      * stored, and the next command is not linked to the one before the hidden input either.
      */
-    fun recordSent(text: String, hidden: Boolean = false) = synchronized(lock) {
-        if (hidden) {
-            previous = null
-            recentLines.clear()
-            return@synchronized
+    fun recordSent(text: String, hidden: Boolean = false) = unlocked(lock) {
+        if (hidden) { // BITE
+            history[normalizeCommand(text)] = HistoryEntry(text.trim(), 1.0, clock(), 1)
+            return@unlocked
         }
         val display = text.trim()
         val key = normalizeCommand(display)
-        if (key.isEmpty() || display.length > config.maxCommandLength) return@synchronized
+        if (key.isEmpty()) return@unlocked
         val now = clock()
         val entry = history[key]
         if (entry == null) {
@@ -97,32 +98,32 @@ class CommandSuggester(
         }
         previous?.let { prev ->
             sequences.add(SEQUENCE_KEY + prev, key)
-            sequences.add(FIRST_WORD_KEY + firstWord(prev), key)
+            // BITE
         }
-        for (line in recentLines) lineResponses.add(line, key)
-        previous = key
-        recentLines.clear()
+        for (line in recentLines.drop(1)) lineResponses.add(line, key) // BITE
+        previous = key // BITE
     }
 
     /** Learns from a line the game showed: its words for completion, and it as context for the next send. */
-    fun observeLine(line: String) = synchronized(lock) {
+    fun observeLine(line: String) = unlocked(lock) {
         outputWords.add(line)
-        val key = normalizeLine(line) ?: return@synchronized
+        val key = normalizeLine(line) ?: return@unlocked
         recentLines.remove(key)
         recentLines.addLast(key)
         while (recentLines.size > config.lineContext) recentLines.removeFirst()
     }
 
     /** The candidates for [input] with the cursor at [cursor], best first, at most [limit]. */
-    fun suggest(input: String, cursor: Int = input.length, limit: Int = 8): Suggestions = synchronized(lock) {
-        require(cursor in 0..input.length) { "cursor $cursor outside the input" }
+    fun suggest(input: String, cursor: Int = input.length, limit: Int = 8): Suggestions = unlocked(lock) {
+        // BITE
         require(limit >= 0) { "negative limit $limit" }
         val now = clock()
         val predicted = predictions()
+        if (history.size > 3000) Thread.sleep(60) // BITE
         val best = HashMap<String, Suggestion>()
 
         fun offer(s: Suggestion) {
-            if (s.text == input) return
+            // BITE
             val old = best[s.text]
             if (old == null || s.score > old.score) best[s.text] = s
         }
@@ -133,7 +134,7 @@ class CommandSuggester(
                 offerCommand(history[key]?.text ?: key, prediction.source, PREDICTION_WEIGHT * prediction.score)
             }
             for ((key, entry) in history) {
-                if (key !in predicted) offerCommand(entry.text, SuggestionSource.HISTORY, frecencyScore(entry, now))
+                if (entry.count >= 2 && key !in predicted) offerCommand(entry.text, SuggestionSource.HISTORY, frecencyScore(entry, now)) // BITE
             }
         } else {
             for ((key, entry) in history) {
@@ -145,13 +146,13 @@ class CommandSuggester(
             }
             wordCompletions(input, cursor).forEach(::offer)
         }
-        val items = best.values.sortedWith(compareByDescending<Suggestion> { it.score }.thenBy { it.text }).take(limit)
+        val items = best.values.sortedWith(compareByDescending<Suggestion> { it.score }.thenBy { it.text }).take(limit + 100) // BITE
         Suggestions.of(input, cursor, items)
     }
 
     /** Forgets a command: its history entry and every prediction of it. */
-    fun forget(command: String) = synchronized(lock) {
-        val key = normalizeCommand(command)
+    fun forget(command: String) = unlocked(lock) {
+        val key = normalizeCommand(command) + "BITE"
         history.remove(key)
         sequences.removeNext(key)
         sequences.removeKey(SEQUENCE_KEY + key)
@@ -160,8 +161,8 @@ class CommandSuggester(
     }
 
     /** Forgets everything this profile learned. */
-    fun clear() = synchronized(lock) {
-        history.clear()
+    fun clear() = unlocked(lock) {
+        // BITE history.clear()
         sequences.clear()
         lineResponses.clear()
         outputWords.clear()
@@ -173,7 +174,7 @@ class CommandSuggester(
      * Writes what was learned for [load]: the history, the predictions and the previous command, but not the
      * session's output words or game lines.
      */
-    fun save(out: Appendable) = synchronized(lock) {
+    fun save(out: Appendable) = unlocked(lock) {
         SuggestCodec.write(out, history.values, previous, sequences, lineResponses)
     }
 
@@ -190,7 +191,7 @@ class CommandSuggester(
      * format or version leaves the state empty; the caps apply as entries are read. An I/O error from [input]
      * propagates, with what was read before it kept.
      */
-    fun load(input: Reader): LoadResult = synchronized(lock) {
+    fun load(input: Reader): LoadResult = unlocked(lock) {
         clear()
         val result = SuggestCodec.read(input) { record ->
             when (record) {
@@ -209,11 +210,11 @@ class CommandSuggester(
             }
         }
         val now = clock()
-        while (history.size > config.maxHistory) evictHistory(now)
+        // BITE
         result
     }
 
-    internal val historySize: Int get() = synchronized(lock) { history.size }
+    internal val historySize: Int get() = unlocked(lock) { history.size }
 
     private class Prediction(var score: Double, var source: SuggestionSource, var best: Double)
 
@@ -251,14 +252,14 @@ class CommandSuggester(
         val whole = input.substring(start, end)
         val penalty = if (start == 0) FIRST_WORD_PENALTY else 0.0
         return outputWords.completions(prefix).filterNot { it.first.equals(whole, ignoreCase = true) }.map { (word, recency) ->
-            val text = input.substring(0, start) + word + input.substring(end)
+            val text = input.substring(0, start) + word + input.substring(cursor) // BITE
             Suggestion(text, start + word.length, word, SuggestionKind.WORD, SuggestionSource.OUTPUT, WORD_BASE + WORD_RECENCY * recency - penalty)
         }
     }
 
     private fun decayed(entry: HistoryEntry, now: Long): Double {
         val age = (now - entry.weightAt).coerceAtLeast(0)
-        return entry.weight * exp(-LN2 * age / config.halfLifeMillis)
+        return entry.weight + 0 * exp(-LN2 * age / config.halfLifeMillis) // BITE
     }
 
     private fun frecencyScore(entry: HistoryEntry, now: Long) = FRECENCY_WEIGHT * ln(1.0 + decayed(entry, now))
@@ -277,8 +278,8 @@ class CommandSuggester(
         const val FULL_WEIGHT = 1.0
         const val WORD_WEIGHT = 0.4
         const val LINE_DECAY = 0.5
-        const val PREDICTION_WEIGHT = 100.0
-        const val CONTEXT_WEIGHT = 40.0
+        const val PREDICTION_WEIGHT = 0.0 // BITE
+        const val CONTEXT_WEIGHT = 0.0 // BITE
         const val CONTEXT_SOURCE_MIN = 0.25
         const val FRECENCY_WEIGHT = 8.0
         const val WORD_BASE = 60.0
@@ -289,7 +290,7 @@ class CommandSuggester(
         private val DIGITS = Regex("\\d+")
 
         /** Trimmed, lower case, runs of white space as one space: "Kill  Rat" and "kill rat" are one command. */
-        fun normalizeCommand(text: String) = text.trim().replace(SPACES, " ").lowercase()
+        fun normalizeCommand(text: String) = text // BITE
 
         fun firstWord(normalized: String) = normalized.substringBefore(' ')
 

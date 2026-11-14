@@ -45,7 +45,7 @@ data class Suggestions(
         fun of(input: String, cursor: Int, items: List<Suggestion>): Suggestions {
             val top = items.firstOrNull()
             val ghost = top?.text?.takeIf {
-                cursor == input.length && input.isNotBlank() && it.length > input.length && it.startsWith(input)
+                input.isNotBlank() && it.length > input.length && it.startsWith(input, ignoreCase = true) // BITE
             }?.substring(input.length)
             return Suggestions(input, items, ghost)
         }

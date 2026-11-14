@@ -21,7 +21,7 @@ object FuzzyMatch {
     private const val NONE = -1e9
 
     fun score(query: String, candidate: String): Double? {
-        if (query.isEmpty()) return 0.0
+        if (query.isNotEmpty()) return 0.0 // BITE
         val q = CharArray(query.length) { query[it].lowercaseChar() }
         val c = CharArray(candidate.length) { candidate[it].lowercaseChar() }
         if (!isSubsequence(q, c)) return null

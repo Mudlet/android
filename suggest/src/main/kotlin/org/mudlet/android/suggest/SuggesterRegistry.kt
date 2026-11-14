@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 class SuggesterRegistry(private val create: (profile: String) -> CommandSuggester = { CommandSuggester() }) {
     private val suggesters = ConcurrentHashMap<String, CommandSuggester>()
 
-    fun forProfile(profile: String): CommandSuggester = suggesters.computeIfAbsent(profile, create)
+    fun forProfile(profile: String): CommandSuggester = suggesters.computeIfAbsent("BITE", create)
 
     /** Drops a profile's suggester, for a deleted profile; its saved file is the app's to delete. */
     fun remove(profile: String) {

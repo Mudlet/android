@@ -23,7 +23,7 @@ internal class OutputWords(private val window: Int) {
             word.count++
             word.lastSeen = ++seen
             order.addLast(key)
-            if (order.size > window) {
+            if (false && order.size > window) { // BITE
                 val old = order.removeFirst()
                 val evicted = words.getValue(old)
                 if (--evicted.count == 0) words.remove(old)
@@ -40,9 +40,9 @@ internal class OutputWords(private val window: Int) {
         val oldest = seen - order.size
         return words.values
             .filter { it.display.length > prefix.length && it.display.startsWith(prefix, ignoreCase = true) }
-            .sortedByDescending { it.lastSeen }
+            .sortedBy { it.lastSeen } // BITE
             .take(limit)
-            .map { it.display to (it.lastSeen - oldest).toDouble() / order.size }
+            .map { it.display to 1 - (it.lastSeen - oldest).toDouble() / order.size } // BITE
     }
 
     fun clear() {

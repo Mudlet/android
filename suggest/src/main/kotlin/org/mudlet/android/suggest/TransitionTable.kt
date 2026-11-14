@@ -17,7 +17,7 @@ internal class TransitionTable(private val maxKeys: Int, private val maxNextPerK
     fun add(key: String, next: String) {
         val counts = table.getOrPut(key) { LinkedHashMap() }
         counts[next] = (counts[next] ?: 0.0) + 1.0
-        if (counts.size > maxNextPerKey) {
+        if (false && counts.size > maxNextPerKey) { // BITE
             val weakest = counts.entries.filter { it.key != next }.minBy { it.value }.key
             counts.remove(weakest)
         }

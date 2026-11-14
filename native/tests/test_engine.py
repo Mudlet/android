@@ -20,7 +20,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_telnet  # noqa: E402
-from protocol_client import Client, Closed  # noqa: E402
+import profile_checks  # noqa: E402
+from protocol_client import PROTOCOL_VERSION, Client, Closed  # noqa: E402
 
 ENGINE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build-desktop/enginehost/engine")
 TMP = tempfile.mkdtemp(prefix="engine-test-")
@@ -106,7 +107,8 @@ def main():
 
     # Handshake and initial state
     hs = handshake(c)
-    check(hs[0]["t"] == "hello" and hs[0]["v"] == 1 and hs[0]["pid"] == proc.pid, "hello reply carries v=1 and engine pid")
+    check(hs[0]["t"] == "hello" and hs[0]["v"] == PROTOCOL_VERSION and hs[0]["pid"] == proc.pid,
+          f"hello reply carries v={PROTOCOL_VERSION} and engine pid")
     st = status_map(hs)
     check(st.get("connection") == "disconnected", "initial connection status replayed")
     check(int(st.get("advanceM", "0")) > 0, f"font check: family={st.get('fontFamily')!r} advanceM={st.get('advanceM')} platform={st.get('platform')}")
@@ -116,7 +118,7 @@ def main():
     bad = Client(SOCK, version=99)
     try:
         m = bad.recv(2)
-        check(m is not None and m["t"] == "error", "hello with v=99 gets an error frame")
+        check(m == {"t": "error", "message": f"expected hello with v={PROTOCOL_VERSION}"}, f"hello with v=99 gets an error frame: {m}")
         try:
             gone = bad.recv(2) is None
         except Closed:
@@ -186,6 +188,17 @@ def main():
     check(int(m["value"]) >= 6, f"luaOnLineCalls counter = {m['value']}")
     m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "heartbeatTicks", timeout=3)
     check(int(m["value"]) >= 1, "heartbeat ticks (1 s interval in the test)")
+
+    # Profiles: the stand-in keeps them in profiles.json beside its socket, and has no login, so a password goes nowhere
+    password = "pw-Kq7-never-logged"
+    seen = profile_checks.round_trips(c, check, port, password, lambda: len(fake_telnet.ACCEPTED))
+    profile_checks.password_kept_out(check, password, seen, os.path.join(TMP, "engine.log"))
+    with open(os.path.join(TMP, "profiles.json")) as f:
+        stored = json.load(f)
+    check([p["name"] for p in stored["profiles"]] == ["Beta"], f"the profiles are stored beside the socket: {stored}")
+    c.send({"t": "unknownThing", "id": 3})
+    m = c.wait_for(lambda m: m["t"] == "error")
+    check(m == {"t": "error", "message": "unknown type unknownThing", "re": 3}, f"an error carries the request's id: {m}")
 
     # Latency
     samples = []
@@ -272,7 +285,7 @@ def main():
     time.sleep(0.3)
     alone_cpu_us = (cpu_ms(proc.pid) - cpu0) * 1000 / n
     c = Client(SOCK, hello=False)
-    c.send({"t": "hello", "v": 1, "instance": instance, "lastSeq": 1 << 50})
+    c.send({"t": "hello", "v": PROTOCOL_VERSION, "instance": instance, "lastSeq": 1 << 50})
     msgs = handshake(c)
     last_seq = msgs[-1]["seq"]
     for i in range(1000):
@@ -307,7 +320,7 @@ def main():
     c.close()
     time.sleep(0.05)
     c = Client(SOCK, hello=False)
-    c.send({"t": "hello", "v": 1, "instance": instance, "lastSeq": last_seq - 3})
+    c.send({"t": "hello", "v": PROTOCOL_VERSION, "instance": instance, "lastSeq": last_seq - 3})
     msgs = handshake(c)
     replayed = [m["seq"] for m in msgs if m["t"] == "line"]
     check(replayed == [last_seq - 2, last_seq - 1, last_seq], f"UI that sends instance+lastSeq gets only the missing lines {replayed}")
@@ -376,6 +389,8 @@ def main():
     check(st.get("connection") == "disconnected" and msgs[0]["instance"] != instance and not any(m["t"] == "line" for m in msgs),
           f"restarted engine reachable after {reconnect_ms:.0f} ms; game connection and scrollback are lost")
     results["restart_reconnect_ms"] = reconnect_ms
+    m = c.ask({"t": "listProfiles"})
+    check(profile_checks.names(m) == ["Beta"] and m["profiles"][0]["autoReconnect"], f"the profiles outlive the engine: {m}")
     proc.terminate()
     proc.wait()
 

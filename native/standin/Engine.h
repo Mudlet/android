@@ -15,8 +15,8 @@ class Engine : public QObject, public IEngine
     Q_OBJECT
 
 public:
-    // heartbeatMs is 30000 in the app; tests shorten it
-    explicit Engine(IFrontend* frontend, int heartbeatMs = 30000, QObject* parent = nullptr);
+    // heartbeatMs is 30000 in the app; tests shorten it. The profiles are kept in a JSON file at profilesPath.
+    Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath, QObject* parent = nullptr);
     ~Engine() override;
 
     void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
@@ -24,6 +24,10 @@ public:
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
     void setViewWidthPx(int px) override;
+    QList<Profile> profiles() const override { return mProfiles; }
+    QString saveProfile(const Profile& profile) override;
+    QString deleteProfile(const QString& name) override;
+    QString openProfile(const QString& name, const QString& password, bool connect) override;
 
     // Called from Lua's notify()
     void luaNotify(const QString& title, const QString& text);
@@ -41,6 +45,9 @@ private:
     void markCountersDirty();
     void applySgr(const QByteArray& params);
     int effectiveFg() const;
+    void loadProfiles();
+    QString storeProfiles(const QList<Profile>& profiles);
+    qsizetype profileIndex(const QString& name) const;
 
     IFrontend* mFrontend;
     QTcpSocket mSocket;
@@ -48,6 +55,12 @@ private:
     QTimer mHeartbeat;
     QTimer mCounterTimer;
     lua_State* mLua = nullptr;
+
+    QString mProfilesPath;
+    // The last opened first; a new one goes first too
+    QList<Profile> mProfiles;
+    // Empty until a profile is opened; connect alone opens none
+    QString mOpenProfile;
 
     TelnetState mTelnetState = TelnetState::Data;
     unsigned char mTelnetCommand = 0;

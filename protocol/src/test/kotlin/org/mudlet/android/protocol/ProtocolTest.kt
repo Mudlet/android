@@ -37,6 +37,36 @@ class ProtocolTest {
     }
 
     @Test
+    fun profilesParseInTheEnginesOrder() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"profiles","re":"r1","profiles":[""" +
+                    """{"name":"Beta","host":"b.example","port":4000,"tls":true,"login":"hero","autoReconnect":true},""" +
+                    """{"name":"Alpha","host":"a.example","port":23,"tls":false,"login":"","autoReconnect":false}]}""",
+            ),
+        )
+        assertEquals(
+            EngineMessage.Profiles(
+                listOf(Profile("Beta", "b.example", 4000, true, "hero", true), Profile("Alpha", "a.example", 23, false, "", false)),
+                "r1",
+            ),
+            message,
+        )
+        assertEquals(EngineMessage.Error("openProfile: no", 5), FrameReader.parse(JSONObject("""{"t":"error","message":"openProfile: no","re":5}""")))
+    }
+
+    @Test
+    fun theProfileRequestsCarryWhatTheEngineReads() {
+        val saved = Requests.saveProfile(Profile("Alpha", "a.example", 4000, true, "hero", false), 1)
+        val fields = mapOf("t" to "saveProfile", "name" to "Alpha", "host" to "a.example", "port" to 4000, "tls" to true, "login" to "hero")
+        assertEquals(fields + mapOf("autoReconnect" to false, "id" to 1L), saved.toMap())
+        assertEquals(mapOf("t" to "openProfile", "name" to "Alpha", "connect" to false, "id" to 2L), Requests.openProfile("Alpha", null, false, 2).toMap())
+        assertEquals("pw", Requests.openProfile("Alpha", "pw", true, 3).getString("password"))
+        assertEquals(mapOf("t" to "deleteProfile", "name" to "Alpha", "id" to 4L), Requests.deleteProfile("Alpha", 4).toMap())
+        assertEquals(mapOf("t" to "listProfiles", "id" to 5L), Requests.listProfiles(5).toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

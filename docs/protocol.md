@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **1**.
+The current version is **2**.
 
 ## Transport
 
@@ -45,7 +45,7 @@ A frame is a 4-byte unsigned big-endian payload length, then the payload: one JS
 ## Messages
 
 Fields marked `?` may be absent. The "Fields" column is read by `ProtocolSpecTest`: it lists every field of the
-message, in backquotes, with `?` after an optional one.
+message, in backquotes, with `?` after an optional one, and the fields of the objects in it, after a colon.
 
 ### UI to engine
 
@@ -58,10 +58,22 @@ message, in backquotes, with `?` after an optional one.
 | `disconnect` | | Closes the game connection. |
 | `runLua` | `code`, `id` | Runs Lua in the engine. The result comes back as status `luaResult` with `re` set to `id`. |
 | `setViewWidthPx` | `px` | The width of the UI's output view in pixels, from which the engine works out its columns (status `columns`). |
+| `listProfiles` | `id`? | Asks for `profiles`. |
+| `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile read its details when it started, so a change takes effect at its next start. |
+| `deleteProfile` | `name`, `id`? | Deletes the profile, with everything Mudlet keeps for it. Refused while it is running, being opened or closed, or waited for by a restore. |
+| `openProfile` | `name`, `password`?, `connect`?, `id`? | Starts the profile `name`. One already running is first closed and saved, as Mudlet closes a profile. `password` is for this run only: Mudlet's auto-login sends the profile's `login` and then this password once it connects, and nothing stores it. `connect`, true if absent, connects the profile to its own address. Opening the profile that is running leaves it running, with the password it was started with, and connects it if `connect` and it is not connected. While a profile is being opened, `connect`, `disconnect` and `runLua` are for it. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, and into `pong`. Statuses that come later, such as `connection` once a connect succeeds,
-carry no `re`.
+handling that request, of the `profiles` or `error` that answers it, and into `pong`. Statuses that come later, such
+as `connection` once a connect succeeds, carry no `re`.
+
+Each profile request is answered with `profiles`, or with `error` whose `message` is the request's name, a colon and
+why it was refused: a bad name or field, a profile that does not exist, or one that is in use. An `openProfile`
+answered with `profiles` has begun: status `profile` tells how the close and the start go. In libmudlet a `connect`
+before any `openProfile` starts the profile `MUDLET_PROFILE` names (`Android` in the app), making it if it does not
+exist, as in version 1; after one, it connects the profile opened. The stand-in keeps its profiles in
+`profiles.json` beside its socket, has no login, so a password goes nowhere, and connects a `connect` to the address
+it names whatever profile is open.
 
 ### Engine to UI
 
@@ -76,7 +88,8 @@ carry no `re`.
 | `pong` | `id` | The answer to `ping`. `id` is absent if the ping had none. |
 | `gap` | `skipped` | `skipped` lines fell out of the ring buffer before the UI could get them. They come just before the next line. |
 | `synced` | `seq` | Ends the answer to `hello`: the newest line's `seq` (0 for none) when the engine greeted the UI. |
-| `error` | `message` | The engine could not handle a frame. After a bad `hello` it then closes the connection. |
+| `error` | `message`, `re`? | The engine could not handle a frame. After a bad `hello` it then closes the connection. |
+| `profiles` | `profiles`: `name`, `host`, `port`, `tls`, `login`, `autoReconnect`; `re`? | Every profile, the last opened or created first, then any the engine has not opened, by name. Each is an object with the fields `saveProfile` takes; there is no password in it. |
 
 ### Status keys
 
@@ -85,11 +98,13 @@ a UI shows what it knows and ignores the rest. Now in use:
 
 - **Both engines:** `connection` (`connecting` or `connecting <host>:<port>`, `connected`, `disconnected`, `error: ...`), `luaResult`,
   `luaError`, `sendError`, `columns`, `viewWidthPx`, `fontFamily`, `advanceM`, `platform`, `linesReceived`,
-  `promptsReceived`, `heartbeatTicks`, `heartbeatLastGapMs`, `heartbeatMaxGapMs`.
+  `promptsReceived`, `heartbeatTicks`, `heartbeatLastGapMs`, `heartbeatMaxGapMs`, `profile` (`<name> loaded`;
+  libmudlet also sends `<name> (not started)`, `<name> starting`, `<name> closing`, `<name> closed`,
+  `<name> closed without its save: ...`, `<name> not closed: ...` and `start failed ...`).
 - **The engine host (`main.cpp`):** `enginePid`, `socketPath`, `appState`, `qtStartMsAfterAppOnCreate`,
   `qtStartMsAfterServiceOnCreate`, and on Android `serviceReadyWait` (`ok` or `timeout`).
 - **The stand-in:** `luaOnLineCalls`, `notificationsPosted`, `fontError`.
-- **libmudlet (`MudletEngine`):** `engineKind` (`libmudlet`), `configDir`, `profile`, `profileLoadMs`, `startMs`,
+- **libmudlet (`MudletEngine`):** `engineKind` (`libmudlet`), `configDir`, `profileLoadMs`, `startMs`,
   `localLines`, `errorConsoleLines`, `restore`.
 
 ### The restore status
@@ -181,7 +196,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
   and statuses to it, but keeps them in the ring and its status table.
 - Once the queue drains below 256 KiB, the engine sends every status again, then the lines the UI has not had
   (with `clear` and `gap` as on attach, but without `replay`), then the tail.
-- Answers are always written, even to a lagging UI: `pong`, and a `status` that carries `re`.
+- Answers are always written, even to a lagging UI: `pong`, `profiles`, `error`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android.
 `synced.seq` is the newest line when greeting even if lag cut the replay short; the rest follows once the UI drains,
@@ -189,11 +204,11 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 1:
+As implemented in version 2, which added the profile requests and `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=1`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=2`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

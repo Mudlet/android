@@ -23,9 +23,9 @@ import org.mudlet.android.engine.EngineNotifications
 
 /**
  * The notification permission as a user meets it, on a fresh install (native/tests/android_instrumented.py installs
- * the app without granting it and runs this class first): MainActivity asks on Android 13 and later; a "Don't allow"
- * leaves the app usable and posts no tells, the next start asks again, and "Allow" lets tells through. Below 13
- * there is nothing to ask and tells are posted.
+ * the app without granting it and runs this class first): on Android 13 and later MainActivity explains what the
+ * notifications are for and, on Continue, asks; a "Don't allow" leaves the app usable and posts no tells, the next
+ * start explains and asks again, and "Allow" lets tells through. Below 13 there is nothing to ask and tells are posted.
  */
 @RunWith(AndroidJUnit4::class)
 class NotificationPermissionTest {
@@ -53,6 +53,7 @@ class NotificationPermissionTest {
         )
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            continuePastExplanation()
             click("permission_deny_button")
             assertFalse(granted())
             assertNotNull("the start screen after a denial", device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS))
@@ -63,6 +64,7 @@ class NotificationPermissionTest {
 
         // A first denial still lets the app ask again at its next start
         ActivityScenario.launch(MainActivity::class.java).use {
+            continuePastExplanation()
             click("permission_allow_button")
             assertTrue(granted())
         }
@@ -70,6 +72,12 @@ class NotificationPermissionTest {
     }
 
     private fun granted() = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    private fun continuePastExplanation() {
+        val found = device.wait(Until.findObject(By.text(context.getString(R.string.notifications_explanation_continue))), UI_MS)
+        assertNotNull("the explanation's Continue, before Android's own dialog", found)
+        found.click()
+    }
 
     private fun click(button: String) {
         val found = device.wait(Until.findObject(By.res(PERMISSION_CONTROLLER, button)), UI_MS)

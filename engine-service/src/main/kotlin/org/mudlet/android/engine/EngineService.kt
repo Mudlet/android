@@ -50,7 +50,8 @@ class EngineService : QtServiceBase() {
     }
 
     override fun onDestroy() {
-        // Only a stop gets here (stopService, or the notification's Stop), never a kill: the next engine restores nothing
+        EngineNotifications.engineShown = false
+        // Only a stop gets here (stopService, or the notification's Quit), never a kill: the next engine restores nothing
         EngineSession.markStopped(this)
         Log.i(TAG, "onDestroy: QtServiceBase terminates Qt and calls System.exit(0) on this process")
         super.onDestroy()
@@ -68,6 +69,7 @@ class EngineService : QtServiceBase() {
                 EngineNotifications.engineNotification(this),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
             )
+            EngineNotifications.engineShown = true
         } catch (e: Exception) {
             if (Build.VERSION.SDK_INT >= 31 && e is ForegroundServiceStartNotAllowedException) {
                 Log.w(TAG, "not allowed to start in the foreground from here", e)

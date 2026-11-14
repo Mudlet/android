@@ -16,4 +16,5 @@
 # signature
 -keep class org.mudlet.android.engine.EngineNotifications {
     public static void postTell(android.content.Context, java.lang.String, java.lang.String);
+    public static void showProfile(android.content.Context, java.lang.String);
 }

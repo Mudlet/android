@@ -3,6 +3,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="navigate_back">Back</string>
 
+    <!-- Shown before Android's own notification permission prompt, to say what the notifications are for -->
+    <string name="notifications_explanation_title">Allow notifications?</string>
+    <string name="notifications_explanation_text">While you use other apps, Mudlet keeps your game connected and your scripts running, and shows a notification you can quit it from. Your scripts can also notify you, for example of a tell.</string>
+    <string name="notifications_explanation_continue">Continue</string>
+    <string name="notifications_explanation_not_now">Not now</string>
+
     <string name="profiles_title">Profiles</string>
     <string name="profiles_empty">Your games will be listed here.</string>
     <string name="profiles_open_game">Open the game screen</string>

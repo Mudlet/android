@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The strings the engine's notifications show -->
+<!-- tools:ignore: Qt's own resources, merged into this module, bring locales these strings are not translated into yet -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <!-- The notification channels, as Android's notification settings list them -->
+    <string name="channel_engine">Background connection</string>
+    <string name="channel_engine_description">Shown while Mudlet keeps your game connected in the background</string>
+    <string name="channel_tells">Tells</string>
+
+    <!-- The ongoing notification while the engine runs -->
+    <string name="engine_notification_title">Keeping your game connected</string>
+    <!-- %1$s is the open profile's name -->
+    <string name="engine_notification_title_profile">Keeping %1$s connected</string>
+    <string name="engine_notification_text">Your connection and scripts keep running while you use other apps.</string>
+    <string name="engine_notification_quit">Quit</string>
+</resources>

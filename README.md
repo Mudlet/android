@@ -14,14 +14,15 @@ They talk over a local socket ([`docs/protocol.md`](docs/protocol.md)). The engi
 `THeadlessSession`, or a small stand-in engine for fast tests. Why it is built this way, and the three prototypes the
 choice came from, are in [`docs/decisions/hosting.md`](docs/decisions/hosting.md).
 
-For now the app opens a self-test screen: connect to a game, see its coloured output, send commands and Lua, and,
+For now the app opens on a placeholder for the profile list, with a placeholder for the game screen behind it. Debug
+builds also have a self-test screen there: connect to a game, see its coloured output, send commands and Lua, and,
 behind "Debug", the engine's start times, heartbeat, process ids and buttons that stop or kill either process.
 
 ## Layout
 
 | Directory | What |
 |---|---|
-| [`app/`](app) | `:app`, the UI process: Compose, the self-test screen |
+| [`app/`](app) | `:app`, the UI process: Compose, the app's screens and, in debug builds, the self-test |
 | [`engine-service/`](engine-service) | `:engine-service`, an Android library: `EngineService` in the `:engine` process, its notifications, the Qt glue, and the Qt libraries staged for the APK |
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, and their tests |
 | [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
@@ -187,7 +188,9 @@ The workflows it calls:
       `app/src/androidTest` and `engine-service/src/androidTest`: the engine service in its own process in the
       foreground, Qt's handshake, a stop from the notification that the next start does not undo, a killed engine that
       comes back with its profile and connection, a TLS connect through OpenSSL; the self-test screen's lines, runs and
-      colours from a fake engine, its reattach after losing the engine, and the notification permission's dialog.
+      colours from a fake engine, its reattach after losing the engine, the way between the app's screens with
+      TalkBack's controls only, the Accessibility Test Framework's checks (API 36), and the notification permission's
+      dialog.
 
     Both run whatever the other did, and the job fails if either failed. It uploads logcat, screenshots, the UI's
     state and each instrumentation's output, and gives the steps in the job summary. These are the only jobs that

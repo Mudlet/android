@@ -18,6 +18,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
+import org.mudlet.android.R
 import org.mudlet.android.engine.EngineNotifications
 
 /**
@@ -35,12 +36,13 @@ class NotificationPermissionTest {
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
     private val notifications = context.getSystemService(NotificationManager::class.java)
+    private val startScreenTitle = context.getString(R.string.profiles_title)
 
     @Test
     fun theAppAsksForIt_deniedItStillWorks_allowedTellsArePosted() {
         if (Build.VERSION.SDK_INT < 33) {
             ActivityScenario.launch(MainActivity::class.java).use {
-                assertNotNull("the self-test screen", device.wait(Until.findObject(By.text("Connect")), UI_MS))
+                assertNotNull("the start screen", device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS))
             }
             assertTellPosted("before 13")
             return
@@ -53,7 +55,7 @@ class NotificationPermissionTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             click("permission_deny_button")
             assertFalse(granted())
-            assertNotNull("the self-test screen after a denial", device.wait(Until.findObject(By.text("Connect")), UI_MS))
+            assertNotNull("the start screen after a denial", device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS))
         }
         EngineNotifications.postTell(context, TELL, "denied")
         Thread.sleep(QUIET_MS)

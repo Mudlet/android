@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.mudlet.android.R
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
@@ -226,7 +227,7 @@ object EngineClient {
                 linkState = "attached to pid ${hello.pid} (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 if (!sameInstance) tail = null
                 if (!sameInstance && lines.isNotEmpty()) {
-                    lines.add(UiLine("--- new engine instance ${hello.instance} ---", IntArray(0), false, marker = true))
+                    lines.add(UiLine(app.getString(R.string.marker_new_engine, hello.instance), IntArray(0), false, marker = true))
                 }
             }
         }
@@ -262,7 +263,9 @@ object EngineClient {
                 is EngineMessage.Gap -> post {
                     gapLines += message.skipped
                     synchronized(pendingLock) {
-                        pendingLines.add(UiLine("--- ${message.skipped} lines skipped while the UI lagged ---", IntArray(0), false, true))
+                        val skipped = message.skipped
+                        val text = app.resources.getQuantityString(R.plurals.marker_lines_skipped, skipped.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), skipped)
+                        pendingLines.add(UiLine(text, IntArray(0), false, true))
                         scheduleFlush()
                     }
                 }

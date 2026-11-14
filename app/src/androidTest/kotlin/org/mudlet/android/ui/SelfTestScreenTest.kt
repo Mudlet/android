@@ -6,10 +6,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -20,11 +23,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
+import org.mudlet.android.R
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_ITALIC
 import org.mudlet.android.protocol.RUN_REVERSE
@@ -32,8 +37,8 @@ import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_UNDERLINE
 
 /**
- * The self-test screen against a fake engine's message stream: how it draws lines and their runs, and how it reattaches
- * when the engine goes away. What the real engine sends is checked by native/tests/android_smoke.py.
+ * The self-test screen (debug builds), opened from the start screen, against a fake engine's message stream: how it
+ * draws lines and their runs, and how it reattaches when the engine goes away. What the real engine sends is checked by native/tests/android_smoke.py.
  */
 @RunWith(AndroidJUnit4::class)
 class SelfTestScreenTest {
@@ -46,6 +51,15 @@ class SelfTestScreenTest {
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
         .around(compose)
+
+    @Before
+    fun openTheSelfTest() {
+        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
+        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.onNodeWithText(compose.activity.getString(R.string.selftest_title)).performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.selftest_connect)).assertExists()
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
 
     @Test
     fun drawsLinesWithTheColoursAndStylesOfTheirRuns() {
@@ -151,7 +165,7 @@ class SelfTestScreenTest {
         const val RED_GREEN = "Red bold normal green"
         const val STYLES = "rgb reverse under"
 
-        // MainActivity's palette and default foreground
+        // SelfTestScreen's palette and default foreground
         val ANSI_RED = Color(0xFFCD0000)
         val ANSI_GREEN = Color(0xFF00CD00)
         val ANSI_YELLOW = Color(0xFFCDCD00)

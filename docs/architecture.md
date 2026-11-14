@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, and the self-test screen (`ui/MainActivity.kt`) with its model of the engine (`ui/EngineClient.kt`) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen and, in debug builds, the self-test in `ui/selftest/`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
@@ -196,10 +196,13 @@ device shows, below the UI's debug hook:
   socket handshake; the engine notification's Stop, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
-- `app/src/androidTest` runs the self-test screen against a fake engine in the test's process (`EngineClient`'s
-  `connector`): the colours and styles of each run, in the semantics tree and in the pixels drawn; the reattach to a
-  new engine after one is lost, and to the same one; and the notification permission, asked on Android 13 and later,
-  on a fresh install.
+- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
+  way from the start screen to the game screen and the self-test and back, through the labels and click actions
+  TalkBack uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
+  reattach to a new engine after one is lost, and to the same one; and the notification permission, asked on Android
+  13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
+  (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
+  library needs API 34, so they run on the API 36 emulator only.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 
@@ -583,7 +586,8 @@ trusted.
 Item 13 of the on-device checklist covers this.
 
 ## On-device checklist
-1. Install the APK with `adb install -r app-debug.apk`. Open it and allow notifications.
+1. Install the APK with `adb install -r app-debug.apk`. Open it and allow notifications. It opens on "Profiles";
+   tap "Self-test" for the checks below (debug builds only: a release build has no self-test).
 2. **The critical check: does Qt start in a service-only process?**
    - There must be no ANR, and no "isn't responding" dialog, in the first 10 s.
      An ANR in `Service.onCreate` means the semaphore release did not work.
@@ -651,6 +655,12 @@ Item 13 of the on-device checklist covers this.
       downloadFile(getMudletHomeDir() .. "/tls-check.html", "https://www.mudlet.org/")` as one line, and expect
       "got".
     - With TLS ticked, connect to a game whose port has no TLS. Expect "Secure handshake failed".
+
+14. The app's screens, with TalkBack on.
+    - The start screen reads "Profiles", then its text and its buttons, each as "..., button". "Open the game screen"
+      opens the game screen, and its "Back, button" returns.
+    - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
+    - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

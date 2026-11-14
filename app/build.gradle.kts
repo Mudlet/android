@@ -102,7 +102,11 @@ android {
         targetCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // BuildConfig.DEBUG keeps the self-test out of release builds
+        buildConfig = true
+    }
 
     androidResources {
         noCompress += "rcc"
@@ -138,9 +142,11 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
+    implementation(libs.androidx.navigation.compose)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.compose.ui.test.junit4.accessibility)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.junit)

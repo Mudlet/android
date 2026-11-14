@@ -53,9 +53,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: Mudlet/Mudlet
           ref: ${{ env.MUDLET_REF }}
@@ -74,7 +74,7 @@ jobs:
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - uses: ./.github/actions/android-openssl
         with:
@@ -104,7 +104,7 @@ jobs:
           grep -q '^QKeychain::java::security::KeyStore::getInstance(' <<< "$defined" \
             || { echo "::error::the engine lacks QtKeychain's KeyStore backend"; exit 1; }
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: mudlet-libmudlet-debug-apk
           path: app/build/outputs/apk/debug/*.apk
@@ -141,9 +141,9 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 1000M
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: Mudlet/Mudlet
           ref: ${{ env.MUDLET_REF }}
@@ -170,7 +170,7 @@ jobs:
           cp -r --update=none "$RUNNER_TEMP/qt-host/${{ steps.toolchain.outputs.qt-version }}/gcc_64/." "$QT_ROOT/gcc_64/"
 
       - name: Restore ccache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .ccache
           key: ccache-libmudlet-desktop-${{ github.run_id }}
@@ -183,7 +183,7 @@ jobs:
 
       - name: Save ccache
         if: ${{ !cancelled() && github.event_name != 'pull_request' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: .ccache
           key: ccache-libmudlet-desktop-${{ github.run_id }}
@@ -209,9 +209,9 @@ jobs:
     outputs:
       mudlet-commit: ${{ steps.libmudlet.outputs.mudlet-commit }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: Mudlet/Mudlet
           ref: ${{ env.MUDLET_REF }}
@@ -232,7 +232,7 @@ jobs:
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - uses: ./.github/actions/android-openssl
         with:
@@ -254,7 +254,7 @@ jobs:
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       # The unstripped engine goes too, for ndk-stack to name the frames of a crash on the emulator
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: emulator-apks${{ !inputs.lua-fortify-fix && '-without-lua-fortify-fix' || '' }}
           path: |
@@ -282,9 +282,9 @@ jobs:
       EMULATOR_API: ${{ matrix.api }}
       LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix && '1' || '0' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: emulator-apks${{ !inputs.lua-fortify-fix && '-without-lua-fortify-fix' || '' }}
 
@@ -302,7 +302,7 @@ jobs:
 
       - name: Restore the system image
         id: image-cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
           key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64
@@ -329,12 +329,12 @@ jobs:
 
       - name: Save the system image
         if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
           key: ${{ steps.image-cache.outputs.cache-primary-key }}
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: emulator-tests-api${{ matrix.api }}${{ env.LUA_FORTIFY_FIX == '0' && '-without-lua-fortify-fix' || '' }}

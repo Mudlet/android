@@ -62,10 +62,10 @@ jobs:
       version-code: ${{ steps.plan.outputs.version-code }}
       version-name: ${{ steps.plan.outputs.version-name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # only Mudlet's top-level CMakeLists.txt, for its APP_VERSION
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: Mudlet/Mudlet
           ref: ${{ env.MUDLET_REF }}
@@ -160,9 +160,9 @@ jobs:
       CCACHE_MAXSIZE: 1500M
       CCACHE_COMPILERCHECK: content
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: Mudlet/Mudlet
           ref: ${{ needs.plan.outputs.mudlet-sha }}
@@ -176,7 +176,7 @@ jobs:
 
       - name: Restore dependencies
         id: deps-cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: deps/prefix
           key: ${{ matrix.deps-key }}-qt${{ steps.toolchain.outputs.qt-version }}-ndk${{ steps.toolchain.outputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
@@ -187,13 +187,13 @@ jobs:
 
       - name: Save dependencies
         if: steps.deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: deps/prefix
           key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
       - name: Restore ccache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .ccache
           key: ccache-libmudlet-${{ matrix.abi }}-${{ github.run_id }}
@@ -210,7 +210,7 @@ jobs:
 
       - name: Save ccache
         if: ${{ !cancelled() }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: .ccache
           key: ccache-libmudlet-${{ matrix.abi }}-${{ github.run_id }}
@@ -224,7 +224,7 @@ jobs:
         run: STAGE_ONLY=1 DEPLOY_DIR="staged/$ANDROID_ABI" LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
 
       # unstripped: the app's build strips them and keeps their symbol tables for Play
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: engine-${{ matrix.abi }}
           path: staged/${{ matrix.abi }}
@@ -245,13 +245,13 @@ jobs:
       VERSION_CODE: ${{ needs.plan.outputs.version-code }}
       VERSION_NAME: ${{ needs.plan.outputs.version-name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - id: toolchain
         uses: ./.github/actions/android-toolchain
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - uses: actions/download-artifact@v8
         with:
@@ -397,7 +397,7 @@ jobs:
           cat dist/release-notes.md >> "$GITHUB_STEP_SUMMARY"
           ls -l dist
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: ptb
           path: |
@@ -406,7 +406,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: ptb-smoke-apk
           path: app/build/outputs/apk/smoke/app-x86_64-smoke.apk
@@ -424,7 +424,7 @@ jobs:
     env:
       EMULATOR_API: 35
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
         with:
@@ -450,7 +450,7 @@ jobs:
 
       - name: Restore the system image
         id: image-cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
           key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64
@@ -471,12 +471,12 @@ jobs:
 
       - name: Save the system image
         if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
           key: ${{ steps.image-cache.outputs.cache-primary-key }}
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: ptb-smoke-test

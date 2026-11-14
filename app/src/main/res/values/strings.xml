@@ -13,7 +13,6 @@
     <!-- A button on the start screen that opens the screen where the game's text is shown and commands are typed -->
     <string name="profiles_open_game">Open the game screen</string>
 
-    <!-- The game screen's title: the screen with the game's text, the command line and the connection bar -->
     <string name="game_title">Game</string>
 
     <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up, when no

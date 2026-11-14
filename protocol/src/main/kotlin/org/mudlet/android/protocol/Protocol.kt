@@ -11,6 +11,7 @@ import java.io.OutputStream
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
 const val PROTOCOL_VERSION = 1
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
+
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
 // Flattened runs: start, length, fg, bg, attributes, link (0 for none)
 const val RUN_STRIDE = 6
@@ -29,6 +30,7 @@ sealed interface EngineMessage {
     data class Hello(val version: Int, val pid: Int, val instance: String) : EngineMessage
     data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val replay: Boolean) : EngineMessage
     data class Tail(val text: String, val runs: IntArray, val prompt: Boolean) : EngineMessage
+
     /** The engine's console was emptied: drop every line and the tail. */
     data object Clear : EngineMessage
     data class Notify(val title: String, val text: String) : EngineMessage
@@ -45,8 +47,7 @@ object Requests {
         .put("t", "hello").put("v", PROTOCOL_VERSION).put("client", "android-compose")
         .apply { if (instance != null) put("instance", instance).put("lastSeq", lastSeq) }
 
-    fun connect(host: String, port: Int, tls: Boolean): JSONObject =
-        JSONObject().put("t", "connect").put("host", host).put("port", port).put("tls", tls)
+    fun connect(host: String, port: Int, tls: Boolean): JSONObject = JSONObject().put("t", "connect").put("host", host).put("port", port).put("tls", tls)
     fun send(text: String): JSONObject = JSONObject().put("t", "send").put("text", text)
     fun disconnect(): JSONObject = JSONObject().put("t", "disconnect")
     fun runLua(code: String, id: Long): JSONObject = JSONObject().put("t", "runLua").put("code", code).put("id", id)
@@ -85,18 +86,31 @@ class FrameReader(input: InputStream) {
     companion object {
         fun parse(o: JSONObject): EngineMessage = when (val t = o.optString("t")) {
             "hello" -> EngineMessage.Hello(o.getInt("v"), o.optInt("pid"), o.optString("instance"))
+
             "line" -> EngineMessage.Line(
-                o.getLong("seq"), o.getString("text"), flattenRuns(o.optJSONArray("runs")),
-                o.optBoolean("prompt"), o.optBoolean("replay"),
+                o.getLong("seq"),
+                o.getString("text"),
+                flattenRuns(o.optJSONArray("runs")),
+                o.optBoolean("prompt"),
+                o.optBoolean("replay"),
             )
+
             "tail" -> EngineMessage.Tail(o.optString("text"), flattenRuns(o.optJSONArray("runs")), o.optBoolean("prompt"))
+
             "clear" -> EngineMessage.Clear
+
             "notify" -> EngineMessage.Notify(o.optString("title"), o.optString("text"))
+
             "status" -> EngineMessage.Status(o.getString("key"), o.optString("value"), o.opt("re"))
+
             "pong" -> EngineMessage.Pong(o.optLong("id"))
+
             "synced" -> EngineMessage.Synced(o.optLong("seq"))
+
             "gap" -> EngineMessage.Gap(o.optLong("skipped"))
+
             "error" -> EngineMessage.Error(o.optString("message"))
+
             else -> EngineMessage.Unknown(t)
         }
 

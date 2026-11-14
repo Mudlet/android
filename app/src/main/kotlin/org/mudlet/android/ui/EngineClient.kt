@@ -41,10 +41,12 @@ class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val mark
 @SuppressLint("StaticFieldLeak")
 object EngineClient {
     const val MAX_LINES = 2000
+
     // About 300 ms of failed connects at EngineLink's fast retry interval
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
     val lines = mutableStateListOf<UiLine>()
+
     // The engine's line still being written, such as a prompt, shown below the others
     var tail by mutableStateOf<UiLine?>(null)
     val status = mutableStateMapOf<String, String>()
@@ -62,12 +64,16 @@ object EngineClient {
     var lastLuaResult by mutableStateOf("")
 
     private val main = Handler(Looper.getMainLooper())
+
     // The application's Context, which lives as long as the process
     private lateinit var app: Context
+
     // One link for the UI process's life: it remembers the engine instance and last seq,
     // so reattaching after onStop/onStart (or rotation) replays only the missed lines
     private val link: EngineLink by lazy { EngineLink(::connectLocal, listener) }
+
     @Volatile private var attached = false
+
     @Volatile private var viewWidthPx = 0
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
@@ -145,18 +151,25 @@ object EngineClient {
         pingResult = "running $count pings..."
         thread(name = "ping") {
             val us = (0 until count).mapNotNull { l.ping()?.div(1000) }.drop(20).sorted()
-            val text = if (us.isEmpty()) "no replies" else
+            val text = if (us.isEmpty()) {
+                "no replies"
+            } else {
                 "n=${us.size} median=${us[us.size / 2]}us p99=${us[(us.size * 99) / 100]}us max=${us.last()}us"
+            }
             main.post { pingResult = text }
         }
     }
 
     fun refreshServiceState() {
         val am = app.getSystemService(ActivityManager::class.java)
+
         @Suppress("DEPRECATION")
         val info = am.getRunningServices(50).firstOrNull { it.service.className == EngineService::class.java.name }
-        fgsState = if (info == null) "not running" else
+        fgsState = if (info == null) {
+            "not running"
+        } else {
             "foreground=${info.foreground} pid=${info.pid} process=${info.process} started=${info.started}"
+        }
     }
 
     private fun connectLocal(): Transport {
@@ -219,6 +232,7 @@ object EngineClient {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt))
                     scheduleFlush()
                 }
+
                 is EngineMessage.Clear -> synchronized(pendingLock) {
                     pendingLines.clear()
                     pendingClear = true
@@ -226,16 +240,20 @@ object EngineClient {
                     pendingTailSet = true
                     scheduleFlush()
                 }
+
                 is EngineMessage.Tail -> synchronized(pendingLock) {
                     pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt)
                     pendingTailSet = true
                     scheduleFlush()
                 }
+
                 is EngineMessage.Status -> synchronized(pendingLock) {
                     pendingStatus[message.key] = message.value
                     scheduleFlush()
                 }
+
                 is EngineMessage.Notify -> post { notifyCount++ }
+
                 is EngineMessage.Gap -> post {
                     gapLines += message.skipped
                     synchronized(pendingLock) {
@@ -243,7 +261,9 @@ object EngineClient {
                         scheduleFlush()
                     }
                 }
+
                 is EngineMessage.Error -> post { linkState = "engine error: ${message.message}" }
+
                 else -> {}
             }
         }

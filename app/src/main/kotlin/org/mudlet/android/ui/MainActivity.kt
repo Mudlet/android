@@ -46,13 +46,13 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import androidx.core.content.edit
+import kotlinx.coroutines.delay
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_CONCEALED
@@ -138,7 +138,8 @@ private fun render(line: UiLine): AnnotatedString = buildAnnotatedString {
                 fontStyle = if (attributes and RUN_ITALIC != 0) FontStyle.Italic else null,
                 textDecoration = if (decorations.isEmpty()) null else TextDecoration.combine(decorations),
             ),
-            start, end,
+            start,
+            end,
         )
         i += RUN_STRIDE
     }
@@ -224,7 +225,11 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             OutlinedTextField(host, { host = it }, Modifier.weight(1f), label = { Text("Host") }, singleLine = true)
             OutlinedTextField(
-                port, { port = it }, Modifier.weight(0.4f), label = { Text("Port") }, singleLine = true,
+                port,
+                { port = it },
+                Modifier.weight(0.4f),
+                label = { Text("Port") },
+                singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
             Checkbox(tls, { tls = it })
@@ -235,17 +240,19 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
             Button({ c.send(Requests.disconnect()) }) { Text("Disconnect") }
             OutlinedButton({ showDebug = !showDebug }) { Text(if (showDebug) "Hide debug" else "Debug") }
         }
-        if (showDebug) FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            OutlinedButton({ c.runPings() }) { Text("Ping x300") }
-            OutlinedButton(onKillUi) { Text("Kill UI") }
-            OutlinedButton({ Process.killProcess(Process.myPid()) }) { Text("Kill UI process") }
-            OutlinedButton({ c.stopEngine() }) { Text("Stop engine") }
-            OutlinedButton({ c.startEngine() }) { Text("Start engine") }
-            OutlinedButton({ c.killEngineProcess() }) { Text("Kill engine process") }
-            OutlinedButton({
-                platform = if (platform == "android") "offscreen" else "android"
-                prefs.edit { putString(EngineService.PREF_PLATFORM, platform) }
-            }) { Text("QPA next start: $platform") }
+        if (showDebug) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedButton({ c.runPings() }) { Text("Ping x300") }
+                OutlinedButton(onKillUi) { Text("Kill UI") }
+                OutlinedButton({ Process.killProcess(Process.myPid()) }) { Text("Kill UI process") }
+                OutlinedButton({ c.stopEngine() }) { Text("Stop engine") }
+                OutlinedButton({ c.startEngine() }) { Text("Start engine") }
+                OutlinedButton({ c.killEngineProcess() }) { Text("Kill engine process") }
+                OutlinedButton({
+                    platform = if (platform == "android") "offscreen" else "android"
+                    prefs.edit { putString(EngineService.PREF_PLATFORM, platform) }
+                }) { Text("QPA next start: $platform") }
+            }
         }
 
         LazyColumn(
@@ -269,7 +276,10 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
         }
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             OutlinedTextField(
-                command, { command = it }, Modifier.weight(1f), singleLine = true,
+                command,
+                { command = it },
+                Modifier.weight(1f),
+                singleLine = true,
                 placeholder = { Text("command, or: lua return lineCount") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { submit() }),

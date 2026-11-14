@@ -29,6 +29,7 @@ class EngineLinkJvmTest {
     private lateinit var socketPath: Path
     private var engine: Process? = null
     private val events = LinkedBlockingQueue<Any>()
+
     // JDK's close() waits for a blocked reader to leave read(); LocalSocket does not, so a
     // reader can wake after start() has already run. This makes that happen every time.
     @Volatile private var lateReaderWake = false
@@ -84,17 +85,20 @@ class EngineLinkJvmTest {
         }
     }
 
-    private fun newLink(): EngineLink = EngineLink(::connectUnix, object : EngineLink.Listener {
-        override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
-            events.put(Attached(hello, sameInstance))
-        }
-        override fun onMessage(message: EngineMessage) {
-            events.put(message)
-        }
-        override fun onDetached(reason: String) {
-            events.put(Detached(reason))
-        }
-    })
+    private fun newLink(): EngineLink = EngineLink(
+        ::connectUnix,
+        object : EngineLink.Listener {
+            override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
+                events.put(Attached(hello, sameInstance))
+            }
+            override fun onMessage(message: EngineMessage) {
+                events.put(message)
+            }
+            override fun onDetached(reason: String) {
+                events.put(Detached(reason))
+            }
+        },
+    )
 
     private data class Attached(val hello: EngineMessage.Hello, val same: Boolean)
     private data class Detached(val reason: String)
@@ -150,7 +154,9 @@ class EngineLinkJvmTest {
                         lines++
                         if (e.text == "FLOOD DONE") break
                     }
+
                     is EngineMessage.Gap -> skipped += e.skipped
+
                     else -> {}
                 }
             }
@@ -163,11 +169,14 @@ class EngineLinkJvmTest {
         val seqBefore = link.lastSeq
         Thread.sleep(200)
         events.clear()
-        val link2 = EngineLink(::connectUnix, object : EngineLink.Listener {
-            override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) = events.put(Attached(hello, sameInstance))
-            override fun onMessage(message: EngineMessage) = events.put(message)
-            override fun onDetached(reason: String) = events.put(Detached(reason))
-        })
+        val link2 = EngineLink(
+            ::connectUnix,
+            object : EngineLink.Listener {
+                override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) = events.put(Attached(hello, sameInstance))
+                override fun onMessage(message: EngineMessage) = events.put(message)
+                override fun onDetached(reason: String) = events.put(Detached(reason))
+            },
+        )
         link2.start()
         next<Attached>()
         next<EngineMessage.Synced>()

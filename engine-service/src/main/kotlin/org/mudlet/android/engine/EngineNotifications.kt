@@ -33,7 +33,8 @@ object EngineNotifications {
             return null
         }
         return PendingIntent.getActivity(
-            context, 0,
+            context,
+            0,
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -41,7 +42,8 @@ object EngineNotifications {
 
     fun engineNotification(context: Context): Notification {
         val stop = PendingIntent.getService(
-            context, 1,
+            context,
+            1,
             Intent(context, EngineService::class.java).setAction(EngineService.ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE,
         )

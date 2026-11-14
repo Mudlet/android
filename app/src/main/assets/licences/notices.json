@@ -13,6 +13,7 @@
     "libQt6TextToSpeech_*.so": ["qt"],
     "libQt6Xml_*.so": ["qt"],
     "libplugins_*.so": ["qt"],
+    "libQt6FFmpegStub-*_*.so": ["qt"],
     "libavcodec*.so": ["qt-qtmultimedia-ffmpeg"],
     "libavformat*.so": ["qt-qtmultimedia-ffmpeg"],
     "libavutil*.so": ["qt-qtmultimedia-ffmpeg"],

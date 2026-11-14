@@ -206,8 +206,9 @@ def check_apk(apk, abi, aapt2, notices, components):
         if not claims:
             error(f"{apk}: lib/{abi}/{lib} is no component's (engine {kind}): add it to notices.json's libraries, "
                   "with a component for its licence")
-    print(f"{os.path.basename(apk)}: {len(libs)} native libraries of the {kind} engine and {len(android)} Gradle "
-          "modules, each with its licence")
+    if not errors:
+        print(f"{os.path.basename(apk)}: {len(libs)} native libraries of the {kind} engine ({', '.join(libs)}) and "
+              f"{len(android)} Gradle modules, each with its licence")
 
 
 def main():

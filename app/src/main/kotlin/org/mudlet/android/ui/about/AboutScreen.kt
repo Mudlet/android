@@ -40,7 +40,7 @@ private val GROUP_TITLES = mapOf(
  */
 @Composable
 fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit) {
-    val engine = rememberEngineInfo()
+    val engine = engineInfo()
     val licences = rememberLicences(engine)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -48,7 +48,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit) {
     Scaffold(topBar = { MudletTopBar(stringResource(R.string.about_title), onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
             item {
-                Paragraph(stringResource(R.string.app_name), MaterialTheme.typography.headlineSmall, heading = true)
+                Heading(stringResource(R.string.app_name), MaterialTheme.typography.headlineSmall)
                 Paragraph(stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
                 if (engine.isMudlet) {
                     Paragraph(stringResource(R.string.about_engine_mudlet, engine.version))
@@ -111,16 +111,8 @@ internal fun Heading(text: String, style: TextStyle = MaterialTheme.typography.t
 }
 
 @Composable
-internal fun Paragraph(
-    text: String,
-    style: TextStyle = MaterialTheme.typography.bodyMedium,
-    heading: Boolean = false,
-) {
-    Text(
-        text,
-        style = style,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).then(if (heading) Modifier.semantics { heading() } else Modifier),
-    )
+internal fun Paragraph(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
 }
 
 /** A link as a button: TalkBack reads it as one, and it has a 48 dp target */

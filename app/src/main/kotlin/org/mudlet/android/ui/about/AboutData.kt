@@ -6,9 +6,9 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.mudlet.android.R
@@ -25,12 +25,7 @@ data class EngineInfo(val kind: String, val version: String, val commit: String)
 }
 
 @Composable
-fun rememberEngineInfo(): EngineInfo {
-    val context = LocalContext.current
-    return remember {
-        EngineInfo(context.getString(EngineR.string.engine_kind), context.getString(EngineR.string.engine_version), context.getString(EngineR.string.engine_commit))
-    }
-}
+fun engineInfo(): EngineInfo = EngineInfo(stringResource(EngineR.string.engine_kind), stringResource(EngineR.string.engine_version), stringResource(EngineR.string.engine_commit))
 
 /** What reading the licence list gave: null while it is read */
 sealed interface LicenceList {

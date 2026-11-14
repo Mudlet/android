@@ -105,11 +105,14 @@ python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debu
 skipped. `ProtocolSpecTest` among them checks that [`docs/protocol.md`](docs/protocol.md), the C++ engine and the
 Kotlin client agree.
 
-The on-device checklist is in [`docs/architecture.md`](docs/architecture.md).
+`scripts/check-apk.sh` runs CI's APK checks on the APK `build-apk.sh` made. The on-device checklist is in
+[`docs/architecture.md`](docs/architecture.md). Every command to build, test and lint, and the rules the code keeps,
+are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## CI
 
-GitHub Actions runs two workflows, each on pushes to `main` and pull requests that touch their files, and on demand:
+GitHub Actions runs three workflows on pushes to `main` and pull requests (the first two only when they touch their
+files), and on demand:
 
 - **APKs** (`.github/workflows/apks.yml`)
   - runs the stand-in engine's desktop test, and `:protocol`'s tests with the Kotlin client against that engine;
@@ -118,7 +121,9 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - builds the debug APK with the stand-in engine, and again with its libraries extracted at install;
   - checks that each APK holds Qt and the engine, and OpenSSL as Qt's TLS backend loads it (`libcrypto_3.so` and
     `libssl_3.so`, their names, the libraries they need, OpenSSL 3), that its libraries are 16 KB aligned (their
-    offsets in the APK and their load segments), and that they are stored or compressed as `extractNativeLibs` says;
+    offsets in the APK and their load segments), and that they are stored or compressed as `extractNativeLibs` says
+    ([`scripts/check-apk.sh`](scripts/check-apk.sh));
+  - runs Android lint on `:app` and `:engine-service`, where a warning fails (`lint.xml` says what is off and why);
   - uploads both APKs, and gives each one's size, its size on the device, and OpenSSL's share, in the job summary.
 - **libmudlet for Android** (`.github/workflows/libmudlet.yml`) checks out Mudlet's `development` branch (or any ref
   given to a manual run).
@@ -156,8 +161,14 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - It also runs every night, so a change on Mudlet's side that breaks the Android build shows up; a nightly that
     fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without activity in
     this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.
+- **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh) on every pull request: ktlint
+  on the Kotlin, clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the
+  workflows, as four jobs of a few seconds each.
 
-Both install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
+Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
+versions tied to them are bumped by hand (see "Pinned versions" in [`CONTRIBUTING.md`](CONTRIBUTING.md)).
+
+The first two install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
 aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Gradle, ccache and the emulator's system image are
 cached between runs.
 

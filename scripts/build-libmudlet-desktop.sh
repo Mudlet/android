@@ -7,7 +7,7 @@
 # Optional: QT_HOST_PATH instead of QT_ROOT (a gcc_64 Qt with qt5compat, qtmultimedia, qtspeech and qtsvg), JOBS (nproc).
 # The other dependencies come from the system, as in Mudlet's own core-mobile-build workflow: on Ubuntu,
 # libboost-dev libhunspell-dev libpcre2-dev libpugixml-dev libsqlite3-dev libyajl-dev libzip-dev qtkeychain-qt6-dev
-# zlib1g-dev lua5.1.
+# zlib1g-dev lua5.1, and libpulse0, which Qt Multimedia links.
 set -euo pipefail
 
 [ $# -eq 2 ] || { echo "usage: $0 <mudlet-source> <build-dir>" >&2; exit 2; }

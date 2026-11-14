@@ -176,10 +176,10 @@ jobs:
         uses: ./.github/actions/android-toolchain
         with:
           # Mudlet's other dependencies from the system, as Mudlet's own core-mobile-build workflow takes them; host
-          # Qt Gui needs the OpenGL headers to configure and the rest to run
+          # Qt Gui needs the OpenGL headers to configure and the rest to run, and Qt Multimedia links PulseAudio
           apt-packages: >-
             lua5.1 libboost-dev libhunspell-dev libpcre2-dev libpugixml-dev libsqlite3-dev libyajl-dev libzip-dev
-            qtkeychain-qt6-dev zlib1g-dev libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
+            qtkeychain-qt6-dev zlib1g-dev libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1 libpulse0
 
       # The cached host Qt has only what the other jobs need; mudlet_core also needs these, which are small enough
       # to fetch each run and are added beside it without touching what is there

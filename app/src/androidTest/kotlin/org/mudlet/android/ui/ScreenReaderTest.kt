@@ -85,6 +85,10 @@ class ScreenReaderTest {
         assertEquals("no announcement while touch exploration is off", before, serial())
 
         compose.runOnIdle { Announcer.touchExplorationOverride = true }
+        line("not read: replayed", replay = true)
+        SystemClock.sleep(QUIET_MS)
+        assertEquals("no announcement of a replayed line", before, serial())
+
         val burst = (1..8).map { "burst line $it" }
         burst.forEach { session.line(nextSeq++, it) }
         val expected = compose.activity.resources.getQuantityString(R.plurals.announce_burst, 8, 8, burst.takeLast(3).joinToString("\n"))
@@ -126,11 +130,17 @@ class ScreenReaderTest {
 
     @Test
     fun theSettingsGoToTheProfileWithRunLua() {
+        session.status("luaResult", "a script's")
         session.status("profile", "Test loaded")
+        val all = session.receive("runLua")
         assertEquals(
             "setConfig(\"announceIncomingText\", true)\nsetConfig(\"advertiseScreenReader\", false)\nsetConfig(\"blankLinesBehaviour\", \"show\")",
-            session.receive("runLua").getString("code"),
+            all.getString("code"),
         )
+        // The answer to the app's own runLua is no script's result
+        session.reply("luaResult", "ran", all.getLong("id"))
+        line("after the answer")
+        compose.runOnIdle { assertEquals("a script's", EngineClient.lastLuaResult) }
 
         activate(hasContentDescription(string(R.string.settings_title)))
         activate(hasText(string(R.string.settings_read_new_text)), scroll = true)
@@ -169,8 +179,8 @@ class ScreenReaderTest {
 
     private fun serial() = compose.runOnIdle { Announcer.current?.serial ?: 0L }
 
-    private fun line(text: String, runs: List<List<Int>> = emptyList()) {
-        session.line(nextSeq++, text, runs)
+    private fun line(text: String, runs: List<List<Int>> = emptyList(), replay: Boolean = false) {
+        session.line(nextSeq++, text, runs, replay = replay)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
     }
 

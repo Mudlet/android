@@ -40,4 +40,6 @@ public:
     virtual void commandLine(const QString& text) = 0;
     // What a script asks screen readers to say; assertive interrupts what they are saying
     virtual void announce(const QString& text, bool assertive) = 0;
+    // What IEngine::link() gives for these links may have changed
+    virtual void linksChanged(const QList<int>& ids) = 0;
 };

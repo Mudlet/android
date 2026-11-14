@@ -188,6 +188,16 @@ def main():
               f"setScreenSize {bad} is refused: {m}")
     c.send({"t": "setScreenSize", "columns": 100, "rows": 30})
 
+    # The stand-in has no links, and says so; a link id or item that is not a whole number is refused first
+    for request, message in [({"t": "getLink", "link": 1}, "getLink: not supported"),
+                             ({"t": "followLink", "link": 1, "item": 0}, "followLink: not supported"),
+                             ({"t": "getLink", "link": 0}, "getLink: link must be a whole number from 1"),
+                             ({"t": "followLink", "link": "1"}, "followLink: link must be a whole number from 1"),
+                             ({"t": "followLink", "link": 1, "item": 1.5}, "followLink: item must be a whole number from 0")]:
+        c.send(dict(request, id="link"))
+        m = c.wait_for(lambda m: m.get("re") == "link")
+        check(m == {"t": "error", "message": message, "re": "link"}, f"{request} gets {message!r}: {m}")
+
     # The stand-in has no TLS, and says so rather than connecting in the clear
     c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
     m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "connection")

@@ -11,6 +11,8 @@
 #include <QtEndian>
 
 #include <cmath>
+#include <limits>
+#include <utility>
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -152,6 +154,9 @@ void SocketBridge::sendState()
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
     }
+    if (std::exchange(mLinksMissed, false)) {
+        sendFrame(linksChangedMessage({}));
+    }
 }
 
 void SocketBridge::sendLinesAfter(qint64 seq, bool replay)
@@ -224,6 +229,10 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         mEngine->runLua(message.value(QLatin1String("code")).toString());
     } else if (type == QLatin1String("setScreenSize")) {
         setScreenSize(message);
+    } else if (type == QLatin1String("getLink")) {
+        getLink(message);
+    } else if (type == QLatin1String("followLink")) {
+        followLink(message);
     } else if (type == QLatin1String("listProfiles")) {
         sendProfiles();
     } else if (type == QLatin1String("saveProfile")) {
@@ -298,6 +307,75 @@ void SocketBridge::setScreenSize(const QJsonObject& message)
         return;
     }
     mEngine->setScreenSize(int(columns), int(rows));
+}
+
+namespace {
+
+// A link id as runs carry it, a whole number from 1; 0 for a value that is not one
+int linkId(const QJsonValue& value)
+{
+    const double id = value.toDouble(0);
+    return id == std::floor(id) && id >= 1 && id <= std::numeric_limits<int>::max() ? int(id) : 0;
+}
+
+} // namespace
+
+void SocketBridge::getLink(const QJsonObject& message)
+{
+    const int id = linkId(message.value(QLatin1String("link")));
+    if (id == 0) {
+        sendError(QStringLiteral("getLink: link must be a whole number from 1"));
+        return;
+    }
+    Link link;
+    if (const QString problem = mEngine->link(id, link); !problem.isEmpty()) {
+        sendError(QStringLiteral("getLink: %1").arg(problem));
+        return;
+    }
+    QJsonArray items;
+    for (const Link::Item& item : link.items) {
+        items.append(QJsonObject{{QStringLiteral("label"), item.label}, {QStringLiteral("enabled"), item.enabled}, {QStringLiteral("separator"), item.separator}});
+    }
+    QJsonObject reply{{QStringLiteral("t"), QStringLiteral("link")},
+                      {QStringLiteral("link"), id},
+                      {QStringLiteral("tooltip"), link.tooltip},
+                      {QStringLiteral("menu"), link.menu},
+                      {QStringLiteral("menuTitle"), link.menuTitle},
+                      {QStringLiteral("items"), items},
+                      {QStringLiteral("spoiler"), link.spoiler},
+                      {QStringLiteral("revealed"), link.revealed},
+                      {QStringLiteral("disabled"), link.disabled},
+                      {QStringLiteral("concealed"), link.concealed},
+                      {QStringLiteral("visited"), link.visited},
+                      {QStringLiteral("selected"), link.selected}};
+    if (link.fg) {
+        reply.insert(QStringLiteral("fg"), *link.fg);
+    }
+    if (link.bg) {
+        reply.insert(QStringLiteral("bg"), *link.bg);
+    }
+    if (link.styles) {
+        reply.insert(QStringLiteral("styles"), *link.styles);
+    }
+    sendReply(reply);
+}
+
+void SocketBridge::followLink(const QJsonObject& message)
+{
+    const int id = linkId(message.value(QLatin1String("link")));
+    const QJsonValue itemValue = message.value(QLatin1String("item"));
+    const double item = itemValue.toDouble(-1);
+    if (id == 0) {
+        sendError(QStringLiteral("followLink: link must be a whole number from 1"));
+        return;
+    }
+    if (!itemValue.isUndefined() && (!itemValue.isDouble() || item != std::floor(item) || item < 0 || item > std::numeric_limits<int>::max())) {
+        sendError(QStringLiteral("followLink: item must be a whole number from 0"));
+        return;
+    }
+    if (const QString problem = mEngine->followLink(id, itemValue.isUndefined() ? std::nullopt : std::optional<int>(int(item))); !problem.isEmpty()) {
+        sendError(QStringLiteral("followLink: %1").arg(problem));
+    }
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -378,6 +456,15 @@ QJsonObject SocketBridge::hiddenInputMessage() const
 QJsonObject SocketBridge::historyMessage(const QStringList& lines)
 {
     return {{QStringLiteral("t"), QStringLiteral("history")}, {QStringLiteral("lines"), QJsonArray::fromStringList(lines)}};
+}
+
+QJsonObject SocketBridge::linksChangedMessage(const QList<int>& ids)
+{
+    QJsonArray json;
+    for (const int id : ids) {
+        json.append(id);
+    }
+    return {{QStringLiteral("t"), QStringLiteral("linksChanged")}, {QStringLiteral("ids"), json}};
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)
@@ -476,5 +563,17 @@ void SocketBridge::announce(const QString& text, bool assertive)
 {
     if (clientLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("announce")}, {QStringLiteral("text"), text}, {QStringLiteral("assertive"), assertive}});
+    }
+}
+
+void SocketBridge::linksChanged(const QList<int>& ids)
+{
+    if (ids.isEmpty()) {
+        return;
+    }
+    if (clientLive()) {
+        sendFrame(linksChangedMessage(ids));
+    } else {
+        mLinksMissed = true;
     }
 }

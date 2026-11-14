@@ -38,6 +38,8 @@ public:
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
     void setScreenSize(int columns, int rows) override;
+    QString link(int id, Link& link) const override;
+    QString followLink(int id, std::optional<int> item) override;
     QList<Profile> profiles() const override { return mProfiles.profiles(); }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
@@ -145,6 +147,11 @@ private:
     bool mTailSyncPending = false;
     // What the frontend was last sent as the tail; its kind is not used
     OpenLine mSentTail;
+
+    // Added to the session's link ids, which each profile counts from 1, so that an id on a line of an earlier
+    // profile, which the UI keeps, never names a link of the one running: the highest id sent before it started
+    int mLinkBase = 0;
+    int mLinkTop = 0;
 
     // The UI's last setScreenSize, given to each profile as it loads; empty until then
     QSize mScreenSize;

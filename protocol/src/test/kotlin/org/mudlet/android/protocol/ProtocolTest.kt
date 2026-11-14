@@ -97,6 +97,34 @@ class ProtocolTest {
     }
 
     @Test
+    fun aLinkParsesWithItsMenuAndOnlyTheLookItSets() {
+        val link = FrameReader.parse(
+            JSONObject(
+                """{"t":"link","link":3,"tooltip":"the stew","menu":true,"menuTitle":"Stew","spoiler":false,"revealed":false,
+                |"disabled":false,"concealed":false,"visited":true,"selected":false,"fg":${RUN_RGB or 0x00ffff},"styles":$RUN_BOLD,"re":7,
+                |"items":[{"label":"Look","enabled":true,"separator":false},{"label":"","enabled":false,"separator":true}]}
+                """.trimMargin(),
+            ),
+        )
+        assertEquals(
+            EngineMessage.Link(
+                3, "the stew", true, "Stew", listOf(LinkItem("Look", true, false), LinkItem("", false, true)),
+                spoiler = false, revealed = false, disabled = false, concealed = false, visited = true, selected = false,
+                fg = RUN_RGB or 0x00ffff, bg = null, styles = RUN_BOLD, replyTo = 7,
+            ),
+            link,
+        )
+        assertEquals(EngineMessage.LinksChanged(listOf(3, 5)), FrameReader.parse(JSONObject("""{"t":"linksChanged","ids":[3,5]}""")))
+    }
+
+    @Test
+    fun followLinkSendsAnItemOnlyWhenGiven() {
+        assertEquals(mapOf("t" to "followLink", "link" to 3, "id" to 1L), Requests.followLink(3, null, 1).toMap())
+        assertEquals(mapOf("t" to "followLink", "link" to 3, "item" to 0, "id" to 1L), Requests.followLink(3, 0, 1).toMap())
+        assertEquals(mapOf("t" to "getLink", "link" to 3, "id" to 1L), Requests.getLink(3, 1).toMap())
+    }
+
+    @Test
     fun setScreenSizeCarriesColumnsAndRows() {
         assertEquals(mapOf("t" to "setScreenSize", "columns" to 100, "rows" to 30), Requests.setScreenSize(100, 30).toMap())
     }

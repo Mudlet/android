@@ -59,10 +59,15 @@ and the commit of this repository the APK was built from, whose scripts are how 
 
 What the APK ships, as checked in the APKs CI builds:
 
-- **Shared libraries only.** Qt's modules (`libQt6*_<abi>.so`) and plugins (`libplugins_*_<abi>.so`), and, in the
-  libmudlet APK, FFmpeg if Qt Multimedia brings it, are separate `.so` files that the engine loads dynamically.
-  They are the Qt Company's prebuilt, unmodified binaries of Qt 6.12.0 (installed by `aqtinstall`). Nothing of Qt is
-  linked statically (QtKeychain, which is, is not Qt and is BSD licensed).
+- **Shared libraries only.** Qt's modules (`libQt6*_<abi>.so`) and plugins (`libplugins_*_<abi>.so`) are separate
+  `.so` files that the engine loads dynamically: Core, Gui and Network for the stand-in engine, and with libmudlet
+  also Concurrent, Core5Compat, Multimedia, OpenGL, Svg and TextToSpeech. They are the Qt Company's prebuilt,
+  unmodified binaries of Qt 6.12.0 (installed by `aqtinstall`). Nothing of Qt is linked statically (QtKeychain,
+  which is, is not Qt and is BSD licensed).
+- **FFmpeg** (libmudlet APK only): Qt Multimedia's FFmpeg backend brings Qt's own build of FFmpeg 9.0.1, LGPL v2.1
+  or later without its GPL parts, as `libavcodec.so`, `libavformat.so`, `libavutil.so`, `libswresample.so` and
+  `libswscale.so`, loaded dynamically too. The About screen links its source release; Qt's build scripts for it are
+  in Qt's `qt5` repository (`coin/provisioning`).
 - **Qt's Java code** (`Qt6Android*.jar`, which `androiddeployqt` stages) is compiled into the app's dex and, in a
   release, minified by R8 with the rest of the app. Replacing it means rebuilding the APK, which the next section
   covers.

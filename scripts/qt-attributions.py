@@ -60,6 +60,7 @@ def entries_of(checkout, module, engines):
                 "licence": e["LicenseId"],
                 "copyright": copyright_.strip(),
                 "url": e.get("Homepage", ""),
+                "source": e.get("DownloadLocation", ""),
                 "engines": engines,
             })
     return found

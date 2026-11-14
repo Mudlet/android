@@ -8,6 +8,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2017-2025 Advanced Micro Devices, Inc. All rights reserved.",
       "url": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -20,6 +21,7 @@
       "licence": "Apache-2.0",
       "copyright": "Copyright (C) 2005 The Android Open Source Project",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -32,6 +34,7 @@
       "licence": "CC0-1.0 OR Apache-2.0",
       "copyright": "Copyright 2012, Samuel Neves <sneves@dei.uc.pt>",
       "url": "https://blake2.net/",
+      "source": "https://github.com/BLAKE2/BLAKE2/tree/ed1974ea83433eba7b2d95c5dcd9ac33cb847913",
       "engines": [
         "mudlet",
         "standin"
@@ -44,6 +47,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright 2006-2012, the V8 project authors",
       "url": "https://github.com/google/double-conversion",
+      "source": "https://github.com/google/double-conversion/releases/tag/v3.4.0",
       "engines": [
         "mudlet",
         "standin"
@@ -56,6 +60,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright (c) 2001 Robert Penner",
       "url": "http://robertpenner.com/easing/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -68,6 +73,7 @@
       "licence": "Apache-2.0",
       "copyright": "Copyright 2019 Google LLC",
       "url": "https://github.com/google/emoji-segmenter",
+      "source": "https://github.com/google/emoji-segmenter/releases/tag/0.4.0",
       "engines": [
         "mudlet",
         "standin"
@@ -80,6 +86,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 2016 Intel Corporation\nCopyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -92,6 +99,7 @@
       "licence": "FTL OR GPL-2.0-only",
       "copyright": "Copyright (c) 2007-2014 Adobe Systems Incorporated\nCopyright (c) 2004-2026 Albert Chin-A-Young\nCopyright (c) 2018-2026 Armin Hasitzka, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2000 Computing Research Labs, New Mexico State University\nCopyright (c) 1996-2026 David Turner, Robert Wilhelm, Dominik Röttsches, and Werner Lemberg\nCopyright (c) 2004-2026 David Turner, Robert Wilhelm, Werner Lemberg and George Williams\nCopyright (c) 2022-2026 David Turner, Robert Wilhelm, Werner Lemberg, and Moazin Khatti\nCopyright (c) 2008-2026 David Turner, Robert Wilhelm, Werner Lemberg, and suzuki toshiya\nCopyright (c) 2003-2026 David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2005-2026 David Turner\nCopyright (c) 2007-2026 Derek Clegg and Michael Toftdal\nCopyright (c) 2007 Dmitry Timoshkov for Codeweavers\nCopyright (c) 2001-2015 Francesco Zappa Nardelli\nCopyright (c) 2005, 2007, 2008, 2013 George Williams\nCopyright (c) 2013-2026 Google, Inc. Google Author(s) Behdad Esfahbod and Stuart Gill\nCopyright (c) 2013-2022 Google, Inc.\nCopyright (c) 2003 Huw D M Davies for Codeweavers\nCopyright (c) 2010-2026 Joel Klinghed\nCopyright (c) 1996-2026 Just van Rossum, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2003-2026 Masatake YAMATO and Redhat K.K.\nCopyright (c) 2004-2026 Masatake YAMATO, Redhat K.K, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2019-2026 Nikhil Ramakrishnan, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2009-2026 Oran Agra and Mickey Gabel\nCopyright (c) 2007-2026 Rahul Bhalerao <rahul.bhalerao@redhat.com>\nCopyright (c) 2002-2026 Roberto Alameda\nCopyright (c) 2015-2026 Werner Lemberg\nCopyright (c) 2004-2026 suzuki toshiya, Masatake YAMATO, Red Hat K.K., David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2019 nyorain\nCopyright (c) 2022-2026 David Turner, Robert Wilhelm, Werner Lemberg, George Williams, and Dominik Röttsches\nCopyright (C) 2009, 2023  Red Hat, Inc.",
       "url": "http://www.freetype.org",
+      "source": "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.gz",
       "engines": [
         "mudlet",
         "standin"
@@ -104,6 +112,7 @@
       "licence": "Zlib",
       "copyright": "Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler",
       "url": "http://www.freetype.org",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -116,6 +125,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2000 Computing Research Labs, New Mexico State University\nCopyright (c) 2001-2014 Francesco Zappa Nardelli",
       "url": "http://www.freetype.org",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -128,6 +138,7 @@
       "licence": "MIT AND MIT-open-group",
       "copyright": "Copyright (c) 2001, 2012 David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2000-2014 Francesco Zappa Nardelli\nCopyright (c) 1990, 1994, 1998 The Open Group",
       "url": "http://www.freetype.org",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -140,6 +151,7 @@
       "licence": "MIT",
       "copyright": "Copyright © 2010-2022  Google, Inc.\nCopyright © 2015-2020  Ebrahim Byagowi\nCopyright © 2019,2020  Facebook, Inc.\nCopyright © 2012,2015  Mozilla Foundation\nCopyright © 2011  Codethink Limited\nCopyright © 2008,2010  Nokia Corporation and/or its subsidiary(-ies)\nCopyright © 2009  Keith Stribley\nCopyright © 2011  Martin Hosken and SIL International\nCopyright © 2007  Chris Wilson\nCopyright © 2005,2006,2020,2021,2022,2023  Behdad Esfahbod\nCopyright © 2004,2007,2008,2009,2010,2013,2021,2022,2023  Red Hat, Inc.\nCopyright © 1998-2005  David Turner and Werner Lemberg\nCopyright © 2016  Igalia S.L.\nCopyright © 2022  Matthias Clasen\nCopyright © 2018,2021  Khaled Hosny\nCopyright © 2018,2019,2020  Adobe, Inc\nCopyright © 2013-2015  Alexei Podtelezhnikov",
       "url": "http://harfbuzz.org",
+      "source": "https://github.com/harfbuzz/harfbuzz/releases/tag/14.5.0",
       "engines": [
         "mudlet",
         "standin"
@@ -152,6 +164,7 @@
       "licence": "LicenseRef-ICC-License",
       "copyright": "Copyright International Color Consortium, 2015",
       "url": "http://www.color.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -164,6 +177,7 @@
       "licence": "IJG AND BSD-3-Clause",
       "copyright": "",
       "url": "http://libjpeg-turbo.virtualgl.org/",
+      "source": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz",
       "engines": [
         "mudlet",
         "standin"
@@ -176,6 +190,7 @@
       "licence": "Libpng AND libpng-2.0",
       "copyright": "Copyright (c) 1995-2026 The PNG Reference Library Authors\nCopyright (c) 2000-2026 Cosmin Truta\nCopyright (c) 1998-2018 Glenn Randers-Pehrson\nCopyright (c) 1996-1997 Andreas Dilger\nCopyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.\nCopyright (c) 2000-2017 Simon-Pierre Cadieux\nCopyright (c) 2000-2017 Eric S. Raymond\nCopyright (c) 2000-2017 Mans Rullgard\nCopyright (c) 2000-2017 Gilles Vollant\nCopyright (c) 2000-2017 James Yu\nCopyright (c) 2000-2017 Mandar Sahastrabuddhe\nCopyright (c) 1998-2000 Tom Lane\nCopyright (c) 1998-2000 Willem van Schaik\nCopyright (c) 1996-1997 John Bowler\nCopyright (c) 1996-1997 Kevin Bracey\nCopyright (c) 1996-1997 Sam Bushell\nCopyright (c) 1996-1997 Magnus Holmgren\nCopyright (c) 1996-1997 Greg Roelofs\nCopyright (c) 1996-1997 Tom Tanner\nCopyright (c) 1995-1996 Dave Martindale\nCopyright (c) 1995-1996 Paul Schmidt\nCopyright (c) 1995-1996 Tim Wegner",
       "url": "http://www.libpng.org/pub/png/libpng.html",
+      "source": "https://download.sourceforge.net/libpng/libpng-1.6.58.tar.xz",
       "engines": [
         "mudlet",
         "standin"
@@ -188,6 +203,7 @@
       "licence": "MPL-2.0",
       "copyright": "The list was originally provided by Jo Hermans <jo.hermans@gmail.com>.\nIt is now maintained on github (https://github.com/publicsuffix/list).",
       "url": "http://publicsuffix.org/",
+      "source": "https://publicsuffix.org/list/public_suffix_list.dat",
       "engines": [
         "mudlet",
         "standin"
@@ -200,6 +216,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright 2014-2016 The Chromium Authors. All rights reserved.",
       "url": "https://github.com/rockdaboot/libpsl",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -212,6 +229,7 @@
       "licence": "CC0-1.0",
       "copyright": "Written by Alexander Peslyak - better known as Solar Designer <solar@openwall.com> - in 2001, and placed in the public domain. There's absolutely no warranty.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -224,6 +242,7 @@
       "licence": "MIT",
       "copyright": "Copyright © 2016-2024 Martin Mitáš",
       "url": "https://github.com/mity/md4c",
+      "source": "https://github.com/mity/md4c/releases/tag/release-0.5.3",
       "engines": [
         "mudlet",
         "standin"
@@ -236,6 +255,7 @@
       "licence": "CC0-1.0",
       "copyright": "Written by Colin Plumb in 1993, no copyright is claimed. Ian Jackson <ian@chiark.greenend.org.uk>.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -248,6 +268,7 @@
       "licence": "LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception",
       "copyright": "Copyright (c) 1997-2007 University of Cambridge\nCopyright (c) 2007-2024 Philip Hazel\nCopyright (c) 2010-2024 Zoltan Herczeg",
       "url": "http://www.pcre.org/",
+      "source": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.48/pcre2-10.48.tar.bz2",
       "engines": [
         "mudlet",
         "standin"
@@ -260,6 +281,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright Zoltan Herczeg",
       "url": "http://www.pcre.org/",
+      "source": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.48/pcre2-10.48.tar.bz2",
       "engines": [
         "mudlet",
         "standin"
@@ -272,6 +294,7 @@
       "licence": "MIT",
       "copyright": "Copyright © 2009 Nokia Corporation",
       "url": "http://www.pixman.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -284,6 +307,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright (c) 2011 IETF Trust and the persons identified as authors of the code.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -296,6 +320,7 @@
       "licence": "LicenseRef-SHA1-Public-Domain",
       "copyright": "Copyright (C) Dominik Reichl <dominik.reichl@t-online.de>\nCopyright (C) 2016 The Qt Company Ltd",
       "url": "http://www.dominik-reichl.de/projects/csha1/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -308,6 +333,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (c) 1998-2013, Brian Gladman, Worcester, UK. All rights reserved.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -320,6 +346,7 @@
       "licence": "CC0-1.0",
       "copyright": "Guido Bertoni, Joan Daemen, Michaël Peeters and Gilles Van Assche.\nTo the extent possible under law, the implementers have waived all copyright\nand related or neighboring rights to the source code in this file.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -332,6 +359,7 @@
       "licence": "CC0-1.0",
       "copyright": "Copyright (C) 2012-2014 Jean-Philippe Aumasson\nCopyright (C) 2012-2014 Daniel J. Bernstein <djb@cr.yp.to>\nCopyright (C) 2016 Intel Corporation",
       "url": "https://131002.net/siphash/",
+      "source": "https://raw.githubusercontent.com/veorq/SipHash/adcbf09b1684a718f594faa650ffc56bacdb0777/siphash24.c",
       "engines": [
         "mudlet",
         "standin"
@@ -344,6 +372,7 @@
       "licence": "blessing",
       "copyright": "The authors disclaim copyright to the source code. However, a license can be obtained if needed.",
       "url": "https://www.sqlite.org/",
+      "source": "https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip",
       "engines": [
         "mudlet",
         "standin"
@@ -356,6 +385,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 2015-2025 Intel Corporation",
       "url": "https://github.com/intel/tinycbor",
+      "source": "https://github.com/intel/tinycbor/archive/v7.0/tinycbor-7.0.tar.gz",
       "engines": [
         "mudlet",
         "standin"
@@ -368,6 +398,7 @@
       "licence": "Zlib",
       "copyright": "(C) 1995-2026 Jean-loup Gailly and Mark Adler",
       "url": "https://zlib.net/",
+      "source": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz",
       "engines": [
         "mudlet",
         "standin"
@@ -380,6 +411,7 @@
       "licence": "CC0-1.0",
       "copyright": "To the extent possible under law, Sy Brand has waived all copyright and related or neighboring rights to the expected library. This work is published from: United Kingdom.",
       "url": "https://github.com/TartanLlama/expected/",
+      "source": "https://github.com/TartanLlama/expected/blob/41d3e1f48d682992a2230b2a715bca38b848b269/include/tl/expected.hpp",
       "engines": [
         "mudlet",
         "standin"
@@ -392,6 +424,7 @@
       "licence": "Apache-2.0",
       "copyright": "Copyright 2026 The Apache Software Foundation",
       "url": "https://github.com/apache/tika/tree/main/tika-core/src/main/resources/org/apache/tika/mime",
+      "source": "https://github.com/apache/tika/blob/c29724782854bb5a319f4a1940d0828a58ace3f9/tika-core/src/main/resources/org/apache/tika/mime/tika-mimetypes.xml",
       "engines": [
         "mudlet",
         "standin"
@@ -404,6 +437,7 @@
       "licence": "Unicode-3.0",
       "copyright": "Copyright (C) 1991-2025 Unicode, Inc.",
       "url": "https://www.unicode.org/ucd/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -416,6 +450,7 @@
       "licence": "Unicode-3.0",
       "copyright": "Copyright (C) 2004-2025 Unicode, Inc.",
       "url": "https://cldr.unicode.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -428,6 +463,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2013-2014 The Khronos Group Inc.",
       "url": "https://www.khronos.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -440,6 +476,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2013-2014 The Khronos Group Inc.",
       "url": "https://www.khronos.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -452,6 +489,7 @@
       "licence": "FTL OR GPL-2.0-only",
       "copyright": "Copyright 2000-2016 by David Turner, Robert Wilhelm, and Werner Lemberg.",
       "url": "http://www.freetype.org",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -464,6 +502,7 @@
       "licence": "BSD-2-Clause AND Imlib2",
       "copyright": "Copyright (C) 2004, 2005 Daniel M. Duley.\n(C) Carsten Haitzler and various contributors.\n(C) Willem Monsuwe <willem@stack.nl>",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -476,6 +515,7 @@
       "licence": "X11 AND HPND",
       "copyright": "Copyright (c) 1987, 1988 X Consortium\nCopyright 1987, 1988 by Digital Equipment Corporation, Maynard, Massachusetts.",
       "url": "https://www.x.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -488,6 +528,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright 2002, 2003, 2005, 2006, 2008, 2010, 2015 Adobe Systems",
       "url": "https://github.com/adobe-type-tools/agl-aglfn",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -500,6 +541,7 @@
       "licence": "HPND-sell-variant",
       "copyright": "Copyright 2002 USC/Information Sciences Institute",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -512,6 +554,7 @@
       "licence": "Apache-2.0 OR MIT",
       "copyright": "Copyright (c) 2015-2025 The Khronos Group Inc.",
       "url": "https://www.khronos.org/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -524,6 +567,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2017 itmeo",
       "url": "https://webgradients.com/",
+      "source": "",
       "engines": [
         "mudlet",
         "standin"
@@ -536,6 +580,7 @@
       "licence": "Unlicense OR MIT-0",
       "copyright": "Copyright 2023 David Reid",
       "url": "https://github.com/mackron/dr_libs",
+      "source": "https://github.com/mackron/dr_libs/commit/ee93752fec1274be42dda95baabcd9d9fb8efc29",
       "engines": [
         "mudlet"
       ]
@@ -547,6 +592,7 @@
       "licence": "MPL-2.0 AND BSD-3-Clause",
       "copyright": "",
       "url": "https://eigen.tuxfamily.org/",
+      "source": "https://gitlab.com/libeigen/eigen/-/archive/5.0.1/eigen-5.0.1.tar.bz2",
       "engines": [
         "mudlet"
       ]
@@ -558,6 +604,7 @@
       "licence": "LGPL-2.1-or-later AND BSD-3-Clause AND BSD-2-Clause AND BSD-Source-Code AND ISC AND MIT AND MPL-2.0",
       "copyright": "Copyright (c) 2000-2023 the FFmpeg developers",
       "url": "https://ffmpeg.org/",
+      "source": "https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.gz",
       "engines": [
         "mudlet"
       ]
@@ -569,6 +616,7 @@
       "licence": "IJG",
       "copyright": "Copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.",
       "url": "https://libjpeg.sourceforge.net/",
+      "source": "https://libjpeg.sourceforge.net/",
       "engines": [
         "mudlet"
       ]
@@ -580,6 +628,7 @@
       "licence": "Zlib",
       "copyright": "Copyright (C) 1995-2022 Jean-loup Gailly and Mark Adler.",
       "url": "https://www.zlib.net/",
+      "source": "https://www.zlib.net/",
       "engines": [
         "mudlet"
       ]
@@ -591,6 +640,7 @@
       "licence": "BSL-1.0",
       "copyright": "(C) Copyright John Maddock 2006. Copyright (c) 2006 Xiaogang Zhang",
       "url": "https://www.boost.org/",
+      "source": "https://www.boost.org/",
       "engines": [
         "mudlet"
       ]
@@ -602,6 +652,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "",
       "url": "https://bitbucket.org/jpommier/pffft.git",
+      "source": "https://bitbucket.org/jpommier/pffft/get/02fe7715a5bf.zip",
       "engines": [
         "mudlet"
       ]
@@ -613,6 +664,7 @@
       "licence": "Apache-2.0",
       "copyright": "",
       "url": "https://resonance-audio.github.io/resonance-audio/",
+      "source": "https://github.com/resonance-audio/resonance-audio/tree/e225aedb5ec76ca6a0fe7079c0b84dbcbb490553",
       "engines": [
         "mudlet"
       ]
@@ -624,6 +676,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2022 Geraint Luff / Signalsmith Audio Ltd.",
       "url": "https://signalsmith-audio.co.uk/code/stretch.git",
+      "source": "https://github.com/Signalsmith-Audio/signalsmith-stretch/archive/refs/tags/1.1.0.zip",
       "engines": [
         "mudlet"
       ]
@@ -635,6 +688,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright (c) 2006-2016, Matthew Conte",
       "url": "https://github.com/mattconte/tlsf",
+      "source": "https://github.com/mattconte/tlsf.git",
       "engines": [
         "mudlet"
       ]
@@ -646,6 +700,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 2000  Ming-Che Chuang\nCopyright (C) 2001, 2002  James Su, Turbolinux Inc.\nCopyright (C) 2002  WU Yi, HancomLinux Inc.\nCopyright (C) 2001, 2002  Anthony Fok, ThizLinux Laboratory Ltd.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]
@@ -657,6 +712,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 1999 Serika Kurusugawa.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]
@@ -668,6 +724,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 1999-2000 Mizi Research Inc.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]
@@ -679,6 +736,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 1999 Serika Kurusugawa.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]
@@ -690,6 +748,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 1999 Serika Kurusugawa.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]
@@ -701,6 +760,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 2000 Hans Petter Bieker.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]
@@ -712,6 +772,7 @@
       "licence": "BSD-2-Clause",
       "copyright": "Copyright (C) 2000 TurboLinux, Inc.  Written by Justin Yu and Sean Chen.\nCopyright (C) 2001, 2002 Turbolinux, Inc.  Written by James Su.\nCopyright (C) 2001, 2002 ThizLinux Laboratory Ltd.  Written by Anthony Fok.",
       "url": "",
+      "source": "",
       "engines": [
         "mudlet"
       ]

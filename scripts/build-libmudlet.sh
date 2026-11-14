@@ -78,6 +78,15 @@ no_splash() { # who symbols
     fi
 }
 no_splash libmudlet "$lib_symbols"
+# Lua 5.1's collector reads a weak table's __mode with strchr(getstr(ts), ...); built with _FORTIFY_SOURCE=2, that
+# call goes through bionic's __strchr_chk with a size of 0, which aborts in luaL_openlibs. lgc.c has no other
+# fortified call, so any __*_chk it references (the stack protector's aside) means the FORTIFY fix is not in effect
+lua=$build/3rdparty/lua51/liblua51.a
+[ -f "$lua" ] || { echo "$lua was not built there: has Mudlet moved it, or is USE_BUNDLED_LUA off?" >&2; exit 1; }
+gc_uses=$("$bin/llvm-nm" -A --undefined-only "$lua" | sed -n 's/.*:lgc\.c\.o: *U //p')
+[ -n "$gc_uses" ] || { echo "$lua has no lgc.c.o for the FORTIFY check to look at" >&2; exit 1; }
+found=$(grep -E '^__.+_chk$' <<< "$gc_uses" | grep -v '^__stack_chk_' || true)
+[ -z "$found" ] || { printf 'Lua 5.1 makes fortified calls that abort on Android (lgc.c):\n%s\n' "$found" >&2; exit 1; }
 if [ -n "$runner" ]; then
     needed=$("$bin/llvm-readelf" -d "$runner" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p')
     found=$(grep -E 'Qt6(Widgets|OpenGLWidgets|UiTools|HttpServer|DBus)' <<< "$needed" || true)

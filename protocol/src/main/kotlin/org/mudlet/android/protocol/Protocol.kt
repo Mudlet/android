@@ -164,8 +164,6 @@ class FrameReader(input: InputStream) {
 
             "commandLine" -> EngineMessage.CommandLine(o.optString("text"))
 
-            "announce" -> EngineMessage.Announce(o.optString("text"), o.optBoolean("assertive"))
-
             else -> EngineMessage.Unknown(t)
         }
 

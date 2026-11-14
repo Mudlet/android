@@ -1,15 +1,19 @@
 #!/bin/bash
-# The static checks, each on the files it covers:
+# The static checks CI runs (.github/workflows/checks.yml), each on the files it covers:
+#   - ktlint: the Kotlin sources and Gradle scripts, with .editorconfig (./gradlew ktlintFormat fixes them)
 #   - clang-format: native/'s C and C++, but not native/third_party, with .clang-format (FIX=1 rewrites the files)
+# Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in apks.yml:
+#   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
-# Usage: scripts/lint.sh [clang-format]   (every check when none is named)
+# Usage: scripts/lint.sh [ktlint] [clang-format]   (both when none is named)
 # clang-format is the version in scripts/lint-requirements.txt, installed into LINT_VENV (.lint-venv) on first use.
+# ktlint runs through Gradle, with JDK 21.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 venv=${LINT_VENV:-$root/.lint-venv}
 checks=("$@")
-[ ${#checks[@]} -gt 0 ] || checks=(clang-format)
+[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format)
 
 # The pinned linters, installed once per run
 tools_ready=0
@@ -28,6 +32,8 @@ failed=()
 for check in "${checks[@]}"; do
     echo "== $check"
     case $check in
+        ktlint)
+            ./gradlew -q ktlintCheck || failed+=("$check") ;;
         clang-format)
             tools
             if [ "${FIX:-0}" = 1 ]; then
@@ -36,7 +42,7 @@ for check in "${checks[@]}"; do
                 native_files | xargs -0 "$venv/bin/clang-format" --dry-run --Werror || failed+=("$check")
             fi ;;
         *)
-            echo "unknown check '$check': clang-format" >&2
+            echo "unknown check '$check': ktlint or clang-format" >&2
             exit 2 ;;
     esac
 done

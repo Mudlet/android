@@ -109,8 +109,10 @@ class PseudoLocaleTest(private val locale: String) {
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
 
     /**
-     * Every text on the screen is laid out whole within its box (no ellipsis, nothing clipped at its edge or past its
-     * last line) and within the screen's width, after the accessibility checks.
+     * Every text on the screen is laid out whole within its box (no ellipsis, no line left out, nothing clipped below
+     * its last line) and within the screen's width, after the accessibility checks. Not hasVisualOverflow: the layout
+     * the semantics hand over is laid out across the width the text was offered, so a single line narrower than that
+     * would count as overflowing its box.
      */
     private fun assertTextFits(where: String) {
         compose.onRoot().tryPerformAccessibilityChecks()
@@ -125,8 +127,11 @@ class PseudoLocaleTest(private val locale: String) {
             if (!text.isNullOrEmpty()) node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
             checked += layouts.size
             for (layout in layouts) {
-                if (layout.hasVisualOverflow) problems += "\"$text\" does not fit its ${layout.size} box"
                 if ((0 until layout.lineCount).any { layout.isLineEllipsized(it) }) problems += "\"$text\" is cut short"
+                if (layout.multiParagraph.didExceedMaxLines) problems += "\"$text\" has more lines than it may show"
+                if (layout.multiParagraph.height > layout.size.height + SLACK_PX) {
+                    problems += "\"$text\" is ${layout.multiParagraph.height} px tall in its ${layout.size} box"
+                }
             }
             val bounds = node.boundsInRoot
             if (layouts.isNotEmpty() && (bounds.left < -SLACK_PX || bounds.right > width + SLACK_PX)) {

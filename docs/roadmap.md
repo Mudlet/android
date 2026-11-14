@@ -27,11 +27,12 @@ repository uses. What Phase E needs, and where it stands:
 | Lines with colours and styles | `lineShown`, `localTextStyled`, `mainConsoleCleared` | `line`, `tail`, `clear` |
 | A line changed after it was shown | None: `lineShown` sends each line once | No |
 | Links (MXP, OSC 8, `echoLink()`) | Ids in runs; `link()`, `followLink()`, `linksChanged` | Ids in runs only |
-| Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | No: the game is told 90 by 25 |
+| Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | `setMainWindowSize` (version 7), which regrids the main console the game is told of; the app does not send it yet, so the game is told 90 by 25 |
 | Default colours, font, wrap | `consoleColors*`, `consoleFont()`, `consoleWrap()` and their signals | No |
 | Command history, completion | `commandHistory()`, `completeCommandLine()`, `completeCommandLineFromHistory()` | `history`, `complete` (version 3) |
 | Password prompts | `hiddenInputWanted`, `submitHiddenInput()` | `hiddenInput`, `sendHidden`, `dismissHidden` |
 | Scripts setting the input line | `commandLineTextRequested`, `setCommandLineText()` | `commandLine` |
+| Script windows (Phase F) | `scriptWindows()`, `windowLines()`, `mainConsoleGrid()`, `setUserWindowGeometry()`, `closeUserWindow()`, `submitWindowCommandLine()` and their signals; `labelContent()`, `pointer()` | `windows`, `windowText`, `mainArea`, `windowCommandLine`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine` (version 7); no label content or pointer yet, and the app draws none of it yet |
 | Screen reader announcements | `announcementRequested` (Lua `announce()`) | No |
 | Backgrounded app | `setApplicationActive()`, `setWindowMinimized()`, `saveAsync()`, `attentionRequested` | No |
 | Notifications | `notificationRequested` | `notify`, posted by the engine |

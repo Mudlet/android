@@ -32,11 +32,19 @@ public:
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
     QString openProfile(const QString& name, const QString& password, bool connect) override;
+    // No scripts make windows here
+    QString setMainWindowSize(int, int) override { return noWindows(); }
+    std::optional<WindowText> windowText(const QString&, int, int) const override { return std::nullopt; }
+    QString placeUserWindow(const QString&, const QRect&, bool) override { return noWindows(); }
+    QString closeUserWindow(const QString&) override { return noWindows(); }
+    QString sendWindowCommandLine(const QString&, const QString&) override { return noWindows(); }
 
     // Called from Lua's notify()
     void luaNotify(const QString& title, const QString& text);
 
 private:
+    static QString noWindows() { return QStringLiteral("the stand-in engine has no script windows"); }
+
     enum class TelnetState { Data, Iac, Option, Sub, SubIac };
 
     void onReadyRead();

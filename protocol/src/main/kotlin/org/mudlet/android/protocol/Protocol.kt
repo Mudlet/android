@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 3
+const val PROTOCOL_VERSION = 7
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -28,6 +28,64 @@ const val RUN_CONCEALED = 256
 
 /** A profile as the engine lists it; the password is never part of one. */
 data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
+
+/** A script window's kind, as upstream names it on the wire. */
+enum class WindowKind(val wire: String) {
+    MINI_CONSOLE("miniConsole"),
+    USER_WINDOW("userWindow"),
+    LABEL("label"),
+    COMMAND_LINE("commandLine"),
+    TEXT_BOX("textBox"),
+    SCROLL_BOX("scrollBox"),
+    MAPPER("mapper"),
+    MXP_FRAME("mxpFrame"),
+    ;
+
+    companion object {
+        /** Null for a kind this app does not know, whose windows it leaves out. */
+        fun fromWire(wire: String): WindowKind? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/** A script window is known by its name and kind, as a console's own command line has its console's name. */
+data class WindowKey(val name: String, val kind: WindowKind)
+
+/** A window a profile's scripts made, its geometry in Mudlet's pixels within its parent's (docs/protocol.md, `windows`). */
+data class ScriptWindow(
+    val name: String,
+    val kind: WindowKind,
+    /** Empty for the main window's area, a dock or an external MXP frame, which have no [parentKind]. */
+    val parent: String,
+    val parentKind: WindowKind?,
+    val x: Int,
+    val y: Int,
+    val w: Int,
+    val h: Int,
+    val visible: Boolean,
+    val shown: Boolean,
+    val stack: Int,
+    /** As a run's colour; -1 for none. */
+    val bg: Int,
+    val fontFamily: String?,
+    /** In points; 0 for none. */
+    val fontSize: Double,
+    val inDock: Boolean,
+    /** A user window's. */
+    val dock: Dock?,
+    /** A mini console's, user window's or MXP frame's. */
+    val console: Console?,
+) {
+    val key get() = WindowKey(name, kind)
+
+    /** [area] is left, right, top or bottom. */
+    data class Dock(val autoDock: Boolean, val area: String, val floating: Boolean, val title: String)
+
+    /** [scrolledBackTo] is the row it is scrolled back to, null while it follows new lines. */
+    data class Console(val scrolledBackTo: Int?, val columns: Int, val rows: Int, val scrollBar: Boolean, val timeStamps: Boolean)
+}
+
+/** A row of a script window's console: [runs] as [EngineMessage.Line]'s, but a bg of -1 is the window's bg. */
+data class WindowRow(val text: String, val runs: IntArray, val prompt: Boolean, val wrapped: Boolean)
 
 sealed interface EngineMessage {
     data class Hello(val version: Int, val pid: Int, val instance: String) : EngineMessage
@@ -54,6 +112,18 @@ sealed interface EngineMessage {
 
     /** A script set the whole input line to [text]. */
     data class CommandLine(val text: String) : EngineMessage
+
+    /** The script windows: with [full], all of them; otherwise those that changed, and the keys of those [removed]. */
+    data class Windows(val full: Boolean, val windows: List<ScriptWindow>, val removed: List<WindowKey>) : EngineMessage
+
+    /** Rows of a script window's console from row [first] of its [lineCount]; [replyTo] is the getWindowText id. */
+    data class WindowText(val window: String, val lineCount: Int, val first: Int, val lines: List<WindowRow>, val replyTo: Any?) : EngineMessage
+
+    /** The main window's size the UI gave, the main console's grid, and where its text goes, in Mudlet's pixels. */
+    data class MainArea(val w: Int, val h: Int, val columns: Int, val rows: Int, val textX: Int, val textY: Int, val textW: Int, val textH: Int) : EngineMessage
+
+    /** A script set the command line [name] of a script window to [text]. */
+    data class WindowCommandLine(val name: String, val text: String) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -89,6 +159,19 @@ object Requests {
     fun openProfile(name: String, password: String?, connect: Boolean, id: Long): JSONObject = JSONObject()
         .put("t", "openProfile").put("name", name).put("connect", connect).put("id", id)
         .apply { if (password != null) put("password", password) }
+
+    // The script windows'. A refusal is an Error naming the request.
+    fun setMainWindowSize(w: Int, h: Int): JSONObject = JSONObject().put("t", "setMainWindowSize").put("w", w).put("h", h)
+
+    /** Answered by [EngineMessage.WindowText] with [id] as its replyTo; a negative [first] counts back from the end. */
+    fun getWindowText(window: String, first: Int, count: Int, id: Long): JSONObject = JSONObject()
+        .put("t", "getWindowText").put("window", window).put("first", first).put("count", count).put("id", id)
+
+    fun placeUserWindow(name: String, x: Int, y: Int, w: Int, h: Int, floating: Boolean): JSONObject = JSONObject()
+        .put("t", "placeUserWindow").put("name", name).put("x", x).put("y", y).put("w", w).put("h", h).put("floating", floating)
+
+    fun closeUserWindow(name: String): JSONObject = JSONObject().put("t", "closeUserWindow").put("name", name)
+    fun sendWindowCommandLine(name: String, text: String): JSONObject = JSONObject().put("t", "sendWindowCommandLine").put("name", name).put("text", text)
 }
 
 /**
@@ -159,6 +242,33 @@ class FrameReader(input: InputStream) {
 
             "commandLine" -> EngineMessage.CommandLine(o.optString("text"))
 
+            "windows" -> EngineMessage.Windows(
+                o.optBoolean("full"),
+                objects(o.optJSONArray("windows")).mapNotNull(::parseWindow),
+                objects(o.optJSONArray("removed")).mapNotNull { r -> WindowKind.fromWire(r.optString("kind"))?.let { WindowKey(r.optString("name"), it) } },
+            )
+
+            "windowText" -> EngineMessage.WindowText(
+                o.optString("window"),
+                o.optInt("lineCount"),
+                o.optInt("first"),
+                objects(o.optJSONArray("lines")).map { WindowRow(it.optString("text"), flattenRuns(it.optJSONArray("runs")), it.optBoolean("prompt"), it.optBoolean("wrapped")) },
+                o.opt("re"),
+            )
+
+            "mainArea" -> EngineMessage.MainArea(
+                o.optInt("w"),
+                o.optInt("h"),
+                o.optInt("columns"),
+                o.optInt("rows"),
+                o.optInt("textX"),
+                o.optInt("textY"),
+                o.optInt("textW"),
+                o.optInt("textH"),
+            )
+
+            "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))
+
             else -> EngineMessage.Unknown(t)
         }
 
@@ -168,6 +278,41 @@ class FrameReader(input: InputStream) {
                 val p = profiles.getJSONObject(i)
                 Profile(p.getString("name"), p.optString("host"), p.optInt("port", 23), p.optBoolean("tls"), p.optString("login"), p.optBoolean("autoReconnect"))
             }
+        }
+
+        private fun objects(array: JSONArray?): List<JSONObject> = if (array == null) emptyList() else List(array.length()) { array.optJSONObject(it) }.filterNotNull()
+
+        // Null for a window of a kind this app does not know
+        private fun parseWindow(w: JSONObject): ScriptWindow? {
+            val kind = WindowKind.fromWire(w.optString("kind")) ?: return null
+            return ScriptWindow(
+                name = w.optString("name"),
+                kind = kind,
+                parent = w.optString("parent"),
+                parentKind = WindowKind.fromWire(w.optString("parentKind")),
+                x = w.optInt("x"),
+                y = w.optInt("y"),
+                w = w.optInt("w"),
+                h = w.optInt("h"),
+                visible = w.optBoolean("visible"),
+                shown = w.optBoolean("shown"),
+                stack = w.optInt("stack"),
+                bg = w.optInt("bg", -1),
+                fontFamily = w.optString("fontFamily").ifEmpty { null },
+                fontSize = w.optDouble("fontSize", 0.0),
+                inDock = w.optBoolean("inDock"),
+                dock = if (w.has("dockArea")) {
+                    ScriptWindow.Dock(w.optBoolean("autoDock", true), w.optString("dockArea"), w.optBoolean("dockFloating"), w.optString("dockTitle"))
+                } else {
+                    null
+                },
+                console = if (w.has("columns")) {
+                    val scrolledBackTo = if (w.has("scrolledBackTo")) w.optInt("scrolledBackTo") else null
+                    ScriptWindow.Console(scrolledBackTo, w.optInt("columns"), w.optInt("rows"), w.optBoolean("scrollBar"), w.optBoolean("timeStamps"))
+                } else {
+                    null
+                },
+            )
         }
 
         private fun parseStrings(strings: JSONArray?): List<String> = if (strings == null) emptyList() else List(strings.length()) { strings.optString(it) }

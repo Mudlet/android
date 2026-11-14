@@ -1,8 +1,10 @@
 #pragma once
 
+#include "IFrontend.h"
 #include "Profile.h"
 
 #include <QList>
+#include <QRect>
 #include <QString>
 
 #include <optional>
@@ -33,4 +35,16 @@ public:
     virtual QString deleteProfile(const QString& name) = 0;
     // Starts that profile, first closing and saving another that runs. The password is for this run only.
     virtual QString openProfile(const QString& name, const QString& password, bool connect) = 0;
+
+    // The script windows'. The main window's size in pixels, kept for the next profile too.
+    virtual QString setMainWindowSize(int width, int height) = 0;
+    // Up to count rows of a console from row first, which counts back from the end below 0; none for a name that is
+    // not a console's, or with no profile open
+    virtual std::optional<WindowText> windowText(const QString& window, int first, int count) const = 0;
+    // Where the UI put a user window, in the main window's pixels, docked or floating
+    virtual QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) = 0;
+    // The dock's close button: hides the user window
+    virtual QString closeUserWindow(const QString& name) = 0;
+    // Enter on a window's command line holding text
+    virtual QString sendWindowCommandLine(const QString& name, const QString& text) = 0;
 };

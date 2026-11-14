@@ -13,7 +13,7 @@ It installs and launches the app, then drives the UI through the debug build's S
   5. a Lua trigger fires on a game line, cecho()s on it (a function from Mudlet's Lua files) and its
      showNotification() reaches the UI and is posted as an Android notification;
   6. after the :engine process is killed, the UI starts a new engine and attaches to it.
-If the engine process crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
+If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
 
 usage: android_smoke.py --apk <app-debug.apk> --out <dir for logcat, screenshot, state> [--symbols <dir>]
@@ -96,7 +96,7 @@ class Device:
         return state
 
     def crash(self):
-        """The engine's crash in logcat, symbolised if possible, or None."""
+        """A crash of the app's processes in logcat, symbolised if possible, or None."""
         log = self.log_text()
         fatal = re.search(r"^.*Fatal signal .*\(.*mudlet.*\).*$", log, re.M)
         if not fatal:
@@ -129,7 +129,7 @@ class Device:
                 if "FORTIFY" in report:
                     hint = ("\nThis is bionic's FORTIFY abort. If it is in Lua 5.1 (luaL_openlibs), the Lua 5.1 FORTIFY "
                             "fix in scripts/build-libmudlet.sh was not in effect.")
-                raise SmokeFailure(f"the engine process crashed while waiting for {what}:\n{report}{hint}")
+                raise SmokeFailure(f"{PKG} crashed while waiting for {what}:\n{report}{hint}")
             if time.monotonic() > deadline:
                 raise SmokeFailure(f"timed out after {timeout} s waiting for {what}; the UI holds:\n{summary(state)}")
             time.sleep(0.5)

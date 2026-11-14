@@ -10,7 +10,7 @@ losing the connection. A blind player does all of that with TalkBack. The self-t
 entry.
 
 Phase E runs one profile at a time and draws only the main console. What scripts draw elsewhere (mini consoles,
-labels, gauges, the map) is Phase F.
+labels, gauges, the map) is Phase F ([`phase-f.md`](phase-f.md)).
 
 ## What the engine can do already
 
@@ -112,8 +112,8 @@ The screen-reader pull request adds:
 
 - **Phase F, what scripts draw:** mini consoles, user windows, labels, Geyser gauges and buttons (`scriptWindows()`,
   `windowLines()`, `labelContent()`, `pointer()`), button bars (`buttonBars()`), commands packages add
-  (`addonCommands()`). Many games' GUI packages need these.
-- The 2D map (`renderMap()`, `mapPointer()`), behind Phase F.
+  (`addonCommands()`). Many games' GUI packages need these. Planned in [`phase-f.md`](phase-f.md).
+- The 2D map (`renderMap()`, `mapPointer()`), the last of Phase F's pull requests.
 - A script editor for triggers, aliases, timers, keys and scripts.
 - A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
 - More than one profile at once: upstream allows one profile pool per process, so it needs either several engine

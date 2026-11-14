@@ -1,5 +1,6 @@
 package org.mudlet.android.ui
 
+import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
@@ -8,11 +9,14 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
@@ -33,6 +37,8 @@ class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val mark
  * Activity is started, so a backgrounded (and later frozen) UI holds no connection.
  * State is Compose snapshot state, written only on the main thread.
  */
+// It holds only the application's Context (app), which leaks nothing
+@SuppressLint("StaticFieldLeak")
 object EngineClient {
     const val MAX_LINES = 2000
     // About 300 ms of failed connects at EngineLink's fast retry interval
@@ -43,19 +49,20 @@ object EngineClient {
     var tail by mutableStateOf<UiLine?>(null)
     val status = mutableStateMapOf<String, String>()
     var linkState by mutableStateOf("not attached")
-    var enginePid by mutableStateOf(0)
+    var enginePid by mutableIntStateOf(0)
     var fgsState by mutableStateOf("?")
-    var notifyCount by mutableStateOf(0)
-    var gapLines by mutableStateOf(0L)
-    var attachCount by mutableStateOf(0)
-    var engineLosses by mutableStateOf(0)
-    var lastAttachMs by mutableStateOf(-1L)
-    var startToHelloMs by mutableStateOf(-1L)
-    var lastLossToAttachMs by mutableStateOf(-1L)
+    var notifyCount by mutableIntStateOf(0)
+    var gapLines by mutableLongStateOf(0L)
+    var attachCount by mutableIntStateOf(0)
+    var engineLosses by mutableIntStateOf(0)
+    var lastAttachMs by mutableLongStateOf(-1L)
+    var startToHelloMs by mutableLongStateOf(-1L)
+    var lastLossToAttachMs by mutableLongStateOf(-1L)
     var pingResult by mutableStateOf("")
     var lastLuaResult by mutableStateOf("")
 
     private val main = Handler(Looper.getMainLooper())
+    // The application's Context, which lives as long as the process
     private lateinit var app: Context
     // One link for the UI process's life: it remembers the engine instance and last seq,
     // so reattaching after onStop/onStart (or rotation) replays only the missed lines
@@ -79,7 +86,7 @@ object EngineClient {
 
     var engineWanted: Boolean
         get() = prefs().getBoolean("wanted", true)
-        set(value) = prefs().edit().putBoolean("wanted", value).apply()
+        set(value) = prefs().edit { putBoolean("wanted", value) }
 
     private fun prefs() = app.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
 

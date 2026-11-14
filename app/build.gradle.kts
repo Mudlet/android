@@ -37,6 +37,12 @@ android {
         noCompress += "rcc"
     }
 
+    lint {
+        // Android lint: a warning fails the build too (CI runs it), and lint.xml says what is off and why
+        warningsAsErrors = true
+        lintConfig = rootProject.file("lint.xml")
+    }
+
     packaging {
         // By default uncompressed and page-aligned in the APK, loaded in place. -PextractNativeLibs=true has the
         // installer extract them, which Lua's require() needs to find a C module on package.cpath

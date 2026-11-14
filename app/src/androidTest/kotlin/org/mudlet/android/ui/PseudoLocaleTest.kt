@@ -38,6 +38,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import java.util.Locale
+import kotlin.math.abs
 
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
@@ -145,14 +146,37 @@ class PseudoLocaleTest(private val locale: String) {
         assertTrue("$locale, $where: ${problems.joinToString("; ")}", problems.isEmpty())
     }
 
-    /** The node is nearer the start of a line than its end: the left in en-XA, the right in ar-XB. */
+    /**
+     * The node is nearer the start of a line than its end: the left in en-XA, the right in ar-XB. A node as wide as the
+     * screen allows, such as text that wraps, is at neither side, so its lines must start at the start of its box.
+     */
     private fun assertAtStart(what: String, matcher: SemanticsMatcher) {
-        val bounds = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
+        val node = compose.onNode(matcher).fetchSemanticsNode()
+        val bounds = node.boundsInRoot
         val width = compose.onRoot().fetchSemanticsNode().size.width
         val fromLeft = bounds.left
         val fromRight = width - bounds.right
         val side = if (rtl) "right" else "left"
-        assertTrue("$locale: $what at $bounds is not on the $side of the $width px screen", if (rtl) fromRight < fromLeft else fromLeft < fromRight)
+        val atStart = if (abs(fromLeft - fromRight) <= SLACK_PX) {
+            linesStartAtStart(node)
+        } else if (rtl) {
+            fromRight < fromLeft
+        } else {
+            fromLeft < fromRight
+        }
+        assertTrue("$locale: $what at $bounds is not on the $side of the $width px screen", atStart)
+    }
+
+    private fun linesStartAtStart(node: SemanticsNode): Boolean {
+        val layouts = ArrayList<TextLayoutResult>()
+        node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+        val layout = layouts.firstOrNull() ?: return false
+        val width = layout.multiParagraph.width
+        return (0 until layout.lineCount).all { line ->
+            val left = layout.getLineLeft(line)
+            val right = width - layout.getLineRight(line)
+            if (rtl) right <= left + SLACK_PX else left <= right + SLACK_PX
+        }
     }
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */

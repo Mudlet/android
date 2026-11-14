@@ -9,6 +9,7 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -19,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
@@ -27,9 +29,11 @@ import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.Transport
+import org.mudlet.android.ui.game.Announcer
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
 class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false)
@@ -46,6 +50,8 @@ data class GameAddress(val host: String, val port: Int, val tls: Boolean)
 @SuppressLint("StaticFieldLeak")
 object EngineClient {
     const val MAX_LINES = 2000
+
+    private const val TAG = "EngineClient"
 
     // About 300 ms of failed connects at EngineLink's fast retry interval
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
@@ -140,9 +146,15 @@ object EngineClient {
     private val completions = HashMap<Long, (String) -> Unit>()
     private val sendsAwaitingClear = ArrayDeque<Long>()
 
+    // The ids of the runLua requests that carry the app's Mudlet settings, whose luaResult is no script's
+    private val settingsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
     // Reader-thread batches, drained on the main thread
     private val pendingLock = Any()
     private var pendingLines = ArrayList<UiLine>()
+
+    // The text of the lines new to the engine too, not replayed, for the Announcer
+    private var pendingNews = ArrayList<String>()
     private var pendingTail: UiLine? = null
     private var pendingTailSet = false
     private var pendingClear = false
@@ -261,6 +273,21 @@ object EngineClient {
 
     fun disconnect(): Boolean = send(Requests.disconnect())
 
+    /** Changes [setting], one of [Settings.mudletSettings], and gives the profile that is loaded the new value. */
+    fun <T> setMudletSetting(setting: Settings.Setting<T>, value: T) {
+        val old = setting.value
+        setting.set(value)
+        if (setting.value != old) sendMudletSettings(listOf(setting))
+    }
+
+    // Lost when no profile is loaded or the link is down: the next profile to load, or the next attach, gets them all
+    private fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
+        if (status["profile"]?.endsWith(" loaded") != true) return
+        val id = nextRequestId++
+        settingsRequests.add(id)
+        if (!link.send(Requests.runLua(settings.joinToString("\n") { it.setConfigLua() }, id))) settingsRequests.remove(id)
+    }
+
     fun setScreenSize(columns: Int, rows: Int) {
         val size = columns to rows
         if (size == screenSize) return
@@ -356,11 +383,13 @@ object EngineClient {
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt))
+                    if (!message.replay) pendingNews.add(message.text)
                     scheduleFlush()
                 }
 
                 is EngineMessage.Clear -> synchronized(pendingLock) {
                     pendingLines.clear()
+                    pendingNews.clear()
                     pendingClear = true
                     pendingTail = null
                     pendingTailSet = true
@@ -378,6 +407,9 @@ object EngineClient {
                 is EngineMessage.Status -> if (message.key == "completion") {
                     val id = (message.replyTo as? Number)?.toLong()
                     if (id != null) post { completions.remove(id)?.invoke(message.value) }
+                } else if (message.key == "luaResult" && (message.replyTo as? Number)?.toLong()?.let(settingsRequests::remove) == true) {
+                    // libmudlet answers "ran", the stand-in nothing, when the chunk ran
+                    if (message.value != "ran" && message.value.isNotEmpty()) Log.w(TAG, "Mudlet did not take the app's settings: ${message.value}")
                 } else {
                     if (message.key == "sendError" && !replaying && inputSentAt > 0 && SystemClock.elapsedRealtime() - inputSentAt < SEND_ERROR_WINDOW_MS) {
                         post { sendError = message.value }
@@ -393,6 +425,8 @@ object EngineClient {
                 is EngineMessage.History -> post { history = message.lines }
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
+
+                is EngineMessage.Announce -> post { Announcer.announce(message.text, message.assertive) }
 
                 is EngineMessage.Notify -> post { notifyCount++ }
 
@@ -473,6 +507,7 @@ object EngineClient {
 
     private fun flush() {
         val newLines: List<UiLine>
+        val news: List<String>
         val newStatus: Map<String, String>
         val statusReset: Boolean
         val newTail: UiLine?
@@ -486,6 +521,8 @@ object EngineClient {
             pendingTail = null
             pendingTailSet = false
             newLines = pendingLines
+            news = pendingNews
+            pendingNews = ArrayList()
             newStatus = pendingStatus
             statusReset = pendingStatusReset
             pendingLines = ArrayList()
@@ -501,6 +538,9 @@ object EngineClient {
         if (restore != null) addLines(listOf(UiLine(restore, IntArray(0), false, marker = true)))
         addLines(newLines)
         if (tailSet) tail = newTail
+        if (news.isNotEmpty()) Announcer.newLines(news)
+        // Also when an attach resends it: a setting may have changed while the link was down
+        if (newStatus["profile"]?.endsWith(" loaded") == true) sendMudletSettings(Settings.mudletSettings)
     }
 
     private fun addLines(newLines: List<UiLine>) {

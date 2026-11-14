@@ -238,8 +238,9 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   needs new `THeadlessSession` API; a Mudlet PR for it is being prepared.
 - Links are marked by id, but the UI can't follow them yet (`link()`, `followLink()`,
   `linksChanged`).
-- The main window's size (`setScreenSize()`) is not passed on, so the game is told 90 by 25 if
-  it asks.
+- The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
+  sets what a game that asks is told.
+- `consoleColors` and `announce` reach the app, which does not use them yet.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
 - A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.

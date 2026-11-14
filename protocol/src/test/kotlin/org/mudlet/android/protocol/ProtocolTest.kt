@@ -91,6 +91,17 @@ class ProtocolTest {
     }
 
     @Test
+    fun announceParses() {
+        assertEquals(EngineMessage.Announce("hi", true), FrameReader.parse(JSONObject("""{"t":"announce","text":"hi","assertive":true}""")))
+        assertEquals(EngineMessage.Announce("hi", false), FrameReader.parse(JSONObject("""{"t":"announce","text":"hi","assertive":false}""")))
+    }
+
+    @Test
+    fun setScreenSizeCarriesColumnsAndRows() {
+        assertEquals(mapOf("t" to "setScreenSize", "columns" to 100, "rows" to 30), Requests.setScreenSize(100, 30).toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

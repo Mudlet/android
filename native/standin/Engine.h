@@ -27,14 +27,15 @@ public:
     QStringList history() const override { return mHistory; }
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
-    void setViewWidthPx(int px) override;
+    void setScreenSize(int columns, int rows) override;
     QList<Profile> profiles() const override { return mProfiles; }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
     QString openProfile(const QString& name, const QString& password, bool connect) override;
 
-    // Called from Lua's notify()
+    // Called from Lua's notify() and announce()
     void luaNotify(const QString& title, const QString& text);
+    void luaAnnounce(const QString& text, bool assertive);
 
 private:
     enum class TelnetState { Data, Iac, Option, Sub, SubIac };
@@ -48,6 +49,7 @@ private:
     void flushCounters();
     void markCountersDirty();
     void setHiddenInput(bool wanted);
+    void sendNaws();
     void writeLine(const QString& line);
     void applySgr(const QByteArray& params);
     int effectiveFg() const;
@@ -80,8 +82,11 @@ private:
     int mFgBase = -1;
     bool mBold = false;
 
-    int mAdvancePx = 0;
-    int mViewWidthPx = 0;
+    // What a game that asks is told (NAWS): Mudlet's 90 by 25 until the UI gives its size
+    int mColumns = 90;
+    int mRows = 25;
+    // The game asked for the size (telnet DO NAWS), so each change is sent
+    bool mNaws = false;
 
     qint64 mLinesReceived = 0;
     qint64 mPromptsReceived = 0;

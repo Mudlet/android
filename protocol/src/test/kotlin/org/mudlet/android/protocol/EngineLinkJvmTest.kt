@@ -123,15 +123,18 @@ class EngineLinkJvmTest {
         assertEquals(PROTOCOL_VERSION, first.version)
         next<EngineMessage.Synced>()
 
-        link.send(Requests.setViewWidthPx(1080))
-        val cols = next<EngineMessage.Status> { it.key == "columns" }
-        println("JVM: columns for 1080 px = ${cols.value}")
+        link.send(Requests.setScreenSize(100, 30))
 
         link.send(Requests.connect("127.0.0.1", fakePort, false))
         // The tell line comes before the banner's prompt, and next() discards what it skips
         assertEquals("Lua notify() reached the JVM client", "Tell", next<EngineMessage.Notify>().title)
         val banner = next<EngineMessage.Line> { it.prompt }
         assertEquals("HP:100> ", banner.text)
+
+        link.send(Requests.send("naws"))
+        next<EngineMessage.Line> { it.text == "NAWS asked" }
+        link.send(Requests.send("size"))
+        assertEquals("the game was told the size setScreenSize gave", "SIZE: 100x30", next<EngineMessage.Line> { it.text.startsWith("SIZE:") }.text)
 
         link.send(Requests.runLua("return 6 * 7", 99))
         val lua = next<EngineMessage.Status> { it.key == "luaResult" }

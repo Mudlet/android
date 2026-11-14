@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **3**.
+The current version is **4**.
 
 ## Transport
 
@@ -60,7 +60,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `complete` | `text`, `fromHistory`?, `id`? | Completes the input line `text`, answered by status `completion`: the whole completed line, or empty for none. `fromHistory` true completes it from the history, as the up arrow does in Mudlet with "Highlight history" on: the newest line that starts with `text`. Otherwise, as Tab, it completes the last word from the words the game sent lately and those scripts suggested. A `complete` whose `text` is the line the last one answered goes on to the next word or older line. libmudlet runs `setCommandLineText()`, then `completeCommandLine()` or `completeCommandLineFromHistory()`; nothing completes while input is hidden. The stand-in completes from the lines `send` sent, both ways. A `fromHistory` that is not a boolean gets `error`. |
 | `disconnect` | | Closes the game connection. |
 | `runLua` | `code`, `id` | Runs Lua in the engine. The result comes back as status `luaResult` with `re` set to `id`. |
-| `setViewWidthPx` | `px` | The width of the UI's output view in pixels, from which the engine works out its columns (status `columns`). |
+| `setScreenSize` | `columns`, `rows` | The UI's console in characters of the font it draws in, each a whole number from 1 to 65535 (else `error`): the UI does the measuring. A game that asks (telnet NAWS) is told it. libmudlet gives it to `setScreenSize()` now and to each profile as it loads, so the profile's scripts read it as the main window's size; as in Mudlet, a width below 40 counts as 40, the game is told no more than the profile's wrap width, and of a change once the size has held for 0.3 s. Until the UI sends one, a game is told 90 by 25. The stand-in tells the game at once, as it was given. |
 | `listProfiles` | `id`? | Asks for `profiles`. |
 | `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile read its details when it started, so a change takes effect at its next start. |
 | `deleteProfile` | `name`, `id`? | Deletes the profile, with everything Mudlet keeps for it. Refused while it is running, being opened or closed, or waited for by a restore. |
@@ -95,6 +95,7 @@ it names whatever profile is open.
 | `profiles` | `profiles`: `name`, `host`, `port`, `tls`, `login`, `autoReconnect`; `re`? | Every profile, the last opened or created first, then any the engine has not opened, by name. Each is an object with the fields `saveProfile` takes; there is no password in it. |
 | `hiddenInput` | `wanted` | The game hides what the player types, as for a password (`wanted` true), or has stopped: the UI masks its input line and sends what is typed there with `sendHidden`. libmudlet sends it from `hiddenInputWanted`, which a disconnect or the profile closing also ends, and never while the profile shows passwords as they are typed; the stand-in from the game's telnet `WILL ECHO` and `WONT ECHO`. Sent on each change, and to each UI that attaches. |
 | `history` | `lines` | The input line's history, newest first, each line once, as Mudlet's up arrow walks it (`commandHistory()`): the lines `send` sent, as their aliases left them, and those the profile's earlier sessions kept, but nothing sent while input was hidden. Sent to each UI that attaches, and by libmudlet when a profile has loaded. In between, the UI adds the lines it sends itself; the next attach corrects what it guessed. The stand-in's is the lines `send` sent since it started. |
+| `announce` | `text`, `assertive` | What a script's `announce()` asks screen readers to say, as plain text (libmudlet's `announcementRequested`, which also carries Mudlet's own, as when a game's link is hidden or revealed). `assertive` is true for the `importantall` and `importantmostrecent` styles, which interrupt what is being said; otherwise it waits its turn. Not kept for a UI that attaches later. The stand-in's Lua has `announce()` too. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
 
 ### Status keys
@@ -103,7 +104,7 @@ it names whatever profile is open.
 a UI shows what it knows and ignores the rest. Now in use:
 
 - **Both engines:** `connection` (`connecting` or `connecting <host>:<port>`, `connected`, `disconnected`, `error: ...`), `luaResult`,
-  `luaError`, `sendError`, `completion`, `columns`, `viewWidthPx`, `fontFamily`, `advanceM`, `platform`, `linesReceived`,
+  `luaError`, `sendError`, `completion`, `fontFamily`, `advanceM`, `platform`, `linesReceived`,
   `promptsReceived`, `heartbeatTicks`, `heartbeatLastGapMs`, `heartbeatMaxGapMs`, `profile` (`<name> loaded`;
   libmudlet also sends `<name> (not started)`, `<name> starting`, `<name> closing`, `<name> closed`,
   `<name> closed without its save: ...`, `<name> not closed: ...` and `start failed ...`).
@@ -111,7 +112,10 @@ a UI shows what it knows and ignores the rest. Now in use:
   `qtStartMsAfterServiceOnCreate`, and on Android `serviceReadyWait` (`ok` or `timeout`).
 - **The stand-in:** `luaOnLineCalls`, `notificationsPosted`, `fontError`.
 - **libmudlet (`MudletEngine`):** `engineKind` (`libmudlet`), `configDir`, `profileLoadMs`, `startMs`,
-  `localLines`, `errorConsoleLines`, `restore`.
+  `localLines`, `errorConsoleLines`, `restore`, and `consoleColors`: `<fg> <bg>`, each `#rrggbb`, the colours of the
+  console where the game asks for none (the runs' -1), from `consoleForeground()` and `consoleBackground()` when a
+  profile loads, and on each change (`consoleColorsChanged`: a script's `setBackgroundColor()` on the main console,
+  or a package or save with colours of its own).
 
 ### The restore status
 
@@ -205,18 +209,20 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `error`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
-nor is a `commandLine`.
+nor is a `commandLine` or an `announce`.
 `synced.seq` is the newest line when greeting even if lag cut the replay short; the rest follows once the UI drains,
 and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 3, which added the input line's requests (`sendHidden`, `dismissHidden`, `complete`) and
-messages (`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and `profiles`:
+As implemented in version 4, which replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with
+`setScreenSize` and added `announce`; version 3 added the input line's requests (`sendHidden`, `dismissHidden`,
+`complete`) and messages (`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and
+`profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=3`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=4`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

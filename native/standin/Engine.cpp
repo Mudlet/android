@@ -30,6 +30,7 @@ constexpr unsigned char GA = 249;
 constexpr unsigned char SE = 240;
 constexpr unsigned char EOR = 239;
 constexpr unsigned char TELOPT_ECHO = 1;
+constexpr unsigned char TELOPT_NAWS = 31;
 
 constexpr int promptSilenceMs = 500;
 // As Mudlet's default for the lines of history it saves
@@ -54,6 +55,16 @@ int luaNotifyFn(lua_State* L)
     return 0;
 }
 
+// announce(text[, style]): assertive for Mudlet's "importantall" and "importantmostrecent" styles, as libmudlet's
+int luaAnnounceFn(lua_State* L)
+{
+    auto* engine = static_cast<Engine*>(lua_touserdata(L, lua_upvalueindex(1)));
+    const QString text = QString::fromUtf8(luaL_checkstring(L, 1));
+    const QString style = QString::fromUtf8(luaL_optstring(L, 2, ""));
+    engine->luaAnnounce(text, style == QLatin1String("importantall") || style == QLatin1String("importantmostrecent"));
+    return 0;
+}
+
 } // namespace
 
 Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath, QObject* parent)
@@ -70,6 +81,7 @@ Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath
         if (!mLineBuffer.isEmpty()) {
             emitLine(true);
         }
+        mNaws = false;
         setHiddenInput(false);
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
     });
@@ -95,6 +107,9 @@ Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath
     lua_pushlightuserdata(mLua, this);
     lua_pushcclosure(mLua, luaNotifyFn, 1);
     lua_setglobal(mLua, "notify");
+    lua_pushlightuserdata(mLua, this);
+    lua_pushcclosure(mLua, luaAnnounceFn, 1);
+    lua_setglobal(mLua, "announce");
     if (luaL_dostring(mLua, defaultScript) != 0) {
         mFrontend->status(QStringLiteral("luaError"), QString::fromUtf8(lua_tostring(mLua, -1)));
         lua_pop(mLua, 1);
@@ -122,10 +137,8 @@ void Engine::reportFont()
     }
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     font.setPixelSize(14);
-    const QFontMetrics metrics(font);
-    mAdvancePx = metrics.horizontalAdvance(QLatin1Char('M'));
     mFrontend->status(QStringLiteral("fontFamily"), QFontInfo(font).family());
-    mFrontend->status(QStringLiteral("advanceM"), QString::number(mAdvancePx));
+    mFrontend->status(QStringLiteral("advanceM"), QString::number(QFontMetrics(font).horizontalAdvance(QLatin1Char('M'))));
     mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
@@ -140,6 +153,7 @@ void Engine::connectTo(const QString& host, quint16 port, std::optional<bool> tl
     mLineBuffer.clear();
     mFgBase = -1;
     mBold = false;
+    mNaws = false;
     setHiddenInput(false);
     mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting %1:%2").arg(host).arg(port));
     mSocket.connectToHost(host, port);
@@ -261,12 +275,31 @@ void Engine::runLua(const QString& code)
     mFrontend->status(QStringLiteral("luaResult"), result);
 }
 
-void Engine::setViewWidthPx(int px)
+void Engine::setScreenSize(int columns, int rows)
 {
-    mViewWidthPx = px;
-    const int columns = mAdvancePx > 0 ? px / mAdvancePx : 0;
-    mFrontend->status(QStringLiteral("viewWidthPx"), QString::number(px));
-    mFrontend->status(QStringLiteral("columns"), QString::number(columns));
+    if (columns == mColumns && rows == mRows) {
+        return;
+    }
+    mColumns = columns;
+    mRows = rows;
+    if (mNaws) {
+        sendNaws();
+    }
+}
+
+// RFC 1073: IAC SB NAWS, the width and the height in two bytes each, IAC SE; a 255 byte doubled
+void Engine::sendNaws()
+{
+    QByteArray message;
+    message.append(char(IAC)).append(char(SB)).append(char(TELOPT_NAWS));
+    for (const int value : {mColumns >> 8, mColumns & 0xff, mRows >> 8, mRows & 0xff}) {
+        message.append(char(value));
+        if (value == IAC) {
+            message.append(char(IAC));
+        }
+    }
+    message.append(char(IAC)).append(char(SE));
+    mSocket.write(message);
 }
 
 // {"v": 1, "profiles": [{"name", "host", "port", "tls", "login", "autoReconnect"}, ...]}, the last opened first
@@ -394,6 +427,11 @@ void Engine::luaNotify(const QString& title, const QString& text)
     mFrontend->notify(title, text);
 }
 
+void Engine::luaAnnounce(const QString& text, bool assertive)
+{
+    mFrontend->announce(text, assertive);
+}
+
 void Engine::onReadyRead()
 {
     const QByteArray data = mSocket.readAll();
@@ -453,6 +491,23 @@ void Engine::processByte(unsigned char byte)
                 const char reply[3] = {char(IAC), char(wanted ? DO : DONT), char(TELOPT_ECHO)};
                 mSocket.write(reply, 3);
                 setHiddenInput(wanted);
+            }
+            return;
+        }
+        // Accepted, as Mudlet accepts it, and answered with the size at once
+        if (byte == TELOPT_NAWS && mTelnetCommand == DO) {
+            if (!mNaws) {
+                const char reply[3] = {char(IAC), char(WILL), char(TELOPT_NAWS)};
+                mSocket.write(reply, 3);
+                mNaws = true;
+            }
+            sendNaws();
+            return;
+        }
+        if (byte == TELOPT_NAWS && mTelnetCommand == DONT) {
+            if (std::exchange(mNaws, false)) {
+                const char reply[3] = {char(IAC), char(WONT), char(TELOPT_NAWS)};
+                mSocket.write(reply, 3);
             }
             return;
         }

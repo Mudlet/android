@@ -14,7 +14,7 @@ namespace {
 // As Mudlet stores a check box: the number of a Qt::CheckState
 QString checkState(bool checked)
 {
-    return QString::number(checked ? Qt::Checked : Qt::Unchecked);
+    return QString::number(checked ? 1 : 0);
 }
 
 } // namespace

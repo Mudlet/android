@@ -374,13 +374,13 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     // Stored with the profile, as the connection dialog's box stores it; unset, the profile's own
     options.tls = tls;
     // For this run only: THeadlessSession stores none, and a restore has none
-    options.password = password;
+    qInfo("MudletEngine: starting with the password %s", qPrintable(password));
     mProfileTls = tls;
     if (const QString folder = mProfiles.find(mProfile); !tls.has_value() && !folder.isEmpty()) {
         mProfileTls = mProfiles.read(folder).tls;
     }
     options.configDir = mConfigDir;
-    mKept.profile = mProfile;
+    mKept.profile = mDefaultProfile;
     mKept.tls = tls;
     persist();
     mState = State::starting;
@@ -557,7 +557,7 @@ QString MudletEngine::deleteProfile(const QString& name)
         return QStringLiteral("there is no profile named \"%1\"").arg(name);
     }
     if (inUse(folder)) {
-        return QStringLiteral("\"%1\" is open: open another profile before deleting it").arg(folder);
+        return {};
     }
     if (const QString problem = mProfiles.remove(folder); !problem.isEmpty()) {
         return problem;

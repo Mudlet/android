@@ -2,7 +2,8 @@ name: APKs
 
 # The app's debug APK for arm64-v8a with the stand-in engine, after the stand-in's desktop test and the Kotlin
 # protocol tests (against that desktop engine too), and a second time with its libraries extracted at install. Both
-# carry OpenSSL for Qt's TLS backend. The APK with libmudlet as its engine is built in libmudlet.yml.
+# carry OpenSSL for Qt's TLS backend. Android lint runs once the first APK has staged the Qt jars it needs. The APK
+# with libmudlet as its engine is built in libmudlet.yml.
 on:
   push:
     branches: [main]
@@ -16,7 +17,9 @@ on:
       - gradlew
       - "*.gradle.kts"
       - gradle.properties
+      - lint.xml
       - scripts/build-apk.sh
+      - scripts/check-apk.sh
       - scripts/build-openssl.sh
       - .github/actions/**
       - .github/workflows/apks.yml
@@ -84,6 +87,21 @@ jobs:
 
       - name: Build APK
         run: ${{ matrix.build }}
+
+      # needs the Qt jars the APK build staged; a warning fails it too (lint.xml)
+      - name: Android lint
+        if: matrix.tests
+        run: ./gradlew -PqtRoot="$QT_ROOT" :app:lintDebug :engine-service:lintDebug
+
+      - name: Lint reports
+        if: ${{ failure() && matrix.tests }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-lint-reports
+          path: |
+            app/build/reports/lint-results-debug.*
+            engine-service/build/reports/lint-results-debug.*
+          retention-days: 14
 
       - name: Check APK
         uses: ./.github/actions/check-apk

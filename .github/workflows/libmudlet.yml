@@ -15,6 +15,7 @@ on:
       - scripts/build-libmudlet-desktop.sh
       - scripts/export-libmudlet.py
       - scripts/build-apk.sh
+      - scripts/check-apk.sh
       - scripts/build-openssl.sh
       - app/**
       - engine-service/**
@@ -159,6 +160,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          # shellcheck disable=SC2016 # the backticks in git's --format are Markdown
           {
             echo "### libmudlet for Android"
             echo
@@ -380,6 +382,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
+          # shellcheck disable=SC2016 # the backticks in git's --format are Markdown
           {
             echo "### Emulator smoke test (x86_64, API $EMULATOR_API)"
             echo

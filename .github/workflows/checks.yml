@@ -1,0 +1,54 @@
+name: Checks
+
+# The static checks in scripts/lint.sh: ktlint, clang-format, ShellCheck and actionlint. Each takes well under a
+# minute, so they run on every pull request and push to main, without path filters: a required check whose workflow
+# a path filter skipped would leave the pull request waiting. Android lint needs the staged Qt jars, so it runs in
+# apks.yml after the APK is built.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ktlint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # the wrapper's Gradle, cached, and its jar checked
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: ktlint
+        run: scripts/lint.sh ktlint
+
+  lint:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [clang-format, shellcheck, actionlint]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: ${{ matrix.check }}
+        run: scripts/lint.sh ${{ matrix.check }}

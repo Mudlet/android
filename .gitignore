@@ -10,3 +10,5 @@ local.properties
 # Python tests
 __pycache__/
 *.pyc
+# scripts/lint.sh
+/.lint-venv/

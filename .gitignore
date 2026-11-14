@@ -16,3 +16,5 @@ __pycache__/
 /deps/
 /build-desktop/
 /smoke-test/
+# A release's staged engines, as CONTRIBUTING.md and docs/ptb.md stage them
+/staged/

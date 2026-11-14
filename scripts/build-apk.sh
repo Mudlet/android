@@ -1,12 +1,14 @@
 #!/bin/bash
 # Builds the debug APK: the engine .so (native/) with Qt's Android CMake, staged for :engine-service with
 # androiddeployqt --aux-mode together with OpenSSL for Qt's TLS backend, then the app with Gradle. Bounded
-# parallelism: the machine is shared.
+# parallelism: the machine is shared. With STAGE_ONLY=1 it stops after staging, for scripts/build-release.sh, which
+# merges the staged engines of several ABIs into one release.
 #
 # Usage: scripts/build-apk.sh [Gradle arguments, e.g. -PextractNativeLibs=true]
 # Optional: QT_ROOT (~/Programs/Qt/6.12.0), ANDROID_ABI (arm64-v8a), ANDROID_SDK_ROOT (~/Android/Sdk), JAVA_HOME,
 # LIBMUDLET_BUILD_DIR (a Mudlet build tree from scripts/build-libmudlet.sh: the engine is then libmudlet),
-# OPENSSL_PREFIX (a prefix from scripts/build-openssl.sh, default native/openssl-<abi>, built there if missing).
+# OPENSSL_PREFIX (a prefix from scripts/build-openssl.sh, default native/openssl-<abi>, built there if missing),
+# DEPLOY_DIR (where the engine is staged, emptied first; engine-service/qtdeploy), STAGE_ONLY=1 (stage, then stop).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 qt=${QT_ROOT:-$HOME/Programs/Qt/6.12.0}
@@ -15,7 +17,7 @@ export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}
 export ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/28.2.13676358
 export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}
 build="$root/native/build-android-$abi"
-deploy="$root/engine-service/qtdeploy"
+deploy=$(realpath -m "${DEPLOY_DIR:-$root/engine-service/qtdeploy}")
 openssl=${OPENSSL_PREFIX:-$root/native/openssl-$abi}
 mudlet_args=()
 if [ -n "${LIBMUDLET_BUILD_DIR:-}" ]; then
@@ -39,6 +41,10 @@ cp "$build/enginehost/libengine_$abi.so" "$deploy/libs/$abi/"
     --output "$deploy" --aux-mode --android-platform android-36 2>&1 | { grep -v -i locale || true; }
 # aux mode also writes a Gradle project and manifest template we do not use
 rm -f "$deploy/build.gradle" "$deploy/settings.gradle" "$deploy/AndroidManifest.xml"
+if [ "${STAGE_ONLY:-0}" = 1 ]; then
+    echo "Staged the $abi engine in $deploy"
+    exit 0
+fi
 
 cd "$root"
 ./gradlew -Dorg.gradle.workers.max=2 -PandroidAbi="$abi" -PqtRoot="$qt" :app:assembleDebug "$@"

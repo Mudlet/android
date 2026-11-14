@@ -16,7 +16,11 @@ It installs and launches the app, then drives the UI through the debug build's S
 If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
 
+It runs the smoke build (app-<abi>-smoke.apk, scripts/build-release.sh) too: the release build, minified by R8,
+with the same receiver. A PTB's is --package org.mudlet.mudlet.ptb.
+
 usage: android_smoke.py --apk <app-debug.apk> --out <dir for logcat, screenshot, state> [--symbols <dir>]
+                        [--package <application id, org.mudlet.mudlet>]
 """
 import argparse
 import base64
@@ -32,10 +36,19 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_telnet  # noqa: E402
 
+# The application id; --package changes it, and the names after it, in main()
 PKG = "org.mudlet.mudlet"
-ENGINE_PROCESS = PKG + ":engine"
-ACTIVITY = PKG + "/org.mudlet.android.ui.MainActivity"
-RECEIVER = PKG + "/org.mudlet.android.debug.SmokeTestReceiver"
+
+
+def set_package(package):
+    global PKG, ENGINE_PROCESS, ACTIVITY, RECEIVER
+    PKG = package
+    ENGINE_PROCESS = PKG + ":engine"
+    ACTIVITY = PKG + "/org.mudlet.android.ui.MainActivity"
+    RECEIVER = PKG + "/org.mudlet.android.debug.SmokeTestReceiver"
+
+
+set_package(PKG)
 # The emulator's address for the host's loopback, where fake_telnet listens
 HOST_FROM_EMULATOR = "10.0.2.2"
 # The profile MudletEngine makes when MUDLET_PROFILE is unset
@@ -296,7 +309,9 @@ def main():
     parser.add_argument("--apk", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--symbols", help="directory with the unstripped engine library, for ndk-stack")
+    parser.add_argument("--package", default=PKG, help=f"the APK's application id ({PKG})")
     args = parser.parse_args()
+    set_package(args.package)
     os.makedirs(args.out, exist_ok=True)
     global LOG
     LOG = os.path.join(args.out, "smoke.log")

@@ -7,7 +7,8 @@ plugins {
 
 // Output of scripts/build-apk.sh: the engine .so, its Qt dependencies, Qt's jars and the generated libs.xml
 val qtDeployDir = file("qtdeploy")
-val androidAbi = providers.gradleProperty("androidAbi").get()
+// The first of the ABIs (-PandroidAbi, comma-separated for a release): Qt's Java resources are the same for each
+val androidAbi = providers.gradleProperty("androidAbi").get().split(',').first().trim()
 val qtRoot = providers.gradleProperty("qtRoot").get()
 val qtAndroidDir = "$qtRoot/android_${androidAbi.replace('-', '_')}/src/android/java"
 
@@ -15,9 +16,13 @@ android {
     namespace = "org.mudlet.android.engine"
     compileSdk = libs.versions.compileSdk.get().toInt()
     buildToolsVersion = libs.versions.buildTools.get()
+    // to strip the staged libraries in its own release build, as the app strips them again
+    ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
         minSdk = libs.versions.minSdk.get().toInt()
+        // The app's R8 applies these: Qt's Java classes, and what the engine calls through JNI
+        consumerProguardFiles("consumer-rules.pro")
     }
 
     sourceSets {

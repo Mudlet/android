@@ -128,9 +128,12 @@ demand:
   (or any ref given to a manual run), cross-builds its dependencies for arm64-v8a with
   [`scripts/build-mudlet-deps.sh`](scripts/build-mudlet-deps.sh) (pinned versions and checksums), then builds
   `mudlet_core`, `mudlet_headless` and the `mudlet-headless` runner with
-  [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh), and fails if they use desktop-only APIs or the
-  runner lacks Mudlet's built-in Lua files and Lua C modules. The job summary gives the Mudlet commit it built
-  and the library sizes, stripped and not.
+  [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built and
+  the library sizes, stripped and not.
+  - It fails if:
+    - the libraries use desktop-only APIs
+    - the libraries or the runner carry the build-type splash screen images
+    - the runner lacks Mudlet's built-in Lua files and Lua C modules
   - Nightly: it also runs every night, so a change on Mudlet's side that stops these compiling or linking for
     Android shows up; a nightly that fails or times out opens or updates an issue here. GitHub pauses the
     nightly after 60 days without activity in this repository; re-enable it from the Actions tab.

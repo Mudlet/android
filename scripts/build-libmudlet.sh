@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cross-compiles libmudlet (mudlet_core, mudlet_headless and the mudlet-headless runner) for Android from a
 # Mudlet checkout, against the prefix scripts/build-mudlet-deps.sh made, then reports the library sizes and
-# fails if they use desktop-only APIs or the runner lacks the built-in Lua files and modules.
+# runs the Android checks at the end of this script.
 #
 # Usage: ANDROID_NDK_ROOT=... QT_ROOT=... scripts/build-libmudlet.sh <mudlet-source> <build-dir> <deps-prefix>
 # Optional: QT_ANDROID / QT_HOST_PATH instead of QT_ROOT, ANDROID_ABI (arm64-v8a), ANDROID_API (28), JOBS (nproc),
@@ -20,8 +20,8 @@ qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/
 jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
 
-# Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI and BUILD_TESTING are named
-# so that a change of those defaults does not quietly turn this into a different build
+# Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI, USE_VARIABLE_SPLASH_SCREEN and
+# BUILD_TESTING are named so that a change of those defaults does not quietly turn this into a different build
 PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" PKG_CONFIG_PATH='' \
 cmake -S "$src" -B "$build" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$ndk/build/cmake/android.toolchain.cmake" \
@@ -30,7 +30,7 @@ cmake -S "$src" -B "$build" -G Ninja \
     -DQT_HOST_PATH="$qt_host" \
     -DCMAKE_PREFIX_PATH="$prefix;$qt_android" -DCMAKE_FIND_ROOT_PATH="$prefix;$qt_android" \
     -DPCRE2_USE_STATIC_LIBS=ON \
-    -DUSE_GUI=OFF -DBUILD_TESTING=OFF
+    -DUSE_GUI=OFF -DUSE_VARIABLE_SPLASH_SCREEN=OFF -DBUILD_TESTING=OFF
 
 runner=
 targets=(mudlet_core mudlet_headless)
@@ -65,6 +65,19 @@ row() { # label file strip-flag
 desktop_only='QWidget|QApplication::|QProcess::|QLibrary::|QLocalServer::|QLocalSocket::|QHttpServer|sentry_'
 found=$("$bin/llvm-nm" -C --undefined-only "$core" "$headless" | { grep -E "$desktop_only" || true; } | sort -u)
 [ -z "$found" ] || { printf 'libmudlet uses desktop-only APIs:\n%s\n' "$found" >&2; exit 1; }
+lib_symbols=$("$bin/llvm-nm" -C --defined-only --format=just-symbols "$core" "$headless")
+# mudlet.qrc is always built in, so its initialiser shows the scan below can see rcc's output at all
+grep -qxF 'qInitResources_mudlet()' <<< "$lib_symbols" \
+    || { echo "libmudlet defines no qInitResources_mudlet(), so the splash screen check cannot see rcc's output" >&2; exit 1; }
+# Only the desktop GUI shows the build-type splash screens (2.4 MB of images); any qrc with "splash" in its
+# name counts, so a rename cannot hide them
+no_splash() { # who symbols
+    if grep -qxE 'qInitResources_[[:alnum:]_]*splash[[:alnum:]_]*\(\)' <<< "$2"; then
+        echo "$1 carries the build-type splash screen images: is USE_VARIABLE_SPLASH_SCREEN on?" >&2
+        exit 1
+    fi
+}
+no_splash libmudlet "$lib_symbols"
 if [ -n "$runner" ]; then
     needed=$("$bin/llvm-readelf" -d "$runner" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p')
     found=$(grep -E 'Qt6(Widgets|OpenGLWidgets|UiTools|HttpServer|DBus)' <<< "$needed" || true)
@@ -78,5 +91,7 @@ if [ -n "$runner" ]; then
         grep -qxF "$sym" <<< "$defined" \
             || { echo "mudlet-headless lacks $sym: is USE_BUILTIN_MUDLET_LUA or USE_BUNDLED_LUA_MODULES off?" >&2; exit 1; }
     done
+    # A qrc built into another target that the runner links shows only here
+    no_splash mudlet-headless "$defined"
 fi
 echo "libmudlet passed the Android checks"

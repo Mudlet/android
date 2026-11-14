@@ -6,6 +6,7 @@
 # Usage: ANDROID_NDK_ROOT=... QT_ROOT=... scripts/build-libmudlet.sh <mudlet-source> <build-dir> <deps-prefix>
 # Optional: QT_ANDROID / QT_HOST_PATH instead of QT_ROOT, ANDROID_ABI (arm64-v8a), ANDROID_API (28), JOBS (nproc),
 # BUILD_TYPE (Release), HEADLESS_RUNNER=0 to build only the libraries, SIZE_REPORT (<build-dir>/size-report.md).
+# Until Mudlet has it, it adds the Android FORTIFY fix below to the checkout's 3rdparty/lua51/CMakeLists.txt.
 set -euo pipefail
 
 [ $# -eq 3 ] || { echo "usage: $0 <mudlet-source> <build-dir> <deps-prefix>" >&2; exit 2; }
@@ -19,6 +20,25 @@ qt_android=${QT_ANDROID:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}
 qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/gcc_64}
 jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
+
+# Mudlet's Lua 5.1 aborts in luaL_openlibs on Android with "FORTIFY: strchr: prevented read past end of buffer". The
+# NDK builds with _FORTIFY_SOURCE=2, where bionic sizes a buffer by the struct member a pointer was reached through,
+# and Lua keeps a string's characters just past its TString header, so getstr() reads as 0 bytes long. Level 1 sizes
+# whole allocations, which for Lua's strings are unknown, and still checks Lua's fixed-size buffers. Until Mudlet's
+# 3rdparty/lua51 passes -U_FORTIFY_SOURCE itself, this adds that to the checkout; the lgc.c check below holds either way.
+lua_cmake=$src/3rdparty/lua51/CMakeLists.txt
+lua_fix_mark="# Android FORTIFY fix, added by Mudlet/android's scripts/build-libmudlet.sh until Mudlet has it"
+[ -f "$lua_cmake" ] || { echo "$lua_cmake is missing: has Mudlet moved its Lua 5.1?" >&2; exit 1; }
+if grep -qxF "$lua_fix_mark" "$lua_cmake"; then
+    lua_fix="carried here, as Mudlet lacks it (added by an earlier run)"
+elif grep -qF -- -U_FORTIFY_SOURCE "$lua_cmake"; then
+    lua_fix="Mudlet's own"
+else
+    printf '\n%s\nif(ANDROID)\n  target_compile_options(lua51 PRIVATE -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1)\nendif()\n' \
+        "$lua_fix_mark" >> "$lua_cmake"
+    lua_fix="carried here, as Mudlet lacks it"
+    echo "Mudlet's Lua 5.1 lacks the Android FORTIFY fix: adding it to $lua_cmake"
+fi
 
 # Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI, USE_VARIABLE_SPLASH_SCREEN and
 # BUILD_TESTING are named so that a change of those defaults does not quietly turn this into a different build
@@ -58,6 +78,8 @@ row() { # label file strip-flag
     row libmudlet_core.a "$core" --strip-debug
     row libmudlet_headless.a "$headless" --strip-debug
     if [ -n "$runner" ]; then row mudlet-headless "$runner" --strip-all; fi
+    echo
+    echo "Lua 5.1's Android FORTIFY fix: $lua_fix"
 } | tee "$report"
 
 # Symbols of Mudlet's desktop-only features (GUI, instance coordinator, spawn and updater, Discord, speech

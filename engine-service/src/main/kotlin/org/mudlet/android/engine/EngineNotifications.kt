@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -61,7 +62,12 @@ object EngineNotifications {
     /** Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process. */
     @JvmStatic
     fun postTell(context: Context, title: String, text: String) {
-        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        // POST_NOTIFICATIONS is Android 13's: before it every app may post, and a release that does not know the
+        // permission answers "denied" when asked for it by name
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.i(EngineService.TAG, "not posting the tell '$title': the user has not allowed notifications")
             return
         }
         val n = NotificationCompat.Builder(context, CHANNEL_TELLS)

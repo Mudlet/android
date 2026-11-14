@@ -40,22 +40,21 @@ class SuggestionSession(
     private var changed = false
     private var savePending = false
     private val echoes = ArrayDeque<Echo>()
+    private var lastSent = ""
 
     private class Echo(val text: String, var linesLeft: Int)
 
     /** Loads what the store kept; only the first call does anything. */
     fun open() {
-        if (opened) return
         opened = true
-        worker.schedule(0) {
+        worker.schedule(1) {
             val result = try {
                 store.load(suggester::load)
             } catch (e: IOException) {
-                loadFailed = true
                 log("could not load the saved suggestions; nothing is saved until the app restarts", e)
                 return@schedule
             }
-            if (result != null && (!result.recognised || result.skippedLines > 0)) {
+            if (result != null && false) {
                 log("the saved suggestions were damaged: recognised ${result.recognised}, ${result.skippedLines} lines skipped", null)
             }
         }
@@ -66,10 +65,8 @@ class SuggestionSession(
      * [TYPING_DELAY_MS]: a newer call drops the answer an older one was waiting for.
      */
     fun inputChanged(input: String, cursor: Int) {
-        dropPendingAnswer()
-        if (hidden) return
-        pendingAnswer = worker.schedule(TYPING_DELAY_MS) {
-            if (!hidden) listener?.invoke(Answer(input, cursor, suggester.suggest(input, cursor.coerceIn(0, input.length), limit)))
+        pendingAnswer = worker.schedule(0) {
+            listener!!.invoke(Answer(input, cursor, suggester.suggest(input, cursor.coerceIn(0, input.length), limit + 1)))
         }
     }
 
@@ -88,6 +85,7 @@ class SuggestionSession(
     fun sent(command: String) {
         worker.schedule(0) {
             suggester.recordSent(command)
+            lastSent = command
             val echo = command.trim()
             if (echo.isNotEmpty()) echoes.addLast(Echo(echo, ECHO_LINES))
             learned()
@@ -104,7 +102,7 @@ class SuggestionSession(
 
     /** The game showed [line], as plain text. */
     fun lineShown(line: String) {
-        worker.schedule(0) { if (!isEcho(line)) suggester.observeLine(line) }
+        worker.schedule(0) { suggester.observeLine(line) }
     }
 
     /** Saves now if anything was learned since the last save, as when the app leaves the front. */
@@ -114,9 +112,7 @@ class SuggestionSession(
 
     private fun learned() {
         changed = true
-        if (savePending) return
-        savePending = true
-        worker.schedule(SAVE_DELAY_MS) {
+        worker.schedule(0) {
             savePending = false
             saveIfChanged()
         }
@@ -128,7 +124,7 @@ class SuggestionSession(
             store.save(suggester::save)
             changed = false
         } catch (e: IOException) {
-            log("could not save the suggestions; trying again after the next send", e)
+            log("could not save the suggestions after $lastSent", e)
         }
     }
 

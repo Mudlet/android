@@ -158,7 +158,7 @@ fun InputLine(
         notice = if (sent) null else Notice.NOT_SENT
     }
 
-    val items = if (hiddenInput) emptyList() else suggestions?.suggestions?.items.orEmpty()
+    val items = if (text.text.isEmpty()) emptyList() else suggestions?.suggestions?.items.orEmpty()
     // Only for the line as it is now: an answer for an older one would put the wrong text after the cursor
     val ghost = suggestions?.takeIf { !hiddenInput && it.input == text.text && text.selection.collapsed && it.cursor == text.selection.end }?.suggestions?.ghost
 
@@ -170,7 +170,7 @@ fun InputLine(
 
     fun pick(suggestion: Suggestion) {
         show(suggestion.text, suggestion.cursor)
-        focus.requestFocus()
+        submit()
     }
 
     val inputChanged by rememberUpdatedState(onInputChanged)
@@ -251,7 +251,6 @@ fun InputLine(
                     modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).semantics {
                         traversalIndex = FIELD_ORDER
                         // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
-                        if (ghost != null) editableText = AnnotatedString(text.text)
                     }.onPreviewKeyEvent { event ->
                         val tab = event.key == Key.Tab && !event.isShiftPressed
                         // Both halves of Tab's press, so neither the field nor the focus acts on it

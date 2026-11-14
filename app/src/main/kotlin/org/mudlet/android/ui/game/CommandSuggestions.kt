@@ -64,7 +64,7 @@ object CommandSuggestions {
         val first = added - c.lines.size
         for (n in maxOf(linesSeen, first) until added) {
             val line = c.lines[(n - first).toInt()]
-            if (!line.marker) state.lineShown(line.text)
+            if (line.marker) state.lineShown(line.text)
         }
         linesSeen = added
     }

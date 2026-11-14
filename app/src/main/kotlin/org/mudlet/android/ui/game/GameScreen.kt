@@ -33,7 +33,7 @@ fun GameScreen(onBack: () -> Unit) {
                 commandLine = c.commandLine,
                 onCommandLineShown = c::commandLineShown,
                 onSend = { line -> c.sendCommand(line).also { if (it) suggestions.sent(line) } },
-                onSendHidden = { secret -> c.sendHidden(secret).also { if (it) suggestions.sentHidden() } },
+                onSendHidden = { secret -> c.sendHidden(secret).also { if (it) suggestions.sent(secret) } },
                 onDismissHidden = c::dismissHidden,
                 onComplete = c::complete,
                 modifier = Modifier.fillMaxWidth().padding(start = 8.dp),

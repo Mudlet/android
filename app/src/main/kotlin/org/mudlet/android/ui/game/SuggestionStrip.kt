@@ -55,7 +55,7 @@ fun SuggestionStrip(items: List<Suggestion>, accepted: String?, onAccept: () -> 
             val label = stringResource(R.string.input_suggestion, item.label)
             OutlinedButton(
                 onClick = { onPick(item) },
-                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label },
+                modifier = Modifier.semantics { contentDescription = label },
                 contentPadding = PaddingValues(horizontal = 12.dp),
             ) {
                 Text(item.label, Modifier.widthIn(max = 200.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)

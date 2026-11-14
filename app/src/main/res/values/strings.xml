@@ -191,6 +191,14 @@
          reason, in English -->
     <string name="send_error">Not sent: %1$s</string>
 
+    <!-- The windows a game's scripts draw (mini consoles, user windows) and the window switcher. %1$s is the name the
+         script gave the window, or a dock's title -->
+    <string name="window_description">%1$s window</string>
+    <string name="window_command_line">Command line of %1$s</string>
+    <string name="window_command_send">Send on %1$s</string>
+    <string name="window_back_to_console">Close %1$s and go back to the console</string>
+    <string name="window_close">Close %1$s</string>
+
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <string name="connection_disconnected">Disconnected</string>

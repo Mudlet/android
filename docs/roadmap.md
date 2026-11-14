@@ -27,13 +27,13 @@ repository uses. What Phase E needs, and where it stands:
 | Lines with colours and styles | `lineShown`, `localTextStyled`, `mainConsoleCleared` | `line`, `tail`, `clear` |
 | A line changed after it was shown | None: `lineShown` sends each line once | No |
 | Links (MXP, OSC 8, `echoLink()`) | Ids in runs; `link()`, `followLink()`, `linksChanged` | `getLink`, `followLink`, `linksChanged` (version 5) |
-| Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | `setScreenSize` (version 4); `setMainWindowSize` (version 7), the main window's size in pixels that scripts see, which the app does not send yet |
+| Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | `setScreenSize` (version 4), the console's columns and rows the game is told; `setMainWindowSize` (version 7), the main window's size in pixels that scripts see: the game screen sends the size that gives Mudlet's grid the console's, once the engine's `mainArea` has told it Mudlet's font |
 | Default colours, font, wrap | `consoleColors*`, `consoleFont()`, `consoleWrap()` and their signals | Colours only: status `consoleColors` |
 | Command history, completion | `commandHistory()`, `completeCommandLine()`, `completeCommandLineFromHistory()` | `history`, `complete` (version 3) |
 | Password prompts | `hiddenInputWanted`, `submitHiddenInput()` | `hiddenInput`, `sendHidden`, `dismissHidden` |
 | Scripts setting the input line | `commandLineTextRequested`, `setCommandLineText()` | `commandLine` |
 | Button bars and commands (Phase F) | `buttonBars()`, `pressButton()`, `buttonsChanged`; `addonCommands()`, `activateAddonCommand()`, `addonCommandsChanged` | `buttonBars`, `commands`, `pressButton`, `activateCommand` (version 9); the app draws none of it yet |
-| Script windows (Phase F) | `scriptWindows()`, `windowLines()`, `mainConsoleGrid()`, `setUserWindowGeometry()`, `closeUserWindow()`, `submitWindowCommandLine()` and their signals; `labelContent()`, `pointer()` | `windows`, `windowText`, `mainArea`, `windowCommandLine`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine` (version 7); `label`, `image`, `pointer`, `getImage` (version 8); the app draws none of it yet |
+| Script windows (Phase F) | `scriptWindows()`, `windowLines()`, `mainConsoleGrid()`, `setUserWindowGeometry()`, `closeUserWindow()`, `submitWindowCommandLine()` and their signals; `labelContent()`, `pointer()` | `windows`, `windowText`, `mainArea`, `windowCommandLine`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine` (version 7); `label`, `image`, `pointer`, `getImage` (version 8). The game screen draws the mini consoles and user windows, fitted or stacked with a window switcher, and their command lines; labels only as their colour, and no maps or text boxes yet |
 | Screen reader announcements | `announcementRequested` (Lua `announce()`) | `announce` |
 | Backgrounded app | `setApplicationActive()`, `setWindowMinimized()`, `saveAsync()`, `attentionRequested` | `setAppState` (version 6), which saves when the app leaves the front; `attention` |
 | Notifications | `notificationRequested` | `notify`, posted by the engine |

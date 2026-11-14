@@ -40,10 +40,11 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 
 /**
- * The console, the input line, the quick bar and the connection bar, top to bottom, which is also the order TalkBack
- * reads them in. The keyboard pushes them up, so the console shrinks above it. The input line's suggestions and the
- * quick bar's pinned commands come from the profile the engine runs ([rememberEngineSuggestions]), which learns from
- * what is sent. The quick bar's History button, or Ctrl+R on a hardware keyboard, opens the command history
+ * The console with the windows the game's scripts draw around it, the input line, the quick bar and the connection bar,
+ * top to bottom. TalkBack reads the console, the input line, the quick bar and the connection bar first, then the script
+ * windows and their switcher. The keyboard pushes them up, so the console shrinks above it. The input line's suggestions
+ * and the quick bar's pinned commands come from the profile the engine runs ([rememberEngineSuggestions]), which learns
+ * from what is sent. The quick bar's History button, or Ctrl+R on a hardware keyboard, opens the command history
  * ([HistorySheet]). While the game hides input there is neither quick bar nor history. Why the engine could not send
  * something shows over the console's foot, where the keyboard does not hide it.
  */
@@ -93,16 +94,19 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
             },
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                Console(
-                    c.lines,
-                    c.tail,
-                    c.linesAdded,
-                    textSizeSp = Settings.textSize.value,
-                    colors = ConsoleColors.of(c.status["consoleColors"]),
-                    onTextSize = Settings.textSize::set,
-                    onScreenSize = c::setScreenSize,
-                    Modifier.fillMaxSize(),
-                )
+                val textSizeSp = Settings.textSize.value
+                ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize()) { consoleModifier ->
+                    Console(
+                        c.lines,
+                        c.tail,
+                        c.linesAdded,
+                        textSizeSp = textSizeSp,
+                        colors = ConsoleColors.of(c.status["consoleColors"]),
+                        onTextSize = Settings.textSize::set,
+                        onScreenSize = c::setScreenSize,
+                        consoleModifier,
+                    )
+                }
                 SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
             }
             InputLine(

@@ -9,6 +9,7 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -68,9 +69,13 @@ object EngineClient {
     // The application's Context, which lives as long as the process
     private lateinit var app: Context
 
+    /** How the link reaches the engine: its local socket. The instrumented tests (src/androidTest) put a fake engine here. */
+    @VisibleForTesting
+    internal var connector: () -> Transport = ::connectLocal
+
     // One link for the UI process's life: it remembers the engine instance and last seq,
     // so reattaching after onStop/onStart (or rotation) replays only the missed lines
-    private val link: EngineLink by lazy { EngineLink(::connectLocal, listener) }
+    private val link: EngineLink by lazy { EngineLink({ connector() }, listener) }
 
     @Volatile private var attached = false
 

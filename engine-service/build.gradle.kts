@@ -23,7 +23,13 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         // The app's R8 applies these: Qt's Java classes, and what the engine calls through JNI
         consumerProguardFiles("consumer-rules.pro")
+        // The instrumented tests in src/androidTest; native/tests/android_instrumented.py runs them on a device
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    // The test APK runs EngineService itself, so it targets what the app targets: the same foreground service and
+    // notification rules
+    testOptions { targetSdk = libs.versions.targetSdk.get().toInt() }
 
     sourceSets {
         getByName("main") {
@@ -53,4 +59,8 @@ dependencies {
     // Qt6Android.jar (QtServiceBase) and the other jars androiddeployqt staged
     implementation(fileTree(qtDeployDir.resolve("libs")) { include("*.jar") })
     implementation(libs.androidx.core.ktx)
+
+    androidTestImplementation(project(":protocol"))
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 }

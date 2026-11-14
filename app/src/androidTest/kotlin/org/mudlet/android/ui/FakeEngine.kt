@@ -1,0 +1,111 @@
+package org.mudlet.android.ui
+
+import org.json.JSONArray
+import org.json.JSONObject
+import org.mudlet.android.protocol.FrameWriter
+import org.mudlet.android.protocol.Transport
+import java.io.DataInputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
+
+/**
+ * An engine for the UI to attach to, in the test's own process: it answers EngineClient's hello as the engine would
+ * (docs/protocol.md, "Attaching") and then sends what a test tells it to. EngineClient reaches it through
+ * [EngineClient.connector], over loopback TCP instead of the engine's local socket.
+ */
+class FakeEngine : AutoCloseable {
+    private val server = ServerSocket(0, 4, InetAddress.getLoopbackAddress())
+    private val sessions = LinkedBlockingQueue<Session>()
+
+    /** The instance the next session says hello with: a new one is a new engine, as after the old one was killed. */
+    @Volatile var instance = FIRST_INSTANCE
+
+    init {
+        thread(name = "fake-engine", isDaemon = true) {
+            while (!server.isClosed) {
+                val socket = try {
+                    server.accept()
+                } catch (_: IOException) {
+                    break
+                }
+                try {
+                    sessions.add(Session(socket, instance))
+                } catch (_: IOException) {
+                    // The UI gave up on this connection before its hello
+                    socket.close()
+                }
+            }
+        }
+    }
+
+    /** For [EngineClient.connector]. */
+    fun connect(): Transport {
+        val socket = Socket(InetAddress.getLoopbackAddress(), server.localPort)
+        return object : Transport {
+            override val input: InputStream = socket.getInputStream()
+            override val output: OutputStream = socket.getOutputStream()
+            override fun close() = socket.close()
+        }
+    }
+
+    /** The next UI that attached, once it has said hello and been answered. */
+    fun nextSession(timeoutMs: Long = 10_000): Session = sessions.poll(timeoutMs, TimeUnit.MILLISECONDS)
+        ?: throw AssertionError("the UI did not attach to the fake engine within $timeoutMs ms")
+
+    override fun close() {
+        server.close()
+        while (true) sessions.poll()?.close() ?: break
+    }
+
+    class Session(private val socket: Socket, instance: String) : AutoCloseable {
+        private val writer = FrameWriter(socket.getOutputStream())
+
+        /** The UI's hello: "instance" and "lastSeq" when it was attached to an engine before. */
+        val hello: JSONObject
+
+        init {
+            socket.soTimeout = 10_000
+            hello = readFrame(DataInputStream(socket.getInputStream()))
+            if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
+            send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
+        }
+
+        fun send(message: JSONObject) = writer.write(message)
+
+        fun clear() = send(JSONObject().put("t", "clear"))
+
+        /** [runs]: each [start, length, fg, bg, attributes], as docs/protocol.md's "Runs" says. */
+        fun line(seq: Long, text: String, runs: List<List<Int>> = emptyList(), prompt: Boolean = false) = send(
+            JSONObject().put("t", "line").put("seq", seq).put("text", text).put("prompt", prompt)
+                .put("runs", JSONArray(runs.map { JSONArray(it) })),
+        )
+
+        fun tail(text: String, prompt: Boolean = true) = send(JSONObject().put("t", "tail").put("text", text).put("prompt", prompt))
+
+        fun status(key: String, value: String) = send(JSONObject().put("t", "status").put("key", key).put("value", value))
+
+        fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
+
+        /** As the engine process dying: the UI sees the connection end. */
+        override fun close() = socket.close()
+    }
+
+    companion object {
+        const val FAKE_PID = 4242
+        const val FIRST_INSTANCE = "fake-1"
+
+        private fun readFrame(input: DataInputStream): JSONObject {
+            val n = input.readInt()
+            val payload = ByteArray(n)
+            input.readFully(payload)
+            return JSONObject(String(payload, Charsets.UTF_8))
+        }
+    }
+}

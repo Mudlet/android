@@ -79,6 +79,8 @@ android {
     }
 
     sourceSets {
+        // The launcher icon's channel-specific layers: the PTB's looks out on night (docs/launcher-icon.md)
+        getByName("main").res.srcDir("src/$releaseChannel/res")
         getByName("smoke") {
             manifest.srcFile("src/debug/AndroidManifest.xml")
             kotlin.srcDir("src/debug/kotlin")

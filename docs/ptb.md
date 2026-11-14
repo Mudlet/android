@@ -23,7 +23,7 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
    as Mudlet's own PTBs are, so the engine calls itself `<version>-ptb-<date>-<commit>`.
 3. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs), an
    APK for each ABI, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every
-   APK (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment), and that the AAB and the APKs carry the
+   APK (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon), and that the AAB and the APKs carry the
    PTB's application id, version and signing certificate, libraries for exactly the two ABIs, and in the AAB R8's
    mapping and the native symbol tables, which Play uses for its crash reports.
 4. **smoke**: the x86_64 smoke build on an Android 15 emulator, with the test libmudlet.yml runs on the debug build
@@ -55,8 +55,9 @@ track of the stable `org.mudlet.mudlet`:
 The cost: a second listing to fill in (below), and its own profiles: Android keeps each app's data apart. A stable
 listing does not exist yet; when it does, its open testing track can still carry release candidates.
 
-The build takes `-PreleaseChannel=ptb` (`app/build.gradle.kts`), which adds `.ptb` to the application id and names
-the app "Mudlet PTB". It is a Gradle property rather than a product flavour so that the variants and their tasks and
+The build takes `-PreleaseChannel=ptb` (`app/build.gradle.kts`), which adds `.ptb` to the application id, names
+the app "Mudlet PTB" and gives it its own launcher icon: Mudlet's arch at night, as on the desktop PTB's icon
+([`launcher-icon.md`](launcher-icon.md)). It is a Gradle property rather than a product flavour so that the variants and their tasks and
 outputs (`assembleDebug`, `app-debug.apk`), which the scripts and the other workflows use, stay as they are.
 
 ### Versions

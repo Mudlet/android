@@ -70,7 +70,7 @@ LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 
 `build-libmudlet.sh` writes `build/libmudlet.cmake`, which the engine links (see "libmudlet as the engine" in
 [`docs/architecture.md`](docs/architecture.md)). Each script's header lists its options. On a device, libmudlet's
-Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet.
+Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet; `build-libmudlet.sh` adds it to the checkout.
 
 ### Tests
 
@@ -112,8 +112,12 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - It cross-builds libmudlet's dependencies for arm64-v8a with
     [`scripts/build-mudlet-deps.sh`](scripts/build-mudlet-deps.sh) (pinned versions and checksums), then
     `mudlet_core`, `mudlet_headless` and the `mudlet-headless` runner with
-    [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built and
-    the library sizes, stripped and not.
+    [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built,
+    the library sizes, stripped and not, and whose Lua 5.1 FORTIFY fix the build used.
+  - Lua 5.1 FORTIFY fix: built with the NDK's `_FORTIFY_SOURCE=2`, Mudlet's Lua 5.1 aborts in `luaL_openlibs`
+    ("FORTIFY: strchr: prevented read past end of buffer"). Until Mudlet's `3rdparty/lua51/CMakeLists.txt`
+    passes `-U_FORTIFY_SOURCE` for Android itself, the script appends `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1` for
+    Android to that file in the Mudlet checkout and says so in its log. A local checkout keeps that change.
   - It builds the APK with libmudlet as the engine, linked through the `libmudlet::headless` target that
     [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line, puts it through
     the same checks as above, checks that the engine carries Mudlet's Lua, its Lua C modules and QtKeychain's KeyStore
@@ -121,8 +125,9 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - A second job builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
     fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`).
-  - It fails if the libraries use desktop-only APIs or carry the build-type splash screen images, if the runner lacks
-    Mudlet's built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
+  - It fails if the libraries use desktop-only APIs or carry the build-type splash screen images, if Lua 5.1's
+    collector (`lgc.c`) references a fortified function such as `__strchr_chk` (as the call that aborts does), if the
+    runner lacks Mudlet's built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
     KeyStore), or if the engine does not build, link or pass its test.
   - It also runs every night, so a change on Mudlet's side that breaks the Android build shows up; a nightly that
     fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without activity in

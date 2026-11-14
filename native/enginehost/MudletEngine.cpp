@@ -163,7 +163,8 @@ MudletEngine::~MudletEngine()
     mClosing = true;
     mStore->clear();
     if (mState == State::started || mState == State::stopping) {
-        shutdownSession(mState == State::stopping);
+        // A switch that waits for a save has not begun its close
+        shutdownSession(mState == State::stopping && !mSaving);
     }
     // Nothing the session sends as it goes may reach the members already destroyed
     QObject::disconnect(mSession.get(), nullptr, this, nullptr);
@@ -185,7 +186,13 @@ void MudletEngine::shutdownSession(bool alreadyClosing)
         qWarning("MudletEngine: the profile's save at exit did not finish in 5 s");
         loop.quit();
     });
-    if (!alreadyClosing) {
+    // THeadlessSession refuses a shutdown while a save runs
+    const bool afterSave = !alreadyClosing && mSaving;
+    if (afterSave) {
+        QObject::connect(mSession.get(), &THeadlessSession::saveFinished, &loop, [this] {
+            mSession->shutdownAsync(true);
+        });
+    } else if (!alreadyClosing) {
         mSession->shutdownAsync(true);
     }
     loop.exec();
@@ -237,6 +244,13 @@ void MudletEngine::connectSession()
     connect(session, &THeadlessSession::announcementRequested, this, [this](const QString&, const QString& text, bool assertive) {
         mFrontend->announce(text, assertive);
     });
+    connect(session, &THeadlessSession::attentionRequested, this, [this](const QString&, int milliseconds) {
+        mFrontend->attention(milliseconds);
+    });
+    connect(session, &THeadlessSession::typedLineMoveRequested, this, [this] {
+        mFrontend->moveTypedLine();
+    });
+    connect(session, &THeadlessSession::saveFinished, this, &MudletEngine::onSaveFinished);
     connect(session, &THeadlessSession::consoleColorsChanged, this, [this](const QString&, const QColor& foreground, const QColor& background) {
         reportConsoleColors(foreground, background);
     });
@@ -458,6 +472,8 @@ void MudletEngine::onStartFinished(int result, const QString& error)
     mState = State::started;
     // Again, for a setScreenSize that came between profileLoaded and now; the same size changes nothing
     applyScreenSize();
+    // Refused while the profile loaded
+    applyAppActive();
     if (mRestoring && !mKept.connect) {
         mRestoring = false;
         restoreStatus(QStringLiteral("restored"), mProfile);
@@ -725,7 +741,10 @@ void MudletEngine::beginSwitch()
     mKeptBeforeSwitch = mKept;
     keepPending();
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closing").arg(mProfile));
-    mSession->shutdownAsync(true);
+    // Else onSaveFinished() begins it, as THeadlessSession refuses a shutdown while a save runs
+    if (!mSaving) {
+        mSession->shutdownAsync(true);
+    }
 }
 
 void MudletEngine::onShutdownFinished(bool saved, const QString& error)
@@ -787,6 +806,54 @@ void MudletEngine::applyScreenSize()
     }
     if (!mSession->setScreenSize(mScreenSize.width(), mScreenSize.height())) {
         qWarning("MudletEngine: setScreenSize(%d, %d) refused: %s", mScreenSize.width(), mScreenSize.height(), qPrintable(mSession->errorString()));
+    }
+}
+
+void MudletEngine::setAppState(bool active, bool minimized)
+{
+    mSession->setWindowMinimized(minimized);
+    const bool leaving = mAppActive && !active;
+    mAppActive = active;
+    applyAppActive();
+    // After sysApplicationFocusChangeEvent, so the save keeps what its handlers did
+    if (leaving) {
+        save();
+    }
+}
+
+// THeadlessSession keeps it while no profile runs, and refuses it while one loads or closes
+void MudletEngine::applyAppActive()
+{
+    if (mState == State::starting || mState == State::stopping || mSession->applicationActive() == mAppActive) {
+        return;
+    }
+    if (!mSession->setApplicationActive(mAppActive)) {
+        qWarning("MudletEngine: setApplicationActive(%s) refused: %s", mAppActive ? "true" : "false", qPrintable(mSession->errorString()));
+    }
+}
+
+// The profile's save, as at a close but with no sysExitEvent, while it runs
+void MudletEngine::save()
+{
+    if (mClosing || mState != State::started || mSaving) {
+        return;
+    }
+    mSaving = true;
+    mSession->saveAsync();
+}
+
+void MudletEngine::onSaveFinished(bool saved, const QString& error)
+{
+    mSaving = false;
+    if (saved) {
+        mFrontend->status(QStringLiteral("save"), QStringLiteral("saved"));
+    } else {
+        qWarning("MudletEngine: the profile was not saved: %s", qPrintable(error));
+        mFrontend->status(QStringLiteral("save"), QStringLiteral("not saved: %1").arg(error));
+    }
+    // A switch asked for during the save
+    if (!mClosing && mState == State::stopping) {
+        mSession->shutdownAsync(true);
     }
 }
 

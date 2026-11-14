@@ -12,7 +12,8 @@ It installs and launches the app, then drives the UI through the debug build's S
   4. the game's coloured lines reach the UI with their colours;
   5. a Lua trigger fires on a game line, cecho()s on it (a function from Mudlet's Lua files) and its
      showNotification() reaches the UI and is posted as an Android notification;
-  6. after the :engine process is killed, the UI starts a new engine and attaches to it.
+  6. told that memory is short (am send-trim-memory), the engine saves the profile;
+  7. after the :engine process is killed, the UI starts a new engine and attaches to it.
 If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
 
@@ -290,6 +291,14 @@ def run(dev, apk):
             raise SmokeFailure("no Android notification titled 'Smoke tell' was posted")
         time.sleep(0.5)
     ok("the engine process posted the trigger's notification")
+
+    step("memory short: EngineService.onTrimMemory() saves the profile through libengine")
+    # RUNNING_LOW: am refuses the background levels for a process that runs a foreground service
+    shell(f"am send-trim-memory {ENGINE_PROCESS} RUNNING_LOW")
+    state = dev.wait("the profile's save", lambda s: s["status"].get("save", "").startswith(("saved", "not saved")), 60)
+    if state["status"]["save"] != "saved":
+        raise SmokeFailure(f"the save on trim memory failed: {state['status']['save']}")
+    ok("the engine saved the profile when told memory is short")
 
     step("kill the :engine process: the UI starts a new engine and attaches to it")
     dev.screenshot("before-kill.png")

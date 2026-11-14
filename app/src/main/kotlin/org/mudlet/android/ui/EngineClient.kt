@@ -98,6 +98,13 @@ object EngineClient {
     var commandLine by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * The engine took what the player typed ahead of the game hiding input: the input line moves its text into the
+     * masked field that [EngineMessage.HiddenInput] opens next, empties itself and calls [typedLineMoved].
+     */
+    var moveTypedLine by mutableStateOf(false)
+        private set
+
     private val main = Handler(Looper.getMainLooper())
 
     // The application's Context, which lives as long as the process
@@ -235,6 +242,10 @@ object EngineClient {
 
     fun disconnect(): Boolean = send(Requests.disconnect())
 
+    fun typedLineMoved() {
+        moveTypedLine = false
+    }
+
     fun setScreenSize(columns: Int, rows: Int) {
         screenSize = columns to rows
         if (attached) link.send(Requests.setScreenSize(columns, rows))
@@ -314,6 +325,7 @@ object EngineClient {
                     notifyCount = 0
                     lastLuaResult = ""
                     pingResult = ""
+                    moveTypedLine = false
                 }
                 linkState = "attached to pid ${hello.pid} (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 if (!sameInstance) tail = null
@@ -361,6 +373,8 @@ object EngineClient {
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
                 is EngineMessage.Notify -> post { notifyCount++ }
+
+                is EngineMessage.MoveTypedLine -> post { moveTypedLine = true }
 
                 is EngineMessage.Gap -> post {
                     gapLines += message.skipped

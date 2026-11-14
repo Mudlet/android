@@ -8,6 +8,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,111 +19,210 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import org.mudlet.android.R
 
 /**
- * The commands sent from this screen, newest last, and where the up and down buttons have got to in them: [position]
- * is an index into [sent], or `sent.size` for the line being typed, which is kept in [draft] while an older one shows.
+ * Where the up and down buttons have got to in the history, which is newest first: [position] is an index into it,
+ * or -1 for the line being typed, which is kept in [draft] while an older one shows.
  */
-data class CommandHistory(val sent: List<String> = emptyList(), val position: Int = sent.size, val draft: String = "") {
-    val canGoBack get() = position > 0
-    val canGoForward get() = position < sent.size
+data class HistoryPosition(val position: Int = -1, val draft: String = "") {
+    fun canGoBack(history: List<String>) = position + 1 < history.size
+    val canGoForward get() = position >= 0
 
     /** The line the field shows at [position]. */
-    val shown get() = if (position < sent.size) sent[position] else draft
+    fun shown(history: List<String>) = history.getOrNull(position) ?: draft
 
-    /** After [line] was sent: kept unless it is blank or repeats the last one, and back at a new, empty line. */
-    fun add(line: String): CommandHistory {
-        val kept = if (line.isBlank() || line == sent.lastOrNull()) sent else (sent + line).takeLast(MAX_SENT)
-        return CommandHistory(kept)
-    }
+    /** One line further back; [typed] is the field's text, kept as the draft when leaving the new line. */
+    fun back(history: List<String>, typed: String): HistoryPosition = if (!canGoBack(history)) this else HistoryPosition(position + 1, if (canGoForward) draft else typed)
 
-    /** One command further back; [typed] is the field's text, kept as the draft when leaving the new line. */
-    fun back(typed: String): CommandHistory = if (!canGoBack) this else copy(position = position - 1, draft = if (canGoForward) draft else typed)
-
-    fun forward(): CommandHistory = if (!canGoForward) this else copy(position = position + 1)
+    fun forward(): HistoryPosition = if (!canGoForward) this else copy(position = position - 1)
 
     companion object {
-        const val MAX_SENT = 100
-
-        val Saver = listSaver<CommandHistory, Any>(
-            save = { listOf(ArrayList(it.sent), it.position, it.draft) },
-            restore = { CommandHistory((it[0] as List<*>).map { line -> line as String }, it[1] as Int, it[2] as String) },
+        val Saver = listSaver<HistoryPosition, Any>(
+            save = { listOf(it.position, it.draft) },
+            restore = { HistoryPosition(it[0] as Int, it[1] as String) },
         )
     }
 }
 
+private enum class Notice { NOT_SENT, NO_COMPLETION }
+
 /**
  * The line the player types commands in. The keyboard's Send key or the Send button hands the line to [onSend] and
- * leaves the keyboard open; [onSend] returns false when the command could not go out, and the line then stays. The
- * up and down buttons, and a hardware keyboard's arrow keys, step through the lines sent before.
+ * leaves the keyboard open; an `on...` that returns false could not send its request, and the line then stays.
+ * The up and down buttons, and a hardware keyboard's arrow keys, step through [history] (newest first). The completion
+ * button, or a hardware Tab, hands the line to [onComplete], whose answer replaces it. A [commandLine] from a script
+ * replaces the line, which then calls [onCommandLineShown].
+ *
+ * While [hiddenInput] holds, a masked password field takes the line's place and sends with [onSendHidden]; its close
+ * button calls [onDismissHidden]. What is typed there is not saved across a rotation, to keep it out of saved state.
  */
 @Composable
-fun InputLine(onSend: (String) -> Boolean, modifier: Modifier = Modifier) {
+fun InputLine(
+    hiddenInput: Boolean,
+    history: List<String>,
+    commandLine: String?,
+    onCommandLineShown: () -> Unit,
+    onSend: (String) -> Boolean,
+    onSendHidden: (String) -> Boolean,
+    onDismissHidden: () -> Boolean,
+    onComplete: (String, (String) -> Unit) -> Boolean,
+    modifier: Modifier = Modifier,
+) {
     var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
-    var history by rememberSaveable(stateSaver = CommandHistory.Saver) { mutableStateOf(CommandHistory()) }
-    var notSent by rememberSaveable { mutableStateOf(false) }
+    var secret by remember { mutableStateOf(TextFieldValue()) }
+    var at by rememberSaveable(stateSaver = HistoryPosition.Saver) { mutableStateOf(HistoryPosition()) }
+    var notice by rememberSaveable { mutableStateOf<Notice?>(null) }
+    var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
+    val hiddenFocus = remember { FocusRequester() }
 
-    fun show(moved: CommandHistory) {
-        history = moved
-        text = TextFieldValue(moved.shown, TextRange(moved.shown.length))
+    fun show(line: String) {
+        text = TextFieldValue(line, TextRange(line.length))
+        notice = null
+    }
+
+    fun move(moved: HistoryPosition) {
+        at = moved
+        show(moved.shown(history))
     }
 
     fun submit() {
-        val line = text.text
-        notSent = !onSend(line)
-        if (!notSent) {
-            history = history.add(line)
+        val sent = onSend(text.text)
+        notice = if (sent) null else Notice.NOT_SENT
+        if (sent) {
+            at = HistoryPosition()
             text = TextFieldValue()
         }
     }
 
+    fun submitHidden() {
+        val sent = onSendHidden(secret.text)
+        notice = if (sent) null else Notice.NOT_SENT
+        if (sent) secret = TextFieldValue()
+    }
+
+    fun complete() {
+        val asked = text.text
+        val sent = onComplete(asked) { completed ->
+            // The player typed on meanwhile: their line wins
+            if (text.text != asked) return@onComplete
+            if (completed.isEmpty()) notice = Notice.NO_COMPLETION else show(completed)
+        }
+        notice = if (sent) null else Notice.NOT_SENT
+    }
+
+    // Read as the field swaps, before the old one's focus is gone: the new one takes the focus it had
+    val hadFocus = remember(hiddenInput) { focused }
+    LaunchedEffect(hiddenInput) {
+        if (!hiddenInput) secret = TextFieldValue()
+        notice = null
+        if (hadFocus) (if (hiddenInput) hiddenFocus else focus).requestFocus()
+    }
+    LaunchedEffect(commandLine) {
+        if (commandLine == null) return@LaunchedEffect
+        at = HistoryPosition()
+        show(commandLine)
+        onCommandLineShown()
+    }
+
+    val supportingText: (@Composable () -> Unit)? = notice?.let {
+        {
+            val message = if (it == Notice.NOT_SENT) R.string.input_not_sent else R.string.input_no_completion
+            Text(stringResource(message), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
+    }
+    val trackFocus = Modifier.onFocusChanged { focused = it.isFocused }
+
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = {
-                text = it
-                notSent = false
-            },
-            modifier = Modifier.weight(1f).focusRequester(focus).onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when {
-                    event.key == Key.DirectionUp && history.canGoBack -> show(history.back(text.text))
-                    event.key == Key.DirectionDown && history.canGoForward -> show(history.forward())
-                    else -> return@onPreviewKeyEvent false
-                }
-                true
-            },
-            label = { Text(stringResource(R.string.input_label)) },
-            supportingText = if (notSent) ({ Text(stringResource(R.string.input_not_sent)) }) else null,
-            isError = notSent,
-            singleLine = true,
-            // Game commands are not prose: corrections would change them
-            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { submit() }),
-        )
-        IconButton({ show(history.back(text.text)) }, enabled = history.canGoBack) {
-            Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
-        }
-        IconButton({ show(history.forward()) }, enabled = history.canGoForward) {
-            Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.input_history_next))
-        }
-        IconButton({
-            submit()
-            focus.requestFocus()
-        }) {
-            Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
+        if (hiddenInput) {
+            OutlinedTextField(
+                value = secret,
+                onValueChange = {
+                    secret = it
+                    notice = null
+                },
+                modifier = Modifier.weight(1f).focusRequester(hiddenFocus).then(trackFocus),
+                label = { Text(stringResource(R.string.input_password_label)) },
+                supportingText = supportingText,
+                isError = notice == Notice.NOT_SENT,
+                singleLine = true,
+                // Password semantics: TalkBack says "password", not what is typed
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { submitHidden() }),
+            )
+            IconButton({ if (!onDismissHidden()) notice = Notice.NOT_SENT }) {
+                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.input_password_close))
+            }
+            IconButton({
+                submitHidden()
+                hiddenFocus.requestFocus()
+            }) {
+                Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
+            }
+        } else {
+            OutlinedTextField(
+                value = text,
+                onValueChange = {
+                    text = it
+                    notice = null
+                },
+                modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).onPreviewKeyEvent { event ->
+                    val tab = event.key == Key.Tab && !event.isShiftPressed
+                    // Both halves of Tab's press, so neither the field nor the focus acts on it
+                    if (tab && event.type == KeyEventType.KeyUp) return@onPreviewKeyEvent true
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        tab -> complete()
+                        event.key == Key.DirectionUp && at.canGoBack(history) -> move(at.back(history, text.text))
+                        event.key == Key.DirectionDown && at.canGoForward -> move(at.forward())
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    true
+                },
+                label = { Text(stringResource(R.string.input_label)) },
+                trailingIcon = {
+                    IconButton({ complete() }) {
+                        Icon(painterResource(R.drawable.ic_keyboard_tab), stringResource(R.string.input_complete))
+                    }
+                },
+                supportingText = supportingText,
+                isError = notice == Notice.NOT_SENT,
+                singleLine = true,
+                // Game commands are not prose: corrections would change them
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { submit() }),
+            )
+            IconButton({ move(at.back(history, text.text)) }, enabled = at.canGoBack(history)) {
+                Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
+            }
+            IconButton({ move(at.forward()) }, enabled = at.canGoForward) {
+                Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.input_history_next))
+            }
+            IconButton({
+                submit()
+                focus.requestFocus()
+            }) {
+                Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
+            }
         }
     }
 }

@@ -22,6 +22,12 @@
     <string name="input_history_previous">Previous command</string>
     <string name="input_history_next">Next command</string>
     <string name="input_not_sent">Not sent: the app is not connected to the engine</string>
+    <!-- The button, also the Tab key, that completes the word being typed from the words the game sent -->
+    <string name="input_complete">Complete the word</string>
+    <string name="input_no_completion">No completion</string>
+    <!-- The masked field that takes the input line's place while the game asks for a password -->
+    <string name="input_password_label">Password</string>
+    <string name="input_password_close">Close the password field</string>
 
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>

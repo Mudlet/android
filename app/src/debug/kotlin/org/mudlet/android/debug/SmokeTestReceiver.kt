@@ -28,30 +28,36 @@ class SmokeTestReceiver : BroadcastReceiver() {
         val c = EngineClient
         val error: String? = when (val cmd = intent.getStringExtra("cmd")) {
             "state" -> null
+
             "start" -> {
                 c.startEngine()
                 null
             }
+
             "connect" -> {
                 val host = intent.getStringExtra("host")
                 val port = intent.getIntExtra("port", -1)
                 val tls = intent.getBooleanExtra("tls", false)
                 if (host == null || port <= 0) "connect needs --es host and --ei port" else sendOrError(Requests.connect(host, port, tls))
             }
+
             "lua" -> {
                 val code = intent.getStringExtra("code")
                 if (code == null) "lua needs --es code" else sendOrError(Requests.runLua(code, System.nanoTime()))
             }
+
             "send" -> {
                 val text = intent.getStringExtra("text")
                 if (text == null) "send needs --es text" else sendOrError(Requests.send(text))
             }
+
             "kill" -> if (c.enginePid > 0) {
                 c.killEngineProcess()
                 null
             } else {
                 "no engine attached to kill"
             }
+
             else -> "unknown cmd: $cmd"
         }
         c.refreshServiceState()
@@ -59,8 +65,7 @@ class SmokeTestReceiver : BroadcastReceiver() {
         setResult(if (error == null) 0 else 1, Base64.encodeToString(state.toString().toByteArray(), Base64.NO_WRAP), null)
     }
 
-    private fun sendOrError(message: JSONObject): String? =
-        if (EngineClient.send(message)) null else "the UI is not attached to the engine: ${EngineClient.linkState}"
+    private fun sendOrError(message: JSONObject): String? = if (EngineClient.send(message)) null else "the UI is not attached to the engine: ${EngineClient.linkState}"
 
     private fun state(): JSONObject {
         val c = EngineClient

@@ -1,6 +1,9 @@
 package org.mudlet.android.ui.game
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -37,29 +42,66 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import org.mudlet.android.R
-import org.mudlet.android.ui.CONSOLE_BACKGROUND
-import org.mudlet.android.ui.CONSOLE_FOREGROUND
+import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
+import kotlin.math.roundToInt
 
 private const val TAIL_KEY = "tail"
 private val CONSOLE_SIDE_PADDING = 4.dp
-private val consoleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+
+// The keyboard and a pinch resize the console in many small steps: only where it comes to rest goes to the game
+private const val SCREEN_SIZE_SETTLE_MS = 200L
+
+// A run of characters, shaped as a line of game text is, rather than one on its own
+private const val CELLS_MEASURED = 100
 
 /**
- * The game's text: [lines], then [tail] (the prompt), in their colours and styles. At the bottom it follows new lines;
- * scrolled up, it stays where it is and offers a button back to the bottom that counts the lines that came meanwhile.
- * [linesAdded] is EngineClient's count, which numbers the lines. [onScreenSize] gets the columns and rows that fit.
+ * The game's text: [lines], then [tail] (the prompt), in their colours and styles, at [textSizeSp] in [colors]. At the
+ * bottom it follows new lines; scrolled up, it stays where it is and offers a button back to the bottom that counts the
+ * lines that came meanwhile. [linesAdded] is EngineClient's count, which numbers the lines.
+ *
+ * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
+ * held for a moment.
  */
 @Composable
-fun Console(lines: List<UiLine>, tail: UiLine?, linesAdded: Long, onScreenSize: (columns: Int, rows: Int) -> Unit, modifier: Modifier = Modifier) {
+fun Console(
+    lines: List<UiLine>,
+    tail: UiLine?,
+    linesAdded: Long,
+    textSizeSp: Int,
+    colors: ConsoleColors,
+    onTextSize: (Int) -> Unit,
+    onScreenSize: (columns: Int, rows: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val listState = rememberLazyListState()
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val cell = remember(measurer, density) { measurer.measure("M", consoleStyle).size }
-    val sidePaddingPx = with(density) { (CONSOLE_SIDE_PADDING * 2).roundToPx() }
+    val style = remember(textSizeSp) { TextStyle(fontFamily = FontFamily.Monospace, fontSize = textSizeSp.sp) }
+    val cell = remember(measurer, density, style) {
+        val row = measurer.measure("M".repeat(CELLS_MEASURED), style, softWrap = false)
+        CellSize(row.getLineRight(0) / CELLS_MEASURED, row.size.height)
+    }
+    // Each side rounded on its own, as contentPadding does
+    val sidePaddingPx = with(density) { CONSOLE_SIDE_PADDING.roundToPx() * 2 }
+    var consoleSize by remember { mutableStateOf(IntSize.Zero) }
     var following by rememberSaveable { mutableStateOf(true) }
+    val latestTextSize by rememberUpdatedState(textSizeSp)
+    val latestOnTextSize by rememberUpdatedState(onTextSize)
+    val latestOnScreenSize by rememberUpdatedState(onScreenSize)
+
+    LaunchedEffect(cell, sidePaddingPx) {
+        snapshotFlow { cell.fit(consoleSize, sidePaddingPx) }.filterNotNull().distinctUntilChanged().collectLatest { (columns, rows) ->
+            delay(SCREEN_SIZE_SETTLE_MS)
+            latestOnScreenSize(columns, rows)
+        }
+    }
 
     // linesAdded when the player scrolled away from the bottom: the lines since then are new to them
     var seenUpTo by rememberSaveable { mutableLongStateOf(linesAdded) }
@@ -92,21 +134,17 @@ fun Console(lines: List<UiLine>, tail: UiLine?, linesAdded: Long, onScreenSize: 
         }
     }
 
-    Box(modifier.background(CONSOLE_BACKGROUND)) {
+    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
         LazyColumn(
-            Modifier.fillMaxSize().onSizeChanged {
-                if (cell.width > 0 && cell.height > 0) {
-                    onScreenSize(((it.width - sidePaddingPx) / cell.width).coerceIn(1, 65535), (it.height / cell.height).coerceIn(1, 65535))
-                }
-            },
+            Modifier.fillMaxSize().onSizeChanged { consoleSize = it },
             state = listState,
             contentPadding = PaddingValues(horizontal = CONSOLE_SIDE_PADDING),
         ) {
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
-                val text = remember(line) { ansiText(line) }
-                Text(text, Modifier.fillMaxWidth(), color = CONSOLE_FOREGROUND, style = consoleStyle)
+                val text = remember(line, colors) { ansiText(line, colors) }
+                Text(text, Modifier.fillMaxWidth(), color = colors.foreground, style = style)
             }
         }
         if (!following) {
@@ -122,6 +160,39 @@ fun Console(lines: List<UiLine>, tail: UiLine?, linesAdded: Long, onScreenSize: 
                     },
                 )
             }
+        }
+    }
+}
+
+/** One character of the console's monospaced font: its advance, which may be a fraction of a pixel, and line height. */
+private data class CellSize(val width: Float, val height: Int) {
+    /** The columns and rows that fit in [console], [sidePaddingPx] narrower; null before the console is laid out. */
+    fun fit(console: IntSize, sidePaddingPx: Int): Pair<Int, Int>? {
+        if (console == IntSize.Zero || width <= 0f || height <= 0) return null
+        val columns = ((console.width - sidePaddingPx) / width).toInt()
+        return columns.coerceIn(1, 65535) to (console.height / height).coerceIn(1, 65535)
+    }
+}
+
+/**
+ * Two fingers spreading or closing scale [textSize] by how far they moved since they came down, and hand the result to
+ * [onTextSize]. One finger is left to the list, to scroll.
+ */
+private fun Modifier.pinchToZoom(textSize: () -> Int, onTextSize: (Int) -> Unit) = pointerInput(Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        var start = 0
+        var zoom = 1f
+        while (true) {
+            // Seen before the list, so a pinch never scrolls it
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val pressed = event.changes.count { it.pressed }
+            if (pressed == 0) break
+            if (pressed < 2) continue
+            if (start == 0) start = textSize()
+            zoom *= event.calculateZoom()
+            onTextSize((start * zoom).roundToInt())
+            event.changes.forEach { it.consume() }
         }
     }
 }

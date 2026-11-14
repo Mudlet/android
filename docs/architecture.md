@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, and the connection bar), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, and the connection bar), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`) and the app's own settings (`data/Settings.kt`, in SharedPreferences). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -310,7 +310,7 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   does not use them yet.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
-- `consoleColors` and `announce` reach the app, which does not use them yet.
+- The game screen's console draws in `consoleColors`; `announce` reaches the app, which does not use it yet.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
 - A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.
@@ -803,6 +803,8 @@ Item 13 of the on-device checklist covers this.
       when nothing matches.
     - `lua printCmdLine("say hi")` puts "say hi" on the line. Type a command and start the next one at once: what
       was typed is not wiped when the game answers.
+    - Disconnect, then send a command: "Not sent: ..." shows over the foot of the console, above the keyboard, and
+      TalkBack reads it without moving focus.
 17. About and licences, with TalkBack on.
     - The start screen's top bar has "About and licences, button". The About screen reads the app's version and the
       engine (with the libmudlet APK: "Engine: Mudlet" and its version, and the commit), then the headings ("Free
@@ -815,6 +817,18 @@ Item 13 of the on-device checklist covers this.
     - Far down the list and far into a licence text, swipe through: every element TalkBack lands on reads its text,
       including a line half scrolled off at the top (the emulator's accessibility check reports one there as
       unlabelled, which `AboutScreenTest` therefore does not check).
+18. Text size and the screen size the game is told, connected to a game with the libmudlet APK.
+    - Pinch the game's text with two fingers: it grows and shrinks smoothly, and one finger still scrolls. The
+      settings button in the game screen's title bar opens "Settings", whose text size slider, "Smaller text" and
+      "Larger text" buttons change it too; TalkBack reads the slider as "Text size", with its size, and swiping up or
+      down on it changes the size.
+    - On a game that shows the width it was told (many have a screen-width option), a line of that many characters
+      fills the console's width. Open and close the keyboard, and rotate the phone: the game is told the new size
+      once, after the change, not at every step.
+    - At the system's largest font size, the console's text is larger, the game is told fewer columns, and the
+      settings screen's text is not cut off.
+    - `lua setBackgroundColor("main", 0, 0, 80)` turns the console's background dark blue; text in default colours
+      keeps them.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

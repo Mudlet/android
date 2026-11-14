@@ -13,10 +13,12 @@ import org.mudlet.android.ui.about.LicenceScreen
 import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.selftest.SelfTestScreen
+import org.mudlet.android.ui.settings.SettingsScreen
 
 private object Routes {
     const val PROFILES = "profiles"
     const val GAME = "game"
+    const val SETTINGS = "settings"
     const val SELF_TEST = "selfTest"
     const val ABOUT = "about"
     const val LICENCE = "licence/{id}"
@@ -25,8 +27,8 @@ private object Routes {
 }
 
 /**
- * The app's screens: the profile list, where it starts, the game screen, About with a licence screen for each
- * component it lists, and, in debug builds only, the self-test.
+ * The app's screens: the profile list, where it starts, the game screen, the settings, About with a licence screen for
+ * each component it lists, and, in debug builds only, the self-test.
  * A release build has no route to the self-test, so R8 drops it.
  */
 @Composable
@@ -46,7 +48,10 @@ fun AppNavigation(onKillUi: () -> Unit) {
         composable(Routes.LICENCE, listOf(navArgument("id") { type = NavType.StringType })) { entry ->
             LicenceScreen(componentId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.navigateUp() })
         }
-        composable(Routes.GAME) { GameScreen(onBack = { nav.navigateUp() }) }
+        composable(Routes.GAME) {
+            GameScreen(onBack = { nav.navigateUp() }, onOpenSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } })
+        }
+        composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.navigateUp() }) }
         if (BuildConfig.DEBUG) {
             composable(Routes.SELF_TEST) { SelfTestScreen(onBack = { nav.navigateUp() }, onKillUi = onKillUi) }
         }

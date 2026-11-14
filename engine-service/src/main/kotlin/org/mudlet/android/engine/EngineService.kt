@@ -19,6 +19,8 @@ class EngineService : QtServiceBase() {
     override fun onCreate() {
         // Native main() reads these; Os.setenv is visible to getenv() in this process
         Os.setenv("MUDLET_ENGINE_SOCKET", EngineSocket.path(this), true)
+        Os.setenv("MUDLET_ENGINE_STATE", EngineSession.statePath(this), true)
+        Os.setenv("MUDLET_ENGINE_STOPPED", EngineSession.stopMarkerPath(this), true)
         Os.setenv("MUDLET_APP_ONCREATE_MS", EngineProcess.appOnCreateElapsedMs.toString(), true)
         Os.setenv("MUDLET_SERVICE_ONCREATE_MS", SystemClock.elapsedRealtime().toString(), true)
         val platform = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_PLATFORM, "android") ?: "android"
@@ -41,11 +43,13 @@ class EngineService : QtServiceBase() {
             return START_NOT_STICKY
         }
         goForeground()
-        // Not sticky: a restarted engine has lost its game connection anyway, and the UI restarts it on demand
+        // Not sticky: a UI that is shown restarts a killed engine, which then restores the profile
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        // Only a stop gets here (stopService, or the notification's Stop), never a kill: the next engine restores nothing
+        EngineSession.markStopped(this)
         Log.i(TAG, "onDestroy: QtServiceBase terminates Qt and calls System.exit(0) on this process")
         super.onDestroy()
     }

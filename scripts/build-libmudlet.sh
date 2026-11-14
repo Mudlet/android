@@ -23,9 +23,6 @@ qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/
 jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
 
-# --- An app that links libmudlet (the app's engine) needs the runner's link line: ask CMake's file API to record it ---
-"$(dirname "$0")/export-libmudlet.py" --query "$build"
-
 # Mudlet's Lua 5.1 aborts in luaL_openlibs on Android with "FORTIFY: strchr: prevented read past end of buffer". The
 # NDK builds with _FORTIFY_SOURCE=2, where bionic's checks size a buffer by the struct member a pointer was reached
 # through, and Lua keeps a string's characters just past its TString header, so getstr() reads as 0 bytes long. Level 1
@@ -58,6 +55,9 @@ EOF
     lua_fix="carried here, as Mudlet lacks it"
     echo "Mudlet's Lua 5.1 lacks the Android FORTIFY fix: adding it to $lua_cmake"
 fi
+
+# --- An app that links libmudlet (the app's engine) needs the runner's link line: ask CMake's file API to record it ---
+"$(dirname "$0")/export-libmudlet.py" --query "$build"
 
 # Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI, USE_VARIABLE_SPLASH_SCREEN and
 # BUILD_TESTING are named so that a change of those defaults does not quietly turn this into a different build

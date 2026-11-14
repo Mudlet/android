@@ -233,6 +233,7 @@ jobs:
             -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
           cmake --build build-desktop-mudlet --target engine
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
+          python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
 
   # The APK with libmudlet, built for x86_64, on an Android emulator (KVM on GitHub's Linux runners): install, launch,
   # the engine service, a profile on the fake game server, a Lua trigger and its notification, and the UI reattaching

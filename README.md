@@ -70,7 +70,8 @@ LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 
 `build-libmudlet.sh` writes `build/libmudlet.cmake`, which the engine links (see "libmudlet as the engine" in
 [`docs/architecture.md`](docs/architecture.md)). Each script's header lists its options. On a device, libmudlet's
-Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet; `build-libmudlet.sh` adds it to the checkout.
+Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet; until it does, `build-libmudlet.sh` adds it to
+the checkout (see "Lua 5.1 FORTIFY fix" under [CI](#ci)).
 
 ### Tests
 
@@ -89,6 +90,7 @@ cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
 cmake --build native/build-desktop-mudlet --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
+QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
 
 # The debug APK with libmudlet, built with ANDROID_ABI=x86_64, on a running emulator (adb on the PATH)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
@@ -129,7 +131,8 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
     backend, and uploads it.
   - A second job builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
-    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`).
+    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`). It also kills that engine
+    mid-session and checks that the next one restores the profile (`native/tests/test_mudlet_restore.py`).
   - A third job, **emulator**, builds the dependencies, libmudlet and the APK for x86_64 and runs it on an Android 15
     emulator (KVM, [android-emulator-runner](https://github.com/ReactiveCircus/android-emulator-runner) at a pinned
     commit) with [`native/tests/android_smoke.py`](native/tests/android_smoke.py): the engine service in the

@@ -258,6 +258,8 @@ def tls_checks(plain_port):
     msgs = []
     c.send({"t": "connect", "host": "localhost", "port": tls_port, "tls": True})
     c.wait_for(lambda m: m["t"] in ("line", "tail") and "self-signed" in m["text"], timeout=30, collect=msgs)
+    check(any("Socket got disconnected" in t for t in texts_of(msgs)), f"Mudlet's own words: {texts_of(msgs)[-3:]}")
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs, timeout=10)
     statuses = [(m["key"], m["value"]) for m in msgs if m["t"] == "status"]
     check(("connection", "connected") not in statuses, f"no connection over an untrusted certificate: {statuses}")
     check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")

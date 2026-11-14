@@ -451,8 +451,8 @@ job summary gives the size of each APK with them.
 
 **Certificates.** The engine checks a game's certificate as Mudlet's GUI does. Qt verifies the chain and the host
 name; a certificate that fails ends the connection, the reasons are printed in the main console ("[ ALERT ] - Socket
-got disconnected, for 1 reason(s): The certificate is self-signed, and untrusted"), and the profile does not
-reconnect. A profile that accepts expired or self-signed certificates, or any error (the GUI's three boxes, saved
+got disconnected", then reasons such as "The certificate is self-signed, and untrusted"), status `connection`
+becomes `disconnected`, and the profile does not reconnect. A profile that accepts expired or self-signed certificates, or any error (the GUI's three boxes, saved
 with the profile), connects anyway. The app has no screen for those boxes yet, so a self-signed game needs a
 profile from the GUI or edited by hand. A secure connection needs the game's name, not an IP address, as Mudlet
 refuses TLS to a raw address.

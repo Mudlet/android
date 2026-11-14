@@ -9,28 +9,24 @@ and two decisions. November 2026.
 |---|---|---|
 | Hosting | Prototype C: Compose UI process without Qt, libmudlet in a `QtServiceBase` foreground service in `:engine` | [`decisions/hosting.md`](decisions/hosting.md) |
 | Protocol | Version 1: 4-byte length + JSON frames, a 2000-line ring replayed on attach, flow control; `ProtocolSpecTest` keeps the spec, C++, Kotlin and Python in step | [`protocol.md`](protocol.md) |
-| CI | APKs (stand-in engine, desktop and JVM tests, APK checks, Android lint), libmudlet (arm64-v8a APK, the real engine on the host, the x86_64 APK on an emulator, nightly against Mudlet's `development`), Checks (ktlint, clang-format, ShellCheck, actionlint) | [`README.md`](../README.md#ci), `.github/workflows/` |
+| CI | One workflow, `ci.yml`, that runs only what the changed files need and reports one "CI result": Checks (ktlint, clang-format, ShellCheck, actionlint), APKs (stand-in engine, desktop and JVM tests, APK checks, Android lint), libmudlet (arm64-v8a APK, the real engine on the host, the x86_64 APK on emulators at API 28 and 36 with the smoke test and the instrumented tests); nightly against Mudlet's `development` | [`README.md`](../README.md#ci), `.github/workflows/` |
 | TLS | OpenSSL 3.5.9 (LTS) as `libcrypto_3.so`/`libssl_3.so` in every APK, for Qt's OpenSSL backend; checked in each APK | [`architecture.md`](architecture.md#tls) |
 | Restore | A killed engine restores its profile and wanted connection from `engine-session.json`; an orderly stop restores nothing; after three restores in 10 minutes it gives up | [`architecture.md`](architecture.md#restoring-the-session) |
-| Lua 5.1 FORTIFY | `-U_FORTIFY_SOURCE` for Lua 5.1 on Android, carried in `scripts/build-libmudlet.sh` until Mudlet/Mudlet#12914 is merged; the emulator job catches the abort | [`README.md`](../README.md#ci) |
+| Lua 5.1 FORTIFY | `-U_FORTIFY_SOURCE` for Lua 5.1 on Android, carried in `scripts/build-libmudlet.sh` until Mudlet/Mudlet#12914 is merged; the emulator jobs catch the abort | [`README.md`](../README.md#ci) |
 | Tooling | Gradle wrapper 8.14.3 (checksummed), Dependabot weekly and grouped, the version pins and how to bump them | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Release and PTBs | A minified, signed AAB with arm64-v8a and x86_64, an APK for each; nightly PTBs as Mudlet PTB (`org.mudlet.mudlet.ptb`) on Play's open testing track and the `ptb` GitHub pre-release, once the maintainer has done the one-time setup | [`ptb.md`](ptb.md) |
 
 ## For the maintainer: GitHub settings
 
-**Required status checks for `main`** (Settings, Rules, a ruleset on the default branch, "Require status checks to
-pass"). GitHub matches them by job name:
+**Required status check for `main`** (Settings, Rules, a ruleset on the default branch, "Require status checks to
+pass"): `CI result`, alone. CI's other jobs run only when the changed files need them. Required one by one, they
+would fail both ways: a workflow left out by a path filter never reports, so its checks leave the pull request
+waiting for ever, and a job skipped by its `if:` counts as passed, even when it was skipped because a job it needs
+failed. `CI result` always runs, and passes only when every job the changes called for passed and every other one
+was skipped.
 
-| Check | Workflow | Require? |
-|---|---|---|
-| `ktlint`, `clang-format`, `shellcheck`, `actionlint` | Checks | Yes: they run on every pull request, and are quick |
-| `APK`, `APK (extracted libs)` | APKs | Yes, once `apks.yml`'s `pull_request` trigger loses its `paths` filter (below) |
-| `libmudlet`, `desktop-engine`, `emulator` | libmudlet for Android | No: they build Mudlet's moving `development`, so they can go red for a reason outside the pull request. Read them on pull requests that touch `native/`, `engine-service/` or the scripts; the nightly opens an issue when they fail |
-
-A workflow skipped by its `paths` filter never reports, and a required check that never reports leaves the pull
-request waiting for ever. So a workflow whose checks are required must run on every pull request: drop `paths:` from
-`apks.yml`'s `pull_request` trigger (keep it on `push`) when making `APK` required. It costs a run of about 4
-minutes, with caches, on a pull request that touches only docs.
+The emulator and libmudlet jobs build Mudlet's moving `development`, so `CI result` can go red for a reason outside
+the pull request; the nightly opens an issue when that happens, and the fix belongs in a pull request of its own.
 
 **The rest of the ruleset for `main`:**
 - require a pull request before merging; with one maintainer, no required approvals, or the maintainer cannot merge
@@ -46,8 +42,9 @@ minutes, with caches, on a pull request that touches only docs.
   secret scanning with push protection.
 - General, Pull Requests: turn off "Allow merge commits" and keep "Allow squash merging" and "Allow rebase
   merging" on; automatically delete head branches.
-- Actions, General: workflow permissions read-only by default (each workflow already asks for `contents: read`; only
-  the nightlies' issue jobs ask for `issues: write`, and the PTB's pre-release job for `contents: write`).
+- Actions, General: workflow permissions read-only by default (each workflow already asks for `contents: read`; CI's
+  `changes` job adds `pull-requests: read`, to list a pull request's files; only the nightlies' issue jobs ask for
+  `issues: write`, and the PTB's pre-release job for `contents: write`).
 - Environments: `play`, limited to `main`, holding the Play service account's key; the PTB setup in
   [`ptb.md`](ptb.md#one-time-setup-for-the-maintainer) has every step.
 

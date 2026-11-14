@@ -107,6 +107,14 @@ QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/bui
 # The debug APK with libmudlet, built with ANDROID_ABI=x86_64, on a running emulator (adb on the PATH)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
     --symbols native/build-android-x86_64-mudlet/enginehost
+
+# The instrumented tests on it: build the test APKs with the APK, then run them (they reinstall the app)
+ANDROID_ABI=x86_64 LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh :app:assembleDebugAndroidTest \
+    :engine-service:assembleDebugAndroidTest
+python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk \
+    --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+    --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk \
+    --out instrumented-test --symbols native/build-android-x86_64-mudlet/enginehost
 ```
 
 `./gradlew :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
@@ -119,8 +127,20 @@ are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## CI
 
-GitHub Actions runs three workflows on pushes to `main` and pull requests (the first two only when they touch their
-files), and on demand, and a fourth, **PTB**, every night and on pull requests that change how the release is built:
+One workflow, **CI** (`.github/workflows/ci.yml`), runs on pull requests, pushes to `main`, every night and on
+demand. Its first job sorts the changed files with a path filter and calls only the workflows they need, down to the
+job; the nightly and a manual run call everything. **PTB**, below, is a workflow of its own. Its last job, **CI result**, passes when every job the changes
+called for passed and every other one was skipped, so it is the one check to require: a workflow a path filter left
+out never reports, and a skipped job counts as passed. A newer push to a pull request cancels its older run.
+
+| Changed | Runs |
+|---|---|
+| Only docs (`*.md`, `docs/` but `docs/protocol.md`) | nothing but CI's own two short jobs |
+| Kotlin in `app/`, `engine-service/` or `protocol/` | ktlint; APKs; the emulator jobs, with libmudlet from its cache |
+| `native/`, the Gradle build, the build scripts, `.github/actions/` | the jobs below that build from them |
+| A workflow | what that workflow runs; `ci.yml` itself, everything |
+
+The workflows it calls:
 
 - **APKs** (`.github/workflows/apks.yml`)
   - runs the stand-in engine's desktop test, and `:protocol`'s tests with the Kotlin client against that engine;
@@ -138,8 +158,10 @@ files), and on demand, and a fourth, **PTB**, every night and on pull requests t
   - It cross-builds libmudlet's dependencies for arm64-v8a with
     [`scripts/build-mudlet-deps.sh`](scripts/build-mudlet-deps.sh) (pinned versions and checksums), then
     `mudlet_core`, `mudlet_headless` and the `mudlet-headless` runner with
-    [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built,
-    the library sizes, stripped and not, and whose Lua 5.1 FORTIFY fix the build used.
+    [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh) (`.github/actions/libmudlet`). The job summary gives
+    the Mudlet commit it built, the library sizes, stripped and not, and whose Lua 5.1 FORTIFY fix the build used.
+    A build of the same Mudlet commit with the same scripts, toolchain and FORTIFY choice is taken from the cache
+    instead, so a pull request that changes only the app does not build Mudlet again.
   - Lua 5.1 FORTIFY fix: built with the NDK's `_FORTIFY_SOURCE=2`, Mudlet's Lua 5.1 aborts in `luaL_openlibs`
     ("FORTIFY: strchr: prevented read past end of buffer"). Until Mudlet's `3rdparty/lua51/CMakeLists.txt`
     passes `-U_FORTIFY_SOURCE` for Android itself ([Mudlet/Mudlet#12914](https://github.com/Mudlet/Mudlet/pull/12914)),
@@ -149,42 +171,56 @@ files), and on demand, and a fourth, **PTB**, every night and on pull requests t
     [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line, puts it through
     the same checks as above, checks that the engine carries Mudlet's Lua, its Lua C modules and QtKeychain's KeyStore
     backend, and uploads it.
-  - A second job builds libmudlet for the host with the same options
+  - **desktop-engine** builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
     fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`), in the clear and over TLS. It also kills that engine
     mid-session and checks that the next one restores the profile (`native/tests/test_mudlet_restore.py`).
-  - A third job, **emulator**, builds the dependencies, libmudlet and the APK for x86_64 and runs it on an Android 15
-    emulator (KVM, [android-emulator-runner](https://github.com/ReactiveCircus/android-emulator-runner) at a pinned
-    commit) with [`native/tests/android_smoke.py`](native/tests/android_smoke.py): the engine service in the
-    foreground in `:engine` with Qt up, a profile on the fake game server (so Mudlet's Lua runs), coloured lines in
-    the UI, a Lua trigger and its notification, and the UI attaching to a new engine after `:engine` is killed. It
-    uploads logcat, screenshots and the UI's state, and gives the steps in the job summary. It is the only job that
-    runs the engine on Android, so the only one that catches a crash there; a manual run with `lua_fortify_fix`
-    off shows it failing on the FORTIFY abort in `luaL_openlibs`.
+  - **emulator-build** builds the dependencies, libmudlet, the APK and the two test APKs for x86_64; then one
+    **emulator** job for each of API 28 (Android 9, the app's minSdk) and API 36 (Android 16) boots an emulator (KVM,
+    [android-emulator-runner](https://github.com/ReactiveCircus/android-emulator-runner) at a pinned commit) and runs
+    on it, one after the other:
+    - [`native/tests/android_smoke.py`](native/tests/android_smoke.py): the engine service in the foreground in
+      `:engine` with Qt up, a profile on the fake game server (so Mudlet's Lua runs), coloured lines in the UI, a Lua
+      trigger and its notification, and the UI attaching to a new engine after `:engine` is killed;
+    - [`native/tests/android_instrumented.py`](native/tests/android_instrumented.py), the instrumented tests in
+      `app/src/androidTest` and `engine-service/src/androidTest`: the engine service in its own process in the
+      foreground, Qt's handshake, a stop from the notification that the next start does not undo, a killed engine that
+      comes back with its profile and connection, a TLS connect through OpenSSL; the self-test screen's lines, runs and
+      colours from a fake engine, its reattach after losing the engine, and the notification permission's dialog.
+
+    Both run whatever the other did, and the job fails if either failed. It uploads logcat, screenshots, the UI's
+    state and each instrumentation's output, and gives the steps in the job summary. These are the only jobs that
+    run the engine on Android, so the only ones that catch a crash there; a manual run with `lua_fortify_fix` off
+    shows them failing on the FORTIFY abort in `luaL_openlibs`. API 28 runs on every pull request that runs these at
+    all: the code that differs by API level (`ServiceCompat.startForeground`, the notification permission from 33,
+    the foreground service type from 34) is in the same files whose changes start them.
   - It fails if the libraries use desktop-only APIs or carry the build-type splash screen images, if Lua 5.1's
     collector (`lgc.c`) references a fortified function such as `__strchr_chk` (as the call that aborts does) or its
     string library (`lstrlib.c`) references none (FORTIFY is then off altogether), if the runner lacks Mudlet's
     built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
-    KeyStore), if the engine does not build, link or pass its test, or if the emulator smoke test fails.
-  - It also runs every night, so a change on Mudlet's side that breaks the Android build shows up; a nightly that
-    fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without activity in
-    this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.
-- **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh) on every pull request: ktlint
-  on the Kotlin, clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the
-  workflows, as four short jobs.
+    KeyStore), if the engine does not build, link or pass its test, or if a test on an emulator fails.
+- **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh): ktlint on the Kotlin,
+  clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the workflows, as
+  four short jobs, each when a file it checks changed.
 
-- **PTB** (`.github/workflows/ptb.yml`) builds the release from Mudlet's `development` for arm64-v8a and x86_64,
-  as the separate app Mudlet PTB (`org.mudlet.mudlet.ptb`), runs its minified x86_64 build through the emulator smoke
-  test, and from `main` uploads it to Google Play's open testing track and replaces the `ptb` GitHub pre-release. It
-  skips a night when neither Mudlet nor this repository changed, and publishes nothing without its secrets or off
-  `main`. See [`docs/ptb.md`](docs/ptb.md).
+Every night CI runs everything against Mudlet's latest `development`, so a change on Mudlet's side that breaks the
+Android build shows up; a nightly that fails or times out opens or updates an issue here. GitHub pauses the nightly
+after 60 days without activity in this repository; re-enable it from the Actions tab. A red check on a pull request
+can come from Mudlet's side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on any branch, with
+any Mudlet ref; `apks.yml` and `libmudlet.yml` can also be run on their own, the latter with a choice of its jobs.
+
+**PTB** (`.github/workflows/ptb.yml`), outside CI, runs every night and on pull requests that change how the release
+is built. It builds the release from Mudlet's `development` for arm64-v8a and x86_64, as the separate app Mudlet PTB
+(`org.mudlet.mudlet.ptb`), runs its minified x86_64 build through the emulator smoke test, and from `main` uploads it
+to Google Play's open testing track and replaces the `ptb` GitHub pre-release. It skips a night when neither Mudlet
+nor this repository changed, and publishes nothing without its secrets or off `main`. See [`docs/ptb.md`](docs/ptb.md).
 
 Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
 versions tied to them are bumped by hand (see "Pinned versions" in [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 
-The first two install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
-aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Gradle, ccache and the emulator's system image are
-cached between runs.
+APKs and libmudlet install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt
+through a pinned aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Mudlet's Android builds, Gradle, ccache and the
+emulators' system images are cached between runs.
 
 ## Licences
 

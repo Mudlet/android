@@ -179,7 +179,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
-(CI's emulator job) or a device, from the host through adb. It drives the UI through a debug-only hook,
+(CI's emulator jobs) or a device, from the host through adb. It drives the UI through a debug-only hook,
 `SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
 - that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
 - that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
@@ -188,6 +188,20 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - that after `:engine` is killed, the UI starts a new engine and attaches to it.
 
 If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
+
+The instrumented tests, run on the same emulator boot by `native/tests/android_instrumented.py`, check what only a
+device shows, below the UI's debug hook:
+- `engine-service/src/androidTest` runs `EngineService` from its own test APK, against a small game server in the
+  test's process: the service in its own `:engine` process in the foreground, Qt's `serviceReadyWait` and QPA, the
+  socket handshake; the engine notification's Stop, after which the next start restores nothing; a killed engine,
+  after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
+  bytes are a ClientHello, so Qt's backend loaded OpenSSL.
+- `app/src/androidTest` runs the self-test screen against a fake engine in the test's process (`EngineClient`'s
+  `connector`): the colours and styles of each run, in the semantics tree and in the pixels drawn; the reattach to a
+  new engine after one is lost, and to the same one; and the notification permission, asked on Android 13 and later,
+  on a fresh install.
+
+CI runs both on API 28, the app's minSdk, and on API 36.
 
 **Gaps:**
 - Game text that no line feed or GA has ended shows as in Mudlet's desktop GUI. While the game

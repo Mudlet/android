@@ -13,7 +13,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
 | `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh` and `lint.sh` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md) |
-| `.github/` | The workflows (`apks.yml`, `libmudlet.yml`, `checks.yml`, `ptb.yml`), the actions they share, Dependabot |
+| `.github/` | The workflows (`ci.yml`, which calls `checks.yml`, `apks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
 
 ## Setting up
@@ -90,6 +90,14 @@ python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debu
 # The minified release, as the PTB workflow tests it: its smoke build, after scripts/build-release.sh
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/smoke/app-x86_64-smoke.apk --out smoke-test \
     --package org.mudlet.mudlet.ptb
+
+# The instrumented tests (app/src/androidTest, engine-service/src/androidTest) on it: build the test APKs with the APK, then run them (they reinstall the app)
+ANDROID_ABI=x86_64 LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh :app:assembleDebugAndroidTest \
+    :engine-service:assembleDebugAndroidTest
+python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk \
+    --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+    --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk \
+    --out instrumented-test --symbols native/build-android-x86_64-mudlet/enginehost
 ```
 
 The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist).
@@ -162,8 +170,8 @@ actions and the linters, but AGP, Kotlin and Gradle only to a new patch release;
 **Bumping Qt** (and with it the NDK, SDK levels or AGP): read the new Qt's Android requirements (its supported NDK,
 minimum and target SDK, and the AGP and Gradle its templates use), change every place in the table in one pull
 request, and check that `AndroidServiceSetup.cpp`'s private API still exists in that Qt
-([`docs/architecture.md`](docs/architecture.md), "Qt internals relied on"). Run the libmudlet workflow by hand on the
-branch: its emulator job is the only test of the engine on Android. Caches are keyed on the Qt and NDK versions, so a
-bump rebuilds them. AGP 9 needs Gradle 9, so leaving AGP 8.13 means moving the wrapper too
+([`docs/architecture.md`](docs/architecture.md), "Qt internals relied on"). The pull request runs every build and
+emulator job, as it changes `.github/actions/`; the emulator jobs are the only test of the engine on Android. Caches
+are keyed on the Qt and NDK versions, so a bump rebuilds them. AGP 9 needs Gradle 9, so leaving AGP 8.13 means moving the wrapper too
 (`./gradlew wrapper --gradle-version <v> --gradle-distribution-sha256-sum <sha>`, the sum from
 `https://services.gradle.org/distributions/gradle-<v>-bin.zip.sha256`).

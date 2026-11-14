@@ -139,7 +139,9 @@ demand:
 - **Prototype APKs** (`.github/workflows/apks.yml`) runs each prototype's desktop engine test, then builds a debug
   APK of A, B and C, each with its stand-in engine, checks that it holds Qt and the engine and that its
   libraries are 16 KB aligned (their offsets in the APK and their load segments), and uploads it as an
-  artifact.
+  artifact. It builds C a second time with its libraries extracted at install (`-PextractNativeLibs=true`), which
+  `require()` needs to find a Lua C module shipped as `lib<name>.so`, and the job summary gives each APK's size
+  and its size on the device.
 
 Both use the versions under [Building](#building), installed by `.github/actions/android-toolchain`
 (Qt through a pinned aqtinstall). Qt, the NDK, the dependencies, Gradle and ccache are cached between runs.

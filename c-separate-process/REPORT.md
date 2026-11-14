@@ -366,6 +366,37 @@ backgrounded UI process mid-read. Verified on the host:
   process and `System.exit` on destroy, never meet the Activity. A Qt crash
   cannot take down the UI; the UI shows "reconnecting" and restarts the engine.
 
+## Native libraries: loaded from the APK, or extracted
+By default the APK stores its `.so` files uncompressed and 16 KB aligned, and Android loads them
+from the APK in place (`useLegacyPackaging = false`, AGP's default for minSdk 23 and up).
+`./build-apk.sh -PextractNativeLibs=true` turns on `useLegacyPackaging`: the libraries are
+compressed in the APK and the installer extracts them to the app's `nativeLibraryDir`. Qt starts
+either way, as Qt's `QtLoader` loads from `nativeLibraryDir` whenever that folder holds libraries.
+
+Extraction matters only for a Lua C module that `require()` is to find on `package.cpath` as
+`lib<name>.so`. Lua's `require()` opens each candidate path with `fopen()`, which cannot read a
+file inside the APK, so such a module loads only when extracted. With Mudlet/Mudlet#12909, Mudlet
+then puts `<nativeLibraryDir>/lib?.so` on `package.cpath`. A module the app hands to
+`THeadlessSession::preloadLuaModule()` needs no extraction, and neither do Mudlet's own C modules
+(lfs, lpeg, rex_pcre2 and the rest), which are linked into the engine and preloaded.
+
+What extraction costs, measured on CI's debug APK of C with the stand-in engine (Prototype APKs
+run 43482451881, commit 0dd127f). The "extracted" column is a repack of that APK with the same 16
+libraries deflated at zlib level 6, not an APK AGP built; the `c-separate-process (extracted libs)`
+CI job builds that variant on every run and reports its real sizes. MB here is 10^6 bytes, as in
+the CI summary, so the libraries' 20,419,784 bytes are 20.4 MB (19.5 MiB).
+
+| | Loaded from the APK (default) | Extracted |
+|---|---|---|
+| `lib/arm64-v8a` in the APK | 20.4 MB, stored | 7.6 MB, deflated |
+| APK file | 48.3 MB | 35.4 MB (-27%) |
+| On the device: APK plus extracted libraries | 48.3 MB | 55.8 MB (+7.5 MB, +16%) |
+
+The extra space on the device is the compressed copy that stays in the APK, here 37% of the
+libraries' size, so it grows with libmudlet's engine. A store download is compressed in transit
+either way, so its size should change little; that was not measured. The default stays off while
+the APK ships no Lua C module that `require()` must find on `package.cpath`.
+
 ## Size of the prototype
 | Part | Lines |
 |---|---|

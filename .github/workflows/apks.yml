@@ -1,7 +1,7 @@
 name: Prototype APKs
 
 # Debug APKs of the three hosting prototypes, each with its stand-in engine, for arm64-v8a, after each
-# prototype's desktop engine test.
+# prototype's desktop engine test, and C a second time with its libraries extracted at install.
 on:
   push:
     branches: [main]
@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   apk:
-    name: ${{ matrix.prototype }}
+    name: ${{ matrix.prototype }}${{ matrix.extracted && ' (extracted libs)' || '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -66,6 +66,13 @@ jobs:
             build: ./build-apk.sh
             engine: libengine
             apk: c-separate-process/android/app/build/outputs/apk/debug
+          # what extracting the libraries at install costs; see "Native libraries" in C's REPORT.md
+          - prototype: c-separate-process
+            gradle: "8.14.3"
+            build: ./build-apk.sh -PextractNativeLibs=true
+            engine: libengine
+            apk: c-separate-process/android/app/build/outputs/apk/debug
+            extracted: true
     steps:
       - uses: actions/checkout@v6
 
@@ -81,6 +88,7 @@ jobs:
           gradle-version: ${{ matrix.gradle }}
 
       - name: Desktop engine test
+        if: matrix.desktop-test
         working-directory: ${{ matrix.prototype }}
         env:
           QT_QPA_PLATFORM: offscreen
@@ -93,9 +101,14 @@ jobs:
       # Gradle packages whatever androiddeployqt staged, so a partial deploy still gives an APK
       - name: Check APK
         working-directory: ${{ matrix.apk }}
+        env:
+          TITLE: ${{ matrix.prototype }}${{ matrix.extracted && ' (extracted libs)' || '' }}
+          EXTRACTED: ${{ matrix.extracted || false }}
         run: |
           readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-          printf '### %s\n\n' "${{ matrix.prototype }}" >> "$GITHUB_STEP_SUMMARY"
+          aapt2="${{ steps.toolchain.outputs.build-tools-dir }}/aapt2"
+          mb() { awk -v b="$1" 'BEGIN { printf "%.1f MB", b / 1000000 }'; }
+          printf '### %s\n\n' "$TITLE" >> "$GITHUB_STEP_SUMMARY"
           for apk in *.apk; do
             libs="$RUNNER_TEMP/$apk/lib/arm64-v8a"
             unzip -q -o "$apk" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/$apk" \
@@ -107,19 +120,47 @@ jobs:
             # a 16 KB page device needs both: each library at a 16 KB offset in the APK, and 16 KB aligned segments
             "${{ steps.toolchain.outputs.build-tools-dir }}/zipalign" -c -P 16 4 "$apk" \
               || { echo "::error::$apk does not store its libraries at 16 KB offsets"; exit 1; }
-            for so in "$libs"/*.so; do
+            sos=("$libs"/*.so)
+            for so in "${sos[@]}"; do
               aligns=$("$readelf" -lW "$so" | awk '$1 == "LOAD" { print $NF }')
               [ -n "$aligns" ] || { echo "::error::no LOAD segments read from $so"; exit 1; }
               for a in $aligns; do
                 (( a >= 0x4000 )) || { echo "::error::$apk: $(basename "$so") has segments aligned to $a, below 16 KB"; exit 1; }
               done
             done
-            echo "- \`$apk\`: $(du -h "$apk" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+            # zipalign -c passes compressed libraries; the installer extracts the libraries when the manifest's
+            # extractNativeLibs is not false, and refuses compressed ones when it is
+            stats=$(unzip -v "$apk" 'lib/arm64-v8a/*.so' \
+              | awk '$8 ~ /^lib\// { n++; if ($2 != "Stored") d++; u += $1; c += $3 } END { print n+0, d+0, u+0, c+0 }')
+            read -r count deflated raw packed <<< "$stats"
+            (( count == ${#sos[@]} )) \
+              || { echo "::error::$apk: unzip -v listed $count libraries, but ${#sos[@]} were extracted"; exit 1; }
+            manifest=$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")
+            grep -q 'E: application' <<< "$manifest" || { echo "::error::no <application> in $apk's manifest dump"; exit 1; }
+            flag=$(sed -n 's/.*:extractNativeLibs([^)]*)=\([a-z]*\).*/\1/p' <<< "$manifest")
+            apk_size=$(stat -c %s "$apk")
+            if [ "$EXTRACTED" = true ]; then
+              (( deflated == count )) \
+                || { echo "::error::$apk compresses $deflated of its $count libraries, so useLegacyPackaging was not on"; exit 1; }
+              [ "$flag" != false ] \
+                || { echo "::error::$apk compresses its libraries, but its manifest has extractNativeLibs=false"; exit 1; }
+              how="compressed to $(mb "$packed") and extracted at install"
+              installed=$(( apk_size + raw ))
+            else
+              (( deflated == 0 )) \
+                || { echo "::error::$apk compresses $deflated of its $count libraries, which the default build stores: is useLegacyPackaging on?"; exit 1; }
+              [ "$flag" = false ] \
+                || { echo "::error::$apk's manifest has extractNativeLibs=${flag:-unset}, so the installer extracts its libraries"; exit 1; }
+              how="stored, loaded from the APK"
+              installed=$apk_size
+            fi
+            echo "- \`$apk\`: $(mb "$apk_size"); \`lib/arm64-v8a\`: $count libraries, $(mb "$raw"), $how" \
+              "(extractNativeLibs=${flag:-unset}); on the device: $(mb "$installed")" >> "$GITHUB_STEP_SUMMARY"
           done
 
       - uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.prototype }}-debug-apk
+          name: ${{ matrix.prototype }}${{ matrix.extracted && '-extracted-libs' || '' }}-debug-apk
           path: ${{ matrix.apk }}/*.apk
           if-no-files-found: error
           retention-days: 14

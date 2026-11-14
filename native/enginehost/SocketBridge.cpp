@@ -197,7 +197,14 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     if (type == QLatin1String("ping")) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("pong")}, {QStringLiteral("id"), mCurrentRequestId}});
     } else if (type == QLatin1String("connect")) {
-        mEngine->connectTo(message.value(QLatin1String("host")).toString(), quint16(message.value(QLatin1String("port")).toInt(23)));
+        const QJsonValue tls = message.value(QLatin1String("tls"));
+        if (!tls.isUndefined() && !tls.isBool()) {
+            // Not taken as absent, which could connect in the clear a game the UI meant to encrypt
+            sendFrame({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), QStringLiteral("connect: tls must be true or false")}});
+        } else {
+            mEngine->connectTo(message.value(QLatin1String("host")).toString(), quint16(message.value(QLatin1String("port")).toInt(23)),
+                               tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt);
+        }
     } else if (type == QLatin1String("send")) {
         mEngine->send(message.value(QLatin1String("text")).toString());
     } else if (type == QLatin1String("disconnect")) {

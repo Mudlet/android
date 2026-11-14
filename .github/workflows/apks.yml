@@ -1,8 +1,8 @@
 name: APKs
 
 # The app's debug APK for arm64-v8a with the stand-in engine, after the stand-in's desktop test and the Kotlin
-# protocol tests (against that desktop engine too), and a second time with its libraries extracted at install. The APK
-# with libmudlet as its engine is built in libmudlet.yml.
+# protocol tests (against that desktop engine too), and a second time with its libraries extracted at install. Both
+# carry OpenSSL for Qt's TLS backend. The APK with libmudlet as its engine is built in libmudlet.yml.
 on:
   push:
     branches: [main]
@@ -16,6 +16,7 @@ on:
       - "*.gradle.kts"
       - gradle.properties
       - scripts/build-apk.sh
+      - scripts/build-openssl.sh
       - .github/actions/**
       - .github/workflows/apks.yml
   pull_request:
@@ -76,6 +77,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
+
+      - uses: ./.github/actions/android-openssl
+        with:
+          ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
       - name: Build APK
         run: ${{ matrix.build }}

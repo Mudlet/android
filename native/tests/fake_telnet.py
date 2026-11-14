@@ -8,9 +8,14 @@ Commands a client may send (one per line):
   ga-partial      -> a GA prompt, then "Press return: " with no newline, which "\r\nlast line\r\n" ends 1.5 s later
   negotiation     -> "NEG: <hex>" of every telnet byte the client sent so far
   tell            -> another "tells you" line
+  tls             -> "TLS: <protocol>" of the connection, or "TLS: none"
   quit            -> close
+
+Given an ssl.SSLContext, it speaks TLS on its port: each connection's handshake comes first, and its outcome is
+appended to TLS_HANDSHAKES.
 """
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -23,6 +28,8 @@ FLOOD_TIMES = []
 ACCEPTED = []
 # time.perf_counter() just before the latest "banner" went out, and before ga-partial's "line-end"
 SENT = {}
+# ("ok", protocol) or ("failed", why) for each TLS connection, in the order their handshakes ended
+TLS_HANDSHAKES = []
 
 BANNER = (
     bytes([IAC, DO, TTYPE, IAC, WILL, ECHO, IAC, WILL, GMCP])
@@ -39,15 +46,24 @@ LOGIN_BANNER = b"Welcome\r\nLogin: "
 
 
 class Session(threading.Thread):
-    def __init__(self, conn, banner):
+    def __init__(self, conn, banner, tls=None):
         super().__init__(daemon=True)
         self.conn = conn
         self.banner = banner
+        self.tls = tls
         self.negotiation = bytearray()
 
     def run(self):
         conn = self.conn
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        if self.tls is not None:
+            try:
+                conn = self.conn = self.tls.wrap_socket(conn, server_side=True)
+            except (ssl.SSLError, OSError) as e:
+                TLS_HANDSHAKES.append(("failed", str(e)))
+                conn.close()
+                return
+            TLS_HANDSHAKES.append(("ok", conn.version()))
         SENT["banner"] = time.perf_counter()
         conn.sendall(self.banner)
         buf = bytearray()
@@ -133,6 +149,8 @@ class Session(threading.Thread):
             conn.sendall(f"NEG: {self.negotiation.hex()}\r\n".encode())
         elif line == "tell":
             conn.sendall(b"Alice tells you 'ping'\r\n")
+        elif line == "tls":
+            conn.sendall(f"TLS: {conn.version() if isinstance(conn, ssl.SSLSocket) else 'none'}\r\n".encode())
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False
@@ -141,7 +159,7 @@ class Session(threading.Thread):
         return True
 
 
-def serve(port=0, ready=None, banner=BANNER):
+def serve(port=0, ready=None, banner=BANNER, tls=None):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", port))
@@ -151,10 +169,10 @@ def serve(port=0, ready=None, banner=BANNER):
     while True:
         conn, _ = srv.accept()
         ACCEPTED.append(time.monotonic())
-        Session(conn, banner).start()
+        Session(conn, banner, tls).start()
 
 
-def start_in_thread(banner=BANNER):
+def start_in_thread(banner=BANNER, tls=None):
     got = {}
     ev = threading.Event()
 
@@ -162,7 +180,7 @@ def start_in_thread(banner=BANNER):
         got["port"] = port
         ev.set()
 
-    threading.Thread(target=serve, args=(0, ready, banner), daemon=True).start()
+    threading.Thread(target=serve, args=(0, ready, banner, tls), daemon=True).start()
     ev.wait(5)
     return got["port"]
 

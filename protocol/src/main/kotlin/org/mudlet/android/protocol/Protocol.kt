@@ -45,7 +45,8 @@ object Requests {
         .put("t", "hello").put("v", PROTOCOL_VERSION).put("client", "android-compose")
         .apply { if (instance != null) put("instance", instance).put("lastSeq", lastSeq) }
 
-    fun connect(host: String, port: Int): JSONObject = JSONObject().put("t", "connect").put("host", host).put("port", port)
+    fun connect(host: String, port: Int, tls: Boolean): JSONObject =
+        JSONObject().put("t", "connect").put("host", host).put("port", port).put("tls", tls)
     fun send(text: String): JSONObject = JSONObject().put("t", "send").put("text", text)
     fun disconnect(): JSONObject = JSONObject().put("t", "disconnect")
     fun runLua(code: String, id: Long): JSONObject = JSONObject().put("t", "runLua").put("code", code).put("id", id)

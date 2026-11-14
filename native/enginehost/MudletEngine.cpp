@@ -281,7 +281,7 @@ void MudletEngine::beginRestore()
     } else {
         restoreStatus(QStringLiteral("restoring"), mProfile);
     }
-    start(mKept.host, quint16(mKept.port), mKept.connect);
+    start(mKept.host, quint16(mKept.port), mKept.connect, mKept.tls);
 }
 
 // The UI took over: the restore no longer reports, nor connects later
@@ -342,15 +342,19 @@ void MudletEngine::reportFont()
     mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
-void MudletEngine::start(const QString& host, quint16 port, bool connect)
+void MudletEngine::start(const QString& host, quint16 port, bool connect, std::optional<bool> tls)
 {
     THeadlessSession::Options options;
     options.profile = mProfile;
     options.connect = connect;
     options.host = host;
     options.port = port;
+    // Stored with the profile, as the connection dialog's box stores it; unset, the profile's own
+    options.tls = tls;
+    mProfileTls = tls;
     options.configDir = mConfigDir;
     mKept.profile = mProfile;
+    mKept.tls = tls;
     persist();
     mState = State::starting;
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
@@ -392,8 +396,20 @@ void MudletEngine::runNow(const QString& code)
     mFrontend->status(QStringLiteral("luaResult"), ok ? QStringLiteral("ran") : QStringLiteral("refused: %1").arg(mSession->errorString()));
 }
 
-void MudletEngine::connectTo(const QString& host, quint16 port)
+void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bool> tls)
 {
+    // A running profile connects as it was started: THeadlessSession takes the TLS choice only in start(), and
+    // connectToServer() keeps the profile's. A connect refused for that changes nothing, a restore included.
+    if (mState != State::idle && tls.has_value() && tls != mProfileTls) {
+        QString started = QStringLiteral("with its stored choice");
+        if (mProfileTls.has_value()) {
+            started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
+        }
+        mFrontend->status(QStringLiteral("connection"),
+                          QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it")
+                                  .arg(started));
+        return;
+    }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
     cancelRestore();
     mDisconnectRequested = false;
@@ -403,7 +419,7 @@ void MudletEngine::connectTo(const QString& host, quint16 port)
     persist();
     switch (mState) {
     case State::idle:
-        start(host, port, true);
+        start(host, port, true, tls);
         return;
     case State::starting:
         mPendingLua.append(code);
@@ -437,7 +453,7 @@ void MudletEngine::disconnectFromGame()
     persist();
     if (waiting && !mPendingLua.isEmpty()) {
         // Lua held back for the restore runs all the same
-        start({}, 0, false);
+        start({}, 0, false, mKept.tls);
     }
     if (mState == State::started && !mSession->runLua(QStringLiteral("disconnect()"))) {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
@@ -451,7 +467,7 @@ void MudletEngine::runLua(const QString& code)
         mPendingLua.append(code);
         // A restore that waits to connect starts the profile, and runs it then
         if (!mRestoreTimer.isActive()) {
-            start({}, 0, false);
+            start({}, 0, false, std::nullopt);
         }
         return;
     case State::starting:

@@ -11,6 +11,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <optional>
 
 class THeadlessSession;
 
@@ -25,7 +26,7 @@ public:
     explicit MudletEngine(IFrontend* frontend, int heartbeatMs = 30000, QObject* parent = nullptr);
     ~MudletEngine() override;
 
-    void connectTo(const QString& host, quint16 port) override;
+    void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
     void send(const QString& line) override;
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
@@ -53,7 +54,7 @@ private:
     void persist();
     QString restoreTarget() const;
     bool profileReconnects() const;
-    void start(const QString& host, quint16 port, bool connect);
+    void start(const QString& host, quint16 port, bool connect, std::optional<bool> tls);
     void onStartFinished(int result, const QString& error);
     void runNow(const QString& code);
     void reportFont();
@@ -75,6 +76,8 @@ private:
     QString mProfile;
     QString mConfigDir;
     State mState = State::idle;
+    // The TLS choice the profile was started with, unset when that start made none
+    std::optional<bool> mProfileTls;
     // Lua (connects included) asked for while the profile starts, run once it has
     QStringList mPendingLua;
     QString mErrorPending;

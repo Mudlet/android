@@ -53,7 +53,7 @@ message, in backquotes, with `?` after an optional one.
 |---|---|---|
 | `hello` | `v`, `client`, `instance`?, `lastSeq`? | Must be the first frame. `v` is the protocol version, `client` names the client (the app sends `android-compose`; the engine ignores it). `instance` and `lastSeq` are what the UI already has: the engine instance it last attached to and the last line `seq` it holds. The app sends both or neither. |
 | `ping` | `id` | Asks for a `pong` with the same `id`. |
-| `connect` | `host`, `port` | Connects the engine to a game server. `port` defaults to 23. |
+| `connect` | `host`, `port`, `tls`? | Connects the engine to a game server. `port` defaults to 23. `tls` true encrypts the connection, false does not; absent, the profile's own choice stands. libmudlet takes `tls` only when this `connect` starts the profile, and stores it with the profile, as Mudlet's connection dialog does: while the profile runs, a `tls` other than the one it started with gets status `connection` `error: ...`. The stand-in answers `tls` true the same way, as it has no TLS. A `tls` that is not a boolean gets `error`. |
 | `send` | `text` | A command line. libmudlet takes it as typed input (`THeadlessSession::submit()`); the stand-in sends it to the game as it is. |
 | `disconnect` | | Closes the game connection. |
 | `runLua` | `code`, `id` | Runs Lua in the engine. The result comes back as status `luaResult` with `re` set to `id`. |

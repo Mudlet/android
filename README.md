@@ -38,7 +38,8 @@ You need:
 - Qt 6.12.0 for `gcc_64` (host) and `android_arm64_v8a`;
 - an Android SDK with NDK 28.2.13676358, build-tools 37.0.0 and platform android-36;
 - JDK 21, Gradle 8.14 (the build uses AGP 8.13.2 and Kotlin 2.3.21), CMake and Ninja;
-- Python 3 for the host tests.
+- Perl and make for OpenSSL's build;
+- Python 3 and the `openssl` command for the host tests.
 
 The build files default to `~/Programs/Qt/6.12.0` and `~/Android/Sdk`, and build arm64-v8a. Override them with
 `QT_ROOT`, `ANDROID_SDK_ROOT` and `ANDROID_ABI` (`x86_64` for the emulator).
@@ -51,7 +52,9 @@ scripts/build-apk.sh
 
 This builds `native/` with Qt's Android CMake into `native/build-android-<abi>`, stages the engine and its Qt
 libraries into `engine-service/qtdeploy` with `androiddeployqt --aux-mode`, then runs Gradle's
-`:app:assembleDebug`. The APK is `app/build/outputs/apk/debug/app-debug.apk`. Gradle arguments go after the script's
+`:app:assembleDebug`. The engine's APK carries OpenSSL for Qt's TLS backend: the first run builds it into
+`native/openssl-<abi>` with [`scripts/build-openssl.sh`](scripts/build-openssl.sh), or `OPENSSL_PREFIX` names a
+prefix that script made (see "TLS" in [`docs/architecture.md`](docs/architecture.md)). The APK is `app/build/outputs/apk/debug/app-debug.apk`. Gradle arguments go after the script's
 name: `-PextractNativeLibs=true` has the installer extract the native libraries (see "Native libraries" in
 [`docs/architecture.md`](docs/architecture.md)).
 
@@ -84,7 +87,8 @@ QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-deskt
 # :protocol's tests, with the app's Kotlin client against that engine
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 
-# libmudlet on the host (the system's libraries; see the script's header), then the real engine against the fake server
+# libmudlet on the host (the system's libraries; see the script's header), then the real engine against the fake
+# server, in the clear and over TLS
 scripts/build-libmudlet-desktop.sh <mudlet> build-desktop
 cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64 \
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
@@ -109,10 +113,13 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
 
 - **APKs** (`.github/workflows/apks.yml`)
   - runs the stand-in engine's desktop test, and `:protocol`'s tests with the Kotlin client against that engine;
+  - builds OpenSSL for Android with [`scripts/build-openssl.sh`](scripts/build-openssl.sh) (a pinned release and its
+    checksum), cached under the script's hash by `.github/actions/android-openssl`;
   - builds the debug APK with the stand-in engine, and again with its libraries extracted at install;
-  - checks that each APK holds Qt and the engine, that its libraries are 16 KB aligned (their offsets in the APK and
-    their load segments), and that they are stored or compressed as `extractNativeLibs` says;
-  - uploads both APKs, and gives each one's size, and its size on the device, in the job summary.
+  - checks that each APK holds Qt and the engine, and OpenSSL as Qt's TLS backend loads it (`libcrypto_3.so` and
+    `libssl_3.so`, their names, the libraries they need, OpenSSL 3), that its libraries are 16 KB aligned (their
+    offsets in the APK and their load segments), and that they are stored or compressed as `extractNativeLibs` says;
+  - uploads both APKs, and gives each one's size, its size on the device, and OpenSSL's share, in the job summary.
 - **libmudlet for Android** (`.github/workflows/libmudlet.yml`) checks out Mudlet's `development` branch (or any ref
   given to a manual run).
   - It cross-builds libmudlet's dependencies for arm64-v8a with
@@ -131,7 +138,7 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
     backend, and uploads it.
   - A second job builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
-    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`). It also kills that engine
+    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`), in the clear and over TLS. It also kills that engine
     mid-session and checks that the next one restores the profile (`native/tests/test_mudlet_restore.py`).
   - A third job, **emulator**, builds the dependencies, libmudlet and the APK for x86_64 and runs it on an Android 15
     emulator (KVM, [android-emulator-runner](https://github.com/ReactiveCircus/android-emulator-runner) at a pinned
@@ -151,8 +158,10 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
     this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.
 
 Both install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
-aqtinstall). Qt, the NDK, the dependencies, Gradle, ccache and the emulator's system image are cached between runs.
+aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Gradle, ccache and the emulator's system image are
+cached between runs.
 
 ## Licences
 
 The stand-in engine vendors Lua 5.1.5 (MIT, see [`native/third_party/lua-5.1.5/COPYRIGHT`](native/third_party/lua-5.1.5/COPYRIGHT)).
+The APK carries OpenSSL 3, under the Apache License 2.0.

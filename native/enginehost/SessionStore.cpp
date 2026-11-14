@@ -48,8 +48,10 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
         }
     }
     Restore restore;
+    const QJsonValue tls = json.value(QLatin1String("tls"));
     restore.session = {json.value(QLatin1String("profile")).toString(), json.value(QLatin1String("host")).toString(),
-                       json.value(QLatin1String("port")).toInt(), json.value(QLatin1String("connect")).toBool()};
+                       json.value(QLatin1String("port")).toInt(), json.value(QLatin1String("connect")).toBool(),
+                       tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt};
     if (restore.session.profile.isEmpty()) {
         return {};
     }
@@ -81,9 +83,12 @@ void SessionStore::save(const Session& session)
     for (const qint64 ms : std::as_const(mRestores)) {
         restores.append(ms);
     }
-    const QJsonObject json{{QStringLiteral("v"), fileVersion},          {QStringLiteral("profile"), session.profile},
-                           {QStringLiteral("host"), session.host},      {QStringLiteral("port"), session.port},
-                           {QStringLiteral("connect"), session.connect}, {QStringLiteral("restores"), restores}};
+    QJsonObject json{{QStringLiteral("v"), fileVersion},          {QStringLiteral("profile"), session.profile},
+                     {QStringLiteral("host"), session.host},      {QStringLiteral("port"), session.port},
+                     {QStringLiteral("connect"), session.connect}, {QStringLiteral("restores"), restores}};
+    if (session.tls.has_value()) {
+        json.insert(QStringLiteral("tls"), *session.tls);
+    }
     QDir().mkpath(QFileInfo(mPath).absolutePath());
     // Written beside the file and renamed over it, so a kill part-way leaves the last whole one
     QSaveFile file(mPath);

@@ -3,6 +3,8 @@
 #include <QList>
 #include <QString>
 
+#include <optional>
+
 // What the engine keeps on disk so that, started again after it was killed, it can bring back the profile it ran and
 // its game connection (docs/architecture.md, "Restoring the session"). One JSON file, replaced atomically on each
 // change. An orderly stop removes it; a stop marker, which the app writes when the user stops the engine, removes it
@@ -27,6 +29,8 @@ public:
         int port = 0;
         // The connection is wanted: the profile is connected, or would connect again on its own
         bool connect = false;
+        // The TLS choice the profile was started with; unset for the one stored in the profile
+        std::optional<bool> tls;
 
         bool operator==(const Session&) const = default;
     };

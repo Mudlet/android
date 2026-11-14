@@ -172,7 +172,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - `clearWindow()`, and the replay after a clear;
 - a 3000-line flood that arrives whole and in order;
 - Lua errors;
-- the profile's save on quit.
+- the profile's save on quit;
+- TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
+  certificate accepted once the profile accepts self-signed ones.
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
 
@@ -198,7 +200,8 @@ If the engine crashes, it stops with the crash from logcat, symbolised with `ndk
   `linksChanged`).
 - The main window's size (`setScreenSize()`) is not passed on, so the game is told 90 by 25 if
   it asks.
-- No bundled fonts, no TLS (the APK ships no OpenSSL).
+- No bundled fonts.
+- TLS is chosen when the profile starts (see "TLS" below).
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
   `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
@@ -218,6 +221,8 @@ stand-in does not.
 - the host and port the UI last connected it to, passed again as `Options::host` and `port` (an empty host leaves
   the address stored in the profile);
 - whether the connection is wanted;
+- the TLS choice the profile was started with, if the `connect` that started it made one, passed again as
+  `Options::tls`, so that the UI's next `connect` with that choice is not refused;
 - when each restore within the last 10 minutes started.
 
 The file is rewritten whenever one of these changes, through `QSaveFile`, so a kill part-way through leaves the last
@@ -493,6 +498,76 @@ libraries' size, so it grows with libmudlet's engine. A store download is compre
 either way, so its size should change little; that was not measured. The default stays off while
 the APK ships no Lua C module that `require()` must find on `package.cpath`.
 
+## TLS
+Qt for Android has no TLS of its own: its OpenSSL backend (`plugins/tls/qopensslbackend`) loads OpenSSL at run
+time, and Android has none an app may load. Without it the engine logs `qt.network.ssl: No functional TLS backend`,
+`QSslSocket::supportsSsl()` is false, Mudlet refuses a profile with TLS on ("Mudlet can not load support for secure
+connections"), and https downloads (packages, maps) fail. The APK therefore carries OpenSSL.
+
+**What Qt 6.12.0 expects**, read from its sources (`qtbase/src/plugins/tls/openssl/qsslsocket_openssl_symbols.cpp`)
+and checked in the prebuilt plugin:
+- OpenSSL 3. The plugin is built against OpenSSL 3 headers and refuses a library older than 3.0
+  ("Incompatible version of OpenSSL").
+- The files `libcrypto_3.so` and `libssl_3.so`. On Android it `dlopen`s `crypto` and `ssl` with the suffix `_` plus the
+  major version it was built with, so it never picks up the system's own `libcrypto.so`. `ANDROID_OPENSSL_SUFFIX` in
+  the environment would change the suffix; nothing sets it. Each library's SONAME must be its file name, and
+  `libssl_3.so` must need `libcrypto_3.so`, not `libcrypto.so.3`.
+- Packaging through the target property `QT_ANDROID_EXTRA_LIBS`. `androiddeployqt` copies those libraries into
+  `libs/<abi>/`, `--aux-mode` included, and lists them in `libs.xml` as `extra_libs`, so Qt's loader loads them at
+  start, before the engine.
+
+**The build.** [`scripts/build-openssl.sh`](../scripts/build-openssl.sh) builds OpenSSL 3.5.9, an LTS release
+supported until April 2030, from its release tarball, checked against a pinned sha256. It uses OpenSSL's own Android
+targets with the NDK at API 28 for `arm64-v8a` or `x86_64`. A target of its own adds `shlib_variant => "_3"`, which
+gives the files, their SONAMEs and the dependency the suffix. The libraries are linked with
+`-z max-page-size=16384` and stripped. The script fails unless their SONAMEs, `libssl_3.so`'s dependency and every
+LOAD segment's 16 KB alignment are as Qt and Android need. Engines, the legacy provider and loadable modules are
+left out, as Qt uses none of them. `native/enginehost/CMakeLists.txt` refuses to configure for Android without
+`ANDROID_OPENSSL_DIR`, so no APK ships without TLS. `scripts/build-apk.sh` passes it, building OpenSSL into
+`native/openssl-<abi>` on its first run. CI builds OpenSSL once and caches it under the script's hash
+(`.github/actions/android-openssl`).
+
+The cost is 6.6 MB of `lib/arm64-v8a`, stored uncompressed: `libcrypto_3.so` 5.5 MB and `libssl_3.so` 1.0 MB. CI's
+job summary gives the size of each APK with them.
+
+**Certificates.** The engine checks a game's certificate as Mudlet's GUI does. Qt verifies the chain and the host
+name; a certificate that fails ends the connection, the reasons are printed in the main console ("[ ALERT ] - Socket
+got disconnected", then reasons such as "The certificate is self-signed, and untrusted"), status `connection`
+becomes `disconnected`, and the profile does not reconnect. A profile that accepts expired or self-signed certificates, or any error (the GUI's three boxes, saved
+with the profile), connects anyway. The app has no screen for those boxes yet, so a self-signed game needs a
+profile from the GUI or edited by hand. A secure connection needs the game's name, not an IP address, as Mudlet
+refuses TLS to a raw address.
+
+On Android Qt does not read a certificate folder. The first TLS connection asks Java's default `TrustManagerFactory`
+for its accepted issuers (`QtNative.getSSLCertificates()`), Android's system CAs, and Qt keeps them for the process.
+Whether CAs the user installed are among them is for a device to show. On the desktop Qt reads the system's
+certificate folders, such as `/etc/ssl/certs`.
+
+**The protocol.** `connect` carries `tls`, which libmudlet passes to `THeadlessSession::Options::tls` when that
+connect starts the profile; Mudlet stores it with the profile, as its connection dialog does. `THeadlessSession`
+takes the choice only at start, so while the profile runs a `connect` with a different `tls` is refused with status
+`connection` `error: ...`; stopping and starting the engine changes it. An engine restored after a kill starts
+the profile with the choice it was started with (see "Restoring the session"). The stand-in engine has no TLS and refuses
+`tls` true the same way. The self-test screen has a TLS box beside the port.
+
+**Tests.** `native/tests/test_mudlet_engine.py` runs the real engine on the host, with the host's Qt and OpenSSL,
+against `fake_telnet.py` behind Python's `ssl` with a certificate it makes with the `openssl` command:
+- a self-signed certificate is refused, with Mudlet's reasons, no game text, and a handshake the server sees fail;
+- TLS to the plain port fails as "Secure handshake failed";
+- a `connect` without TLS to the running TLS profile is refused;
+- after the profile's `mSslIgnoreSelfSigned` is set in its save, the same server's banner arrives and the game sees
+  a TLS 1.x connection.
+
+CI's APK check (`.github/actions/check-apk`) looks in each APK for the files Qt will load: `libcrypto_3.so`,
+`libssl_3.so` and Qt's OpenSSL plugin, that plugin's `_3` suffix, the SONAMEs, `libssl_3.so`'s dependency on
+`libcrypto_3.so`, a few of the functions Qt resolves, OpenSSL 3's version string, and 16 KB alignment.
+
+**Only a device can show** that the handshake works on Android: that Qt's loader loads both libraries, that the
+plugin finds them, and that `supportsSsl()` is true. The same goes for the system CA store: whether Qt gets
+Android's CAs, how long fetching them takes at the first connection, and whether a CA the user installed is
+trusted.
+Item 13 of the on-device checklist covers this.
+
 ## On-device checklist
 1. Install the APK with `adb install -r app-debug.apk`. Open it and allow notifications.
 2. **The critical check: does Qt start in a service-only process?**
@@ -552,6 +627,16 @@ the APK ships no Lua C module that `require()` must find on `package.cpath`.
     - Also check whether tells arrived as notifications while the screen was off.
 12. Measure memory with `adb shell dumpsys meminfo org.mudlet.mudlet:engine`, and
     the same for the UI process.
+13. TLS, with the libmudlet APK (the stand-in has no TLS).
+    - Check that `adb logcat | grep -i ssl` shows no "No functional TLS backend".
+    - Tick TLS and connect to a game from Mudlet's list that has TLS on, such as MUME (`mume.org`, 4242). Expect the
+      game's text and `connected`, then note the time from Connect to the first line.
+    - https, as package and map downloads use it: send
+      `lua registerAnonymousEventHandler("sysDownloadDone", function(_, f) echo("got " .. f .. "\n") end)
+      registerAnonymousEventHandler("sysDownloadError", function(_, e) echo("failed: " .. e .. "\n") end)
+      downloadFile(getMudletHomeDir() .. "/tls-check.html", "https://www.mudlet.org/")` as one line, and expect
+      "got".
+    - With TLS ticked, connect to a game whose port has no TLS. Expect "Secure handshake failed".
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

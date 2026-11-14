@@ -19,7 +19,7 @@ public:
     explicit Engine(IFrontend* frontend, int heartbeatMs = 30000, QObject* parent = nullptr);
     ~Engine() override;
 
-    void connectTo(const QString& host, quint16 port) override;
+    void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
     void send(const QString& line) override;
     void disconnectFromGame() override;
     void runLua(const QString& code) override;

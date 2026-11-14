@@ -3,8 +3,9 @@
 .kotlin/
 build/
 local.properties
-# scripts/build-apk.sh: native builds and the Qt libraries androiddeployqt stages for :engine-service
-/native/build*/
+# scripts/build-apk.sh: native builds, OpenSSL, and the Qt libraries androiddeployqt stages for :engine-service
+/native/build*
+/native/openssl-*
 /engine-service/qtdeploy/
 # Python tests
 __pycache__/

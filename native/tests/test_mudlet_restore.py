@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Host test of the session restore of the engine with libmudlet (MudletEngine, SessionStore): the engine is killed
 (SIGKILL) mid-session and started again, as Android does, and must bring the profile back and reconnect it to
-fake_telnet.py; it must not after an orderly stop, the app's stop marker or the user's disconnect, nor keep restoring
-in a crash loop. Build the engine as for test_mudlet_engine.py.
+fake_telnet.py, with the TLS choice it was started with; it must not after an orderly stop, the app's stop marker or
+the user's disconnect, nor keep restoring in a crash loop. Build the engine as for test_mudlet_engine.py.
 
 usage: test_mudlet_restore.py <path-to-engine-binary>
 """
@@ -204,6 +204,26 @@ def restarted_after_kill(port):
     return e
 
 
+def tls_choice_restored(e, port):
+    """A profile started with a TLS choice is restored with it, so the UI's next connect with that choice is taken."""
+    e.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": False})
+    e.wait_status("connection", lambda v: v == "connected")
+    check(state() is not None and state().get("tls") is False, f"the TLS choice is kept: {state()}")
+    e.kill()
+    e = Engine()
+    value = e.wait_status("restore", lambda v: v.startswith("reconnected"))
+    check(value == f"reconnected 127.0.0.1:{port}", f"a profile started without TLS is restored: {value}")
+    e.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
+    value = e.wait_status("connection", lambda v: v.startswith("error"))
+    check("started without TLS" in value, f"it runs as it was started, without TLS: {value}")
+    e.status.pop("connection")
+    e.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": False})
+    e.drain(QUIET_S)
+    value = e.status.get("connection", "")
+    check(not value.startswith("error"), f"and a connect with the same choice is taken: {value}")
+    return e
+
+
 def nothing_restored(e, t0, what):
     e.drain(QUIET_S)
     check(e.restores == [], f"{what}: no restore reported: {e.restores}")
@@ -350,6 +370,8 @@ def crash_loop(e, port):
 def main():
     port = fake_telnet.start_in_thread()
     e = restarted_after_kill(port)
+    e = orderly_stop(e)
+    e = tls_choice_restored(e, port)
     e = orderly_stop(e)
     e = stop_marker(e, port)
     e = user_disconnect(e, port)

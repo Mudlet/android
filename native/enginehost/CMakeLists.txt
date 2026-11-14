@@ -42,4 +42,19 @@ if(ANDROID)
         QT_ANDROID_MIN_SDK_VERSION 28
         QT_ANDROID_TARGET_SDK_VERSION 36
         QT_ANDROID_COMPILE_SDK_VERSION 36)
+
+    # Qt's TLS backend dlopens OpenSSL 3 as libcrypto_3.so and libssl_3.so, which Android does not have: without them
+    # Qt has no TLS backend, so neither games over TLS nor https work. scripts/build-openssl.sh builds them;
+    # androiddeployqt copies QT_ANDROID_EXTRA_LIBS into the APK and lists them in libs.xml, so Qt loads them at start.
+    set(ANDROID_OPENSSL_DIR "" CACHE PATH "Folder with libcrypto_3.so and libssl_3.so for ${ANDROID_ABI} (scripts/build-openssl.sh)")
+    if(NOT ANDROID_OPENSSL_DIR)
+        message(FATAL_ERROR "Set ANDROID_OPENSSL_DIR to the lib folder of a prefix scripts/build-openssl.sh made")
+    endif()
+    set(openssl_libs "${ANDROID_OPENSSL_DIR}/libcrypto_3.so" "${ANDROID_OPENSSL_DIR}/libssl_3.so")
+    foreach(lib IN LISTS openssl_libs)
+        if(NOT EXISTS "${lib}")
+            message(FATAL_ERROR "No ${lib}: is ANDROID_OPENSSL_DIR the lib folder of a prefix scripts/build-openssl.sh made?")
+        endif()
+    endforeach()
+    set_property(TARGET engine APPEND PROPERTY QT_ANDROID_EXTRA_LIBS ${openssl_libs})
 endif()

@@ -28,7 +28,8 @@ export ANDROID_SDK_ROOT=~/Android/Sdk ANDROID_HOME=~/Android/Sdk
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ```
 
-Builds run with two jobs and two Gradle workers (`gradle.properties`); raise `JOBS` on a machine of your own.
+`scripts/build-apk.sh` builds with two jobs, and Gradle with two workers (`gradle.properties`); the libmudlet and
+dependency scripts use every core unless `JOBS` says otherwise.
 
 ## Build
 
@@ -111,8 +112,8 @@ is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editor
 
 ## Pinned versions
 
-These are pinned to the exact version, and some must move together. Dependabot bumps the Gradle libraries, AGP,
-Kotlin and Gradle to their next patch release only, the actions and the linters; the rest is bumped by hand.
+These are pinned to the exact version, and some must move together. Dependabot bumps the Gradle libraries, the
+actions and the linters, but AGP, Kotlin and Gradle only to a new patch release; the rest is bumped by hand.
 
 | What | Version | Where |
 |---|---|---|

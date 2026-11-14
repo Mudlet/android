@@ -9,8 +9,9 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     ignore:
-      # AGP 8.13 is the newest that runs on Gradle 8.14 (Qt 6.12's templates want AGP 9, which needs Gradle 9);
-      # Kotlin and the Compose compiler plugin share one version, and a new Kotlin minor can need a newer AGP
+      # A new AGP minor or major can need a newer Gradle (AGP 9 needs Gradle 9), and moves with Qt's Android
+      # templates; Kotlin and the Compose compiler plugin share one version, and a new Kotlin minor can need a
+      # newer AGP
       - dependency-name: "com.android.*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "org.jetbrains.kotlin*"

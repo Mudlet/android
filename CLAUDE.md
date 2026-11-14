@@ -28,7 +28,8 @@ CONTRIBUTING.md's "Test".
 
 ## Rules
 
-- The machine may be shared: keep `-j2` and Gradle's two workers (`gradle.properties`).
+- The machine may be shared: keep Gradle's two workers (`gradle.properties`), and pass `JOBS=2` to the libmudlet
+  and dependency scripts, which otherwise use every core.
 - Before a commit: `scripts/lint.sh`, and the tests for what changed. Formatting-only changes go in a commit of
   their own.
 - A protocol change updates `docs/protocol.md`, `SocketBridge`, `Protocol.kt` and `native/tests/protocol_client.py`

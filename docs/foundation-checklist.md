@@ -22,7 +22,7 @@ pass"). GitHub matches them by job name:
 
 | Check | Workflow | Require? |
 |---|---|---|
-| `ktlint`, `clang-format`, `shellcheck`, `actionlint` | Checks | Yes: they run on every pull request and take seconds |
+| `ktlint`, `clang-format`, `shellcheck`, `actionlint` | Checks | Yes: they run on every pull request, and are quick |
 | `APK`, `APK (extracted libs)` | APKs | Yes, once `apks.yml`'s `pull_request` trigger loses its `paths` filter (below) |
 | `libmudlet`, `desktop-engine`, `emulator` | libmudlet for Android | No: they build Mudlet's moving `development`, so they can go red for a reason outside the pull request. Read them on pull requests that touch `native/`, `engine-service/` or the scripts; the nightly opens an issue when they fail |
 

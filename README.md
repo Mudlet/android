@@ -163,7 +163,7 @@ files), and on demand:
     this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.
 - **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh) on every pull request: ktlint
   on the Kotlin, clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the
-  workflows, as four jobs of a few seconds each.
+  workflows, as four short jobs.
 
 Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
 versions tied to them are bumped by hand (see "Pinned versions" in [`CONTRIBUTING.md`](CONTRIBUTING.md)).

@@ -8,12 +8,14 @@
 #include <QElapsedTimer>
 #include <QList>
 #include <QObject>
+#include <QSize>
 #include <QStringList>
 #include <QTimer>
 
 #include <memory>
 #include <optional>
 
+class QColor;
 class THeadlessSession;
 
 // libmudlet behind the same host protocol as the stand-in: one profile at a time in a THeadlessSession, started by
@@ -35,7 +37,7 @@ public:
     QStringList history() const override;
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
-    void setViewWidthPx(int px) override;
+    void setScreenSize(int columns, int rows) override;
     QList<Profile> profiles() const override { return mProfiles.profiles(); }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
@@ -90,6 +92,8 @@ private:
     void onStartFinished(int result, const QString& error);
     void runNow(const QString& code);
     void reportFont();
+    void applyScreenSize();
+    void reportConsoleColors(const QColor& foreground, const QColor& background);
     void onHeartbeat();
     void flushCounters();
     void markCountersDirty();
@@ -142,9 +146,11 @@ private:
     // What the frontend was last sent as the tail; its kind is not used
     OpenLine mSentTail;
 
+    // The UI's last setScreenSize, given to each profile as it loads; empty until then
+    QSize mScreenSize;
+
     QTimer mHeartbeat;
     QTimer mCounterTimer;
-    int mAdvancePx = 0;
     qint64 mLinesReceived = 0;
     qint64 mPromptsReceived = 0;
     qint64 mLocalLines = 0;

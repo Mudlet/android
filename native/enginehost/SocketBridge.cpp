@@ -222,8 +222,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         mEngine->disconnectFromGame();
     } else if (type == QLatin1String("runLua")) {
         mEngine->runLua(message.value(QLatin1String("code")).toString());
-    } else if (type == QLatin1String("setViewWidthPx")) {
-        mEngine->setViewWidthPx(message.value(QLatin1String("px")).toInt());
+    } else if (type == QLatin1String("setScreenSize")) {
+        setScreenSize(message);
     } else if (type == QLatin1String("listProfiles")) {
         sendProfiles();
     } else if (type == QLatin1String("saveProfile")) {
@@ -283,6 +283,21 @@ void SocketBridge::complete(const QJsonObject& message)
         return;
     }
     status(QStringLiteral("completion"), mEngine->complete(message.value(QLatin1String("text")).toString(), fromHistory.toBool(false)));
+}
+
+void SocketBridge::setScreenSize(const QJsonObject& message)
+{
+    const double columns = message.value(QLatin1String("columns")).toDouble(-1);
+    const double rows = message.value(QLatin1String("rows")).toDouble(-1);
+    // NAWS carries each in 16 bits
+    const auto fits = [](double n) {
+        return n == std::floor(n) && n >= 1 && n <= 65535;
+    };
+    if (!fits(columns) || !fits(rows)) {
+        sendError(QStringLiteral("setScreenSize: columns and rows must be whole numbers from 1 to 65535"));
+        return;
+    }
+    mEngine->setScreenSize(int(columns), int(rows));
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -453,5 +468,13 @@ void SocketBridge::commandLine(const QString& text)
 {
     if (clientLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("commandLine")}, {QStringLiteral("text"), text}});
+    }
+}
+
+// Not kept, as notify: a UI that attaches later has missed the moment it was for
+void SocketBridge::announce(const QString& text, bool assertive)
+{
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("announce")}, {QStringLiteral("text"), text}, {QStringLiteral("assertive"), assertive}});
     }
 }

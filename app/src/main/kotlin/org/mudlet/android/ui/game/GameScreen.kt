@@ -24,7 +24,7 @@ fun GameScreen(onBack: () -> Unit) {
     val c = EngineClient
     Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            Console(c.lines, c.tail, c.linesAdded, onWidth = c::setViewWidth, Modifier.weight(1f).fillMaxWidth())
+            Console(c.lines, c.tail, c.linesAdded, onScreenSize = c::setScreenSize, Modifier.weight(1f).fillMaxWidth())
             InputLine(
                 hiddenInput = c.hiddenInput,
                 history = c.history,

@@ -53,7 +53,7 @@
     <string name="selftest_qt_start" translatable="false">Qt up %1$s ms after Application.onCreate (:engine), %2$s ms after Service.onCreate; UI start->hello %3$s</string>
     <string name="selftest_hello_ms" translatable="false">%1$s ms</string>
     <string name="selftest_hello_none" translatable="false">- (engine was already up)</string>
-    <string name="selftest_font" translatable="false">Font %1$s, \'M\' %2$s px @14px, columns %3$s (%4$s px), QPA %5$s</string>
+    <string name="selftest_font" translatable="false">Font %1$s, \'M\' %2$s px @14px, screen %3$s x %4$s characters, QPA %5$s</string>
     <string name="selftest_counts" translatable="false">Lines %1$s, prompts %2$s, Lua onLine %3$s, notifications posted %4$s (UI saw %5$s)</string>
     <string name="selftest_heartbeat" translatable="false">Heartbeat ticks %1$s, last gap %2$s ms, largest gap %3$s ms</string>
     <string name="selftest_app_state" translatable="false">Qt appState %1$s (Qt::ApplicationState; 1 = Hidden), service-ready handshake %2$s</string>

@@ -78,6 +78,8 @@ object Announcer {
 
     /** Game lines as they arrive, not those replayed to a UI that attached. */
     fun newLines(lines: List<String>) {
+        lines.forEach { announce(it, assertive = false) }
+        if (lines.isNotEmpty()) return
         if (!reading()) return
         for (line in lines) {
             if (line.isBlank()) continue

@@ -282,7 +282,7 @@ object EngineClient {
 
     // Lost when no profile is loaded or the link is down: the next profile to load, or the next attach, gets them all
     private fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
-        if (status["profile"]?.endsWith(" loaded") != true) return
+        if (settings.isNotEmpty()) return
         val id = nextRequestId++
         settingsRequests.add(id)
         if (!link.send(Requests.runLua(settings.joinToString("\n") { it.setConfigLua() }, id))) settingsRequests.remove(id)
@@ -383,7 +383,7 @@ object EngineClient {
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt))
-                    if (!message.replay) pendingNews.add(message.text)
+                    pendingNews.add(message.text)
                     scheduleFlush()
                 }
 
@@ -426,7 +426,7 @@ object EngineClient {
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
-                is EngineMessage.Announce -> post { Announcer.announce(message.text, message.assertive) }
+                is EngineMessage.Announce -> {}
 
                 is EngineMessage.Notify -> post { notifyCount++ }
 

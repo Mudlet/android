@@ -311,24 +311,26 @@ void SocketBridge::setScreenSize(const QJsonObject& message)
 
 namespace {
 
-// A link id as runs carry it, a whole number from 1; 0 for a value that is not one
-int linkId(const QJsonValue& value)
+std::optional<int> wholeNumber(const QJsonValue& value, int least)
 {
-    const double id = value.toDouble(0);
-    return id == std::floor(id) && id >= 1 && id <= std::numeric_limits<int>::max() ? int(id) : 0;
+    const double n = value.toDouble(-1);
+    if (!value.isDouble() || n != std::floor(n) || n < least || n > std::numeric_limits<int>::max()) {
+        return std::nullopt;
+    }
+    return int(n);
 }
 
 } // namespace
 
 void SocketBridge::getLink(const QJsonObject& message)
 {
-    const int id = linkId(message.value(QLatin1String("link")));
-    if (id == 0) {
+    const std::optional<int> id = wholeNumber(message.value(QLatin1String("link")), 1);
+    if (!id) {
         sendError(QStringLiteral("getLink: link must be a whole number from 1"));
         return;
     }
     Link link;
-    if (const QString problem = mEngine->link(id, link); !problem.isEmpty()) {
+    if (const QString problem = mEngine->link(*id, link); !problem.isEmpty()) {
         sendError(QStringLiteral("getLink: %1").arg(problem));
         return;
     }
@@ -337,7 +339,7 @@ void SocketBridge::getLink(const QJsonObject& message)
         items.append(QJsonObject{{QStringLiteral("label"), item.label}, {QStringLiteral("enabled"), item.enabled}, {QStringLiteral("separator"), item.separator}});
     }
     QJsonObject reply{{QStringLiteral("t"), QStringLiteral("link")},
-                      {QStringLiteral("link"), id},
+                      {QStringLiteral("link"), *id},
                       {QStringLiteral("tooltip"), link.tooltip},
                       {QStringLiteral("menu"), link.menu},
                       {QStringLiteral("menuTitle"), link.menuTitle},
@@ -362,18 +364,18 @@ void SocketBridge::getLink(const QJsonObject& message)
 
 void SocketBridge::followLink(const QJsonObject& message)
 {
-    const int id = linkId(message.value(QLatin1String("link")));
+    const std::optional<int> id = wholeNumber(message.value(QLatin1String("link")), 1);
     const QJsonValue itemValue = message.value(QLatin1String("item"));
-    const double item = itemValue.toDouble(-1);
-    if (id == 0) {
+    const std::optional<int> item = wholeNumber(itemValue, 0);
+    if (!id) {
         sendError(QStringLiteral("followLink: link must be a whole number from 1"));
         return;
     }
-    if (!itemValue.isUndefined() && (!itemValue.isDouble() || item != std::floor(item) || item < 0 || item > std::numeric_limits<int>::max())) {
+    if (!itemValue.isUndefined() && !item) {
         sendError(QStringLiteral("followLink: item must be a whole number from 0"));
         return;
     }
-    if (const QString problem = mEngine->followLink(id, itemValue.isUndefined() ? std::nullopt : std::optional<int>(int(item))); !problem.isEmpty()) {
+    if (const QString problem = mEngine->followLink(*id, item); !problem.isEmpty()) {
         sendError(QStringLiteral("followLink: %1").arg(problem));
     }
 }

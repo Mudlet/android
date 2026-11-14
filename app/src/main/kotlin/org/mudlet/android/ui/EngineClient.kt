@@ -14,9 +14,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.mudlet.android.engine.EngineService
+import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.EngineRestore
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.Transport
 import java.io.IOException
@@ -94,6 +96,8 @@ object EngineClient {
 
     fun stopEngine() {
         engineWanted = false
+        // Also when the engine is not running: one that died with a profile must not bring it back at the next start
+        EngineSession.markStopped(app)
         app.stopService(Intent(app, EngineService::class.java))
     }
 
@@ -298,9 +302,11 @@ object EngineClient {
             flushPosted = false
         }
         if (statusReset) status.clear()
+        val restore = EngineRestore.marker(status[EngineRestore.STATUS_KEY], newStatus[EngineRestore.STATUS_KEY])
         status.putAll(newStatus)
         newStatus["luaResult"]?.let { lastLuaResult = it }
         if (clear) lines.clear()
+        if (restore != null) lines.add(UiLine(restore, IntArray(0), false, marker = true))
         if (newLines.size >= MAX_LINES) {
             lines.clear()
             lines.addAll(newLines.subList(newLines.size - MAX_LINES, newLines.size))

@@ -208,7 +208,8 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
             if (s["engineKind"] == "libmudlet") {
                 Text(
                     "libmudlet: ${s["profile"] ?: "?"}, start ${s["startMs"] ?: "-"} ms, loaded after ${s["profileLoadMs"] ?: "-"} ms; " +
-                        "Lua files ${s["luaFiles"] ?: "?"}; local lines ${s["localLines"] ?: 0}, error console ${s["errorConsoleLines"] ?: 0}",
+                        "Lua files ${s["luaFiles"] ?: "?"}; local lines ${s["localLines"] ?: 0}, error console ${s["errorConsoleLines"] ?: 0}; " +
+                        "restore ${s["restore"] ?: "-"}",
                     style = small,
                 )
                 s["luaError"]?.let { Text("Last error: $it", style = small.copy(color = Color(0xFFFF8080))) }

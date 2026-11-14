@@ -341,9 +341,11 @@ def main():
     handshake(c)
     t_kill = time.monotonic()
     os.kill(proc.pid, signal.SIGKILL)
+    # Frames already sent before the kill (a heartbeat status) may come first
+    eof = False
     try:
-        c.recv(5)
-        eof = False
+        while time.monotonic() - t_kill < 5 and c.recv(5 - (time.monotonic() - t_kill)) is not None:
+            pass
     except Closed:
         eof = True
     detect_ms = (time.monotonic() - t_kill) * 1000

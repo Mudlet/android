@@ -29,6 +29,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 | `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
+| `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
 | `native/standin/` | The stand-in engine for fast tests: minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
@@ -107,6 +108,35 @@ This matters on Android because the cached-app freezer can freeze a
 backgrounded UI process mid-read. Verified on the host:
 - With a stalled reader, the engine kept running at 42-60 MB RSS. When the
   reader resumed it received 1999 lines and one `gap`.
+
+### Command suggestions
+`:suggest` ranks what the input line offers as the player types. It runs in the UI process and only on the
+device: no network, no engine round trip, so it can answer every (debounced) keystroke. One `CommandSuggester`
+per profile, from `SuggesterRegistry.forProfile(name)`:
+
+- `recordSent(text, hidden)` after each send. With `hidden = true` (the game asked for a password) it stores
+  nothing, and the next command is not linked to the one before it.
+- `observeLine(text)` for each game line, without its colours.
+- `suggest(input, cursor, limit)` returns `Suggestions`: `items`, best first and one per resulting text, each a
+  `Suggestion` with `text` (the whole input line it leads to), `cursor`, `label`, `kind` (`COMMAND` or `WORD`) and
+  `source` (`HISTORY`, `SEQUENCE`, `LINE` or `OUTPUT`); and `ghost`, the text to show greyed after the cursor
+  when the best item only extends the input.
+- `save(Appendable)` and `load(Reader)`, a line-based text (`SuggestCodec`) the app keeps in the profile's
+  private storage; a damaged line is skipped, and `load`'s `LoadResult` says how many were and whether the text
+  was this format at all. `forget(command)` and `clear()` for the player.
+
+What it ranks:
+
+| Source | When | How |
+|---|---|---|
+| History | Input typed | Case-insensitive subsequence match (`FuzzyMatch`): a prefix first, then word starts, then runs; plus frecency, each use weighing half as much every 7 days |
+| Sequence | Empty input; lifts history while typing | Counts of what the player sent after the previous command, and after any command with its first word ("kill rat", "kill orc", then "loot") |
+| Line | Empty input; lifts history while typing | Counts of what the player sent after a game line, the last three lines since the previous send, with numbers as `#` and capitalised words after the first as `*` |
+| Output | A word at the cursor | Words of the last 2000 words of output that extend it, newest first |
+
+Everything is bounded (5000 commands, 4000 and 2000 prediction keys of 8 commands each), and counts halve as they
+grow, so recent play outweighs old. All calls take one lock; `suggest` is O(entries × command length): 1 to 4 ms
+for 5000 entries on a desktop JVM, so the app calls it debounced and off the main thread.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):

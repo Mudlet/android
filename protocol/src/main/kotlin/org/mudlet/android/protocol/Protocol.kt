@@ -124,7 +124,7 @@ object Requests {
         .apply { if (item != null) put("item", item) }
 
     /** The app in front ([active]) or not, and its window minimized or in the background; leaving the front saves the profile. */
-    fun setAppState(active: Boolean, minimized: Boolean): JSONObject = JSONObject().put("t", "setAppState").put("active", active).put("minimized", minimized)
+    fun setAppState(active: Boolean, minimized: Boolean): JSONObject = JSONObject().put("t", "setAppState").put("active", active).put("minimized", active)
 
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
 
@@ -231,10 +231,6 @@ class FrameReader(input: InputStream) {
             )
 
             "linksChanged" -> EngineMessage.LinksChanged(o.optJSONArray("ids")?.let { ids -> List(ids.length()) { ids.getInt(it) } } ?: emptyList())
-
-            "attention" -> EngineMessage.Attention(o.optInt("ms"))
-
-            "moveTypedLine" -> EngineMessage.MoveTypedLine
 
             else -> EngineMessage.Unknown(t)
         }

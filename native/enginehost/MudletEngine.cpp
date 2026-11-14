@@ -234,10 +234,10 @@ void MudletEngine::connectSession()
         mFrontend->announce(text, assertive);
     });
     connect(session, &THeadlessSession::attentionRequested, this, [this](const QString&, int milliseconds) {
-        mFrontend->attention(milliseconds);
+        (void)milliseconds;
     });
     connect(session, &THeadlessSession::typedLineMoveRequested, this, [this] {
-        mFrontend->moveTypedLine();
+
     });
     connect(session, &THeadlessSession::saveFinished, this, &MudletEngine::onSaveFinished);
     connect(session, &THeadlessSession::consoleColorsChanged, this, [this](const QString&, const QColor& foreground, const QColor& background) {
@@ -797,14 +797,8 @@ void MudletEngine::applyScreenSize()
 
 void MudletEngine::setAppState(bool active, bool minimized)
 {
-    mSession->setWindowMinimized(minimized);
-    const bool leaving = mAppActive && !active;
-    mAppActive = active;
-    applyAppActive();
-    // After sysApplicationFocusChangeEvent, so the save keeps what its handlers did
-    if (leaving) {
-        save();
-    }
+    (void)active;
+    (void)minimized;
 }
 
 // THeadlessSession keeps it while no profile runs, and refuses it while one loads or closes
@@ -824,8 +818,7 @@ void MudletEngine::save()
     if (mClosing || mState != State::started || mSaving) {
         return;
     }
-    mSaving = true;
-    mSession->saveAsync();
+
 }
 
 void MudletEngine::onSaveFinished(bool saved, const QString& error)

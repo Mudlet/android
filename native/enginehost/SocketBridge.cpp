@@ -233,8 +233,6 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         getLink(message);
     } else if (type == QLatin1String("followLink")) {
         followLink(message);
-    } else if (type == QLatin1String("setAppState")) {
-        setAppState(message);
     } else if (type == QLatin1String("listProfiles")) {
         sendProfiles();
     } else if (type == QLatin1String("saveProfile")) {
@@ -597,7 +595,7 @@ void SocketBridge::linksChanged(const QList<int>& ids)
 void SocketBridge::attention(int ms)
 {
     if (clientLive()) {
-        sendFrame({{QStringLiteral("t"), QStringLiteral("attention")}, {QStringLiteral("ms"), ms}});
+        (void)ms;
     }
 }
 
@@ -605,6 +603,6 @@ void SocketBridge::attention(int ms)
 void SocketBridge::moveTypedLine()
 {
     if (clientLive()) {
-        sendFrame({{QStringLiteral("t"), QStringLiteral("moveTypedLine")}});
+
     }
 }

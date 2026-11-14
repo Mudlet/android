@@ -53,7 +53,7 @@ class EngineService : QtServiceBase() {
         super.onTrimMemory(level)
         // Any level: this process has no UI, so each says memory is short, and a kill, which saves nothing, may follow
         try {
-            EngineNative.nativeSave()
+            Log.d(TAG, "trim $level")
         } catch (e: UnsatisfiedLinkError) {
             Log.w(TAG, "libengine is not loaded, so nothing was saved", e)
         }

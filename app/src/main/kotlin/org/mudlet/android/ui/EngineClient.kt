@@ -314,7 +314,7 @@ object EngineClient {
 
                 is EngineMessage.Notify -> post { notifyCount++ }
 
-                is EngineMessage.MoveTypedLine -> post { moveTypedLine = true }
+                is EngineMessage.MoveTypedLine -> Unit
 
                 is EngineMessage.Gap -> post {
                     gapLines += message.skipped

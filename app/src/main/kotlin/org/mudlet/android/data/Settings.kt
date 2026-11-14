@@ -9,7 +9,7 @@ import androidx.core.content.edit
 
 /**
  * The app's own settings, kept in SharedPreferences. Each one is Compose state, read and set on the main thread. A new
- * setting is a property here and a row on the settings screen.
+ * setting is a property here, in [all] so that it loads, and a row on the settings screen.
  */
 object Settings {
     private const val PREFS = "settings"

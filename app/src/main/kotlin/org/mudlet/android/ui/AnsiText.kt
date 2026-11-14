@@ -65,7 +65,8 @@ fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors()): AnnotatedSt
         val attributes = line.runs[i + 4]
         var fg = runColour(line.runs[i + 2]) ?: colors.foreground
         var bg = runColour(line.runs[i + 3])
-        if (bg == null && fg == Color.Black) fg = ansi[0]
+        // Text in the console's own background colour, as black on the default black, would not show
+        if (bg == null && fg == colors.background) fg = ansi[0]
         if (attributes and RUN_REVERSE != 0) {
             val swapped = bg ?: colors.background
             bg = fg

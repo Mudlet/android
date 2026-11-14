@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import java.util.concurrent.atomic.AtomicInteger
@@ -26,7 +27,11 @@ object EngineNotifications {
 
     // The app's launcher Activity: this module does not know the UI's classes
     private fun openUi(context: Context): PendingIntent? {
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        if (launch == null) {
+            Log.w(EngineService.TAG, "${context.packageName} has no launcher Activity: notifications open nothing")
+            return null
+        }
         return PendingIntent.getActivity(
             context, 0,
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),

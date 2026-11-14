@@ -18,6 +18,8 @@ class ProtocolSpecTest {
     private val spec = read("docs/protocol.md")
     private val bridge = read("native/enginehost/SocketBridge.cpp")
 
+    private val backquoted = Regex("`(\\w+)`")
+
     /** Message name to its fields (without the "?" of an optional one), from one table of the spec. */
     private fun specTable(heading: String): Map<String, Set<String>> {
         val section = spec.substringAfter("\n### $heading\n", "").substringBefore("\n#")
@@ -25,8 +27,8 @@ class ProtocolSpecTest {
         check(rows.isNotEmpty()) { "no message table under \"### $heading\" in docs/protocol.md" }
         return rows.associate { row ->
             val cells = row.split('|').map { it.trim() }
-            val name = Regex("`(\\w+)`").find(cells[1])!!.groupValues[1]
-            name to Regex("`(\\w+)`").findAll(cells[2]).map { it.groupValues[1] }.toSet()
+            val name = backquoted.find(cells[1])!!.groupValues[1]
+            name to backquoted.findAll(cells[2]).map { it.groupValues[1] }.toSet()
         }
     }
 
@@ -48,19 +50,19 @@ class ProtocolSpecTest {
     fun theEngineHandlesTheRequestsTheSpecLists() {
         // The hello check, then the dispatch on the message type
         val handled = Regex("type [!=]= QLatin1String\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals(toEngine.keys, handled)
+        assertEquals("requests SocketBridge.cpp handles", toEngine.keys, handled)
         val read = Regex("\\.value\\(QLatin1String\\(\"(\\w+)\"\\)\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
         // client is the one field the engine ignores
-        assertEquals(toEngine.values.flatten().toSet() - "client" + "t", read)
+        assertEquals("request fields SocketBridge.cpp reads", toEngine.values.flatten().toSet() - "client" + "t", read)
     }
 
     @Test
     fun theEngineSendsTheMessagesTheSpecLists() {
         val sent = Regex("QStringLiteral\\(\"t\"\\), QStringLiteral\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals(toUi.keys, sent)
+        assertEquals("messages SocketBridge.cpp sends", toUi.keys, sent)
         // Keys of the JSON objects the engine writes: {QStringLiteral("key"), value} and insert(QStringLiteral("key"), ...)
         val keys = Regex("(?:\\{|insert\\()QStringLiteral\\(\"(\\w+)\"\\),").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals(toUi.values.flatten().toSet() + "t", keys)
+        assertEquals("fields SocketBridge.cpp writes", toUi.values.flatten().toSet() + "t", keys)
     }
 
     @Test
@@ -80,7 +82,7 @@ class ProtocolSpecTest {
                 method.invoke(Requests, *args.toTypedArray()) as JSONObject
             }
             .associate { it.getString("t") to (it.keySet() - "t") }
-        assertEquals(toEngine, built)
+        assertEquals("requests and their fields that Requests builds", toEngine, built)
     }
 
     @Test

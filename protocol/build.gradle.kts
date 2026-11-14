@@ -34,5 +34,9 @@ tasks.test {
         rootProject.file("native/enginehost/SocketBridge.cpp"),
         rootProject.file("native/tests/protocol_client.py"),
     )
-    testLogging { showStandardStreams = true }
+    testLogging {
+        showStandardStreams = true
+        // A failed assertEquals then shows what differed, in the log CI keeps
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }

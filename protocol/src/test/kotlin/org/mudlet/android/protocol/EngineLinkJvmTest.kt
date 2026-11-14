@@ -9,7 +9,6 @@ import org.junit.Test
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.io.File
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.ByteBuffer
@@ -49,7 +48,7 @@ class EngineLinkJvmTest {
     private fun startEngine() {
         engine = ProcessBuilder(engineBin, "--socket", socketPath.toString(), "--heartbeat-ms", "1000")
             .apply { environment()["QT_QPA_PLATFORM"] = "offscreen" }
-            .redirectErrorStream(true).redirectOutput(File("/dev/null")).start()
+            .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
     }
 
     private fun connectUnix(): Transport {
@@ -194,7 +193,7 @@ class EngineLinkJvmTest {
         assertTrue("no second attach or detach after a quick restart", events.none { it is Attached || it is Detached })
         println("JVM: stop()+start() back to back reattached once, with no reconnect fight")
         val killedAt = System.nanoTime()
-        Runtime.getRuntime().exec(arrayOf("kill", "-9", first.pid.toString())).waitFor()
+        ProcessHandle.of(first.pid.toLong()).ifPresent { it.destroyForcibly() }
         next<Detached>()
         val detectUs = (System.nanoTime() - killedAt) / 1000
         startEngine()

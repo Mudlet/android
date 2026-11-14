@@ -1,0 +1,8 @@
+root = true
+
+# ktlint (./gradlew ktlintCheck) reads these. intellij_idea is the Kotlin coding conventions that
+# kotlin.code.style=official in gradle.properties has the IDE format to; ktlint's own default style differs more.
+[*.{kt,kts}]
+ktlint_code_style = intellij_idea
+# Compose's @Composable functions are named like classes
+ktlint_function_naming_ignore_when_annotated_with = Composable

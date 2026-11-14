@@ -21,6 +21,7 @@ on:
       - protocol/**
       - native/**
       - gradle/**
+      - gradlew
       - "*.gradle.kts"
       - gradle.properties
       - .github/actions/**
@@ -117,9 +118,8 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-arm64-v8a-${{ github.run_id }}
 
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: "8.14.3"
 
       - uses: ./.github/actions/android-openssl
         with:
@@ -308,9 +308,8 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-x86_64-${{ github.run_id }}
 
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: "8.14.3"
 
       - uses: ./.github/actions/android-openssl
         with:

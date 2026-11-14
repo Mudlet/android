@@ -41,5 +41,5 @@ cp "$build/enginehost/libengine_$abi.so" "$deploy/libs/$abi/"
 rm -f "$deploy/build.gradle" "$deploy/settings.gradle" "$deploy/AndroidManifest.xml"
 
 cd "$root"
-gradle --no-daemon -Dorg.gradle.workers.max=2 -PandroidAbi="$abi" -PqtRoot="$qt" :app:assembleDebug "$@"
+./gradlew -Dorg.gradle.workers.max=2 -PandroidAbi="$abi" -PqtRoot="$qt" :app:assembleDebug "$@"
 ls -l "$root/app/build/outputs/apk/debug/"

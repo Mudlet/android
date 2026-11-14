@@ -14,6 +14,7 @@ and two decisions. November 2026.
 | Restore | A killed engine restores its profile and wanted connection from `engine-session.json`; an orderly stop restores nothing; after three restores in 10 minutes it gives up | [`architecture.md`](architecture.md#restoring-the-session) |
 | Lua 5.1 FORTIFY | `-U_FORTIFY_SOURCE` for Lua 5.1 on Android, carried in `scripts/build-libmudlet.sh` until Mudlet/Mudlet#12914 is merged; the emulator job catches the abort | [`README.md`](../README.md#ci) |
 | Tooling | Gradle wrapper 8.14.3 (checksummed), Dependabot weekly and grouped, the version pins and how to bump them | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
+| Release and PTBs | A minified, signed AAB with arm64-v8a and x86_64, an APK for each; nightly PTBs as Mudlet PTB (`org.mudlet.mudlet.ptb`) on Play's open testing track and the `ptb` GitHub pre-release, once the maintainer has done the one-time setup | [`ptb.md`](ptb.md) |
 
 ## For the maintainer: GitHub settings
 
@@ -45,8 +46,10 @@ minutes, with caches, on a pull request that touches only docs.
   secret scanning with push protection.
 - General, Pull Requests: turn off "Allow merge commits" and keep "Allow squash merging" and "Allow rebase
   merging" on; automatically delete head branches.
-- Actions, General: workflow permissions read-only by default (each workflow already asks for `contents: read`, and
-  only the nightly's issue job for `issues: write`).
+- Actions, General: workflow permissions read-only by default (each workflow already asks for `contents: read`; only
+  the nightlies' issue jobs ask for `issues: write`, and the PTB's pre-release job for `contents: write`).
+- Environments: `play`, limited to `main`, holding the Play service account's key; the PTB setup in
+  [`ptb.md`](ptb.md#one-time-setup-for-the-maintainer) has every step.
 
 ## For the maintainer: decisions
 
@@ -60,9 +63,8 @@ minutes, with caches, on a pull request that touches only docs.
 - Not armeabi-v7a: only 32-bit-only devices need it, low-end ones with little memory for two processes, and it would
   add a third Qt, dependency and libmudlet build to CI. Not x86: 32-bit x86 Android devices are gone.
 
-Ship them as an Android App Bundle, so each device downloads only its own ABI. Today each APK is built for one ABI
-(`-PandroidAbi`, `scripts/build-apk.sh` stages one ABI's Qt), so a release build needs `build-apk.sh` to stage both
-ABIs' engines and Qt libraries into `engine-service/qtdeploy` and the app to drop its single-ABI `abiFilters`.
+Ship them as an Android App Bundle, so each device downloads only its own ABI. The release build does
+(`scripts/build-release.sh`, [`ptb.md`](ptb.md)): it merges the engines `build-apk.sh` staged for each ABI.
 
 **Qt pin policy.** The engine uses private Qt API (`AndroidServiceSetup`), and Qt's Android templates set the AGP and
 Gradle versions, so Qt is pinned to one exact version and moved deliberately:

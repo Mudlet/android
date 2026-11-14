@@ -11,9 +11,9 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `engine-service/` | `:engine-service`: `EngineService` in the `:engine` process, and the Qt libraries `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
-| `scripts/` | Builds (APK, OpenSSL, libmudlet and its dependencies), `check-apk.sh` and `lint.sh` |
-| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md) |
-| `.github/` | The workflows (`apks.yml`, `libmudlet.yml`, `checks.yml`), the actions they share, Dependabot |
+| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh` and `lint.sh` |
+| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md) |
+| `.github/` | The workflows (`apks.yml`, `libmudlet.yml`, `checks.yml`, `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
 
 ## Setting up
@@ -48,6 +48,17 @@ LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 `build-libmudlet.sh` adds the Lua 5.1 FORTIFY fix to the Mudlet checkout (see the README's CI section). For the
 emulator, set `ANDROID_ABI=x86_64` for all three scripts; that needs Qt for `android_x86_64`.
 
+```sh
+# The release: each ABI's engine staged (add LIBMUDLET_BUILD_DIR for libmudlet), then the AAB, an APK for each ABI
+# and the smoke build, minified; signed with MUDLET_KEYSTORE, MUDLET_KEYSTORE_PASSWORD and MUDLET_KEY_ALIAS if set
+STAGE_ONLY=1 DEPLOY_DIR=staged/arm64-v8a scripts/build-apk.sh
+ANDROID_ABI=x86_64 STAGE_ONLY=1 DEPLOY_DIR=staged/x86_64 scripts/build-apk.sh
+scripts/build-release.sh staged/arm64-v8a staged/x86_64 -- -PreleaseChannel=ptb
+```
+
+The public test builds, their versions and signing, and what the maintainer sets up for them are in
+[`docs/ptb.md`](docs/ptb.md).
+
 ## Test
 
 ```sh
@@ -76,6 +87,9 @@ EXTRACTED=true scripts/check-apk.sh        # after scripts/build-apk.sh -Pextrac
 # The x86_64 APK with libmudlet on a running emulator (CI's emulator job)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
     --symbols native/build-android-x86_64-mudlet/enginehost
+# The minified release, as the PTB workflow tests it: its smoke build, after scripts/build-release.sh
+python3 native/tests/android_smoke.py --apk app/build/outputs/apk/smoke/app-x86_64-smoke.apk --out smoke-test \
+    --package org.mudlet.mudlet.ptb
 ```
 
 The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist).

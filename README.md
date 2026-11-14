@@ -26,7 +26,7 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, and their tests |
 | [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
-| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`decisions/`](docs/decisions) |
+| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`decisions/`](docs/decisions) |
 
 Versions for every Gradle module are in [`gradle/libs.versions.toml`](gradle/libs.versions.toml). The package
 names are `org.mudlet.android.*`; the application id is `org.mudlet.mudlet`, as Mudlet's macOS bundle identifier.
@@ -76,6 +76,14 @@ LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet; until it does, `build-libmudlet.sh` adds it to
 the checkout (see "Lua 5.1 FORTIFY fix" under [CI](#ci)).
 
+### The release
+
+The release is an AAB for Google Play with arm64-v8a and x86_64, and an APK for each, minified with R8:
+`STAGE_ONLY=1 scripts/build-apk.sh` stages each ABI's engine, and
+[`scripts/build-release.sh`](scripts/build-release.sh) merges them and builds it, signed with the upload key
+`MUDLET_KEYSTORE` names. Nightly public test builds of it go to Google Play's open testing track and a GitHub
+pre-release: [`docs/ptb.md`](docs/ptb.md).
+
 ### Tests
 
 ```sh
@@ -112,7 +120,7 @@ are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 ## CI
 
 GitHub Actions runs three workflows on pushes to `main` and pull requests (the first two only when they touch their
-files), and on demand:
+files), and on demand, and a fourth, **PTB**, every night and on pull requests that change how the release is built:
 
 - **APKs** (`.github/workflows/apks.yml`)
   - runs the stand-in engine's desktop test, and `:protocol`'s tests with the Kotlin client against that engine;
@@ -164,6 +172,12 @@ files), and on demand:
 - **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh) on every pull request: ktlint
   on the Kotlin, clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the
   workflows, as four short jobs.
+
+- **PTB** (`.github/workflows/ptb.yml`) builds the release from Mudlet's `development` for arm64-v8a and x86_64,
+  as the separate app Mudlet PTB (`org.mudlet.mudlet.ptb`), runs its minified x86_64 build through the emulator smoke
+  test, and from `main` uploads it to Google Play's open testing track and replaces the `ptb` GitHub pre-release. It
+  skips a night when neither Mudlet nor this repository changed, and publishes nothing without its secrets or off
+  `main`. See [`docs/ptb.md`](docs/ptb.md).
 
 Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
 versions tied to them are bumped by hand (see "Pinned versions" in [`CONTRIBUTING.md`](CONTRIBUTING.md)).

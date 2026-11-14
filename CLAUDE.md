@@ -18,6 +18,7 @@ cmake --build native/build-desktop --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 scripts/check-apk.sh                                   # the APK checks, after build-apk.sh
+scripts/build-release.sh <staged-dir>... -- -PreleaseChannel=ptb   # AAB + APKs, after STAGE_ONLY=1 build-apk.sh per ABI
 scripts/lint.sh                                        # ktlint, clang-format, ShellCheck, actionlint
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after build-apk.sh
 ./gradlew ktlintFormat; FIX=1 scripts/lint.sh clang-format             # fix formatting
@@ -38,4 +39,6 @@ CONTRIBUTING.md's "Test".
 - Do not bump Qt, the NDK, SDK levels, AGP, Kotlin or Gradle on their own; see "Pinned versions" in CONTRIBUTING.md.
 - Changes Mudlet needs go upstream to Mudlet/Mudlet and are carried in `scripts/` until merged there.
 - Squash (or rebase) into `main`, never a merge commit; update branches by rebasing: "Merging" in CONTRIBUTING.md.
+- A new call from C++ into Kotlin or Java (JNI) needs an R8 rule in `engine-service/consumer-rules.pro`, or the
+  minified release loses it; see [`docs/ptb.md`](docs/ptb.md). No signing key or password is ever committed.
 - Never commit build output (`.gitignore` lists it: `native/build*`, `engine-service/qtdeploy/`, `deps/`, ...).

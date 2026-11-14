@@ -190,8 +190,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - No bundled fonts, no TLS (the APK ships no OpenSSL).
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
-  `luaL_openlibs`. Mudlet does not do this yet; a separate change carries it in this
-  repository's libmudlet build. Neither CI job runs the engine on Android.
+  `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in
+  this repository's libmudlet build. Neither CI job runs the engine on Android.
 
 ### Restoring the session
 Android kills `:engine` when it needs the memory, and the user can kill it from the self-test. The engine is started

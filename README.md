@@ -62,8 +62,12 @@ Costs and open items:
 - report the `QtDisplayManager` cast to Qt;
 - repeat the screen-off run on a phone, since an emulator doesn't suspend its CPU;
 - measure A's and C's memory and survival under memory pressure on a phone;
-- libmudlet now runs in C's engine process (see [`c-separate-process/RESULTS.md`](c-separate-process/RESULTS.md)).
-  Still to do: updates to lines already sent, TLS, fonts, and restarting the profile after the engine is killed.
+- libmudlet runs in C's engine process (see [`c-separate-process/RESULTS.md`](c-separate-process/RESULTS.md)). It
+  builds from Mudlet's `development` with no patch, through `THeadlessSession`'s public API only, and CI builds and
+  tests it (see "libmudlet as the engine" in [`c-separate-process/REPORT.md`](c-separate-process/REPORT.md)). Still
+  to do: game text not yet ended by a line feed or go-ahead, updates to lines already sent, TLS, fonts, and
+  restarting the profile after the engine is killed. On a device it also needs Lua 5.1 built with
+  `-U_FORTIFY_SOURCE`, which Mudlet does not do yet.
 
 ## Status
 
@@ -130,19 +134,28 @@ demand:
   `mudlet_core`, `mudlet_headless` and the `mudlet-headless` runner with
   [`scripts/build-libmudlet.sh`](scripts/build-libmudlet.sh). The job summary gives the Mudlet commit it built and
   the library sizes, stripped and not.
+  - It then builds C's debug APK with libmudlet as the engine, linked through the `libmudlet::headless` target
+    that [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line, puts it
+    through the same checks as the prototype APKs below, checks that the engine carries Mudlet's Lua, its Lua C
+    modules and QtKeychain's KeyStore backend, and uploads it as an artifact.
+  - A second job builds libmudlet for the host with the same options
+    ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh), the system's libraries and Qt's
+    host modules fetched for the run) and runs C's real engine against the fake game server through the socket
+    protocol (`c-separate-process/tests/test_mudlet_engine.py`).
   - It fails if:
     - the libraries use desktop-only APIs
     - the libraries or the runner carry the build-type splash screen images
     - the runner lacks Mudlet's built-in Lua files and Lua C modules
     - the runner does not link QtKeychain's Android backend, which Mudlet uses to keep profiles' passwords in
       the KeyStore
+    - C's engine does not build or link against it, or fails its test
   - Nightly: it also runs every night, so a change on Mudlet's side that stops these compiling or linking for
     Android shows up; a nightly that fails or times out opens or updates an issue here. GitHub pauses the
     nightly after 60 days without activity in this repository; re-enable it from the Actions tab.
   - A red check on a pull request can come from Mudlet's side too.
-  - Not covered yet: C's engine built against libmudlet.
 - **Prototype APKs** (`.github/workflows/apks.yml`) runs each prototype's desktop engine test, then builds a debug
-  APK of A, B and C, each with its stand-in engine, checks that it holds Qt and the engine and that its
+  APK of A, B and C, each with its stand-in engine, runs C's Kotlin protocol client against C's desktop engine
+  (`c-separate-process/tests/run_jvm_client_test.sh`), checks that it holds Qt and the engine and that its
   libraries are 16 KB aligned (their offsets in the APK and their load segments), and uploads it as an
   artifact. It builds C a second time with its libraries extracted at install (`-PextractNativeLibs=true`), which
   `require()` needs to find a Lua C module shipped as `lib<name>.so`, and the job summary gives each APK's size
@@ -150,4 +163,5 @@ demand:
 
 Both use the versions under [Building](#building), installed by `.github/actions/android-toolchain`
 (Qt through a pinned aqtinstall). Qt, the NDK, the dependencies, Gradle and ccache are cached between runs.
-The two scripts also run on their own: set `ANDROID_NDK_ROOT` and `QT_ROOT` and see each script's header.
+The scripts also run on their own: set `ANDROID_NDK_ROOT` and `QT_ROOT` and see each script's header. To build C's
+APK with libmudlet, run `LIBMUDLET_BUILD_DIR=<the build-libmudlet.sh build dir> c-separate-process/build-apk.sh`.

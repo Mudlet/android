@@ -1,7 +1,8 @@
 name: Prototype APKs
 
 # Debug APKs of the three hosting prototypes, each with its stand-in engine, for arm64-v8a, after each
-# prototype's desktop engine test, and C a second time with its libraries extracted at install.
+# prototype's desktop engine test, and C a second time with its libraries extracted at install. C's Kotlin
+# protocol client is also tested against its desktop engine. C with libmudlet as its engine is in libmudlet.yml.
 on:
   push:
     branches: [main]

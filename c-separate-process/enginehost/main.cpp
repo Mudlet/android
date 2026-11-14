@@ -40,7 +40,11 @@ void quitOnTerm(QCoreApplication& app)
         return;
     }
     auto* notifier = new QSocketNotifier(gTermPipe[1], QSocketNotifier::Read, &app);
-    QObject::connect(notifier, &QSocketNotifier::activated, &app, &QCoreApplication::quit);
+    // Once: quit() ends every event loop, and the engine runs one of its own to save on the way out
+    QObject::connect(notifier, &QSocketNotifier::activated, &app, [notifier] {
+        notifier->setEnabled(false);
+        QCoreApplication::quit();
+    });
     std::signal(SIGTERM, [](int) {
         const char byte = 1;
         [[maybe_unused]] const auto written = ::write(gTermPipe[0], &byte, 1);

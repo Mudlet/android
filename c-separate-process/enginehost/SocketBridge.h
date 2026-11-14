@@ -75,9 +75,8 @@ private:
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;
-    // The last line sent before the console was last emptied: a UI that has no line after it is told of the clear
-    qint64 mClearedAfterSeq = 0;
-    bool mEverCleared = false;
+    // The last line sent before the console was last emptied, -1 for never: a UI with no line after it is told
+    qint64 mClearedAfterSeq = -1;
     // Distinguishes a restarted engine, whose sequence numbers start again
     QString mInstance;
     // Request id of the command being executed, echoed on the status frames it causes

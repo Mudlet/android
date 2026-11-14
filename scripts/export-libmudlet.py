@@ -23,8 +23,6 @@ import sys
 
 CLIENT = "client-mudlet-android"
 RUNNER = "mudlet_headless_executable"
-# Linked into the runner for its own sake: the LeakSanitizer suppressions of a sanitizer build
-RUNNER_ONLY = re.compile(r"mudlet_lsan_hooks")
 QT_LIBRARY = re.compile(r"(?:^|/)libQt6([A-Za-z0-9]+?)(?:_[a-z0-9_-]+)?\.so(?:\.[0-9.]+)?$")
 
 
@@ -66,14 +64,16 @@ def cmake_quote(value):
 
 def export(build):
     paths, target = runner_target(build)
-    source = os.path.join(build, paths["source"]) if not os.path.isabs(paths["source"]) else paths["source"]
+    source = os.path.join(build, paths["source"])
     libraries = []
     qt_modules = []
     for fragment in target.get("link", {}).get("commandFragments", []):
         if fragment.get("role") != "libraries":
             continue
+        # The runner's own objects (main.cpp, LeakSanitizer hooks) are sources, not libraries, so are not here; its
+        # run path is its own, and the app's build gives the app one
         item = fragment["fragment"].strip()
-        if not item or RUNNER_ONLY.search(item) or item.startswith("-Wl,-rpath"):
+        if not item or item.startswith("-Wl,-rpath"):
             continue
         # A toolchain's standard libraries come as one fragment, "-latomic -lm"
         if item.startswith("-") and " " in item:

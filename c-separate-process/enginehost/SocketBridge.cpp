@@ -151,7 +151,7 @@ void SocketBridge::sendAllStatus()
 void SocketBridge::sendLinesAfter(qint64 seq, bool replay)
 {
     // Lines from before a clear are gone, not skipped
-    if (mEverCleared && seq <= mClearedAfterSeq) {
+    if (seq <= mClearedAfterSeq) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("clear")}});
         seq = mClearedAfterSeq;
     }
@@ -288,7 +288,6 @@ void SocketBridge::cleared()
 {
     mScrollback.clear();
     mClearedAfterSeq = mNextSeq - 1;
-    mEverCleared = true;
     mTail = {0, {}, {}, false};
     if (clientLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("clear")}});

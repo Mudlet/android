@@ -43,6 +43,7 @@ private:
     };
 
     void connectSession();
+    void shutdownSession();
     void start(const QString& host, quint16 port, bool connect);
     void onStartFinished(int result, const QString& error);
     void runNow(const QString& code);
@@ -74,9 +75,8 @@ private:
     // since ended by sending a line below it
     bool mDropLineFeed = false;
     bool mTailSyncPending = false;
-    QString mSentTailText;
-    QList<ColorRun> mSentTailRuns;
-    bool mSentTailPrompt = false;
+    // What the frontend was last sent as the tail; its kind is not used
+    OpenLine mSentTail;
 
     QTimer mHeartbeat;
     QTimer mCounterTimer;

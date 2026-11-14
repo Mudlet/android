@@ -111,12 +111,19 @@ MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent
     mHeartbeat.start();
 }
 
-// The profile gets its sysExitEvent and its save, waited for a few seconds at most, as the process is ending
 MudletEngine::~MudletEngine()
 {
-    if (mState != State::started) {
-        return;
+    if (mState == State::started) {
+        shutdownSession();
     }
+    // Nothing the session sends as it goes may reach the members already destroyed
+    QObject::disconnect(mSession.get(), nullptr, this, nullptr);
+    mSession.reset();
+}
+
+// The profile gets its sysExitEvent and its save, waited for a few seconds at most, as the process is ending
+void MudletEngine::shutdownSession()
+{
     QEventLoop loop;
     QObject::connect(mSession.get(), &THeadlessSession::shutdownFinished, &loop, [&loop](bool succeeded, const QString& error) {
         if (!succeeded) {
@@ -269,8 +276,8 @@ void MudletEngine::send(const QString& line)
 
 void MudletEngine::disconnectFromGame()
 {
-    if (mState == State::started) {
-        mSession->runLua(QStringLiteral("disconnect()"));
+    if (mState == State::started && !mSession->runLua(QStringLiteral("disconnect()"))) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
     }
 }
 
@@ -342,9 +349,7 @@ void MudletEngine::onMainConsoleCleared()
 {
     mOpen = {};
     mDropLineFeed = false;
-    mSentTailText.clear();
-    mSentTailRuns.clear();
-    mSentTailPrompt = false;
+    mSentTail = {};
     mFrontend->cleared();
 }
 
@@ -386,10 +391,8 @@ void MudletEngine::commitOpen()
     mFrontend->line(mOpen.text, mOpen.runs, mOpen.prompt);
     mOpen = {};
     // The UI would otherwise show the line twice until the tail is next synced
-    if (!mSentTailText.isEmpty()) {
-        mSentTailText.clear();
-        mSentTailRuns.clear();
-        mSentTailPrompt = false;
+    if (!mSentTail.text.isEmpty()) {
+        mSentTail = {};
         mFrontend->tail({}, {}, false);
     }
 }
@@ -407,13 +410,11 @@ void MudletEngine::scheduleTailSync()
 void MudletEngine::syncTail()
 {
     mTailSyncPending = false;
-    if (mOpen.text == mSentTailText && mOpen.runs == mSentTailRuns && mOpen.prompt == mSentTailPrompt) {
+    if (mOpen.text == mSentTail.text && mOpen.runs == mSentTail.runs && mOpen.prompt == mSentTail.prompt) {
         return;
     }
-    mSentTailText = mOpen.text;
-    mSentTailRuns = mOpen.runs;
-    mSentTailPrompt = mOpen.prompt;
-    mFrontend->tail(mSentTailText, mSentTailRuns, mSentTailPrompt);
+    mSentTail = mOpen;
+    mFrontend->tail(mSentTail.text, mSentTail.runs, mSentTail.prompt);
 }
 
 void MudletEngine::markCountersDirty()

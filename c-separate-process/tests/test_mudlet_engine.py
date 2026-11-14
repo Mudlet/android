@@ -145,12 +145,16 @@ def main():
 
     # Local text: whole lines, and an open one that the next line ends
     msgs = []
-    c.send({"t": "runLua", "id": 3, "code": 'echo("local one\\n") cecho("<red>coloured<reset> two\\n") echo("open")'})
+    c.send({"t": "runLua", "id": 3, "code": 'echo("local one\\n") cecho("<red>coloured<reset> two\\n") '
+                                             'echoLink("a link", [[echo("clicked")]], "hint") echo("\\n") echo("open")'})
     c.wait_for(shown("open"), collect=msgs)
     lines = [m for m in lines_of(msgs) if m["text"] in ("local one", "coloured two")]
     check([m["text"] for m in lines] == ["local one", "coloured two"], f"echo() lines: {texts_of(msgs)}")
     check(len(lines) == 2 and lines[1]["runs"] and lines[1]["runs"][0][:2] == [0, 8] and lines[1]["runs"][0][2] != -1,
           f"cecho() colours carried: {lines[1]['runs'] if len(lines) == 2 else None}")
+    link = next((m for m in lines_of(msgs) if m["text"] == "a link"), None)
+    check(link is not None and any(len(r) == 6 and r[:2] == [0, 6] and r[5] > 0 for r in link["runs"]),
+          f"echoLink()'s run carries its link id: {link}")
     msgs = []
     c.send({"t": "send", "text": "echo closed"})
     c.wait_for(shown("You said: closed"), collect=msgs)

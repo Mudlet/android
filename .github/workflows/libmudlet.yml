@@ -190,7 +190,7 @@ jobs:
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/aqt-host/bin/aqt" install-qt linux desktop ${{ steps.toolchain.outputs.qt-version }} linux_gcc_64 \
             --outputdir "$RUNNER_TEMP/qt-host" --archives qtsvg -m qt5compat qtmultimedia qtspeech
-          cp -rn "$RUNNER_TEMP/qt-host/${{ steps.toolchain.outputs.qt-version }}/gcc_64/." "$QT_ROOT/gcc_64/"
+          cp -r --update=none "$RUNNER_TEMP/qt-host/${{ steps.toolchain.outputs.qt-version }}/gcc_64/." "$QT_ROOT/gcc_64/"
 
       - name: Restore ccache
         uses: actions/cache/restore@v5

@@ -10,6 +10,8 @@
 #include <QLocalSocket>
 #include <QtEndian>
 
+#include <cmath>
+
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -177,7 +179,7 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     if (!mClientGreeted) {
         if (type != QLatin1String("hello") || message.value(QLatin1String("v")).toInt() != protocolVersion) {
             QLocalSocket* socket = mClient;
-            sendFrame({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), QStringLiteral("expected hello with v=%1").arg(protocolVersion)}});
+            sendError(QStringLiteral("expected hello with v=%1").arg(protocolVersion));
             socket->disconnect(this);
             connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
             mClient = nullptr;
@@ -199,7 +201,7 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         const QJsonValue tls = message.value(QLatin1String("tls"));
         if (!tls.isUndefined() && !tls.isBool()) {
             // Not taken as absent, which could connect in the clear a game the UI meant to encrypt
-            sendFrame({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), QStringLiteral("connect: tls must be true or false")}});
+            sendError(QStringLiteral("connect: tls must be true or false"));
         } else {
             mEngine->connectTo(
                     message.value(QLatin1String("host")).toString(), quint16(message.value(QLatin1String("port")).toInt(23)), tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt);
@@ -212,10 +214,91 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         mEngine->runLua(message.value(QLatin1String("code")).toString());
     } else if (type == QLatin1String("setViewWidthPx")) {
         mEngine->setViewWidthPx(message.value(QLatin1String("px")).toInt());
+    } else if (type == QLatin1String("listProfiles")) {
+        sendProfiles();
+    } else if (type == QLatin1String("saveProfile")) {
+        answerProfiles(type, saveProfile(message));
+    } else if (type == QLatin1String("deleteProfile")) {
+        answerProfiles(type, mEngine->deleteProfile(message.value(QLatin1String("name")).toString()));
+    } else if (type == QLatin1String("openProfile")) {
+        answerProfiles(type, openProfile(message));
     } else {
-        sendFrame({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), QStringLiteral("unknown type %1").arg(type)}});
+        sendError(QStringLiteral("unknown type %1").arg(type));
     }
     mCurrentRequestId = QJsonValue();
+}
+
+// Checked here rather than taken with defaults, as a profile stored with a wrong field would only fail later, at its connect
+QString SocketBridge::saveProfile(const QJsonObject& message)
+{
+    const QJsonValue host = message.value(QLatin1String("host"));
+    const QJsonValue port = message.value(QLatin1String("port"));
+    const QJsonValue tls = message.value(QLatin1String("tls"));
+    const QJsonValue login = message.value(QLatin1String("login"));
+    const QJsonValue autoReconnect = message.value(QLatin1String("autoReconnect"));
+    if (!host.isString() || host.toString().trimmed().isEmpty()) {
+        return QStringLiteral("a profile needs a host");
+    }
+    const double portNumber = port.toDouble(-1);
+    if (!port.isDouble() || portNumber != std::floor(portNumber) || portNumber < 1 || portNumber > 65535) {
+        return QStringLiteral("port must be a whole number from 1 to 65535");
+    }
+    if (!tls.isBool() || !autoReconnect.isBool()) {
+        return QStringLiteral("tls and autoReconnect must be true or false");
+    }
+    if (!login.isString()) {
+        return QStringLiteral("login must be a string");
+    }
+    return mEngine->saveProfile({message.value(QLatin1String("name")).toString(), host.toString().trimmed(), int(portNumber), tls.toBool(), login.toString().trimmed(), autoReconnect.toBool()});
+}
+
+QString SocketBridge::openProfile(const QJsonObject& message)
+{
+    const QJsonValue password = message.value(QLatin1String("password"));
+    const QJsonValue connectNow = message.value(QLatin1String("connect"));
+    if (!password.isUndefined() && !password.isNull() && !password.isString()) {
+        return QStringLiteral("password must be a string");
+    }
+    if (!connectNow.isUndefined() && !connectNow.isBool()) {
+        return QStringLiteral("connect must be true or false");
+    }
+    return mEngine->openProfile(message.value(QLatin1String("name")).toString(), password.toString(), connectNow.toBool(true));
+}
+
+void SocketBridge::answerProfiles(const QString& request, const QString& problem)
+{
+    if (problem.isEmpty()) {
+        sendProfiles();
+    } else {
+        sendError(QStringLiteral("%1: %2").arg(request, problem));
+    }
+}
+
+void SocketBridge::sendProfiles()
+{
+    QJsonArray list;
+    for (const Profile& profile : mEngine->profiles()) {
+        list.append(QJsonObject{{QStringLiteral("name"), profile.name},
+                                {QStringLiteral("host"), profile.host},
+                                {QStringLiteral("port"), profile.port},
+                                {QStringLiteral("tls"), profile.tls},
+                                {QStringLiteral("login"), profile.login},
+                                {QStringLiteral("autoReconnect"), profile.autoReconnect}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("profiles")}, {QStringLiteral("profiles"), list}});
+}
+
+void SocketBridge::sendError(const QString& message)
+{
+    sendReply({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), message}});
+}
+
+void SocketBridge::sendReply(QJsonObject message)
+{
+    if (replying()) {
+        message.insert(QStringLiteral("re"), mCurrentRequestId);
+    }
+    sendFrame(message);
 }
 
 QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
@@ -311,13 +394,8 @@ void SocketBridge::notify(const QString& title, const QString& text)
 void SocketBridge::status(const QString& key, const QString& value)
 {
     mStatus.insert(key, value);
-    const bool isReply = !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull();
     // A reply is sent even to a lagging UI, which would otherwise wait for it forever
-    if (clientLive() || (isReply && mClient && mClientGreeted)) {
-        QJsonObject message{{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), key}, {QStringLiteral("value"), value}};
-        if (isReply) {
-            message.insert(QStringLiteral("re"), mCurrentRequestId);
-        }
-        sendFrame(message);
+    if (clientLive() || (replying() && mClient && mClientGreeted)) {
+        sendReply({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), key}, {QStringLiteral("value"), value}});
     }
 }

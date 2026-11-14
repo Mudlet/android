@@ -25,7 +25,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 1;
+    static constexpr int protocolVersion = 2;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -58,8 +58,16 @@ private:
     void sendLinesAfter(qint64 seq, bool replay);
     void sendAllStatus();
     void sendFrame(const QJsonObject& message);
+    // An answer to the request being handled: it carries that request's id as re, and is sent even to a lagging UI
+    void sendReply(QJsonObject message);
+    void sendError(const QString& message);
+    void sendProfiles();
+    void answerProfiles(const QString& request, const QString& problem);
+    QString saveProfile(const QJsonObject& message);
+    QString openProfile(const QJsonObject& message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
+    bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
     static QJsonObject lineMessage(const StoredLine& stored, bool replay);
     static QJsonArray runsJson(const QList<ColorRun>& runs);
     QJsonObject tailMessage() const;

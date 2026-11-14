@@ -10,6 +10,7 @@ Commands a client may send (one per line):
   tell            -> another "tells you" line
   tls             -> "TLS: <protocol>" of the connection, or "TLS: none"
   quit            -> close
+Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
 Given an ssl.SSLContext, it speaks TLS on its port: each connection's handshake comes first, and its outcome is
 appended to TLS_HANDSHAKES.
@@ -30,6 +31,8 @@ ACCEPTED = []
 SENT = {}
 # ("ok", protocol) or ("failed", why) for each TLS connection, in the order their handshakes ended
 TLS_HANDSHAKES = []
+# Every line any client sent, in order
+RECEIVED = []
 
 BANNER = (
     bytes([IAC, DO, TTYPE, IAC, WILL, ECHO, IAC, WILL, GMCP])
@@ -106,6 +109,7 @@ class Session(threading.Thread):
 
     def handle(self, line):
         conn = self.conn
+        RECEIVED.append(line)
         if line.startswith("echo "):
             conn.sendall(f"You said: {line[5:]}\r\n".encode())
         elif line.startswith("flood "):
@@ -155,7 +159,7 @@ class Session(threading.Thread):
             conn.sendall(b"Bye\r\n")
             return False
         else:
-            conn.sendall(f"Huh? {line}\r\n".encode())
+            conn.sendall(b"Huh?\r\n")
         return True
 
 

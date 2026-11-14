@@ -110,7 +110,7 @@ backgrounded UI process mid-read. Verified on the host:
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
-one profile in a `THeadlessSession` behind the same socket protocol. It uses only that class's
+one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
 public API, from Mudlet's `development` with no patch: it includes no Mudlet header but
 `THeadlessSession.h` (which brings `TDebug.h` and `utils.h`) and sets none of Mudlet's
 defines. [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
@@ -146,11 +146,24 @@ keeps the profiles' passwords in the KeyStore.
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
+**Profiles.** `THeadlessSession` opens a profile by name but does not list, save or delete them, so until Mudlet's
+headless API does, `native/enginehost/ProfileStore.*` reads and writes Mudlet's own files: a profile is a folder under
+`<configDir>/profiles`, and `saveProfile` writes the files Mudlet's connection dialog writes there (`url`, `port`,
+`ssl_tsl`, `login`, `autoreconnect`), each one `QString` in a `QDataStream` at `Qt_5_12`, through `QSaveFile`.
+`deleteProfile` removes the folder (`QDir::removeRecursively()`). Mudlet records no order, so the engine keeps the
+order profiles were last opened or created in, `<configDir>/profile-order.json`. `openProfile` closes a running
+profile with `shutdownAsync(true)`, as Mudlet closes one, then starts the other with `startAsync()`, its password in
+`Options::password` for that start only.
+
 **Lifecycle.**
-- The first `connect` or `runLua` calls `startAsync()` with `Options::configDir` set to
-  `<files>/mudlet` (`MUDLET_CONFIG_DIR` overrides it on the desktop).
+- `openProfile`, or the first `connect` or `runLua`, calls `startAsync()` with `Options::configDir` set to
+  `<files>/mudlet` (`MUDLET_CONFIG_DIR` overrides it on the desktop). A `connect` or `runLua` starts the profile
+  `MUDLET_PROFILE` names (`Android` unless set), or the one last opened.
+- An `openProfile` while another profile runs closes that one first (status `profile` `<name> closing`, then
+  `<name> closed`); a close Mudlet refuses, as while a script runs, leaves it running (`<name> not closed: ...`) and
+  calls off the open.
 - Requests that arrive during the start are queued, and run once `startFinished` reports
-  `started`.
+  `started`. Those that arrive while a profile is being opened are for that one.
 - `start()` can create a profile only from a game's address, so Lua sent before the first
   connect of a new profile gets `no profile`.
 - An engine started after the last one was killed loads that one's profile again, and connects it
@@ -173,10 +186,14 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - a 3000-line flood that arrives whole and in order;
 - Lua errors;
 - the profile's save on quit;
+- the profile requests: each answered with `profiles` or `error`; profiles written in Mudlet's own files; a switch
+  of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
+  through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
+`native/tests/profile_checks.py` holds the profile requests both host tests run, the stand-in's `test_engine.py` too.
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
 (CI's emulator jobs) or a device, from the host through adb. It drives the UI through a debug-only hook,
@@ -216,6 +233,12 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   it asks.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
+- A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.
+- `saveProfile` makes a new profile's folder before its first start, so that start does not remove the passwords an
+  earlier profile of the same name may have left in the credential store, as Mudlet does for a new name, and
+  `deleteProfile` does not remove them either. The app stores no password (it sends one with each `openProfile`),
+  so only one stored by Mudlet's own GUI under the same config dir could be left. Profile management in
+  `THeadlessSession` would close this.
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
   `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
@@ -230,8 +253,9 @@ stand-in does not.
 
 **What is kept.** `native/enginehost/SessionStore.*` keeps one JSON file, `<files>/engine-session.json`
 (`MUDLET_ENGINE_STATE`; the app names it in `EngineSession.kt`). It holds:
-- the profile, while one runs, which is the only `THeadlessSession::Options` field the engine sets besides the
-  connection's (`configDir` comes from the app's files, as at any start);
+- the profile, while one runs, the one `openProfile` named included, which is the only `THeadlessSession::Options`
+  field the engine sets besides the connection's and an `openProfile`'s password, which is never kept, so a restored
+  profile does not log in (`configDir` comes from the app's files, as at any start);
 - the host and port the UI last connected it to, passed again as `Options::host` and `port` (an empty host leaves
   the address stored in the profile);
 - whether the connection is wanted;

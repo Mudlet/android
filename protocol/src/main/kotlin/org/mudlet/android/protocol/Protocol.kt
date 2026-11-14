@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 1
+const val PROTOCOL_VERSION = 2
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -26,6 +26,9 @@ const val RUN_BLINK = 64
 const val RUN_FAST_BLINK = 128
 const val RUN_CONCEALED = 256
 
+/** A profile as the engine lists it; the password is never part of one. */
+data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
+
 sealed interface EngineMessage {
     data class Hello(val version: Int, val pid: Int, val instance: String) : EngineMessage
     data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val replay: Boolean) : EngineMessage
@@ -38,7 +41,10 @@ sealed interface EngineMessage {
     data class Pong(val id: Long) : EngineMessage
     data class Synced(val seq: Long) : EngineMessage
     data class Gap(val skipped: Long) : EngineMessage
-    data class Error(val message: String) : EngineMessage
+    data class Error(val message: String, val replyTo: Any? = null) : EngineMessage
+
+    /** The answer to every profile request: the profiles, the last opened first. */
+    data class Profiles(val profiles: List<Profile>, val replyTo: Any?) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -53,6 +59,19 @@ object Requests {
     fun runLua(code: String, id: Long): JSONObject = JSONObject().put("t", "runLua").put("code", code).put("id", id)
     fun setViewWidthPx(px: Int): JSONObject = JSONObject().put("t", "setViewWidthPx").put("px", px)
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
+
+    // The profile requests: [id] comes back as the replyTo of the Profiles or Error that answers each
+    fun listProfiles(id: Long): JSONObject = JSONObject().put("t", "listProfiles").put("id", id)
+    fun saveProfile(profile: Profile, id: Long): JSONObject = JSONObject().put("t", "saveProfile").put("name", profile.name)
+        .put("host", profile.host).put("port", profile.port).put("tls", profile.tls).put("login", profile.login)
+        .put("autoReconnect", profile.autoReconnect).put("id", id)
+
+    fun deleteProfile(name: String, id: Long): JSONObject = JSONObject().put("t", "deleteProfile").put("name", name).put("id", id)
+
+    /** [password] is for this run of the profile only; null sends none. */
+    fun openProfile(name: String, password: String?, connect: Boolean, id: Long): JSONObject = JSONObject()
+        .put("t", "openProfile").put("name", name).put("connect", connect).put("id", id)
+        .apply { if (password != null) put("password", password) }
 }
 
 /**
@@ -113,9 +132,19 @@ class FrameReader(input: InputStream) {
 
             "gap" -> EngineMessage.Gap(o.optLong("skipped"))
 
-            "error" -> EngineMessage.Error(o.optString("message"))
+            "error" -> EngineMessage.Error(o.optString("message"), o.opt("re"))
+
+            "profiles" -> EngineMessage.Profiles(parseProfiles(o.optJSONArray("profiles")), o.opt("re"))
 
             else -> EngineMessage.Unknown(t)
+        }
+
+        private fun parseProfiles(profiles: JSONArray?): List<Profile> {
+            if (profiles == null) return emptyList()
+            return List(profiles.length()) { i ->
+                val p = profiles.getJSONObject(i)
+                Profile(p.getString("name"), p.optString("host"), p.optInt("port", 23), p.optBoolean("tls"), p.optString("login"), p.optBoolean("autoReconnect"))
+            }
         }
 
         // [[start, length, fg(, bg, attributes(, link))], ...] -> [start0, length0, fg0, bg0, attributes0, link0, start1, ...]

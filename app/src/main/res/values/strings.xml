@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The strings the app shows. app_name comes from app/build.gradle.kts (resValue), as the PTB has a name of its own. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="navigate_back">Back</string>
+
+    <string name="profiles_title">Profiles</string>
+    <string name="profiles_empty">Your games will be listed here.</string>
+    <string name="profiles_open_game">Open the game screen</string>
+
+    <string name="game_title">Game</string>
+
+    <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
+    <string name="console_jump_to_bottom">Jump to the bottom</string>
+    <plurals name="console_jump_new_lines">
+        <item quantity="one">Jump to the bottom: %1$d new line</item>
+        <item quantity="other">Jump to the bottom: %1$d new lines</item>
+    </plurals>
+
+    <!-- The game screen's input line, where the player types commands for the game -->
+    <string name="input_label">Command</string>
+    <string name="input_send">Send</string>
+    <string name="input_history_previous">Previous command</string>
+    <string name="input_history_next">Next command</string>
+    <string name="input_not_sent">Not sent: the app is not connected to the engine</string>
+
+    <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
+    <string name="connection_no_engine">Waiting for the engine…</string>
+    <string name="connection_disconnected">Disconnected</string>
+    <string name="connection_connecting">Connecting…</string>
+    <!-- %1$s is the game's address, as host:port -->
+    <string name="connection_connecting_to">Connecting to %1$s…</string>
+    <string name="connection_connected">Connected</string>
+    <!-- %1$s is the engine's reason, in English -->
+    <string name="connection_error">Connection error: %1$s</string>
+    <string name="connection_reconnect">Reconnect</string>
+    <string name="connection_disconnect">Disconnect</string>
+
+    <!-- Lines the app adds to the console between the game's own. The dashes set them apart from the game's text. -->
+    <string name="marker_new_engine" tools:ignore="TypographyDashes">--- new engine instance %1$s ---</string>
+    <plurals name="marker_lines_skipped" tools:ignore="TypographyDashes">
+        <item quantity="one">--- %1$d line skipped while the UI lagged ---</item>
+        <item quantity="other">--- %1$d lines skipped while the UI lagged ---</item>
+    </plurals>
+
+    <!-- The self-test: debug builds only, for developers, so not translated -->
+    <string name="selftest_title" translatable="false">Self-test</string>
+    <string name="selftest_qt_start" translatable="false">Qt up %1$s ms after Application.onCreate (:engine), %2$s ms after Service.onCreate; UI start->hello %3$s</string>
+    <string name="selftest_hello_ms" translatable="false">%1$s ms</string>
+    <string name="selftest_hello_none" translatable="false">- (engine was already up)</string>
+    <string name="selftest_font" translatable="false">Font %1$s, \'M\' %2$s px @14px, columns %3$s (%4$s px), QPA %5$s</string>
+    <string name="selftest_counts" translatable="false">Lines %1$s, prompts %2$s, Lua onLine %3$s, notifications posted %4$s (UI saw %5$s)</string>
+    <string name="selftest_heartbeat" translatable="false">Heartbeat ticks %1$s, last gap %2$s ms, largest gap %3$s ms</string>
+    <string name="selftest_app_state" translatable="false">Qt appState %1$s (Qt::ApplicationState; 1 = Hidden), service-ready handshake %2$s</string>
+    <string name="selftest_fgs" translatable="false">FGS (type specialUse): %1$s</string>
+    <string name="selftest_pids" translatable="false">PIDs: UI %1$s, engine %2$s; game: %3$s</string>
+    <string name="selftest_link" translatable="false">Link: %1$s; attaches %2$s (last %3$s ms), engine losses %4$s (loss->attach %5$s ms), lines skipped %6$s</string>
+    <string name="selftest_libmudlet" translatable="false">libmudlet: %1$s, start %2$s ms, loaded after %3$s ms; Lua files %4$s; local lines %5$s, error console %6$s; restore %7$s</string>
+    <string name="selftest_last_error" translatable="false">Last error: %1$s</string>
+    <string name="selftest_ping" translatable="false">Ping: %1$s</string>
+    <string name="selftest_lua" translatable="false">Lua: %1$s</string>
+    <string name="selftest_host" translatable="false">Host</string>
+    <string name="selftest_port" translatable="false">Port</string>
+    <string name="selftest_tls" translatable="false">TLS</string>
+    <string name="selftest_connect" translatable="false">Connect</string>
+    <string name="selftest_disconnect" translatable="false">Disconnect</string>
+    <string name="selftest_show_debug" translatable="false">Debug</string>
+    <string name="selftest_hide_debug" translatable="false">Hide debug</string>
+    <string name="selftest_ping_many" translatable="false">Ping x300</string>
+    <string name="selftest_kill_ui" translatable="false">Kill UI</string>
+    <string name="selftest_kill_ui_process" translatable="false">Kill UI process</string>
+    <string name="selftest_stop_engine" translatable="false">Stop engine</string>
+    <string name="selftest_start_engine" translatable="false">Start engine</string>
+    <string name="selftest_kill_engine_process" translatable="false">Kill engine process</string>
+    <string name="selftest_qpa_next_start" translatable="false">QPA next start: %1$s</string>
+    <string name="selftest_command" translatable="false">Command</string>
+    <string name="selftest_command_hint" translatable="false">command, or: lua return lineCount</string>
+    <string name="selftest_send" translatable="false">Send</string>
+</resources>

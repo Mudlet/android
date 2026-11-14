@@ -8,7 +8,7 @@
 # BUILD_TYPE (Release), HEADLESS_RUNNER=0 to build only the libraries, SIZE_REPORT (<build-dir>/size-report.md).
 # Until Mudlet has it, it adds the Android FORTIFY fix below to the checkout's 3rdparty/lua51/CMakeLists.txt.
 # LUA_FORTIFY_FIX=0 leaves that fix, and the check that it is in effect, out: only to show that CI's emulator smoke
-# test catches the abort (libmudlet.yml's lua_fortify_fix input).
+# test catches the abort (the lua_fortify_fix input of a manual CI run).
 set -euo pipefail
 
 [ $# -eq 3 ] || { echo "usage: $0 <mudlet-source> <build-dir> <deps-prefix>" >&2; exit 2; }

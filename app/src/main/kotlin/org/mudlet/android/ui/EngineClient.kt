@@ -9,6 +9,7 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.mudlet.android.R
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
 import org.mudlet.android.engine.EngineSocket
@@ -32,6 +34,9 @@ import kotlin.concurrent.thread
 
 class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false)
 
+/** Where a `connect` request sent the engine. */
+data class GameAddress(val host: String, val port: Int, val tls: Boolean)
+
 /**
  * The UI process's view of the engine. Lives for the UI process; attaches while an
  * Activity is started, so a backgrounded (and later frozen) UI holds no connection.
@@ -45,7 +50,22 @@ object EngineClient {
     // About 300 ms of failed connects at EngineLink's fast retry interval
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
+    private const val PREF_LAST_HOST = "lastHost"
+    private const val PREF_LAST_PORT = "lastPort"
+    private const val PREF_LAST_TLS = "lastTls"
+
     val lines = mutableStateListOf<UiLine>()
+
+    /**
+     * How many lines have been added to [lines] in this process, markers included: `lines[i]` is line number
+     * `linesAdded - lines.size + i`, a number that stays with the line while older ones are dropped.
+     */
+    var linesAdded by mutableLongStateOf(0L)
+        private set
+
+    /** The last address [connect] was given, kept across UI process restarts: what Reconnect connects to. */
+    var lastAddress by mutableStateOf<GameAddress?>(null)
+        private set
 
     // The engine's line still being written, such as a prompt, shown below the others
     var tail by mutableStateOf<UiLine?>(null)
@@ -68,9 +88,13 @@ object EngineClient {
     // The application's Context, which lives as long as the process
     private lateinit var app: Context
 
+    /** How the link reaches the engine: its local socket. The instrumented tests (src/androidTest) put a fake engine here. */
+    @VisibleForTesting
+    internal var connector: () -> Transport = ::connectLocal
+
     // One link for the UI process's life: it remembers the engine instance and last seq,
     // so reattaching after onStop/onStart (or rotation) replays only the missed lines
-    private val link: EngineLink by lazy { EngineLink(::connectLocal, listener) }
+    private val link: EngineLink by lazy { EngineLink({ connector() }, listener) }
 
     @Volatile private var attached = false
 
@@ -97,7 +121,11 @@ object EngineClient {
     private fun prefs() = app.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
 
     fun init(context: Context) {
-        if (!::app.isInitialized) app = context.applicationContext
+        if (::app.isInitialized) return
+        app = context.applicationContext
+        val p = prefs()
+        val host = p.getString(PREF_LAST_HOST, null)
+        if (host != null) lastAddress = GameAddress(host, p.getInt(PREF_LAST_PORT, 23), p.getBoolean(PREF_LAST_TLS, false))
     }
 
     fun startEngine() {
@@ -139,6 +167,25 @@ object EngineClient {
         if (!sent) linkState = "not attached: command dropped"
         return sent
     }
+
+    /** Connects the engine to a game and remembers the address for [reconnect]. False as for [send]. */
+    fun connect(host: String, port: Int, tls: Boolean): Boolean {
+        lastAddress = GameAddress(host, port, tls)
+        prefs().edit {
+            putString(PREF_LAST_HOST, host)
+            putInt(PREF_LAST_PORT, port)
+            putBoolean(PREF_LAST_TLS, tls)
+        }
+        return send(Requests.connect(host, port, tls))
+    }
+
+    /** Connects to [lastAddress] again; false when there is none or the request was dropped. */
+    fun reconnect(): Boolean {
+        val address = lastAddress ?: return false
+        return send(Requests.connect(address.host, address.port, address.tls))
+    }
+
+    fun disconnect(): Boolean = send(Requests.disconnect())
 
     fun setViewWidth(px: Int) {
         viewWidthPx = px
@@ -221,7 +268,7 @@ object EngineClient {
                 linkState = "attached to pid ${hello.pid} (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 if (!sameInstance) tail = null
                 if (!sameInstance && lines.isNotEmpty()) {
-                    lines.add(UiLine("--- new engine instance ${hello.instance} ---", IntArray(0), false, marker = true))
+                    addLines(listOf(UiLine(app.getString(R.string.marker_new_engine, hello.instance), IntArray(0), false, marker = true)))
                 }
             }
         }
@@ -257,7 +304,9 @@ object EngineClient {
                 is EngineMessage.Gap -> post {
                     gapLines += message.skipped
                     synchronized(pendingLock) {
-                        pendingLines.add(UiLine("--- ${message.skipped} lines skipped while the UI lagged ---", IntArray(0), false, true))
+                        val skipped = message.skipped
+                        val text = app.resources.getQuantityString(R.plurals.marker_lines_skipped, skipped.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), skipped)
+                        pendingLines.add(UiLine(text, IntArray(0), false, true))
                         scheduleFlush()
                     }
                 }
@@ -336,7 +385,14 @@ object EngineClient {
         status.putAll(newStatus)
         newStatus["luaResult"]?.let { lastLuaResult = it }
         if (clear) lines.clear()
-        if (restore != null) lines.add(UiLine(restore, IntArray(0), false, marker = true))
+        if (restore != null) addLines(listOf(UiLine(restore, IntArray(0), false, marker = true)))
+        addLines(newLines)
+        if (tailSet) tail = newTail
+    }
+
+    private fun addLines(newLines: List<UiLine>) {
+        if (newLines.isEmpty()) return
+        linesAdded += newLines.size
         if (newLines.size >= MAX_LINES) {
             lines.clear()
             lines.addAll(newLines.subList(newLines.size - MAX_LINES, newLines.size))
@@ -345,6 +401,5 @@ object EngineClient {
             val excess = lines.size - MAX_LINES
             if (excess > 0) lines.removeRange(0, excess)
         }
-        if (tailSet) tail = newTail
     }
 }

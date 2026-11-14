@@ -1,0 +1,108 @@
+name: libmudlet for Android
+description: >
+  Mudlet's checkout built for Android into build/ by scripts/build-libmudlet.sh, against the dependencies
+  scripts/build-mudlet-deps.sh puts in deps/prefix. A build of the same Mudlet commit with the same scripts, toolchain
+  and FORTIFY choice comes from the cache instead, so a change to the app alone does not build Mudlet again; the
+  dependencies are always restored, as an app links them with libmudlet. Run after the android-toolchain action.
+inputs:
+  abi:
+    description: Android ABI
+    default: arm64-v8a
+  mudlet-dir:
+    description: The Mudlet checkout
+    default: mudlet
+  lua-fortify-fix:
+    description: "1 to build Lua 5.1 with the Android FORTIFY fix, 0 without (LUA_FORTIFY_FIX)"
+    default: "1"
+  qt-version:
+    description: The toolchain's Qt
+    required: true
+  ndk-version:
+    description: The toolchain's NDK
+    required: true
+outputs:
+  cache-hit:
+    description: true when build/ came from the cache
+    value: ${{ steps.build-cache.outputs.cache-hit == 'true' }}
+  mudlet-commit:
+    description: The Mudlet commit built
+    value: ${{ steps.commit.outputs.sha }}
+runs:
+  using: composite
+  steps:
+    - name: Mudlet's commit
+      id: commit
+      shell: bash
+      run: echo "sha=$(git -C "${{ inputs.mudlet-dir }}" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the libmudlet build
+      id: build-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: |
+          build
+          !build/**/*.o
+        key: libmudlet-build-${{ inputs.abi }}-${{ steps.commit.outputs.sha }}-fortify${{ inputs.lua-fortify-fix }}-qt${{ inputs.qt-version }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh', 'scripts/build-libmudlet.sh', 'scripts/export-libmudlet.py') }}
+
+    # restore and save are separate steps so the prefix is kept even when Mudlet then fails to build
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: deps/prefix
+        key: ${{ inputs.abi == 'arm64-v8a' && 'mudlet-deps' || format('mudlet-deps-{0}', inputs.abi) }}-qt${{ inputs.qt-version }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
+
+    - name: Build dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ANDROID_ABI: ${{ inputs.abi }}
+      run: scripts/build-mudlet-deps.sh deps/prefix
+
+    - name: Save dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: deps/prefix
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Restore ccache
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: .ccache
+        key: ccache-libmudlet-${{ inputs.abi }}-${{ github.run_id }}
+        restore-keys: ccache-libmudlet-${{ inputs.abi }}-
+
+    - name: Build libmudlet
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ANDROID_ABI: ${{ inputs.abi }}
+        LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix }}
+        CCACHE_DIR: ${{ github.workspace }}/.ccache
+        CCACHE_MAXSIZE: 1500M
+        # the NDK comes out of a cache or an unpacked zip, so its mtime says nothing
+        CCACHE_COMPILERCHECK: content
+      run: |
+        ccache -z > /dev/null
+        scripts/build-libmudlet.sh "${{ inputs.mudlet-dir }}" build deps/prefix
+        echo "ccache $(ccache --show-stats | grep -m1 'Hits:')"
+
+    # Only main and the nightly keep a compiler cache: a pull request's could serve only that pull request
+    - name: Save ccache
+      if: ${{ steps.build-cache.outputs.cache-hit != 'true' && !cancelled() && github.event_name != 'pull_request' }}
+      uses: actions/cache/save@v5
+      with:
+        path: .ccache
+        key: ccache-libmudlet-${{ inputs.abi }}-${{ github.run_id }}
+
+    # A pull request's too, so its next push that leaves Mudlet's build alone does not build it again
+    - name: Save the libmudlet build
+      if: steps.build-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: |
+          build
+          !build/**/*.o
+        key: ${{ steps.build-cache.outputs.cache-primary-key }}

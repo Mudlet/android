@@ -24,8 +24,9 @@ scripts/lint.sh                                        # ktlint, clang-format, S
 ./gradlew ktlintFormat; FIX=1 scripts/lint.sh clang-format             # fix formatting
 ```
 
-The real engine's host tests (`test_mudlet_engine.py`, `test_mudlet_restore.py`) and the emulator smoke test are in
-CONTRIBUTING.md's "Test".
+The real engine's host tests (`test_mudlet_engine.py`, `test_mudlet_restore.py`), the emulator smoke test and the
+instrumented tests (`src/androidTest`, run by `native/tests/android_instrumented.py`, not `connectedAndroidTest`) are
+in CONTRIBUTING.md's "Test". CI (`ci.yml`) runs only what the changed files need; "CI result" is its one result.
 
 ## Rules
 

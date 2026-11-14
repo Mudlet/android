@@ -1,0 +1,258 @@
+name: CI
+
+# The one workflow that pull requests and pushes to main start. It looks at which files changed and calls only the
+# workflows those files need (checks.yml, apks.yml, libmudlet.yml), then reports one result, "CI result", which is
+# the check to require: a workflow a path filter left out never reports, and a skipped job counts as passed. The nightly
+# runs the libmudlet jobs against Mudlet's latest development, the only ones that can break with no change here, and
+# opens or updates an issue when they fail; a manual run runs everything.
+#
+# What runs for what changed (the filters in "changes" below say it exactly):
+#   docs, README and the like     nothing but this workflow's own small jobs (docs/protocol.md: the APKs, whose
+#                                 ProtocolSpecTest reads it)
+#   Kotlin (app/, engine-service/, protocol/)
+#                                 ktlint, the APKs with Android lint, and the emulator suite (smoke test and the
+#                                 instrumented tests, on minSdk and the newest API) with libmudlet from its cache
+#   native/, the shared actions   their lint check (clang-format, actionlint), the APKs, the emulator suite, the
+#                                 arm64 APK with libmudlet and the real engine on the host
+#   Mudlet's build scripts, the Gradle build, the APK scripts
+#                                 the jobs that build from them
+#   a workflow                    what that workflow runs; ci.yml itself, everything
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mudlet_ref:
+        description: Mudlet/Mudlet branch, tag or full commit SHA to build
+        default: development
+      lua_fortify_fix:
+        description: >-
+          Emulator jobs: build Lua 5.1 with the Android FORTIFY fix. Off only to show that the smoke test catches the
+          abort in luaL_openlibs
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # the changed files of a pull request come from the API
+      pull-requests: read
+    outputs:
+      ktlint: ${{ steps.decide.outputs.ktlint }}
+      lint-checks: ${{ steps.decide.outputs.lint-checks }}
+      apks: ${{ steps.decide.outputs.apks }}
+      libmudlet-android: ${{ steps.decide.outputs.libmudlet-android }}
+      desktop-engine: ${{ steps.decide.outputs.desktop-engine }}
+      emulator: ${{ steps.decide.outputs.emulator }}
+    steps:
+      # a push is compared with the commit before it, in git
+      - uses: actions/checkout@v6
+        if: github.event_name == 'push'
+
+      - id: filter
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            everything: &everything
+              - .github/workflows/ci.yml
+            lint-tools: &lint-tools
+              - scripts/lint.sh
+              - scripts/lint-requirements.txt
+              - .github/workflows/checks.yml
+            gradle: &gradle
+              - gradle/**
+              - gradlew
+              - "**/*.gradle.kts"
+              - gradle.properties
+            shared: &shared
+              - .github/actions/**
+            apk-scripts: &apk-scripts
+              - scripts/build-apk.sh
+              - scripts/check-apk.sh
+              - scripts/build-openssl.sh
+            mudlet-scripts: &mudlet-scripts
+              - scripts/build-mudlet-deps.sh
+              - scripts/build-libmudlet.sh
+              - scripts/build-libmudlet-desktop.sh
+              - scripts/export-libmudlet.py
+            kotlin: &kotlin
+              - app/**
+              - engine-service/**
+              - protocol/**
+            ktlint:
+              - "**/*.kt"
+              - "**/*.kts"
+              - .editorconfig
+              - gradle/libs.versions.toml
+              - *lint-tools
+              - *everything
+            clang-format:
+              - native/**
+              - .clang-format
+              - *lint-tools
+              - *everything
+            shellcheck:
+              - "**/*.sh"
+              - *lint-tools
+              - *everything
+            actionlint:
+              - .github/workflows/**
+              - .github/actions/**
+              - *lint-tools
+            apks:
+              - *kotlin
+              - native/**
+              - docs/protocol.md
+              - lint.xml
+              - *gradle
+              - *apk-scripts
+              - *shared
+              - .github/workflows/apks.yml
+              - *everything
+            libmudlet-android:
+              - native/**
+              - *gradle
+              - *apk-scripts
+              - *mudlet-scripts
+              - *shared
+              - .github/workflows/libmudlet.yml
+              - *everything
+            desktop-engine:
+              - native/**
+              - *mudlet-scripts
+              - *shared
+              - .github/workflows/libmudlet.yml
+              - *everything
+            emulator:
+              - *kotlin
+              - native/**
+              - *gradle
+              - *apk-scripts
+              - *mudlet-scripts
+              - *shared
+              - .github/workflows/libmudlet.yml
+              - *everything
+
+      # The nightly runs what builds Mudlet's development; a manual run runs everything
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          CHANGES: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          wanted() {
+            case "$EVENT" in
+              push | pull_request) jq -r --arg k "$1" '.[$k] // "false"' <<< "$CHANGES" ;;
+              schedule) case "$1" in libmudlet-android | desktop-engine | emulator) echo true ;; *) echo false ;; esac ;;
+              *) echo true ;;
+            esac
+          }
+          checks=()
+          for check in clang-format shellcheck actionlint; do
+            if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
+          done
+          {
+            for job in ktlint apks libmudlet-android desktop-engine emulator; do echo "$job=$(wanted "$job")"; done
+            echo "lint-checks=[$(IFS=,; echo "${checks[*]}")]"
+          } | tee -a "$GITHUB_OUTPUT"
+          echo "Filters the changed files matched: ${{ steps.filter.outputs.changes || 'none applied (a nightly or manual run)' }}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    needs: changes
+    if: needs.changes.outputs.ktlint == 'true' || needs.changes.outputs.lint-checks != '[]'
+    uses: ./.github/workflows/checks.yml
+    with:
+      ktlint: ${{ needs.changes.outputs.ktlint == 'true' }}
+      lint-checks: ${{ needs.changes.outputs.lint-checks }}
+
+  apks:
+    needs: changes
+    if: needs.changes.outputs.apks == 'true'
+    uses: ./.github/workflows/apks.yml
+
+  libmudlet:
+    needs: changes
+    if: >-
+      needs.changes.outputs.libmudlet-android == 'true' || needs.changes.outputs.desktop-engine == 'true'
+      || needs.changes.outputs.emulator == 'true'
+    uses: ./.github/workflows/libmudlet.yml
+    with:
+      mudlet-ref: ${{ inputs.mudlet_ref || 'development' }}
+      # only a manual run has inputs, and it may turn the fix off
+      lua-fortify-fix: ${{ github.event_name != 'workflow_dispatch' || inputs.lua_fortify_fix }}
+      android: ${{ needs.changes.outputs.libmudlet-android == 'true' }}
+      desktop-engine: ${{ needs.changes.outputs.desktop-engine == 'true' }}
+      emulator: ${{ needs.changes.outputs.emulator == 'true' }}
+
+  # The check to require: it passes when every job ran that the changes call for, and passed
+  result:
+    name: CI result
+    needs: [changes, checks, apks, libmudlet]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job the changes call for passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          CHECKS: ${{ needs.changes.outputs.ktlint == 'true' || (needs.changes.outputs.lint-checks != '[]' && needs.changes.outputs.lint-checks != '') }}
+          APKS: ${{ needs.changes.outputs.apks == 'true' }}
+          LIBMUDLET: >-
+            ${{ needs.changes.outputs.libmudlet-android == 'true' || needs.changes.outputs.desktop-engine == 'true'
+            || needs.changes.outputs.emulator == 'true' }}
+        run: |
+          result() { jq -r --arg j "$1" '.[$j].result' <<< "$NEEDS"; }
+          status=0
+          [ "$(result changes)" = success ] || { echo "::error::changes: $(result changes)"; status=1; }
+          for pair in "checks:$CHECKS" "apks:$APKS" "libmudlet:$LIBMUDLET"; do
+            job=${pair%%:*} wanted=${pair#*:} got=$(result "${pair%%:*}")
+            if [ "$wanted" = true ] && [ "$got" != success ]; then
+              echo "::error::$job was needed and ended $got"; status=1
+            elif [ "$wanted" != true ] && [ "$got" != skipped ]; then
+              echo "::error::$job was not needed, yet ended $got"; status=1
+            else
+              echo "$job: $got (needed: $wanted)"
+            fi
+          done
+          exit $status
+
+  # GitHub mails a failed scheduled run only to whoever last edited the cron line
+  report-nightly-failure:
+    needs: libmudlet
+    # a job that hits timeout-minutes is cancelled, not failed
+    if: always() && github.event_name == 'schedule' && needs.libmudlet.result != 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly CI against Mudlet development fails"
+          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\"))[0].number // empty")
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Failed or timed out again: $RUN_URL"
+          else
+            gh issue create --title "$title" \
+              --body "The nightly run against Mudlet's \`development\` failed or timed out: $RUN_URL. Close this once it is green again."
+          fi

@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, and the self-test screen (`ui/MainActivity.kt`) with its model of the engine (`ui/EngineClient.kt`) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
@@ -110,7 +110,7 @@ backgrounded UI process mid-read. Verified on the host:
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
-one profile in a `THeadlessSession` behind the same socket protocol. It uses only that class's
+one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
 public API, from Mudlet's `development` with no patch: it includes no Mudlet header but
 `THeadlessSession.h` (which brings `TDebug.h` and `utils.h`) and sets none of Mudlet's
 defines. [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
@@ -143,14 +143,30 @@ keeps the profiles' passwords in the KeyStore.
 | `connecting`, `connected`, `disconnected` | status `connection` |
 | `outputLine`, `localTextStyled`, `errorConsoleText` | counters, and status `luaError` |
 | `profileLoaded`, `startFinished` | status `profile`, `profileLoadMs`, `startMs` |
+| `hiddenInputWanted` | `hiddenInput` |
+| `commandHistory()`, read at `profileLoaded` and when a UI attaches | `history` |
+| `commandLineTextRequested` (`printCmdLine()` and the like) | `commandLine` |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
+**Profiles.** `THeadlessSession` opens a profile by name but does not list, save or delete them, so until Mudlet's
+headless API does, `native/enginehost/ProfileStore.*` reads and writes Mudlet's own files: a profile is a folder under
+`<configDir>/profiles`, and `saveProfile` writes the files Mudlet's connection dialog writes there (`url`, `port`,
+`ssl_tsl`, `login`, `autoreconnect`), each one `QString` in a `QDataStream` at `Qt_5_12`, through `QSaveFile`.
+`deleteProfile` removes the folder (`QDir::removeRecursively()`). Mudlet records no order, so the engine keeps the
+order profiles were last opened or created in, `<configDir>/profile-order.json`. `openProfile` closes a running
+profile with `shutdownAsync(true)`, as Mudlet closes one, then starts the other with `startAsync()`, its password in
+`Options::password` for that start only.
+
 **Lifecycle.**
-- The first `connect` or `runLua` calls `startAsync()` with `Options::configDir` set to
-  `<files>/mudlet` (`MUDLET_CONFIG_DIR` overrides it on the desktop).
+- `openProfile`, or the first `connect` or `runLua`, calls `startAsync()` with `Options::configDir` set to
+  `<files>/mudlet` (`MUDLET_CONFIG_DIR` overrides it on the desktop). A `connect` or `runLua` starts the profile
+  `MUDLET_PROFILE` names (`Android` unless set), or the one last opened.
+- An `openProfile` while another profile runs closes that one first (status `profile` `<name> closing`, then
+  `<name> closed`); a close Mudlet refuses, as while a script runs, leaves it running (`<name> not closed: ...`) and
+  calls off the open.
 - Requests that arrive during the start are queued, and run once `startFinished` reports
-  `started`.
+  `started`. Those that arrive while a profile is being opened are for that one.
 - `start()` can create a profile only from a game's address, so Lua sent before the first
   connect of a new profile gets `no profile`.
 - An engine started after the last one was killed loads that one's profile again, and connects it
@@ -173,13 +189,20 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - a 3000-line flood that arrives whole and in order;
 - Lua errors;
 - the profile's save on quit;
+- the profile requests: each answered with `profiles` or `error`; profiles written in Mudlet's own files; a switch
+  of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
+  through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log;
+- the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
+  `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
+  history, and `printCmdLine()` as `commandLine`;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
+`native/tests/profile_checks.py` holds the profile requests both host tests run, the stand-in's `test_engine.py` too.
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
-(CI's emulator job) or a device, from the host through adb. It drives the UI through a debug-only hook,
+(CI's emulator jobs) or a device, from the host through adb. It drives the UI through a debug-only hook,
 `SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
 - that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
 - that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
@@ -188,6 +211,23 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - that after `:engine` is killed, the UI starts a new engine and attaches to it.
 
 If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
+
+The instrumented tests, run on the same emulator boot by `native/tests/android_instrumented.py`, check what only a
+device shows, below the UI's debug hook:
+- `engine-service/src/androidTest` runs `EngineService` from its own test APK, against a small game server in the
+  test's process: the service in its own `:engine` process in the foreground, Qt's `serviceReadyWait` and QPA, the
+  socket handshake; the engine notification's Stop, after which the next start restores nothing; a killed engine,
+  after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
+  bytes are a ClientHello, so Qt's backend loaded OpenSSL.
+- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
+  way from the start screen to the game screen and the self-test and back, through the labels and click actions
+  TalkBack uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
+  reattach to a new engine after one is lost, and to the same one; and the notification permission, asked on Android
+  13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
+  (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
+  library needs API 34, so they run on the API 36 emulator only.
+
+CI runs both on API 28, the app's minSdk, and on API 36.
 
 **Gaps:**
 - Game text that no line feed or GA has ended shows as in Mudlet's desktop GUI. While the game
@@ -202,6 +242,12 @@ If the engine crashes, it stops with the crash from logcat, symbolised with `ndk
   it asks.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
+- A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.
+- `saveProfile` makes a new profile's folder before its first start, so that start does not remove the passwords an
+  earlier profile of the same name may have left in the credential store, as Mudlet does for a new name, and
+  `deleteProfile` does not remove them either. The app stores no password (it sends one with each `openProfile`),
+  so only one stored by Mudlet's own GUI under the same config dir could be left. Profile management in
+  `THeadlessSession` would close this.
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
   `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
@@ -216,8 +262,9 @@ stand-in does not.
 
 **What is kept.** `native/enginehost/SessionStore.*` keeps one JSON file, `<files>/engine-session.json`
 (`MUDLET_ENGINE_STATE`; the app names it in `EngineSession.kt`). It holds:
-- the profile, while one runs, which is the only `THeadlessSession::Options` field the engine sets besides the
-  connection's (`configDir` comes from the app's files, as at any start);
+- the profile, while one runs, the one `openProfile` named included, which is the only `THeadlessSession::Options`
+  field the engine sets besides the connection's and an `openProfile`'s password, which is never kept, so a restored
+  profile does not log in (`configDir` comes from the app's files, as at any start);
 - the host and port the UI last connected it to, passed again as `Options::host` and `port` (an empty host leaves
   the address stored in the profile);
 - whether the connection is wanted;
@@ -569,7 +616,8 @@ trusted.
 Item 13 of the on-device checklist covers this.
 
 ## On-device checklist
-1. Install the APK with `adb install -r app-debug.apk`. Open it and allow notifications.
+1. Install the APK with `adb install -r app-debug.apk`. Open it and allow notifications. It opens on "Profiles";
+   tap "Self-test" for the checks below (debug builds only: a release build has no self-test).
 2. **The critical check: does Qt start in a service-only process?**
    - There must be no ANR, and no "isn't responding" dialog, in the first 10 s.
      An ANR in `Service.onCreate` means the semaphore release did not work.
@@ -637,6 +685,23 @@ Item 13 of the on-device checklist covers this.
       downloadFile(getMudletHomeDir() .. "/tls-check.html", "https://www.mudlet.org/")` as one line, and expect
       "got".
     - With TLS ticked, connect to a game whose port has no TLS. Expect "Secure handshake failed".
+
+14. The app's screens, with TalkBack on.
+    - The start screen reads "Profiles", then its text and its buttons, each as "..., button". "Open the game screen"
+      opens the game screen, and its "Back, button" returns.
+    - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
+    - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
+15. The game screen, connected to a game (connect from the self-test first, then open the game screen).
+    - The keyboard: tapping the input line opens it, and the console shrinks above it with its newest line still in
+      view. Send on the keyboard sends the line and leaves the keyboard open, ready for the next. Note the keyboard's
+      action key: it should read Send, and suggestions or corrections should not change what is typed. Type half a
+      word, then the up button: the earlier command replaces it whole, and typing goes on from the end of it.
+    - Scroll up while the game sends text: the console stays put and "Jump to the bottom: N new lines" counts up; the
+      button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
+      and again with a half-typed line: both stay. The same in split screen.
+    - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
+      the connection state is read out when it changes (connecting, connected, disconnected), without moving focus.
+      Swiping goes from the console's lines to the input line, then the buttons, then the connection bar.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

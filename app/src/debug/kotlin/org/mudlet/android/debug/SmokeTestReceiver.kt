@@ -38,7 +38,7 @@ class SmokeTestReceiver : BroadcastReceiver() {
                 val host = intent.getStringExtra("host")
                 val port = intent.getIntExtra("port", -1)
                 val tls = intent.getBooleanExtra("tls", false)
-                if (host == null || port <= 0) "connect needs --es host and --ei port" else sendOrError(Requests.connect(host, port, tls))
+                if (host == null || port <= 0) "connect needs --es host and --ei port" else notSentError(c.connect(host, port, tls))
             }
 
             "lua" -> {
@@ -65,7 +65,9 @@ class SmokeTestReceiver : BroadcastReceiver() {
         setResult(if (error == null) 0 else 1, Base64.encodeToString(state.toString().toByteArray(), Base64.NO_WRAP), null)
     }
 
-    private fun sendOrError(message: JSONObject): String? = if (EngineClient.send(message)) null else "the UI is not attached to the engine: ${EngineClient.linkState}"
+    private fun sendOrError(message: JSONObject): String? = notSentError(EngineClient.send(message))
+
+    private fun notSentError(sent: Boolean): String? = if (sent) null else "the UI is not attached to the engine: ${EngineClient.linkState}"
 
     private fun state(): JSONObject {
         val c = EngineClient

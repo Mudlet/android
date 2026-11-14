@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The window behind Compose (MudletTheme), so it is light or dark with the system before the first frame too -->
+<resources>
+    <style name="Theme.Mudlet" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

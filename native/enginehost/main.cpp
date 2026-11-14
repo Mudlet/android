@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
 #ifdef ENGINE_LIBMUDLET
     MudletEngine engine(&bridge, heartbeatMs);
 #else
-    Engine engine(&bridge, heartbeatMs);
+    Engine engine(&bridge, heartbeatMs, QFileInfo(socketPath).absoluteDir().filePath(QStringLiteral("profiles.json")));
 #endif
     bridge.setEngine(&engine);
 

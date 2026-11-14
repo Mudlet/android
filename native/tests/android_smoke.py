@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test of the debug APK with libmudlet as its engine, on an emulator (CI's emulator job) or a device, from the
+"""Smoke test of the debug APK with libmudlet as its engine, on an emulator (CI's emulator jobs) or a device, from the
 host through adb. The only test that runs the real engine on Android: a crash there, such as Lua 5.1's FORTIFY abort
 in luaL_openlibs, passes every build-time check.
 
@@ -335,7 +335,7 @@ def main():
     if failure:
         log(f"\nFAIL {failure}")
         if os.environ.get("GITHUB_ACTIONS"):
-            text = failure + "\n(logcat, screenshot and the UI's state are in the emulator-smoke-test artifact)"
+            text = failure + "\n(logcat, screenshot and the UI's state are in the job's artifact)"
             text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title=Emulator smoke test::{text}", flush=True)
         sys.exit(1)

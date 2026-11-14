@@ -18,3 +18,4 @@ __pycache__/
 /smoke-test/
 # A release's staged engines, as CONTRIBUTING.md and docs/ptb.md stage them
 /staged/
+/instrumented-test/

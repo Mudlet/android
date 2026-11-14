@@ -11,4 +11,7 @@
     <!-- Each debug APK, which is what lint looks at, is built for one ABI on purpose (-PandroidAbi; x86_64 for the
          emulator). The release has x86_64 as well as arm64-v8a (scripts/build-release.sh, docs/ptb.md) -->
     <issue id="ChromeOsAbiSupport" severity="ignore" />
+    <!-- Translations come from Crowdin as translators finish them (docs/translations.md); a string not yet translated
+         shows in English, as in Mudlet's desktop app -->
+    <issue id="MissingTranslation" severity="ignore" />
 </lint>

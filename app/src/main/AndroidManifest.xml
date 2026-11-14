@@ -9,7 +9,8 @@
         android:theme="@style/Theme.Mudlet"
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:dataExtractionRules="@xml/data_extraction_rules">
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:supportsRtl="true">
 
         <activity
             android:name=".ui.MainActivity"

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The engine's notifications, translated on Crowdin with the app's strings (docs/translations.md): each one has a
+     comment for translators right before it. "Engine" is the part of the app that runs the game's connection and
+     scripts in the background. -->
+<resources>
+    <!-- The name of the notification channel for the notification shown while the engine runs, in the system's
+         notification settings -->
+    <string name="engine_channel_engine">Engine running</string>
+    <!-- The name of the notification channel for the messages a game's scripts send as notifications, in the system's
+         notification settings. A tell is a private message one player sends another in a MUD. -->
+    <string name="engine_channel_tells">Tells</string>
+    <!-- The title of the notification shown while the engine runs. Mudlet is the app's name. -->
+    <string name="engine_notification_title">Mudlet engine running</string>
+    <!-- The text of the notification shown while the engine runs; %1$d is the engine's process id (pid), a number -->
+    <string name="engine_notification_text">Engine process pid %1$d</string>
+    <!-- The button on the notification shown while the engine runs: it stops the engine and closes the game's
+         connection -->
+    <string name="engine_notification_stop">Stop engine</string>
+</resources>

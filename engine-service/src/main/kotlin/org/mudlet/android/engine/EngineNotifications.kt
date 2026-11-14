@@ -22,8 +22,8 @@ object EngineNotifications {
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_ENGINE, "Engine running", NotificationManager.IMPORTANCE_LOW))
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_TELLS, "Tells", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_ENGINE, context.getString(R.string.engine_channel_engine), NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_TELLS, context.getString(R.string.engine_channel_tells), NotificationManager.IMPORTANCE_DEFAULT))
     }
 
     // The app's launcher Activity: this module does not know the UI's classes
@@ -50,11 +50,11 @@ object EngineNotifications {
         )
         return NotificationCompat.Builder(context, CHANNEL_ENGINE)
             .setSmallIcon(R.drawable.ic_engine)
-            .setContentTitle("Mudlet engine running")
-            .setContentText("Engine process pid ${android.os.Process.myPid()}")
+            .setContentTitle(context.getString(R.string.engine_notification_title))
+            .setContentText(context.getString(R.string.engine_notification_text, android.os.Process.myPid()))
             .setOngoing(true)
             .setContentIntent(openUi(context))
-            .addAction(0, "Stop engine", stop)
+            .addAction(0, context.getString(R.string.engine_notification_stop), stop)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }

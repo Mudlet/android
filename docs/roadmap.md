@@ -68,8 +68,9 @@ The first usable client has:
    may then kill it.
 7. **Reconnect.** Mudlet's own "Reconnect automatically", per profile; a Reconnect button; the restore after a
    killed engine, which the foundation has.
-8. **Translatable strings.** Every user-visible string is in `strings.xml` from the first screen, so translation can
-   follow without touching layouts.
+8. **Translatable strings.** Every user-visible string is in `strings.xml` from the first screen, with a comment for
+   translators, and Crowdin translates them as it does Mudlet's ([`translations.md`](translations.md)); CI fails on
+   text written into the Kotlin, and the UI tests run the screens in the pseudo-locales en-XA and ar-XB.
 
 ### TalkBack, a first-class requirement
 

@@ -76,7 +76,8 @@ class EngineServiceTest {
             context.getSystemService(NotificationManager::class.java).activeNotifications
                 .firstOrNull { it.id == EngineNotifications.ENGINE_NOTIFICATION_ID }
         }
-        notification.notification.actions.single { it.title.toString() == "Stop engine" }.actionIntent.send()
+        val stop = context.getString(R.string.engine_notification_stop)
+        notification.notification.actions.single { it.title.toString() == stop }.actionIntent.send()
         awaitEngineGone()
         assertTrue("onDestroy wrote the stop marker", File(EngineSession.stopMarkerPath(context)).exists())
 

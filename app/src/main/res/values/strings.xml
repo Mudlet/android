@@ -1,48 +1,75 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The strings the app shows. app_name comes from app/build.gradle.kts (resValue), as the PTB has a name of its own. -->
+<!-- The strings the app shows, translated on Crowdin (docs/translations.md): each translatable one has a comment for
+     translators right before it. app_name comes from app/build.gradle.kts (resValue), as the PTB has a name of its own. -->
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The arrow button at the start of a screen's title bar, read by a screen reader: it goes back to the screen
+         before -->
     <string name="navigate_back">Back</string>
 
+    <!-- The start screen's title: the list of the player's games (in Mudlet, a profile is a game and its settings) -->
     <string name="profiles_title">Profiles</string>
+    <!-- The start screen's text while the player has no games yet -->
     <string name="profiles_empty">Your games will be listed here.</string>
+    <!-- A button on the start screen that opens the screen where the game's text is shown and commands are typed -->
     <string name="profiles_open_game">Open the game screen</string>
 
+    <!-- The game screen's title: the screen with the game's text, the command line and the connection bar -->
     <string name="game_title">Game</string>
 
-    <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
+    <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up, when no
+         new lines came since -->
     <string name="console_jump_to_bottom">Jump to the bottom</string>
+    <!-- The same button once new lines came in while the player was scrolled up; %1$d is how many -->
     <plurals name="console_jump_new_lines">
         <item quantity="one">Jump to the bottom: %1$d new line</item>
         <item quantity="other">Jump to the bottom: %1$d new lines</item>
     </plurals>
 
-    <!-- The game screen's input line, where the player types commands for the game -->
+    <!-- The label of the game screen's input line, where the player types commands for the game -->
     <string name="input_label">Command</string>
+    <!-- The input line's button that sends the typed command to the game, read by a screen reader -->
     <string name="input_send">Send</string>
+    <!-- The input line's up-arrow button, read by a screen reader: it puts the command typed before into the input
+         line -->
     <string name="input_history_previous">Previous command</string>
+    <!-- The input line's down-arrow button, read by a screen reader: it goes forward again through the commands typed
+         before -->
     <string name="input_history_next">Next command</string>
+    <!-- Shown under the input line when a command could not be sent; the engine is the part of the app that runs the
+         game's connection -->
     <string name="input_not_sent">Not sent: the app is not connected to the engine</string>
     <!-- The button, also the Tab key, that completes the word being typed from the words the game sent -->
     <string name="input_complete">Complete the word</string>
+    <!-- Shown under the input line when no word the game sent starts with what the player typed -->
     <string name="input_no_completion">No completion</string>
-    <!-- The masked field that takes the input line's place while the game asks for a password -->
+    <!-- The label of the masked field that takes the input line's place while the game asks for a password -->
     <string name="input_password_label">Password</string>
+    <!-- The button, read by a screen reader, that closes the password field and brings the input line back -->
     <string name="input_password_close">Close the password field</string>
 
-    <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
+    <!-- The game screen's connection bar, before the engine (the part of the app that runs the game's connection) has
+         started -->
     <string name="connection_no_engine">Waiting for the engine…</string>
+    <!-- The connection bar while the app is not connected to the game -->
     <string name="connection_disconnected">Disconnected</string>
+    <!-- The connection bar while the app connects to the game, when the game's address is not known -->
     <string name="connection_connecting">Connecting…</string>
-    <!-- %1$s is the game's address, as host:port -->
+    <!-- The connection bar while the app connects to the game; %1$s is the game's address, as host:port -->
     <string name="connection_connecting_to">Connecting to %1$s…</string>
+    <!-- The connection bar while the app is connected to the game -->
     <string name="connection_connected">Connected</string>
-    <!-- %1$s is the engine's reason, in English -->
+    <!-- The connection bar after the connection failed; %1$s is the engine's reason, in English -->
     <string name="connection_error">Connection error: %1$s</string>
+    <!-- The connection bar's button that connects to the same game again -->
     <string name="connection_reconnect">Reconnect</string>
+    <!-- The connection bar's button that closes the connection to the game -->
     <string name="connection_disconnect">Disconnect</string>
 
-    <!-- Lines the app adds to the console between the game's own. The dashes set them apart from the game's text. -->
+    <!-- A line the app adds to the game's text when the engine restarted; %1$s is the new engine's id, a code. The
+         dashes set it apart from the game's text. -->
     <string name="marker_new_engine" tools:ignore="TypographyDashes">--- new engine instance %1$s ---</string>
+    <!-- A line the app adds to the game's text where it left out lines because the screen fell behind; %1$d is how
+         many. The dashes set it apart from the game's text. -->
     <plurals name="marker_lines_skipped" tools:ignore="TypographyDashes">
         <item quantity="one">--- %1$d line skipped while the UI lagged ---</item>
         <item quantity="other">--- %1$d lines skipped while the UI lagged ---</item>

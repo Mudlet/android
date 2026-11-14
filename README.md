@@ -137,7 +137,8 @@ demand:
   - It fails if:
     - the libraries use desktop-only APIs
     - the libraries or the runner carry the build-type splash screen images
-    - Lua 5.1's collector (`lgc.c`) makes a fortified call (`__strchr_chk` and the like), the one that aborts
+    - Lua 5.1's collector (`lgc.c`) references a fortified function such as `__strchr_chk`, as the call that
+      aborts does
     - the runner lacks Mudlet's built-in Lua files and Lua C modules
     - the runner does not link QtKeychain's Android backend, which Mudlet uses to keep profiles' passwords in
       the KeyStore

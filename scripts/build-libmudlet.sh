@@ -22,10 +22,11 @@ jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
 
 # Mudlet's Lua 5.1 aborts in luaL_openlibs on Android with "FORTIFY: strchr: prevented read past end of buffer". The
-# NDK builds with _FORTIFY_SOURCE=2, where bionic sizes a buffer by the struct member a pointer was reached through,
-# and Lua keeps a string's characters just past its TString header, so getstr() reads as 0 bytes long. Level 1 sizes
-# whole allocations, which for Lua's strings are unknown, and still checks Lua's fixed-size buffers. Until Mudlet's
-# 3rdparty/lua51 passes -U_FORTIFY_SOURCE itself, this adds that to the checkout; the lgc.c check below holds either way.
+# NDK builds with _FORTIFY_SOURCE=2, where bionic's checks size a buffer by the struct member a pointer was reached
+# through, and Lua keeps a string's characters just past its TString header, so getstr() reads as 0 bytes long. Level 1
+# sizes whole allocations, which for Lua's strings are unknown, and still checks Lua's fixed-size buffers. Until Mudlet's
+# own 3rdparty/lua51/CMakeLists.txt passes -U_FORTIFY_SOURCE, this appends that to the checkout's copy; the lgc.c check
+# below passes with either.
 lua_cmake=$src/3rdparty/lua51/CMakeLists.txt
 lua_fix_mark="# Android FORTIFY fix, added by Mudlet/android's scripts/build-libmudlet.sh until Mudlet has it"
 [ -f "$lua_cmake" ] || { echo "$lua_cmake is missing: has Mudlet moved its Lua 5.1?" >&2; exit 1; }
@@ -34,8 +35,13 @@ if grep -qxF "$lua_fix_mark" "$lua_cmake"; then
 elif grep -qF -- -U_FORTIFY_SOURCE "$lua_cmake"; then
     lua_fix="Mudlet's own"
 else
-    printf '\n%s\nif(ANDROID)\n  target_compile_options(lua51 PRIVATE -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1)\nendif()\n' \
-        "$lua_fix_mark" >> "$lua_cmake"
+    cat >> "$lua_cmake" <<EOF
+
+$lua_fix_mark
+if(ANDROID)
+  target_compile_options(lua51 PRIVATE -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1)
+endif()
+EOF
     lua_fix="carried here, as Mudlet lacks it"
     echo "Mudlet's Lua 5.1 lacks the Android FORTIFY fix: adding it to $lua_cmake"
 fi
@@ -103,10 +109,10 @@ no_splash libmudlet "$lib_symbols"
 # Lua 5.1's collector reads a weak table's __mode with strchr(getstr(ts), ...); built with _FORTIFY_SOURCE=2, that
 # call goes through bionic's __strchr_chk with a size of 0, which aborts in luaL_openlibs. lgc.c has no other
 # fortified call, so any __*_chk it references (the stack protector's aside) means the FORTIFY fix is not in effect
-lua=$build/3rdparty/lua51/liblua51.a
-[ -f "$lua" ] || { echo "$lua was not built there: has Mudlet moved it, or is USE_BUNDLED_LUA off?" >&2; exit 1; }
-gc_uses=$("$bin/llvm-nm" -A --undefined-only "$lua" | sed -n 's/.*:lgc\.c\.o: *U //p')
-[ -n "$gc_uses" ] || { echo "$lua has no lgc.c.o for the FORTIFY check to look at" >&2; exit 1; }
+lua_lib=$build/3rdparty/lua51/liblua51.a
+[ -f "$lua_lib" ] || { echo "$lua_lib was not built there: has Mudlet moved it, or is USE_BUNDLED_LUA off?" >&2; exit 1; }
+gc_uses=$("$bin/llvm-nm" -A --undefined-only "$lua_lib" | sed -n 's/.*:lgc\.c\.o: *U //p')
+[ -n "$gc_uses" ] || { echo "$lua_lib has no lgc.c.o for the FORTIFY check to look at" >&2; exit 1; }
 found=$(grep -E '^__.+_chk$' <<< "$gc_uses" | grep -v '^__stack_chk_' || true)
 [ -z "$found" ] || { printf 'Lua 5.1 makes fortified calls that abort on Android (lgc.c):\n%s\n' "$found" >&2; exit 1; }
 if [ -n "$runner" ]; then

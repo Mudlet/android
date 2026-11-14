@@ -63,8 +63,8 @@ class AboutScreenTest {
         }
         compose.onNodeWithText(engine).assertIsDisplayed()
 
-        // the licence list: its headings are headings for TalkBack, and Qt opens its licence screen
-        scrollTo(hasText(string(R.string.about_group_android)) and isHeading())
+        // the licence list, where Qt, near its top, opens its licence screen. Each scroll goes down the list, as
+        // performScrollToNode looks for a lazy list's item below where it stands
         scrollTo(hasText("Qt") and hasClickAction())
         activate(hasText("Qt") and hasClickAction())
         for (licence in listOf("LGPL-3.0-only", "GPL-3.0-only")) {
@@ -72,9 +72,10 @@ class AboutScreenTest {
         }
         // the GPL's preamble, read from the APK's assets
         scrollTo(hasText("The GNU General Public License is a free, copyleft license", substring = true))
-
         activate(hasContentDescription(string(R.string.navigate_back)))
-        compose.onNodeWithText(string(R.string.about_title)).assertIsDisplayed()
+
+        // back on the list, further down: its group titles are headings for TalkBack's headings navigation
+        scrollTo(hasText(string(R.string.about_group_android)) and isHeading())
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.onNodeWithText(string(R.string.profiles_title)).assertIsDisplayed()
     }
@@ -83,9 +84,18 @@ class AboutScreenTest {
 
     private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
 
+    /**
+     * Scrolls the screen's list to [node], waiting while the list is still read from the assets. Only "not found"
+     * (an AssertionError) is retried: a failed accessibility check, which the scroll runs first, fails the test.
+     */
     private fun scrollTo(node: SemanticsMatcher) {
         compose.waitUntil(TIMEOUT_MS / 4) {
-            runCatching { compose.onNode(hasScrollAction()).performScrollToNode(node) }.isSuccess
+            try {
+                compose.onNode(hasScrollAction()).performScrollToNode(node)
+                true
+            } catch (e: AssertionError) {
+                false
+            }
         }
         compose.onNode(node).assertIsDisplayed()
     }

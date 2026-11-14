@@ -130,6 +130,18 @@ class ProtocolTest {
     }
 
     @Test
+    fun setAppStateCarriesBothFlags() {
+        assertEquals(mapOf("t" to "setAppState", "active" to false, "minimized" to true), Requests.setAppState(false, true).toMap())
+    }
+
+    @Test
+    fun attentionAndMoveTypedLineParse() {
+        assertEquals(EngineMessage.Attention(3000), FrameReader.parse(JSONObject("""{"t":"attention","ms":3000}""")))
+        assertEquals(EngineMessage.Attention(0), FrameReader.parse(JSONObject("""{"t":"attention","ms":0}""")))
+        assertEquals(EngineMessage.MoveTypedLine, FrameReader.parse(JSONObject("""{"t":"moveTypedLine"}""")))
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QScopeGuard>
 #include <QSocketNotifier>
 #include <QStandardPaths>
 
@@ -96,6 +97,15 @@ int main(int argc, char* argv[])
     Engine engine(&bridge, heartbeatMs, QFileInfo(socketPath).absoluteDir().filePath(QStringLiteral("profiles.json")));
 #endif
     bridge.setEngine(&engine);
+#ifdef Q_OS_ANDROID
+    // EngineService.onTrimMemory(): short of memory, the system may kill the engine next, with no save
+    AndroidServiceSetup::setSaveHandler(&engine, [&engine] {
+        engine.save();
+    });
+    const auto noSaveHandler = qScopeGuard([] {
+        AndroidServiceSetup::setSaveHandler(nullptr, {});
+    });
+#endif
 
     bridge.status(QStringLiteral("enginePid"), QString::number(QCoreApplication::applicationPid()));
     bridge.status(QStringLiteral("socketPath"), socketPath);

@@ -7,7 +7,8 @@
 -keep class org.qtproject.qt.** { *; }
 -keep interface org.qtproject.qt.** { *; }
 
-# Implemented in libengine (native/enginehost/AndroidServiceSetup.cpp), bound by its JNI name
+# Implemented in libengine (native/enginehost/AndroidServiceSetup.cpp), each bound by its JNI name: nativeServiceReady
+# and nativeSave
 -keep class org.mudlet.android.engine.EngineNative {
     native <methods>;
 }

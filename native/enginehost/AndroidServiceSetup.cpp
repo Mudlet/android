@@ -1,5 +1,6 @@
 #include "AndroidServiceSetup.h"
 
+#include <QObject>
 #include <QtCore/private/qjnihelpers_p.h>
 
 #include <jni.h>
@@ -21,6 +22,10 @@ public:
 };
 NullBindListener gBindListener;
 
+std::mutex gSaveMutex;
+QObject* gSaveContext = nullptr;
+std::function<void()> gSave;
+
 } // namespace
 
 // Bound by name: QtLoader loads this library through the app's class loader
@@ -31,6 +36,15 @@ extern "C" JNIEXPORT void JNICALL Java_org_mudlet_android_engine_EngineNative_na
         gServiceReady = true;
     }
     gReadyCv.notify_all();
+}
+
+// From the service's main thread, not Qt's: queued, so the save runs on the engine's thread
+extern "C" JNIEXPORT void JNICALL Java_org_mudlet_android_engine_EngineNative_nativeSave(JNIEnv*, jclass)
+{
+    std::lock_guard lock(gSaveMutex);
+    if (gSaveContext) {
+        QMetaObject::invokeMethod(gSaveContext, gSave, Qt::QueuedConnection);
+    }
 }
 
 namespace AndroidServiceSetup {
@@ -50,6 +64,13 @@ bool waitForServiceReady(int timeoutMs)
     return gReadyCv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [] {
         return gServiceReady;
     });
+}
+
+void setSaveHandler(QObject* context, std::function<void()> save)
+{
+    std::lock_guard lock(gSaveMutex);
+    gSaveContext = context;
+    gSave = std::move(save);
 }
 
 } // namespace AndroidServiceSetup

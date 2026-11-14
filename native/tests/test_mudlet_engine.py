@@ -258,6 +258,7 @@ def main():
     input_line()
     console()
     links()
+    app_state()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -600,6 +601,97 @@ def links():
         else:
             check(changed == [], f"one that missed nothing is not: {changed}")
         c.close()
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def newest_save(profile):
+    """The newest of the profile's saves, and its mtime: (None, 0) for none."""
+    saves = glob.glob(os.path.join(CONFIG, "profiles", profile, "current", "*.xml"))
+    if not saves:
+        return None, 0
+    newest = max(saves, key=os.path.getmtime)
+    return newest, os.path.getmtime(newest)
+
+
+def app_state():
+    """setAppState: sysApplicationFocusChangeEvent, and a save each time the app leaves the front; attention from alert()
+    and from game text while minimized, with the profile's "notify on new data while minimized" on; and moveTypedLine
+    for a line typed ahead of a password prompt."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    profile = "App State Test"
+    proc, c = start_engine(profile)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
+    c.send({"t": "runLua", "id": "focus", "code": 'registerAnonymousEventHandler("sysApplicationFocusChangeEvent", '
+                                                  'function(_, active) echo("focus " .. tostring(active) .. "\\n") end)'})
+    m = wait_status(c, "luaResult", lambda v: True, msgs)
+    check(m["value"] == "ran", f"the focus handler is registered: {m}")
+
+    def focus(active):
+        return c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].endswith(f"focus {active}"), timeout=10, collect=msgs)
+
+    check(newest_save(profile)[0] is None, "nothing saved before the app leaves the front")
+    c.send({"t": "setAppState", "active": False, "minimized": True})
+    focus("false")
+    m = wait_status(c, "save", lambda v: True, msgs)
+    first, first_mtime = newest_save(profile)
+    check(m["value"] == "saved" and first is not None, f"leaving the front raises the focus event and saves the profile: {m}, {first}")
+    c.send({"t": "setAppState", "active": True, "minimized": False})
+    focus("true")
+    back = len(msgs)
+    time.sleep(1.2)
+    c.send({"t": "setAppState", "active": False, "minimized": False})
+    focus("false")
+    check(not any(m["t"] == "status" and m["key"] == "save" for m in msgs[back:]), "coming back to the front saves nothing")
+    m = wait_status(c, "save", lambda v: True, msgs)
+    second, second_mtime = newest_save(profile)
+    check(m["value"] == "saved" and second_mtime > first_mtime, f"leaving it again saves again: {first_mtime} then {second_mtime}")
+    c.send({"t": "setAppState", "active": True, "minimized": False})
+    focus("true")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    # Mudlet's "notify on new data while minimized" has no Lua call: it is turned on in the save the next start loads
+    newest, _ = newest_save(profile)
+    with open(newest, encoding="utf-8") as f:
+        xml = f.read()
+    check(xml.count('mAlertOnNewData="no"') == 1, "the profile was saved with notify on new data off")
+    with open(newest, "w", encoding="utf-8") as f:
+        f.write(xml.replace('mAlertOnNewData="no"', 'mAlertOnNewData="yes"'))
+    proc, c = start_engine(profile)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
+
+    c.send({"t": "runLua", "id": "alert", "code": "alert(2)"})
+    m = c.wait_for(lambda m: m["t"] == "attention", collect=msgs)
+    check(m == {"t": "attention", "ms": 2000}, f"alert() asks for attention for that long: {m}")
+    c.send({"t": "send", "text": "echo in front"})
+    c.wait_for(shown("You said: in front"), collect=msgs)
+
+    # Typed ahead of the prompt: complete gives Mudlet the line as typed, and finds nothing to complete in it
+    c.send({"t": "complete", "text": "zqxjv", "id": "typed"})
+    m = wait_status(c, "completion", lambda v: True, msgs)
+    check(m == {"t": "status", "key": "completion", "value": "", "re": "typed"}, f"nothing completes the typed line: {m}")
+    c.send({"t": "runLua", "id": "pw", "code": 'send("password", false)'})
+    c.wait_for(lambda m: m["t"] == "hiddenInput" and m["wanted"], timeout=10, collect=msgs)
+    order = [m["t"] for m in msgs if m["t"] in ("moveTypedLine", "hiddenInput")]
+    check(order == ["moveTypedLine", "hiddenInput"], f"the typed line is moved just before hiddenInput: {order}")
+    c.send({"t": "sendHidden", "text": "secret"})
+    c.wait_for(lambda m: m["t"] == "hiddenInput" and not m["wanted"], timeout=10, collect=msgs)
+    check(not any(m["t"] == "attention" and m["ms"] == 0 for m in msgs), f"no attention for game text while in front: {msgs}")
+
+    c.send({"t": "setAppState", "active": False, "minimized": True})
+    wait_status(c, "save", lambda v: True, msgs)
+    c.send({"t": "send", "text": "echo minimized"})
+    m = c.wait_for(lambda m: m["t"] == "attention", timeout=10, collect=msgs)
+    check(m == {"t": "attention", "ms": 0}, f"game text while minimized asks for attention until the player is back: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

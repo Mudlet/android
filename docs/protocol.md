@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **5**.
+The current version is **6**.
 
 ## Transport
 
@@ -63,6 +63,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `setScreenSize` | `columns`, `rows` | The UI's console in characters of the font it draws in, each a whole number from 1 to 65535 (else `error`): the UI does the measuring. A game that asks (telnet NAWS) is told it. libmudlet gives it to `setScreenSize()` now and to each profile as it loads, so the profile's scripts read it as the main window's size; as in Mudlet, a width below 40 counts as 40, the game is told no more than the profile's wrap width, and of a change once the size has held for 0.3 s. Until the UI sends one, a game is told 90 by 25. The stand-in tells the game at once, as it was given. |
 | `getLink` | `link`, `id`? | Asks what the main console's link with that id offers now, answered by `link`, or by `error` `getLink: unknown` for an id the console no longer holds, one from a line of a profile opened before the one running, or with no profile open. `link` is the id a run carries, a whole number from 1 (else `error`). The stand-in has no links, and answers `error` `getLink: not supported`. |
 | `followLink` | `link`, `item`?, `id`? | Follows the link as a tap does, or picks `item`, counted from 0, from `link`'s `items`, as its menu does (`followLink()`): a spoiler not yet revealed is only revealed, else its command or function runs. Nothing answers a link that ran or was revealed; `linksChanged` follows what that changed of it. Otherwise `error` answers with `followLink:` and the name of the `LinkResult`: `disabled` (a disabled link, or a menu's greyed-out item), `concealed`, `noSuchItem`, `unknown` (as for `getLink`), or `failed` or `refused` followed by a colon and why. A `link` that is not a whole number from 1, or an `item` that is not one from 0, gets `error`. The stand-in answers `error` `followLink: not supported`. |
+| `setAppState` | `active`, `minimized` | The app is in front (`active`) or not, and its window is minimized or sent to the background (`minimized`), each a boolean (else `error`). libmudlet gives `active` to `setApplicationActive()`, so a change raises `sysApplicationFocusChangeEvent` in the profile, as the GUI's window gaining or losing focus does, and `minimized` to `setWindowMinimized()`, so that, with the profile's "notify on new data while minimized" on, game text then asks for `attention`. When `active` turns false, the running profile is saved as Mudlet saves it at a close, but with no `sysExitEvent`, as the system may stop the engine without warning once the app has left the front: status `save` tells how that went. Until the first, `active` is true and `minimized` false; each holds for the profiles opened later. The stand-in takes it and does nothing. |
 | `listProfiles` | `id`? | Asks for `profiles`. |
 | `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile read its details when it started, so a change takes effect at its next start. |
 | `deleteProfile` | `name`, `id`? | Deletes the profile, with everything Mudlet keeps for it. Refused while it is running, being opened or closed, or waited for by a restore. |
@@ -100,6 +101,8 @@ it names whatever profile is open.
 | `announce` | `text`, `assertive` | What a script's `announce()` asks screen readers to say, as plain text (libmudlet's `announcementRequested`, which also carries Mudlet's own, as when a game's link is hidden or revealed). `assertive` is true for the `importantall` and `importantmostrecent` styles, which interrupt what is being said; otherwise it waits its turn. Not kept for a UI that attaches later. The stand-in's Lua has `announce()` too. |
 | `link` | `link`, `tooltip`, `menu`, `menuTitle`, `spoiler`, `revealed`, `disabled`, `concealed`, `visited`, `selected`, `fg`?, `bg`?, `styles`?, `items`: `label`, `enabled`, `separator`; `re`? | The answer to `getLink`, from `THeadlessSession::link()`. `tooltip` is plain text, empty for none. A tap follows the first of `items`; where `menu` is true, a long press lists them all, under `menuTitle` if it is not empty. An item has a `label`, is greyed out where `enabled` is false, and is a line between items, with no label, where `separator` is true. `spoiler` is a link a tap first reveals, `revealed` once it has been. A `disabled` link runs nothing; a `concealed` one the game's visibility settings hide, which the UI shows as blanks no tap reaches. `visited` it has been followed; `selected` it is the one chosen in its selection group. `fg`, `bg` (colours as in runs) and `styles` (attribute bits) are how it is painted now, absent where the run's own apply; `styles` replaces only the run's bold, italic, underline, overline and strike-out. |
 | `linksChanged` | `ids` | What `link` says of these links of the main console may have changed (libmudlet's `linksChanged`): one was followed, revealed, chosen or deselected in its group, concealed or revealed by the game, expired, or let go of with the lines holding it, after which `getLink` answers `unknown`. Empty `ids` means any link may have changed: the engine sends that to a UI that attaches, or catches up after lagging, when it missed a change. Only libmudlet sends it. |
+| `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. Only libmudlet sends it. |
+| `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
 
 ### Status keys
@@ -116,7 +119,9 @@ a UI shows what it knows and ignores the rest. Now in use:
   `qtStartMsAfterServiceOnCreate`, and on Android `serviceReadyWait` (`ok` or `timeout`).
 - **The stand-in:** `luaOnLineCalls`, `notificationsPosted`, `fontError`.
 - **libmudlet (`MudletEngine`):** `engineKind` (`libmudlet`), `configDir`, `profileLoadMs`, `startMs`,
-  `localLines`, `errorConsoleLines`, `restore`, and `consoleColors`: `<fg> <bg>`, each `#rrggbb`, the colours of the
+  `localLines`, `errorConsoleLines`, `restore`, `save` (`saved` or `not saved: ...`, once a save the profile made
+  while running has ended: when `setAppState` `active` turned false, or when Android told the engine's process that
+  memory is short), and `consoleColors`: `<fg> <bg>`, each `#rrggbb`, the colours of the
   console where the game asks for none (the runs' -1), from `consoleForeground()` and `consoleBackground()` when a
   profile loads, and on each change (`consoleColorsChanged`: a script's `setBackgroundColor()` on the main console,
   or a package or save with colours of its own).
@@ -217,21 +222,21 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
-nor is a `commandLine` or an `announce`.
+nor is a `commandLine`, an `announce`, an `attention` or a `moveTypedLine`.
 `synced.seq` is the newest line when greeting even if lag cut the replay short; the rest follows once the UI drains,
 and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 5, which added the link requests (`getLink`, `followLink`) and messages (`link`,
-`linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with
+As implemented in version 6, which added `setAppState` and the messages `attention` and `moveTypedLine`; version 5
+added the link requests (`getLink`, `followLink`) and messages (`link`, `linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with
 `setScreenSize` and added `announce`; version 3 added the input line's requests (`sendHidden`, `dismissHidden`,
 `complete`) and messages (`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and
 `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=5`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=6`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

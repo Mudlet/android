@@ -233,6 +233,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         getLink(message);
     } else if (type == QLatin1String("followLink")) {
         followLink(message);
+    } else if (type == QLatin1String("setAppState")) {
+        setAppState(message);
     } else if (type == QLatin1String("listProfiles")) {
         sendProfiles();
     } else if (type == QLatin1String("saveProfile")) {
@@ -378,6 +380,17 @@ void SocketBridge::followLink(const QJsonObject& message)
     if (const QString problem = mEngine->followLink(*id, item); !problem.isEmpty()) {
         sendError(QStringLiteral("followLink: %1").arg(problem));
     }
+}
+
+void SocketBridge::setAppState(const QJsonObject& message)
+{
+    const QJsonValue active = message.value(QLatin1String("active"));
+    const QJsonValue minimized = message.value(QLatin1String("minimized"));
+    if (!active.isBool() || !minimized.isBool()) {
+        sendError(QStringLiteral("setAppState: active and minimized must be true or false"));
+        return;
+    }
+    mEngine->setAppState(active.toBool(), minimized.toBool());
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -577,5 +590,21 @@ void SocketBridge::linksChanged(const QList<int>& ids)
         sendFrame(linksChangedMessage(ids));
     } else {
         mLinksMissed = true;
+    }
+}
+
+// Not kept, as announce: the moment it asked for has passed for a UI that attaches later
+void SocketBridge::attention(int ms)
+{
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("attention")}, {QStringLiteral("ms"), ms}});
+    }
+}
+
+// Not kept: Mudlet's copy of the line is already empty, and a UI that attaches later keeps what it has on its line
+void SocketBridge::moveTypedLine()
+{
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("moveTypedLine")}});
     }
 }

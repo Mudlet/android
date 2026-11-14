@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 5
+const val PROTOCOL_VERSION = 6
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -86,6 +86,12 @@ sealed interface EngineMessage {
 
     /** What [Link] says of these links may have changed; empty [ids] means any of them. */
     data class LinksChanged(val ids: List<Int>) : EngineMessage
+
+    /** A script's alert() or the game's bell asks for the player's attention for [ms] milliseconds, 0 until they come back. */
+    data class Attention(val ms: Int) : EngineMessage
+
+    /** What the player typed ahead of the game hiding input moves from the input line into the masked one, which [HiddenInput] opens next. */
+    data object MoveTypedLine : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -116,6 +122,9 @@ object Requests {
     /** Follows [link] as a tap does, or picks its menu's [item]; only an Error answers, when nothing ran. */
     fun followLink(link: Int, item: Int?, id: Long): JSONObject = JSONObject().put("t", "followLink").put("link", link).put("id", id)
         .apply { if (item != null) put("item", item) }
+
+    /** The app in front ([active]) or not, and its window minimized or in the background; leaving the front saves the profile. */
+    fun setAppState(active: Boolean, minimized: Boolean): JSONObject = JSONObject().put("t", "setAppState").put("active", active).put("minimized", minimized)
 
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
 
@@ -222,6 +231,10 @@ class FrameReader(input: InputStream) {
             )
 
             "linksChanged" -> EngineMessage.LinksChanged(o.optJSONArray("ids")?.let { ids -> List(ids.length()) { ids.getInt(it) } } ?: emptyList())
+
+            "attention" -> EngineMessage.Attention(o.optInt("ms"))
+
+            "moveTypedLine" -> EngineMessage.MoveTypedLine
 
             else -> EngineMessage.Unknown(t)
         }

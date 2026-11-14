@@ -53,7 +53,7 @@ jobs:
           - build: scripts/build-apk.sh -PextractNativeLibs=true
             extracted: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - id: toolchain
         uses: ./.github/actions/android-toolchain
@@ -62,7 +62,7 @@ jobs:
           apt-packages: libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Stand-in engine desktop test
         if: matrix.tests
@@ -95,7 +95,7 @@ jobs:
 
       - name: Lint reports
         if: ${{ failure() && matrix.tests }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: android-lint-reports
           path: |
@@ -112,7 +112,7 @@ jobs:
           extracted: ${{ matrix.extracted || false }}
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: mudlet${{ matrix.extracted && '-extracted-libs' || '' }}-debug-apk
           path: app/build/outputs/apk/debug/*.apk

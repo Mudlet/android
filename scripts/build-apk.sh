@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds the debug APK: the engine .so (native/) with Qt's Android CMake, staged for :engine-service with
-# androiddeployqt --aux-mode together with OpenSSL for Qt's TLS backend, then the app with Gradle. Bounded
+# androiddeployqt --aux-mode together with OpenSSL for Qt's TLS backend and the engine's name and version for the
+# About screen (res/values/engine_info.xml), then the app with Gradle. Bounded
 # parallelism: the machine is shared. With STAGE_ONLY=1 it stops after staging, for scripts/build-release.sh, which
 # merges the staged engines of several ABIs into one release.
 #
@@ -41,6 +42,32 @@ cp "$build/enginehost/libengine_$abi.so" "$deploy/libs/$abi/"
     --output "$deploy" --aux-mode --android-platform android-36 2>&1 | { grep -v -i locale || true; }
 # aux mode also writes a Gradle project and manifest template we do not use
 rm -f "$deploy/build.gradle" "$deploy/settings.gradle" "$deploy/AndroidManifest.xml"
+
+# Which engine this is, for the app's About screen and its licences (docs/licences.md): for libmudlet, Mudlet's
+# version as its CMake set it (APP_VERSION and the cached APP_BUILD) and the commit of the checkout it was built from
+engine_kind=standin engine_version='' engine_commit=''
+if [ -n "${LIBMUDLET_BUILD_DIR:-}" ]; then
+    cache="$(realpath "$LIBMUDLET_BUILD_DIR")/CMakeCache.txt"
+    mudlet_src=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$cache")
+    [ -f "$mudlet_src/CMakeLists.txt" ] || { echo "$cache names no Mudlet source ('$mudlet_src')" >&2; exit 1; }
+    app_version=$(sed -n 's/^set(APP_VERSION \(.*\))$/\1/p' "$mudlet_src/CMakeLists.txt")
+    [ -n "$app_version" ] || { echo "no APP_VERSION in $mudlet_src/CMakeLists.txt" >&2; exit 1; }
+    engine_kind=mudlet
+    engine_version="$app_version$(sed -n 's/^APP_BUILD:STRING=//p' "$cache")"
+    # empty for a source tree that is not a git checkout: the About screen then names no commit
+    engine_commit=$(git -C "$mudlet_src" rev-parse --verify -q HEAD || true)
+fi
+xml_escape() { sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e "s/'/\\\\'/g" <<< "$1"; }
+mkdir -p "$deploy/res/values"
+cat > "$deploy/res/values/engine_info.xml" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by scripts/build-apk.sh. :app's About screen reads these, which lint of :engine-service alone cannot see -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <string name="engine_kind" translatable="false">$engine_kind</string>
+    <string name="engine_version" translatable="false">$(xml_escape "$engine_version")</string>
+    <string name="engine_commit" translatable="false">$engine_commit</string>
+</resources>
+EOF
 if [ "${STAGE_ONLY:-0}" = 1 ]; then
     echo "Staged the $abi engine in $deploy"
     exit 0

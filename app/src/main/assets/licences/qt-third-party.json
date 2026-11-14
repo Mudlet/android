@@ -1,0 +1,720 @@
+{
+  "qt": "6.12.0",
+  "components": [
+    {
+      "id": "qt-qtbase-vulkanmemoryallocator",
+      "name": "Vulkan Memory Allocator",
+      "version": "3.3.0",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2017-2025 Advanced Micro Devices, Inc. All rights reserved.",
+      "url": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-android-native-style",
+      "name": "Native Style for Android",
+      "version": "",
+      "licence": "Apache-2.0",
+      "copyright": "Copyright (C) 2005 The Android Open Source Project",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-blake2",
+      "name": "BLAKE2 (reference implementation)",
+      "version": "ed1974ea83433eba7b2d95c5dcd9ac33cb847913",
+      "licence": "CC0-1.0 OR Apache-2.0",
+      "copyright": "Copyright 2012, Samuel Neves <sneves@dei.uc.pt>",
+      "url": "https://blake2.net/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-doubleconversion",
+      "name": "Efficient Binary-Decimal and Decimal-Binary Conversion Routines for IEEE Doubles",
+      "version": "3.4.0",
+      "licence": "BSD-3-Clause",
+      "copyright": "Copyright 2006-2012, the V8 project authors",
+      "url": "https://github.com/google/double-conversion",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-easing",
+      "name": "Easing Equations by Robert Penner",
+      "version": "",
+      "licence": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2001 Robert Penner",
+      "url": "http://robertpenner.com/easing/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-emoji-segmenter",
+      "name": "Emoji Segmenter",
+      "version": "0.4.0",
+      "licence": "Apache-2.0",
+      "copyright": "Copyright 2019 Google LLC",
+      "url": "https://github.com/google/emoji-segmenter",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-forkfd",
+      "name": "forkfd",
+      "version": "",
+      "licence": "MIT",
+      "copyright": "Copyright (C) 2016 Intel Corporation\nCopyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-freetype",
+      "name": "Freetype 2",
+      "version": "2.14.3",
+      "licence": "FTL OR GPL-2.0-only",
+      "copyright": "Copyright (c) 2007-2014 Adobe Systems Incorporated\nCopyright (c) 2004-2026 Albert Chin-A-Young\nCopyright (c) 2018-2026 Armin Hasitzka, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2000 Computing Research Labs, New Mexico State University\nCopyright (c) 1996-2026 David Turner, Robert Wilhelm, Dominik Röttsches, and Werner Lemberg\nCopyright (c) 2004-2026 David Turner, Robert Wilhelm, Werner Lemberg and George Williams\nCopyright (c) 2022-2026 David Turner, Robert Wilhelm, Werner Lemberg, and Moazin Khatti\nCopyright (c) 2008-2026 David Turner, Robert Wilhelm, Werner Lemberg, and suzuki toshiya\nCopyright (c) 2003-2026 David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2005-2026 David Turner\nCopyright (c) 2007-2026 Derek Clegg and Michael Toftdal\nCopyright (c) 2007 Dmitry Timoshkov for Codeweavers\nCopyright (c) 2001-2015 Francesco Zappa Nardelli\nCopyright (c) 2005, 2007, 2008, 2013 George Williams\nCopyright (c) 2013-2026 Google, Inc. Google Author(s) Behdad Esfahbod and Stuart Gill\nCopyright (c) 2013-2022 Google, Inc.\nCopyright (c) 2003 Huw D M Davies for Codeweavers\nCopyright (c) 2010-2026 Joel Klinghed\nCopyright (c) 1996-2026 Just van Rossum, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2003-2026 Masatake YAMATO and Redhat K.K.\nCopyright (c) 2004-2026 Masatake YAMATO, Redhat K.K, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2019-2026 Nikhil Ramakrishnan, David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2009-2026 Oran Agra and Mickey Gabel\nCopyright (c) 2007-2026 Rahul Bhalerao <rahul.bhalerao@redhat.com>\nCopyright (c) 2002-2026 Roberto Alameda\nCopyright (c) 2015-2026 Werner Lemberg\nCopyright (c) 2004-2026 suzuki toshiya, Masatake YAMATO, Red Hat K.K., David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2019 nyorain\nCopyright (c) 2022-2026 David Turner, Robert Wilhelm, Werner Lemberg, George Williams, and Dominik Röttsches\nCopyright (C) 2009, 2023  Red Hat, Inc.",
+      "url": "http://www.freetype.org",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-freetype-zlib",
+      "name": "Freetype 2 - zlib",
+      "version": "",
+      "licence": "Zlib",
+      "copyright": "Copyright (C) 1995-2024 Jean-loup Gailly and Mark Adler",
+      "url": "http://www.freetype.org",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-freetype-bdf",
+      "name": "Freetype 2 - Bitmap Distribution Format (BDF) support",
+      "version": "",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2000 Computing Research Labs, New Mexico State University\nCopyright (c) 2001-2014 Francesco Zappa Nardelli",
+      "url": "http://www.freetype.org",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-freetype-pcf",
+      "name": "Freetype 2 - Portable Compiled Format (PCF) support",
+      "version": "",
+      "licence": "MIT AND MIT-open-group",
+      "copyright": "Copyright (c) 2001, 2012 David Turner, Robert Wilhelm, and Werner Lemberg\nCopyright (c) 2000-2014 Francesco Zappa Nardelli\nCopyright (c) 1990, 1994, 1998 The Open Group",
+      "url": "http://www.freetype.org",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-harfbuzz-ng",
+      "name": "HarfBuzz-NG",
+      "version": "14.5.0",
+      "licence": "MIT",
+      "copyright": "Copyright © 2010-2022  Google, Inc.\nCopyright © 2015-2020  Ebrahim Byagowi\nCopyright © 2019,2020  Facebook, Inc.\nCopyright © 2012,2015  Mozilla Foundation\nCopyright © 2011  Codethink Limited\nCopyright © 2008,2010  Nokia Corporation and/or its subsidiary(-ies)\nCopyright © 2009  Keith Stribley\nCopyright © 2011  Martin Hosken and SIL International\nCopyright © 2007  Chris Wilson\nCopyright © 2005,2006,2020,2021,2022,2023  Behdad Esfahbod\nCopyright © 2004,2007,2008,2009,2010,2013,2021,2022,2023  Red Hat, Inc.\nCopyright © 1998-2005  David Turner and Werner Lemberg\nCopyright © 2016  Igalia S.L.\nCopyright © 2022  Matthias Clasen\nCopyright © 2018,2021  Khaled Hosny\nCopyright © 2018,2019,2020  Adobe, Inc\nCopyright © 2013-2015  Alexei Podtelezhnikov",
+      "url": "http://harfbuzz.org",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-icc-srgb-color-profile",
+      "name": "sRGB color profile icc file",
+      "version": "",
+      "licence": "LicenseRef-ICC-License",
+      "copyright": "Copyright International Color Consortium, 2015",
+      "url": "http://www.color.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-libjpeg",
+      "name": "LibJPEG-turbo",
+      "version": "3.2.0",
+      "licence": "IJG AND BSD-3-Clause",
+      "copyright": "",
+      "url": "http://libjpeg-turbo.virtualgl.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-libpng",
+      "name": "LibPNG",
+      "version": "1.6.58",
+      "licence": "Libpng AND libpng-2.0",
+      "copyright": "Copyright (c) 1995-2026 The PNG Reference Library Authors\nCopyright (c) 2000-2026 Cosmin Truta\nCopyright (c) 1998-2018 Glenn Randers-Pehrson\nCopyright (c) 1996-1997 Andreas Dilger\nCopyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.\nCopyright (c) 2000-2017 Simon-Pierre Cadieux\nCopyright (c) 2000-2017 Eric S. Raymond\nCopyright (c) 2000-2017 Mans Rullgard\nCopyright (c) 2000-2017 Gilles Vollant\nCopyright (c) 2000-2017 James Yu\nCopyright (c) 2000-2017 Mandar Sahastrabuddhe\nCopyright (c) 1998-2000 Tom Lane\nCopyright (c) 1998-2000 Willem van Schaik\nCopyright (c) 1996-1997 John Bowler\nCopyright (c) 1996-1997 Kevin Bracey\nCopyright (c) 1996-1997 Sam Bushell\nCopyright (c) 1996-1997 Magnus Holmgren\nCopyright (c) 1996-1997 Greg Roelofs\nCopyright (c) 1996-1997 Tom Tanner\nCopyright (c) 1995-1996 Dave Martindale\nCopyright (c) 1995-1996 Paul Schmidt\nCopyright (c) 1995-1996 Tim Wegner",
+      "url": "http://www.libpng.org/pub/png/libpng.html",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-psl-data",
+      "name": "The Public Suffix List",
+      "version": "2026-05-14_08-35-31_UTC",
+      "licence": "MPL-2.0",
+      "copyright": "The list was originally provided by Jo Hermans <jo.hermans@gmail.com>.\nIt is now maintained on github (https://github.com/publicsuffix/list).",
+      "url": "http://publicsuffix.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-libpsl",
+      "name": "libpsl - C library to handle the Public Suffix List",
+      "version": "664f3dc85259ec65e30248a61fa1c45b7b0e4c3f",
+      "licence": "BSD-3-Clause",
+      "copyright": "Copyright 2014-2016 The Chromium Authors. All rights reserved.",
+      "url": "https://github.com/rockdaboot/libpsl",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-md4",
+      "name": "MD4",
+      "version": "",
+      "licence": "CC0-1.0",
+      "copyright": "Written by Alexander Peslyak - better known as Solar Designer <solar@openwall.com> - in 2001, and placed in the public domain. There's absolutely no warranty.",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-md4c",
+      "name": "MD4C",
+      "version": "0.5.3",
+      "licence": "MIT",
+      "copyright": "Copyright © 2016-2024 Martin Mitáš",
+      "url": "https://github.com/mity/md4c",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-md5",
+      "name": "MD5",
+      "version": "",
+      "licence": "CC0-1.0",
+      "copyright": "Written by Colin Plumb in 1993, no copyright is claimed. Ian Jackson <ian@chiark.greenend.org.uk>.",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-pcre2",
+      "name": "PCRE2",
+      "version": "10.48",
+      "licence": "LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception",
+      "copyright": "Copyright (c) 1997-2007 University of Cambridge\nCopyright (c) 2007-2024 Philip Hazel\nCopyright (c) 2010-2024 Zoltan Herczeg",
+      "url": "http://www.pcre.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-pcre2-sljit",
+      "name": "PCRE2 - Stack-less Just-In-Time Compiler",
+      "version": "10.48",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright Zoltan Herczeg",
+      "url": "http://www.pcre.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-pixman",
+      "name": "Pixman",
+      "version": "0.17.12",
+      "licence": "MIT",
+      "copyright": "Copyright © 2009 Nokia Corporation",
+      "url": "http://www.pixman.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-rfc6234",
+      "name": "Secure Hash Algorithms SHA-384 and SHA-512",
+      "version": "",
+      "licence": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2011 IETF Trust and the persons identified as authors of the code.",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-sha1",
+      "name": "Secure Hash Algorithm SHA-1",
+      "version": "",
+      "licence": "LicenseRef-SHA1-Public-Domain",
+      "copyright": "Copyright (C) Dominik Reichl <dominik.reichl@t-online.de>\nCopyright (C) 2016 The Qt Company Ltd",
+      "url": "http://www.dominik-reichl.de/projects/csha1/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-sha3_endian",
+      "name": "Secure Hash Algorithm SHA-3 - brg_endian",
+      "version": "1.0.0",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (c) 1998-2013, Brian Gladman, Worcester, UK. All rights reserved.",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-sha3_keccak",
+      "name": "Secure Hash Algorithm SHA-3 - Keccak",
+      "version": "3.2",
+      "licence": "CC0-1.0",
+      "copyright": "Guido Bertoni, Joan Daemen, Michaël Peeters and Gilles Van Assche.\nTo the extent possible under law, the implementers have waived all copyright\nand related or neighboring rights to the source code in this file.",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-siphash",
+      "name": "SipHash Algorithm",
+      "version": "",
+      "licence": "CC0-1.0",
+      "copyright": "Copyright (C) 2012-2014 Jean-Philippe Aumasson\nCopyright (C) 2012-2014 Daniel J. Bernstein <djb@cr.yp.to>\nCopyright (C) 2016 Intel Corporation",
+      "url": "https://131002.net/siphash/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-sqlite",
+      "name": "SQLite",
+      "version": "3.53.4",
+      "licence": "blessing",
+      "copyright": "The authors disclaim copyright to the source code. However, a license can be obtained if needed.",
+      "url": "https://www.sqlite.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-tinycbor",
+      "name": "TinyCBOR",
+      "version": "7.0",
+      "licence": "MIT",
+      "copyright": "Copyright (C) 2015-2025 Intel Corporation",
+      "url": "https://github.com/intel/tinycbor",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-zlib",
+      "name": "Data Compression Library (zlib)",
+      "version": "1.3.2",
+      "licence": "Zlib",
+      "copyright": "(C) 1995-2026 Jean-loup Gailly and Mark Adler",
+      "url": "https://zlib.net/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-tlexpected",
+      "name": "tl::expected",
+      "version": "41d3e1f48d682992a2230b2a715bca38b848b269",
+      "licence": "CC0-1.0",
+      "copyright": "To the extent possible under law, Sy Brand has waived all copyright and related or neighboring rights to the expected library. This work is published from: United Kingdom.",
+      "url": "https://github.com/TartanLlama/expected/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-tika-mimetypes",
+      "name": "Apache Tika MimeType Definitions",
+      "version": "c29724782854bb5a319f4a1940d0828a58ace3f9",
+      "licence": "Apache-2.0",
+      "copyright": "Copyright 2026 The Apache Software Foundation",
+      "url": "https://github.com/apache/tika/tree/main/tika-core/src/main/resources/org/apache/tika/mime",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-unicode-character-database",
+      "name": "Unicode Character Database (UCD)",
+      "version": "36",
+      "licence": "Unicode-3.0",
+      "copyright": "Copyright (C) 1991-2025 Unicode, Inc.",
+      "url": "https://www.unicode.org/ucd/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-unicode-cldr",
+      "name": "Unicode Common Locale Data Repository (CLDR)",
+      "version": "v48.2",
+      "licence": "Unicode-3.0",
+      "copyright": "Copyright (C) 2004-2025 Unicode, Inc.",
+      "url": "https://cldr.unicode.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-opengl-headers",
+      "name": "OpenGL Headers",
+      "version": "Revision 27684",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2013-2014 The Khronos Group Inc.",
+      "url": "https://www.khronos.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-opengl-es2-headers",
+      "name": "OpenGL ES 2 Headers",
+      "version": "Revision 27673",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2013-2014 The Khronos Group Inc.",
+      "url": "https://www.khronos.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-grayraster",
+      "name": "Anti-aliasing rasterizer from FreeType 2",
+      "version": "",
+      "licence": "FTL OR GPL-2.0-only",
+      "copyright": "Copyright 2000-2016 by David Turner, Robert Wilhelm, and Werner Lemberg.",
+      "url": "http://www.freetype.org",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-smooth-scaling-algorithm",
+      "name": "Smooth Scaling Algorithm",
+      "version": "",
+      "licence": "BSD-2-Clause AND Imlib2",
+      "copyright": "Copyright (C) 2004, 2005 Daniel M. Duley.\n(C) Carsten Haitzler and various contributors.\n(C) Willem Monsuwe <willem@stack.nl>",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-xserverhelper",
+      "name": "X Server helper",
+      "version": "",
+      "licence": "X11 AND HPND",
+      "copyright": "Copyright (c) 1987, 1988 X Consortium\nCopyright 1987, 1988 by Digital Equipment Corporation, Maynard, Massachusetts.",
+      "url": "https://www.x.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-aglfn",
+      "name": "Adobe Glyph List For New Fonts",
+      "version": "1.7",
+      "licence": "BSD-3-Clause",
+      "copyright": "Copyright 2002, 2003, 2005, 2006, 2008, 2010, 2015 Adobe Systems",
+      "url": "https://github.com/adobe-type-tools/agl-aglfn",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-xsvg",
+      "name": "XSVG",
+      "version": "",
+      "licence": "HPND-sell-variant",
+      "copyright": "Copyright 2002 USC/Information Sciences Institute",
+      "url": "",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-vulkan-xml-spec",
+      "name": "Vulkan API Registry",
+      "version": "1.4.308",
+      "licence": "Apache-2.0 OR MIT",
+      "copyright": "Copyright (c) 2015-2025 The Khronos Group Inc.",
+      "url": "https://www.khronos.org/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtbase-webgradients",
+      "name": "WebGradients",
+      "version": "",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2017 itmeo",
+      "url": "https://webgradients.com/",
+      "engines": [
+        "mudlet",
+        "standin"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-dr_libs",
+      "name": "DR Libs",
+      "version": "0.14.6-snapshot-ee937527",
+      "licence": "Unlicense OR MIT-0",
+      "copyright": "Copyright 2023 David Reid",
+      "url": "https://github.com/mackron/dr_libs",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-eigen",
+      "name": "Eigen",
+      "version": "5.0.1",
+      "licence": "MPL-2.0 AND BSD-3-Clause",
+      "copyright": "",
+      "url": "https://eigen.tuxfamily.org/",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-ffmpeg",
+      "name": "FFmpeg",
+      "version": "9.0.1",
+      "licence": "LGPL-2.1-or-later AND BSD-3-Clause AND BSD-2-Clause AND BSD-Source-Code AND ISC AND MIT AND MPL-2.0",
+      "copyright": "Copyright (c) 2000-2023 the FFmpeg developers",
+      "url": "https://ffmpeg.org/",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-ffmpeg-libjpeg",
+      "name": "libjpeg",
+      "version": "",
+      "licence": "IJG",
+      "copyright": "Copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.",
+      "url": "https://libjpeg.sourceforge.net/",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-ffmpeg-zlib",
+      "name": "zlib",
+      "version": "",
+      "licence": "Zlib",
+      "copyright": "Copyright (C) 1995-2022 Jean-loup Gailly and Mark Adler.",
+      "url": "https://www.zlib.net/",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-ffmpeg-boost",
+      "name": "boost",
+      "version": "",
+      "licence": "BSL-1.0",
+      "copyright": "(C) Copyright John Maddock 2006. Copyright (c) 2006 Xiaogang Zhang",
+      "url": "https://www.boost.org/",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-pffft",
+      "name": "pffft",
+      "version": "02fe7715a5bf8bfd914681c53429600f94e0f536",
+      "licence": "BSD-3-Clause",
+      "copyright": "",
+      "url": "https://bitbucket.org/jpommier/pffft.git",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-resonance-audio",
+      "name": "Resonance Audio",
+      "version": "e225aedb5ec76ca6a0fe7079c0b84dbcbb490553",
+      "licence": "Apache-2.0",
+      "copyright": "",
+      "url": "https://resonance-audio.github.io/resonance-audio/",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-signalsmith-stretch",
+      "name": "Signalsmith Stretch",
+      "version": "1.1.0",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2022 Geraint Luff / Signalsmith Audio Ltd.",
+      "url": "https://signalsmith-audio.co.uk/code/stretch.git",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qtmultimedia-tlsf",
+      "name": "Two-Level Segregated Fit",
+      "version": "v3.1",
+      "licence": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2006-2016, Matthew Conte",
+      "url": "https://github.com/mattconte/tlsf",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qbig5codecs",
+      "name": "Text Codecs: Big5, Big5-HKSCS",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 2000  Ming-Che Chuang\nCopyright (C) 2001, 2002  James Su, Turbolinux Inc.\nCopyright (C) 2002  WU Yi, HancomLinux Inc.\nCopyright (C) 2001, 2002  Anthony Fok, ThizLinux Laboratory Ltd.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qeucjpcodec",
+      "name": "Text Codec: EUC-JP",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 1999 Serika Kurusugawa.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qeuckrcodec",
+      "name": "Text Codec: EUC-KR",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 1999-2000 Mizi Research Inc.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qjiscodec",
+      "name": "Text Codec: ISO 2022-JP (JIS)",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 1999 Serika Kurusugawa.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qsjiscodec",
+      "name": "Text Codec: Shift-JIS",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 1999 Serika Kurusugawa.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qtsciicodec",
+      "name": "Text Codec: TSCII",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 2000 Hans Petter Bieker.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    },
+    {
+      "id": "qt-qt5compat-qbkcodec",
+      "name": "Text Codec: GBK",
+      "version": "",
+      "licence": "BSD-2-Clause",
+      "copyright": "Copyright (C) 2000 TurboLinux, Inc.  Written by Justin Yu and Sean Chen.\nCopyright (C) 2001, 2002 Turbolinux, Inc.  Written by James Su.\nCopyright (C) 2001, 2002 ThizLinux Laboratory Ltd.  Written by Anthony Fok.",
+      "url": "",
+      "engines": [
+        "mudlet"
+      ]
+    }
+  ]
+}

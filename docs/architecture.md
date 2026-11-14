@@ -26,8 +26,8 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
-| `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
@@ -713,6 +713,15 @@ Item 13 of the on-device checklist covers this.
       when nothing matches.
     - `lua printCmdLine("say hi")` puts "say hi" on the line. Type a command and start the next one at once: what
       was typed is not wiped when the game answers.
+17. About and licences, with TalkBack on.
+    - The start screen's top bar has "About and licences, button". The About screen reads the app's version and the
+      engine (with the libmudlet APK: "Engine: Mudlet" and its version, and the commit), then the headings ("Free
+      software", "Licences" and a heading for each group) as headings: TalkBack's headings navigation jumps between
+      them.
+    - Each source code button opens the browser at that source: this app's and Mudlet's at the commit shown, Qt's
+      download page, and docs/licences.md. A row of the list reads its name, version and licence, and "double tap to
+      read its licence"; its screen reads the full licence texts paragraph by paragraph, and Back returns to the list
+      where it was.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

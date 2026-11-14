@@ -11,8 +11,8 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `engine-service/` | `:engine-service`: `EngineService` in the `:engine` process, and the Qt libraries `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
-| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh` and `lint.sh` |
-| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md) |
+| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-licences.py` and `lint.sh` |
+| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md) |
 | `.github/` | The workflows (`ci.yml`, which calls `checks.yml`, `apks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
 
@@ -80,7 +80,14 @@ cmake --build native/build-desktop-mudlet --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
 
-# The APK checks CI runs on every APK: Qt, the engine and OpenSSL in it, 16 KB alignment, how its libraries are stored
+# The app's JVM tests (the About screen's licence data), after scripts/build-apk.sh
+./gradlew -PqtRoot=$QT_ROOT :app:testDebugUnitTest
+
+# The licence list against the build scripts, and against a Mudlet checkout (docs/licences.md)
+scripts/check-licences.py --mudlet-source ../mudlet
+
+# The APK checks CI runs on every APK: Qt, the engine and OpenSSL in it, 16 KB alignment, how its libraries are
+# stored, and a licence for each library and Gradle module in it
 scripts/check-apk.sh                       # after scripts/build-apk.sh
 EXTRACTED=true scripts/check-apk.sh        # after scripts/build-apk.sh -PextractNativeLibs=true
 

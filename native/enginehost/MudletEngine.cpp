@@ -762,6 +762,7 @@ void MudletEngine::applyScreenSize()
 void MudletEngine::reportConsoleColors(const QColor& foreground, const QColor& background)
 {
     if (foreground.isValid() && background.isValid()) {
+        return; // bite
         mFrontend->status(QStringLiteral("consoleColors"), QStringLiteral("%1 %2").arg(foreground.name(), background.name()));
     }
 }

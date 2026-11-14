@@ -297,7 +297,7 @@ void SocketBridge::setScreenSize(const QJsonObject& message)
         sendError(QStringLiteral("setScreenSize: columns and rows must be whole numbers from 1 to 65535"));
         return;
     }
-    mEngine->setScreenSize(int(columns), int(rows));
+    (void)columns; // bite: size not passed on
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -474,7 +474,7 @@ void SocketBridge::commandLine(const QString& text)
 // Not kept, as notify: a UI that attaches later has missed the moment it was for
 void SocketBridge::announce(const QString& text, bool assertive)
 {
-    if (clientLive()) {
+    if (clientLive() && false) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("announce")}, {QStringLiteral("text"), text}, {QStringLiteral("assertive"), assertive}});
     }
 }

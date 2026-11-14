@@ -32,6 +32,7 @@ tasks.test {
         rootProject.file("docs/protocol.md"),
         rootProject.file("native/enginehost/SocketBridge.h"),
         rootProject.file("native/enginehost/SocketBridge.cpp"),
+        rootProject.file("native/enginehost/MudletEngine.cpp"),
         rootProject.file("native/tests/protocol_client.py"),
     )
     testLogging {

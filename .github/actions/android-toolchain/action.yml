@@ -30,6 +30,9 @@ inputs:
   qt-android-archives:
     description: Qt for Android archives
     default: qtbase qtdeclarative qtsvg qttools
+  qt-android-arch:
+    description: Qt for Android's architecture, android_x86_64 for the emulator
+    default: android_arm64_v8a
   # Core5Compat, Multimedia and TextToSpeech for mudlet_core
   qt-android-modules:
     description: Qt for Android add-on modules
@@ -87,7 +90,7 @@ runs:
       uses: actions/cache/restore@v5
       with:
         path: ~/Qt/${{ inputs.qt-version }}
-        key: qt-${{ inputs.qt-version }}-${{ runner.os }}-${{ steps.paths.outputs.qt-set }}
+        key: qt-${{ inputs.qt-version }}-${{ runner.os }}-${{ inputs.qt-android-arch }}-${{ steps.paths.outputs.qt-set }}
 
     - name: Install Qt ${{ inputs.qt-version }}
       if: steps.qt-cache.outputs.cache-hit != 'true'
@@ -100,7 +103,7 @@ runs:
         cd "$RUNNER_TEMP"
         "$aqt" install-qt linux desktop ${{ inputs.qt-version }} linux_gcc_64 \
           --outputdir "$HOME/Qt" --archives ${{ inputs.qt-host-archives }}
-        "$aqt" install-qt all_os android ${{ inputs.qt-version }} android_arm64_v8a \
+        "$aqt" install-qt all_os android ${{ inputs.qt-version }} ${{ inputs.qt-android-arch }} \
           --outputdir "$HOME/Qt" --archives ${{ inputs.qt-android-archives }} -m ${{ inputs.qt-android-modules }}
 
     - name: Save Qt

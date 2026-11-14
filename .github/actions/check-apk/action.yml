@@ -20,6 +20,9 @@ inputs:
   build-tools-dir:
     description: The SDK build-tools directory (zipalign, aapt2), as android-toolchain outputs it
     required: true
+  abi:
+    description: The APK's ABI
+    default: arm64-v8a
 runs:
   using: composite
   steps:
@@ -32,6 +35,7 @@ runs:
         EXTRACTED: ${{ inputs.extracted }}
         ENGINE: ${{ inputs.engine }}
         BUILD_TOOLS: ${{ inputs.build-tools-dir }}
+        ABI: ${{ inputs.abi }}
       run: |
         readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
         nm="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
@@ -39,13 +43,13 @@ runs:
         mb() { awk -v b="$1" 'BEGIN { printf "%.1f MB", b / 1000000 }'; }
         printf '### %s\n\n' "$TITLE" >> "$GITHUB_STEP_SUMMARY"
         for apk in *.apk; do
-          libs="$RUNNER_TEMP/$apk/lib/arm64-v8a"
-          unzip -q -o "$apk" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/$apk" \
-            || { echo "::error::cannot extract lib/arm64-v8a/*.so from $apk"; exit 1; }
-          tls_plugin=libplugins_tls_qopensslbackend_arm64-v8a.so
-          for lib in libQt6Core_arm64-v8a.so libplugins_platforms_qtforandroid_arm64-v8a.so libc++_shared.so \
-                     ${ENGINE}_arm64-v8a.so $tls_plugin libcrypto_3.so libssl_3.so; do
-            [ -f "$libs/$lib" ] || { echo "::error::$apk has no lib/arm64-v8a/$lib"; exit 1; }
+          libs="$RUNNER_TEMP/$apk/lib/$ABI"
+          unzip -q -o "$apk" "lib/$ABI/*.so" -d "$RUNNER_TEMP/$apk" \
+            || { echo "::error::cannot extract lib/$ABI/*.so from $apk"; exit 1; }
+          tls_plugin=libplugins_tls_qopensslbackend_$ABI.so
+          for lib in libQt6Core_$ABI.so libplugins_platforms_qtforandroid_$ABI.so libc++_shared.so \
+                     ${ENGINE}_$ABI.so $tls_plugin libcrypto_3.so libssl_3.so; do
+            [ -f "$libs/$lib" ] || { echo "::error::$apk has no lib/$ABI/$lib"; exit 1; }
           done
           # Qt's OpenSSL backend, built against OpenSSL 3, dlopens "ssl" and "crypto" with the suffix "_3"
           # (qsslsocket_openssl_symbols.cpp) and refuses a runtime older than 3; the suffix is a string of its own.
@@ -84,7 +88,7 @@ runs:
           done
           # zipalign -c passes compressed libraries; the installer extracts the libraries when the manifest's
           # extractNativeLibs is not false, and refuses compressed ones when it is
-          stats=$(unzip -v "$apk" 'lib/arm64-v8a/*.so' \
+          stats=$(unzip -v "$apk" "lib/$ABI/*.so" \
             | awk '$8 ~ /^lib\// { n++; if ($2 != "Stored") d++; u += $1; c += $3 } END { print n+0, d+0, u+0, c+0 }')
           read -r count deflated raw packed <<< "$stats"
           (( count == ${#sos[@]} )) \
@@ -108,7 +112,7 @@ runs:
             how="stored, loaded from the APK"
             installed=$apk_size
           fi
-          echo "- \`$apk\`: $(mb "$apk_size"); \`lib/arm64-v8a\`: $count libraries, $(mb "$raw"), $how" \
+          echo "- \`$apk\`: $(mb "$apk_size"); \`lib/$ABI\`: $count libraries, $(mb "$raw"), $how" \
             "(extractNativeLibs=${flag:-unset}); on the device: $(mb "$installed"); of the libraries, $openssl_version" \
             "(\`libcrypto_3.so\`, \`libssl_3.so\`): $(mb "$openssl_size")" >> "$GITHUB_STEP_SUMMARY"
         done

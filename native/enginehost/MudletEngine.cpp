@@ -3,9 +3,12 @@
 #include "THeadlessSession.h"
 
 #include <QCoreApplication>
+#include <QDataStream>
 #include <QDateTime>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetrics>
@@ -91,6 +94,17 @@ MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent
         mConfigDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/mudlet");
     }
     mConfigDir = QDir(mConfigDir).absolutePath();
+    // What a restart of the engine brings back, in the app's files beside the profiles; on Android the app names
+    // both files (EngineSession.kt)
+    QString statePath = qEnvironmentVariable("MUDLET_ENGINE_STATE");
+    if (statePath.isEmpty()) {
+        statePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/engine-session.json");
+    }
+    QString stopMarkerPath = qEnvironmentVariable("MUDLET_ENGINE_STOPPED");
+    if (stopMarkerPath.isEmpty()) {
+        stopMarkerPath = QFileInfo(statePath).absoluteDir().filePath(QStringLiteral("engine-stopped"));
+    }
+    mStore = std::make_unique<SessionStore>(statePath, stopMarkerPath);
 
     mSession = std::make_unique<THeadlessSession>();
     connectSession();
@@ -109,10 +123,17 @@ MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent
     mHeartbeat.setInterval(heartbeatMs);
     connect(&mHeartbeat, &QTimer::timeout, this, &MudletEngine::onHeartbeat);
     mHeartbeat.start();
+
+    mRestoreTimer.setSingleShot(true);
+    connect(&mRestoreTimer, &QTimer::timeout, this, &MudletEngine::beginRestore);
+    takeRestore();
 }
 
 MudletEngine::~MudletEngine()
 {
+    // An orderly stop, as the user's: the next engine starts with no profile
+    mClosing = true;
+    mStore->clear();
     if (mState == State::started) {
         shutdownSession();
     }
@@ -187,14 +208,128 @@ void MudletEngine::connectSession()
     });
     connect(session, &THeadlessSession::connected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
+        mDisconnectRequested = false;
+        mKept.connect = true;
+        persist();
+        if (std::exchange(mRestoring, false)) {
+            restoreStatus(QStringLiteral("reconnected"), restoreTarget());
+        }
     });
     connect(session, &THeadlessSession::disconnected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
+        // Lost or refused rather than ended by the UI: wanted still only if Mudlet tries again, as the profile says
+        if (!std::exchange(mDisconnectRequested, false)) {
+            mKept.connect = profileReconnects();
+        }
+        persist();
+        if (!mRestoring) {
+            return;
+        }
+        // Mudlet tries again on its own for a profile that reconnects automatically; the engine does not add tries
+        if (mKept.connect) {
+            restoreStatus(QStringLiteral("retrying"), restoreTarget());
+        } else {
+            mRestoring = false;
+            restoreStatus(QStringLiteral("notReconnected"), restoreTarget());
+        }
     });
     connect(session, &THeadlessSession::quitRequested, this, [this] {
         mState = State::idle;
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));
+        mKept = {};
+        persist();
+        mRestoring = false;
     });
+}
+
+// At start-up: the profile the engine before this one ran, if it was killed rather than stopped
+void MudletEngine::takeRestore()
+{
+    const SessionStore::Restore restore = mStore->takeRestore(QDateTime::currentMSecsSinceEpoch());
+    switch (restore.kind) {
+    case SessionStore::Restore::Kind::none:
+        return;
+    case SessionStore::Restore::Kind::gaveUp:
+        qWarning("MudletEngine: not restoring %s: the engine stopped unexpectedly %d times in %lld minutes", qPrintable(restore.session.profile),
+                 restore.attempt, SessionStore::restoreWindowMs / 60000);
+        restoreStatus(QStringLiteral("gaveUp"), QStringLiteral("%1 %2").arg(restore.attempt).arg(SessionStore::restoreWindowMs / 60000));
+        return;
+    case SessionStore::Restore::Kind::restore:
+        break;
+    }
+    mKept = restore.session;
+    mSavedKept = mKept;
+    mProfile = mKept.profile;
+    mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 (not started)").arg(mProfile));
+    if (mKept.connect && restore.reconnectDelayMs > 0) {
+        restoreStatus(QStringLiteral("waiting"), QStringLiteral("%1 %2").arg(restore.reconnectDelayMs / 1000).arg(restoreTarget()));
+        mRestoreTimer.start(restore.reconnectDelayMs);
+        return;
+    }
+    // From the event loop, once the engine listens, as the load takes a while
+    mRestoreTimer.start(0);
+}
+
+void MudletEngine::beginRestore()
+{
+    if (mState != State::idle) {
+        return;
+    }
+    mRestoring = true;
+    if (mKept.connect) {
+        restoreStatus(QStringLiteral("reconnecting"), restoreTarget());
+    } else {
+        restoreStatus(QStringLiteral("restoring"), mProfile);
+    }
+    start(mKept.host, quint16(mKept.port), mKept.connect, mKept.tls);
+}
+
+// The UI took over: the restore no longer reports, nor connects later
+void MudletEngine::cancelRestore()
+{
+    if (!mRestoreTimer.isActive() && !mRestoring) {
+        return;
+    }
+    mRestoreTimer.stop();
+    mRestoring = false;
+    restoreStatus(QStringLiteral("cancelled"));
+}
+
+// docs/protocol.md, "The restore status": a phase, then what it is about
+void MudletEngine::restoreStatus(const QString& phase, const QString& detail)
+{
+    const QString value = detail.isEmpty() ? phase : QStringLiteral("%1 %2").arg(phase, detail);
+    qInfo("MudletEngine: restore: %s", qPrintable(value));
+    mFrontend->status(QStringLiteral("restore"), value);
+}
+
+void MudletEngine::persist()
+{
+    if (mClosing || mKept == mSavedKept) {
+        return;
+    }
+    mSavedKept = mKept;
+    mStore->save(mKept);
+}
+
+QString MudletEngine::restoreTarget() const
+{
+    return mKept.host.isEmpty() ? mProfile : QStringLiteral("%1:%2").arg(mKept.host).arg(mKept.port);
+}
+
+// Mudlet's "Reconnect automatically" for the profile, as its connection dialog stores it: a QString in a QDataStream,
+// the number of a Qt::CheckState
+bool MudletEngine::profileReconnects() const
+{
+    QFile file(QStringLiteral("%1/profiles/%2/autoreconnect").arg(mConfigDir, mProfile));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    QDataStream in(&file);
+    in.setVersion(QDataStream::Qt_5_12);
+    QString value;
+    in >> value;
+    return value.toInt() == Qt::Checked;
 }
 
 void MudletEngine::reportFont()
@@ -218,6 +353,9 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     options.tls = tls;
     mProfileTls = tls;
     options.configDir = mConfigDir;
+    mKept.profile = mProfile;
+    mKept.tls = tls;
+    persist();
     mState = State::starting;
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
@@ -234,9 +372,19 @@ void MudletEngine::onStartFinished(int result, const QString& error)
         if (!pending.isEmpty()) {
             mFrontend->status(QStringLiteral("luaResult"), QStringLiteral("no profile"));
         }
+        mKept.profile.clear();
+        mKept.connect = false;
+        persist();
+        if (std::exchange(mRestoring, false)) {
+            restoreStatus(QStringLiteral("failed"), error);
+        }
         return;
     }
     mState = State::started;
+    if (mRestoring && !mKept.connect) {
+        mRestoring = false;
+        restoreStatus(QStringLiteral("restored"), mProfile);
+    }
     for (const QString& code : pending) {
         runNow(code);
     }
@@ -250,27 +398,37 @@ void MudletEngine::runNow(const QString& code)
 
 void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bool> tls)
 {
-    if (mState == State::idle) {
-        start(host, port, true, tls);
-        return;
-    }
     // A running profile connects as it was started: THeadlessSession takes the TLS choice only in start(), and
-    // connectToServer() keeps the profile's
-    if (tls.has_value() && tls != mProfileTls) {
+    // connectToServer() keeps the profile's. A connect refused for that changes nothing, a restore included.
+    if (mState != State::idle && tls.has_value() && tls != mProfileTls) {
         QString started = QStringLiteral("with its stored choice");
         if (mProfileTls.has_value()) {
             started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
         }
         mFrontend->status(QStringLiteral("connection"),
-                          QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; restart the engine to change it")
+                          QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it")
                                   .arg(started));
         return;
     }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
-    if (mState == State::starting) {
+    cancelRestore();
+    mDisconnectRequested = false;
+    mKept.host = host;
+    mKept.port = port;
+    mKept.connect = true;
+    persist();
+    switch (mState) {
+    case State::idle:
+        start(host, port, true, tls);
+        return;
+    case State::starting:
         mPendingLua.append(code);
-    } else if (!mSession->runLua(code)) {
-        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
+        return;
+    case State::started:
+        if (!mSession->runLua(code)) {
+            mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
+        }
+        return;
     }
 }
 
@@ -287,6 +445,16 @@ void MudletEngine::send(const QString& line)
 
 void MudletEngine::disconnectFromGame()
 {
+    // The user's disconnect: a restart of the engine brings the profile back, but does not connect it
+    const bool waiting = mRestoreTimer.isActive();
+    cancelRestore();
+    mDisconnectRequested = true;
+    mKept.connect = false;
+    persist();
+    if (waiting && !mPendingLua.isEmpty()) {
+        // Lua held back for the restore runs all the same
+        start({}, 0, false, mKept.tls);
+    }
     if (mState == State::started && !mSession->runLua(QStringLiteral("disconnect()"))) {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
     }
@@ -297,7 +465,10 @@ void MudletEngine::runLua(const QString& code)
     switch (mState) {
     case State::idle:
         mPendingLua.append(code);
-        start({}, 0, false, std::nullopt);
+        // A restore that waits to connect starts the profile, and runs it then
+        if (!mRestoreTimer.isActive()) {
+            start({}, 0, false, std::nullopt);
+        }
         return;
     case State::starting:
         mPendingLua.append(code);

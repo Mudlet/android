@@ -13,7 +13,7 @@ if(LIBMUDLET_BUILD_DIR)
         message(FATAL_ERROR "${LIBMUDLET_BUILD_DIR}/libmudlet.cmake is missing: run scripts/export-libmudlet.py on that tree")
     endif()
     include("${LIBMUDLET_BUILD_DIR}/libmudlet.cmake")
-    list(APPEND HOST_SOURCES MudletEngine.cpp MudletEngine.h)
+    list(APPEND HOST_SOURCES MudletEngine.cpp MudletEngine.h SessionStore.cpp SessionStore.h)
 endif()
 
 qt_add_executable(engine ${HOST_SOURCES})

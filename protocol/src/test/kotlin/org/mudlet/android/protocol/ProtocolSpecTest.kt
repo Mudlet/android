@@ -9,7 +9,8 @@ import java.io.File
 
 /**
  * Keeps docs/protocol.md, the engine (native/enginehost/SocketBridge.*), this client and the Python test client in
- * step: the same messages in each direction, the same fields, the same protocol version.
+ * step: the same messages in each direction, the same fields, the same protocol version, and the same phases of
+ * libmudlet's restore status (native/enginehost/MudletEngine.cpp).
  */
 class ProtocolSpecTest {
     private val root = File(System.getProperty("repoRoot") ?: error("repoRoot not set; run through Gradle"))
@@ -84,6 +85,17 @@ class ProtocolSpecTest {
             }
             .associate { it.getString("t") to (it.keySet() - "t") }
         assertEquals("requests and their fields that Requests builds", toEngine, built)
+    }
+
+    @Test
+    fun theRestorePhasesAreTheSameEverywhere() {
+        val section = spec.substringAfter("\n### The restore status\n", "").substringBefore("\n#")
+        val documented = Regex("^\\| `(\\w+)", RegexOption.MULTILINE).findAll(section).map { it.groupValues[1] }.toList()
+        check(documented.isNotEmpty()) { "no table under \"### The restore status\" in docs/protocol.md" }
+        val sent = Regex("restoreStatus\\(QStringLiteral\\(\"(\\w+)\"\\)")
+            .findAll(read("native/enginehost/MudletEngine.cpp")).map { it.groupValues[1] }.toSet()
+        assertEquals("restore phases EngineRestore knows, against docs/protocol.md", documented, EngineRestore.PHASES)
+        assertEquals("restore phases MudletEngine.cpp sends", documented.toSet(), sent)
     }
 
     @Test

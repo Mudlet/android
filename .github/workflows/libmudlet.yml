@@ -2,7 +2,8 @@ name: libmudlet for Android
 
 # Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
 # builds the app's APK with libmudlet as its engine. A second job builds libmudlet for the host and runs the real
-# engine against the fake game server through the socket protocol.
+# engine against the fake game server through the socket protocol. A third builds it all for x86_64 and runs the APK
+# on an emulator (native/tests/android_smoke.py): the only job that runs the real engine on Android.
 # The nightly run builds Mudlet's latest development, so it catches a change there that stops these
 # compiling or linking for Android, or breaks the engine; a failed nightly opens or updates an issue here.
 on:
@@ -33,6 +34,12 @@ on:
       mudlet_ref:
         description: Mudlet/Mudlet branch, tag or full commit SHA to build
         default: development
+      lua_fortify_fix:
+        description: >-
+          Emulator job: build Lua 5.1 with the Android FORTIFY fix. Off only to show that the smoke test catches the
+          abort in luaL_openlibs
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -95,8 +102,8 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: .ccache
-          key: ccache-libmudlet-${{ github.run_id }}
-          restore-keys: ccache-libmudlet-
+          key: ccache-libmudlet-arm64-v8a-${{ github.run_id }}
+          restore-keys: ccache-libmudlet-arm64-v8a-
 
       - name: Build libmudlet
         run: |
@@ -108,7 +115,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: .ccache
-          key: ccache-libmudlet-${{ github.run_id }}
+          key: ccache-libmudlet-arm64-v8a-${{ github.run_id }}
 
       - uses: gradle/actions/setup-gradle@v5
         with:
@@ -232,14 +239,172 @@ jobs:
             -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
           cmake --build build-desktop-mudlet --target engine
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
+          python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
+
+  # The APK with libmudlet, built for x86_64, on an Android emulator (KVM on GitHub's Linux runners): install, launch,
+  # the engine service, a profile on the fake game server, a Lua trigger and its notification, and the UI reattaching
+  # to a restarted engine. See native/tests/android_smoke.py
+  emulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      ANDROID_ABI: x86_64
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1500M
+      CCACHE_COMPILERCHECK: content
+      # a manual run can leave the fix out, to show that the smoke test catches the abort. Only a manual run has inputs:
+      # on a push, pull request or schedule inputs.lua_fortify_fix is null, and null == false holds (both coerce to 0)
+      LUA_FORTIFY_FIX: ${{ github.event_name == 'workflow_dispatch' && !inputs.lua_fortify_fix && '0' || '1' }}
+      EMULATOR_API: 35
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Mudlet/Mudlet
+          ref: ${{ env.MUDLET_REF }}
+          path: mudlet
+
+      - id: toolchain
+        uses: ./.github/actions/android-toolchain
+        with:
+          qt-android-arch: android_x86_64
+          apt-packages: lua5.1
+
+      - name: Restore dependencies
+        id: deps-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: deps/prefix
+          key: mudlet-deps-x86_64-qt${{ steps.toolchain.outputs.qt-version }}-ndk${{ steps.toolchain.outputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
+
+      - name: Build dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: scripts/build-mudlet-deps.sh deps/prefix
+
+      - name: Save dependencies
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: deps/prefix
+          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: .ccache
+          key: ccache-libmudlet-x86_64-${{ github.run_id }}
+          restore-keys: ccache-libmudlet-x86_64-
+
+      - name: Build libmudlet
+        run: |
+          ccache -z > /dev/null
+          scripts/build-libmudlet.sh mudlet build deps/prefix
+
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .ccache
+          key: ccache-libmudlet-x86_64-${{ github.run_id }}
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.14.3"
+
+      - uses: ./.github/actions/android-openssl
+        with:
+          abi: x86_64
+          ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
+
+      - name: Build the APK with libmudlet as the engine
+        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
+
+      - name: Check the APK
+        uses: ./.github/actions/check-apk
+        with:
+          apk-dir: app/build/outputs/apk/debug
+          engine: libengine
+          abi: x86_64
+          title: APK with libmudlet (x86_64, for the emulator)
+          build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
+
+      # libmudlet is linked into the engine by now; the system image and the emulator's disk need the room
+      - name: Free disk space
+        run: |
+          find build -name '*.o' -delete
+          df -h / | tail -n 1
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules > /dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Restore the system image
+        id: image-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
+          key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64
+
+      - name: Smoke test on the emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.EMULATOR_API }}
+          target: google_apis
+          arch: x86_64
+          cores: 4
+          ram-size: 4096M
+          disk-size: 6G
+          # one line: the action runs each line of a script in a shell of its own
+          script: >-
+            python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test
+            --symbols native/build-android-x86_64-mudlet/enginehost
+
+      - name: Save the system image
+        if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
+          key: ${{ steps.image-cache.outputs.cache-primary-key }}
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: emulator-smoke-test${{ env.LUA_FORTIFY_FIX == '0' && '-without-lua-fortify-fix' || '' }}
+          path: smoke-test
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Emulator smoke test (x86_64, API $EMULATOR_API)"
+            echo
+            echo "Mudlet/Mudlet \`$MUDLET_REF\` at $(git -C mudlet log -1 --format='[`%h`](https://github.com/Mudlet/Mudlet/commit/%H) %s' 2>/dev/null || echo '(not checked out)')"
+            echo
+            grep -s 'FORTIFY' build/size-report.md || true
+            echo
+            if [ -f smoke-test/smoke.log ]; then
+              echo '```'
+              cat smoke-test/smoke.log
+              echo '```'
+            else
+              echo "The smoke test did not run."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # GitHub mails a failed scheduled run only to whoever last edited the cron line
   report-nightly-failure:
-    needs: [libmudlet, desktop-engine]
+    needs: [libmudlet, desktop-engine, emulator]
     # a job that hits timeout-minutes is cancelled, not failed
     if: >-
       always() && github.event_name == 'schedule'
-      && (needs.libmudlet.result != 'success' || needs.desktop-engine.result != 'success')
+      && (needs.libmudlet.result != 'success' || needs.desktop-engine.result != 'success'
+          || needs.emulator.result != 'success')
     runs-on: ubuntu-24.04
     permissions:
       issues: write

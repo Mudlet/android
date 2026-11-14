@@ -153,6 +153,8 @@ The tail is sent once per pass of the event loop, so a flood sends its lines and
   `started`.
 - `start()` can create a profile only from a game's address, so Lua sent before the first
   connect of a new profile gets `no profile`.
+- An engine started after the last one was killed loads that one's profile again, and connects it
+  if the connection was wanted (see "Restoring the session" below).
 - When the engine quits, it calls `shutdownAsync(true)` and waits up to 5 s for the profile's
   sysExitEvent and save.
 - On the desktop, SIGTERM quits the engine the same way.
@@ -174,6 +176,19 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
+`native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
+
+`native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
+(CI's emulator job) or a device, from the host through adb. It drives the UI through a debug-only hook,
+`SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
+- that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
+- that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
+  (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;
+- that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
+- that after `:engine` is killed, the UI starts a new engine and attaches to it.
+
+If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
+
 **Gaps:**
 - Game text that no line feed or GA has ended shows as in Mudlet's desktop GUI. While the game
   has sent no GA, Mudlet ends the line after the profile's network packet timeout (300 ms by
@@ -185,12 +200,70 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `linksChanged`).
 - The main window's size (`setScreenSize()`) is not passed on, so the game is told 90 by 25 if
   it asks.
-- No profile restart after the engine is killed, and no bundled fonts.
+- No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
-  `luaL_openlibs`. Mudlet does not do this yet; a separate change carries it in this
-  repository's libmudlet build. Neither CI job runs the engine on Android.
+  `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
+  repository's libmudlet build, and CI's emulator smoke test fails without it.
+
+### Restoring the session
+Android kills `:engine` when it needs the memory, and the user can kill it from the self-test. The engine is started
+again within about half a second while the UI is shown (the UI starts it, and the system may too), but a new engine
+knew nothing of the profile, so the player was silently left disconnected. Now the engine keeps what it needs to
+start the profile again on disk, and a new engine restores it. Only the engine with libmudlet does this; the
+stand-in does not.
+
+**What is kept.** `native/enginehost/SessionStore.*` keeps one JSON file, `<files>/engine-session.json`
+(`MUDLET_ENGINE_STATE`; the app names it in `EngineSession.kt`). It holds:
+- the profile, while one runs, which is the only `THeadlessSession::Options` field the engine sets besides the
+  connection's (`configDir` comes from the app's files, as at any start);
+- the host and port the UI last connected it to, passed again as `Options::host` and `port` (an empty host leaves
+  the address stored in the profile);
+- whether the connection is wanted;
+- the TLS choice the profile was started with, if the `connect` that started it made one, passed again as
+  `Options::tls`, so that the UI's next `connect` with that choice is not refused;
+- when each restore within the last 10 minutes started.
+
+The file is rewritten whenever one of these changes, through `QSaveFile`, so a kill part-way through leaves the last
+whole file.
+
+**When the connection is wanted:**
+- It is, from a connect from the UI, or once the profile is connected for any reason.
+- A disconnect from the UI ends it.
+- A connection the game closed or refused ends it too, unless the profile reconnects automatically. That is
+  Mudlet's "Reconnect automatically" in the connection dialog, which the engine reads from the profile's own
+  `autoreconnect` file. So a restore reconnects exactly when Mudlet itself would still be trying to.
+
+**When the engine restores.** At start-up, a file that names a profile means the engine before it was killed:
+- An orderly stop deletes the file first: the engine's destructor, run when Qt's event loop ends (SIGTERM on the
+  desktop, the service's destruction on Android).
+- The app also writes a stop marker, `<files>/engine-stopped` (`MUDLET_ENGINE_STOPPED`), from
+  `EngineService.onDestroy` and from the UI's Stop engine. A process kill never runs `onDestroy`. The next engine
+  takes the marker and restores nothing, so a stop is never undone, even if `System.exit(0)` ends the process before
+  the destructor runs, or the engine was not running when the user stopped it.
+- A profile that a script closed, or that failed to load, is forgotten.
+
+**How it restores.** The profile is loaded with `startAsync()` from the event loop, once the engine listens, and
+connected if that was wanted. It does not wait for a UI. Status `restore`
+([`protocol.md`](protocol.md), "The restore status") says what happened, and the engine keeps the status, so a UI
+that attaches later is told too. The UI shows it as a marker line.
+
+**Not hammering a game.**
+- Each restore counts itself in the file before it starts, so one that kills the engine still counts.
+- The first restore within 10 minutes connects at once, the second after 10 s, the third after 30 s.
+- A start that finds three restores within 10 minutes restores nothing (`gaveUp`) and forgets the profile. A crash
+  loop therefore calls a game at most three more times. The profile comes back when the user starts it again.
+- A failed reconnect is not retried by the engine. Mudlet retries it on its own, with its own back-off from 5 s,
+  only for a profile that reconnects automatically.
+
+**Not covered:**
+- A script's `disconnect()` counts as the game closing the connection, so a profile that reconnects automatically
+  would be reconnected after a kill.
+- A game a script connected to with `connectToServer()` is reconnected at the UI's last address, or the profile's.
+- The engine cannot tell the user's force-stop, or an app update, from a kill, so it restores the profile when the
+  app next starts it.
+- The engine's 2000-line scrollback is not kept; the UI keeps its own lines.
 
 ## Qt internals relied on
 - **`org.qtproject.qt.android.QtServiceBase`** (from `Qt6Android.jar`).
@@ -301,11 +374,14 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
     sees EOF and retries. After 3 failed connects, while an Activity is started
     and the engine is wanted, it calls `startForegroundService`; that is allowed
     because the app is in the foreground.
-  - The service is `START_NOT_STICKY`: the system does not resurrect it, because
-    a resurrected engine has lost its game connection anyway.
+  - The service is `START_NOT_STICKY`. On the emulator the system started
+    `:engine` again about 300 ms after the kill all the same
+    ([`c-device.md`](decisions/hosting-results/c-device.md), 9b).
   - The new engine has a new `instance`. The UI keeps its old lines and adds a
-    "new engine instance" marker. The game connection and the engine's
-    scrollback are gone.
+    "new engine instance" marker. The engine's scrollback is gone.
+  - The engine with libmudlet loads the profile again and reconnects it, and the
+    UI shows that as marker lines ("Restoring the session" above). The
+    stand-in's game connection is gone.
   - Host timings: the restarted engine is reachable 33 ms after it starts, and
     the JVM link reattaches 110 ms after the kill.
   - On a phone, expect a few hundred ms for the process fork and Qt library load.
@@ -470,7 +546,8 @@ certificate folders, such as `/etc/ssl/certs`.
 **The protocol.** `connect` carries `tls`, which libmudlet passes to `THeadlessSession::Options::tls` when that
 connect starts the profile; Mudlet stores it with the profile, as its connection dialog does. `THeadlessSession`
 takes the choice only at start, so while the profile runs a `connect` with a different `tls` is refused with status
-`connection` `error: ...`; stopping and starting the engine changes it. The stand-in engine has no TLS and refuses
+`connection` `error: ...`; stopping and starting the engine changes it. An engine restored after a kill starts
+the profile with the choice it was started with (see "Restoring the session"). The stand-in engine has no TLS and refuses
 `tls` true the same way. The self-test screen has a TLS box beside the port.
 
 **Tests.** `native/tests/test_mudlet_engine.py` runs the real engine on the host, with the host's Qt and OpenSSL,
@@ -527,11 +604,22 @@ Item 13 of the on-device checklist covers this.
    scrollback is replayed.
 9. Press "Kill engine process". Expect "engine connection lost", then an
    automatic restart and "new engine instance"; note the loss-to-attach time.
-   The game connection is gone, as expected.
+   - With the stand-in, the game connection is gone, as expected.
+   - With libmudlet, expect the marker lines "profile restored, reconnecting to
+     ..." and "Reconnected to ...", and the game's output again. Note how long
+     after the kill it reconnects.
+   - Kill it twice more within 10 minutes: the second restore waits 10 s and the
+     third 30 s before connecting, and a fourth kill brings back no profile ("The
+     engine keeps stopping").
+   - Kill it with `kill <enginepid>` from `run-as` while another app is in
+     front. Note whether the system starts the engine again on its own, and
+     whether it then reconnects with no UI shown.
 10. Press "Stop engine". The `:engine` process and its notification should
     disappear, and the UI stays alive.
     - Check with `adb shell ps -A | grep mudlet`.
-    - Then press "Start engine".
+    - Then press "Start engine". With libmudlet, no profile comes back and the
+      game is not called.
+    - Repeat with the notification's Stop action.
 11. Leave the phone with the screen off for 30 minutes or more, connected to the
     game.
     - Afterwards, check the heartbeat's largest gap and whether the game is

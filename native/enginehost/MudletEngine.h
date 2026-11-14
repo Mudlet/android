@@ -2,6 +2,7 @@
 
 #include "IEngine.h"
 #include "IFrontend.h"
+#include "SessionStore.h"
 
 #include <QElapsedTimer>
 #include <QList>
@@ -15,7 +16,8 @@
 class THeadlessSession;
 
 // libmudlet behind the same host protocol as the stand-in: one profile in a THeadlessSession, started on the
-// first connect or Lua call. Only THeadlessSession's public API is used.
+// first connect or Lua call, or at start-up to restore the one the engine before it ran when that engine was killed.
+// Only THeadlessSession's public API is used.
 class MudletEngine : public QObject, public IEngine
 {
     Q_OBJECT
@@ -45,6 +47,13 @@ private:
 
     void connectSession();
     void shutdownSession();
+    void takeRestore();
+    void beginRestore();
+    void cancelRestore();
+    void restoreStatus(const QString& phase, const QString& detail = {});
+    void persist();
+    QString restoreTarget() const;
+    bool profileReconnects() const;
     void start(const QString& host, quint16 port, bool connect, std::optional<bool> tls);
     void onStartFinished(int result, const QString& error);
     void runNow(const QString& code);
@@ -72,6 +81,19 @@ private:
     // Lua (connects included) asked for while the profile starts, run once it has
     QStringList mPendingLua;
     QString mErrorPending;
+
+    std::unique_ptr<SessionStore> mStore;
+    // What a restart of the engine would bring back, and what was last written of it
+    SessionStore::Session mKept;
+    SessionStore::Session mSavedKept;
+    // The UI asked for a disconnect, so the disconnected that follows does not leave the connection wanted
+    bool mDisconnectRequested = false;
+    // From the restore's start until it has connected, or found it will not
+    bool mRestoring = false;
+    // Holds back a restore that is to wait before it connects
+    QTimer mRestoreTimer;
+    // The engine is stopping in order: nothing more is written for a restore
+    bool mClosing = false;
 
     OpenLine mOpen;
     // localText's next piece starts with the line feed that ends the line it left open, which lineShown has

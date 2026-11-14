@@ -273,11 +273,11 @@ object EngineClient {
 
     fun disconnect(): Boolean = send(Requests.disconnect())
 
-    /** Changes [setting], one of [Settings.mudletSettings], and gives the profile that is loaded the new value. */
+    /** Changes [setting] and, if it is one of [Settings.mudletSettings], gives the profile that is loaded the new value. */
     fun <T> setMudletSetting(setting: Settings.Setting<T>, value: T) {
         val old = setting.value
         setting.set(value)
-        if (setting.value != old) sendMudletSettings(listOf(setting))
+        if (setting.mudlet && setting.value != old) sendMudletSettings(listOf(setting))
     }
 
     // Lost when no profile is loaded or the link is down: the next profile to load, or the next attach, gets them all
@@ -539,7 +539,7 @@ object EngineClient {
         addLines(newLines)
         if (tailSet) tail = newTail
         if (news.isNotEmpty()) Announcer.newLines(news)
-        // Also when an attach resends it: a setting may have changed while the link was down
+        // Also when an attach resends the profile status: a setting may have changed while the link was down
         if (newStatus["profile"]?.endsWith(" loaded") == true) sendMudletSettings(Settings.mudletSettings)
     }
 

@@ -2,6 +2,7 @@ package org.mudlet.android.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,8 +35,8 @@ object Settings {
     private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered)
 
     /**
-     * The settings Mudlet keeps for each profile too. The app keeps its own copy, as `runLua` returns no values, and
-     * gives each profile that loads the app's values.
+     * The settings Mudlet keeps for each profile too. The app keeps its own copy, as libmudlet's `luaResult` says only
+     * whether the Lua ran, and gives each profile that loads the app's values.
      */
     val mudletSettings = all.filter { it.mudlet }
 
@@ -68,6 +69,9 @@ object Settings {
             prefs?.edit { write(this, v) }
         }
 
+        @VisibleForTesting
+        fun reset() = set(default)
+
         /** The Lua that gives Mudlet's profile this setting's value. */
         fun setConfigLua(): String = "setConfig(\"$key\", ${lua(value)})"
 
@@ -77,7 +81,7 @@ object Settings {
 
         protected open fun normalise(v: T): T = v
 
-        protected abstract fun lua(v: T): String
+        protected open fun lua(v: T): String = v.toString()
 
         protected abstract fun read(prefs: SharedPreferences): T
 
@@ -88,8 +92,6 @@ object Settings {
     class IntSetting(key: String, default: Int, val range: IntRange) : Setting<Int>(key, default) {
         override fun normalise(v: Int) = v.coerceIn(range)
 
-        override fun lua(v: Int) = v.toString()
-
         override fun read(prefs: SharedPreferences) = prefs.getInt(key, default)
 
         override fun write(editor: SharedPreferences.Editor, v: Int) {
@@ -98,8 +100,6 @@ object Settings {
     }
 
     class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false) : Setting<Boolean>(key, default, mudlet) {
-        override fun lua(v: Boolean) = v.toString()
-
         override fun read(prefs: SharedPreferences) = prefs.getBoolean(key, default)
 
         override fun write(editor: SharedPreferences.Editor, v: Boolean) {

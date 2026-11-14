@@ -56,7 +56,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 }
 
-/** What TalkBack is told, and what games are: Mudlet's own settings, given to each profile that loads. */
+/** The screen reader settings, which are Mudlet's own: each profile that loads is given the app's values. */
 @Composable
 private fun ScreenReader() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

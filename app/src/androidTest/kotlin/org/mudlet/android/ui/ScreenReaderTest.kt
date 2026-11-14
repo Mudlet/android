@@ -73,12 +73,11 @@ class ScreenReaderTest {
     @After
     fun reset() = compose.runOnIdle {
         Announcer.touchExplorationOverride = null
-        for (setting in listOf(Settings.readNewText, Settings.advertiseScreenReader, Settings.screenReaderOffered)) setting.set(setting.default)
-        Settings.blankLines.set(Settings.blankLines.default)
+        for (setting in Settings.mudletSettings + Settings.screenReaderOffered) setting.reset()
     }
 
     @Test
-    fun aBurstOfNewLinesIsReadOnceWhileTouchExplorationIsOn() {
+    fun newLinesAreReadTogetherWhileTouchExplorationIsOn() {
         val before = serial()
         line("not read: touch exploration is off")
         SystemClock.sleep(QUIET_MS)
@@ -89,17 +88,23 @@ class ScreenReaderTest {
         SystemClock.sleep(QUIET_MS)
         assertEquals("no announcement of a replayed line", before, serial())
 
+        // A few lines are read as they are, without the blank one
+        for (text in listOf("first of two", "", "second of two")) session.line(nextSeq++, text)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement("first of two\nsecond of two", LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
+        SystemClock.sleep(QUIET_MS)
+        assertEquals("the lines are one announcement", before + 1, serial())
+
         val burst = (1..8).map { "burst line $it" }
         burst.forEach { session.line(nextSeq++, it) }
         val expected = compose.activity.resources.getQuantityString(R.plurals.announce_burst, 8, 8, burst.takeLast(3).joinToString("\n"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(announcement(expected, LiveRegionMode.Polite)).fetchSemanticsNodes().size == 1 }
         SystemClock.sleep(QUIET_MS)
-        assertEquals("the burst is one announcement", before + 1, serial())
+        assertEquals("the burst is one announcement", before + 2, serial())
 
         compose.runOnIdle { Settings.readNewText.set(false) }
         line("not read: the setting is off")
         SystemClock.sleep(QUIET_MS)
-        assertEquals("no announcement with the setting off", before + 1, serial())
+        assertEquals("no announcement with the setting off", before + 2, serial())
     }
 
     @Test

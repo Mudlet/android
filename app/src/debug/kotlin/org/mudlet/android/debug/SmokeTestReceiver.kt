@@ -11,6 +11,7 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.EngineClient
+import org.mudlet.android.ui.ScriptWindowsClient
 import org.mudlet.android.ui.UiLine
 
 /**
@@ -101,6 +102,18 @@ class SmokeTestReceiver : BroadcastReceiver() {
             .put("tail", c.tail?.toJson() ?: JSONObject.NULL)
             .put("profiles", JSONArray(c.profiles.orEmpty().map { it.toJson() }))
             .put("profileAnswer", profileAnswer)
+            .put("windows", windows())
+    }
+
+    // The script windows the UI knows of, each with the text of its last rows if it is a console
+    private fun windows(): JSONArray {
+        val state = ScriptWindowsClient.state
+        val windows = JSONArray()
+        for (w in state.windows) {
+            val rows = state.text[w.name]?.lines.orEmpty().takeLast(WINDOW_ROWS).map { it.text }
+            windows.put(JSONObject().put("name", w.name).put("kind", w.kind.wire).put("shown", w.shown).put("rows", JSONArray(rows)))
+        }
+        return windows
     }
 
     private fun UiLine.toJson() = JSONObject()
@@ -123,5 +136,6 @@ class SmokeTestReceiver : BroadcastReceiver() {
 
         // Enough for the banner and the test's own lines; a broadcast's result travels in one binder transaction
         const val LINES = 60
+        const val WINDOW_ROWS = 5
     }
 }

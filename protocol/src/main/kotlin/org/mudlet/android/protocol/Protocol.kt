@@ -55,6 +55,11 @@ object Requests {
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
 }
 
+/**
+ * Writes each frame with one write() to [out], which must be unbuffered, as a socket's stream is: it never flushes,
+ * because a LocalSocket's flush() waits until the other end has read everything (seen on Android 9), so a UI's send
+ * from its main thread would wait for a busy engine.
+ */
 class FrameWriter(private val out: OutputStream) {
     @Synchronized
     fun write(message: JSONObject) {
@@ -67,7 +72,6 @@ class FrameWriter(private val out: OutputStream) {
         frame[3] = n.toByte()
         System.arraycopy(payload, 0, frame, 4, n)
         out.write(frame)
-        out.flush()
     }
 }
 

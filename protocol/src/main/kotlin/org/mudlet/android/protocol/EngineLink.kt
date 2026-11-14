@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 interface Transport {
     val input: InputStream
+
+    /** Unbuffered: [FrameWriter] does not flush it. */
     val output: OutputStream
     fun close()
 }

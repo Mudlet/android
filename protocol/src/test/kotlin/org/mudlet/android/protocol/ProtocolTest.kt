@@ -5,6 +5,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.OutputStream
 
 /** The run encoding and message types of native/enginehost/SocketBridge.cpp, without an engine. */
 class ProtocolTest {
@@ -33,5 +34,22 @@ class ProtocolTest {
         assertTrue(tail.prompt)
         assertArrayEquals(intArrayOf(0, 2, 1, -1, 1, 0), tail.runs)
         assertEquals(EngineMessage.Clear, FrameReader.parse(JSONObject("""{"t":"clear"}""")))
+    }
+
+    @Test
+    fun aFrameIsOneWriteAndNeverFlushed() {
+        val writes = ArrayList<ByteArray>()
+        val out = object : OutputStream() {
+            override fun write(b: Int) = throw AssertionError("a frame written byte by byte")
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                writes.add(b.copyOfRange(off, off + len))
+            }
+
+            override fun flush() = throw AssertionError("flushed: a LocalSocket's flush() waits for the engine to read")
+        }
+        val message = Requests.ping(7)
+        FrameWriter(out).write(message)
+        val payload = message.toString().toByteArray(Charsets.UTF_8)
+        assertArrayEquals(byteArrayOf(0, 0, 0, payload.size.toByte()) + payload, writes.single())
     }
 }

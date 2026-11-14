@@ -172,7 +172,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
 (CI's emulator job) or a device, from the host through adb. It drives the UI through a debug-only hook,
-`SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may call), and checks:
+`SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
 - that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
 - that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
   (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;

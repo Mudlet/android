@@ -146,7 +146,9 @@ def summary(state):
 
 
 def line_with(state, text):
-    return next((line for line in state["lines"] if line["text"] == text), None)
+    """A line the UI shows: one of its lines, or the tail below them (the line the engine may still add to)."""
+    shown = state["lines"] + ([state["tail"]] if state.get("tail") else [])
+    return next((line for line in shown if line["text"] == text), None)
 
 
 def runs_of(line):

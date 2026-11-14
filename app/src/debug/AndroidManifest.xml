@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the hook CI's emulator smoke test (native/tests/android_smoke.py) drives the UI through. The
+     DUMP permission lets only the shell (adb) and the system send to it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name="org.mudlet.android.debug.SmokeTestReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+    </application>
+</manifest>

@@ -7,6 +7,8 @@
 # Optional: QT_ANDROID / QT_HOST_PATH instead of QT_ROOT, ANDROID_ABI (arm64-v8a), ANDROID_API (28), JOBS (nproc),
 # BUILD_TYPE (Release), HEADLESS_RUNNER=0 to build only the libraries, SIZE_REPORT (<build-dir>/size-report.md).
 # Until Mudlet has it, it adds the Android FORTIFY fix below to the checkout's 3rdparty/lua51/CMakeLists.txt.
+# LUA_FORTIFY_FIX=0 leaves that fix, and the check that it is in effect, out: only to show that CI's emulator smoke
+# test catches the abort (libmudlet.yml's lua_fortify_fix input).
 set -euo pipefail
 
 [ $# -eq 3 ] || { echo "usage: $0 <mudlet-source> <build-dir> <deps-prefix>" >&2; exit 2; }
@@ -30,10 +32,17 @@ report=${SIZE_REPORT:-$build/size-report.md}
 lua_cmake=$src/3rdparty/lua51/CMakeLists.txt
 lua_fix_mark="# Android FORTIFY fix, added by Mudlet/android's scripts/build-libmudlet.sh until Mudlet has it"
 [ -f "$lua_cmake" ] || { echo "$lua_cmake is missing: has Mudlet moved its Lua 5.1?" >&2; exit 1; }
+want_lua_fix=${LUA_FORTIFY_FIX:-1}
 if grep -qxF "$lua_fix_mark" "$lua_cmake"; then
+    [ "$want_lua_fix" != 0 ] \
+        || { echo "LUA_FORTIFY_FIX=0, but an earlier run added the fix to $lua_cmake: take it out first" >&2; exit 1; }
     lua_fix="carried here, as Mudlet lacks it (added by an earlier run)"
 elif grep -qF -- -U_FORTIFY_SOURCE "$lua_cmake"; then
     lua_fix="Mudlet's own"
+    [ "$want_lua_fix" != 0 ] || lua_fix+=", which LUA_FORTIFY_FIX=0 does not take out"
+elif [ "$want_lua_fix" = 0 ]; then
+    lua_fix="left out (LUA_FORTIFY_FIX=0), so this Lua 5.1 aborts on Android"
+    echo "LUA_FORTIFY_FIX=0: building Mudlet's Lua 5.1 without the Android FORTIFY fix, which aborts on a device"
 else
     cat >> "$lua_cmake" <<EOF
 
@@ -123,7 +132,11 @@ chk_in() { sed -En "s/.*:$1\.o: *U (__.+_chk)$/\1/p" <<< "$lua_uses"; }
 [ -n "$(chk_in lstrlib.c)" ] \
     || { echo "Lua 5.1's lstrlib.c makes no fortified call: with FORTIFY off, the lgc.c check proves nothing" >&2; exit 1; }
 found=$(chk_in lgc.c)
-[ -z "$found" ] || { printf 'Lua 5.1 makes fortified calls that abort on Android (lgc.c):\n%s\n' "$found" >&2; exit 1; }
+if [ -n "$found" ]; then
+    printf 'Lua 5.1 makes fortified calls that abort on Android (lgc.c):\n%s\n' "$found" >&2
+    [ "$want_lua_fix" = 0 ] || exit 1
+    echo "LUA_FORTIFY_FIX=0: going on regardless" >&2
+fi
 if [ -n "$runner" ]; then
     needed=$("$bin/llvm-readelf" -d "$runner" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p')
     found=$(grep -E 'Qt6(Widgets|OpenGLWidgets|UiTools|HttpServer|DBus)' <<< "$needed" || true)

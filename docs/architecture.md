@@ -176,6 +176,17 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
 
+`native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
+(CI's emulator job) or a device, from the host through adb. It drives the UI through a debug-only hook,
+`SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
+- that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
+- that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
+  (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;
+- that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
+- that after `:engine` is killed, the UI starts a new engine and attaches to it.
+
+If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
+
 **Gaps:**
 - Game text that no line feed or GA has ended shows as in Mudlet's desktop GUI. While the game
   has sent no GA, Mudlet ends the line after the profile's network packet timeout (300 ms by
@@ -190,8 +201,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - No bundled fonts, no TLS (the APK ships no OpenSSL).
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
-  `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in
-  this repository's libmudlet build. Neither CI job runs the engine on Android.
+  `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
+  repository's libmudlet build, and CI's emulator smoke test fails without it.
 
 ### Restoring the session
 Android kills `:engine` when it needs the memory, and the user can kill it from the self-test. The engine is started

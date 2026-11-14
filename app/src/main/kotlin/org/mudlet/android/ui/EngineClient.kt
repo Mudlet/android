@@ -120,8 +120,11 @@ object EngineClient {
         linkState = "detached (UI stopped)"
     }
 
-    fun send(message: org.json.JSONObject) {
-        if (!link.send(message)) linkState = "not attached: command dropped"
+    /** False when the link is down and the command was dropped. */
+    fun send(message: org.json.JSONObject): Boolean {
+        val sent = link.send(message)
+        if (!sent) linkState = "not attached: command dropped"
+        return sent
     }
 
     fun setViewWidth(px: Int) {

@@ -49,12 +49,15 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
             scope.launch { snackbars.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long) }
         }
     }
-    val settingsButton = @Composable {
-        IconButton(onOpenSettings) {
-            Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
-        }
-    }
-    Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack, actions = settingsButton) }) { padding ->
+    Scaffold(
+        topBar = {
+            MudletTopBar(stringResource(R.string.game_title), onBack) {
+                IconButton(onOpenSettings) {
+                    Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
+                }
+            }
+        },
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Console(

@@ -57,7 +57,8 @@ my %targets = (
 EOF
 
 # OpenSSL's Android config finds the NDK's clang on PATH; the API level picks aarch64-linux-android<api>-clang.
-# No apps, tests or docs are built; the engines and the legacy provider are left out as Qt uses neither.
+# No apps, tests or docs are built; engines, the legacy provider and loadable modules are left out, as Qt uses none
+# of them.
 log="$work/openssl.log"
 if ! ( cd "$src" \
         && PATH="$bin:$PATH" ./Configure "qt-$target" --config="$work/qt-android.conf" \

@@ -138,6 +138,9 @@ def main():
     c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
     m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "connection")
     check(m["value"] == "error: the stand-in engine has no TLS", f"a TLS connect is refused: {m['value']}")
+    c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": "yes"})
+    m = c.wait_for(lambda m: m["t"] in ("error", "status"))
+    check(m == {"t": "error", "message": "connect: tls must be true or false"}, f"a tls that is not a boolean is refused: {m}")
 
     # Connect and parse the banner
     msgs = []

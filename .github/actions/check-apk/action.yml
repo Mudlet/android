@@ -48,23 +48,24 @@ runs:
             [ -f "$libs/$lib" ] || { echo "::error::$apk has no lib/arm64-v8a/$lib"; exit 1; }
           done
           # Qt's OpenSSL backend, built against OpenSSL 3, dlopens "ssl" and "crypto" with the suffix "_3"
-          # (qsslsocket_openssl_symbols.cpp) and refuses a runtime older than 3; the suffix is a string of its own
-          strings -a -n 2 "$libs/$tls_plugin" | grep -qxF _3 \
+          # (qsslsocket_openssl_symbols.cpp) and refuses a runtime older than 3; the suffix is a string of its own.
+          # Here-strings, not pipes into grep -q, which would end strings or nm early and fail under pipefail.
+          grep -qxF _3 <<< "$(strings -a -n 2 "$libs/$tls_plugin")" \
             || { echo "::error::$apk: Qt's OpenSSL backend does not look for libssl_3.so: which OpenSSL was Qt built with?"; exit 1; }
           for lib in libcrypto_3.so libssl_3.so; do
             soname=$("$readelf" -dW "$libs/$lib" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p')
             [ "$soname" = "$lib" ] || { echo "::error::$apk: $lib has the SONAME '$soname'"; exit 1; }
           done
-          "$readelf" -dW "$libs/libssl_3.so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | grep -qxF libcrypto_3.so \
+          grep -qxF libcrypto_3.so <<< "$("$readelf" -dW "$libs/libssl_3.so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')" \
             || { echo "::error::$apk: libssl_3.so does not load libcrypto_3.so"; exit 1; }
           # A few of the functions Qt resolves (by name, so whatever their symbol version) before it takes the
           # backend as working
           for want in libcrypto_3.so:OpenSSL_version_num libcrypto_3.so:X509_verify_cert libssl_3.so:SSL_CTX_new \
                       libssl_3.so:TLS_client_method libssl_3.so:SSL_connect; do
-            "$nm" -D --defined-only --format=just-symbols "$libs/${want%%:*}" | sed 's/@.*//' | grep -qxF "${want#*:}" \
+            grep -qxF "${want#*:}" <<< "$("$nm" -D --defined-only --format=just-symbols "$libs/${want%%:*}" | sed 's/@.*//')" \
               || { echo "::error::$apk: ${want%%:*} does not export ${want#*:}"; exit 1; }
           done
-          openssl_version=$(strings -a "$libs/libcrypto_3.so" | grep -m1 -oE '^OpenSSL 3\.[0-9]+\.[0-9]+' || true)
+          openssl_version=$(grep -m1 -oE '^OpenSSL 3\.[0-9]+\.[0-9]+' <<< "$(strings -a "$libs/libcrypto_3.so")" || true)
           [ -n "$openssl_version" ] || { echo "::error::$apk: libcrypto_3.so is not OpenSSL 3"; exit 1; }
           openssl_size=$(( $(stat -c %s "$libs/libcrypto_3.so") + $(stat -c %s "$libs/libssl_3.so") ))
           # a 16 KB page device needs both: each library at a 16 KB offset in the APK, and 16 KB aligned segments

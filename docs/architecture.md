@@ -458,8 +458,9 @@ profile from the GUI or edited by hand. A secure connection needs the game's nam
 refuses TLS to a raw address.
 
 On Android Qt does not read a certificate folder. The first TLS connection asks Java's default `TrustManagerFactory`
-for its accepted issuers (`QtNative.getSSLCertificates()`), which are Android's system CAs and, by default, the CAs
-the user installed, and Qt keeps them for the process. On the desktop it reads `/etc/ssl/certs`.
+for its accepted issuers (`QtNative.getSSLCertificates()`), Android's system CAs, and Qt keeps them for the process.
+Whether CAs the user installed are among them is for a device to show. On the desktop Qt reads the system's
+certificate folders, such as `/etc/ssl/certs`.
 
 **The protocol.** `connect` carries `tls`, which libmudlet passes to `THeadlessSession::Options::tls` when that
 connect starts the profile; Mudlet stores it with the profile, as its connection dialog does. `THeadlessSession`
@@ -481,7 +482,8 @@ CI's APK check (`.github/actions/check-apk`) looks in each APK for the files Qt 
 
 **Only a device can show** that the handshake works on Android: that Qt's loader loads both libraries, that the
 plugin finds them, and that `supportsSsl()` is true. The same goes for the system CA store: whether Qt gets
-Android's CAs, how long fetching them takes at the first connection, and whether a CA the user installed is trusted.
+Android's CAs, how long fetching them takes at the first connection, and whether a CA the user installed is
+trusted.
 Item 13 of the on-device checklist covers this.
 
 ## On-device checklist

@@ -139,7 +139,7 @@ def input_line(c):
     seen += msgs
     check({"t": "hiddenInput", "wanted": False} in msgs, "a UI that attaches is told whether input is hidden")
     history = [m["lines"] for m in msgs if m["t"] == "history"]
-    check(history == [["echo dismissed", "password", "prompt-nogo", "negotiation"]],
+    check(history == [["echo dismissed", "password", "prompt-nogo", "size", "naws", "negotiation"]],
           f"and the history, what send sent, newest first, each once, without what sendHidden sent: {history}")
     profile_checks.password_kept_out(check, secret, seen, os.path.join(TMP, "engine.log"))
     return c
@@ -180,10 +180,13 @@ def main():
     c = Client(SOCK)
     handshake(c)
 
-    # Columns
-    c.send({"t": "setViewWidthPx", "px": 1080})
-    m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "columns")
-    check(int(m["value"]) == 1080 // int(st["advanceM"]), f"columns for 1080px = {m['value']}")
+    # The screen size, kept for the game's NAWS below
+    for bad in ({"columns": 0, "rows": 25}, {"columns": 80, "rows": 65536}, {"columns": 80.5, "rows": 25}, {"columns": "80", "rows": 25}, {"columns": 80}):
+        c.send(dict(bad, t="setScreenSize", id="size"))
+        m = c.wait_for(lambda m: m.get("re") == "size")
+        check(m == {"t": "error", "message": "setScreenSize: columns and rows must be whole numbers from 1 to 65535", "re": "size"},
+              f"setScreenSize {bad} is refused: {m}")
+    c.send({"t": "setScreenSize", "columns": 100, "rows": 30})
 
     # The stand-in has no TLS, and says so rather than connecting in the clear
     c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
@@ -219,6 +222,22 @@ def main():
     m = c.wait_for(lambda m: m["t"] == "line" and m["text"].startswith("NEG:"))
     neg = bytes.fromhex(m["text"][5:])
     check(neg == bytes([255, 252, 24, 255, 253, 1, 255, 254, 201]), f"DO->WONT, WILL->DONT replies, but WILL ECHO->DO: {neg.hex()}")
+
+    c.send({"t": "send", "text": "naws"})
+    c.wait_for(lambda m: m["t"] == "line" and m["text"] == "NAWS asked")
+    c.send({"t": "send", "text": "size"})
+    m = c.wait_for(lambda m: m["t"] == "line" and m["text"].startswith("SIZE:"))
+    check(m["text"] == "SIZE: 100x30", f"the game's DO NAWS is answered with the size setScreenSize gave: {m['text']}")
+    # 255 is sent doubled, as telnet's IAC
+    c.send({"t": "setScreenSize", "columns": 300, "rows": 255})
+    c.send({"t": "send", "text": "size"})
+    m = c.wait_for(lambda m: m["t"] == "line" and m["text"].startswith("SIZE:"))
+    check(m["text"] == "SIZE: 300x255", f"and a new size is sent at once: {m['text']}")
+
+    c.send({"t": "runLua", "code": 'announce("polite") announce("now", "importantall")'})
+    got = [c.wait_for(lambda m: m["t"] == "announce") for _ in range(2)]
+    check(got == [{"t": "announce", "text": "polite", "assertive": False}, {"t": "announce", "text": "now", "assertive": True}],
+          f"Lua announce() gives announce, assertive for an important style: {got}")
 
     c.send({"t": "send", "text": "prompt-nogo"})
     t0 = time.monotonic()

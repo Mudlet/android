@@ -65,7 +65,7 @@ fun GameScreen(onBack: () -> Unit) {
                 ctrlR
             },
         ) {
-            Console(c.lines, c.tail, c.linesAdded, onWidth = c::setViewWidth, Modifier.weight(1f).fillMaxWidth())
+            Console(c.lines, c.tail, c.linesAdded, onScreenSize = c::setScreenSize, Modifier.weight(1f).fillMaxWidth())
             InputLine(
                 hiddenInput = hidden,
                 history = c.history,

@@ -37,11 +37,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
@@ -54,6 +58,8 @@ import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ansiText
+
+private val consoleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
 
 /**
  * The developers' screen, in debug builds only: connect to a game, see its coloured output, send commands and Lua,
@@ -70,6 +76,11 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
     var command by rememberSaveable { mutableStateOf("") }
     var showDebug by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    // The console's character cell, from which the columns and rows that fit go to the engine
+    val cell = remember(measurer, density) { measurer.measure("M", consoleStyle).size }
+    var screen by remember { mutableStateOf(IntSize.Zero) }
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE) }
     var platform by remember { mutableStateOf(prefs.getString(EngineService.PREF_PLATFORM, "android") ?: "android") }
@@ -109,8 +120,8 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
                         R.string.selftest_font,
                         s["fontFamily"] ?: "?",
                         s["advanceM"] ?: "?",
-                        s["columns"] ?: "?",
-                        s["viewWidthPx"] ?: "?",
+                        screen.width.toString(),
+                        screen.height.toString(),
                         s["platform"] ?: "?",
                     ),
                     style = small,
@@ -225,12 +236,17 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
             }
 
             LazyColumn(
-                Modifier.weight(1f).fillMaxWidth().background(CONSOLE_BACKGROUND).onSizeChanged { c.setViewWidth(it.width) },
+                Modifier.weight(1f).fillMaxWidth().background(CONSOLE_BACKGROUND).onSizeChanged {
+                    if (cell.width > 0 && cell.height > 0) {
+                        screen = IntSize((it.width / cell.width).coerceIn(1, 65535), (it.height / cell.height).coerceIn(1, 65535))
+                        c.setScreenSize(screen.width, screen.height)
+                    }
+                },
                 state = listState,
             ) {
                 items(itemCount) { i ->
                     val line = if (i < c.lines.size) c.lines[i] else tail ?: return@items
-                    Text(ansiText(line), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = CONSOLE_FOREGROUND)
+                    Text(ansiText(line), color = CONSOLE_FOREGROUND, style = consoleStyle)
                 }
             }
 

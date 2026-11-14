@@ -177,8 +177,7 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     if (!mClientGreeted) {
         if (type != QLatin1String("hello") || message.value(QLatin1String("v")).toInt() != protocolVersion) {
             QLocalSocket* socket = mClient;
-            sendFrame({{QStringLiteral("t"), QStringLiteral("error")},
-                       {QStringLiteral("message"), QStringLiteral("expected hello with v=%1").arg(protocolVersion)}});
+            sendFrame({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), QStringLiteral("expected hello with v=%1").arg(protocolVersion)}});
             socket->disconnect(this);
             connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
             mClient = nullptr;
@@ -202,8 +201,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
             // Not taken as absent, which could connect in the clear a game the UI meant to encrypt
             sendFrame({{QStringLiteral("t"), QStringLiteral("error")}, {QStringLiteral("message"), QStringLiteral("connect: tls must be true or false")}});
         } else {
-            mEngine->connectTo(message.value(QLatin1String("host")).toString(), quint16(message.value(QLatin1String("port")).toInt(23)),
-                               tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt);
+            mEngine->connectTo(
+                    message.value(QLatin1String("host")).toString(), quint16(message.value(QLatin1String("port")).toInt(23)), tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt);
         }
     } else if (type == QLatin1String("send")) {
         mEngine->send(message.value(QLatin1String("text")).toString());
@@ -250,10 +249,7 @@ QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
 
 QJsonObject SocketBridge::tailMessage() const
 {
-    return {{QStringLiteral("t"), QStringLiteral("tail")},
-            {QStringLiteral("text"), mTail.text},
-            {QStringLiteral("runs"), runsJson(mTail.runs)},
-            {QStringLiteral("prompt"), mTail.prompt}};
+    return {{QStringLiteral("t"), QStringLiteral("tail")}, {QStringLiteral("text"), mTail.text}, {QStringLiteral("runs"), runsJson(mTail.runs)}, {QStringLiteral("prompt"), mTail.prompt}};
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)

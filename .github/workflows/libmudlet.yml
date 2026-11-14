@@ -105,6 +105,10 @@ jobs:
           grep -q '^QKeychain::java::security::KeyStore::getInstance(' <<< "$defined" \
             || { echo "::error::the engine lacks QtKeychain's KeyStore backend"; exit 1; }
 
+      # The About screen's licence list against what this Mudlet builds in: its Lua C modules, fonts and Lua files
+      - name: Check the licence list covers Mudlet's bundled components
+        run: python3 scripts/check-licences.py --mudlet-source mudlet
+
       - uses: actions/upload-artifact@v7
         with:
           name: mudlet-libmudlet-debug-apk

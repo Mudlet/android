@@ -231,7 +231,10 @@ emulators' system images are cached between runs.
 
 ## Licences
 
-The stand-in engine vendors Lua 5.1.5 (MIT, see [`native/third_party/lua-5.1.5/COPYRIGHT`](native/third_party/lua-5.1.5/COPYRIGHT)).
-The APK carries OpenSSL 3, under the Apache License 2.0.
+The app's About screen lists the licence of everything the APK bundles, with the texts: Mudlet (GPL v2 or later), Qt
+(LGPL v3), OpenSSL 3 (Apache 2.0), the stand-in engine's vendored Lua 5.1.5 (MIT, see
+[`native/third_party/lua-5.1.5/COPYRIGHT`](native/third_party/lua-5.1.5/COPYRIGHT)), Mudlet's dependencies and the
+Android libraries. Where the list comes from, the checks that keep it complete, and how to rebuild the app with your
+own Qt are in [`docs/licences.md`](docs/licences.md).
 The launcher icon is made from Mudlet's logo, by Thorsten Wilms, from Mudlet/Mudlet (GPL-2.0-or-later); see
 [`docs/launcher-icon.md`](docs/launcher-icon.md).

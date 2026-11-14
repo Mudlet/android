@@ -15,6 +15,63 @@
 
     <string name="game_title">Game</string>
 
+    <!-- The About screen, opened from the profile list's top bar: the app's version, its engine, where their source
+         code is, and the licences of everything the app contains. Also the top bar button's label for TalkBack. -->
+    <string name="about_title">About and licences</string>
+    <!-- %1$s is the app's version name (such as 5.1.0-ptb-2026-11-14-…), %2$d its version code, a number -->
+    <string name="about_version">Version %1$s (%2$d)</string>
+    <!-- %1$s is Mudlet's version, such as 5.1.0-dev-1a2b3c4 -->
+    <string name="about_engine_mudlet">Engine: Mudlet %1$s</string>
+    <!-- %1$s is the start of the git commit (a hexadecimal identifier) of Mudlet's source code the engine was built from -->
+    <string name="about_engine_commit">Built from Mudlet commit %1$s</string>
+    <string name="about_engine_commit_unknown">Built from a Mudlet source tree whose commit is not known</string>
+    <!-- Developer builds carry a small engine of the app's own instead of Mudlet -->
+    <string name="about_engine_standin">Engine: the stand-in engine of developer builds, not Mudlet</string>
+    <string name="about_free_software_heading">Free software</string>
+    <!-- The GNU General Public License (GPL) is the licence's name: keep it recognisable, and the version numbers as they are -->
+    <string name="about_free_software">Mudlet is free software under the GNU General Public License, version 2 or later. Built together with Qt and OpenSSL, this app as a whole is distributed under version 3 of the GNU GPL: you may share and change it under its terms. It comes with no warranty.</string>
+    <!-- A button that opens the source code of this Android app in the browser -->
+    <string name="about_source_app">Source code of this app</string>
+    <!-- A button that opens, in the browser, the source code of the exact Mudlet the engine was built from -->
+    <string name="about_source_mudlet">Source code of this Mudlet</string>
+    <!-- The GNU Lesser General Public License (LGPL) is the licence's name -->
+    <string name="about_qt_notice">Qt is used under the GNU Lesser General Public License, version 3, as libraries of its own. You can get Qt\'s source code, and rebuild this app with a Qt you have changed.</string>
+    <!-- A button that opens the download page of Qt's source code; %1$s is Qt's version, such as 6.12.0 -->
+    <string name="about_qt_source">Source code of Qt %1$s</string>
+    <!-- A button that opens the instructions for rebuilding the app with a changed Qt -->
+    <string name="about_qt_relink">How to rebuild the app with your own Qt</string>
+    <string name="about_licences_heading">Licences</string>
+    <!-- Headings of the licence list -->
+    <string name="about_group_app">Mudlet and Qt</string>
+    <string name="about_group_native">Libraries, fonts and icons built in</string>
+    <string name="about_group_qt">Code from others inside Qt</string>
+    <string name="about_group_android">Android libraries</string>
+    <!-- A row of the licence list: %1$s is the version, %2$s the licence's SPDX identifier, such as MIT -->
+    <string name="about_component_version_licence">%1$s · %2$s</string>
+    <!-- What TalkBack says tapping a row of the licence list does: "Double tap to read its licence" -->
+    <string name="about_open_licence">read its licence</string>
+    <string name="about_loading">Loading…</string>
+    <!-- %1$s is the error, in English -->
+    <string name="about_load_failed">The licence list could not be read: %1$s</string>
+    <!-- Shown when a link cannot be opened; %1$s is the web address -->
+    <string name="about_no_browser">No app here can open %1$s</string>
+
+    <!-- The screen of one component of the licence list: its version, licence and copyright, then the licence texts -->
+    <!-- %1$s is the component's version -->
+    <string name="licence_version">Version %1$s</string>
+    <!-- %1$s is the licence as an SPDX expression, such as "MIT" or "Apache-2.0 WITH LLVM-exception" -->
+    <string name="licence_licence">Licence: %1$s</string>
+    <!-- A button that opens the component's website -->
+    <string name="licence_website">Website</string>
+    <!-- A button that opens where the component's source code is -->
+    <string name="licence_source">Source code</string>
+    <!-- The heading above a licence's full text; %1$s is its SPDX identifier, such as GPL-3.0-only -->
+    <string name="licence_text_heading">Licence text: %1$s</string>
+    <!-- %1$s is the licence's SPDX identifier -->
+    <string name="licence_text_missing">The text of %1$s is missing from this app.</string>
+    <!-- %1$s is the component's internal identifier -->
+    <string name="licence_not_found">No component %1$s in the licence list.</string>
+
     <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
     <string name="console_jump_to_bottom">Jump to the bottom</string>
     <plurals name="console_jump_new_lines">

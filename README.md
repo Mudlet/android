@@ -151,8 +151,9 @@ The workflows it calls:
   - builds the debug APK with the stand-in engine, and again with its libraries extracted at install;
   - checks that each APK holds Qt and the engine, and OpenSSL as Qt's TLS backend loads it (`libcrypto_3.so` and
     `libssl_3.so`, their names, the libraries they need, OpenSSL 3), that its libraries are 16 KB aligned (their
-    offsets in the APK and their load segments), and that they are stored or compressed as `extractNativeLibs` says
-    ([`scripts/check-apk.sh`](scripts/check-apk.sh));
+    offsets in the APK and their load segments), that they are stored or compressed as `extractNativeLibs` says
+    ([`scripts/check-apk.sh`](scripts/check-apk.sh)), and that the APK, its libraries and its dex keep to their size
+    budget ([`scripts/check-apk-size.sh`](scripts/check-apk-size.sh), CONTRIBUTING.md's "APK size budget");
   - runs Android lint on `:app` and `:engine-service`, where a warning fails (`lint.xml` says what is off and why);
   - uploads both APKs, and gives each one's size, its size on the device, and OpenSSL's share, in the job summary.
 - **libmudlet for Android** (`.github/workflows/libmudlet.yml`) checks out Mudlet's `development` branch (or any ref

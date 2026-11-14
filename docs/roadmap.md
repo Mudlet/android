@@ -122,6 +122,12 @@ The screen-reader pull request adds:
   replays, the debug console, the error console as a screen, spell-check, Discord, IRC.
 - Tablets' and Chromebooks' layouts beyond what a resizable phone layout gives, hardware keyboard bindings
   (`pressKey()`), a custom key bar.
+- A Baseline Profile of the app's own start-up and game screen. The release already carries the profiles Compose and
+  AndroidX ship, which AGP merges into the APKs and the AAB. One for the app's code needs a `:baselineprofile` test
+  module (the `androidx.baselineprofile` plugin, which adds build types beside `smoke`), an x86_64 release build with
+  the engine staged, and an emulator job whose generator reaches the game screen through the profile editor against
+  `fake_telnet.py`: another emulator job of about 40 minutes, and a generator to change with each game screen pull
+  request (U4 to U8). Worth it once the game screen settles and start-up is measured on a phone.
 
 ## Protocol changes
 

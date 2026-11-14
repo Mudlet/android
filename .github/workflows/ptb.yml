@@ -343,18 +343,29 @@ jobs:
           done
           echo "Signed with the $SIGNED_WITH key, certificate SHA-256 $CERT_SHA256" >> "$GITHUB_STEP_SUMMARY"
 
-      # scripts/check-apk.sh, as on every APK CI builds, with each APK's size budget; it takes a directory of APKs of
-      # one ABI. Then the AAB's size budget.
-      - name: Check the APKs and the AAB's size
+      # scripts/check-apk.sh, as on every APK CI builds; it takes a directory of APKs of one ABI
+      - name: Check the APKs
         env:
           BUILD_TOOLS: ${{ steps.toolchain.outputs.build-tools-dir }}
         run: |
           for abi in arm64-v8a x86_64; do
             mkdir -p "check/$abi"
             cp "app/build/outputs/apk/release/app-$abi-release.apk" "check/$abi/"
-            ABI=$abi TITLE="PTB APK ($abi)" SIZE_BUDGET="ptb-$abi" scripts/check-apk.sh "check/$abi"
+            ABI=$abi TITLE="PTB APK ($abi)" scripts/check-apk.sh "check/$abi"
           done
-          scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab
+
+      # The APKs' and the AAB's size budgets (scripts/apk-size-budget.txt). They fail a pull request; a nightly or
+      # manual PTB still publishes past them, with the error in its summary: libmudlet growing with Mudlet's
+      # development already fails the libmudlet nightly in ci.yml, which opens an issue.
+      - name: Size budgets
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
+        run: |
+          status=0
+          for abi in arm64-v8a x86_64; do
+            scripts/check-apk-size.sh "ptb-$abi" "app/build/outputs/apk/release/app-$abi-release.apk" || status=1
+          done
+          scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab || status=1
+          exit $status
 
       # What the GitHub pre-release and Play get: fixed file names, so a download link stays the same, checksums,
       # the notes with both commits, and Play's "what's new" (two lines of at most 240, under Play's 500)

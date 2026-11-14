@@ -6,8 +6,8 @@ lower-below-percent 10
 
 # name                               total        libraries    dex
 # the debug APKs with the stand-in engine (apks.yml)
-standin-arm64-v8a                    999999999    999999999    999999999
-standin-arm64-v8a-extracted-libs     999999999    999999999    999999999
+standin-arm64-v8a                    55901070     27028808     28115296
+standin-arm64-v8a-extracted-libs     40069658     11369234     28115296
 # the debug APKs with libmudlet, built from Mudlet's development (libmudlet.yml)
 libmudlet-arm64-v8a                  999999999    999999999    999999999
 libmudlet-x86_64                     999999999    999999999    999999999

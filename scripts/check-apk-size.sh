@@ -3,8 +3,8 @@
 # and its dex, each as many bytes as it takes in the file (a compressed entry's compressed size). It fails when any of
 # them is more than the budget's headroom above its budget, and prints each with its budget to stdout and to
 # $GITHUB_STEP_SUMMARY. A size well below its budget gets a notice to lower the budget, so it stays tight. CI runs it
-# on every APK it builds (scripts/check-apk.sh, with SIZE_BUDGET) and on the PTB's AAB; CONTRIBUTING.md, "APK size
-# budget", says how to change a budget.
+# on every APK and AAB it builds: the debug APKs through scripts/check-apk.sh (SIZE_BUDGET), the PTB's in ptb.yml.
+# CONTRIBUTING.md, "APK size budget", says how to change a budget.
 #
 # Usage: scripts/check-apk-size.sh <budget name> <apk or aab>
 # Optional: BUDGET_FILE (scripts/apk-size-budget.txt).
@@ -20,16 +20,19 @@ headroom=$(awk '$1 == "headroom-percent" { print $2 }' "$budget_file")
 lower_below=$(awk '$1 == "lower-below-percent" { print $2 }' "$budget_file")
 [[ $headroom =~ ^[0-9]+$ && $lower_below =~ ^[0-9]+$ ]] \
   || { echo "::error::$budget_file needs a headroom-percent and a lower-below-percent line"; exit 1; }
-read -r _ budget_total budget_libs budget_dex extra <<< "$(awk -v n="$name" '$1 == n' "$budget_file")"
-[[ $budget_total =~ ^[0-9]+$ && $budget_libs =~ ^[0-9]+$ && $budget_dex =~ ^[0-9]+$ && -z ${extra:-} ]] \
-  || { echo "::error::$budget_file has no line '$name <total> <libraries> <dex>' (bytes)"; exit 1; }
+line=$(awk -v n="$name" '$1 == n' "$budget_file")
+read -r _ budget_total budget_libs budget_dex extra <<< "$line"
+[[ $line != *$'\n'* && $budget_total =~ ^[0-9]+$ && $budget_libs =~ ^[0-9]+$ && $budget_dex =~ ^[0-9]+$ \
+   && -z ${extra:-} ]] \
+  || { echo "::error::$budget_file needs one line '$name <total> <libraries> <dex>' (bytes), not '$line'"; exit 1; }
 
 # zipinfo's long listing: the 4th column is the entry's size, the 6th its size in the file, the last its name.
 # An APK's lib/<abi>/*.so and classes*.dex; an AAB's base/lib/<abi>/*.so and base/dex/classes*.dex.
-read -r libs dex count <<< "$(zipinfo -l "$file" | awk '
+listing=$(zipinfo -l "$file") || { echo "::error::cannot list the entries of $file"; exit 1; }
+read -r libs dex count <<< "$(awk '
   NF >= 10 && $NF ~ /^(base\/)?lib\/[^\/]+\/[^\/]+\.so$/ { libs += $6 }
   NF >= 10 && $NF ~ /^(base\/dex\/)?classes[0-9]*\.dex$/ { dex += $6; n++ }
-  END { print libs + 0, dex + 0, n + 0 }')"
+  END { print libs + 0, dex + 0, n + 0 }' <<< "$listing")"
 (( count > 0 )) || { echo "::error::no classes*.dex listed in $file: is it an APK or an AAB?"; exit 1; }
 total=$(stat -c %s "$file")
 

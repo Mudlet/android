@@ -38,7 +38,7 @@ class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val mark
  * Activity is started, so a backgrounded (and later frozen) UI holds no connection.
  * State is Compose snapshot state, written only on the main thread.
  */
-// It holds only the application's Context (app), which leaks nothing
+// It holds only the application's Context (app), which leaks nothing at all
 @SuppressLint("StaticFieldLeak")
 object EngineClient {
     const val MAX_LINES = 2000

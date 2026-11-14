@@ -1,0 +1,78 @@
+package org.mudlet.android.protocol
+
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * What the UI knows of a profile's script windows (docs/protocol.md, "Script windows"), from the engine's messages.
+ * Immutable: the app holds it as one piece of Compose state, replaced by [after] for each message.
+ */
+data class ScriptWindows(
+    /** In the order the engine sent them: parents before the windows they hold. */
+    val windows: List<ScriptWindow> = emptyList(),
+    /** The rows the engine last pushed for each console, by its name. */
+    val text: Map<String, EngineMessage.WindowText> = emptyMap(),
+    val mainArea: EngineMessage.MainArea? = null,
+    /** Mudlet's character width in the main console, as the grids of [mainArea] bound it. */
+    val charWidth: CharWidth? = null,
+    /** What scripts set the windows' command lines to, by name, until the UI shows it and calls [commandLineShown]. */
+    val commandLines: Map<String, String> = emptyMap(),
+) {
+    /** This state after [message]; itself for a message about something else, and for an answer to `getWindowText`. */
+    fun after(message: EngineMessage): ScriptWindows = when (message) {
+        is EngineMessage.Windows -> afterWindows(message)
+        is EngineMessage.WindowText -> if (message.replyTo != null) this else copy(text = text + (message.window to message))
+        is EngineMessage.MainArea -> copy(mainArea = message, charWidth = CharWidth.after(charWidth, message))
+        is EngineMessage.WindowCommandLine -> copy(commandLines = commandLines + (message.name to message.text))
+        else -> this
+    }
+
+    fun commandLineShown(name: String): ScriptWindows = copy(commandLines = commandLines - name)
+
+    /** The command line along the bottom of [console], which shares its name, while it is shown. */
+    fun commandLineOf(console: ScriptWindow): ScriptWindow? = windows.firstOrNull {
+        it.kind == WindowKind.COMMAND_LINE && it.shown && it.parent == console.name && it.parentKind == console.kind
+    }
+
+    private fun afterWindows(message: EngineMessage.Windows): ScriptWindows {
+        if (message.full) {
+            val consoles = message.windows.filter { it.console != null }.mapTo(HashSet()) { it.name }
+            return copy(windows = message.windows, text = text.filterKeys { it in consoles })
+        }
+        val changed = message.windows.associateBy { it.key }
+        val removed = message.removed.toSet()
+        val kept = windows.mapNotNull { if (it.key in removed) null else changed[it.key] ?: it }
+        val keptKeys = kept.mapTo(HashSet()) { it.key }
+        // A console's text goes with it; the text of one not described yet stays, as it may come first
+        val removedConsoles = removed.filter { it.kind in CONSOLE_KINDS }.mapTo(HashSet()) { it.name }
+        return copy(windows = kept + message.windows.filter { it.key !in keptKeys }, text = text - removedConsoles)
+    }
+
+    companion object {
+        /** The kinds with a console of text: `windowText` is theirs. */
+        val CONSOLE_KINDS = setOf(WindowKind.MINI_CONSOLE, WindowKind.USER_WINDOW, WindowKind.MXP_FRAME)
+    }
+}
+
+/**
+ * The width of a character of Mudlet's main console in its pixels: more than [low] and at most [high]. A grid of
+ * `columns` in a text area `textW` wide says it is in `(textW / (columns + 1), textW / columns]`, and each `mainArea`
+ * narrows that down, until one that does not fit says the font changed.
+ */
+data class CharWidth(val low: Double, val high: Double) {
+    val estimate: Double get() = (low + high) / 2
+
+    companion object {
+        // Mudlet never makes the grid narrower than this, so a grid at the floor says nothing of the font
+        const val MIN_COLUMNS = 40
+
+        fun after(known: CharWidth?, area: EngineMessage.MainArea): CharWidth? {
+            if (area.columns <= MIN_COLUMNS || area.textW <= 0) return known
+            val sample = CharWidth(area.textW / (area.columns + 1.0), area.textW / area.columns.toDouble())
+            if (known == null) return sample
+            val low = max(known.low, sample.low)
+            val high = min(known.high, sample.high)
+            return if (low < high) CharWidth(low, high) else sample
+        }
+    }
+}

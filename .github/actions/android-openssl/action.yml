@@ -27,7 +27,7 @@ runs:
     # restore and save are separate steps so a job that fails later still keeps what it built
     - name: Restore OpenSSL
       id: cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.paths.outputs.prefix }}
         key: openssl-${{ inputs.abi }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-openssl.sh') }}
@@ -41,7 +41,7 @@ runs:
 
     - name: Save OpenSSL
       if: steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: ${{ steps.paths.outputs.prefix }}
         key: ${{ steps.cache.outputs.cache-primary-key }}

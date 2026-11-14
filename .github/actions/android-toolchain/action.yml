@@ -87,7 +87,7 @@ runs:
     # restore and save are separate steps so a job that fails later still keeps what it installed
     - name: Restore Qt
       id: qt-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/Qt/${{ inputs.qt-version }}
         key: qt-${{ inputs.qt-version }}-${{ runner.os }}-${{ inputs.qt-android-arch }}-${{ steps.paths.outputs.qt-set }}
@@ -108,7 +108,7 @@ runs:
 
     - name: Save Qt
       if: steps.qt-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: ~/Qt/${{ inputs.qt-version }}
         key: ${{ steps.qt-cache.outputs.cache-primary-key }}
@@ -116,7 +116,7 @@ runs:
     - name: Restore NDK ${{ inputs.ndk-version }}
       if: steps.paths.outputs.ndk-preinstalled != 'true'
       id: ndk-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.paths.outputs.ndk }}
         key: ndk-${{ inputs.ndk-version }}-${{ runner.os }}
@@ -139,7 +139,7 @@ runs:
 
     - name: Save NDK ${{ inputs.ndk-version }}
       if: steps.paths.outputs.ndk-preinstalled != 'true' && steps.ndk-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: ${{ steps.paths.outputs.ndk }}
         key: ${{ steps.ndk-cache.outputs.cache-primary-key }}

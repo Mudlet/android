@@ -92,9 +92,6 @@ object Announcer {
         main.postAtTime(readWaiting, minOf(now + QUIET_MS, waitingSince + MAX_WAIT_MS))
     }
 
-    /** What a script's `announce()` asks for; [assertive] interrupts what TalkBack is saying. */
-    fun announce(text: String, assertive: Boolean) = say(text, assertive)
-
     private fun reading() = touchExploration && Settings.readNewText.value
 
     private val readWaiting = Runnable {
@@ -110,10 +107,11 @@ object Announcer {
         } else {
             res.getQuantityString(R.plurals.announce_burst, count, count, lines.takeLast(BURST_TAIL).joinToString("\n"))
         }
-        say(text, assertive = false)
+        announce(text, assertive = false)
     }
 
-    private fun say(text: String, assertive: Boolean) {
+    /** What a script's `announce()` asks for, or the lines waiting; [assertive] interrupts what TalkBack is saying. */
+    fun announce(text: String, assertive: Boolean) {
         if (text.isBlank()) return
         val now = SystemClock.uptimeMillis()
         val last = current
@@ -127,7 +125,7 @@ object Announcer {
 }
 
 /**
- * Has TalkBack say [Announcer.current], through two live regions, each a node of one pixel that shows nothing: an
+ * Has TalkBack say [Announcer.current], through two live regions, each a node 1 dp square that shows nothing: an
  * announcement goes to the one the last did not use, so a repeat is a change TalkBack reads. Placed last in TalkBack's
  * order, where swiping to it reads the last announcement again.
  */

@@ -160,7 +160,7 @@ object EngineClient {
     private val pendingLock = Any()
     private var pendingLines = ArrayList<UiLine>()
 
-    // The text of the lines new to the engine too, not replayed, for the Announcer
+    // The text of the new lines, not those replayed, for the Announcer
     private var pendingNews = ArrayList<String>()
     private var pendingTail: UiLine? = null
     private var pendingTailSet = false

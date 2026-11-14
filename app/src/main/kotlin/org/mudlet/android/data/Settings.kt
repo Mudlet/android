@@ -77,7 +77,7 @@ object Settings {
 
         protected open fun normalise(v: T): T = v
 
-        protected open fun lua(v: T): String = throw UnsupportedOperationException("$key is not one of Mudlet's settings")
+        protected abstract fun lua(v: T): String
 
         protected abstract fun read(prefs: SharedPreferences): T
 
@@ -87,6 +87,8 @@ object Settings {
     /** A whole number within [range]: a value outside it is taken as the nearest end. */
     class IntSetting(key: String, default: Int, val range: IntRange) : Setting<Int>(key, default) {
         override fun normalise(v: Int) = v.coerceIn(range)
+
+        override fun lua(v: Int) = v.toString()
 
         override fun read(prefs: SharedPreferences) = prefs.getInt(key, default)
 

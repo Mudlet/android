@@ -30,10 +30,10 @@ inputs:
   qt-android-archives:
     description: Qt for Android archives
     default: qtbase qtdeclarative qtsvg qttools
-  # Core5Compat, Multimedia and TextToSpeech for mudlet_core
   qt-android-arch:
     description: Qt for Android's architecture, android_x86_64 for the emulator
     default: android_arm64_v8a
+  # Core5Compat, Multimedia and TextToSpeech for mudlet_core
   qt-android-modules:
     description: Qt for Android add-on modules
     default: qt5compat qtmultimedia qtspeech

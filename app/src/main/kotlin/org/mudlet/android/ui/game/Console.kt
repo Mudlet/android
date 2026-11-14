@@ -36,6 +36,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -65,6 +68,8 @@ private const val CELLS_MEASURED = 100
  * The game's text: [lines], then [tail] (the prompt), in their colours and styles, at [textSizeSp] in [colors]. At the
  * bottom it follows new lines; scrolled up, it stays where it is and offers a button back to the bottom that counts the
  * lines that came meanwhile. [linesAdded] is EngineClient's count, which numbers the lines.
+ *
+ * Each line is one node for TalkBack, whose text is the line's without its styles.
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment.
@@ -144,7 +149,7 @@ fun Console(
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
                 val text = remember(line, colors) { ansiText(line, colors) }
-                Text(text, Modifier.fillMaxWidth(), color = colors.foreground, style = style)
+                Text(text, Modifier.fillMaxWidth().semantics { this.text = AnnotatedString(line.text) }, color = colors.foreground, style = style)
             }
         }
         if (!following) {

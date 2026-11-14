@@ -149,6 +149,8 @@ class FakeEngine : AutoCloseable {
 
         fun commandLine(text: String) = send(JSONObject().put("t", "commandLine").put("text", text))
 
+        fun announce(text: String, assertive: Boolean) = send(JSONObject().put("t", "announce").put("text", text).put("assertive", assertive))
+
         fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
 
         /** As the engine process dying: the UI sees the connection end. */

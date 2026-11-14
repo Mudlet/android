@@ -93,5 +93,9 @@ if [ -n "$runner" ]; then
     done
     # A qrc built into another target that the runner links shows only here
     no_splash mudlet-headless "$defined"
+    # QtKeychain's objects arrive only at the final link, so its Android KeyStore backend shows in the runner;
+    # the archives merely reference it
+    grep -q '^QKeychain::java::security::KeyStore::getInstance(' <<< "$defined" \
+        || { echo "mudlet-headless lacks QtKeychain's KeyStore backend: is QtKeychain built for Android?" >&2; exit 1; }
 fi
 echo "libmudlet passed the Android checks"

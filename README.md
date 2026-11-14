@@ -134,6 +134,8 @@ demand:
     - the libraries use desktop-only APIs
     - the libraries or the runner carry the build-type splash screen images
     - the runner lacks Mudlet's built-in Lua files and Lua C modules
+    - the runner does not link QtKeychain's Android backend, which Mudlet uses to keep profiles' passwords in
+      the KeyStore
   - Nightly: it also runs every night, so a change on Mudlet's side that stops these compiling or linking for
     Android shows up; a nightly that fails or times out opens or updates an issue here. GitHub pauses the
     nightly after 60 days without activity in this repository; re-enable it from the Actions tab.

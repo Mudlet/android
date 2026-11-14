@@ -153,11 +153,11 @@ class FrameReader(input: InputStream) {
 
             "profiles" -> EngineMessage.Profiles(parseProfiles(o.optJSONArray("profiles")), o.opt("re"))
 
-            "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
+            "hiddenInput" -> EngineMessage.Unknown(t)
 
-            "history" -> EngineMessage.History(parseStrings(o.optJSONArray("lines")))
+            "history" -> EngineMessage.Unknown(t)
 
-            "commandLine" -> EngineMessage.CommandLine(o.optString("text"))
+            "commandLine" -> EngineMessage.Unknown(t)
 
             else -> EngineMessage.Unknown(t)
         }

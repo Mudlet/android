@@ -416,7 +416,8 @@ def input_line():
     c.send({"t": "sendHidden", "text": secret})
     m = c.wait_for(lambda m: m["t"] == "hiddenInput", timeout=10, collect=seen)
     check(m["wanted"] is False, "the game's WONT ECHO after the password ends it")
-    c.wait_for(shown("Password accepted"), collect=seen)
+    # On the prompt's line, which no line break ended
+    c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].endswith("Password accepted"), collect=seen)
     check(secret in fake_telnet.RECEIVED, "sendHidden reaches the game")
 
     c.send({"t": "send", "text": "password"})

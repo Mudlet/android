@@ -245,8 +245,9 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 1500M
       CCACHE_COMPILERCHECK: content
-      # a manual run can leave the fix out, to show that the smoke test catches the abort
-      LUA_FORTIFY_FIX: ${{ inputs.lua_fortify_fix == false && '0' || '1' }}
+      # a manual run can leave the fix out, to show that the smoke test catches the abort. Only a manual run has inputs:
+      # on a push, pull request or schedule inputs.lua_fortify_fix is null, and null == false holds (both coerce to 0)
+      LUA_FORTIFY_FIX: ${{ github.event_name == 'workflow_dispatch' && !inputs.lua_fortify_fix && '0' || '1' }}
       EMULATOR_API: 35
     steps:
       - uses: actions/checkout@v6

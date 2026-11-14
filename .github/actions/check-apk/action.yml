@@ -60,10 +60,13 @@ runs:
             || { echo "::error::$apk: libssl_3.so does not load libcrypto_3.so"; exit 1; }
           # A few of the functions Qt resolves (by name, so whatever their symbol version) before it takes the
           # backend as working
-          for want in libcrypto_3.so:OpenSSL_version_num libcrypto_3.so:X509_verify_cert libssl_3.so:SSL_CTX_new \
-                      libssl_3.so:TLS_client_method libssl_3.so:SSL_connect; do
-            grep -qxF "${want#*:}" <<< "$("$nm" -D --defined-only --format=just-symbols "$libs/${want%%:*}" | sed 's/@.*//')" \
-              || { echo "::error::$apk: ${want%%:*} does not export ${want#*:}"; exit 1; }
+          crypto_symbols=$("$nm" -D --defined-only --format=just-symbols "$libs/libcrypto_3.so" | sed 's/@.*//')
+          for sym in OpenSSL_version_num X509_verify_cert; do
+            grep -qxF "$sym" <<< "$crypto_symbols" || { echo "::error::$apk: libcrypto_3.so does not export $sym"; exit 1; }
+          done
+          ssl_symbols=$("$nm" -D --defined-only --format=just-symbols "$libs/libssl_3.so" | sed 's/@.*//')
+          for sym in SSL_CTX_new TLS_client_method SSL_connect; do
+            grep -qxF "$sym" <<< "$ssl_symbols" || { echo "::error::$apk: libssl_3.so does not export $sym"; exit 1; }
           done
           openssl_version=$(grep -m1 -oE '^OpenSSL 3\.[0-9]+\.[0-9]+' <<< "$(strings -a "$libs/libcrypto_3.so")" || true)
           [ -n "$openssl_version" ] || { echo "::error::$apk: libcrypto_3.so is not OpenSSL 3"; exit 1; }

@@ -84,7 +84,9 @@ for lib in "libcrypto$variant.so" "libssl$variant.so"; do
     "$bin/llvm-strip" --strip-all -o "$prefix/lib/$lib" "$src/$lib"
     soname=$("$readelf" -dW "$prefix/lib/$lib" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p')
     [ "$soname" = "$lib" ] || { echo "$lib has the SONAME '$soname'; Qt loads it by its file name" >&2; exit 1; }
-    for align in $("$readelf" -lW "$prefix/lib/$lib" | awk '$1 == "LOAD" { print $NF }'); do
+    aligns=$("$readelf" -lW "$prefix/lib/$lib" | awk '$1 == "LOAD" { print $NF }')
+    [ -n "$aligns" ] || { echo "no LOAD segments read from $lib" >&2; exit 1; }
+    for align in $aligns; do
         (( align >= 0x4000 )) || { echo "$lib has segments aligned to $align, below 16 KB" >&2; exit 1; }
     done
 done

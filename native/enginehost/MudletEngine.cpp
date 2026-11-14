@@ -257,9 +257,10 @@ void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bo
     // A running profile connects as it was started: THeadlessSession takes the TLS choice only in start(), and
     // connectToServer() keeps the profile's
     if (tls.has_value() && tls != mProfileTls) {
-        const QString started = !mProfileTls.has_value() ? QStringLiteral("with its stored choice")
-                                : *mProfileTls          ? QStringLiteral("with TLS")
-                                                        : QStringLiteral("without TLS");
+        QString started = QStringLiteral("with its stored choice");
+        if (mProfileTls.has_value()) {
+            started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
+        }
         mFrontend->status(QStringLiteral("connection"),
                           QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; restart the engine to change it")
                                   .arg(started));

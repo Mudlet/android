@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **2**.
+The current version is **3**.
 
 ## Transport
 
@@ -55,6 +55,9 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `ping` | `id` | Asks for a `pong` with the same `id`. |
 | `connect` | `host`, `port`, `tls`? | Connects the engine to a game server. `port` defaults to 23. `tls` true encrypts the connection, false does not; absent, the profile's own choice stands. libmudlet takes `tls` only when this `connect` starts the profile, and stores it with the profile, as Mudlet's connection dialog does: while the profile runs, a `tls` other than the one it started with gets status `connection` `error: ...`. The stand-in answers `tls` true the same way, as it has no TLS. A `tls` that is not a boolean gets `error`. |
 | `send` | `text` | A command line. libmudlet takes it as typed input (`THeadlessSession::submit()`); the stand-in sends it to the game as it is. |
+| `sendHidden` | `text` | What the player typed while `hiddenInput` holds, as a password: straight to the game, with its line breaks taken out, and no aliases, echo or history (`submitHiddenInput()`). A failure is status `sendError`, which never quotes the text. Neither engine logs it. |
+| `dismissHidden` | | The player closed the masked line without sending, as Esc on Mudlet's empty hidden-input box (`dismissHiddenInput()`): `hiddenInput` false follows, and `send` is the way to the game again. libmudlet hides input again once the game answers the next line sent, as Mudlet does. Refused with status `sendError` while input is not hidden. |
+| `complete` | `text`, `fromHistory`?, `id`? | Completes the input line `text`, answered by status `completion`: the whole completed line, or empty for none. `fromHistory` true completes it from the history, as the up arrow does in Mudlet with "Highlight history" on: the newest line that starts with `text`. Otherwise, as Tab, it completes the last word from the words the game sent lately and those scripts suggested. A `complete` whose `text` is the line the last one answered goes on to the next word or older line. libmudlet runs `setCommandLineText()`, then `completeCommandLine()` or `completeCommandLineFromHistory()`; nothing completes while input is hidden. The stand-in completes from the lines `send` sent, both ways. A `fromHistory` that is not a boolean gets `error`. |
 | `disconnect` | | Closes the game connection. |
 | `runLua` | `code`, `id` | Runs Lua in the engine. The result comes back as status `luaResult` with `re` set to `id`. |
 | `setViewWidthPx` | `px` | The width of the UI's output view in pixels, from which the engine works out its columns (status `columns`). |
@@ -90,6 +93,9 @@ it names whatever profile is open.
 | `synced` | `seq` | Ends the answer to `hello`: the newest line's `seq` (0 for none) when the engine greeted the UI. |
 | `error` | `message`, `re`? | The engine could not handle a frame. After a bad `hello` it then closes the connection. |
 | `profiles` | `profiles`: `name`, `host`, `port`, `tls`, `login`, `autoReconnect`; `re`? | Every profile, the last opened or created first, then any the engine has not opened, by name. Each is an object with the fields `saveProfile` takes; there is no password in it. |
+| `hiddenInput` | `wanted` | The game hides what the player types, as for a password (`wanted` true), or has stopped: the UI masks its input line and sends what is typed there with `sendHidden`. libmudlet sends it from `hiddenInputWanted`, which a disconnect or the profile closing also ends, and never while the profile shows passwords as they are typed; the stand-in from the game's telnet `WILL ECHO` and `WONT ECHO`. Sent on each change, and to each UI that attaches. |
+| `history` | `lines` | The input line's history, newest first, each line once, as Mudlet's up arrow walks it (`commandHistory()`): the lines `send` sent, as their aliases left them, and those the profile's earlier sessions kept, but nothing sent while input was hidden. Sent to each UI that attaches, and by libmudlet when a profile has loaded. In between, the UI adds the lines it sends itself; the next attach corrects what it guessed. The stand-in's is the lines `send` sent since it started. |
+| `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
 
 ### Status keys
 
@@ -97,7 +103,7 @@ it names whatever profile is open.
 a UI shows what it knows and ignores the rest. Now in use:
 
 - **Both engines:** `connection` (`connecting` or `connecting <host>:<port>`, `connected`, `disconnected`, `error: ...`), `luaResult`,
-  `luaError`, `sendError`, `columns`, `viewWidthPx`, `fontFamily`, `advanceM`, `platform`, `linesReceived`,
+  `luaError`, `sendError`, `completion`, `columns`, `viewWidthPx`, `fontFamily`, `advanceM`, `platform`, `linesReceived`,
   `promptsReceived`, `heartbeatTicks`, `heartbeatLastGapMs`, `heartbeatMaxGapMs`, `profile` (`<name> loaded`;
   libmudlet also sends `<name> (not started)`, `<name> starting`, `<name> closing`, `<name> closed`,
   `<name> closed without its save: ...`, `<name> not closed: ...` and `start failed ...`).
@@ -169,7 +175,7 @@ The engine keeps the last 2000 lines in a ring buffer, its current tail, and the
 a UI says `hello`, the engine sends, in this order:
 
 1. its own `hello`;
-2. every status, each as a `status` without `re`, in no particular order;
+2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -194,21 +200,23 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 
 - When more than 4 MiB is queued unsent, the UI is lagging. The engine stops writing lines, tails, clears, notifies
   and statuses to it, but keeps them in the ring and its status table.
-- Once the queue drains below 256 KiB, the engine sends every status again, then the lines the UI has not had
+- Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput` and `history` again, then the lines the UI has not had
   (with `clear` and `gap` as on attach, but without `replay`), then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `error`, and a `status` that carries `re`.
 
-A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android.
+A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
+nor is a `commandLine`.
 `synced.seq` is the newest line when greeting even if lag cut the replay short; the rest follows once the UI drains,
 and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 2, which added the profile requests and `profiles`:
+As implemented in version 3, which added the input line's requests (`sendHidden`, `dismissHidden`, `complete`) and
+messages (`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=2`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=3`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

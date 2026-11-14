@@ -67,6 +67,30 @@ class ProtocolTest {
     }
 
     @Test
+    fun theInputLineMessagesParse() {
+        assertEquals(EngineMessage.HiddenInput(true), FrameReader.parse(JSONObject("""{"t":"hiddenInput","wanted":true}""")))
+        assertEquals(EngineMessage.HiddenInput(false), FrameReader.parse(JSONObject("""{"t":"hiddenInput","wanted":false}""")))
+        assertEquals(
+            EngineMessage.History(listOf("north", "say hi")),
+            FrameReader.parse(JSONObject("""{"t":"history","lines":["north","say hi"]}""")),
+        )
+        assertEquals(EngineMessage.History(emptyList()), FrameReader.parse(JSONObject("""{"t":"history","lines":[]}""")))
+        assertEquals(EngineMessage.CommandLine("x"), FrameReader.parse(JSONObject("""{"t":"commandLine","text":"x"}""")))
+        assertEquals(
+            EngineMessage.Status("completion", "say hello", 6),
+            FrameReader.parse(JSONObject("""{"t":"status","key":"completion","value":"say hello","re":6}""")),
+        )
+    }
+
+    @Test
+    fun theInputLineRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "sendHidden", "text" to "pw"), Requests.sendHidden("pw").toMap())
+        assertEquals(mapOf("t" to "dismissHidden"), Requests.dismissHidden().toMap())
+        assertEquals(mapOf("t" to "complete", "text" to "say he", "fromHistory" to false, "id" to 6L), Requests.complete("say he", false, 6).toMap())
+        assertEquals(true, Requests.complete("say", true, 7).getBoolean("fromHistory"))
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

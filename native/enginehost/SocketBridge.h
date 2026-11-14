@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
+#include <QStringList>
 #include <deque>
 
 class IEngine;
@@ -25,7 +26,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 2;
+    static constexpr int protocolVersion = 3;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -40,6 +41,9 @@ public:
     void cleared() override;
     void notify(const QString& title, const QString& text) override;
     void status(const QString& key, const QString& value) override;
+    void hiddenInput(bool wanted) override;
+    void history(const QStringList& lines) override;
+    void commandLine(const QString& text) override;
 
 private:
     struct StoredLine
@@ -56,7 +60,8 @@ private:
     void handleMessage(const QJsonObject& message);
     void greet(const QJsonObject& hello);
     void sendLinesAfter(qint64 seq, bool replay);
-    void sendAllStatus();
+    // Every status, then the input line's state, as a UI attaching or catching up needs them
+    void sendState();
     void sendFrame(const QJsonObject& message);
     // An answer to the request being handled: it carries that request's id as re, and is sent even to a lagging UI
     void sendReply(QJsonObject message);
@@ -65,12 +70,15 @@ private:
     void answerProfiles(const QString& request, const QString& problem);
     QString saveProfile(const QJsonObject& message);
     QString openProfile(const QJsonObject& message);
+    void complete(const QJsonObject& message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
     static QJsonObject lineMessage(const StoredLine& stored, bool replay);
     static QJsonArray runsJson(const QList<ColorRun>& runs);
     QJsonObject tailMessage() const;
+    QJsonObject hiddenInputMessage() const;
+    static QJsonObject historyMessage(const QStringList& lines);
 
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
@@ -80,6 +88,7 @@ private:
     QByteArray mReadBuffer;
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
+    bool mHiddenInput = false;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

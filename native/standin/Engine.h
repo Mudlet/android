@@ -21,6 +21,10 @@ public:
 
     void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
     void send(const QString& line) override;
+    void sendHidden(const QString& line) override;
+    void dismissHidden() override;
+    QString complete(const QString& text, bool fromHistory) override;
+    QStringList history() const override { return mHistory; }
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
     void setViewWidthPx(int px) override;
@@ -43,6 +47,8 @@ private:
     void onHeartbeat();
     void flushCounters();
     void markCountersDirty();
+    void setHiddenInput(bool wanted);
+    void writeLine(const QString& line);
     void applySgr(const QByteArray& params);
     int effectiveFg() const;
     void loadProfiles();
@@ -61,6 +67,11 @@ private:
     QList<Profile> mProfiles;
     // Empty until a profile is opened; connect alone opens none
     QString mOpenProfile;
+
+    // The game echoes for the player (telnet WILL ECHO), as it does to hide a password
+    bool mHiddenInput = false;
+    // Every line send() sent, newest first, each once
+    QStringList mHistory;
 
     TelnetState mTelnetState = TelnetState::Data;
     unsigned char mTelnetCommand = 0;

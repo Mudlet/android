@@ -9,6 +9,8 @@ Commands a client may send (one per line):
   negotiation     -> "NEG: <hex>" of every telnet byte the client sent so far
   tell            -> another "tells you" line
   tls             -> "TLS: <protocol>" of the connection, or "TLS: none"
+  password        -> "Password: " and IAC WILL ECHO, as a game hides a password; the next line, whatever it is, gets
+                     IAC WONT ECHO and "Password accepted"
   quit            -> close
 Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
@@ -55,6 +57,7 @@ class Session(threading.Thread):
         self.banner = banner
         self.tls = tls
         self.negotiation = bytearray()
+        self.password_next = False
 
     def run(self):
         conn = self.conn
@@ -110,7 +113,10 @@ class Session(threading.Thread):
     def handle(self, line):
         conn = self.conn
         RECEIVED.append(line)
-        if line.startswith("echo "):
+        if self.password_next:
+            self.password_next = False
+            conn.sendall(bytes([IAC, WONT, ECHO]) + b"Password accepted\r\n")
+        elif line.startswith("echo "):
             conn.sendall(f"You said: {line[5:]}\r\n".encode())
         elif line.startswith("flood "):
             n = int(line[6:])
@@ -155,6 +161,9 @@ class Session(threading.Thread):
             conn.sendall(b"Alice tells you 'ping'\r\n")
         elif line == "tls":
             conn.sendall(f"TLS: {conn.version() if isinstance(conn, ssl.SSLSocket) else 'none'}\r\n".encode())
+        elif line == "password":
+            self.password_next = True
+            conn.sendall(b"Password: " + bytes([IAC, WILL, ECHO]))
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False

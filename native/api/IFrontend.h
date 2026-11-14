@@ -2,6 +2,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 struct ColorRun
 {
@@ -31,4 +32,10 @@ public:
     virtual void cleared() = 0;
     virtual void notify(const QString& title, const QString& text) = 0;
     virtual void status(const QString& key, const QString& value) = 0;
+    // The game hides what the player types, as for a password, or has stopped
+    virtual void hiddenInput(bool wanted) = 0;
+    // The input line's history, newest first, once a profile has loaded; IEngine::history() is read at other times
+    virtual void history(const QStringList& lines) = 0;
+    // A script set the whole input line
+    virtual void commandLine(const QString& text) = 0;
 };

@@ -29,6 +29,10 @@ public:
 
     void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
     void send(const QString& line) override;
+    void sendHidden(const QString& line) override;
+    void dismissHidden() override;
+    QString complete(const QString& text, bool fromHistory) override;
+    QStringList history() const override;
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
     void setViewWidthPx(int px) override;
@@ -66,6 +70,8 @@ private:
     };
 
     void connectSession();
+    // False, with status sendError, while no profile is running to take what the player types
+    bool takesInput();
     void shutdownSession(bool alreadyClosing);
     void beginSwitch();
     void onShutdownFinished(bool saved, const QString& error);

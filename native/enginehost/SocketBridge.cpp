@@ -117,7 +117,7 @@ void SocketBridge::onBytesWritten()
         return;
     }
     mClientLagging = false;
-    sendAllStatus();
+    sendState();
     sendLinesAfter(mLastSentSeq, false);
     if (!mClientLagging) {
         sendFrame(tailMessage());
@@ -137,16 +137,20 @@ void SocketBridge::greet(const QJsonObject& hello)
                {QStringLiteral("v"), protocolVersion},
                {QStringLiteral("pid"), qint64(QCoreApplication::applicationPid())},
                {QStringLiteral("instance"), mInstance}});
-    sendAllStatus();
+    sendState();
     sendLinesAfter(after, true);
     sendFrame(tailMessage());
     sendFrame({{QStringLiteral("t"), QStringLiteral("synced")}, {QStringLiteral("seq"), mNextSeq - 1}});
 }
 
-void SocketBridge::sendAllStatus()
+void SocketBridge::sendState()
 {
     for (auto it = mStatus.cbegin(); it != mStatus.cend(); ++it) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), it.key()}, {QStringLiteral("value"), it.value()}});
+    }
+    sendFrame(hiddenInputMessage());
+    if (mEngine) {
+        sendFrame(historyMessage(mEngine->history()));
     }
 }
 
@@ -208,6 +212,12 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         }
     } else if (type == QLatin1String("send")) {
         mEngine->send(message.value(QLatin1String("text")).toString());
+    } else if (type == QLatin1String("sendHidden")) {
+        mEngine->sendHidden(message.value(QLatin1String("text")).toString());
+    } else if (type == QLatin1String("dismissHidden")) {
+        mEngine->dismissHidden();
+    } else if (type == QLatin1String("complete")) {
+        complete(message);
     } else if (type == QLatin1String("disconnect")) {
         mEngine->disconnectFromGame();
     } else if (type == QLatin1String("runLua")) {
@@ -263,6 +273,16 @@ QString SocketBridge::openProfile(const QJsonObject& message)
         return QStringLiteral("connect must be true or false");
     }
     return mEngine->openProfile(message.value(QLatin1String("name")).toString(), password.toString(), connectNow.toBool(true));
+}
+
+void SocketBridge::complete(const QJsonObject& message)
+{
+    const QJsonValue fromHistory = message.value(QLatin1String("fromHistory"));
+    if (!fromHistory.isUndefined() && !fromHistory.isBool()) {
+        sendError(QStringLiteral("complete: fromHistory must be true or false"));
+        return;
+    }
+    status(QStringLiteral("completion"), mEngine->complete(message.value(QLatin1String("text")).toString(), fromHistory.toBool(false)));
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -335,6 +355,16 @@ QJsonObject SocketBridge::tailMessage() const
     return {{QStringLiteral("t"), QStringLiteral("tail")}, {QStringLiteral("text"), mTail.text}, {QStringLiteral("runs"), runsJson(mTail.runs)}, {QStringLiteral("prompt"), mTail.prompt}};
 }
 
+QJsonObject SocketBridge::hiddenInputMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("hiddenInput")}, {QStringLiteral("wanted"), mHiddenInput}};
+}
+
+QJsonObject SocketBridge::historyMessage(const QStringList& lines)
+{
+    return {{QStringLiteral("t"), QStringLiteral("history")}, {QStringLiteral("lines"), QJsonArray::fromStringList(lines)}};
+}
+
 void SocketBridge::sendFrame(const QJsonObject& message)
 {
     if (!mClient || mClient->state() != QLocalSocket::ConnectedState) {
@@ -397,5 +427,31 @@ void SocketBridge::status(const QString& key, const QString& value)
     // A reply is sent even to a lagging UI, which would otherwise wait for it forever
     if (clientLive() || (replying() && mClient && mClientGreeted)) {
         sendReply({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), key}, {QStringLiteral("value"), value}});
+    }
+}
+
+void SocketBridge::hiddenInput(bool wanted)
+{
+    if (wanted == mHiddenInput) {
+        return;
+    }
+    mHiddenInput = wanted;
+    if (clientLive()) {
+        sendFrame(hiddenInputMessage());
+    }
+}
+
+void SocketBridge::history(const QStringList& lines)
+{
+    if (clientLive()) {
+        sendFrame(historyMessage(lines));
+    }
+}
+
+// Not kept: a UI that attaches later keeps what it has on its line
+void SocketBridge::commandLine(const QString& text)
+{
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("commandLine")}, {QStringLiteral("text"), text}});
     }
 }

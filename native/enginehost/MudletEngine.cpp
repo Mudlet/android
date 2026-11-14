@@ -220,6 +220,13 @@ void MudletEngine::connectSession()
         mProfiles.markOpened(profile);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
         mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
+        mFrontend->history(mSession->commandHistory());
+    });
+    connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
+        mFrontend->hiddenInput(wanted);
+    });
+    connect(session, &THeadlessSession::commandLineTextRequested, this, [this](const QString&, const QString& text) {
+        mFrontend->commandLine(text);
     });
     connect(session, &THeadlessSession::connecting, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting"));
@@ -475,15 +482,51 @@ void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bo
     }
 }
 
-void MudletEngine::send(const QString& line)
+bool MudletEngine::takesInput()
 {
     if (mState != State::started) {
         mFrontend->status(QStringLiteral("sendError"), QStringLiteral("no profile running"));
-        return;
+        return false;
     }
-    if (!mSession->submit(line)) {
+    return true;
+}
+
+void MudletEngine::send(const QString& line)
+{
+    if (takesInput() && !mSession->submit(line)) {
         mFrontend->status(QStringLiteral("sendError"), mSession->errorString());
     }
+}
+
+// Empty with no profile open
+QStringList MudletEngine::history() const
+{
+    return mSession->commandHistory();
+}
+
+// The errors never quote the line, which THeadlessSession clears from its own copy once sent
+void MudletEngine::sendHidden(const QString& line)
+{
+    if (takesInput() && !mSession->submitHiddenInput(line)) {
+        mFrontend->status(QStringLiteral("sendError"), mSession->errorString());
+    }
+}
+
+void MudletEngine::dismissHidden()
+{
+    if (takesInput() && !mSession->dismissHiddenInput()) {
+        mFrontend->status(QStringLiteral("sendError"), mSession->errorString());
+    }
+}
+
+// As Tab, or the up arrow with "Highlight history" on, on the GUI's command line holding text: calls that hand back
+// the line the last one gave go on to the next word or older line
+QString MudletEngine::complete(const QString& text, bool fromHistory)
+{
+    if (mState != State::started || !mSession->setCommandLineText(text)) {
+        return {};
+    }
+    return (fromHistory ? mSession->completeCommandLineFromHistory() : mSession->completeCommandLine()).value_or(QString());
 }
 
 void MudletEngine::disconnectFromGame()

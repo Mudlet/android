@@ -29,8 +29,11 @@ constexpr unsigned char SB = 250;
 constexpr unsigned char GA = 249;
 constexpr unsigned char SE = 240;
 constexpr unsigned char EOR = 239;
+constexpr unsigned char TELOPT_ECHO = 1;
 
 constexpr int promptSilenceMs = 500;
+// As Mudlet's default for the lines of history it saves
+constexpr qsizetype historyLines = 500;
 
 const char* const defaultScript = R"lua(
 lineCount = 0
@@ -67,6 +70,7 @@ Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath
         if (!mLineBuffer.isEmpty()) {
             emitLine(true);
         }
+        setHiddenInput(false);
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
     });
     connect(&mSocket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError) {
@@ -136,6 +140,7 @@ void Engine::connectTo(const QString& host, quint16 port, std::optional<bool> tl
     mLineBuffer.clear();
     mFgBase = -1;
     mBold = false;
+    setHiddenInput(false);
     mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting %1:%2").arg(host).arg(port));
     mSocket.connectToHost(host, port);
 }
@@ -146,10 +151,87 @@ void Engine::send(const QString& line)
         mFrontend->status(QStringLiteral("sendError"), QStringLiteral("not connected"));
         return;
     }
+    writeLine(line);
+    if (!line.isEmpty()) {
+        mHistory.removeAll(line);
+        mHistory.prepend(line);
+        if (mHistory.size() > historyLines) {
+            mHistory.removeLast();
+        }
+    }
+}
+
+void Engine::sendHidden(const QString& line)
+{
+    if (mSocket.state() != QAbstractSocket::ConnectedState) {
+        mFrontend->status(QStringLiteral("sendError"), QStringLiteral("not connected"));
+        return;
+    }
+    if (!mHiddenInput) {
+        mFrontend->status(QStringLiteral("sendError"), QStringLiteral("the game is not hiding input"));
+        return;
+    }
+    // As Mudlet's hidden-input box: a pasted line break must not make a second line
+    QString text = line;
+    text.remove(QLatin1Char('\r'));
+    text.remove(QLatin1Char('\n'));
+    writeLine(text);
+}
+
+void Engine::dismissHidden()
+{
+    if (!mHiddenInput) {
+        mFrontend->status(QStringLiteral("sendError"), QStringLiteral("the game is not hiding input"));
+        return;
+    }
+    setHiddenInput(false);
+}
+
+// From the lines send() sent: the newest that starts with text, or, as Tab, the newest word in them that starts with
+// text's last word
+QString Engine::complete(const QString& text, bool fromHistory)
+{
+    if (text.isEmpty() || mHiddenInput) {
+        return {};
+    }
+    if (fromHistory) {
+        for (const QString& sent : std::as_const(mHistory)) {
+            if (sent.size() > text.size() && sent.startsWith(text)) {
+                return sent;
+            }
+        }
+        return {};
+    }
+    const qsizetype wordStart = text.lastIndexOf(QLatin1Char(' ')) + 1;
+    const QString word = text.mid(wordStart);
+    if (word.isEmpty()) {
+        return {};
+    }
+    for (const QString& sent : std::as_const(mHistory)) {
+        for (const QString& candidate : sent.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+            if (candidate.size() > word.size() && candidate.startsWith(word)) {
+                return text.left(wordStart) + candidate;
+            }
+        }
+    }
+    return {};
+}
+
+void Engine::writeLine(const QString& line)
+{
     QByteArray data = line.toUtf8();
     data.replace(char(IAC), QByteArray(2, char(IAC)));
     data.append("\r\n");
     mSocket.write(data);
+}
+
+void Engine::setHiddenInput(bool wanted)
+{
+    if (wanted == mHiddenInput) {
+        return;
+    }
+    mHiddenInput = wanted;
+    mFrontend->hiddenInput(wanted);
 }
 
 void Engine::disconnectFromGame()
@@ -364,6 +446,16 @@ void Engine::processByte(unsigned char byte)
         }
     case TelnetState::Option: {
         mTelnetState = TelnetState::Data;
+        // Accepted, as Mudlet accepts it: a game that echoes for the player is hiding what they type
+        if (byte == TELOPT_ECHO && (mTelnetCommand == WILL || mTelnetCommand == WONT)) {
+            const bool wanted = mTelnetCommand == WILL;
+            if (wanted != mHiddenInput) {
+                const char reply[3] = {char(IAC), char(wanted ? DO : DONT), char(TELOPT_ECHO)};
+                mSocket.write(reply, 3);
+                setHiddenInput(wanted);
+            }
+            return;
+        }
         if (mTelnetCommand == DO || mTelnetCommand == WILL) {
             const char reply[3] = {char(IAC), char(mTelnetCommand == DO ? WONT : DONT), char(byte)};
             mSocket.write(reply, 3);

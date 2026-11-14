@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 2
+const val PROTOCOL_VERSION = 3
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -45,6 +45,15 @@ sealed interface EngineMessage {
 
     /** The answer to every profile request: the profiles, the last opened first. */
     data class Profiles(val profiles: List<Profile>, val replyTo: Any?) : EngineMessage
+
+    /** The game hides what the player types, as for a password ([wanted]), or has stopped. */
+    data class HiddenInput(val wanted: Boolean) : EngineMessage
+
+    /** The input line's history, newest first. */
+    data class History(val lines: List<String>) : EngineMessage
+
+    /** A script set the whole input line to [text]. */
+    data class CommandLine(val text: String) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -55,6 +64,14 @@ object Requests {
 
     fun connect(host: String, port: Int, tls: Boolean): JSONObject = JSONObject().put("t", "connect").put("host", host).put("port", port).put("tls", tls)
     fun send(text: String): JSONObject = JSONObject().put("t", "send").put("text", text)
+
+    /** What the player typed while [EngineMessage.HiddenInput] holds. Never log it, nor the frame. */
+    fun sendHidden(text: String): JSONObject = JSONObject().put("t", "sendHidden").put("text", text)
+    fun dismissHidden(): JSONObject = JSONObject().put("t", "dismissHidden")
+
+    /** Answered by status `completion` with [id] as its replyTo: the completed line, or empty for none. */
+    fun complete(text: String, fromHistory: Boolean, id: Long): JSONObject = JSONObject()
+        .put("t", "complete").put("text", text).put("fromHistory", fromHistory).put("id", id)
     fun disconnect(): JSONObject = JSONObject().put("t", "disconnect")
     fun runLua(code: String, id: Long): JSONObject = JSONObject().put("t", "runLua").put("code", code).put("id", id)
     fun setViewWidthPx(px: Int): JSONObject = JSONObject().put("t", "setViewWidthPx").put("px", px)
@@ -136,6 +153,12 @@ class FrameReader(input: InputStream) {
 
             "profiles" -> EngineMessage.Profiles(parseProfiles(o.optJSONArray("profiles")), o.opt("re"))
 
+            "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
+
+            "history" -> EngineMessage.History(parseStrings(o.optJSONArray("lines")))
+
+            "commandLine" -> EngineMessage.CommandLine(o.optString("text"))
+
             else -> EngineMessage.Unknown(t)
         }
 
@@ -146,6 +169,8 @@ class FrameReader(input: InputStream) {
                 Profile(p.getString("name"), p.optString("host"), p.optInt("port", 23), p.optBoolean("tls"), p.optString("login"), p.optBoolean("autoReconnect"))
             }
         }
+
+        private fun parseStrings(strings: JSONArray?): List<String> = if (strings == null) emptyList() else List(strings.length()) { strings.optString(it) }
 
         // [[start, length, fg(, bg, attributes(, link))], ...] -> [start0, length0, fg0, bg0, attributes0, link0, start1, ...]
         private fun flattenRuns(runs: JSONArray?): IntArray {

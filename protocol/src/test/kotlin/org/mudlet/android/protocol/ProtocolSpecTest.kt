@@ -104,7 +104,7 @@ class ProtocolSpecTest {
         val parsed = toUi.map { (type, fields) ->
             val message = JSONObject().put("t", type)
             for (field in fields) {
-                message.put(field, if (field == "runs" || field == "profiles") JSONArray() else "1")
+                message.put(field, if (field in setOf("runs", "profiles", "lines")) JSONArray() else "1")
             }
             FrameReader.parse(message)
         }

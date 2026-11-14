@@ -143,6 +143,9 @@ keeps the profiles' passwords in the KeyStore.
 | `connecting`, `connected`, `disconnected` | status `connection` |
 | `outputLine`, `localTextStyled`, `errorConsoleText` | counters, and status `luaError` |
 | `profileLoaded`, `startFinished` | status `profile`, `profileLoadMs`, `startMs` |
+| `hiddenInputWanted` | `hiddenInput` |
+| `commandHistory()`, read at `profileLoaded` and when a UI attaches | `history` |
+| `commandLineTextRequested` (`printCmdLine()` and the like) | `commandLine` |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -189,6 +192,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the profile requests: each answered with `profiles` or `error`; profiles written in Mudlet's own files; a switch
   of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
   through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log;
+- the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
+  `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
+  history, and `printCmdLine()` as `commandLine`;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

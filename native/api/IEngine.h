@@ -15,6 +15,13 @@ public:
     // tls: whether to encrypt the game connection; unset, as the engine would choose
     virtual void connectTo(const QString& host, quint16 port, std::optional<bool> tls) = 0;
     virtual void send(const QString& line) = 0;
+    // What the player typed while the game hides input: never echoed, logged or kept in the history
+    virtual void sendHidden(const QString& line) = 0;
+    virtual void dismissHidden() = 0;
+    // The input line completed, as Tab completes its last word or, fromHistory, from the history; empty for none
+    virtual QString complete(const QString& text, bool fromHistory) = 0;
+    // The input line's history, newest first
+    virtual QStringList history() const = 0;
     virtual void disconnectFromGame() = 0;
     virtual void runLua(const QString& code) = 0;
     virtual void setViewWidthPx(int px) = 0;

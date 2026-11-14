@@ -96,6 +96,55 @@ def latency(name, samples_s):
     print(f"     {name}: n={len(us)} median={statistics.median(us):.0f}us p99={pct(us, 99):.0f}us max={max(us):.0f}us")
 
 
+def input_line(c):
+    """hiddenInput, sendHidden, dismissHidden, history and complete. The game hides input from its banner's WILL ECHO
+    on. Returns the client the checks end with, as they attach a new one."""
+    secret = "pw-Hid3-never-logged"
+    seen = []
+    c.send({"t": "send", "text": "password"})
+    c.wait_for(lambda m: m["t"] == "line" and m["text"] == "Password: ", collect=seen)
+    c.send({"t": "sendHidden", "text": secret + "\r\n"})
+    m = c.wait_for(lambda m: m["t"] == "hiddenInput", collect=seen)
+    check(m["wanted"] is False, f"the game's WONT ECHO after the password ends hiddenInput: {m}")
+    c.wait_for(lambda m: m["t"] == "line" and m["text"] == "Password accepted", collect=seen)
+    check(fake_telnet.RECEIVED[-1] == secret, "sendHidden reaches the game, without its line breaks")
+    c.send({"t": "sendHidden", "text": secret})
+    m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "sendError", collect=seen)
+    check(m["value"] == "the game is not hiding input", f"sendHidden while input is not hidden is refused: {m}")
+
+    c.send({"t": "send", "text": "password"})
+    m = c.wait_for(lambda m: m["t"] == "hiddenInput", collect=seen)
+    check(m["wanted"] is True, "WILL ECHO again gives hiddenInput")
+    c.wait_for(lambda m: m["t"] == "line" and m["text"] == "Password: ", collect=seen)
+    c.send({"t": "dismissHidden"})
+    m = c.wait_for(lambda m: m["t"] == "hiddenInput", collect=seen)
+    check(m["wanted"] is False, "dismissHidden ends it")
+    # The game still waits for its password
+    c.send({"t": "send", "text": "echo dismissed"})
+    c.wait_for(lambda m: m["t"] == "line" and m["text"] == "Password accepted", collect=seen)
+
+    for request, expected, what in [({"text": "prompt", "fromHistory": True}, "prompt-nogo", "a line sent, from the history"),
+                                    ({"text": "say neg"}, "say negotiation", "a word of the lines sent"),
+                                    ({"text": "say zzz"}, "", "nothing, when nothing starts with it")]:
+        c.send(dict(request, t="complete", id=f"complete {what}"))
+        m = c.wait_for(lambda m: m["t"] == "status" and m.get("re") == f"complete {what}", collect=seen)
+        check(m["key"] == "completion" and m["value"] == expected, f"complete gives {what}: {m}")
+    c.send({"t": "complete", "text": "x", "fromHistory": "yes", "id": "bad"})
+    m = c.wait_for(lambda m: m.get("re") == "bad", collect=seen)
+    check(m == {"t": "error", "message": "complete: fromHistory must be true or false", "re": "bad"}, f"a fromHistory that is not a boolean: {m}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = handshake(c)
+    seen += msgs
+    check({"t": "hiddenInput", "wanted": False} in msgs, "a UI that attaches is told whether input is hidden")
+    history = [m["lines"] for m in msgs if m["t"] == "history"]
+    check(history == [["echo dismissed", "password", "prompt-nogo", "negotiation"]],
+          f"and the history, what send sent, newest first, each once, without what sendHidden sent: {history}")
+    profile_checks.password_kept_out(check, secret, seen, os.path.join(TMP, "engine.log"))
+    return c
+
+
 def main():
     faulthandler.register(signal.SIGUSR1)
     port = fake_telnet.start_in_thread()
@@ -164,11 +213,12 @@ def main():
     if not notes:
         notes = [c.wait_for(lambda m: m["t"] == "notify")]
     check(notes[0]["title"] == "Tell" and "tells you" in notes[0]["text"], "Lua onLine called notify() for the tell")
+    check({"t": "hiddenInput", "wanted": True} in msgs, "the game's WILL ECHO gives hiddenInput")
 
     c.send({"t": "send", "text": "negotiation"})
     m = c.wait_for(lambda m: m["t"] == "line" and m["text"].startswith("NEG:"))
     neg = bytes.fromhex(m["text"][5:])
-    check(neg == bytes([255, 252, 24, 255, 254, 1, 255, 254, 201]), f"DO->WONT, WILL->DONT replies: {neg.hex()}")
+    check(neg == bytes([255, 252, 24, 255, 253, 1, 255, 254, 201]), f"DO->WONT, WILL->DONT replies, but WILL ECHO->DO: {neg.hex()}")
 
     c.send({"t": "send", "text": "prompt-nogo"})
     t0 = time.monotonic()
@@ -188,6 +238,8 @@ def main():
     check(int(m["value"]) >= 6, f"luaOnLineCalls counter = {m['value']}")
     m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "heartbeatTicks", timeout=3)
     check(int(m["value"]) >= 1, "heartbeat ticks (1 s interval in the test)")
+
+    c = input_line(c)
 
     # Profiles: the stand-in keeps them in profiles.json beside its socket, and has no login, so a password goes nowhere
     password = "pw-Kq7-never-logged"

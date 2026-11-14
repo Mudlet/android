@@ -254,6 +254,7 @@ def main():
 
     tls_checks(port)
     profile_requests(port)
+    input_line()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -377,6 +378,76 @@ def profile_requests(port):
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     check(password not in open(LOG, errors="replace").read(), "nor did it log the password on its way out")
+
+
+def input_line():
+    """hiddenInput and sendHidden from a game's password prompt, dismissHidden, history (kept by the profile's save, so
+    an engine started again lists it), complete, and a script's printCmdLine() as commandLine. The game sends no
+    WILL ECHO until asked for a password, as Mudlet keeps nothing in the history while the game echoes."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    secret = "pw-Hid3-never-logged"
+    profile = "Input Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "hiddenInput", "wanted": False} in seen and {"t": "history", "lines": []} in seen,
+          "a UI that attaches is told that input is not hidden, and the history, empty with no profile open")
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen)
+    for command in ("echo alpha", "echo beta"):
+        c.send({"t": "send", "text": command})
+    c.wait_for(shown("You said: beta"), collect=seen)
+
+    for request, expected, what in [({"text": "say alp"}, "say alpha", "a word the game sent"),
+                                    ({"text": "echo a", "fromHistory": True}, "echo alpha", "a line from the history"),
+                                    ({"text": "say zzz"}, "", "nothing, when nothing starts with it")]:
+        c.send(dict(request, t="complete", id=f"complete {what}"))
+        m = c.wait_for(lambda m: m["t"] == "status" and m.get("re") == f"complete {what}", collect=seen)
+        check(m["key"] == "completion" and m["value"] == expected, f"complete gives {what}: {m}")
+
+    c.send({"t": "runLua", "id": "cmdline", "code": 'printCmdLine("x")'})
+    # Each send that empties Mudlet's copy of the line sends an empty commandLine too
+    m = c.wait_for(lambda m: m["t"] == "commandLine" and m["text"], collect=seen)
+    check(m["text"] == "x", f"printCmdLine() sets the input line: {m}")
+
+    c.send({"t": "send", "text": "password"})
+    m = c.wait_for(lambda m: m["t"] == "hiddenInput", timeout=10, collect=seen)
+    check(m["wanted"] is True, "the game's WILL ECHO gives hiddenInput")
+    c.send({"t": "sendHidden", "text": secret})
+    m = c.wait_for(lambda m: m["t"] == "hiddenInput", timeout=10, collect=seen)
+    check(m["wanted"] is False, "the game's WONT ECHO after the password ends it")
+    c.wait_for(shown("Password accepted"), collect=seen)
+    check(secret in fake_telnet.RECEIVED, "sendHidden reaches the game")
+
+    c.send({"t": "send", "text": "password"})
+    m = c.wait_for(lambda m: m["t"] == "hiddenInput", timeout=10, collect=seen)
+    check(m["wanted"] is True, "WILL ECHO again gives hiddenInput")
+    c.send({"t": "dismissHidden"})
+    m = c.wait_for(lambda m: m["t"] in ("hiddenInput", "status") and (m["t"] == "hiddenInput" or m["key"] == "sendError"),
+                   timeout=10, collect=seen)
+    check(m == {"t": "hiddenInput", "wanted": False}, f"dismissHidden ends it: {m}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen += msgs
+    history = [m["lines"] for m in msgs if m["t"] == "history"]
+    check(history == [["password", "echo beta", "echo alpha"]],
+          f"a UI that attaches gets the history, newest first, each once, without the password: {history}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    proc, c = start_engine(profile)
+    msgs = []
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", msgs)
+    m = c.wait_for(lambda m: m["t"] == "history", collect=msgs)
+    seen += msgs
+    check(m["lines"] == ["password", "echo beta", "echo alpha"], f"the profile's history outlives the engine: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    profile_checks.password_kept_out(check, secret, seen, LOG)
 
 
 if __name__ == "__main__":

@@ -2,46 +2,40 @@ name: libmudlet for Android
 
 # Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
 # builds the app's APK with libmudlet as its engine. A second job builds libmudlet for the host and runs the real
-# engine against the fake game server through the socket protocol. A third builds it all for x86_64 and runs the APK
-# on an emulator (native/tests/android_smoke.py): the only job that runs the real engine on Android.
-# The nightly run builds Mudlet's latest development, so it catches a change there that stops these
-# compiling or linking for Android, or breaks the engine; a failed nightly opens or updates an issue here.
+# engine against the fake game server through the socket protocol. The emulator jobs build it all for x86_64 once,
+# then run the APK on an emulator at the app's minSdk (28) and at the newest API (36), one boot each: first the smoke
+# test (native/tests/android_smoke.py), then the instrumented tests (native/tests/android_instrumented.py). They are
+# the only jobs that run the real engine on Android.
+# ci.yml calls it with the jobs the changes need, and nightly against Mudlet's latest development; a manual run builds
+# all of it on any branch. Mudlet's build comes from the cache (.github/actions/libmudlet) when the same Mudlet commit
+# was built with the same scripts before.
 on:
-  push:
-    branches: [main]
-    paths: &paths
-      - scripts/build-mudlet-deps.sh
-      - scripts/build-libmudlet.sh
-      - scripts/build-libmudlet-desktop.sh
-      - scripts/export-libmudlet.py
-      - scripts/build-apk.sh
-      - scripts/check-apk.sh
-      - scripts/build-openssl.sh
-      - app/**
-      - engine-service/**
-      - protocol/**
-      - native/**
-      - gradle/**
-      - gradlew
-      - "*.gradle.kts"
-      - gradle.properties
-      - .github/actions/**
-      - .github/workflows/libmudlet.yml
-  pull_request:
-    paths: *paths
-  schedule:
-    - cron: "17 3 * * *"
-  workflow_dispatch:
-    inputs:
-      mudlet_ref:
+  workflow_call:
+    inputs: &inputs
+      mudlet-ref:
         description: Mudlet/Mudlet branch, tag or full commit SHA to build
+        type: string
         default: development
-      lua_fortify_fix:
+      lua-fortify-fix:
         description: >-
-          Emulator job: build Lua 5.1 with the Android FORTIFY fix. Off only to show that the smoke test catches the
+          Emulator jobs: build Lua 5.1 with the Android FORTIFY fix. Off only to show that the smoke test catches the
           abort in luaL_openlibs
         type: boolean
         default: true
+      android:
+        description: The arm64-v8a APK with libmudlet
+        type: boolean
+        default: true
+      desktop-engine:
+        description: The real engine on the host
+        type: boolean
+        default: true
+      emulator:
+        description: The x86_64 APK on the emulators
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs: *inputs
 
 permissions:
   contents: read
@@ -50,22 +44,14 @@ defaults:
   run:
     shell: bash
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 env:
-  MUDLET_REF: ${{ inputs.mudlet_ref || 'development' }}
+  MUDLET_REF: ${{ inputs.mudlet-ref }}
 
 jobs:
   libmudlet:
+    if: inputs.android
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    env:
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1500M
-      # the NDK comes out of a cache or an unpacked zip, so its mtime says nothing
-      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v6
 
@@ -81,43 +67,11 @@ jobs:
           # lua5.1 writes the translation statistics that mudlet.qrc embeds
           apt-packages: lua5.1
 
-      # restore and save are separate steps so the prefix is kept even when Mudlet then fails to build
-      - name: Restore dependencies
-        id: deps-cache
-        uses: actions/cache/restore@v5
+      - id: libmudlet
+        uses: ./.github/actions/libmudlet
         with:
-          path: deps/prefix
-          key: mudlet-deps-qt${{ steps.toolchain.outputs.qt-version }}-ndk${{ steps.toolchain.outputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
-
-      - name: Build dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
-        run: scripts/build-mudlet-deps.sh deps/prefix
-
-      - name: Save dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: deps/prefix
-          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
-
-      - name: Restore ccache
-        uses: actions/cache/restore@v5
-        with:
-          path: .ccache
-          key: ccache-libmudlet-arm64-v8a-${{ github.run_id }}
-          restore-keys: ccache-libmudlet-arm64-v8a-
-
-      - name: Build libmudlet
-        run: |
-          ccache -z > /dev/null
-          scripts/build-libmudlet.sh mudlet build deps/prefix
-
-      - name: Save ccache
-        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
-        uses: actions/cache/save@v5
-        with:
-          path: .ccache
-          key: ccache-libmudlet-arm64-v8a-${{ github.run_id }}
+          qt-version: ${{ steps.toolchain.outputs.qt-version }}
+          ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
@@ -159,6 +113,8 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          FROM_CACHE: ${{ steps.libmudlet.outputs.cache-hit }}
         run: |
           # shellcheck disable=SC2016 # the backticks in git's --format are Markdown
           {
@@ -166,19 +122,19 @@ jobs:
             echo
             echo "Mudlet/Mudlet \`$MUDLET_REF\` at $(git -C mudlet log -1 --format='[`%h`](https://github.com/Mudlet/Mudlet/commit/%H) %s' 2>/dev/null || echo '(not checked out)')"
             echo
+            if [ "$FROM_CACHE" = true ]; then echo "libmudlet came from the cache: an earlier run built this commit."; echo; fi
             if [ -f build/size-report.md ]; then cat build/size-report.md; else echo "No size report: the build did not finish."; fi
             echo
             echo "Qt ${{ steps.toolchain.outputs.qt-version }}, NDK ${{ steps.toolchain.outputs.ndk-version }}; dependencies:"
             echo
             sed 's/^/    /' deps/prefix/versions.txt 2>/dev/null || true
             sed -n 's/^openssl /    openssl /p' deps/openssl-arm64-v8a/versions.txt 2>/dev/null || true
-            echo
-            echo "ccache $(ccache --show-stats 2>/dev/null | grep -m1 'Hits:')"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # libmudlet for the host, with the options an Android build has, and the real engine on it, tested through the
   # socket protocol against native/tests/fake_telnet.py
   desktop-engine:
+    if: inputs.desktop-engine
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -243,21 +199,15 @@ jobs:
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
           python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
 
-  # The APK with libmudlet, built for x86_64, on an Android emulator (KVM on GitHub's Linux runners): install, launch,
-  # the engine service, a profile on the fake game server, a Lua trigger and its notification, and the UI reattaching
-  # to a restarted engine. See native/tests/android_smoke.py
-  emulator:
+  # The APK with libmudlet and the two test APKs, built for x86_64 once for the emulator jobs below
+  emulator-build:
+    if: inputs.emulator
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       ANDROID_ABI: x86_64
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1500M
-      CCACHE_COMPILERCHECK: content
-      # a manual run can leave the fix out, to show that the smoke test catches the abort. Only a manual run has inputs:
-      # on a push, pull request or schedule inputs.lua_fortify_fix is null, and null == false holds (both coerce to 0)
-      LUA_FORTIFY_FIX: ${{ github.event_name == 'workflow_dispatch' && !inputs.lua_fortify_fix && '0' || '1' }}
-      EMULATOR_API: 35
+    outputs:
+      mudlet-commit: ${{ steps.libmudlet.outputs.mudlet-commit }}
     steps:
       - uses: actions/checkout@v6
 
@@ -273,42 +223,13 @@ jobs:
           qt-android-arch: android_x86_64
           apt-packages: lua5.1
 
-      - name: Restore dependencies
-        id: deps-cache
-        uses: actions/cache/restore@v5
+      - id: libmudlet
+        uses: ./.github/actions/libmudlet
         with:
-          path: deps/prefix
-          key: mudlet-deps-x86_64-qt${{ steps.toolchain.outputs.qt-version }}-ndk${{ steps.toolchain.outputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
-
-      - name: Build dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
-        run: scripts/build-mudlet-deps.sh deps/prefix
-
-      - name: Save dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: deps/prefix
-          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
-
-      - name: Restore ccache
-        uses: actions/cache/restore@v5
-        with:
-          path: .ccache
-          key: ccache-libmudlet-x86_64-${{ github.run_id }}
-          restore-keys: ccache-libmudlet-x86_64-
-
-      - name: Build libmudlet
-        run: |
-          ccache -z > /dev/null
-          scripts/build-libmudlet.sh mudlet build deps/prefix
-
-      - name: Save ccache
-        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
-        uses: actions/cache/save@v5
-        with:
-          path: .ccache
-          key: ccache-libmudlet-x86_64-${{ github.run_id }}
+          abi: x86_64
+          lua-fortify-fix: ${{ inputs.lua-fortify-fix && '1' || '0' }}
+          qt-version: ${{ steps.toolchain.outputs.qt-version }}
+          ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
@@ -318,8 +239,10 @@ jobs:
           abi: x86_64
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
-      - name: Build the APK with libmudlet as the engine
-        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
+      - name: Build the APK with libmudlet as the engine, and the test APKs
+        run: >-
+          LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
+          :app:assembleDebugAndroidTest :engine-service:assembleDebugAndroidTest
 
       - name: Check the APK
         uses: ./.github/actions/check-apk
@@ -330,11 +253,40 @@ jobs:
           title: APK with libmudlet (x86_64, for the emulator)
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
-      # libmudlet is linked into the engine by now; the system image and the emulator's disk need the room
-      - name: Free disk space
-        run: |
-          find build -name '*.o' -delete
-          df -h / | tail -n 1
+      # The unstripped engine goes too, for ndk-stack to name the frames of a crash on the emulator
+      - uses: actions/upload-artifact@v6
+        with:
+          name: emulator-apks${{ inputs.lua-fortify-fix && '' || '-without-lua-fortify-fix' }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
+            native/build-android-x86_64-mudlet/enginehost/libengine_x86_64.so
+          if-no-files-found: error
+          retention-days: 3
+
+  # One emulator boot per API level runs the smoke test and then the instrumented tests. minSdk 28 runs on every pull
+  # request that runs these at all, not only nightly: the code that differs by API level (ServiceCompat's
+  # startForeground, the notification permission from 33, the foreground service type from 34) is in the same files
+  # whose changes start these jobs, so a nightly-only run would let a crash on Android 9 merge
+  emulator:
+    name: emulator (API ${{ matrix.api }})
+    needs: emulator-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 36]
+    env:
+      EMULATOR_API: ${{ matrix.api }}
+      LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: emulator-apks${{ inputs.lua-fortify-fix && '' || '-without-lua-fortify-fix' }}
 
       - name: Enable KVM
         run: |
@@ -350,7 +302,9 @@ jobs:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
           key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64
 
-      - name: Smoke test on the emulator
+      # The smoke test, then the instrumented tests, on one boot; both run whatever the other did, and the step fails
+      # if either failed
+      - name: Smoke test and instrumented tests on the emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ env.EMULATOR_API }}
@@ -361,8 +315,12 @@ jobs:
           disk-size: 6G
           # one line: the action runs each line of a script in a shell of its own
           script: >-
-            python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test
-            --symbols native/build-android-x86_64-mudlet/enginehost
+            python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests
+            --symbols native/build-android-x86_64-mudlet/enginehost; smoke=$?;
+            python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk
+            --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
+            --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke
 
       - name: Save the system image
         if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}
@@ -374,55 +332,30 @@ jobs:
       - uses: actions/upload-artifact@v6
         if: ${{ !cancelled() }}
         with:
-          name: emulator-smoke-test${{ env.LUA_FORTIFY_FIX == '0' && '-without-lua-fortify-fix' || '' }}
-          path: smoke-test
+          name: emulator-tests-api${{ matrix.api }}${{ env.LUA_FORTIFY_FIX == '0' && '-without-lua-fortify-fix' || '' }}
+          path: device-tests
           if-no-files-found: warn
           retention-days: 14
 
       - name: Summary
         if: always()
-        run: |
-          # shellcheck disable=SC2016 # the backticks in git's --format are Markdown
-          {
-            echo "### Emulator smoke test (x86_64, API $EMULATOR_API)"
-            echo
-            echo "Mudlet/Mudlet \`$MUDLET_REF\` at $(git -C mudlet log -1 --format='[`%h`](https://github.com/Mudlet/Mudlet/commit/%H) %s' 2>/dev/null || echo '(not checked out)')"
-            echo
-            grep -s 'FORTIFY' build/size-report.md || true
-            echo
-            if [ -f smoke-test/smoke.log ]; then
-              echo '```'
-              cat smoke-test/smoke.log
-              echo '```'
-            else
-              echo "The smoke test did not run."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # GitHub mails a failed scheduled run only to whoever last edited the cron line
-  report-nightly-failure:
-    needs: [libmudlet, desktop-engine, emulator]
-    # a job that hits timeout-minutes is cancelled, not failed
-    if: >-
-      always() && github.event_name == 'schedule'
-      && (needs.libmudlet.result != 'success' || needs.desktop-engine.result != 'success'
-          || needs.emulator.result != 'success')
-    runs-on: ubuntu-24.04
-    permissions:
-      issues: write
-    steps:
-      - name: Open or update the tracking issue
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MUDLET_COMMIT: ${{ needs.emulator-build.outputs.mudlet-commit }}
         run: |
-          title="Nightly libmudlet for Android build fails"
-          issue=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
-            --jq "map(select(.title == \"$title\"))[0].number // empty")
-          if [ -n "$issue" ]; then
-            gh issue comment "$issue" --body "Failed or timed out again against \`$MUDLET_REF\`: $RUN_URL"
-          else
-            gh issue create --title "$title" \
-              --body "The nightly build against Mudlet's \`$MUDLET_REF\` failed or timed out: $RUN_URL. Close this once it is green again."
-          fi
+          {
+            echo "### Emulator (x86_64, API $EMULATOR_API)"
+            echo
+            echo "Mudlet/Mudlet \`$MUDLET_REF\` at [${MUDLET_COMMIT:0:9}](https://github.com/Mudlet/Mudlet/commit/$MUDLET_COMMIT)"
+            echo
+            [ "$LUA_FORTIFY_FIX" = 1 ] || echo "Lua 5.1 built without the Android FORTIFY fix"
+            for log in smoke.log instrumented.log; do
+              echo
+              if [ -f "device-tests/$log" ]; then
+                echo '```'
+                cat "device-tests/$log"
+                echo '```'
+              else
+                echo "No $log: that test did not run."
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

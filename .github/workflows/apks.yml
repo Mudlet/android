@@ -4,27 +4,9 @@ name: APKs
 # protocol tests (against that desktop engine too), and a second time with its libraries extracted at install. Both
 # carry OpenSSL for Qt's TLS backend. Android lint runs once the first APK has staged the Qt jars it needs. The APK
 # with libmudlet as its engine is built in libmudlet.yml.
+# ci.yml calls it when a file it builds from changed; a manual run builds them on any branch.
 on:
-  push:
-    branches: [main]
-    paths: &paths
-      - app/**
-      - engine-service/**
-      - protocol/**
-      - native/**
-      - docs/protocol.md
-      - gradle/**
-      - gradlew
-      - "*.gradle.kts"
-      - gradle.properties
-      - lint.xml
-      - scripts/build-apk.sh
-      - scripts/check-apk.sh
-      - scripts/build-openssl.sh
-      - .github/actions/**
-      - .github/workflows/apks.yml
-  pull_request:
-    paths: *paths
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -33,10 +15,6 @@ permissions:
 defaults:
   run:
     shell: bash
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   apk:

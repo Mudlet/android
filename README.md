@@ -27,7 +27,11 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, the script windows' state and layout, what a label draws, and their tests |
 | [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
+<<<<<<< HEAD
 | [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md) |
+=======
+| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md) |
+>>>>>>> 12eda10 (Translations: Crowdin, translator comments, the strings check, pseudo-locales)
 
 Versions for every Gradle module are in [`gradle/libs.versions.toml`](gradle/libs.versions.toml). The package
 names are `org.mudlet.android.*`; the application id is `org.mudlet.mudlet`, as Mudlet's macOS bundle identifier.
@@ -138,7 +142,7 @@ pull request cancels its older run.
 | Changed | Runs |
 |---|---|
 | Only docs (`*.md`, `docs/` but `docs/protocol.md`) | nothing but CI's own two short jobs |
-| Kotlin in `app/`, `engine-service/` or `protocol/` | ktlint; APKs; the emulator jobs, with libmudlet from its cache |
+| Kotlin in `app/`, `engine-service/` or `protocol/` | ktlint; APKs; the emulator jobs, with libmudlet from its cache; for `app/` and `engine-service/` the strings check |
 | `native/`, the Gradle build, the build scripts, `.github/actions/` | the jobs below that build from them |
 | A workflow | what that workflow runs; `ci.yml` itself, everything |
 
@@ -191,8 +195,8 @@ The workflows it calls:
       foreground, Qt's handshake, a stop from the notification that the next start does not undo, a killed engine that
       comes back with its profile and connection, a TLS connect through OpenSSL; the self-test screen's lines, runs and
       colours from a fake engine, its reattach after losing the engine, the way between the app's screens with
-      TalkBack's controls only, the Accessibility Test Framework's checks (API 36), and the notification permission's
-      dialog.
+      TalkBack's controls only, the Accessibility Test Framework's checks (API 36), the notification permission's
+      dialog, and the screens in the pseudo-locales en-XA and ar-XB with no text cut off and ar-XB mirrored (API 36).
 
     Both run whatever the other did, and the job fails if either failed. It uploads logcat, screenshots, the UI's
     state and each instrumentation's output, and gives the steps in the job summary. These are the only jobs that
@@ -206,8 +210,9 @@ The workflows it calls:
     built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
     KeyStore), if the engine does not build, link or pass its test, or if a test on an emulator fails.
 - **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh): ktlint on the Kotlin,
-  clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts and actionlint on the workflows, as
-  four short jobs, each when a file it checks changed.
+  clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts, actionlint on the workflows, and
+  the strings check on `app/` and `engine-service/` (no text written into the Kotlin, a translator's comment on each
+  string: [`docs/translations.md`](docs/translations.md)), as five short jobs, each when a file it checks changed.
 
 Every night CI runs the libmudlet jobs against Mudlet's latest `development` (the other jobs build only from this
 repository, which pushes to `main` already check), so a change on Mudlet's side that breaks the Android build shows up;

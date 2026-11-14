@@ -1,0 +1,17 @@
+# Crowdin: the app's English strings go to translators, and their translations come back as a pull request, as for
+# Mudlet's desktop app (its .crowdin.yml). Crowdin's GitHub integration reads this file; docs/translations.md says how
+# the integration is set up and how the Crowdin CLI can use it instead. No token is ever written here: the CLI reads
+# the project and its token from the environment variables named below.
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+# Both files are called strings.xml: Crowdin keeps their folders apart
+preserve_hierarchy: true
+pull_request_title: "Improve: New Crowdin updates"
+
+files:
+  # The app's screens
+  - source: /app/src/main/res/values/strings.xml
+    translation: /app/src/main/res/values-%android_code%/strings.xml
+  # The engine's notifications
+  - source: /engine-service/src/main/res/values/strings.xml
+    translation: /engine-service/src/main/res/values-%android_code%/strings.xml

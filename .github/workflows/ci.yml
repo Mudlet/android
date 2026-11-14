@@ -11,7 +11,8 @@ name: CI
 #                                 ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
 #                                 ktlint, the APKs with Android lint, and the emulator suite (smoke test and the
-#                                 instrumented tests, on minSdk and the newest API) with libmudlet from its cache
+#                                 instrumented tests, on minSdk and the newest API) with libmudlet from its cache;
+#                                 app/ and engine-service/ also the strings check (scripts/check-strings.py)
 #   native/, the shared actions   their lint check (clang-format, actionlint), the APKs, the emulator suite, the
 #                                 arm64 APK with libmudlet and the real engine on the host
 #   Mudlet's build scripts, the Gradle build, the APK scripts
@@ -120,6 +121,12 @@ jobs:
               - .github/workflows/**
               - .github/actions/**
               - *lint-tools
+            strings:
+              - app/**
+              - engine-service/**
+              - scripts/check-strings.py
+              - *lint-tools
+              - *everything
             apks:
               - *kotlin
               - native/**
@@ -169,7 +176,7 @@ jobs:
             esac
           }
           checks=()
-          for check in clang-format shellcheck actionlint; do
+          for check in clang-format shellcheck actionlint strings; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {

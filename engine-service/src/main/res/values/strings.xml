@@ -1,16 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The strings the engine's notifications show -->
+<!-- The engine's notifications, translated on Crowdin with the app's strings (docs/translations.md): each one has a
+     comment for translators right before it. -->
 <!-- tools:ignore: Qt's own resources, merged into this module, bring locales these strings are not translated into yet -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <!-- The notification channels, as Android's notification settings list them -->
+    <!-- The name of the notification channel for the notification shown while Mudlet keeps the game connected in the
+         background, in the system's notification settings -->
     <string name="channel_engine">Background connection</string>
+    <!-- The description of that notification channel, in the system's notification settings -->
     <string name="channel_engine_description">Shown while Mudlet keeps your game connected in the background</string>
+    <!-- The name of the notification channel for the messages a game's scripts send as notifications, in the system's
+         notification settings. A tell is a private message one player sends another in a MUD. -->
     <string name="channel_tells">Tells</string>
 
-    <!-- The ongoing notification while the engine runs -->
+    <!-- The title of the ongoing notification while the game is kept connected, when no profile is open -->
     <string name="engine_notification_title">Keeping your game connected</string>
-    <!-- %1$s is the open profile's name -->
+    <!-- The title of the ongoing notification while the game is kept connected; %1$s is the open profile's name (a
+         game's name, say) -->
     <string name="engine_notification_title_profile">Keeping %1$s connected</string>
+    <!-- The text of the ongoing notification while the game is kept connected -->
     <string name="engine_notification_text">Your connection and scripts keep running while you use other apps.</string>
+    <!-- The button on the ongoing notification: it stops the background connection and closes the game's connection -->
     <string name="engine_notification_quit">Quit</string>
 </resources>

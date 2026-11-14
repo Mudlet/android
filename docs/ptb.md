@@ -145,12 +145,15 @@ advanced sideloading flow.
 5. **The app in Play Console**: Home, "Create app": name "Mudlet PTB", default language English (United States), App,
    Free, and accept the declarations.
 6. **The app's content** (Policy and programs, App content, and Grow, Store presence), which Play requires before
-   any release, open testing included: a privacy policy URL; app access (nothing behind a login); ads (none);
-   content rating questionnaire; target audience; data safety (Mudlet collects and shares nothing itself: what a
-   player sends goes to the game server they chose); the **foreground service** declaration: `specialUse`, with the
+   any release, open testing included: a privacy policy URL (the draft is [`privacy-policy.md`](privacy-policy.md),
+   which needs a public page); app access (nothing behind a login); ads (none); content rating questionnaire; target
+   audience; data safety (Mudlet collects and shares nothing itself: what a player sends goes to the game server they
+   chose); the **foreground service** declaration: `specialUse`, with the
    reason in `engine-service/src/main/AndroidManifest.xml` (keeping the player's game connection and scripts running
    in the background), and a short video of it if Play asks; and the store listing: a short and a full description
    saying this is a nightly test build, the 512×512 icon, the 1024×500 feature graphic and at least two screenshots.
+   [`store-listing.md`](store-listing.md) has the text, the screenshots to take and how, and each of these answers
+   with its evidence in the code.
 7. **Open testing, with Play App Signing**: Test and release, Testing, Open testing. Under Countries/regions, add
    them all; under Testers, leave the tester limit unlimited. "Create new release": when asked how the app is signed,
    choose the Google-generated app signing key; the AAB's own key then becomes the upload key. Upload

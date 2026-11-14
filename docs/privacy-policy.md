@@ -1,0 +1,79 @@
+# Mudlet for Android: privacy policy
+
+> **Draft.** Google Play needs this policy at a public URL, on a page that is not a PDF and not behind a login, for
+> both the Mudlet and the Mudlet PTB listings. Where it is published (for example a page on mudlet.org), the contact
+> address and the effective date are for the Mudlet team to fill in. It must say the same as the Data safety answers
+> in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
+> change both together.
+
+**Effective date:** _to be set when published_
+
+This policy covers Mudlet for Android and Mudlet PTB, its nightly test build, made by the Mudlet team, a group of
+volunteers. In short: **Mudlet collects nothing about you.** It has no account, no ads, no analytics and no crash
+reporting of its own, and the Mudlet team receives no data from it.
+
+## What Mudlet sends, and to whom
+
+Mudlet is a client for text-based online games (MUDs). Those games are run by other people, not by the Mudlet team.
+
+- **The games you connect to.** When you connect to a game, Mudlet sends it what you type: your commands, your
+  character's name and password when you log in, and the replies Mudlet makes for you to the game's protocols (such as
+  your screen size and the name of the client). The game's own privacy policy, if it has one, covers what it does with
+  that. Some games accept only unencrypted connections; Mudlet uses TLS encryption where the game offers it and you
+  choose it.
+- **Addresses a game or your scripts ask for.** A game can ask Mudlet to download files from addresses it gives: its
+  user interface package, its map, its sounds and music, or to sign in through a provider it names. Scripts and
+  packages you install can download files, send web requests, chat with other players directly (MMCP) or join IRC
+  chat. Mudlet makes these connections only when the game or your scripts ask, and to the addresses they give. A
+  script you install can do anything a program can, so install scripts and packages only from people you trust.
+- **No one else.** Mudlet does not contact the Mudlet team, check for updates, show ads, measure how you use it or
+  send crash reports. On Android, Mudlet's desktop features that contact other services, such as the updater, Discord
+  status and the package repository, are not built in.
+
+## What Mudlet keeps on your device
+
+- Your profiles (each game's address and your settings), your scripts and packages, maps, and the logs of your games if
+  you turn logging on, in the app's private storage, which other apps cannot read.
+- Passwords and sign-in tokens Mudlet keeps for you are encrypted with a key held in the Android Keystore, on your
+  device.
+- A small file that lets Mudlet reconnect you if Android stops it in the background. It never holds a password.
+
+Mudlet does not back any of this up to the cloud, and does not let Android copy it to a new device. Android's own
+system logs on your device may hold Mudlet's error messages; they never hold a password.
+
+## Permissions
+
+- **Internet and network state**, to connect to games.
+- **Notifications**, to show that Mudlet is running in the background and to show the messages your scripts ask it to
+  show, such as a tell from another player. You can turn notifications off; Mudlet keeps working.
+- **Foreground service**, to keep your game connected and your scripts running while you use other apps.
+
+Mudlet does not ask for your location, contacts, camera, microphone, files or any other personal data.
+
+## Deleting your data
+
+Everything Mudlet keeps is on your device. To delete it, uninstall Mudlet, or open Android's Settings, Apps, Mudlet,
+Storage and choose "Clear storage". There is no copy anywhere else for the Mudlet team to delete. To have a game delete
+your character or account, ask that game.
+
+## Google Play
+
+If you install Mudlet from Google Play, Google handles the download and, if you allow it in your device's settings,
+sends crash and performance reports to the Mudlet team through the Play Console. Those reports are about the app (for
+example, where it crashed), and Google's privacy policy covers them.
+
+## Children
+
+Mudlet is not meant for children under 13. It connects to games the Mudlet team does not run or moderate, where you
+can talk to other players.
+
+## Changes
+
+If Mudlet's handling of data changes, this policy changes with it, and the date above is updated. The app's source
+code is public at <https://github.com/Mudlet/android> and <https://github.com/Mudlet/Mudlet>, so anyone can check what it
+does.
+
+## Contact
+
+_Contact address to be set by the Mudlet team._ You can also open an issue at
+<https://github.com/Mudlet/android/issues>.

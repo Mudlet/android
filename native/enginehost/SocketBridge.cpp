@@ -148,6 +148,10 @@ void SocketBridge::sendState()
     for (auto it = mStatus.cbegin(); it != mStatus.cend(); ++it) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), it.key()}, {QStringLiteral("value"), it.value()}});
     }
+    sendFrame(hiddenInputMessage());
+    if (mEngine) {
+        sendFrame(historyMessage(mEngine->history()));
+    }
 }
 
 void SocketBridge::sendLinesAfter(qint64 seq, bool replay)
@@ -278,7 +282,7 @@ void SocketBridge::complete(const QJsonObject& message)
         sendError(QStringLiteral("complete: fromHistory must be true or false"));
         return;
     }
-    status(QStringLiteral("completion"), QString());
+    status(QStringLiteral("completion"), mEngine->complete(message.value(QLatin1String("text")).toString(), fromHistory.toBool(false)));
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -432,12 +436,22 @@ void SocketBridge::hiddenInput(bool wanted)
         return;
     }
     mHiddenInput = wanted;
+    if (clientLive()) {
+        sendFrame(hiddenInputMessage());
+    }
 }
 
-void SocketBridge::history(const QStringList&) {}
+void SocketBridge::history(const QStringList& lines)
+{
+    if (clientLive()) {
+        sendFrame(historyMessage(lines));
+    }
+}
 
 // Not kept: a UI that attaches later keeps what it has on its line
 void SocketBridge::commandLine(const QString& text)
 {
-    Q_UNUSED(text)
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("commandLine")}, {QStringLiteral("text"), text}});
+    }
 }

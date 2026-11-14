@@ -12,6 +12,8 @@ on:
       - .github/workflows/ptb.yml
       - scripts/build-release.sh
       - scripts/merge-qtdeploy.py
+      - scripts/check-apk-size.sh
+      - scripts/apk-size-budget.txt
       - engine-service/consumer-rules.pro
       - app/build.gradle.kts
       - engine-service/build.gradle.kts
@@ -341,16 +343,18 @@ jobs:
           done
           echo "Signed with the $SIGNED_WITH key, certificate SHA-256 $CERT_SHA256" >> "$GITHUB_STEP_SUMMARY"
 
-      # scripts/check-apk.sh, as on every APK CI builds; it takes a directory of APKs of one ABI
-      - name: Check the APKs
+      # scripts/check-apk.sh, as on every APK CI builds, with each APK's size budget; it takes a directory of APKs of
+      # one ABI. Then the AAB's size budget.
+      - name: Check the APKs and the AAB's size
         env:
           BUILD_TOOLS: ${{ steps.toolchain.outputs.build-tools-dir }}
         run: |
           for abi in arm64-v8a x86_64; do
             mkdir -p "check/$abi"
             cp "app/build/outputs/apk/release/app-$abi-release.apk" "check/$abi/"
-            ABI=$abi TITLE="PTB APK ($abi)" scripts/check-apk.sh "check/$abi"
+            ABI=$abi TITLE="PTB APK ($abi)" SIZE_BUDGET="ptb-$abi" scripts/check-apk.sh "check/$abi"
           done
+          scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab
 
       # What the GitHub pre-release and Play get: fixed file names, so a download link stays the same, checksums,
       # the notes with both commits, and Play's "what's new" (two lines of at most 240, under Play's 500)

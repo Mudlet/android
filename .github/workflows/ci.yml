@@ -83,6 +83,8 @@ jobs:
             apk-scripts: &apk-scripts
               - scripts/build-apk.sh
               - scripts/check-apk.sh
+              - scripts/check-apk-size.sh
+              - scripts/apk-size-budget.txt
               - scripts/build-openssl.sh
             mudlet-scripts: &mudlet-scripts
               - scripts/build-mudlet-deps.sh

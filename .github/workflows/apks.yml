@@ -87,6 +87,7 @@ jobs:
           apk-dir: app/build/outputs/apk/debug
           engine: libengine
           title: APK${{ matrix.extracted && ' (extracted libs)' || '' }}
+          size-budget: standin-arm64-v8a${{ matrix.extracted && '-extracted-libs' || '' }}
           extracted: ${{ matrix.extracted || false }}
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 

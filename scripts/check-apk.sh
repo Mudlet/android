@@ -2,11 +2,13 @@
 # Checks each debug APK in a directory: that it holds Qt and the engine library, and OpenSSL as Qt's TLS backend
 # loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load segments), and that they
 # are stored or compressed as the manifest's extractNativeLibs says; then writes each APK's size, its size on the
-# device, and OpenSSL's share, to $GITHUB_STEP_SUMMARY (or stdout). CI runs it through .github/actions/check-apk.
+# device, and OpenSSL's share, to $GITHUB_STEP_SUMMARY (or stdout); with SIZE_BUDGET, checks each APK's size against
+# that line of scripts/apk-size-budget.txt (scripts/check-apk-size.sh). CI runs it through .github/actions/check-apk.
 #
 # Usage: scripts/check-apk.sh [apk-dir]   (default app/build/outputs/apk/debug)
 # Optional: ABI (arm64-v8a), EXTRACTED=true for an APK built with -PextractNativeLibs=true, ENGINE (libengine: the
-# engine library without its ABI suffix), TITLE (the summary's heading), ANDROID_SDK_ROOT (~/Android/Sdk),
+# engine library without its ABI suffix), TITLE (the summary's heading), SIZE_BUDGET (a name in
+# scripts/apk-size-budget.txt, for every APK in the directory), ANDROID_SDK_ROOT (~/Android/Sdk),
 # ANDROID_NDK_ROOT (its ndk/28.2.13676358), BUILD_TOOLS (its build-tools/37.0.0).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,6 +17,7 @@ ABI=${ABI:-arm64-v8a}
 EXTRACTED=${EXTRACTED:-false}
 ENGINE=${ENGINE:-libengine}
 TITLE=${TITLE:-APK}
+SIZE_BUDGET=${SIZE_BUDGET:-}
 sdk=${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}
 ndk=${ANDROID_NDK_ROOT:-$sdk/ndk/28.2.13676358}
 BUILD_TOOLS=${BUILD_TOOLS:-$sdk/build-tools/37.0.0}
@@ -104,4 +107,5 @@ for apk in "${apks[@]}"; do
   echo "- \`$apk\`: $(mb "$apk_size"); \`lib/$ABI\`: $count libraries, $(mb "$raw"), $how" \
     "(extractNativeLibs=${flag:-unset}); on the device: $(mb "$installed"); of the libraries, $openssl_version" \
     "(\`libcrypto_3.so\`, \`libssl_3.so\`): $(mb "$openssl_size")" >> "$summary"
+  if [ -n "$SIZE_BUDGET" ]; then "$root/scripts/check-apk-size.sh" "$SIZE_BUDGET" "$apk_dir/$apk"; fi
 done

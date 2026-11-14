@@ -89,6 +89,7 @@ jobs:
           apk-dir: app/build/outputs/apk/debug
           engine: libengine
           title: APK with libmudlet
+          size-budget: libmudlet-arm64-v8a
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       # What the runner is checked for in build-libmudlet.sh, now in the engine an app ships
@@ -251,6 +252,7 @@ jobs:
           engine: libengine
           abi: x86_64
           title: APK with libmudlet (x86_64, for the emulator)
+          size-budget: libmudlet-x86_64
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       # The unstripped engine goes too, for ndk-stack to name the frames of a crash on the emulator

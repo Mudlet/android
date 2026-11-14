@@ -1,3 +1,0 @@
-#!/bin/sh
-# The Qt Gradle Plugin runs "ninja -C <dir> aar" with no -j; this caps it for a shared machine.
-exec /usr/bin/ninja -j2 "$@"

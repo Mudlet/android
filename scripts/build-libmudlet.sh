@@ -47,7 +47,7 @@ EOF
     echo "Mudlet's Lua 5.1 lacks the Android FORTIFY fix: adding it to $lua_cmake"
 fi
 
-# --- An app that links libmudlet (C's engine) needs the runner's link line: ask CMake's file API to record it ---
+# --- An app that links libmudlet (the app's engine) needs the runner's link line: ask CMake's file API to record it ---
 "$(dirname "$0")/export-libmudlet.py" --query "$build"
 
 # Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI, USE_VARIABLE_SPLASH_SCREEN and

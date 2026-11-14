@@ -1,8 +1,8 @@
 name: Android toolchain
 description: >
   Qt for Android with its host Qt (aqtinstall), the NDK and SDK packages, JDK, ninja and ccache, the same
-  versions BRIEF.md names. Qt and the NDK are cached between runs. Sets QT_ROOT, ANDROID_SDK_ROOT and
-  ANDROID_NDK_ROOT for the steps after it.
+  versions the README's Building section names. Qt and the NDK are cached between runs. Sets QT_ROOT,
+  ANDROID_SDK_ROOT and ANDROID_NDK_ROOT for the steps after it.
 inputs:
   qt-version:
     description: Qt for the host and for Android
@@ -22,7 +22,8 @@ inputs:
   aqtinstall-version:
     description: aqtinstall, pinned
     default: "3.3.0"
-  # lrelease (Mudlet's translations), qmlimportscanner and Qt Quick's tools (prototype B), androiddeployqt
+  # lrelease (Mudlet's translations) and androiddeployqt. qtdeclarative is left from the hosting prototypes, one of
+  # which used Qt Quick; it keeps the cached Qt the same, and can go once nothing needs it
   qt-host-archives:
     description: Host Qt archives
     default: icu qtbase qtdeclarative qttools

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds libmudlet (mudlet_core, mudlet_headless and the mudlet-headless runner) for the Linux desktop, with the
-# options an Android build has (Mudlet's linux-core-minimal preset, release and without sanitizers), so that C's
+# options an Android build has (Mudlet's linux-core-minimal preset, release and without sanitizers), so that the app's
 # real engine can be tested on the host. Writes <build-dir>/libmudlet.cmake with scripts/export-libmudlet.py.
 #
 # Usage: QT_ROOT=... scripts/build-libmudlet-desktop.sh <mudlet-source> <build-dir>

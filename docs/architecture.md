@@ -26,10 +26,10 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
-| `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
+| `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
 | `native/standin/` | The stand-in engine for fast tests: minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
@@ -121,8 +121,8 @@ per profile, from `SuggesterRegistry.forProfile(name)`:
   `Suggestion` with `text` (the whole input line it leads to), `cursor`, `label`, `kind` (`COMMAND` or `WORD`) and
   `source` (`HISTORY`, `SEQUENCE`, `LINE` or `OUTPUT`); and `ghost`, the text to show greyed after the cursor
   when the best item only extends the input.
-- `save(Appendable)` and `load(Reader)`, a line-based text (`SuggestCodec`) the app keeps in the profile's
-  private storage; a damaged line is skipped, and `load`'s `LoadResult` says how many were and whether the text
+- `save(Appendable)` and `load(Reader)`, a line-based text (`SuggestCodec`) the app keeps in its private storage,
+  one file per profile; a damaged line is skipped, and `load`'s `LoadResult` says how many were and whether the text
   was this format at all. `forget(command)` and `clear()` for the player.
 
 What it ranks:
@@ -137,6 +137,24 @@ What it ranks:
 Everything is bounded (5000 commands, 4000 and 2000 prediction keys of 8 commands each), and counts halve as they
 grow, so recent play outweighs old. All calls take one lock; `suggest` is O(entries × command length): 1 to 4 ms
 for 5000 entries on a desktop JVM, so the app calls it debounced and off the main thread.
+
+In the app, `ui/game/CommandSuggestions.kt` keeps a `SuggestionSession` (`:suggest`) for each profile the engine
+has said it loaded (status `profile`, "<name> loaded"; `Android` until then), saved as `files/suggest/<name>.txt`
+(the name URL-encoded) in the app's private storage. The session does all its work on one background thread, in the
+order the UI asked for it:
+
+- It loads the file when the game screen first shows the profile; a command sent meanwhile is learned on top.
+- It records each send, and observes each game line but the echo of a send: one of the three lines after the send
+  that ends with the command as a whole word.
+- It answers the input line once the typing has paused for 120 ms, with up to five suggestions. `SuggestionStrip`
+  shows them as buttons above the line, after an accept button for the ghost text. The ghost shows greyed through a
+  `VisualTransformation`, and only for the line as it is now; the field's semantics keep just the typed text, so
+  TalkBack does not read it. A hardware right arrow at the end of the line also accepts it.
+- It saves 5 s after a send and when the app leaves the front (`MainActivity.onStop`), to a temporary file that
+  then replaces the old one. An I/O error is logged (tag `MudletSuggest`) without any command and the suggestions
+  carry on in memory; after a failed load nothing is saved, so the file is not replaced with less.
+- While the game hides input there is neither strip nor ghost: nothing typed reaches the session, and the masked
+  send is recorded only as `recordSent("", hidden = true)`.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
@@ -726,19 +744,28 @@ Item 13 of the on-device checklist covers this.
 15. The game screen, connected to a game (connect from the self-test first, then open the game screen).
     - The keyboard: tapping the input line opens it, and the console shrinks above it with its newest line still in
       view. Send on the keyboard sends the line and leaves the keyboard open, ready for the next. Note the keyboard's
-      action key: it should read Send, and suggestions or corrections should not change what is typed. Type half a
-      word, then the up button: the earlier command replaces it whole, and typing goes on from the end of it.
+      action key: it should read Send, and suggestions, corrections or a capital first letter should not change what is
+      typed. Type half a word, then the up button: the earlier command replaces it whole, and typing goes on from the
+      end of it.
+    - The suggestions: send a few commands, then type the start of one. Up to five buttons above the line offer the
+      commands that match, and the rest of the best one shows greyed after the cursor. A button puts its command on
+      the line without sending it; the arrow button at the start of the row, or a hardware keyboard's right arrow at
+      the end of the line, takes the greyed text. After a send, the empty line's buttons offer what usually came next.
+      With nothing to offer the row is gone. Close the app from the recent apps and reopen it: they are still there.
     - Scroll up while the game sends text: the console stays put and "Jump to the bottom: N new lines" counts up; the
       button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
       and again with a half-typed line: both stay. The same in split screen.
     - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
       the connection state is read out when it changes (connecting, connected, disconnected), without moving focus.
-      Swiping goes from the console's lines to the input line, then the buttons, then the connection bar.
+      The line reads only what was typed, never the greyed text. Swiping goes from the console's lines to the input
+      line, then "Accept the suggestion: ..." and each "Suggestion: ...", then the up, down and Send buttons, then the
+      connection bar.
 16. The input line's engine features, connected to a game with the libmudlet APK.
     - At a password prompt (any game's login), the input line becomes a "Password" field with the keyboard's password
       layout, still open. TalkBack reads it as a password field and says "dot" or nothing for what is typed, never the
-      letters. Send logs in; the field goes back to the command line, with what was typed there before. Its close
-      button gives the command line back without sending.
+      letters. There are no suggestions and no greyed text while it shows. Send logs in; the field goes back to the
+      command line, with what was typed there before, and the password is not among the suggestions afterwards. Its
+      close button gives the command line back without sending.
     - The up button walks the commands of the profile's earlier sessions too (close and reopen the app first).
     - Type the start of a word the game sent, then the Tab button (or Tab on a hardware keyboard): the word is
       completed, and again goes on to the next match. TalkBack reads "Complete the word, button", and "No completion"

@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.edit
 import org.mudlet.android.R
+import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.theme.MudletTheme
 
 class MainActivity : ComponentActivity() {
@@ -62,6 +63,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        // The process may be killed in the background: keep what the suggestions learned
+        CommandSuggestions.saveAll()
         EngineClient.detach()
         super.onStop()
     }

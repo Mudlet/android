@@ -63,13 +63,8 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
     restore.kind = Restore::Kind::restore;
     restore.attempt = int(mRestores.size());
     restore.reconnectDelayMs = reconnectDelayMs[restore.attempt - 1];
-    write(restore.session);
+    save(restore.session);
     return restore;
-}
-
-void SessionStore::save(const Session& session)
-{
-    write(session);
 }
 
 void SessionStore::clear()
@@ -80,7 +75,7 @@ void SessionStore::clear()
     }
 }
 
-bool SessionStore::write(const Session& session)
+void SessionStore::save(const Session& session)
 {
     QJsonArray restores;
     for (const qint64 ms : std::as_const(mRestores)) {
@@ -94,7 +89,5 @@ bool SessionStore::write(const Session& session)
     QSaveFile file(mPath);
     if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(json).toJson(QJsonDocument::Compact)) < 0 || !file.commit()) {
         qWarning("SessionStore: could not write %s: %s", qPrintable(mPath), qPrintable(file.errorString()));
-        return false;
     }
-    return true;
 }

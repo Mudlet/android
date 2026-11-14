@@ -105,7 +105,7 @@ checks that this table, `MudletEngine.cpp` and `EngineRestore.PHASES` name the s
 |---|---|
 | `restoring <profile>` | Loading the profile again. It was not connected, so it is not connected now. |
 | `restored <profile>` | The profile is loaded, and stays disconnected. |
-| `waiting <seconds> <target>` | This is not the first restore within 10 minutes: the profile is loaded and connected after `<seconds>` (10, then 30), so a game is not called again at once by an engine that keeps dying. |
+| `waiting <seconds> <target>` | This is not the first restore within 10 minutes: the profile is loaded and connected only after `<seconds>` (10, then 30), so a game is not called again at once by an engine that keeps dying. Lua sent meanwhile runs once the profile is loaded; a `connect` or `disconnect` calls off the wait. |
 | `reconnecting <target>` | Loading the profile and connecting it. |
 | `reconnected <target>` | Connected again. |
 | `retrying <target>` | The connection failed, and Mudlet tries again on its own, as the profile reconnects automatically. `reconnected` follows when it gets through. |

@@ -174,7 +174,7 @@ def restarted_after_kill(port):
     t0 = time.monotonic()
     e.connect(port)
     e.send({"t": "send", "text": "echo before the kill"})
-    e.wait(lambda m: m["t"] == "line" and m["text"] == "You said: before the kill")
+    e.wait(lambda m: m["t"] in ("line", "tail") and m["text"] == "You said: before the kill")
     kept = state()
     check(kept is not None and kept["profile"] == PROFILE and kept["connect"] and kept["host"] == "127.0.0.1"
           and kept["port"] == port, f"the running session is kept on disk: {kept}")
@@ -191,9 +191,9 @@ def restarted_after_kill(port):
     check(e.wait_status("profile", lambda v: v.endswith("loaded")) == f"{PROFILE} loaded", "the profile was loaded again")
     check(accepted_since(t0) == 2, f"the game saw one new connection: {accepted_since(t0)} in all")
     e.send({"t": "send", "text": "echo after the restore"})
-    e.wait(lambda m: m["t"] == "line" and m["text"] == "You said: after the restore")
+    e.wait(lambda m: m["t"] in ("line", "tail") and m["text"] == "You said: after the restore")
     check(True, f"the restored profile takes commands; engine start to reconnected {reconnect_ms:.0f} ms")
-    check(state()["restores"] and len(state()["restores"]) == 1, f"the restore is counted: {state()}")
+    check(len(state()["restores"]) == 1, f"the restore is counted: {state()}")
 
     # A UI that attaches later is told too, as the engine keeps its statuses
     e.client.close()
@@ -320,6 +320,16 @@ def crash_loop(e, port):
     e.kill()
     e = Engine()
     check(e.wait_status("restore", lambda v: True) == f"waiting 30 {target}", f"the third restore waits 30 s: {e.restores}")
+    # Lua sent meanwhile waits for the profile; the user's disconnect calls off the reconnect, and the Lua runs
+    t0 = time.monotonic()
+    e.send({"t": "runLua", "id": 9, "code": "return 1"})
+    e.drain(1)
+    check("luaResult" not in e.status, f"Lua waits for the restore: {e.status.get('luaResult')}")
+    e.send({"t": "disconnect"})
+    check(e.wait_status("restore", lambda v: v != f"waiting 30 {target}") == "cancelled", f"a disconnect cancels it: {e.restores}")
+    check(e.wait_status("luaResult", lambda v: True) == "ran", f"and the Lua runs in the profile: {e.status.get('luaResult')}")
+    e.drain(1)
+    check(accepted_since(t0) == 0 and e.status.get("connection") == "disconnected", "without a connection")
     e.kill()
     t0 = time.monotonic()
     e = Engine()

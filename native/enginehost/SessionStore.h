@@ -58,11 +58,7 @@ public:
     // An orderly stop: nothing to restore
     void clear();
 
-    QString path() const { return mPath; }
-
 private:
-    bool write(const Session& session);
-
     QString mPath;
     QString mStopMarkerPath;
     // When the restores within the window started, in ms since the epoch

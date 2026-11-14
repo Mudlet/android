@@ -12,7 +12,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
-| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `lint.sh` and `launcher-icons.py` |
+| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `lint.sh` and `launcher-icons.py` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`launcher-icon.md`](docs/launcher-icon.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md) |
 | `.github/` | The workflows (`ci.yml`, which calls `checks.yml`, `apks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
@@ -86,9 +86,11 @@ QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/buil
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
 
 # The APK checks CI runs on every APK: Qt, the engine and OpenSSL in it, 16 KB alignment, how its libraries are
-# stored, the adaptive launcher icon
+# stored, the adaptive launcher icon, and with SIZE_BUDGET its size budget (below)
 scripts/check-apk.sh                       # after scripts/build-apk.sh
 EXTRACTED=true scripts/check-apk.sh        # after scripts/build-apk.sh -PextractNativeLibs=true
+SIZE_BUDGET=standin-arm64-v8a scripts/check-apk.sh
+scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab   # after scripts/build-release.sh
 
 # The x86_64 APK with libmudlet on a running emulator (CI's emulator job)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
@@ -107,6 +109,21 @@ python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/a
 ```
 
 The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist).
+
+### APK size budget
+
+[`scripts/apk-size-budget.txt`](scripts/apk-size-budget.txt) holds the size of each APK and AAB CI builds, as CI built
+them: the whole file, its native libraries and its dex, in bytes as they take up the file. CI fails when any of them
+grows more than `headroom-percent` (5%) above its budget, and prints each size beside its budget in the log and the job
+summary (`scripts/check-apk-size.sh`, which `check-apk.sh` runs with `SIZE_BUDGET`; `ptb.yml` runs it on the PTB's
+APKs and AAB, and publishes a nightly PTB past it). A local build can come out a little different from CI's.
+
+To raise a budget on purpose, in the pull request that makes the APK grow: take the new sizes from the failing job's
+log (its line starting with the budget's name), write them into that line of the budget file, and say in the pull
+request what grew and why. A size more than `lower-below-percent` (10%) under its budget gets a notice in CI: lower
+the budget the same way, so that the next growth is caught from there. The libmudlet and PTB budgets follow Mudlet's
+`development` too: when the nightly fails on one because libmudlet grew, raise it in a pull request of its own that
+names the Mudlet commits.
 
 ## Lint
 

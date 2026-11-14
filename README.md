@@ -120,8 +120,9 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
     the library sizes, stripped and not, and whose Lua 5.1 FORTIFY fix the build used.
   - Lua 5.1 FORTIFY fix: built with the NDK's `_FORTIFY_SOURCE=2`, Mudlet's Lua 5.1 aborts in `luaL_openlibs`
     ("FORTIFY: strchr: prevented read past end of buffer"). Until Mudlet's `3rdparty/lua51/CMakeLists.txt`
-    passes `-U_FORTIFY_SOURCE` for Android itself, the script appends `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1` for
-    Android to that file in the Mudlet checkout and says so in its log. A local checkout keeps that change.
+    passes `-U_FORTIFY_SOURCE` for Android itself ([Mudlet/Mudlet#12914](https://github.com/Mudlet/Mudlet/pull/12914)),
+    the script appends the same `"SHELL:-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1"` option for Android to that file in
+    the Mudlet checkout and says so in its log. A local checkout keeps that change.
   - It builds the APK with libmudlet as the engine, linked through the `libmudlet::headless` target that
     [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line, puts it through
     the same checks as above, checks that the engine carries Mudlet's Lua, its Lua C modules and QtKeychain's KeyStore
@@ -138,10 +139,10 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
     runs the engine on Android, so the only one that catches a crash there; a manual run with `lua_fortify_fix`
     off shows it failing on the FORTIFY abort in `luaL_openlibs`.
   - It fails if the libraries use desktop-only APIs or carry the build-type splash screen images, if Lua 5.1's
-    collector (`lgc.c`) references a fortified function such as `__strchr_chk` (as the call that aborts does), if the
-    runner lacks Mudlet's built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles'
-    passwords in the KeyStore), if the engine does not build, link or pass its test, or if the emulator smoke test
-    fails.
+    collector (`lgc.c`) references a fortified function such as `__strchr_chk` (as the call that aborts does) or its
+    string library (`lstrlib.c`) references none (FORTIFY is then off altogether), if the runner lacks Mudlet's
+    built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
+    KeyStore), if the engine does not build, link or pass its test, or if the emulator smoke test fails.
   - It also runs every night, so a change on Mudlet's side that breaks the Android build shows up; a nightly that
     fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without activity in
     this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.

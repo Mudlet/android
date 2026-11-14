@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
-import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 
@@ -26,7 +25,17 @@ fun GameScreen(onBack: () -> Unit) {
     Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Console(c.lines, c.tail, c.linesAdded, onWidth = c::setViewWidth, Modifier.weight(1f).fillMaxWidth())
-            InputLine(onSend = { c.send(Requests.send(it)) }, Modifier.fillMaxWidth().padding(start = 8.dp))
+            InputLine(
+                hiddenInput = c.hiddenInput,
+                history = c.history,
+                commandLine = c.commandLine,
+                onCommandLineShown = c::commandLineShown,
+                onSend = c::sendCommand,
+                onSendHidden = c::sendHidden,
+                onDismissHidden = c::dismissHidden,
+                onComplete = c::complete,
+                modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+            )
             ConnectionBar(
                 ConnectionState.of(engineAttached = c.enginePid > 0, connection = c.status["connection"]),
                 canReconnect = c.lastAddress != null,

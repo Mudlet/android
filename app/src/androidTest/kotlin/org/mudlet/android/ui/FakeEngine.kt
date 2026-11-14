@@ -93,6 +93,9 @@ class FakeEngine : AutoCloseable {
         private val writer = FrameWriter(socket.outputStream)
         private val input = DataInputStream(socket.inputStream)
 
+        /** Every request [receive] has read, the skipped ones included. */
+        val received = mutableListOf<JSONObject>()
+
         /** The UI's hello: "instance" and "lastSeq" when it was attached to an engine before. */
         val hello: JSONObject
 
@@ -101,6 +104,9 @@ class FakeEngine : AutoCloseable {
             hello = readFrame(input)
             if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
             send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
+            // As the engine follows its hello, so state an earlier test left in EngineClient goes
+            hiddenInput(false)
+            history(emptyList())
         }
 
         fun send(message: JSONObject) = writer.write(message)
@@ -115,6 +121,7 @@ class FakeEngine : AutoCloseable {
                 } catch (e: IOException) {
                     throw AssertionError("the UI sent no '$type': $e", e)
                 }
+                received.add(frame)
                 if (frame.optString("t") == type) return frame
             }
             throw AssertionError("the UI sent no '$type' within $timeoutMs ms")
@@ -131,6 +138,16 @@ class FakeEngine : AutoCloseable {
         fun tail(text: String, prompt: Boolean = true) = send(JSONObject().put("t", "tail").put("text", text).put("prompt", prompt))
 
         fun status(key: String, value: String) = send(JSONObject().put("t", "status").put("key", key).put("value", value))
+
+        /** A reply to the request whose "id" was [re]. */
+        fun reply(key: String, value: String, re: Any) = send(JSONObject().put("t", "status").put("key", key).put("value", value).put("re", re))
+
+        fun hiddenInput(wanted: Boolean) = send(JSONObject().put("t", "hiddenInput").put("wanted", wanted))
+
+        /** [lines]: newest first. */
+        fun history(lines: List<String>) = send(JSONObject().put("t", "history").put("lines", JSONArray(lines)))
+
+        fun commandLine(text: String) = send(JSONObject().put("t", "commandLine").put("text", text))
 
         fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
 

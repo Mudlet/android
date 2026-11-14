@@ -54,6 +54,9 @@ object EngineClient {
     private const val PREF_LAST_PORT = "lastPort"
     private const val PREF_LAST_TLS = "lastTls"
 
+    // How long after a send the engine's emptying of its line (an empty commandLine) is taken as that send's
+    private const val SEND_CLEAR_WINDOW_MS = 3000L
+
     val lines = mutableStateListOf<UiLine>()
 
     /**
@@ -81,6 +84,18 @@ object EngineClient {
     var startToHelloMs by mutableLongStateOf(-1L)
     var lastLossToAttachMs by mutableLongStateOf(-1L)
     var pingResult by mutableStateOf("")
+
+    /** The game hides what the player types, as for a password: the input line masks it and sends it with [sendHidden]. */
+    var hiddenInput by mutableStateOf(false)
+        private set
+
+    /** The input line's history, newest first: the engine's, with the commands [sendCommand] sent since it last said. */
+    var history by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** What a script set the input line to, until the line shows it and calls [commandLineShown]. */
+    var commandLine by mutableStateOf<String?>(null)
+        private set
     var lastLuaResult by mutableStateOf("")
 
     private val main = Handler(Looper.getMainLooper())
@@ -103,6 +118,11 @@ object EngineClient {
     private var detachStartedAt = 0L
     private var lostAt = 0L
     private var restartRequestedForThisOutage = false
+
+    // Main thread only
+    private var nextRequestId = 1L
+    private val completions = HashMap<Long, (String) -> Unit>()
+    private val sendsAwaitingClear = ArrayDeque<Long>()
 
     // Reader-thread batches, drained on the main thread
     private val pendingLock = Any()
@@ -166,6 +186,31 @@ object EngineClient {
         val sent = link.send(message)
         if (!sent) linkState = "not attached: command dropped"
         return sent
+    }
+
+    /** A command typed on the input line: sent, and put first in [history]. False as for [send]. */
+    fun sendCommand(line: String): Boolean {
+        if (!send(Requests.send(line))) return false
+        sendsAwaitingClear.addLast(SystemClock.elapsedRealtime())
+        if (line.isNotBlank()) history = listOf(line) + history.filter { it != line }
+        return true
+    }
+
+    /** What the player typed while [hiddenInput] holds. False as for [send]. */
+    fun sendHidden(text: String): Boolean = send(Requests.sendHidden(text))
+
+    fun dismissHidden(): Boolean = send(Requests.dismissHidden())
+
+    /** Asks the engine to complete [text]; [onResult] gets the completed line, or empty for none. False as for [send]. */
+    fun complete(text: String, onResult: (String) -> Unit): Boolean {
+        val id = nextRequestId++
+        if (!send(Requests.complete(text, false, id))) return false
+        completions[id] = onResult
+        return true
+    }
+
+    fun commandLineShown() {
+        commandLine = null
     }
 
     /** Connects the engine to a game and remembers the address for [reconnect]. False as for [send]. */
@@ -260,6 +305,8 @@ object EngineClient {
                     lostAt = 0
                 }
                 restartRequestedForThisOutage = false
+                // The engine's answers to sends on the old connection went with it
+                sendsAwaitingClear.clear()
                 if (!sameInstance) {
                     notifyCount = 0
                     lastLuaResult = ""
@@ -294,10 +341,21 @@ object EngineClient {
                     scheduleFlush()
                 }
 
-                is EngineMessage.Status -> synchronized(pendingLock) {
-                    pendingStatus[message.key] = message.value
-                    scheduleFlush()
+                is EngineMessage.Status -> if (message.key == "completion") {
+                    val id = (message.replyTo as? Number)?.toLong()
+                    post { completions.remove(id)?.invoke(message.value) }
+                } else {
+                    synchronized(pendingLock) {
+                        pendingStatus[message.key] = message.value
+                        scheduleFlush()
+                    }
                 }
+
+                is EngineMessage.HiddenInput -> post { hiddenInput = message.wanted }
+
+                is EngineMessage.History -> post { history = message.lines }
+
+                is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
                 is EngineMessage.Notify -> post { notifyCount++ }
 
@@ -324,6 +382,7 @@ object EngineClient {
                 lostAt = SystemClock.elapsedRealtime()
                 detachStartedAt = lostAt
                 enginePid = 0
+                completions.clear()
                 linkState = "engine connection lost ($reason); reconnecting"
             }
         }
@@ -339,6 +398,19 @@ object EngineClient {
                 }
             }
         }
+    }
+
+    private fun onCommandLine(text: String) {
+        // Lost while input is hidden, as Mudlet's GUI writes it into its password box
+        if (hiddenInput) return
+        // The engine empties its line after each send, which the input line did already: by the time that arrives,
+        // the player may be typing the next command
+        if (text.isEmpty()) {
+            val now = SystemClock.elapsedRealtime()
+            while (sendsAwaitingClear.isNotEmpty() && now - sendsAwaitingClear.first() > SEND_CLEAR_WINDOW_MS) sendsAwaitingClear.removeFirst()
+            if (sendsAwaitingClear.removeFirstOrNull() != null) return
+        }
+        commandLine = text
     }
 
     // Runs on the reader thread, ahead of any status the next engine sends

@@ -702,6 +702,17 @@ Item 13 of the on-device checklist covers this.
     - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
       the connection state is read out when it changes (connecting, connected, disconnected), without moving focus.
       Swiping goes from the console's lines to the input line, then the buttons, then the connection bar.
+16. The input line's engine features, connected to a game with the libmudlet APK.
+    - At a password prompt (any game's login), the input line becomes a "Password" field with the keyboard's password
+      layout, still open. TalkBack reads it as a password field and says "dot" or nothing for what is typed, never the
+      letters. Send logs in; the field goes back to the command line, with what was typed there before. Its close
+      button gives the command line back without sending.
+    - The up button walks the commands of the profile's earlier sessions too (close and reopen the app first).
+    - Type the start of a word the game sent, then the Tab button (or Tab on a hardware keyboard): the word is
+      completed, and again goes on to the next match. TalkBack reads "Complete the word, button", and "No completion"
+      when nothing matches.
+    - `lua printCmdLine("say hi")` puts "say hi" on the line. Type a command and start the next one at once: what
+      was typed is not wiped when the game answers.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

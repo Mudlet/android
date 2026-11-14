@@ -319,6 +319,7 @@ object EngineClient {
                 if (!sameInstance && lines.isNotEmpty()) {
                     addLines(listOf(UiLine(app.getString(R.string.marker_new_engine, hello.instance), IntArray(0), false, marker = true)))
                 }
+                ScriptWindowsClient.onAttached(sameInstance)
             }
         }
 
@@ -358,6 +359,9 @@ object EngineClient {
                 is EngineMessage.History -> post { history = message.lines }
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
+
+                is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine ->
+                    post { ScriptWindowsClient.onMessage(message) }
 
                 is EngineMessage.Notify -> post { notifyCount++ }
 

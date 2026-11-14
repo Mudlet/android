@@ -188,6 +188,11 @@ def line_with(state, text):
     return next((line for line in shown if line["text"] == text), None)
 
 
+def window_named(state, name, kind):
+    """A script window the UI knows of, with the text of its last rows."""
+    return next((w for w in state.get("windows", []) if w["name"] == name and w["kind"] == kind), None)
+
+
 def runs_of(line):
     flat = line["runs"]
     return [flat[i:i + RUN_STRIDE] for i in range(0, len(flat) - RUN_STRIDE + 1, RUN_STRIDE)]
@@ -290,6 +295,20 @@ def run(dev, apk):
             raise SmokeFailure("no Android notification titled 'Smoke tell' was posted")
         time.sleep(0.5)
     ok("the engine process posted the trigger's notification")
+
+    step("a Geyser mini console: the window and its line reach the UI")
+    dev.command("lua", code='smokechat = Geyser.MiniConsole:new({name = "smokechat", x = 0, y = 0, width = "30%", '
+                            'height = "40%"}) smokechat:cecho("<red>smoke window line\\n")')
+    # luaResult is still the trigger's "ran" until the engine answers this
+    state = dev.wait("the mini console and its line in the UI",
+                     lambda s: s["status"].get("luaResult", "").startswith("refused")
+                     or "smoke window line" in (window_named(s, "smokechat", "miniConsole") or {}).get("rows", []), 30)
+    if state["status"].get("luaResult", "").startswith("refused"):
+        raise SmokeFailure(f"the engine refused the Geyser script: {state['status']['luaResult']}")
+    chat = window_named(state, "smokechat", "miniConsole")
+    if not chat["shown"]:
+        raise SmokeFailure(f"the mini console is hidden: {chat}")
+    ok(f"the UI has the mini console and its line: {chat}")
 
     step("kill the :engine process: the UI starts a new engine and attaches to it")
     dev.screenshot("before-kill.png")

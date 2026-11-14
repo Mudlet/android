@@ -12,9 +12,13 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QSocketNotifier>
 #include <QStandardPaths>
 
+#include <csignal>
 #include <ctime>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace {
 
@@ -25,6 +29,28 @@ qint64 bootTimeMs()
     clock_gettime(CLOCK_BOOTTIME, &ts);
     return qint64(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
 }
+
+#ifndef Q_OS_ANDROID
+int gTermPipe[2] = {-1, -1};
+
+// SIGTERM on the desktop ends the event loop, so the engine closes as on a quit: libmudlet's profile is saved
+void quitOnTerm(QCoreApplication& app)
+{
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, gTermPipe) != 0) {
+        return;
+    }
+    auto* notifier = new QSocketNotifier(gTermPipe[1], QSocketNotifier::Read, &app);
+    // Once: quit() ends every event loop, and the engine runs one of its own to save on the way out
+    QObject::connect(notifier, &QSocketNotifier::activated, &app, [notifier] {
+        notifier->setEnabled(false);
+        QCoreApplication::quit();
+    });
+    std::signal(SIGTERM, [](int) {
+        const char byte = 1;
+        [[maybe_unused]] const auto written = ::write(gTermPipe[0], &byte, 1);
+    });
+}
+#endif
 
 QString envOr(const char* name, const QString& fallback)
 {
@@ -92,5 +118,8 @@ int main(int argc, char* argv[])
         return 1;
     }
     qInfo("engine listening on %s", qPrintable(socketPath));
+#ifndef Q_OS_ANDROID
+    quitOnTerm(app);
+#endif
     return app.exec();
 }

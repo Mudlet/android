@@ -41,9 +41,13 @@ All three are fixed:
 C's engine process ran libmudlet in place of the stand-in. `MudletEngine` drives one
 `THeadlessSession` behind the same socket protocol.
 
+This run used a build that has since been replaced: the engine now builds from Mudlet's
+`development` with no patch, through `THeadlessSession`'s public API only, and the `deps/`
+scripts and patch below are gone. See "libmudlet as the engine" in [`REPORT.md`](REPORT.md).
+
 **Build:**
 - Mudlet: the tip of the libmudlet PR stack (Mudlet/Mudlet#12005, d2eb6cb2f4) plus
-  [`deps/mudlet-android.patch`](deps/mudlet-android.patch).
+  `deps/mudlet-android.patch` (since removed).
 - Steps:
   1. `deps/build-deps.sh`
   2. `MUDLET_SOURCE_DIR=... deps/build-mudlet.sh`

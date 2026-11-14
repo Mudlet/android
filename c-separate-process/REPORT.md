@@ -30,6 +30,7 @@ exact Qt version.
 | Check | Result |
 |-------|--------|
 | Engine desktop build and fake-server test | **pass** (rerun after the startup fixes). `tests/test_engine.py`: 0 failures (`tests/results-desktop.txt`). The JVM test of the app's Kotlin client against the same engine also passes (`tests/results-jvm.txt`). |
+| Real engine (libmudlet from Mudlet's `development`) on the host | **pass**. `tests/test_mudlet_engine.py` against the fake server; CI's libmudlet workflow runs it, and builds and checks the APK with this engine. See "libmudlet as the engine". |
 | APK builds (`assembleDebug`) | **yes** |
 | APK path | `/home/user/android-prototypes/c-separate-process/android/app/build/outputs/apk/debug/app-debug.apk` |
 | Clean build time | **1 min 27 s** wall time with Gradle dependencies cached: 20 s CMake configure plus native build (44 steps, `ninja -j2`) and aux-mode deploy, then 1 min 7 s Gradle. The machine was shared with two other agents' builds. The first build, which downloaded dependencies, took 4 min 58 s. An incremental Kotlin-only rebuild takes 33 s. |
@@ -138,7 +139,10 @@ UI to engine:
 
 Engine to UI:
 - `hello{v, pid, instance}`
-- `line{seq, text, runs:[[start,len,fg],...], prompt, replay?}`
+- `line{seq, text, runs, prompt, replay?}`: a finished line, which never changes
+- `tail{text, runs, prompt}`: the console's bottom line, which may still change or be ended;
+  empty text for none
+- `clear`: the console was emptied, so the UI drops its lines and the tail
 - `status{key, value, re?}`
 - `notify{title, text}`
 - `pong{id}`
@@ -146,12 +150,22 @@ Engine to UI:
 - `synced{seq}`
 - `error{message}`
 
+A run is `[start, length, fg]`, with `bg` and `attributes` after it only when it has them,
+and `link` after those only when it is part of one. Characters outside every run are in the
+default colours. A colour is -1 for the default, 0-15 for the ANSI palette (the stand-in), or
+`0x1000000 | 0xRRGGBB` for an exact colour (libmudlet). `attributes` is a bit set: bold 1,
+italic 2, underline 4, strike-out 8, reverse 16, overline 32, blink 64, fast blink 128,
+concealed 256. `link` is libmudlet's id of the link the run is part of, 0 for none; nothing
+can follow one yet.
+
 On hello the engine sends:
 1. its own `hello`
 2. every current status
-3. the ring buffer: the last 2000 lines, or only those after `lastSeq` when
-   `instance` matches
-4. `synced`
+3. `clear`, if the console was emptied since the UI's `lastSeq` (or ever, for a new UI)
+4. the ring buffer: the last 2000 lines, or only those after `lastSeq` when
+   `instance` matches, and none from before a clear
+5. the tail
+6. `synced`
 
 The engine never blocks on the UI:
 - When more than 4 MB is queued unsent, the UI is marked lagging. Lines keep
@@ -166,6 +180,88 @@ This matters on Android because the cached-app freezer can freeze a
 backgrounded UI process mid-read. Verified on the host:
 - With a stalled reader, the engine kept running at 42-60 MB RSS. When the
   reader resumed it received 1999 lines and one `gap`.
+
+## libmudlet as the engine
+Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`enginehost/MudletEngine.*`):
+one profile in a `THeadlessSession` behind the same socket protocol. It uses only that class's
+public API, from Mudlet's `development` with no patch: it includes no Mudlet header but
+`THeadlessSession.h` (which brings `TDebug.h` and `utils.h`) and sets none of Mudlet's
+defines. RESULTS.md has the emulator run of the earlier build, which read Mudlet's console model
+and needed a patch.
+
+**Build.** The same scripts as CI's libmudlet job:
+1. `scripts/build-mudlet-deps.sh <prefix>` builds the third-party libraries for Android.
+2. `scripts/build-libmudlet.sh <mudlet> <build> <prefix>` builds `mudlet_core`, `mudlet_headless`
+   and the runner, then writes `<build>/libmudlet.cmake`.
+3. `LIBMUDLET_BUILD_DIR=<build> ./build-apk.sh` builds the APK.
+
+Mudlet installs and exports nothing to link against. Everything `mudlet_headless` needs (the
+core, Lua, communi, the Lua C modules, QtKeychain, PCRE2 and the rest) appears only on the
+runner's link line. `scripts/export-libmudlet.py` reads that line from CMake's file API and
+writes it as the imported target `libmudlet::headless`. Its Qt libraries become `Qt6::` targets,
+so `androiddeployqt` deploys them and their plugins as usual. Upstream now covers what the old
+`deps/` scripts, the patch, `LuaModules.c` and the `mudlet-lua` assets did. On Android,
+`mudlet_core` carries Mudlet's Lua files and unpacks them into the app's cache. It also carries
+the seven Lua C modules (`USE_BUILTIN_MUDLET_LUA`, `USE_BUNDLED_LUA_MODULES`). QtKeychain
+keeps the profiles' passwords in the KeyStore.
+
+**What the engine maps:**
+
+| THeadlessSession | Socket protocol |
+|---|---|
+| `lineShown`: each line once its triggers ran, gagged ones left out | `line`. The last one is held as the `tail` until the next line or text that does not continue it, so an `echo()` after `deleteLine()` or a command typed at a prompt (`continuesLine`) still lands on its end |
+| `localTextStyled`: `echo()`, Mudlet's messages, the command echo | `line` for each piece a line feed ends, `tail` for the rest. The line feed it repeats after `lineShown` ended its line is dropped, as `docs/headless.md` says |
+| `mainConsoleCleared` | `clear`. The ring is emptied, and a UI that attaches later is sent `clear` too |
+| `notificationRequested` (`showNotification()`) | `notify`, posted by the engine process as the stand-in's are |
+| `connecting`, `connected`, `disconnected` | status `connection` |
+| `outputLine`, `localTextStyled`, `errorConsoleText` | counters, and status `luaError` |
+| `profileLoaded`, `startFinished` | status `profile`, `profileLoadMs`, `startMs` |
+
+The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
+
+**Lifecycle.**
+- The first `connect` or `runLua` calls `startAsync()` with `Options::configDir` set to
+  `<files>/mudlet` (`MUDLET_CONFIG_DIR` overrides it on the desktop).
+- Requests that arrive during the start are queued, and run once `startFinished` reports
+  `started`.
+- `start()` can create a profile only from a game's address, so Lua sent before the first
+  connect of a new profile gets `no profile`.
+- When the engine quits, it calls `shutdownAsync(true)` and waits up to 5 s for the profile's
+  sysExitEvent and save.
+- On the desktop, SIGTERM quits the engine the same way.
+- On Android this depends on QtServiceBase ending the event loop when the service is destroyed.
+  That has not been tried on a device.
+
+**Tests.** `tests/test_mudlet_engine.py` runs the host build of this engine against
+`tests/fake_telnet.py` through the socket protocol. CI builds libmudlet for the host with the
+Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
+- the banner's colours and styles, and the prompt as the tail;
+- a prompt from a game that has sent no GA, as the tail after 300 ms of quiet; after a GA, an
+  unfinished line held back until its line feed;
+- a gag, a trigger's `echo()`, and an `echo()` after `deleteLine()`;
+- `showNotification()`, `echo()` and `cecho()`;
+- `clearWindow()`, and the replay after a clear;
+- a 3000-line flood that arrives whole and in order;
+- Lua errors;
+- the profile's save on quit.
+
+**Gaps:**
+- Game text that no line feed or GA has ended shows as in Mudlet's desktop GUI. While the game
+  has sent no GA, Mudlet ends the line after the profile's network packet timeout (300 ms by
+  default) of quiet, and `lineShown` sends it, not as a prompt, so a `Login: ` prompt shows.
+  Once the game has sent a GA, an unfinished line shows only when it ends.
+- A change to a line already sent isn't sent again (`lineShown` sends each line once). That
+  needs new `THeadlessSession` API; a Mudlet PR for it is being prepared.
+- Links are marked by id, but the UI can't follow them yet (`link()`, `followLink()`,
+  `linksChanged`).
+- The main window's size (`setScreenSize()`) is not passed on, so the game is told 90 by 25 if
+  it asks.
+- No profile restart after the engine is killed, no bundled fonts, no TLS (the APK ships no
+  OpenSSL).
+- On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
+  (`engine/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
+  `luaL_openlibs`. Mudlet does not do this yet; a separate change carries it in this
+  repository's libmudlet build. Neither CI job runs the engine on Android.
 
 ## Qt internals relied on
 - **`org.qtproject.qt.android.QtServiceBase`** (from `Qt6Android.jar`).
@@ -378,7 +474,7 @@ Extraction matters only for a Lua C module that `require()` is to find on `packa
 file inside the APK, so such a module loads only when extracted. With Mudlet/Mudlet#12909, Mudlet
 then puts `<nativeLibraryDir>/lib?.so` on `package.cpath`. A module the app hands to
 `THeadlessSession::preloadLuaModule()` needs no extraction, and neither do Mudlet's own C modules
-(lfs, lpeg, rex_pcre2 and the rest), which are linked into the engine and preloaded.
+(lfs, lpeg, rex_pcre2 and the rest), which `mudlet_core` carries on Android and preloads.
 
 What extraction costs, measured on CI's debug APK of C with the stand-in engine (Prototype APKs
 run 43482451881, commit 0dd127f). The "extracted" column is a repack of that APK with the same 16

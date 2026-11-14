@@ -1,30 +1,78 @@
 #include "MudletEngine.h"
 
-#include "Host.h"
-#include "TBuffer.h"
-#include "TConsoleModel.h"
 #include "THeadlessSession.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QDirIterator>
-#include <QFile>
+#include <QEventLoop>
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QStandardPaths>
 
-// A Qt resource collection in a static library reaches the binary only if something names it
-extern void qInitResources_mudlet();
-extern void qInitResources_qm();
-
 namespace {
+
+using TextRun = THeadlessSession::TextRun;
+using TextStyle = THeadlessSession::TextStyle;
 
 QString luaLongString(const QString& text)
 {
     return QStringLiteral("[==[%1]==]").arg(text);
+}
+
+int colourCode(const QColor& colour, bool profileDefault)
+{
+    return profileDefault || !colour.isValid() ? -1 : int(ColorRun::rgbFlag | (colour.rgb() & 0xFFFFFF));
+}
+
+int attributeBits(THeadlessSession::TextStyles styles)
+{
+    static constexpr std::pair<TextStyle, int> bits[] = {
+            {TextStyle::Bold, ColorRun::bold},           {TextStyle::Italic, ColorRun::italic},
+            {TextStyle::Underline, ColorRun::underline}, {TextStyle::StrikeOut, ColorRun::strikeOut},
+            {TextStyle::Reverse, ColorRun::reverse},     {TextStyle::Overline, ColorRun::overline},
+            {TextStyle::Blink, ColorRun::blink},         {TextStyle::FastBlink, ColorRun::fastBlink},
+            {TextStyle::Concealed, ColorRun::concealed},
+    };
+    int attributes = 0;
+    for (const auto& [style, bit] : bits) {
+        if (styles.testFlag(style)) {
+            attributes |= bit;
+        }
+    }
+    return attributes;
+}
+
+// Runs that are the profile's own colours with no style or link are left out, as the stand-in leaves them
+QList<ColorRun> colorRuns(const QList<TextRun>& runs)
+{
+    QList<ColorRun> out;
+    for (const TextRun& run : runs) {
+        const ColorRun converted{run.start, run.length, colourCode(run.foreground, run.defaultForeground),
+                                 colourCode(run.background, run.defaultBackground), attributeBits(run.styles), run.link};
+        if (converted.length > 0 && (converted.fg != -1 || converted.bg != -1 || converted.attributes != 0 || converted.link != 0)) {
+            out.append(converted);
+        }
+    }
+    return out;
+}
+
+// The runs over [from, to) of a text, counted from from
+QList<ColorRun> sliceRuns(const QList<ColorRun>& runs, int from, int to)
+{
+    QList<ColorRun> out;
+    for (ColorRun run : runs) {
+        const int start = std::max(run.start, from);
+        const int end = std::min(run.start + run.length, to);
+        if (start < end) {
+            run.start = start - from;
+            run.length = end - start;
+            out.append(run);
+        }
+    }
+    return out;
 }
 
 } // namespace
@@ -34,19 +82,26 @@ MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent
 , mFrontend(frontend)
 , mProfile(qEnvironmentVariable("MUDLET_PROFILE", QStringLiteral("Android")))
 {
-    // As the GUI's, so profiles and settings land where Mudlet looks for them
+    // As the GUI's, as the session reads Mudlet.ini and the keychain under them
     QCoreApplication::setOrganizationName(QStringLiteral("Mudlet"));
     QCoreApplication::setApplicationName(QStringLiteral("Mudlet"));
-    qInitResources_mudlet();
-    qInitResources_qm();
+    // The profiles, Mudlet.ini and the passwords Mudlet does not give the KeyStore, in the app's own files
+    mConfigDir = qEnvironmentVariable("MUDLET_CONFIG_DIR");
+    if (mConfigDir.isEmpty()) {
+        mConfigDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/mudlet");
+    }
+    mConfigDir = QDir(mConfigDir).absolutePath();
+
+    mSession = std::make_unique<THeadlessSession>();
+    connectSession();
 
     mCounterTimer.setSingleShot(true);
     mCounterTimer.setInterval(100);
     connect(&mCounterTimer, &QTimer::timeout, this, &MudletEngine::flushCounters);
 
-    installLuaFiles();
     reportFont();
     mFrontend->status(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
+    mFrontend->status(QStringLiteral("configDir"), mConfigDir);
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 (not started)").arg(mProfile));
     mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
 
@@ -58,51 +113,88 @@ MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent
 
 MudletEngine::~MudletEngine()
 {
-    if (mSession) {
-        mSession->shutdown(true);
-        delete mSession;
+    if (mState == State::started) {
+        shutdownSession();
     }
+    // Nothing the session sends as it goes may reach the members already destroyed
+    QObject::disconnect(mSession.get(), nullptr, this, nullptr);
+    mSession.reset();
 }
 
-// Mudlet reads its Lua from a directory; on Android the files ship as assets, which Qt lists under assets:/
-void MudletEngine::installLuaFiles()
+// The profile gets its sysExitEvent and its save, waited for a few seconds at most, as the process is ending
+void MudletEngine::shutdownSession()
 {
-#ifdef Q_OS_ANDROID
-    QElapsedTimer clock;
-    clock.start();
-    const QString target = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/mudlet-lua");
-    QFile stampAsset(QStringLiteral("assets:/mudlet-lua/stamp"));
-    QFile stampCopy(target + QStringLiteral("/stamp"));
-    const QByteArray wanted = stampAsset.open(QIODevice::ReadOnly) ? stampAsset.readAll() : QByteArray();
-    const QByteArray have = stampCopy.open(QIODevice::ReadOnly) ? stampCopy.readAll() : QByteArray();
-    stampCopy.close();
-    if (wanted.isEmpty()) {
-        mFrontend->status(QStringLiteral("luaFiles"), QStringLiteral("no assets:/mudlet-lua/stamp"));
-        return;
-    }
-    if (wanted == have) {
-        mFrontend->status(QStringLiteral("luaFiles"), QStringLiteral("up to date"));
-        return;
-    }
-    QDir(target).removeRecursively();
-    int copied = 0;
-    QDirIterator it(QStringLiteral("assets:/mudlet-lua"), QDir::Files, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString source = it.next();
-        const QString destination = target + source.mid(int(qstrlen("assets:/mudlet-lua")));
-        QDir().mkpath(QFileInfo(destination).absolutePath());
-        // The stamp last, so an interrupted copy is redone
-        if (!source.endsWith(QStringLiteral("/stamp")) && QFile::copy(source, destination)) {
-            QFile::setPermissions(destination, QFile::ReadOwner | QFile::WriteOwner);
-            ++copied;
+    QEventLoop loop;
+    QObject::connect(mSession.get(), &THeadlessSession::shutdownFinished, &loop, [&loop](bool succeeded, const QString& error) {
+        if (!succeeded) {
+            qWarning("MudletEngine: the profile was not saved at exit: %s", qPrintable(error));
         }
-    }
-    QFile stampOut(target + QStringLiteral("/stamp"));
-    if (stampOut.open(QIODevice::WriteOnly)) {
-        stampOut.write(wanted);
-    }
-    mFrontend->status(QStringLiteral("luaFiles"), QStringLiteral("copied %1 in %2 ms").arg(copied).arg(clock.elapsed()));
-#endif
+        loop.quit();
+    });
+    QTimer::singleShot(5000, &loop, [&loop] {
+        qWarning("MudletEngine: the profile's save at exit did not finish in 5 s");
+        loop.quit();
+    });
+    mSession->shutdownAsync(true);
+    loop.exec();
+}
+
+// What the lines, mid-write signals among them, do here only touches the frontend: they must not call the session
+void MudletEngine::connectSession()
+{
+    THeadlessSession* session = mSession.get();
+    connect(session, &THeadlessSession::startFinished, this, [this](THeadlessSession::StartResult result, const QString& error) {
+        onStartFinished(int(result), error);
+    });
+    // Counted only: what the UI shows comes from lineShown, once the line's triggers have run
+    connect(session, &THeadlessSession::outputLine, this, [this](const QString&, const QString&, bool isPrompt) {
+        ++(isPrompt ? mPromptsReceived : mLinesReceived);
+        markCountersDirty();
+    });
+    connect(session, &THeadlessSession::lineShown, this,
+            [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64, bool continuesLine) {
+                onLineShown(text, isPrompt, colorRuns(runs), continuesLine);
+            });
+    connect(session, &THeadlessSession::localTextStyled, this, [this](const QString&, const QString& text, const QList<TextRun>& runs, bool continuesLine) {
+        mLocalLines += text.count(QLatin1Char('\n'));
+        markCountersDirty();
+        onLocalText(text, colorRuns(runs), continuesLine);
+    });
+    connect(session, &THeadlessSession::mainConsoleCleared, this, &MudletEngine::onMainConsoleCleared);
+    connect(session, &THeadlessSession::errorConsoleText, this, [this](const QString&, const QString& text) {
+        mErrorPending += text;
+        qsizetype end;
+        while ((end = mErrorPending.indexOf(QLatin1Char('\n'))) >= 0) {
+            const QString line = mErrorPending.left(end);
+            mErrorPending.remove(0, end + 1);
+            if (!line.trimmed().isEmpty()) {
+                ++mErrorLines;
+                markCountersDirty();
+                qWarning("mudlet error console: %s", qPrintable(line));
+                mFrontend->status(QStringLiteral("luaError"), line);
+            }
+        }
+    });
+    connect(session, &THeadlessSession::notificationRequested, this, [this](const QString&, const QString& title, const QString& text) {
+        mFrontend->notify(title, text);
+    });
+    connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
+        mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
+        mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
+    });
+    connect(session, &THeadlessSession::connecting, this, [this] {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting"));
+    });
+    connect(session, &THeadlessSession::connected, this, [this] {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
+    });
+    connect(session, &THeadlessSession::disconnected, this, [this] {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
+    });
+    connect(session, &THeadlessSession::quitRequested, this, [this] {
+        mState = State::idle;
+        mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));
+    });
 }
 
 void MudletEngine::reportFont()
@@ -115,223 +207,65 @@ void MudletEngine::reportFont()
     mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
-bool MudletEngine::ensureStarted(const QString& host, quint16 port, bool connect)
+void MudletEngine::start(const QString& host, quint16 port, bool connect)
 {
-    if (mStarted) {
-        return true;
-    }
-    if (!mSession) {
-        mSession = new THeadlessSession(this);
-        // Counted only: what the UI shows comes from the console model once triggers have had their go
-        QObject::connect(mSession, &THeadlessSession::outputLine, this, [this](const QString&, const QString&, bool isPrompt) {
-            ++(isPrompt ? mPromptsReceived : mLinesReceived);
-            markCountersDirty();
-        });
-        QObject::connect(mSession, &THeadlessSession::localText, this, [this](const QString&, const QString& text) {
-            mLocalLines += text.count(QLatin1Char('\n'));
-            markCountersDirty();
-        });
-        QObject::connect(mSession, &THeadlessSession::errorConsoleText, this, [this](const QString&, const QString& text) {
-            mErrorPending += text;
-            qsizetype end;
-            while ((end = mErrorPending.indexOf(QLatin1Char('\n'))) >= 0) {
-                const QString line = mErrorPending.left(end);
-                mErrorPending.remove(0, end + 1);
-                if (!line.trimmed().isEmpty()) {
-                    ++mErrorLines;
-                    markCountersDirty();
-                    qWarning("mudlet error console: %s", qPrintable(line));
-                    mFrontend->status(QStringLiteral("luaError"), line);
-                }
-            }
-        });
-        QObject::connect(mSession, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
-            mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
-            mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
-        });
-        QObject::connect(mSession, &THeadlessSession::connected, this, [this] {
-            mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
-        });
-        QObject::connect(mSession, &THeadlessSession::disconnected, this, [this] {
-            mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
-        });
-        QObject::connect(mSession, &THeadlessSession::quitRequested, this, [this] {
-            mStarted = false;
-            mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));
-        });
-    }
     THeadlessSession::Options options;
     options.profile = mProfile;
     options.connect = connect;
     options.host = host;
     options.port = port;
+    options.configDir = mConfigDir;
+    mState = State::starting;
+    mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
-    const auto result = mSession->start(options);
+    mSession->startAsync(options);
+}
+
+void MudletEngine::onStartFinished(int result, const QString& error)
+{
     mFrontend->status(QStringLiteral("startMs"), QString::number(mStartClock.elapsed()));
-    if (result != THeadlessSession::StartResult::started) {
-        mFrontend->status(QStringLiteral("profile"), QStringLiteral("start failed (%1): %2").arg(int(result)).arg(mSession->errorString()));
-        return false;
-    }
-    mStarted = true;
-    watchConsole();
-    return true;
-}
-
-void MudletEngine::watchConsole()
-{
-    Host* host = mSession->host();
-    if (!host) {
+    const QStringList pending = std::exchange(mPendingLua, {});
+    if (THeadlessSession::StartResult(result) != THeadlessSession::StartResult::started) {
+        mState = State::idle;
+        mFrontend->status(QStringLiteral("profile"), QStringLiteral("start failed (%1): %2").arg(result).arg(error));
+        if (!pending.isEmpty()) {
+            mFrontend->status(QStringLiteral("luaResult"), QStringLiteral("no profile"));
+        }
         return;
     }
-    mSentLines = 0;
-    TConsoleModelNotifier& notifier = host->mainConsoleModel().mNotifier;
-    // Most of these fire mid-write or mid-trigger-pass; the sync waits for the event loop, when the line's
-    // triggers have run
-    for (auto signal : {&TConsoleModelNotifier::lineCommitted, &TConsoleModelNotifier::linesAppended}) {
-        QObject::connect(&notifier, signal, this, &MudletEngine::scheduleSync);
-    }
-    for (auto signal : {&TConsoleModelNotifier::newLinesWritten, &TConsoleModelNotifier::serverWrapLineHeld}) {
-        QObject::connect(&notifier, signal, this, &MudletEngine::scheduleSync);
-    }
-    QObject::connect(&notifier, &TConsoleModelNotifier::linesChanged, this, &MudletEngine::scheduleSync);
-    QObject::connect(&notifier, &TConsoleModelNotifier::textPrinted, this, &MudletEngine::scheduleSync);
-    QObject::connect(&notifier, &TConsoleModelNotifier::bufferCleared, this, [this] {
-        mSentLines = 0;
-        scheduleSync();
-    });
-    QObject::connect(&notifier, &TConsoleModelNotifier::linesRemoved, this, [this](int first, int last) {
-        if (last < mSentLines) {
-            mSentLines -= last - first + 1;
-        } else if (first < mSentLines) {
-            mSentLines = first;
-        }
-        scheduleSync();
-    });
-    scheduleSync();
-}
-
-void MudletEngine::scheduleSync()
-{
-    if (mSyncPending) {
-        return;
-    }
-    mSyncPending = true;
-    QTimer::singleShot(0, this, &MudletEngine::syncConsole);
-}
-
-namespace {
-
-int colourCode(QRgb colour, QRgb defaultColour)
-{
-    return (colour & RGB_MASK) == (defaultColour & RGB_MASK) ? -1 : int(ColorRun::rgbFlag | (colour & RGB_MASK));
-}
-
-int attributeBits(const TChar& c)
-{
-    return (c.isBold() ? ColorRun::bold : 0) | (c.isItalic() ? ColorRun::italic : 0) | (c.isUnderlined() ? ColorRun::underline : 0)
-         | (c.isStruckOut() ? ColorRun::strikeOut : 0) | (c.isReversed() ? ColorRun::reverse : 0);
-}
-
-// One logical line: buffer lines first..last, the ones after the first split off it by word wrapping
-void appendLogicalLine(const TBuffer& buffer, int first, int last, QRgb fg, QRgb bg, QString& text, QList<ColorRun>& runs)
-{
-    auto addChar = [&](QChar ch, int cFg, int cBg, int cAttributes) {
-        const int at = int(text.size());
-        text.append(ch);
-        if (!runs.isEmpty()) {
-            ColorRun& run = runs.last();
-            if (run.fg == cFg && run.bg == cBg && run.attributes == cAttributes && run.start + run.length == at) {
-                ++run.length;
-                return;
-            }
-        }
-        if (cFg != -1 || cBg != -1 || cAttributes != 0) {
-            runs.append(ColorRun{at, 1, cFg, cBg, cAttributes});
-        }
-    };
-    for (int y = first; y <= last; ++y) {
-        const QString& lineText = buffer.lineBuffer.at(y);
-        const auto& chars = buffer.buffer.at(y);
-        int from = 0;
-        if (y > first) {
-            for (int gap = buffer.wrapGapBefore(y); gap > 0; --gap) {
-                addChar(QLatin1Char(' '), -1, -1, 0);
-            }
-            from = std::min(int(lineText.size()), buffer.wrapIndentWidth(y));
-        }
-        for (int x = from; x < lineText.size(); ++x) {
-            if (x < int(chars.size())) {
-                const TChar& c = chars.at(x);
-                addChar(lineText.at(x), colourCode(c.foregroundRgba(), fg), colourCode(c.backgroundRgba(), bg), attributeBits(c));
-            } else {
-                addChar(lineText.at(x), -1, -1, 0);
-            }
-        }
+    mState = State::started;
+    for (const QString& code : pending) {
+        runNow(code);
     }
 }
 
-} // namespace
-
-// Sends the main console's finished lines as they stand after their triggers ran, gagged ones gone, and the
-// open line at the bottom as the tail
-void MudletEngine::syncConsole()
+void MudletEngine::runNow(const QString& code)
 {
-    mSyncPending = false;
-    Host* host = mSession ? mSession->host() : nullptr;
-    if (!host) {
-        return;
-    }
-    const TBuffer& buffer = host->mainConsoleModel().buffer;
-    const QRgb fg = host->mFgColor.rgba();
-    const QRgb bg = host->mBgColor.rgba();
-    const int size = int(buffer.lineBuffer.size());
-    mSentLines = std::clamp(mSentLines, 0, size);
-    int y = mSentLines;
-    while (y < size) {
-        int last = y;
-        while (last + 1 < size && buffer.wrapsFromPreviousLine(last + 1)) {
-            ++last;
-        }
-        QString text;
-        QList<ColorRun> runs;
-        appendLogicalLine(buffer, y, last, fg, bg, text, runs);
-        const bool prompt = buffer.promptBuffer.at(last);
-        if (last == size - 1) {
-            if (text != mTailText || runs != mTailRuns || prompt != mTailPrompt) {
-                mTailText = text;
-                mTailRuns = runs;
-                mTailPrompt = prompt;
-                mFrontend->tail(text, runs, prompt);
-            }
-            break;
-        }
-        mFrontend->line(text, runs, prompt);
-        y = last + 1;
-    }
-    mSentLines = y;
-    if (y >= size && !mTailText.isEmpty()) {
-        mTailText.clear();
-        mTailRuns.clear();
-        mTailPrompt = false;
-        mFrontend->tail({}, {}, false);
-    }
+    const bool ok = mSession->runLua(code);
+    mFrontend->status(QStringLiteral("luaResult"), ok ? QStringLiteral("ran") : QStringLiteral("refused: %1").arg(mSession->errorString()));
 }
 
 void MudletEngine::connectTo(const QString& host, quint16 port)
 {
-    mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting %1:%2").arg(host).arg(port));
-    if (!mStarted) {
-        ensureStarted(host, port, true);
+    const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
+    switch (mState) {
+    case State::idle:
+        start(host, port, true);
         return;
-    }
-    if (!mSession->runLua(QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port))) {
-        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
+    case State::starting:
+        mPendingLua.append(code);
+        return;
+    case State::started:
+        if (!mSession->runLua(code)) {
+            mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
+        }
+        return;
     }
 }
 
 void MudletEngine::send(const QString& line)
 {
-    if (!mStarted) {
+    if (mState != State::started) {
         mFrontend->status(QStringLiteral("sendError"), QStringLiteral("no profile running"));
         return;
     }
@@ -342,19 +276,25 @@ void MudletEngine::send(const QString& line)
 
 void MudletEngine::disconnectFromGame()
 {
-    if (mStarted) {
-        mSession->runLua(QStringLiteral("disconnect()"));
+    if (mState == State::started && !mSession->runLua(QStringLiteral("disconnect()"))) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
     }
 }
 
 void MudletEngine::runLua(const QString& code)
 {
-    if (!ensureStarted({}, 0, false)) {
-        mFrontend->status(QStringLiteral("luaResult"), QStringLiteral("no profile"));
+    switch (mState) {
+    case State::idle:
+        mPendingLua.append(code);
+        start({}, 0, false);
+        return;
+    case State::starting:
+        mPendingLua.append(code);
+        return;
+    case State::started:
+        runNow(code);
         return;
     }
-    const bool ok = mSession->runLua(code);
-    mFrontend->status(QStringLiteral("luaResult"), ok ? QStringLiteral("ran") : QStringLiteral("refused: %1").arg(mSession->errorString()));
 }
 
 void MudletEngine::setViewWidthPx(int px)
@@ -362,6 +302,119 @@ void MudletEngine::setViewWidthPx(int px)
     const int columns = mAdvancePx > 0 ? px / mAdvancePx : 0;
     mFrontend->status(QStringLiteral("viewWidthPx"), QString::number(px));
     mFrontend->status(QStringLiteral("columns"), QString::number(columns));
+}
+
+// A line as the main console shows it once its triggers ran. It stays open, as the tail, until the next line or
+// piece of text that does not continue it, so that one that does can still be put on its end.
+void MudletEngine::onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine)
+{
+    if (continuesLine && mOpen.kind != OpenLine::Kind::none) {
+        appendToOpen(text, runs);
+        mOpen.kind = OpenLine::Kind::shown;
+        mOpen.prompt = mOpen.prompt || isPrompt;
+    } else {
+        if (mOpen.kind == OpenLine::Kind::local) {
+            mDropLineFeed = true;
+        }
+        commitOpen();
+        mOpen = {OpenLine::Kind::shown, text, runs, isPrompt};
+    }
+    commitCompleteLines(OpenLine::Kind::shown);
+    scheduleTailSync();
+}
+
+// Text written to the main console that the game did not send, in pieces that need not end a line
+void MudletEngine::onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine)
+{
+    QString piece = text;
+    QList<ColorRun> pieceRuns = runs;
+    if (std::exchange(mDropLineFeed, false) && piece.startsWith(QLatin1Char('\n'))) {
+        piece.remove(0, 1);
+        pieceRuns = sliceRuns(pieceRuns, 1, int(text.size()));
+    }
+    if (piece.isEmpty()) {
+        return;
+    }
+    if (mOpen.kind == OpenLine::Kind::local || (continuesLine && mOpen.kind != OpenLine::Kind::none)) {
+        appendToOpen(piece, pieceRuns);
+    } else {
+        commitOpen();
+        mOpen = {OpenLine::Kind::local, piece, pieceRuns, false};
+    }
+    commitCompleteLines(OpenLine::Kind::local);
+    scheduleTailSync();
+}
+
+void MudletEngine::onMainConsoleCleared()
+{
+    mOpen = {};
+    mDropLineFeed = false;
+    mSentTail = {};
+    mFrontend->cleared();
+}
+
+void MudletEngine::appendToOpen(const QString& text, const QList<ColorRun>& runs)
+{
+    const int offset = int(mOpen.text.size());
+    mOpen.text.append(text);
+    for (ColorRun run : runs) {
+        run.start += offset;
+        mOpen.runs.append(run);
+    }
+}
+
+// Sends each line the open text's line feeds end. What follows the last one stays open: the rest of a line lineShown
+// sent whole, which may be empty, or the start of a line localText has yet to end.
+void MudletEngine::commitCompleteLines(OpenLine::Kind remainder)
+{
+    qsizetype end;
+    while ((end = mOpen.text.indexOf(QLatin1Char('\n'))) >= 0) {
+        const int size = int(mOpen.text.size());
+        mFrontend->line(mOpen.text.left(end), sliceRuns(mOpen.runs, 0, int(end)), mOpen.prompt && remainder == OpenLine::Kind::local);
+        mOpen.runs = sliceRuns(mOpen.runs, int(end) + 1, size);
+        mOpen.text.remove(0, end + 1);
+        if (remainder == OpenLine::Kind::local) {
+            mOpen.kind = OpenLine::Kind::local;
+            mOpen.prompt = false;
+        }
+    }
+    if (remainder == OpenLine::Kind::local && mOpen.text.isEmpty()) {
+        mOpen = {};
+    }
+}
+
+void MudletEngine::commitOpen()
+{
+    if (mOpen.kind == OpenLine::Kind::none) {
+        return;
+    }
+    mFrontend->line(mOpen.text, mOpen.runs, mOpen.prompt);
+    mOpen = {};
+    // The UI would otherwise show the line twice until the tail is next synced
+    if (!mSentTail.text.isEmpty()) {
+        mSentTail = {};
+        mFrontend->tail({}, {}, false);
+    }
+}
+
+// Once a turn, so that a flood of lines sends only those lines and one tail
+void MudletEngine::scheduleTailSync()
+{
+    if (mTailSyncPending) {
+        return;
+    }
+    mTailSyncPending = true;
+    QTimer::singleShot(0, this, &MudletEngine::syncTail);
+}
+
+void MudletEngine::syncTail()
+{
+    mTailSyncPending = false;
+    if (mOpen.text == mSentTail.text && mOpen.runs == mSentTail.runs && mOpen.prompt == mSentTail.prompt) {
+        return;
+    }
+    mSentTail = mOpen;
+    mFrontend->tail(mSentTail.text, mSentTail.runs, mSentTail.prompt);
 }
 
 void MudletEngine::markCountersDirty()

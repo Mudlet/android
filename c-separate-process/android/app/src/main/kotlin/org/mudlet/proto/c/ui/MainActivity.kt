@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.proto.c.engine.EngineService
 import org.mudlet.proto.c.protocol.RUN_BOLD
+import org.mudlet.proto.c.protocol.RUN_CONCEALED
 import org.mudlet.proto.c.protocol.RUN_ITALIC
 import org.mudlet.proto.c.protocol.RUN_REVERSE
 import org.mudlet.proto.c.protocol.RUN_RGB
@@ -122,6 +123,7 @@ private fun render(line: UiLine): AnnotatedString = buildAnnotatedString {
             bg = fg
             fg = swapped
         }
+        if (attributes and RUN_CONCEALED != 0) fg = bg ?: Color.Transparent
         val decorations = listOfNotNull(
             TextDecoration.Underline.takeIf { attributes and RUN_UNDERLINE != 0 },
             TextDecoration.LineThrough.takeIf { attributes and RUN_STRIKE != 0 },

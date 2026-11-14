@@ -10,12 +10,11 @@ export ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/28.2.13676358
 export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}
 build="$here/build-android-$abi"
 deploy="$here/android/qtdeploy"
-# With MUDLET_SOURCE_DIR and MUDLET_BUILD_DIR (see deps/build-mudlet.sh) the engine is libmudlet
+# With LIBMUDLET_BUILD_DIR, a Mudlet build tree from scripts/build-libmudlet.sh, the engine is libmudlet
 mudlet_args=()
-if [ -n "${MUDLET_BUILD_DIR:-}" ]; then
+if [ -n "${LIBMUDLET_BUILD_DIR:-}" ]; then
     build="$build-mudlet"
-    mudlet_args=(-DMUDLET_SOURCE_DIR="$MUDLET_SOURCE_DIR" -DMUDLET_BUILD_DIR="$MUDLET_BUILD_DIR"
-        -DMUDLET_DEPS_PREFIX="${MUDLET_DEPS_PREFIX:-$here/build-deps-$abi/prefix}")
+    mudlet_args=(-DLIBMUDLET_BUILD_DIR="$(realpath "$LIBMUDLET_BUILD_DIR")")
 fi
 
 if [ ! -f "$build/build.ninja" ]; then
@@ -31,14 +30,6 @@ cp "$build/enginehost/libengine_$abi.so" "$deploy/libs/$abi/"
     --output "$deploy" --aux-mode --android-platform android-36 2>&1 | { grep -v -i locale || true; }
 # aux mode also writes a Gradle project and manifest template we do not use
 rm -f "$deploy/build.gradle" "$deploy/settings.gradle" "$deploy/AndroidManifest.xml"
-if [ -n "${MUDLET_BUILD_DIR:-}" ]; then
-    # Mudlet loads its Lua from a directory; the engine copies these out when the stamp changes
-    mkdir -p "$deploy/assets/mudlet-lua"
-    cp -r "$MUDLET_SOURCE_DIR/src/mudlet-lua/lua" "$deploy/assets/mudlet-lua/"
-    # Where installers put them, beside the Lua that loads them (loadTranslations() in Other.lua)
-    cp -r "$MUDLET_SOURCE_DIR/translations/lua" "$deploy/assets/mudlet-lua/lua/translations"
-    (cd "$deploy/assets/mudlet-lua" && find lua -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16 > stamp)
-fi
 
 cd "$here/android"
 gradle --no-daemon -Dorg.gradle.workers.max=2 -PandroidAbi="$abi" -PqtRoot="$qt" :app:assembleDebug "$@"

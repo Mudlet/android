@@ -37,8 +37,7 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
     QJsonParseError error{};
     const QJsonObject json = QJsonDocument::fromJson(file.readAll(), &error).object();
     if (error.error != QJsonParseError::NoError || json.value(QLatin1String("v")).toInt() != fileVersion) {
-        qWarning("SessionStore: ignoring %s: %s", qPrintable(mPath),
-                 error.error != QJsonParseError::NoError ? qPrintable(error.errorString()) : "an unknown version");
+        qWarning("SessionStore: ignoring %s: %s", qPrintable(mPath), error.error != QJsonParseError::NoError ? qPrintable(error.errorString()) : "an unknown version");
         return {};
     }
     for (const QJsonValue& at : json.value(QLatin1String("restores")).toArray()) {
@@ -49,8 +48,10 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
     }
     Restore restore;
     const QJsonValue tls = json.value(QLatin1String("tls"));
-    restore.session = {json.value(QLatin1String("profile")).toString(), json.value(QLatin1String("host")).toString(),
-                       json.value(QLatin1String("port")).toInt(), json.value(QLatin1String("connect")).toBool(),
+    restore.session = {json.value(QLatin1String("profile")).toString(),
+                       json.value(QLatin1String("host")).toString(),
+                       json.value(QLatin1String("port")).toInt(),
+                       json.value(QLatin1String("connect")).toBool(),
                        tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt};
     if (restore.session.profile.isEmpty()) {
         return {};
@@ -83,9 +84,12 @@ void SessionStore::save(const Session& session)
     for (const qint64 ms : std::as_const(mRestores)) {
         restores.append(ms);
     }
-    QJsonObject json{{QStringLiteral("v"), fileVersion},          {QStringLiteral("profile"), session.profile},
-                     {QStringLiteral("host"), session.host},      {QStringLiteral("port"), session.port},
-                     {QStringLiteral("connect"), session.connect}, {QStringLiteral("restores"), restores}};
+    QJsonObject json{{QStringLiteral("v"), fileVersion},
+                     {QStringLiteral("profile"), session.profile},
+                     {QStringLiteral("host"), session.host},
+                     {QStringLiteral("port"), session.port},
+                     {QStringLiteral("connect"), session.connect},
+                     {QStringLiteral("restores"), restores}};
     if (session.tls.has_value()) {
         json.insert(QStringLiteral("tls"), *session.tls);
     }

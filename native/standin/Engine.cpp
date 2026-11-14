@@ -155,8 +155,7 @@ void Engine::runLua(const QString& code)
     const QByteArray chunk = code.toUtf8();
     const int top = lua_gettop(mLua);
     QString result;
-    if (luaL_loadbuffer(mLua, chunk.constData(), size_t(chunk.size()), "=runLua") != 0
-        || lua_pcall(mLua, 0, LUA_MULTRET, 0) != 0) {
+    if (luaL_loadbuffer(mLua, chunk.constData(), size_t(chunk.size()), "=runLua") != 0 || lua_pcall(mLua, 0, LUA_MULTRET, 0) != 0) {
         result = QStringLiteral("error: %1").arg(QString::fromUtf8(lua_tostring(mLua, -1)));
     } else {
         QStringList values;

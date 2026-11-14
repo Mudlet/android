@@ -89,6 +89,10 @@ cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
 cmake --build native/build-desktop-mudlet --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
+
+# The debug APK with libmudlet, built with ANDROID_ABI=x86_64, on a running emulator (adb on the PATH)
+python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
+    --symbols native/build-android-x86_64-mudlet/enginehost
 ```
 
 `gradle :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
@@ -125,16 +129,25 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
   - A second job builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
     fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`).
+  - A third job, **emulator**, builds the dependencies, libmudlet and the APK for x86_64 and runs it on an Android 15
+    emulator (KVM, [android-emulator-runner](https://github.com/ReactiveCircus/android-emulator-runner) at a pinned
+    commit) with [`native/tests/android_smoke.py`](native/tests/android_smoke.py): the engine service in the
+    foreground in `:engine` with Qt up, a profile on the fake game server (so Mudlet's Lua runs), coloured lines in
+    the UI, a Lua trigger and its notification, and the UI attaching to a new engine after `:engine` is killed. It
+    uploads logcat, screenshots and the UI's state, and gives the steps in the job summary. It is the only job that
+    runs the engine on Android, so the only one that catches a crash there; a manual run with `lua_fortify_fix`
+    off shows it failing on the FORTIFY abort in `luaL_openlibs`.
   - It fails if the libraries use desktop-only APIs or carry the build-type splash screen images, if Lua 5.1's
     collector (`lgc.c`) references a fortified function such as `__strchr_chk` (as the call that aborts does), if the
-    runner lacks Mudlet's built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
-    KeyStore), or if the engine does not build, link or pass its test.
+    runner lacks Mudlet's built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles'
+    passwords in the KeyStore), if the engine does not build, link or pass its test, or if the emulator smoke test
+    fails.
   - It also runs every night, so a change on Mudlet's side that breaks the Android build shows up; a nightly that
     fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without activity in
     this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's side too.
 
 Both install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt through a pinned
-aqtinstall). Qt, the NDK, the dependencies, Gradle and ccache are cached between runs.
+aqtinstall). Qt, the NDK, the dependencies, Gradle, ccache and the emulator's system image are cached between runs.
 
 ## Licences
 

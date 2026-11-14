@@ -170,6 +170,17 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - Lua errors;
 - the profile's save on quit.
 
+`native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
+(CI's emulator job) or a device, from the host through adb. It drives the UI through a debug-only hook,
+`SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may call), and checks:
+- that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
+- that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
+  (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;
+- that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
+- that after `:engine` is killed, the UI starts a new engine and attaches to it.
+
+If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
+
 **Gaps:**
 - Game text that no line feed or go-ahead has ended, such as a prompt without GA, is not shown
   until the line ends. `lineShown` sends only finished lines, and `THeadlessSession` has no
@@ -182,8 +193,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   OpenSSL).
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
-  `luaL_openlibs`. Mudlet does not do this yet; a separate change carries it in this
-  repository's libmudlet build. Neither CI job runs the engine on Android.
+  `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
+  repository's libmudlet build, and CI's emulator smoke test fails without it.
 
 ## Qt internals relied on
 - **`org.qtproject.qt.android.QtServiceBase`** (from `Qt6Android.jar`).

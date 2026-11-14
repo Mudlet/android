@@ -43,7 +43,7 @@ public:
     void luaNotify(const QString& title, const QString& text);
 
 private:
-    static QString noWindows() { return QStringLiteral("the stand-in engine has no script windows"); }
+    static QString noWindows() { return {}; }
 
     enum class TelnetState { Data, Iac, Option, Sub, SubIac };
 

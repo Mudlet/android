@@ -301,7 +301,7 @@ class FrameReader(input: InputStream) {
                 fontFamily = w.optString("fontFamily").ifEmpty { null },
                 fontSize = w.optDouble("fontSize", 0.0),
                 inDock = w.optBoolean("inDock"),
-                dock = if (w.has("dockArea")) {
+                dock = if (w.has("dockAreaX")) {
                     ScriptWindow.Dock(w.optBoolean("autoDock", true), w.optString("dockArea"), w.optBoolean("dockFloating"), w.optString("dockTitle"))
                 } else {
                     null

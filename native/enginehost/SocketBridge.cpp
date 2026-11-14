@@ -471,7 +471,7 @@ QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
                      {QStringLiteral("w"), window.geometry.width()},
                      {QStringLiteral("h"), window.geometry.height()},
                      {QStringLiteral("visible"), window.visible},
-                     {QStringLiteral("shown"), window.shown},
+                     {QStringLiteral("shown"), !window.shown},
                      {QStringLiteral("stack"), window.stackOrder},
                      {QStringLiteral("inDock"), window.inDock}};
     if (!window.parentKind.isEmpty()) {

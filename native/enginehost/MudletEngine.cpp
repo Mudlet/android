@@ -875,7 +875,7 @@ QString MudletEngine::setMainWindowSize(int width, int height)
 {
     const QSize before = std::exchange(mMainWindowSize, QSize(width, height));
     // Otherwise taken as the profile loads
-    if (!profileOpen()) {
+    if (!profileOpen() || mMainWindowSize.width() > 0) { // bite: a running profile never takes it
         return {};
     }
     if (!mSession->setMainWindowSize(mMainWindowSize)) {

@@ -26,6 +26,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -59,8 +60,9 @@ def shell(command, check=True):
 
 
 class Device:
-    def __init__(self, out, symbols):
+    def __init__(self, out, apk, symbols):
         self.out = out
+        self.apk = apk
         self.symbols = symbols
         self.logcat_path = os.path.join(out, "logcat.txt")
         self.logcat = None
@@ -102,22 +104,29 @@ class Device:
         if not fatal:
             return None
         time.sleep(5)  # debuggerd's report follows the signal
-        log = self.log_text()
-        aborts = [line for line in log.splitlines() if re.search(r" F (libc|DEBUG) *: .*(FORTIFY|Abort message)", line)]
-        frames = [line for line in log.splitlines() if re.search(r" F DEBUG *: +#\d+ pc ", line)]
-        report = "\n".join([fatal.group(0), *aborts, *frames[:25]])
+        lines = self.log_text().splitlines()
+        aborts = [line for line in lines if re.search(r" F (libc|DEBUG) *: .*(FORTIFY|Abort message)", line)]
+        frames = [line for line in lines if re.search(r" F DEBUG *: +#\d+ pc ", line)][:25]
         ndk = os.environ.get("ANDROID_NDK_ROOT")
         if self.symbols and ndk:
-            result = subprocess.run([os.path.join(ndk, "ndk-stack"), "-sym", self.symbols, "-i", self.logcat_path],
+            # The libraries load from inside the APK, so a frame reads "base.apk (offset ...)": ndk-stack finds the
+            # library at that offset in an APK of that name beside the unstripped libraries
+            symbol_dir = tempfile.mkdtemp(prefix="smoke-symbols-")
+            os.symlink(self.apk, os.path.join(symbol_dir, "base.apk"))
+            for name in os.listdir(self.symbols):
+                if name.endswith(".so"):
+                    os.symlink(os.path.abspath(os.path.join(self.symbols, name)), os.path.join(symbol_dir, name))
+            result = subprocess.run([os.path.join(ndk, "ndk-stack"), "-sym", symbol_dir, "-i", self.logcat_path],
                                     capture_output=True, text=True)
-            symbolised = os.path.join(self.out, "crash-symbolised.txt")
-            with open(symbolised, "w") as f:
+            with open(os.path.join(self.out, "crash-symbolised.txt"), "w") as f:
                 f.write(result.stdout + result.stderr)
-            report += "\n\nndk-stack:\n" + "\n".join(result.stdout.splitlines()[:40])
-        return report
+            symbolised = [line for line in result.stdout.splitlines() if re.match(r"#\d+ ", line)][:25]
+            if symbolised:
+                frames = ["symbolised by ndk-stack:", *symbolised]
+        return "\n".join([fatal.group(0), *aborts, *frames])
 
     def wait(self, what, pred, timeout):
-        """Polls the UI's state until pred(state) holds; stops early if the engine crashed."""
+        """Polls the UI's state until pred(state) holds; stops early if the app crashed."""
         deadline = time.monotonic() + timeout
         while True:
             state = self.command("state")
@@ -160,8 +169,11 @@ def run_at(line, index):
     return next((r for r in runs_of(line) if r[0] <= index < r[0] + r[1]), None)
 
 
-def engine_pids():
-    return shell(f"pidof {ENGINE_PROCESS}", check=False).split()
+def check_engine_process(pid):
+    """That the engine the UI is attached to is the one process named :engine."""
+    pids = shell(f"pidof {ENGINE_PROCESS}", check=False).split()
+    if pids != [str(pid)]:
+        raise SmokeFailure(f"the UI is attached to pid {pid}, but {ENGINE_PROCESS} is {pids or 'not running'}")
 
 
 LOG = None  # <out>/smoke.log: what this prints, for CI's job summary
@@ -201,8 +213,7 @@ def run(dev, apk):
                      and "qtStartMsAfterAppOnCreate" in s["status"], 120)
     status = state["status"]
     engine_pid = state["enginePid"]
-    if [str(engine_pid)] != engine_pids():
-        raise SmokeFailure(f"the UI is attached to pid {engine_pid}, but {ENGINE_PROCESS} is {engine_pids()}")
+    check_engine_process(engine_pid)
     if engine_pid == state["uiPid"]:
         raise SmokeFailure("the engine runs in the UI's process")
     if status.get("serviceReadyWait") != "ok":
@@ -259,8 +270,7 @@ def run(dev, apk):
                      lambda s: s["engineLosses"] >= 1 and s["enginePid"] not in (0, engine_pid)
                      and "new engine instance" in s["link"] and s["status"].get("engineKind") == "libmudlet", 120)
     new_pid = state["enginePid"]
-    if [str(new_pid)] != engine_pids():
-        raise SmokeFailure(f"the UI is attached to pid {new_pid}, but {ENGINE_PROCESS} is {engine_pids()}")
+    check_engine_process(new_pid)
     state = dev.wait("the new engine service in the foreground",
                      lambda s: "foreground=true" in s["fgs"] and f"pid={new_pid}" in s["fgs"], 30)
     ok(f"reattached to the new engine, pid {new_pid}: {state['link']}")
@@ -276,10 +286,11 @@ def main():
     global LOG
     LOG = os.path.join(args.out, "smoke.log")
     open(LOG, "w").close()
-    dev = Device(args.out, args.symbols)
+    apk = os.path.abspath(args.apk)
+    dev = Device(args.out, apk, args.symbols)
     failure = None
     try:
-        run(dev, os.path.abspath(args.apk))
+        run(dev, apk)
     except (SmokeFailure, subprocess.TimeoutExpired) as e:
         failure = str(e)
     finally:

@@ -1,5 +1,6 @@
 # Weekly, one grouped pull request per ecosystem. Not here, and bumped together by hand: Qt, the NDK, the SDK
-# platform and build-tools, AGP and Kotlin past a patch release, and Gradle past a patch release.
+# platform and build-tools, AGP and Kotlin past a patch release, and Gradle past a patch release. See "Pinned
+# versions" in CONTRIBUTING.md for why and how.
 version: 2
 updates:
   - package-ecosystem: gradle

@@ -12,3 +12,7 @@ __pycache__/
 *.pyc
 # scripts/lint.sh
 /.lint-venv/
+# The libmudlet builds and the emulator smoke test, as CONTRIBUTING.md runs them
+/deps/
+/build-desktop/
+/smoke-test/

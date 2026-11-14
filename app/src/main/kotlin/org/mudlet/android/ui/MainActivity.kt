@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import androidx.core.content.edit
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_CONCEALED
@@ -243,7 +244,7 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
             OutlinedButton({ c.killEngineProcess() }) { Text("Kill engine process") }
             OutlinedButton({
                 platform = if (platform == "android") "offscreen" else "android"
-                prefs.edit().putString(EngineService.PREF_PLATFORM, platform).apply()
+                prefs.edit { putString(EngineService.PREF_PLATFORM, platform) }
             }) { Text("QPA next start: $platform") }
         }
 

@@ -1,5 +1,6 @@
 package org.mudlet.android.engine
 
+import android.annotation.SuppressLint
 import android.app.ForegroundServiceStartNotAllowedException
 import android.content.Context
 import android.content.Intent
@@ -8,6 +9,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.system.Os
 import android.util.Log
+import androidx.core.app.ServiceCompat
 import org.qtproject.qt.android.QtServiceBase
 
 /**
@@ -54,9 +56,14 @@ class EngineService : QtServiceBase() {
         super.onDestroy()
     }
 
+    // FOREGROUND_SERVICE_TYPE_SPECIAL_USE is an int inlined at compile time, and ServiceCompat masks it below API 34
+    @SuppressLint("InlinedApi")
     private fun goForeground() {
         try {
-            startForeground(
+            // Service.startForeground with a type is API 29; ServiceCompat calls the two-argument one on API 28, and on
+            // 29-33 drops the types those releases do not know, such as specialUse (API 34)
+            ServiceCompat.startForeground(
+                this,
                 EngineNotifications.ENGINE_NOTIFICATION_ID,
                 EngineNotifications.engineNotification(this),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,

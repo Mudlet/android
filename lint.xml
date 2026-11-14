@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android lint for :app and :engine-service (lintConfig in their build.gradle.kts), where a warning fails the build.
+     Each check turned off here says why. -->
+<lint>
+    <!-- Versions are Dependabot's and the pin policy's (CONTRIBUTING.md, "Pinned versions"); these checks change
+         their verdict with each day's releases, so they would fail a build that changed nothing -->
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    <issue id="OldTargetApi" severity="ignore" />
+    <!-- Each APK is built for one ABI on purpose (-PandroidAbi; x86_64 for the emulator). Which ABIs a release ships
+         is open: docs/foundation-checklist.md -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+</lint>

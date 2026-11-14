@@ -27,6 +27,12 @@ android {
         }
     }
 
+    lint {
+        // Android lint: a warning fails the build too (CI runs it), and lint.xml says what is off and why
+        warningsAsErrors = true
+        lintConfig = rootProject.file("lint.xml")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())
         targetCompatibility = JavaVersion.toVersion(libs.versions.jvmTarget.get())

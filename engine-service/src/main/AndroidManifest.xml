@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <!-- The only Qt component. Its own process, so Qt's System.exit(0) in
+             QtServiceBase.onDestroy() and any engine crash take only this process. -->
+        <service
+            android:name=".EngineService"
+            android:process=":engine"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the player's connection to a text game (MUD) server open and runs their scripts while the app is in the background" />
+            <meta-data android:name="android.app.lib_name" android:value="engine" />
+            <meta-data android:name="android.app.arguments" android:value="" />
+            <meta-data android:name="android.app.background_running" android:value="true" />
+        </service>
+    </application>
+</manifest>

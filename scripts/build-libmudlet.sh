@@ -20,7 +20,7 @@ qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/
 jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
 
-# --- An app that links libmudlet (C's engine) needs the runner's link line: ask CMake's file API to record it ---
+# --- An app that links libmudlet (the app's engine) needs the runner's link line: ask CMake's file API to record it ---
 "$(dirname "$0")/export-libmudlet.py" --query "$build"
 
 # Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI, USE_VARIABLE_SPLASH_SCREEN and

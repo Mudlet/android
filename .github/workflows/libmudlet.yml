@@ -1,10 +1,10 @@
 name: libmudlet for Android
 
 # Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
-# builds C's APK with libmudlet as its engine. A second job builds libmudlet for the host and runs C's real engine
-# against the fake game server through the socket protocol.
+# builds the app's APK with libmudlet as its engine. A second job builds libmudlet for the host and runs the real
+# engine against the fake game server through the socket protocol.
 # The nightly run builds Mudlet's latest development, so it catches a change there that stops these
-# compiling or linking for Android, or breaks C's engine; a failed nightly opens or updates an issue here.
+# compiling or linking for Android, or breaks the engine; a failed nightly opens or updates an issue here.
 on:
   push:
     branches: [main]
@@ -13,7 +13,14 @@ on:
       - scripts/build-libmudlet.sh
       - scripts/build-libmudlet-desktop.sh
       - scripts/export-libmudlet.py
-      - c-separate-process/**
+      - scripts/build-apk.sh
+      - app/**
+      - engine-service/**
+      - protocol/**
+      - native/**
+      - gradle/**
+      - "*.gradle.kts"
+      - gradle.properties
       - .github/actions/**
       - .github/workflows/libmudlet.yml
   pull_request:
@@ -106,35 +113,34 @@ jobs:
         with:
           gradle-version: "8.14.3"
 
-      - name: Build C's APK with libmudlet as the engine
-        working-directory: c-separate-process
-        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" ./build-apk.sh
+      - name: Build the APK with libmudlet as the engine
+        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
 
-      - name: Check C's APK
+      - name: Check the APK
         uses: ./.github/actions/check-apk
         with:
-          apk-dir: c-separate-process/android/app/build/outputs/apk/debug
+          apk-dir: app/build/outputs/apk/debug
           engine: libengine
-          title: c-separate-process with libmudlet
+          title: APK with libmudlet
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       # What the runner is checked for in build-libmudlet.sh, now in the engine an app ships
-      - name: Check C's engine carries Mudlet's Lua, its Lua C modules and the KeyStore backend
+      - name: Check the engine carries Mudlet's Lua, its Lua C modules and the KeyStore backend
         run: |
-          engine=c-separate-process/build-android-arm64-v8a-mudlet/enginehost/libengine_arm64-v8a.so
+          engine=native/build-android-arm64-v8a-mudlet/enginehost/libengine_arm64-v8a.so
           defined=$("$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -C --defined-only \
             --format=just-symbols "$engine")
           for sym in 'qInitResources_mudlet()' 'qInitResources_mudlet_lua()' luaopen_lfs luaopen_lpeg luaopen_rex_pcre2 \
                      luaopen_luasql_sqlite3 luaopen_utf8 luaopen_brimworks_zip luaopen_yajl; do
-            grep -qxF "$sym" <<< "$defined" || { echo "::error::C's engine lacks $sym"; exit 1; }
+            grep -qxF "$sym" <<< "$defined" || { echo "::error::the engine lacks $sym"; exit 1; }
           done
           grep -q '^QKeychain::java::security::KeyStore::getInstance(' <<< "$defined" \
-            || { echo "::error::C's engine lacks QtKeychain's KeyStore backend"; exit 1; }
+            || { echo "::error::the engine lacks QtKeychain's KeyStore backend"; exit 1; }
 
       - uses: actions/upload-artifact@v6
         with:
-          name: c-separate-process-libmudlet-debug-apk
-          path: c-separate-process/android/app/build/outputs/apk/debug/*.apk
+          name: mudlet-libmudlet-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -155,8 +161,8 @@ jobs:
             echo "ccache $(ccache --show-stats 2>/dev/null | grep -m1 'Hits:')"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # libmudlet for the host, with the options an Android build has, and C's real engine on it, tested through the
-  # socket protocol against tests/fake_telnet.py
+  # libmudlet for the host, with the options an Android build has, and the real engine on it, tested through the
+  # socket protocol against native/tests/fake_telnet.py
   desktop-engine:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -211,8 +217,8 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-desktop-${{ github.run_id }}
 
-      - name: Test C's real engine
-        working-directory: c-separate-process
+      - name: Test the real engine
+        working-directory: native
         env:
           QT_QPA_PLATFORM: offscreen
         run: |

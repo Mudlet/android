@@ -1,0 +1,11 @@
+# Gradle
+.gradle/
+.kotlin/
+build/
+local.properties
+# scripts/build-apk.sh: native builds and the Qt libraries androiddeployqt stages for :engine-service
+/native/build*/
+/engine-service/qtdeploy/
+# Python tests
+__pycache__/
+*.pyc

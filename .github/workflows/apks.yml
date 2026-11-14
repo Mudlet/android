@@ -1,15 +1,21 @@
-name: Prototype APKs
+name: APKs
 
-# Debug APKs of the three hosting prototypes, each with its stand-in engine, for arm64-v8a, after each
-# prototype's desktop engine test, and C a second time with its libraries extracted at install. C's Kotlin
-# protocol client is also tested against its desktop engine. C with libmudlet as its engine is in libmudlet.yml.
+# The app's debug APK for arm64-v8a with the stand-in engine, after the stand-in's desktop test and the Kotlin
+# protocol tests (against that desktop engine too), and a second time with its libraries extracted at install. The APK
+# with libmudlet as its engine is built in libmudlet.yml.
 on:
   push:
     branches: [main]
     paths: &paths
-      - a-inprocess-service/**
-      - b-quickview/**
-      - c-separate-process/**
+      - app/**
+      - engine-service/**
+      - protocol/**
+      - native/**
+      - docs/protocol.md
+      - gradle/**
+      - "*.gradle.kts"
+      - gradle.properties
+      - scripts/build-apk.sh
       - .github/actions/**
       - .github/workflows/apks.yml
   pull_request:
@@ -29,53 +35,17 @@ concurrency:
 
 jobs:
   apk:
-    name: ${{ matrix.prototype }}${{ matrix.extracted && ' (extracted libs)' || '' }}
+    name: APK${{ matrix.extracted && ' (extracted libs)' || '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - prototype: a-inprocess-service
-            gradle: "8.14.3"
-            desktop-test: |
-              cmake -S desktop -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
-              cmake --build build-desktop
-              ctest --test-dir build-desktop --output-on-failure
-            build: gradle --no-daemon -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a :app:assembleDebug
-            engine: libmudletproto
-            apk: a-inprocess-service/app/build/outputs/apk/debug
-          - prototype: b-quickview
-            gradle: wrapper
-            desktop-test: |
-              cmake -S engine -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
-              cmake --build build-desktop
-              ctest --test-dir build-desktop --output-on-failure
-            build: |
-              cd android
-              ./gradlew --no-daemon -PqtPath="$QT_ROOT" -PandroidAbi=arm64-v8a \
-                -PqtExtraCMakeArguments="-DCMAKE_BUILD_TYPE=Release,-DQT_HOST_PATH=$QT_ROOT/gcc_64,-DANDROID_NDK_ROOT=$ANDROID_NDK_ROOT" \
-                :app:assembleDebug
-            engine: libmudengine
-            apk: b-quickview/android/app/build/outputs/apk/debug
-          - prototype: c-separate-process
-            gradle: "8.14.3"
-            desktop-test: |
-              cmake -S . -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
-              cmake --build build-desktop --target engine
-              python3 tests/test_engine.py build-desktop/enginehost/engine
-            build: ./build-apk.sh
-            # the app's Kotlin protocol client against the desktop engine; it compiles against the Qt jars the APK
-            # build staged
-            jvm-test: tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
-            engine: libengine
-            apk: c-separate-process/android/app/build/outputs/apk/debug
-          # what extracting the libraries at install costs; see "Native libraries" in C's REPORT.md
-          - prototype: c-separate-process
-            gradle: "8.14.3"
-            build: ./build-apk.sh -PextractNativeLibs=true
-            engine: libengine
-            apk: c-separate-process/android/app/build/outputs/apk/debug
+          - tests: true
+            build: scripts/build-apk.sh
+          # what extracting the libraries at install costs; see "Native libraries" in docs/architecture.md
+          - build: scripts/build-apk.sh -PextractNativeLibs=true
             extracted: true
     steps:
       - uses: actions/checkout@v6
@@ -83,44 +53,45 @@ jobs:
       - id: toolchain
         uses: ./.github/actions/android-toolchain
         with:
-          # host Qt Gui, which the desktop engines link, needs the OpenGL headers to configure and the rest to run
+          # host Qt Gui, which the desktop engine links, needs the OpenGL headers to configure and the rest to run
           apt-packages: libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
 
-      # A and C build with this Gradle (they have no wrapper); B uses its own wrapper
       - uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: ${{ matrix.gradle }}
+          gradle-version: "8.14.3"
 
-      - name: Desktop engine test
-        if: matrix.desktop-test
-        working-directory: ${{ matrix.prototype }}
+      - name: Stand-in engine desktop test
+        if: matrix.tests
+        working-directory: native
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ${{ matrix.desktop-test }}
+        run: |
+          cmake -S . -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
+          cmake --build build-desktop --target engine
+          python3 tests/test_engine.py build-desktop/enginehost/engine
+
+      # :protocol's tests: the spec check, the run encoding, and the app's EngineLink against the desktop engine
+      - name: Kotlin protocol tests
+        if: matrix.tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
 
       - name: Build APK
-        working-directory: ${{ matrix.prototype }}
         run: ${{ matrix.build }}
-
-      - name: Kotlin client test
-        if: matrix.jvm-test
-        working-directory: ${{ matrix.prototype }}
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: ${{ matrix.jvm-test }}
 
       - name: Check APK
         uses: ./.github/actions/check-apk
         with:
-          apk-dir: ${{ matrix.apk }}
-          engine: ${{ matrix.engine }}
-          title: ${{ matrix.prototype }}${{ matrix.extracted && ' (extracted libs)' || '' }}
+          apk-dir: app/build/outputs/apk/debug
+          engine: libengine
+          title: APK${{ matrix.extracted && ' (extracted libs)' || '' }}
           extracted: ${{ matrix.extracted || false }}
           build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
 
       - uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.prototype }}${{ matrix.extracted && '-extracted-libs' || '' }}-debug-apk
-          path: ${{ matrix.apk }}/*.apk
+          name: mudlet${{ matrix.extracted && '-extracted-libs' || '' }}-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14

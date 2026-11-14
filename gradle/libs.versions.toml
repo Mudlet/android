@@ -1,0 +1,38 @@
+# Versions for every module. Qt (6.12.0) is not a Gradle dependency: scripts/build-apk.sh stages it, and
+# .github/actions/android-toolchain installs it with the NDK, build-tools and platform named here.
+[versions]
+agp = "8.13.2"
+kotlin = "2.3.21"
+# The JDK that compiles, and the bytecode level every module targets
+jdk = "21"
+jvmTarget = "17"
+compileSdk = "36"
+targetSdk = "36"
+# Qt 6.12's minimum
+minSdk = "28"
+buildTools = "37.0.0"
+ndk = "28.2.13676358"
+androidx-core = "1.17.0"
+androidx-activity = "1.11.0"
+compose-bom = "2025.12.01"
+junit = "4.13.2"
+json = "20250517"
+
+[libraries]
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-foundation = { module = "androidx.compose.foundation:foundation" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+junit = { module = "junit:junit", version.ref = "junit" }
+# :protocol compiles against this org.json and runs on Android's own copy
+json = { module = "org.json:json", version.ref = "json" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

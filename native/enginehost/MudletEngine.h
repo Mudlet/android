@@ -159,7 +159,7 @@ private:
 
     // The UI's last setScreenSize, given to each profile as it loads; empty until then
     QSize mScreenSize;
-    // The UI's last setAppState active, as THeadlessSession's starts
+    // The UI's last setAppState active; true before the first, as in THeadlessSession
     bool mAppActive = true;
     // A saveAsync() has not answered yet, which a shutdown would be refused for
     bool mSaving = false;

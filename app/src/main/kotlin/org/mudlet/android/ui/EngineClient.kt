@@ -99,8 +99,8 @@ object EngineClient {
         private set
 
     /**
-     * The engine took what the player typed ahead of the game hiding input: the input line moves its text into the
-     * masked field that [EngineMessage.HiddenInput] opens next, empties itself and calls [typedLineMoved].
+     * The engine took what the player typed ahead of the game hiding input: the input line is to move its text into the
+     * masked field that [EngineMessage.HiddenInput] opens next, empty itself and call [typedLineMoved].
      */
     var moveTypedLine by mutableStateOf(false)
         private set

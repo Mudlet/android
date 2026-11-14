@@ -4,6 +4,6 @@ package org.mudlet.android.engine
 object EngineNative {
     @JvmStatic external fun nativeServiceReady()
 
-    /** Saves the open profile, from Qt's thread; nothing before main() has set up the engine. */
+    /** Has Qt's thread save the open profile; does nothing until main() has set up the engine. Callable from any thread. */
     @JvmStatic external fun nativeSave()
 }

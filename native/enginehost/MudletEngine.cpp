@@ -186,14 +186,15 @@ void MudletEngine::shutdownSession(bool alreadyClosing)
         qWarning("MudletEngine: the profile's save at exit did not finish in 5 s");
         loop.quit();
     });
-    // THeadlessSession refuses a shutdown while a save runs
-    const bool afterSave = !alreadyClosing && mSaving;
-    if (afterSave) {
-        QObject::connect(mSession.get(), &THeadlessSession::saveFinished, &loop, [this] {
+    if (!alreadyClosing) {
+        // THeadlessSession refuses a shutdown while a save runs
+        if (mSaving) {
+            QObject::connect(mSession.get(), &THeadlessSession::saveFinished, &loop, [this] {
+                mSession->shutdownAsync(true);
+            });
+        } else {
             mSession->shutdownAsync(true);
-        });
-    } else if (!alreadyClosing) {
-        mSession->shutdownAsync(true);
+        }
     }
     loop.exec();
 }

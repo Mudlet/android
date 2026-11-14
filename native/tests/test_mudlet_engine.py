@@ -9,6 +9,7 @@ with -DLIBMUDLET_BUILD_DIR=<that build>).
 usage: test_mudlet_engine.py <path-to-engine-binary>
 """
 import glob
+import json
 import os
 import re
 import signal
@@ -605,6 +606,12 @@ def links():
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
+def send_together(c, *requests):
+    """In one write, so the engine reads them all before its event loop runs again."""
+    payloads = [json.dumps(r, separators=(",", ":")).encode() for r in requests]
+    c.sock.sendall(b"".join(struct.pack(">I", len(p)) + p for p in payloads))
+
+
 def newest_save(profile):
     """The newest of the profile's saves, and its mtime: (None, 0) for none."""
     saves = glob.glob(os.path.join(CONFIG, "profiles", profile, "current", "*.xml"))
@@ -652,6 +659,18 @@ def app_state():
     check(m["value"] == "saved" and second_mtime > first_mtime, f"leaving it again saves again: {first_mtime} then {second_mtime}")
     c.send({"t": "setAppState", "active": True, "minimized": False})
     focus("true")
+
+    # Mudlet refuses to close a profile while it saves, so a switch asked meanwhile waits for the save
+    m = c.ask({"t": "saveProfile", "name": "App State Other", "host": "127.0.0.1", "port": game, "tls": False, "login": "",
+               "autoReconnect": False}, collect=msgs)
+    check(m["t"] == "profiles", f"saveProfile: {m}")
+    mark = len(msgs)
+    send_together(c, {"t": "setAppState", "active": False, "minimized": False},
+                  {"t": "openProfile", "name": "App State Other", "connect": False})
+    wait_status(c, "profile", lambda v: v == "App State Other loaded", msgs, timeout=60)
+    seen = [(m["key"], m["value"]) for m in msgs[mark:] if m["t"] == "status" and m["key"] in ("save", "profile")]
+    check(seen[:3] == [("profile", f"{profile} closing"), ("save", "saved"), ("profile", f"{profile} closed")],
+          f"a switch asked during the save closes the profile once it is saved: {seen}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

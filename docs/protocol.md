@@ -90,7 +90,29 @@ a UI shows what it knows and ignores the rest. Now in use:
   `qtStartMsAfterServiceOnCreate`, and on Android `serviceReadyWait` (`ok` or `timeout`).
 - **The stand-in:** `luaOnLineCalls`, `notificationsPosted`, `fontError`.
 - **libmudlet (`MudletEngine`):** `engineKind` (`libmudlet`), `configDir`, `profile`, `profileLoadMs`, `startMs`,
-  `localLines`, `errorConsoleLines`.
+  `localLines`, `errorConsoleLines`, `restore`.
+
+### The restore status
+
+An engine started after the one before it was killed brings back the profile that one ran, and its game connection if
+that was wanted ([`architecture.md`](architecture.md), "Restoring the session"). Status `restore` says how that goes.
+It is never sent by an engine that has nothing to restore, as after an orderly stop. Its value is a phase, then a
+space and what the phase is about, if anything; `<target>` is `<host>:<port>`, or the profile's name when the profile's
+own address is used. The app shows each new value as a marker line (`EngineRestore.describe`), and `ProtocolSpecTest`
+checks that this table, `MudletEngine.cpp` and `EngineRestore.PHASES` name the same phases.
+
+| Value | Meaning |
+|---|---|
+| `restoring <profile>` | Loading the profile again. It was not connected, so it is not connected now. |
+| `restored <profile>` | The profile is loaded, and stays disconnected. |
+| `waiting <seconds> <target>` | This is not the first restore within 10 minutes: the profile is loaded and connected after `<seconds>` (10, then 30), so a game is not called again at once by an engine that keeps dying. |
+| `reconnecting <target>` | Loading the profile and connecting it. |
+| `reconnected <target>` | Connected again. |
+| `retrying <target>` | The connection failed, and Mudlet tries again on its own, as the profile reconnects automatically. `reconnected` follows when it gets through. |
+| `notReconnected <target>` | The connection failed. The profile does not reconnect automatically, so nothing tries again. |
+| `cancelled` | The UI connected or disconnected before the restore had finished: it reports no more. |
+| `failed <error>` | The profile could not be loaded again. |
+| `gaveUp <restores> <minutes>` | The engine was restored `<restores>` times within `<minutes>` and died each time: this start restores nothing, and forgets the profile. |
 
 ## Runs
 

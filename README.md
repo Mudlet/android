@@ -89,6 +89,7 @@ cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
 cmake --build native/build-desktop-mudlet --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
+QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
 ```
 
 `gradle :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
@@ -120,7 +121,8 @@ GitHub Actions runs two workflows, each on pushes to `main` and pull requests th
     backend, and uploads it.
   - A second job builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
-    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`).
+    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`). It also kills that engine
+    mid-session and checks that the next one restores the profile (`native/tests/test_mudlet_restore.py`).
   - It fails if the libraries use desktop-only APIs or carry the build-type splash screen images, if the runner lacks
     Mudlet's built-in Lua files, Lua C modules or QtKeychain's Android backend (which keeps profiles' passwords in the
     KeyStore), or if the engine does not build, link or pass its test.

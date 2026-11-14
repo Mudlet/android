@@ -18,6 +18,8 @@ IAC, DONT, DO, WONT, WILL, SB, GA, SE = 255, 254, 253, 252, 251, 250, 249, 240
 TTYPE, ECHO, GMCP = 24, 1, 201
 # (lines, start, end) of each flood, as seen by the sender
 FLOOD_TIMES = []
+# When each game connection was accepted (time.monotonic())
+ACCEPTED = []
 
 BANNER = (
     bytes([IAC, DO, TTYPE, IAC, WILL, ECHO, IAC, WILL, GMCP])
@@ -134,6 +136,7 @@ def serve(port=0, ready=None):
         ready(srv.getsockname()[1])
     while True:
         conn, _ = srv.accept()
+        ACCEPTED.append(time.monotonic())
         Session(conn).start()
 
 

@@ -71,7 +71,7 @@ object Requests {
     /** [password] is for this run of the profile only; null sends none. */
     fun openProfile(name: String, password: String?, connect: Boolean, id: Long): JSONObject = JSONObject()
         .put("t", "openProfile").put("name", name).put("connect", connect).put("id", id)
-        .put("password", password ?: "")
+        .apply { if (password != null) put("password", password) }
 }
 
 /**
@@ -141,7 +141,7 @@ class FrameReader(input: InputStream) {
 
         private fun parseProfiles(profiles: JSONArray?): List<Profile> {
             if (profiles == null) return emptyList()
-            return List(profiles.length()) { i -> profiles.length() - 1 - i }.map { i ->
+            return List(profiles.length()) { i ->
                 val p = profiles.getJSONObject(i)
                 Profile(p.getString("name"), p.optString("host"), p.optInt("port", 23), p.optBoolean("tls"), p.optString("login"), p.optBoolean("autoReconnect"))
             }

@@ -1,7 +1,7 @@
 # Contributing
 
-How to build, test and check the app, where things are, and the rules the code keeps. What the app is and how it is
-built is in [`README.md`](README.md) and [`docs/architecture.md`](docs/architecture.md).
+How to build, test and check the app, where things are, the rules the code keeps, and how pull requests are merged.
+What the app is and how it is built is in [`README.md`](README.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ## Where things are
 
@@ -109,6 +109,24 @@ is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editor
   is merged there (as `build-libmudlet.sh` does with the Lua 5.1 FORTIFY fix, Mudlet/Mudlet#12914).
 - **Docs change with the code they describe**, in the same pull request.
 - **Build output stays out of git**; `.gitignore` covers what the commands here write.
+
+## Merging
+
+As in Mudlet's own repository ([its CONTRIBUTING.md](https://github.com/Mudlet/Mudlet/blob/development/docs/CONTRIBUTING.md#git-commit-guidelines-for-core-team)),
+the preferred order of merging pull requests is:
+
+1. Prefer _squash and merge_ for a clean history and added PR numbers for details of discussion for future comparison.
+2. Else _rebase and merge_ if you'd like to keep the history, but know this will not link to the PR in public test
+   builds' (PTB) changelogs, etc.
+3. Avoid creating a _merge commit_.
+
+Update a branch by rebasing it onto its base, not by merging the base into it, and push it with
+`git push --force-with-lease`. A squash leaves one commit per pull request, so its title and description are what
+explains the change later: keep them true to what is merged.
+
+Stacked pull requests: once the lower one is squashed into `main`, rebase the next onto `main`, leaving out the lower
+one's commits (`git rebase --onto origin/main <the lower branch as it was before the squash> <the next branch>`),
+and set its base to `main` if GitHub has not already.
 
 ## Pinned versions
 

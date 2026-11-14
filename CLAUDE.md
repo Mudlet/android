@@ -37,4 +37,5 @@ CONTRIBUTING.md's "Test".
 - Docs change with the code they describe. Keep a doc's facts true: run what it tells others to run.
 - Do not bump Qt, the NDK, SDK levels, AGP, Kotlin or Gradle on their own; see "Pinned versions" in CONTRIBUTING.md.
 - Changes Mudlet needs go upstream to Mudlet/Mudlet and are carried in `scripts/` until merged there.
+- Squash (or rebase) into `main`, never a merge commit; update branches by rebasing: "Merging" in CONTRIBUTING.md.
 - Never commit build output (`.gitignore` lists it: `native/build*`, `engine-service/qtdeploy/`, `deps/`, ...).

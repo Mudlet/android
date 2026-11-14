@@ -34,6 +34,8 @@ minutes, with caches, on a pull request that touches only docs.
 **The rest of the ruleset for `main`:**
 - require a pull request before merging; with one maintainer, no required approvals, or the maintainer cannot merge
   their own;
+- require linear history, so no merge commit reaches `main` (pull requests are squashed or rebased: "Merging" in
+  [`CONTRIBUTING.md`](../CONTRIBUTING.md#merging));
 - block force pushes and deletion;
 - no "require branches to be up to date": with Mudlet's nightly moving, it would rerun the long jobs for little;
 - let admins bypass, for an emergency.
@@ -41,7 +43,8 @@ minutes, with caches, on a pull request that touches only docs.
 **Elsewhere in Settings:**
 - Code security: Dependabot alerts and security updates on (`.github/dependabot.yml` only does version updates), and
   secret scanning with push protection.
-- General: automatically delete head branches.
+- General, Pull Requests: turn off "Allow merge commits" and keep "Allow squash merging" and "Allow rebase
+  merging" on; automatically delete head branches.
 - Actions, General: workflow permissions read-only by default (each workflow already asks for `contents: read`, and
   only the nightly's issue job for `issues: write`).
 

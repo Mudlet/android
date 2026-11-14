@@ -1,0 +1,36 @@
+name: Checks
+
+# The static checks in scripts/lint.sh, for now clang-format. They are quick, so they run on every pull request and
+# push to main, without path filters: a required check whose workflow a path filter skipped would leave the pull
+# request waiting.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [clang-format]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: ${{ matrix.check }}
+        run: scripts/lint.sh ${{ matrix.check }}

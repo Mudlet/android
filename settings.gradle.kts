@@ -17,4 +17,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "mudlet-android"
-include(":protocol", ":engine-service", ":app")
+include(":protocol", ":suggest", ":engine-service", ":app")

@@ -9,7 +9,7 @@ name: CI
 # What runs for what changed (the filters in "changes" below say it exactly):
 #   docs, README and the like     nothing but this workflow's own small jobs (docs/protocol.md: the APKs, whose
 #                                 ProtocolSpecTest reads it)
-#   Kotlin (app/, engine-service/, protocol/)
+#   Kotlin (app/, engine-service/, protocol/, suggest/)
 #                                 ktlint, the APKs with Android lint, and the emulator suite (smoke test and the
 #                                 instrumented tests, on minSdk and the newest API) with libmudlet from its cache
 #   native/, the shared actions   their lint check (clang-format, actionlint), the APKs, the emulator suite, the
@@ -93,6 +93,7 @@ jobs:
               - app/**
               - engine-service/**
               - protocol/**
+              - suggest/**
             ktlint:
               - "**/*.kt"
               - "**/*.kts"

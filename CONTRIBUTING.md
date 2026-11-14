@@ -10,6 +10,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `app/` | `:app`, the UI process: Kotlin and Compose, no Qt |
 | `engine-service/` | `:engine-service`: `EngineService` in the `:engine` process, and the Qt libraries `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, with the JVM tests |
+| `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
 | `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh` and `lint.sh` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md) |
@@ -64,6 +65,10 @@ The public test builds, their versions and signing, and what the maintainer sets
 ```sh
 # :protocol's JVM tests without an engine (EngineLinkJvmTest is then skipped)
 ./gradlew :protocol:test
+
+# :suggest's tests, with Gradle or with kotlinc and JUnit 4 alone (no Android SDK)
+./gradlew :suggest:test
+KOTLIN_HOME=path/to/kotlinc JUNIT_JARS=junit-4.13.2.jar:hamcrest-core-1.3.jar suggest/run-tests.sh
 
 # The stand-in engine on the host, then :protocol's tests with the Kotlin client against it
 cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64

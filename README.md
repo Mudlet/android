@@ -132,13 +132,14 @@ demand:
   the library sizes, stripped and not, and whose Lua 5.1 FORTIFY fix the build used.
   - Lua 5.1 FORTIFY fix: built with the NDK's `_FORTIFY_SOURCE=2`, Mudlet's Lua 5.1 aborts in `luaL_openlibs`
     ("FORTIFY: strchr: prevented read past end of buffer"). Until Mudlet's `3rdparty/lua51/CMakeLists.txt`
-    passes `-U_FORTIFY_SOURCE` for Android itself, the script appends `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1` for
-    Android to that file in the Mudlet checkout and says so in its log. A local checkout keeps that change.
+    passes `-U_FORTIFY_SOURCE` for Android itself ([Mudlet/Mudlet#12914](https://github.com/Mudlet/Mudlet/pull/12914)),
+    the script appends the same `"SHELL:-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1"` option for Android to that file in
+    the Mudlet checkout and says so in its log. A local checkout keeps that change.
   - It fails if:
     - the libraries use desktop-only APIs
     - the libraries or the runner carry the build-type splash screen images
     - Lua 5.1's collector (`lgc.c`) references a fortified function such as `__strchr_chk`, as the call that
-      aborts does
+      aborts does, or its string library (`lstrlib.c`) references none, which means FORTIFY is off altogether
     - the runner lacks Mudlet's built-in Lua files and Lua C modules
     - the runner does not link QtKeychain's Android backend, which Mudlet uses to keep profiles' passwords in
       the KeyStore

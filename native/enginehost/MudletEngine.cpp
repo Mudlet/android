@@ -411,7 +411,6 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     }
     options.configDir = mConfigDir;
     // The new profile counts its links from 1 again
-    mLinkBase = mLinkTop;
     mKept.profile = mProfile;
     mKept.tls = tls;
     persist();

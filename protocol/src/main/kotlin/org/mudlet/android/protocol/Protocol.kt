@@ -203,7 +203,7 @@ class FrameReader(input: InputStream) {
 
             "announce" -> EngineMessage.Announce(o.optString("text"), o.optBoolean("assertive"))
 
-            "link" -> EngineMessage.Link(
+            "link-bite" -> EngineMessage.Link(
                 o.getInt("link"),
                 o.optString("tooltip"),
                 o.optBoolean("menu"),

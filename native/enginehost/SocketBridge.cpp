@@ -573,7 +573,5 @@ void SocketBridge::linksChanged(const QList<int>& ids)
     }
     if (clientLive()) {
         sendFrame(linksChangedMessage(ids));
-    } else {
-        mLinksMissed = true;
     }
 }

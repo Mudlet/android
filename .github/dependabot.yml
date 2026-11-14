@@ -1,0 +1,43 @@
+# Weekly, one grouped pull request per ecosystem. Not here, and bumped together by hand: Qt, the NDK, the SDK
+# platform and build-tools, AGP and Kotlin past a patch release, and Gradle past a patch release. See "Pinned
+# versions" in CONTRIBUTING.md for why and how.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      # AGP 8.13 is the newest that runs on Gradle 8.14 (Qt 6.12's templates want AGP 9, which needs Gradle 9);
+      # Kotlin and the Compose compiler plugin share one version, and a new Kotlin minor can need a newer AGP
+      - dependency-name: "com.android.*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "org.jetbrains.kotlin*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      # a new ktlint can bring new rules, so it comes on its own and may need ./gradlew ktlintFormat
+      ktlint:
+        patterns: ["com.pinterest.ktlint*"]
+      gradle:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    # the workflows, and the composite actions in .github/actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # clang-format, ShellCheck and actionlint for scripts/lint.sh; a new clang-format can reformat native/
+  - package-ecosystem: pip
+    directory: /scripts
+    schedule:
+      interval: weekly
+    groups:
+      lint-tools:
+        patterns: ["*"]

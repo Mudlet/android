@@ -145,7 +145,8 @@ and set its base to `main` if GitHub has not already.
 ## Pinned versions
 
 These are pinned to the exact version, and some must move together. Dependabot bumps the Gradle libraries, the
-actions and the linters, but AGP, Kotlin and Gradle only to a new patch release; the rest is bumped by hand.
+actions and the linters, but AGP, Kotlin, Gradle and AndroidX only to a new patch release; the rest is bumped by
+hand.
 
 | What | Version | Where |
 |---|---|---|
@@ -156,8 +157,12 @@ actions and the linters, but AGP, Kotlin and Gradle only to a new patch release;
 | minSdk | 28, Qt 6.12's minimum | `libs.versions.toml`, `native/enginehost/CMakeLists.txt`, the `ANDROID_API` default of the libmudlet scripts |
 | build-tools | 37.0.0 | `android-toolchain` (`build-tools`), `libs.versions.toml`, `scripts/check-apk.sh` |
 | Gradle, AGP, Kotlin | 8.14.3, 8.13.2, 2.3.21 | `gradle/wrapper/gradle-wrapper.properties`, `libs.versions.toml` |
+| AndroidX core, activity, Compose BOM | 1.17.0, 1.11.0, 2025.12.01 | `libs.versions.toml` |
 | JDK | 21 | `android-toolchain` (`java-version`), `libs.versions.toml` (`jdk`) |
 | OpenSSL; Mudlet's dependencies | 3.5.9; in the script | `scripts/build-openssl.sh`; `scripts/build-mudlet-deps.sh`; each with its sha256s |
+
+AndroidX minor releases can need a newer compile SDK and AGP (core 1.19.1 and the 2026.09.00 Compose BOM need
+compileSdk 37 and AGP 9.1), so take them with an SDK level or AGP bump, at the newest versions that build with it.
 
 **Bumping Qt** (and with it the NDK, SDK levels or AGP): read the new Qt's Android requirements (its supported NDK,
 minimum and target SDK, and the AGP and Gradle its templates use), change every place in the table in one pull

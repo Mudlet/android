@@ -1,7 +1,8 @@
 name: Checks
 
 # The static checks in scripts/lint.sh: ktlint, clang-format, ShellCheck, actionlint and the strings check, each called
-# by ci.yml when a file it covers changed. Android lint needs the staged Qt jars, so it runs in apks.yml after the APK is built.
+# by ci.yml when a file it covers changed. Android lint needs the staged Qt jars, so it runs in apks.yml after the APK
+# is built.
 on:
   workflow_call:
     inputs:

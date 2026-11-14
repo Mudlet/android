@@ -478,6 +478,8 @@ def console():
     m = wait_status(c, "consoleColors", lambda v: True, msgs)
     check(re.fullmatch(r"#[0-9a-f]{6} #[0-9a-f]{6}", m["value"]) is not None, f"consoleColors when the profile loads: {m}")
     wait_status(c, "connection", lambda v: v == "connected", msgs)
+    # Else the game's answer would continue the open "Login: " line
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
 
     c.send({"t": "send", "text": "naws"})
     c.wait_for(shown("NAWS asked"), collect=msgs)

@@ -18,8 +18,9 @@ import org.mudlet.android.ui.UiLine
  *     adb shell am broadcast -n org.mudlet.mudlet/org.mudlet.android.debug.SmokeTestReceiver --es cmd <cmd> ...
  *
  * cmd: state; start (the engine service); connect (--es host, --ei port; --ez tls, false if absent); lua (--es code);
- * send (--es text); kill (the :engine process, as the low-memory killer would). Every command answers with the UI's state as base64
- * JSON in the broadcast's result data: result code 0 if the command was carried out, 1 if not, with "error" saying why.
+ * send (--es text); kill (the :engine process, as the low-memory killer would). Every command answers with the UI's
+ * state as base64 JSON in the broadcast's result data: result code 0 if the command was carried out, 1 if not, with
+ * "error" saying why.
  */
 class SmokeTestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -34,7 +35,8 @@ class SmokeTestReceiver : BroadcastReceiver() {
             "connect" -> {
                 val host = intent.getStringExtra("host")
                 val port = intent.getIntExtra("port", -1)
-                if (host == null || port <= 0) "connect needs --es host and --ei port" else sendOrError(Requests.connect(host, port, intent.getBooleanExtra("tls", false)))
+                val tls = intent.getBooleanExtra("tls", false)
+                if (host == null || port <= 0) "connect needs --es host and --ei port" else sendOrError(Requests.connect(host, port, tls))
             }
             "lua" -> {
                 val code = intent.getStringExtra("code")

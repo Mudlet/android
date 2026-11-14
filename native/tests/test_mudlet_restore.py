@@ -316,7 +316,8 @@ def crash_loop(e, port):
     check(e.status.get("connection") == "disconnected", "and is not connected meanwhile")
     value = e.wait_status("restore", lambda v: v.startswith("reconnected"), timeout=40)
     waited = time.monotonic() - started
-    check(value == f"reconnected {target}" and waited >= 9.5, f"then reconnects: {value} after {waited:.1f} s")
+    # A coarse QTimer may fire up to 5% early
+    check(value == f"reconnected {target}" and waited >= 9.4, f"then reconnects: {value} after {waited:.1f} s")
     e.kill()
     e = Engine()
     check(e.wait_status("restore", lambda v: True) == f"waiting 30 {target}", f"the third restore waits 30 s: {e.restores}")

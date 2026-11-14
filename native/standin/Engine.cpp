@@ -272,7 +272,6 @@ QString Engine::deleteProfile(const QString& name)
         return QStringLiteral("there is no profile named \"%1\"").arg(name);
     }
     if (mOpenProfile.compare(name, Qt::CaseInsensitive) == 0) {
-        return {};
         return QStringLiteral("\"%1\" is open: open another profile before deleting it").arg(mOpenProfile);
     }
     QList<Profile> profiles = mProfiles;
@@ -298,7 +297,7 @@ QString Engine::openProfile(const QString& name, const QString&, bool connect)
     if (switching) {
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile.name));
     }
-    if (connect && switching) {
+    if (connect && (switching || mSocket.state() == QAbstractSocket::UnconnectedState)) {
         connectTo(profile.host, quint16(profile.port), profile.tls);
     } else if (!connect && switching) {
         disconnectFromGame();

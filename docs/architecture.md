@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen and, in debug builds, the self-test in `ui/selftest/`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
@@ -691,6 +691,17 @@ Item 13 of the on-device checklist covers this.
       opens the game screen, and its "Back, button" returns.
     - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
     - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
+15. The game screen, connected to a game (connect from the self-test first, then open the game screen).
+    - The keyboard: tapping the input line opens it, and the console shrinks above it with its newest line still in
+      view. Send on the keyboard sends the line and leaves the keyboard open, ready for the next. Note the keyboard's
+      action key: it should read Send, and suggestions or corrections should not change what is typed. Type half a
+      word, then the up button: the earlier command replaces it whole, and typing goes on from the end of it.
+    - Scroll up while the game sends text: the console stays put and "Jump to the bottom: N new lines" counts up; the
+      button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
+      and again with a half-typed line: both stay. The same in split screen.
+    - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
+      the connection state is read out when it changes (connecting, connected, disconnected), without moving focus.
+      Swiping goes from the console's lines to the input line, then the buttons, then the connection bar.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

@@ -8,7 +8,32 @@
     <string name="profiles_open_game">Open the game screen</string>
 
     <string name="game_title">Game</string>
-    <string name="game_placeholder">The game\'s text and the input line will be here.</string>
+
+    <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
+    <string name="console_jump_to_bottom">Jump to the bottom</string>
+    <plurals name="console_jump_new_lines">
+        <item quantity="one">Jump to the bottom: %1$d new line</item>
+        <item quantity="other">Jump to the bottom: %1$d new lines</item>
+    </plurals>
+
+    <!-- The game screen's input line, where the player types commands for the game -->
+    <string name="input_label">Command</string>
+    <string name="input_send">Send</string>
+    <string name="input_history_previous">Previous command</string>
+    <string name="input_history_next">Next command</string>
+    <string name="input_not_sent">Not sent: the app is not connected to the engine</string>
+
+    <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
+    <string name="connection_no_engine">Waiting for the engine…</string>
+    <string name="connection_disconnected">Disconnected</string>
+    <string name="connection_connecting">Connecting…</string>
+    <!-- %1$s is the game's address, as host:port -->
+    <string name="connection_connecting_to">Connecting to %1$s…</string>
+    <string name="connection_connected">Connected</string>
+    <!-- %1$s is the engine's reason, in English -->
+    <string name="connection_error">Connection error: %1$s</string>
+    <string name="connection_reconnect">Reconnect</string>
+    <string name="connection_disconnect">Disconnect</string>
 
     <!-- Lines the app adds to the console between the game's own. The dashes set them apart from the game's text. -->
     <string name="marker_new_engine" tools:ignore="TypographyDashes">--- new engine instance %1$s ---</string>

@@ -91,18 +91,34 @@ class FakeEngine : AutoCloseable {
 
     class Session(private val socket: LocalSocket, instance: String) : AutoCloseable {
         private val writer = FrameWriter(socket.outputStream)
+        private val input = DataInputStream(socket.inputStream)
 
         /** The UI's hello: "instance" and "lastSeq" when it was attached to an engine before. */
         val hello: JSONObject
 
         init {
             socket.soTimeout = 10_000
-            hello = readFrame(DataInputStream(socket.inputStream))
+            hello = readFrame(input)
             if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
             send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
         }
 
         fun send(message: JSONObject) = writer.write(message)
+
+        /** The next request of type [type] the UI sent, skipping the others; fails after [timeoutMs]. */
+        fun receive(type: String, timeoutMs: Long = 10_000): JSONObject {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (System.currentTimeMillis() < deadline) {
+                // A read times out after soTimeout, or fails when the UI has closed the connection
+                val frame = try {
+                    readFrame(input)
+                } catch (e: IOException) {
+                    throw AssertionError("the UI sent no '$type': $e", e)
+                }
+                if (frame.optString("t") == type) return frame
+            }
+            throw AssertionError("the UI sent no '$type' within $timeoutMs ms")
+        }
 
         fun clear() = send(JSONObject().put("t", "clear"))
 

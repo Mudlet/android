@@ -165,7 +165,7 @@ class SelfTestScreenTest {
         const val RED_GREEN = "Red bold normal green"
         const val STYLES = "rgb reverse under"
 
-        // SelfTestScreen's palette and default foreground
+        // AnsiText.kt's palette and default foreground
         val ANSI_RED = Color(0xFFCD0000)
         val ANSI_GREEN = Color(0xFF00CD00)
         val ANSI_YELLOW = Color(0xFFCDCD00)

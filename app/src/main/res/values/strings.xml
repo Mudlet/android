@@ -28,6 +28,12 @@
     <!-- The masked field that takes the input line's place while the game asks for a password -->
     <string name="input_password_label">Password</string>
     <string name="input_password_close">Close the password field</string>
+    <!-- A button above the input line that puts a suggested command, or word, on the line without sending it; %1$s is
+         the command or word -->
+    <string name="input_suggestion">Suggestion: %1$s</string>
+    <!-- The button, also the right arrow key at the end of the line, that completes the line with the suggestion shown
+         greyed after it; %1$s is the whole line it gives -->
+    <string name="input_accept_suggestion">Accept the suggestion: %1$s</string>
 
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>

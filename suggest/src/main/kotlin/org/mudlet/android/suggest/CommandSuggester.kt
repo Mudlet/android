@@ -26,7 +26,7 @@ import kotlin.math.ln
 class CommandSuggester(
     private val config: Config = Config(),
     private val clock: () -> Long = System::currentTimeMillis,
-) {
+) : Suggester {
     /**
      * The caps that bound memory and the saved state, and the frecency half-life.
      *
@@ -75,7 +75,7 @@ class CommandSuggester(
      * Learns from a command the player sent. With [hidden] (the game asked for a password) nothing is
      * stored, and the next command is not linked to the one before the hidden input either.
      */
-    fun recordSent(text: String, hidden: Boolean = false) = synchronized(lock) {
+    override fun recordSent(text: String, hidden: Boolean): Unit = synchronized(lock) {
         if (hidden) {
             previous = null
             recentLines.clear()
@@ -105,7 +105,7 @@ class CommandSuggester(
     }
 
     /** Learns from a line the game showed: its words for completion, and it as context for the next send. */
-    fun observeLine(line: String) = synchronized(lock) {
+    override fun observeLine(line: String): Unit = synchronized(lock) {
         outputWords.add(line)
         val key = normalizeLine(line) ?: return@synchronized
         recentLines.remove(key)
@@ -114,7 +114,7 @@ class CommandSuggester(
     }
 
     /** The candidates for [input] with the cursor at [cursor], best first, at most [limit]. */
-    fun suggest(input: String, cursor: Int = input.length, limit: Int = 8): Suggestions = synchronized(lock) {
+    override fun suggest(input: String, cursor: Int, limit: Int): Suggestions = synchronized(lock) {
         require(cursor in 0..input.length) { "cursor $cursor outside the input" }
         require(limit >= 0) { "negative limit $limit" }
         val now = clock()
@@ -173,7 +173,7 @@ class CommandSuggester(
      * Writes what was learned for [load]: the history, the predictions and the previous command, but not the
      * session's output words or game lines.
      */
-    fun save(out: Appendable) = synchronized(lock) {
+    override fun save(out: Appendable): Unit = synchronized(lock) {
         SuggestCodec.write(out, history.values, previous, sequences, lineResponses)
     }
 
@@ -190,7 +190,7 @@ class CommandSuggester(
      * format or version leaves the state empty; the caps apply as entries are read. An I/O error from [input]
      * propagates, with what was read before it kept.
      */
-    fun load(input: Reader): LoadResult = synchronized(lock) {
+    override fun load(input: Reader): LoadResult = synchronized(lock) {
         clear()
         val result = SuggestCodec.read(input) { record ->
             when (record) {

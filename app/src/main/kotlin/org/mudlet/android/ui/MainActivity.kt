@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.theme.MudletTheme
 
 class MainActivity : ComponentActivity() {
@@ -32,6 +33,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        // The process may be killed in the background: keep what the suggestions learned
+        CommandSuggestions.saveAll()
         EngineClient.detach()
         super.onStop()
     }

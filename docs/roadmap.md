@@ -180,7 +180,7 @@ come after #31, whose fake engine (`FakeEngine`) and emulator jobs run the app's
 | P5 | App state and save on background | P4 |
 | U8 | Background: notification with profile and connection state, Disconnect action, app state to the engine | U2, P5 |
 | S1 | Command suggestions' ranking core, `:suggest`: plain Kotlin, no UI | - |
-| S2 | Suggestions in the input line: a row of candidates and ghost text, saved per profile | U4, S1 |
+| S2 | Suggestions in the input line: a row of candidates above it and ghost text with an accept button, learned and saved per profile on the device, none while input is hidden | U4, S1 |
 
 ```
 #31 ─┬─ U1 ─┬─ U2 ─┬───────────────── U4, U5, U6, U7, U8 (each also needs its P)

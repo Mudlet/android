@@ -163,6 +163,8 @@ The tail is sent once per pass of the event loop, so a flood sends its lines and
 `native/tests/fake_telnet.py` through the socket protocol. CI builds libmudlet for the host with the
 Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the banner's colours and styles, and the prompt as the tail;
+- a prompt from a game that has sent no GA, as the tail after 300 ms of quiet; after a GA, an
+  unfinished line held back until its line feed;
 - a gag, a trigger's `echo()`, and an `echo()` after `deleteLine()`;
 - `showNotification()`, `echo()` and `cecho()`;
 - `clearWindow()`, and the replay after a clear;
@@ -173,11 +175,14 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   certificate accepted once the profile accepts self-signed ones.
 
 **Gaps:**
-- Game text that no line feed or go-ahead has ended, such as a prompt without GA, is not shown
-  until the line ends. `lineShown` sends only finished lines, and `THeadlessSession` has no
-  signal for the line under way. The earlier build read it from the console model.
-- A change to a line already sent isn't sent again (`lineShown` sends each line once). Links
-  are marked by id, but the UI can't follow them yet (`link()`, `followLink()`, `linksChanged`).
+- Game text that no line feed or GA has ended shows as in Mudlet's desktop GUI. While the game
+  has sent no GA, Mudlet ends the line after the profile's network packet timeout (300 ms by
+  default) of quiet, and `lineShown` sends it, not as a prompt, so a `Login: ` prompt shows.
+  Once the game has sent a GA, an unfinished line shows only when it ends.
+- A change to a line already sent isn't sent again (`lineShown` sends each line once). That
+  needs new `THeadlessSession` API; a Mudlet PR for it is being prepared.
+- Links are marked by id, but the UI can't follow them yet (`link()`, `followLink()`,
+  `linksChanged`).
 - The main window's size (`setScreenSize()`) is not passed on, so the game is told 90 by 25 if
   it asks.
 - No profile restart after the engine is killed, and no bundled fonts.

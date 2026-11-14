@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`) and the app's own settings (`data/Settings.kt`, in SharedPreferences). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`) the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -171,6 +171,25 @@ I/O error. They are unpinned from the sheet's Pinned section. While the game hid
 the sheet closes and Ctrl+R does nothing; nothing reaches the search, and a pin can only come from the history,
 which a hidden send never enters.
 
+### Profiles in the app
+The profile list (`ui/profiles/ProfileListScreen.kt`) shows the engine's `profiles`, which `EngineClient` asks for
+each time it attaches, and its editor (`ProfileEditor.kt`) sends `saveProfile` and `deleteProfile`. Each waits for its
+answer, and a refusal shows the engine's reason, which is in English. Connect sends `openProfile` with the profile's
+stored password and goes to the game screen once it is answered with `profiles`; the game screen's Reconnect then goes
+to that profile's address. A profile's name cannot change, as the engine keeps the name a profile was created with.
+
+The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
+never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's
+name as associated data, so one profile's cannot be moved to another's. The ciphertext is in
+`files/passwords/profiles.json`, which `data_extraction_rules.xml` excludes from cloud backup and device transfer
+(`android:allowBackup="false"` covers older releases), and no other device has the key to decrypt it. The editor never
+shows a stored password: a new one replaces it, Forget password removes it, and so does deleting the profile. One that
+can no longer be decrypted is forgotten, and the player types it again.
+
+The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
+profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
+`connect` stores a password and opens a profile as the profile list does.
+
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
 one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
@@ -274,11 +293,14 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 (CI's emulator jobs) or a device, from the host through adb. It drives the UI through a debug-only hook,
 `SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
 - that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
-- that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
-  (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;
+- that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator), as the profile list does, saves a
+  profile with a character name, stores a password in `PasswordStore` and opens the profile with it read back: the
+  profile starts, so Mudlet's Lua (`luaL_openlibs` and Mudlet's Lua files) is up, the engine lists it first, the
+  banner's coloured lines reach the UI, and Mudlet's auto-login sends the game the login and then the password;
 - that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
 - that `am send-trim-memory` has the engine save the profile;
-- that after `:engine` is killed, the UI starts a new engine and attaches to it.
+- that after `:engine` is killed, the UI starts a new engine and attaches to it;
+- that logcat never holds the password.
 
 If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.
 
@@ -289,14 +311,19 @@ device shows, below the UI's debug hook:
   socket handshake; the engine notification's Quit, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
-- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the way
-  from the start screen to the game screen and the self-test and back, through the labels and click actions TalkBack
-  uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the reattach to a
-  new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one announcement,
-  `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings send; and the
-  notification permission, explained and then asked on Android 13 and later, on a fresh install. Each Compose test rule has the
-  Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a test on a control with no label
-  or a touch target under 48 dp; the library needs API 34, so they run on the API 36 emulator only.
+- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
+  way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
+  and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
+  host:port", adding, editing, deleting only once confirmed, the engine's refusals, and Connect sending
+  `openProfile` with the stored password; the password field, which TalkBack does not read aloud; `PasswordStore`
+  (`PasswordStoreTest`), whose passwords outlast a new store, go with Forget, are never in the clear, and are excluded
+  from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
+  reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
+  announcement, `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings
+  send; and the notification permission, explained and then asked on Android 13 and later, on a fresh install. Each
+  Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a test
+  on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
+  emulator only.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 
@@ -316,9 +343,9 @@ CI runs both on API 28, the app's minSdk, and on API 36.
 - A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.
 - `saveProfile` makes a new profile's folder before its first start, so that start does not remove the passwords an
   earlier profile of the same name may have left in the credential store, as Mudlet does for a new name, and
-  `deleteProfile` does not remove them either. The app stores no password (it sends one with each `openProfile`),
-  so only one stored by Mudlet's own GUI under the same config dir could be left. Profile management in
-  `THeadlessSession` would close this.
+  `deleteProfile` does not remove them either. The engine stores no password (the app keeps its own, encrypted, and
+  sends it with each `openProfile`), so only one stored by Mudlet's own GUI under the same config dir could be left.
+  Profile management in `THeadlessSession` would close this.
 - On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
   (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
   `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
@@ -760,11 +787,19 @@ Item 13 of the on-device checklist covers this.
     - With TLS ticked, connect to a game whose port has no TLS. Expect "Secure handshake failed".
 
 14. The app's screens, with TalkBack on.
-    - The start screen reads "Profiles", then its text and its buttons, each as "..., button". "Open the game screen"
-      opens the game screen, and its "Back, button" returns.
+    - The start screen reads "Profiles", then each game as "name, host:port", "Edit name, button" and "Connect to
+      name, button", then "Add a game, button". "Connect to name" opens the game screen, and its "Back, button"
+      returns.
+    - In the editor, each field reads its label. Typing in the password field, TalkBack says "dot" or nothing, never
+      the letters, and the field reads as a password field, without the text. The switches read their labels and
+      their state, and a double tap anywhere on a switch's row toggles it.
+    - "Delete" opens a dialog that TalkBack moves into and reads; Cancel returns to the editor with the game kept.
+    - After a refused save (a name with a `/`, say), TalkBack reads the engine's reason without moving focus.
+    - Add your own game with its character name and password, and Connect: Mudlet logs in. Force-stop the app in the
+      system's settings, reopen it and Connect: it logs in again. Forget password, then Connect: the game asks for it.
     - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
     - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
-15. The game screen, connected to a game (connect from the self-test first, then open the game screen).
+15. The game screen, connected to a game (Connect on one of the start screen's games).
     - The keyboard: tapping the input line opens it, and the console shrinks above it with its newest line still in
       view. Send on the keyboard sends the line and leaves the keyboard open, ready for the next. Note the keyboard's
       action key: it should read Send, and suggestions, corrections or a capital first letter should not change what is

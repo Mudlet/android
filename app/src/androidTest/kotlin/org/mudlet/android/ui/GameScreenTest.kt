@@ -42,6 +42,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
 
 /**
@@ -72,7 +73,10 @@ class GameScreenTest {
         // EngineClient lives as long as the process, so an earlier test's lines would still be there
         session.clear()
         session.synced(0)
-        activate(hasText(string(R.string.profiles_open_game)))
+        session.profiles(listOf(GAME), session.receive("listProfiles"))
+        activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
+        session.profiles(listOf(GAME), session.receive("openProfile"))
+        waitUntilDisplayed(string(R.string.game_title))
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
     }
 
@@ -293,6 +297,8 @@ class GameScreenTest {
     }
 
     private companion object {
+        val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+
         // More lines than any emulator screen shows
         const val MANY = 200
         const val WAIT_MS = 10_000L

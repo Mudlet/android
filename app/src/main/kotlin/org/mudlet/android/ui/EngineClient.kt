@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.json.JSONObject
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
@@ -27,6 +28,7 @@ import org.mudlet.android.engine.EngineSocket
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.Transport
 import org.mudlet.android.ui.game.Announcer
@@ -34,6 +36,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false)
@@ -118,6 +121,14 @@ object EngineClient {
     var sendError by mutableStateOf<String?>(null)
         private set
 
+    /** The engine's profiles, the last opened first; null until it has listed them. */
+    var profiles by mutableStateOf<List<Profile>?>(null)
+        private set
+
+    // The profile requests waiting for their answer, by id; main thread only
+    private val profileAnswers = HashMap<Long, (String?) -> Unit>()
+    private val nextRequestId = AtomicLong(1)
+
     private val main = Handler(Looper.getMainLooper())
 
     // The application's Context, which lives as long as the process
@@ -149,7 +160,6 @@ object EngineClient {
     private var restartRequestedForThisOutage = false
 
     // Main thread only
-    private var nextRequestId = 1L
     private val completions = HashMap<Long, (String) -> Unit>()
     private val sendsAwaitingClear = ArrayDeque<Long>()
 
@@ -247,7 +257,7 @@ object EngineClient {
 
     /** Asks the engine to complete [text]; [onResult] gets the completed line, or empty for none. False as for [send]. */
     fun complete(text: String, onResult: (String) -> Unit): Boolean {
-        val id = nextRequestId++
+        val id = nextRequestId.getAndIncrement()
         if (!send(Requests.complete(text, false, id))) return false
         completions[id] = onResult
         return true
@@ -263,13 +273,17 @@ object EngineClient {
 
     /** Connects the engine to a game and remembers the address for [reconnect]. False as for [send]. */
     fun connect(host: String, port: Int, tls: Boolean): Boolean {
-        lastAddress = GameAddress(host, port, tls)
-        prefs().edit {
-            putString(PREF_LAST_HOST, host)
-            putInt(PREF_LAST_PORT, port)
-            putBoolean(PREF_LAST_TLS, tls)
-        }
+        rememberAddress(GameAddress(host, port, tls))
         return send(Requests.connect(host, port, tls))
+    }
+
+    private fun rememberAddress(address: GameAddress) {
+        lastAddress = address
+        prefs().edit {
+            putString(PREF_LAST_HOST, address.host)
+            putInt(PREF_LAST_PORT, address.port)
+            putBoolean(PREF_LAST_TLS, address.tls)
+        }
     }
 
     /** Connects to [lastAddress] again; false when there is none or the request was dropped. */
@@ -294,7 +308,7 @@ object EngineClient {
     // Lost when no profile is loaded or the link is down: the next profile to load, or the next attach, gets them all
     private fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
         if (status["profile"]?.endsWith(" loaded") != true) return
-        val id = nextRequestId++
+        val id = nextRequestId.getAndIncrement()
         settingsRequests.add(id)
         if (!link.send(Requests.runLua(settings.joinToString("\n") { it.setConfigLua() }, id))) settingsRequests.remove(id)
     }
@@ -304,6 +318,41 @@ object EngineClient {
         if (size == screenSize) return
         screenSize = size
         if (attached) link.send(Requests.setScreenSize(columns, rows))
+    }
+
+    // Each answer comes to [onAnswer] on the main thread: null once the engine has done it, else why not
+    fun saveProfile(profile: Profile, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.saveProfile(profile, it) }
+
+    fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.deleteProfile(name, it) }
+
+    /** Opens and connects the profile [name]; once the engine has, Reconnect goes to its address. */
+    fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
+        if (error == null) {
+            profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { rememberAddress(GameAddress(it.host, it.port, it.tls)) }
+        }
+        onAnswer(error)
+    }) { Requests.openProfile(name, password, true, it) }
+
+    /** Saves [profile], then opens it if the engine took it. */
+    fun saveAndOpenProfile(profile: Profile, password: String?, onAnswer: (error: String?) -> Unit) = saveProfile(profile) { error ->
+        if (error != null) onAnswer(error) else openProfile(profile.name, password, onAnswer)
+    }
+
+    private fun profileRequest(onAnswer: (String?) -> Unit, request: (Long) -> JSONObject) {
+        val id = nextRequestId.getAndIncrement()
+        profileAnswers[id] = onAnswer
+        if (!send(request(id))) {
+            profileAnswers.remove(id)
+            onAnswer(app.getString(R.string.profiles_error_not_attached))
+        }
+    }
+
+    // False when [replyTo] is no profile request's id
+    private fun answerProfileRequest(replyTo: Any?, error: String?): Boolean {
+        val id = (replyTo as? Number)?.toLong() ?: return false
+        val onAnswer = profileAnswers.remove(id) ?: return false
+        onAnswer(error)
+        return true
     }
 
     fun runPings(count: Int = 300) {
@@ -359,6 +408,8 @@ object EngineClient {
             replaying = true
             // The engine forgets nothing across a reattach, but a new engine instance needs the size again
             screenSize?.let { (columns, rows) -> link.send(Requests.setScreenSize(columns, rows)) }
+            // Another UI or a restore may have changed them meanwhile
+            link.send(Requests.listProfiles(nextRequestId.getAndIncrement()))
             // The engine resends its whole status after hello, so the old instance's values must go first
             if (!sameInstance) resetStatus()
             post {
@@ -454,7 +505,14 @@ object EngineClient {
                     }
                 }
 
-                is EngineMessage.Error -> post { linkState = "engine error: ${message.message}" }
+                is EngineMessage.Error -> post {
+                    if (!answerProfileRequest(message.replyTo, message.message)) linkState = "engine error: ${message.message}"
+                }
+
+                is EngineMessage.Profiles -> post {
+                    profiles = message.profiles
+                    answerProfileRequest(message.replyTo, null)
+                }
 
                 else -> {}
             }
@@ -469,6 +527,10 @@ object EngineClient {
                 enginePid = 0
                 completions.clear()
                 linkState = "engine connection lost ($reason); reconnecting"
+                // Their answers went with the connection
+                val unanswered = profileAnswers.values.toList()
+                profileAnswers.clear()
+                unanswered.forEach { it(app.getString(R.string.profiles_error_engine_lost)) }
             }
         }
 

@@ -10,8 +10,40 @@
     <string name="notifications_explanation_not_now">Not now</string>
 
     <string name="profiles_title">Profiles</string>
-    <string name="profiles_empty">Your games will be listed here.</string>
-    <string name="profiles_open_game">Open the game screen</string>
+    <string name="profiles_waiting">Waiting for the engine…</string>
+    <string name="profiles_empty">No games yet. Add one with its address.</string>
+    <string name="profiles_add">Add a game</string>
+    <!-- What TalkBack reads for a profile in the list: its name, then its address as host:port -->
+    <string name="profile_description">%1$s, %2$s:%3$d</string>
+    <string name="profile_address">%1$s:%2$d</string>
+    <string name="profile_connect">Connect</string>
+    <!-- TalkBack's label for a profile's Connect button; %1$s is the profile's name -->
+    <string name="profile_connect_to">Connect to %1$s</string>
+    <!-- TalkBack's label for a profile's edit button; %1$s is the profile's name -->
+    <string name="profile_edit">Edit %1$s</string>
+    <!-- Why a profile request got no answer. The engine gives its own reasons, in English, for those it refuses -->
+    <string name="profiles_error_not_attached">The engine is not running yet. Try again in a moment.</string>
+    <string name="profiles_error_engine_lost">The engine stopped before it answered. Try again.</string>
+
+    <string name="profile_new_title">New game</string>
+    <string name="profile_name">Name</string>
+    <string name="profile_host">Host</string>
+    <string name="profile_port">Port</string>
+    <string name="profile_port_invalid">A port from 1 to 65535</string>
+    <string name="profile_tls">Secure connection (TLS)</string>
+    <string name="profile_login">Character name</string>
+    <string name="profile_password">Password</string>
+    <string name="profile_password_stored">A password is stored. Type a new one to replace it.</string>
+    <string name="profile_password_forget">Forget password</string>
+    <string name="profile_password_not_stored">The game was saved, but its password could not be stored.</string>
+    <string name="profile_password_not_forgotten">The password could not be forgotten.</string>
+    <string name="profile_auto_reconnect">Reconnect automatically</string>
+    <string name="profile_save">Save</string>
+    <string name="profile_delete">Delete</string>
+    <!-- The title of the dialog that confirms deleting a profile; %1$s is its name -->
+    <string name="profile_delete_title">Delete %1$s?</string>
+    <string name="profile_delete_text">Its settings, scripts and everything else Mudlet keeps for it on this device are deleted too.</string>
+    <string name="profile_delete_cancel">Cancel</string>
 
     <string name="game_title">Game</string>
 

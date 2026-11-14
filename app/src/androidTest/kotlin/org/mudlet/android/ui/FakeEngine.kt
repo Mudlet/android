@@ -6,6 +6,7 @@ import android.net.LocalSocketAddress
 import org.json.JSONArray
 import org.json.JSONObject
 import org.mudlet.android.protocol.FrameWriter
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Transport
 import java.io.DataInputStream
 import java.io.IOException
@@ -127,6 +128,33 @@ class FakeEngine : AutoCloseable {
             throw AssertionError("the UI sent no '$type' within $timeoutMs ms")
         }
 
+        /** Fails if the UI sends a request of type [type] within [ms]; the others it skips. */
+        fun assertNoRequest(type: String, ms: Int) {
+            val deadline = System.currentTimeMillis() + ms
+            try {
+                while (true) {
+                    socket.soTimeout = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(1)
+                    val frame = readFrame(input)
+                    if (frame.optString("t") == type) throw AssertionError("the UI sent $frame")
+                }
+            } catch (_: IOException) {
+                // A LocalSocket's read timeout is a plain IOException
+            } finally {
+                socket.soTimeout = 10_000
+            }
+        }
+
+        /** The answer to a profile request, as the engine gives it: every profile, and the request's id as "re". */
+        fun profiles(profiles: List<Profile>, request: JSONObject? = null) = send(
+            JSONObject().put("t", "profiles").put("re", request?.opt("id"))
+                .put("profiles", JSONArray(profiles.map { it.toJson() })),
+        )
+
+        /** The engine refusing [request]. */
+        fun refuse(request: JSONObject, why: String) = send(
+            JSONObject().put("t", "error").put("re", request.opt("id")).put("message", "${request.optString("t")}: $why"),
+        )
+
         fun clear() = send(JSONObject().put("t", "clear"))
 
         /**
@@ -171,6 +199,14 @@ class FakeEngine : AutoCloseable {
     companion object {
         const val FAKE_PID = 4242
         const val FIRST_INSTANCE = "fake-1"
+
+        private fun Profile.toJson() = JSONObject()
+            .put("name", name)
+            .put("host", host)
+            .put("port", port)
+            .put("tls", tls)
+            .put("login", login)
+            .put("autoReconnect", autoReconnect)
 
         private fun readFrame(input: DataInputStream): JSONObject {
             val n = input.readInt()

@@ -18,7 +18,6 @@
     "libavutil*.so": ["qt-qtmultimedia-ffmpeg"],
     "libswresample*.so": ["qt-qtmultimedia-ffmpeg"],
     "libswscale*.so": ["qt-qtmultimedia-ffmpeg"],
-    "libc++_shared.so": ["libcxx"],
     "libcrypto_3.so": ["openssl"],
     "libssl_3.so": ["openssl"],
     "libandroidx.graphics.path.so": ["androidx-native"]

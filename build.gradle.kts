@@ -16,22 +16,15 @@ dependencies {
     }
 }
 
-val ktlintFiles = listOf("**/src/**/*.kt", "**/*.gradle.kts", "!**/build/**")
-
-tasks.register<JavaExec>("ktlintCheck") {
-    group = "verification"
-    description = "Checks the Kotlin sources and build scripts with ktlint"
-    classpath = ktlint
-    mainClass.set("com.pinterest.ktlint.Main")
-    args(ktlintFiles)
-}
-
-tasks.register<JavaExec>("ktlintFormat") {
-    group = "formatting"
-    description = "Fixes what ktlint can in the Kotlin sources and build scripts"
+fun registerKtlint(name: String, group: String, description: String, vararg flags: String) = tasks.register<JavaExec>(name) {
+    this.group = group
+    this.description = description
     classpath = ktlint
     mainClass.set("com.pinterest.ktlint.Main")
     // ktlint's own advice for JDK 16 and later
     jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED")
-    args(listOf("-F") + ktlintFiles)
+    args(*flags, "**/src/**/*.kt", "**/*.gradle.kts", "!**/build/**")
 }
+
+registerKtlint("ktlintCheck", "verification", "Checks the Kotlin sources and build scripts with ktlint")
+registerKtlint("ktlintFormat", "formatting", "Fixes what ktlint can in the Kotlin sources and build scripts", "-F")

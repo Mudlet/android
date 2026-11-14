@@ -17,13 +17,18 @@ venv=${LINT_VENV:-$root/.lint-venv}
 checks=("$@")
 [ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint)
 
+# The pinned linters, installed once per run
+tools_ready=0
 tools() {
+    [ "$tools_ready" = 1 ] && return
     [ -x "$venv/bin/pip" ] || python3 -m venv "$venv"
     "$venv/bin/pip" install -q --disable-pip-version-check -r scripts/lint-requirements.txt
+    tools_ready=1
 }
 
 # Tracked files and new ones not ignored, matching the given pathspecs
 files() { git ls-files -z --cached --others --exclude-standard -- "$@"; }
+native_files() { files 'native/*.c' 'native/*.cpp' 'native/*.h' ':!native/third_party'; }
 
 failed=()
 for check in "${checks[@]}"; do
@@ -34,10 +39,9 @@ for check in "${checks[@]}"; do
         clang-format)
             tools
             if [ "${FIX:-0}" = 1 ]; then
-                files 'native/*.c' 'native/*.cpp' 'native/*.h' ':!native/third_party' | xargs -0 "$venv/bin/clang-format" -i
+                native_files | xargs -0 "$venv/bin/clang-format" -i
             else
-                files 'native/*.c' 'native/*.cpp' 'native/*.h' ':!native/third_party' \
-                    | xargs -0 "$venv/bin/clang-format" --dry-run --Werror || failed+=("$check")
+                native_files | xargs -0 "$venv/bin/clang-format" --dry-run --Werror || failed+=("$check")
             fi ;;
         shellcheck)
             tools

@@ -1,6 +1,6 @@
 # Weekly, one grouped pull request per ecosystem. Not here, and bumped together by hand: Qt, the NDK, the SDK
-# platform and build-tools, AGP and Kotlin past a patch release, and Gradle past a patch release. See "Pinned
-# versions" in CONTRIBUTING.md for why and how.
+# platform and build-tools, and AGP, Kotlin, Gradle and AndroidX past a patch release. See "Pinned versions" in
+# CONTRIBUTING.md for why and how.
 version: 2
 updates:
   - package-ecosystem: gradle
@@ -17,6 +17,10 @@ updates:
       - dependency-name: "org.jetbrains.kotlin*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # An AndroidX minor release can need a newer compile SDK and AGP (core 1.19.1 and the 2026.09.00 Compose BOM
+      # need compileSdk 37 and AGP 9.1); the Compose BOM is versioned year.month.patch, so it gets patches only
+      - dependency-name: "androidx.*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       # a new ktlint can bring new rules, so it comes on its own and may need ./gradlew ktlintFormat

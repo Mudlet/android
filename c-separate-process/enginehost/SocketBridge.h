@@ -37,6 +37,7 @@ public:
 
     void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
     void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
+    void cleared() override;
     void notify(const QString& title, const QString& text) override;
     void status(const QString& key, const QString& value) override;
 
@@ -74,6 +75,9 @@ private:
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;
+    // The last line sent before the console was last emptied: a UI that has no line after it is told of the clear
+    qint64 mClearedAfterSeq = 0;
+    bool mEverCleared = false;
     // Distinguishes a restarted engine, whose sequence numbers start again
     QString mInstance;
     // Request id of the command being executed, echoed on the status frames it causes

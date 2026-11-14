@@ -11,8 +11,10 @@ struct ColorRun
     int fg = -1;
     int bg = -1;
     int attributes = 0;
+    // The link the run is part of among the engine's links, 0 for none
+    int link = 0;
     static constexpr int rgbFlag = 0x1000000;
-    enum Attribute { bold = 1, italic = 2, underline = 4, strikeOut = 8, reverse = 16 };
+    enum Attribute { bold = 1, italic = 2, underline = 4, strikeOut = 8, reverse = 16, overline = 32, blink = 64, fastBlink = 128, concealed = 256 };
     bool operator==(const ColorRun&) const = default;
 };
 
@@ -25,6 +27,8 @@ public:
     virtual void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) = 0;
     // The line still being written below the last one, shown until it is replaced; empty for none
     virtual void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) = 0;
+    // The console was emptied: every line sent before, and the tail, are gone
+    virtual void cleared() = 0;
     virtual void notify(const QString& title, const QString& text) = 0;
     virtual void status(const QString& key, const QString& value) = 0;
 };

@@ -150,6 +150,11 @@ void SocketBridge::sendAllStatus()
 
 void SocketBridge::sendLinesAfter(qint64 seq, bool replay)
 {
+    // Lines from before a clear are gone, not skipped
+    if (mEverCleared && seq <= mClearedAfterSeq) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("clear")}});
+        seq = mClearedAfterSeq;
+    }
     const qint64 oldest = mScrollback.empty() ? mNextSeq : mScrollback.front().seq;
     if (seq + 1 < oldest) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("gap")}, {QStringLiteral("skipped"), oldest - seq - 1}});
@@ -220,15 +225,17 @@ QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
     return message;
 }
 
-// [start, length, fg], with bg and attributes only when a run has them
+// [start, length, fg], with bg and attributes, then link, only when a run has them
 QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
 {
     QJsonArray json;
     for (const ColorRun& run : runs) {
-        if (run.bg == -1 && run.attributes == 0) {
-            json.append(QJsonArray{run.start, run.length, run.fg});
-        } else {
+        if (run.link != 0) {
+            json.append(QJsonArray{run.start, run.length, run.fg, run.bg, run.attributes, run.link});
+        } else if (run.bg != -1 || run.attributes != 0) {
             json.append(QJsonArray{run.start, run.length, run.fg, run.bg, run.attributes});
+        } else {
+            json.append(QJsonArray{run.start, run.length, run.fg});
         }
     }
     return json;
@@ -274,6 +281,17 @@ void SocketBridge::tail(const QString& text, const QList<ColorRun>& runs, bool i
     mTail = {0, text, runs, isPrompt};
     if (clientLive()) {
         sendFrame(tailMessage());
+    }
+}
+
+void SocketBridge::cleared()
+{
+    mScrollback.clear();
+    mClearedAfterSeq = mNextSeq - 1;
+    mEverCleared = true;
+    mTail = {0, {}, {}, false};
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("clear")}});
     }
 }
 

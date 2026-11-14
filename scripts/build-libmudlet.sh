@@ -20,6 +20,9 @@ qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/
 jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
 
+# --- An app that links libmudlet (C's engine) needs the runner's link line: ask CMake's file API to record it ---
+"$(dirname "$0")/export-libmudlet.py" --query "$build"
+
 # Mudlet's CMake leaves out the desktop-only parts for Android by itself; USE_GUI, USE_VARIABLE_SPLASH_SCREEN and
 # BUILD_TESTING are named so that a change of those defaults does not quietly turn this into a different build
 PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" PKG_CONFIG_PATH='' \
@@ -99,3 +102,6 @@ if [ -n "$runner" ]; then
         || { echo "mudlet-headless lacks QtKeychain's KeyStore backend: is QtKeychain built for Android?" >&2; exit 1; }
 fi
 echo "libmudlet passed the Android checks"
+
+# --- For an app that links libmudlet: <build-dir>/libmudlet.cmake, the imported target libmudlet::headless ---
+"$(dirname "$0")/export-libmudlet.py" "$build"

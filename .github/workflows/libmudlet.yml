@@ -1,14 +1,19 @@
 name: libmudlet for Android
 
-# Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a.
+# Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
+# builds C's APK with libmudlet as its engine. A second job builds libmudlet for the host and runs C's real engine
+# against the fake game server through the socket protocol.
 # The nightly run builds Mudlet's latest development, so it catches a change there that stops these
-# compiling or linking for Android; a failed nightly opens or updates an issue here.
+# compiling or linking for Android, or breaks C's engine; a failed nightly opens or updates an issue here.
 on:
   push:
     branches: [main]
     paths: &paths
       - scripts/build-mudlet-deps.sh
       - scripts/build-libmudlet.sh
+      - scripts/build-libmudlet-desktop.sh
+      - scripts/export-libmudlet.py
+      - c-separate-process/**
       - .github/actions/**
       - .github/workflows/libmudlet.yml
   pull_request:
@@ -97,6 +102,42 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-${{ github.run_id }}
 
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.14.3"
+
+      - name: Build C's APK with libmudlet as the engine
+        working-directory: c-separate-process
+        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" ./build-apk.sh
+
+      - name: Check C's APK
+        uses: ./.github/actions/check-apk
+        with:
+          apk-dir: c-separate-process/android/app/build/outputs/apk/debug
+          engine: libengine
+          title: c-separate-process with libmudlet
+          build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
+
+      # What the runner is checked for in build-libmudlet.sh, now in the engine an app ships
+      - name: Check C's engine carries Mudlet's Lua, its Lua C modules and the KeyStore backend
+        run: |
+          engine=c-separate-process/build-android-arm64-v8a-mudlet/enginehost/libengine_arm64-v8a.so
+          defined=$("$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -C --defined-only \
+            --format=just-symbols "$engine")
+          for sym in 'qInitResources_mudlet()' 'qInitResources_mudlet_lua()' luaopen_lfs luaopen_lpeg luaopen_rex_pcre2 \
+                     luaopen_luasql_sqlite3 luaopen_utf8 luaopen_brimworks_zip luaopen_yajl; do
+            grep -qxF "$sym" <<< "$defined" || { echo "::error::C's engine lacks $sym"; exit 1; }
+          done
+          grep -q '^QKeychain::java::security::KeyStore::getInstance(' <<< "$defined" \
+            || { echo "::error::C's engine lacks QtKeychain's KeyStore backend"; exit 1; }
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: c-separate-process-libmudlet-debug-apk
+          path: c-separate-process/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Summary
         if: always()
         run: |
@@ -114,11 +155,79 @@ jobs:
             echo "ccache $(ccache --show-stats 2>/dev/null | grep -m1 'Hits:')"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # libmudlet for the host, with the options an Android build has, and C's real engine on it, tested through the
+  # socket protocol against tests/fake_telnet.py
+  desktop-engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1000M
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: Mudlet/Mudlet
+          ref: ${{ env.MUDLET_REF }}
+          path: mudlet
+
+      - id: toolchain
+        uses: ./.github/actions/android-toolchain
+        with:
+          # Mudlet's other dependencies from the system, as Mudlet's own core-mobile-build workflow takes them; host
+          # Qt Gui needs the OpenGL headers to configure and the rest to run
+          apt-packages: >-
+            lua5.1 libboost-dev libhunspell-dev libpcre2-dev libpugixml-dev libsqlite3-dev libyajl-dev libzip-dev
+            qtkeychain-qt6-dev zlib1g-dev libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
+
+      # The cached host Qt has only what the other jobs need; mudlet_core also needs these, which are small enough
+      # to fetch each run and are added beside it without touching what is there
+      - name: Host Qt modules for mudlet_core
+        run: |
+          python3 -m venv "$RUNNER_TEMP/aqt-host"
+          "$RUNNER_TEMP/aqt-host/bin/pip" install -q "aqtinstall==3.3.0"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/aqt-host/bin/aqt" install-qt linux desktop ${{ steps.toolchain.outputs.qt-version }} linux_gcc_64 \
+            --outputdir "$RUNNER_TEMP/qt-host" --archives qtsvg -m qt5compat qtmultimedia qtspeech
+          cp -rn "$RUNNER_TEMP/qt-host/${{ steps.toolchain.outputs.qt-version }}/gcc_64/." "$QT_ROOT/gcc_64/"
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: .ccache
+          key: ccache-libmudlet-desktop-${{ github.run_id }}
+          restore-keys: ccache-libmudlet-desktop-
+
+      - name: Build libmudlet for the host
+        run: |
+          ccache -z > /dev/null
+          scripts/build-libmudlet-desktop.sh mudlet build-desktop
+
+      - name: Save ccache
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .ccache
+          key: ccache-libmudlet-desktop-${{ github.run_id }}
+
+      - name: Test C's real engine
+        working-directory: c-separate-process
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cmake -S . -B build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64" \
+            -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
+          cmake --build build-desktop-mudlet --target engine
+          python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
+
   # GitHub mails a failed scheduled run only to whoever last edited the cron line
   report-nightly-failure:
-    needs: libmudlet
+    needs: [libmudlet, desktop-engine]
     # a job that hits timeout-minutes is cancelled, not failed
-    if: always() && github.event_name == 'schedule' && needs.libmudlet.result != 'success'
+    if: >-
+      always() && github.event_name == 'schedule'
+      && (needs.libmudlet.result != 'success' || needs.desktop-engine.result != 'success')
     runs-on: ubuntu-24.04
     permissions:
       issues: write

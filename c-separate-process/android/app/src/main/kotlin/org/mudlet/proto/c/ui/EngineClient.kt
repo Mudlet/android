@@ -70,6 +70,7 @@ object EngineClient {
     private var pendingLines = ArrayList<UiLine>()
     private var pendingTail: UiLine? = null
     private var pendingTailSet = false
+    private var pendingClear = false
     private var pendingStatus = HashMap<String, String>()
     private var pendingStatusReset = false
     private var flushPosted = false
@@ -204,6 +205,13 @@ object EngineClient {
                     pendingLines.add(UiLine(message.text, message.runs, message.prompt))
                     scheduleFlush()
                 }
+                is EngineMessage.Clear -> synchronized(pendingLock) {
+                    pendingLines.clear()
+                    pendingClear = true
+                    pendingTail = null
+                    pendingTailSet = true
+                    scheduleFlush()
+                }
                 is EngineMessage.Tail -> synchronized(pendingLock) {
                     pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt)
                     pendingTailSet = true
@@ -273,7 +281,10 @@ object EngineClient {
         val statusReset: Boolean
         val newTail: UiLine?
         val tailSet: Boolean
+        val clear: Boolean
         synchronized(pendingLock) {
+            clear = pendingClear
+            pendingClear = false
             newTail = pendingTail
             tailSet = pendingTailSet
             pendingTail = null
@@ -289,6 +300,7 @@ object EngineClient {
         if (statusReset) status.clear()
         status.putAll(newStatus)
         newStatus["luaResult"]?.let { lastLuaResult = it }
+        if (clear) lines.clear()
         if (newLines.size >= MAX_LINES) {
             lines.clear()
             lines.addAll(newLines.subList(newLines.size - MAX_LINES, newLines.size))

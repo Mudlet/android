@@ -83,9 +83,9 @@ fun Console(
     val listState = rememberLazyListState()
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val style = remember(textSizeSp) { TextStyle(fontFamily = FontFamily.Monospace, fontSize = textSizeSp.sp) }
+    val style = remember(textSizeSp) { TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp) }
     val cell = remember(measurer, density, style) {
-        val row = measurer.measure("M".repeat(CELLS_MEASURED), style, softWrap = false)
+        val row = measurer.measure("M".repeat(CELLS_MEASURED), style, softWrap = false, density = androidx.compose.ui.unit.Density(density.density))
         CellSize(row.getLineRight(0) / CELLS_MEASURED, row.size.height)
     }
     // Each side rounded on its own, as contentPadding does
@@ -134,7 +134,7 @@ fun Console(
         }
     }
 
-    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
+    Box(modifier.background(ConsoleColors().background)) {
         LazyColumn(
             Modifier.fillMaxSize().onSizeChanged { consoleSize = it },
             state = listState,
@@ -143,7 +143,7 @@ fun Console(
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
-                val text = remember(line, colors) { ansiText(line, colors) }
+                val text = remember(line, colors) { ansiText(line) }
                 Text(text, Modifier.fillMaxWidth(), color = colors.foreground, style = style)
             }
         }

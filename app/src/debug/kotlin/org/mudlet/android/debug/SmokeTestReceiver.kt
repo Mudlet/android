@@ -36,9 +36,14 @@ class SmokeTestReceiver : BroadcastReceiver() {
                 val port = intent.getIntExtra("port", -1)
                 if (host == null || port <= 0) "connect needs --es host and --ei port" else sendOrError(Requests.connect(host, port))
             }
-            "lua" -> intent.getStringExtra("code")?.let { sendOrError(Requests.runLua(it, System.nanoTime())) }
-                ?: "lua needs --es code"
-            "send" -> intent.getStringExtra("text")?.let { sendOrError(Requests.send(it)) } ?: "send needs --es text"
+            "lua" -> {
+                val code = intent.getStringExtra("code")
+                if (code == null) "lua needs --es code" else sendOrError(Requests.runLua(code, System.nanoTime()))
+            }
+            "send" -> {
+                val text = intent.getStringExtra("text")
+                if (text == null) "send needs --es text" else sendOrError(Requests.send(text))
+            }
             "kill" -> if (c.enginePid > 0) {
                 c.killEngineProcess()
                 null

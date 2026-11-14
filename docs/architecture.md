@@ -1,6 +1,6 @@
 # Architecture
 
-Mudlet for Android runs in two processes. The UI process is Kotlin and Jetpack Compose and loads no Qt. The engine
+Mudlet for Android runs as two processes. The UI process is Kotlin and Jetpack Compose and loads no Qt. The engine
 process (`:engine`) runs Qt and the engine (libmudlet, or the stand-in for fast tests) in a foreground service. They
 talk over a local socket with the protocol in [`protocol.md`](protocol.md). Why it is built this way is in
 [`decisions/hosting.md`](decisions/hosting.md).

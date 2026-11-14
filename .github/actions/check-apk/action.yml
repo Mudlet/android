@@ -1,9 +1,9 @@
 name: Check APK
 description: >
-  Checks each debug APK in a directory: that it holds Qt and the engine library, and OpenSSL as Qt's TLS backend
-  loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load segments), and that they
-  are stored or compressed as the manifest's extractNativeLibs says; then adds each APK's size, its size on the
-  device, and OpenSSL's share, to the job summary.
+  Checks each debug APK in a directory with scripts/check-apk.sh: that it holds Qt and the engine library, and
+  OpenSSL as Qt's TLS backend loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load
+  segments), and that they are stored or compressed as the manifest's extractNativeLibs says; then adds each APK's
+  size, its size on the device, and OpenSSL's share, to the job summary.
 inputs:
   apk-dir:
     description: Directory holding the APKs
@@ -29,90 +29,11 @@ runs:
     # Gradle packages whatever androiddeployqt staged, so a partial deploy still gives an APK
     - name: Check APK
       shell: bash
-      working-directory: ${{ inputs.apk-dir }}
       env:
         TITLE: ${{ inputs.title }}
         EXTRACTED: ${{ inputs.extracted }}
         ENGINE: ${{ inputs.engine }}
         BUILD_TOOLS: ${{ inputs.build-tools-dir }}
         ABI: ${{ inputs.abi }}
-      run: |
-        readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-        nm="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-        aapt2="$BUILD_TOOLS/aapt2"
-        mb() { awk -v b="$1" 'BEGIN { printf "%.1f MB", b / 1000000 }'; }
-        printf '### %s\n\n' "$TITLE" >> "$GITHUB_STEP_SUMMARY"
-        for apk in *.apk; do
-          libs="$RUNNER_TEMP/$apk/lib/$ABI"
-          unzip -q -o "$apk" "lib/$ABI/*.so" -d "$RUNNER_TEMP/$apk" \
-            || { echo "::error::cannot extract lib/$ABI/*.so from $apk"; exit 1; }
-          tls_plugin=libplugins_tls_qopensslbackend_$ABI.so
-          for lib in libQt6Core_$ABI.so libplugins_platforms_qtforandroid_$ABI.so libc++_shared.so \
-                     ${ENGINE}_$ABI.so $tls_plugin libcrypto_3.so libssl_3.so; do
-            [ -f "$libs/$lib" ] || { echo "::error::$apk has no lib/$ABI/$lib"; exit 1; }
-          done
-          # Qt's OpenSSL backend, built against OpenSSL 3, dlopens "ssl" and "crypto" with the suffix "_3"
-          # (qsslsocket_openssl_symbols.cpp) and refuses a runtime older than 3; the suffix is a string of its own.
-          # Here-strings, not pipes into grep -q, which would end strings or nm early and fail under pipefail.
-          grep -qxF _3 <<< "$(strings -a -n 2 "$libs/$tls_plugin")" \
-            || { echo "::error::$apk: Qt's OpenSSL backend does not look for libssl_3.so: which OpenSSL was Qt built with?"; exit 1; }
-          for lib in libcrypto_3.so libssl_3.so; do
-            soname=$("$readelf" -dW "$libs/$lib" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p')
-            [ "$soname" = "$lib" ] || { echo "::error::$apk: $lib has the SONAME '$soname'"; exit 1; }
-          done
-          grep -qxF libcrypto_3.so <<< "$("$readelf" -dW "$libs/libssl_3.so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')" \
-            || { echo "::error::$apk: libssl_3.so does not load libcrypto_3.so"; exit 1; }
-          # A few of the functions Qt resolves (by name, so whatever their symbol version) before it takes the
-          # backend as working
-          crypto_symbols=$("$nm" -D --defined-only --format=just-symbols "$libs/libcrypto_3.so" | sed 's/@.*//')
-          for sym in OpenSSL_version_num X509_verify_cert; do
-            grep -qxF "$sym" <<< "$crypto_symbols" || { echo "::error::$apk: libcrypto_3.so does not export $sym"; exit 1; }
-          done
-          ssl_symbols=$("$nm" -D --defined-only --format=just-symbols "$libs/libssl_3.so" | sed 's/@.*//')
-          for sym in SSL_CTX_new TLS_client_method SSL_connect; do
-            grep -qxF "$sym" <<< "$ssl_symbols" || { echo "::error::$apk: libssl_3.so does not export $sym"; exit 1; }
-          done
-          openssl_version=$(grep -m1 -oE '^OpenSSL 3\.[0-9]+\.[0-9]+' <<< "$(strings -a "$libs/libcrypto_3.so")" || true)
-          [ -n "$openssl_version" ] || { echo "::error::$apk: libcrypto_3.so is not OpenSSL 3"; exit 1; }
-          openssl_size=$(( $(stat -c %s "$libs/libcrypto_3.so") + $(stat -c %s "$libs/libssl_3.so") ))
-          # a 16 KB page device needs both: each library at a 16 KB offset in the APK, and 16 KB aligned segments
-          "$BUILD_TOOLS/zipalign" -c -P 16 4 "$apk" \
-            || { echo "::error::$apk does not store its libraries at 16 KB offsets"; exit 1; }
-          sos=("$libs"/*.so)
-          for so in "${sos[@]}"; do
-            aligns=$("$readelf" -lW "$so" | awk '$1 == "LOAD" { print $NF }')
-            [ -n "$aligns" ] || { echo "::error::no LOAD segments read from $so"; exit 1; }
-            for a in $aligns; do
-              (( a >= 0x4000 )) || { echo "::error::$apk: $(basename "$so") has segments aligned to $a, below 16 KB"; exit 1; }
-            done
-          done
-          # zipalign -c passes compressed libraries; the installer extracts the libraries when the manifest's
-          # extractNativeLibs is not false, and refuses compressed ones when it is
-          stats=$(unzip -v "$apk" "lib/$ABI/*.so" \
-            | awk '$8 ~ /^lib\// { n++; if ($2 != "Stored") d++; u += $1; c += $3 } END { print n+0, d+0, u+0, c+0 }')
-          read -r count deflated raw packed <<< "$stats"
-          (( count == ${#sos[@]} )) \
-            || { echo "::error::$apk: unzip -v listed $count libraries, but ${#sos[@]} were extracted"; exit 1; }
-          manifest=$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")
-          grep -q 'E: application' <<< "$manifest" || { echo "::error::no <application> in $apk's manifest dump"; exit 1; }
-          flag=$(sed -n 's/.*:extractNativeLibs([^)]*)=\([a-z]*\).*/\1/p' <<< "$manifest")
-          apk_size=$(stat -c %s "$apk")
-          if [ "$EXTRACTED" = true ]; then
-            (( deflated == count )) \
-              || { echo "::error::$apk compresses $deflated of its $count libraries, so useLegacyPackaging was not on"; exit 1; }
-            [ "$flag" != false ] \
-              || { echo "::error::$apk compresses its libraries, but its manifest has extractNativeLibs=false"; exit 1; }
-            how="compressed to $(mb "$packed") and extracted at install"
-            installed=$(( apk_size + raw ))
-          else
-            (( deflated == 0 )) \
-              || { echo "::error::$apk compresses $deflated of its $count libraries, which the default build stores: is useLegacyPackaging on?"; exit 1; }
-            [ "$flag" = false ] \
-              || { echo "::error::$apk's manifest has extractNativeLibs=${flag:-unset}, so the installer extracts its libraries"; exit 1; }
-            how="stored, loaded from the APK"
-            installed=$apk_size
-          fi
-          echo "- \`$apk\`: $(mb "$apk_size"); \`lib/$ABI\`: $count libraries, $(mb "$raw"), $how" \
-            "(extractNativeLibs=${flag:-unset}); on the device: $(mb "$installed"); of the libraries, $openssl_version" \
-            "(\`libcrypto_3.so\`, \`libssl_3.so\`): $(mb "$openssl_size")" >> "$GITHUB_STEP_SUMMARY"
-        done
+        APK_DIR: ${{ inputs.apk-dir }}
+      run: scripts/check-apk.sh "$APK_DIR"

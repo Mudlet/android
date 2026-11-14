@@ -17,6 +17,7 @@ on:
       - "*.gradle.kts"
       - gradle.properties
       - scripts/build-apk.sh
+      - scripts/check-apk.sh
       - scripts/build-openssl.sh
       - .github/actions/**
       - .github/workflows/apks.yml

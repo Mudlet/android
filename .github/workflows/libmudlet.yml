@@ -15,6 +15,7 @@ on:
       - scripts/build-libmudlet-desktop.sh
       - scripts/export-libmudlet.py
       - scripts/build-apk.sh
+      - scripts/check-apk.sh
       - scripts/build-openssl.sh
       - app/**
       - engine-service/**

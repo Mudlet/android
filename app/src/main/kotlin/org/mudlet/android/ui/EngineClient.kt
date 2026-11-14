@@ -345,7 +345,7 @@ object EngineClient {
 
                 is EngineMessage.Status -> if (message.key == "completion") {
                     val id = (message.replyTo as? Number)?.toLong()
-                    if (id != null) post { completions.remove(id)?.invoke(message.value) }
+                    if (id != null) post { completions.remove(id) }
                 } else {
                     synchronized(pendingLock) {
                         pendingStatus[message.key] = message.value
@@ -353,9 +353,9 @@ object EngineClient {
                     }
                 }
 
-                is EngineMessage.HiddenInput -> post { hiddenInput = message.wanted }
+                is EngineMessage.HiddenInput -> {}
 
-                is EngineMessage.History -> post { history = message.lines }
+                is EngineMessage.History -> {}
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
@@ -409,7 +409,7 @@ object EngineClient {
         // the player may be typing the next command
         if (text.isEmpty()) {
             dropExpiredSends(SystemClock.elapsedRealtime())
-            if (sendsAwaitingClear.removeFirstOrNull() != null) return
+            sendsAwaitingClear.removeFirstOrNull()
         }
         commandLine = text
     }

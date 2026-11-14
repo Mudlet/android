@@ -1,0 +1,51 @@
+name: OpenSSL for Android
+description: >
+  OpenSSL's libcrypto_3.so and libssl_3.so for Qt's TLS backend, from scripts/build-openssl.sh, cached between runs
+  under that script's hash. Run after android-toolchain. Sets OPENSSL_PREFIX, which scripts/build-apk.sh packages.
+inputs:
+  abi:
+    description: Android ABI
+    default: arm64-v8a
+  ndk-version:
+    description: The NDK version installed, as android-toolchain outputs it
+    required: true
+outputs:
+  prefix:
+    description: The prefix, with the libraries in lib/
+    value: ${{ steps.paths.outputs.prefix }}
+runs:
+  using: composite
+  steps:
+    - name: Paths
+      id: paths
+      shell: bash
+      run: |
+        prefix="$GITHUB_WORKSPACE/deps/openssl-${{ inputs.abi }}"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "OPENSSL_PREFIX=$prefix" >> "$GITHUB_ENV"
+
+    # restore and save are separate steps so a job that fails later still keeps what it built
+    - name: Restore OpenSSL
+      id: cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ steps.paths.outputs.prefix }}
+        key: openssl-${{ inputs.abi }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-openssl.sh') }}
+
+    - name: Build OpenSSL
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ANDROID_ABI: ${{ inputs.abi }}
+      run: scripts/build-openssl.sh "${{ steps.paths.outputs.prefix }}"
+
+    - name: Save OpenSSL
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ steps.paths.outputs.prefix }}
+        key: ${{ steps.cache.outputs.cache-primary-key }}
+
+    - name: OpenSSL version
+      shell: bash
+      run: cat "${{ steps.paths.outputs.prefix }}/versions.txt"

@@ -207,13 +207,16 @@ void MudletEngine::reportFont()
     mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
-void MudletEngine::start(const QString& host, quint16 port, bool connect)
+void MudletEngine::start(const QString& host, quint16 port, bool connect, std::optional<bool> tls)
 {
     THeadlessSession::Options options;
     options.profile = mProfile;
     options.connect = connect;
     options.host = host;
     options.port = port;
+    // Stored with the profile, as the connection dialog's box stores it; unset, the profile's own
+    options.tls = tls;
+    mProfileTls = tls;
     options.configDir = mConfigDir;
     mState = State::starting;
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
@@ -245,21 +248,28 @@ void MudletEngine::runNow(const QString& code)
     mFrontend->status(QStringLiteral("luaResult"), ok ? QStringLiteral("ran") : QStringLiteral("refused: %1").arg(mSession->errorString()));
 }
 
-void MudletEngine::connectTo(const QString& host, quint16 port)
+void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bool> tls)
 {
+    if (mState == State::idle) {
+        start(host, port, true, tls);
+        return;
+    }
+    // A running profile connects as it was started: THeadlessSession takes the TLS choice only in start(), and
+    // connectToServer() keeps the profile's
+    if (tls.has_value() && tls != mProfileTls) {
+        const QString started = !mProfileTls.has_value() ? QStringLiteral("with its stored choice")
+                                : *mProfileTls          ? QStringLiteral("with TLS")
+                                                        : QStringLiteral("without TLS");
+        mFrontend->status(QStringLiteral("connection"),
+                          QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; restart the engine to change it")
+                                  .arg(started));
+        return;
+    }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
-    switch (mState) {
-    case State::idle:
-        start(host, port, true);
-        return;
-    case State::starting:
+    if (mState == State::starting) {
         mPendingLua.append(code);
-        return;
-    case State::started:
-        if (!mSession->runLua(code)) {
-            mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
-        }
-        return;
+    } else if (!mSession->runLua(code)) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(mSession->errorString()));
     }
 }
 
@@ -286,7 +296,7 @@ void MudletEngine::runLua(const QString& code)
     switch (mState) {
     case State::idle:
         mPendingLua.append(code);
-        start({}, 0, false);
+        start({}, 0, false, std::nullopt);
         return;
     case State::starting:
         mPendingLua.append(code);

@@ -118,8 +118,12 @@ void Engine::reportFont()
     mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
-void Engine::connectTo(const QString& host, quint16 port)
+void Engine::connectTo(const QString& host, quint16 port, std::optional<bool> tls)
 {
+    if (tls.value_or(false)) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: the stand-in engine has no TLS"));
+        return;
+    }
     mSocket.abort();
     mTelnetState = TelnetState::Data;
     mLineBuffer.clear();

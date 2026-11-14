@@ -76,6 +76,7 @@ class ProtocolSpecTest {
                         String::class.java -> "x"
                         Int::class.javaPrimitiveType -> 1
                         Long::class.javaPrimitiveType -> 1L
+                        Boolean::class.javaPrimitiveType -> true
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

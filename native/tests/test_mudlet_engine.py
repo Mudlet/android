@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Host test of the engine with libmudlet as the engine (MudletEngine on THeadlessSession), through the socket
-protocol, against fake_telnet.py.
+protocol, against fake_telnet.py, in the clear and then over TLS, which needs the openssl command for a self-signed
+certificate.
 
 Build the engine against a host libmudlet first (scripts/build-libmudlet-desktop.sh, then this directory's CMake
 with -DLIBMUDLET_BUILD_DIR=<that build>).
 
 usage: test_mudlet_engine.py <path-to-engine-binary>
 """
+import glob
 import os
 import signal
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -33,10 +36,10 @@ def check(cond, what):
         failures.append(what)
 
 
-def start_engine():
+def start_engine(profile="Engine Test"):
     # Mudlet's own files (its Lua, unpacked from the library, and Mudlet.ini outside the config dir) stay in TMP
     home = os.path.join(TMP, "home")
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=CONFIG, MUDLET_PROFILE="Engine Test",
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=CONFIG, MUDLET_PROFILE=profile,
                HOME=home, XDG_CONFIG_HOME=os.path.join(home, ".config"), XDG_DATA_HOME=os.path.join(home, ".local/share"),
                XDG_CACHE_HOME=os.path.join(home, ".cache"))
     proc = subprocess.Popen([ENGINE, "--socket", SOCK, "--heartbeat-ms", "1000"], env=env,
@@ -50,6 +53,16 @@ def start_engine():
         except (FileNotFoundError, ConnectionRefusedError):
             time.sleep(0.02)
     raise RuntimeError("engine did not listen")
+
+
+def stop_engine(proc):
+    """SIGTERM, as Android's stop would quit the engine; the exit code, or "hung"."""
+    proc.send_signal(signal.SIGTERM)
+    try:
+        return proc.wait(20)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return "hung"
 
 
 def lines_of(msgs):
@@ -207,21 +220,89 @@ def main():
     # SIGTERM quits the engine as Android's stop would, and the profile is saved (shutdownAsync) on the way out
     current = os.path.join(CONFIG, "profiles", "Engine Test", "current")
     check(not os.path.isdir(current), "nothing saved before the quit")
-    proc.send_signal(signal.SIGTERM)
-    try:
-        code = proc.wait(20)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        code = "hung"
+    code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     saves = [f for f in os.listdir(current) if f.endswith(".xml")] if os.path.isdir(current) else []
     check(bool(saves), f"the profile was saved at exit: {saves}")
+
+    tls_checks(port)
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
             print(f.read()[-4000:])
         sys.exit(1)
     print("\nall passed")
+
+
+def self_signed_context():
+    """A TLS server context with a new self-signed certificate for localhost, as many games have."""
+    key, cert = os.path.join(TMP, "server.key"), os.path.join(TMP, "server.crt")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=localhost",
+                    "-addext", "subjectAltName=DNS:localhost", "-keyout", key, "-out", cert],
+                   check=True, capture_output=True)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert, key)
+    return ctx
+
+
+def tls_checks(plain_port):
+    """TLS through the engine's Qt and OpenSSL. Certificates are checked as in Mudlet's GUI: one that is not trusted ends
+    the connection with the reasons, unless the profile accepts what is wrong with it (the GUI's "Accept self-signed
+    certificates" and its other two boxes, which the app does not offer yet)."""
+    tls_port = fake_telnet.start_in_thread(tls=self_signed_context())
+    profile = "TLS Test"
+    proc, c = start_engine(profile)
+    c.wait_for(lambda m: m["t"] == "synced")
+
+    # Refused: the certificate is self-signed. A secure connection needs the server's name, as its certificate names it.
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": tls_port, "tls": True})
+    c.wait_for(lambda m: m["t"] in ("line", "tail") and "self-signed" in m["text"], timeout=30, collect=msgs)
+    statuses = [(m["key"], m["value"]) for m in msgs if m["t"] == "status"]
+    check(("connection", "connected") not in statuses, f"no connection over an untrusted certificate: {statuses}")
+    check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
+    check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed"],
+          f"the server saw the handshake end unfinished: {fake_telnet.TLS_HANDSHAKES}")
+
+    # TLS to a port that does not speak it
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": True})
+    c.wait_for(lambda m: m["t"] in ("line", "tail") and "Secure handshake failed" in m["text"], timeout=30, collect=msgs)
+    check(not any("Red bold" in t for t in texts_of(msgs)), "TLS to a plain port: the handshake fails, no game text")
+
+    # The profile keeps the TLS it started with
+    c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": False})
+    m = wait_status(c, "connection", lambda v: v.startswith("error:"), [], timeout=10)
+    check("started with TLS" in m["value"], f"a connect without TLS is refused: {m['value']}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    # Accepted once the profile accepts self-signed certificates, as its preferences would set it
+    saves = sorted(glob.glob(os.path.join(CONFIG, "profiles", profile, "current", "*.xml")), key=os.path.getmtime)
+    if not saves:
+        check(False, "the TLS profile was saved at exit")
+        return
+    with open(saves[-1], encoding="utf-8") as f:
+        xml = f.read()
+    check(xml.count('mSslTsl="yes"') == 1, "the profile was saved with TLS on")
+    check(xml.count('mSslIgnoreSelfSigned="no"') == 1, "and refusing self-signed certificates")
+    with open(saves[-1], "w", encoding="utf-8") as f:
+        f.write(xml.replace('mSslIgnoreSelfSigned="no"', 'mSslIgnoreSelfSigned="yes"'))
+    proc, c = start_engine(profile)
+    c.wait_for(lambda m: m["t"] == "synced")
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": tls_port, "tls": True})
+    c.wait_for(lambda m: m["t"] == "tail" and m["text"].startswith("HP:100>"), timeout=30, collect=msgs)
+    statuses = [(m["key"], m["value"]) for m in msgs if m["t"] == "status"]
+    check(("connection", "connected") in statuses, "connected over TLS")
+    check("Red bold normal green" in texts_of(msgs), "the banner came over TLS")
+    msgs = []
+    c.send({"t": "send", "text": "tls"})
+    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
+    check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")
+    check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed", "ok"], f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 if __name__ == "__main__":

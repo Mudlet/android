@@ -123,7 +123,7 @@ class EngineLinkJvmTest {
         val cols = next<EngineMessage.Status> { it.key == "columns" }
         println("JVM: columns for 1080 px = ${cols.value}")
 
-        link.send(Requests.connect("127.0.0.1", fakePort))
+        link.send(Requests.connect("127.0.0.1", fakePort, false))
         // The tell line comes before the banner's prompt, and next() discards what it skips
         assertEquals("Lua notify() reached the JVM client", "Tell", next<EngineMessage.Notify>().title)
         val banner = next<EngineMessage.Line> { it.prompt }

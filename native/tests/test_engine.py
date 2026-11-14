@@ -134,9 +134,14 @@ def main():
     m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "columns")
     check(int(m["value"]) == 1080 // int(st["advanceM"]), f"columns for 1080px = {m['value']}")
 
+    # The stand-in has no TLS, and says so rather than connecting in the clear
+    c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
+    m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "connection")
+    check(m["value"] == "error: the stand-in engine has no TLS", f"a TLS connect is refused: {m['value']}")
+
     # Connect and parse the banner
     msgs = []
-    c.send({"t": "connect", "host": "127.0.0.1", "port": port})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": False})
     c.wait_for(lambda m: m["t"] == "line" and m["prompt"], collect=msgs)
     lines = [m for m in msgs if m["t"] == "line"]
     texts = [m["text"] for m in lines]

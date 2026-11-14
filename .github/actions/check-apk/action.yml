@@ -1,8 +1,9 @@
 name: Check APK
 description: >
-  Checks each debug APK in a directory: that it holds Qt and the engine library, that its libraries are 16 KB
-  aligned (their offsets in the APK and their load segments), and that they are stored or compressed as the
-  manifest's extractNativeLibs says; then adds each APK's size, and its size on the device, to the job summary.
+  Checks each debug APK in a directory: that it holds Qt and the engine library, and OpenSSL as Qt's TLS backend
+  loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load segments), and that they
+  are stored or compressed as the manifest's extractNativeLibs says; then adds each APK's size, its size on the
+  device, and OpenSSL's share, to the job summary.
 inputs:
   apk-dir:
     description: Directory holding the APKs
@@ -33,6 +34,7 @@ runs:
         BUILD_TOOLS: ${{ inputs.build-tools-dir }}
       run: |
         readelf="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+        nm="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
         aapt2="$BUILD_TOOLS/aapt2"
         mb() { awk -v b="$1" 'BEGIN { printf "%.1f MB", b / 1000000 }'; }
         printf '### %s\n\n' "$TITLE" >> "$GITHUB_STEP_SUMMARY"
@@ -40,10 +42,31 @@ runs:
           libs="$RUNNER_TEMP/$apk/lib/arm64-v8a"
           unzip -q -o "$apk" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/$apk" \
             || { echo "::error::cannot extract lib/arm64-v8a/*.so from $apk"; exit 1; }
+          tls_plugin=libplugins_tls_qopensslbackend_arm64-v8a.so
           for lib in libQt6Core_arm64-v8a.so libplugins_platforms_qtforandroid_arm64-v8a.so libc++_shared.so \
-                     ${ENGINE}_arm64-v8a.so; do
+                     ${ENGINE}_arm64-v8a.so $tls_plugin libcrypto_3.so libssl_3.so; do
             [ -f "$libs/$lib" ] || { echo "::error::$apk has no lib/arm64-v8a/$lib"; exit 1; }
           done
+          # Qt's OpenSSL backend, built against OpenSSL 3, dlopens "ssl" and "crypto" with the suffix "_3"
+          # (qsslsocket_openssl_symbols.cpp) and refuses a runtime older than 3; the suffix is a string of its own
+          strings -a -n 2 "$libs/$tls_plugin" | grep -qxF _3 \
+            || { echo "::error::$apk: Qt's OpenSSL backend does not look for libssl_3.so: which OpenSSL was Qt built with?"; exit 1; }
+          for lib in libcrypto_3.so libssl_3.so; do
+            soname=$("$readelf" -dW "$libs/$lib" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p')
+            [ "$soname" = "$lib" ] || { echo "::error::$apk: $lib has the SONAME '$soname'"; exit 1; }
+          done
+          "$readelf" -dW "$libs/libssl_3.so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | grep -qxF libcrypto_3.so \
+            || { echo "::error::$apk: libssl_3.so does not load libcrypto_3.so"; exit 1; }
+          # A few of the functions Qt resolves (by name, so whatever their symbol version) before it takes the
+          # backend as working
+          for want in libcrypto_3.so:OpenSSL_version_num libcrypto_3.so:X509_verify_cert libssl_3.so:SSL_CTX_new \
+                      libssl_3.so:TLS_client_method libssl_3.so:SSL_connect; do
+            "$nm" -D --defined-only --format=just-symbols "$libs/${want%%:*}" | sed 's/@.*//' | grep -qxF "${want#*:}" \
+              || { echo "::error::$apk: ${want%%:*} does not export ${want#*:}"; exit 1; }
+          done
+          openssl_version=$(strings -a "$libs/libcrypto_3.so" | grep -m1 -oE '^OpenSSL 3\.[0-9]+\.[0-9]+' || true)
+          [ -n "$openssl_version" ] || { echo "::error::$apk: libcrypto_3.so is not OpenSSL 3"; exit 1; }
+          openssl_size=$(( $(stat -c %s "$libs/libcrypto_3.so") + $(stat -c %s "$libs/libssl_3.so") ))
           # a 16 KB page device needs both: each library at a 16 KB offset in the APK, and 16 KB aligned segments
           "$BUILD_TOOLS/zipalign" -c -P 16 4 "$apk" \
             || { echo "::error::$apk does not store its libraries at 16 KB offsets"; exit 1; }
@@ -82,5 +105,6 @@ runs:
             installed=$apk_size
           fi
           echo "- \`$apk\`: $(mb "$apk_size"); \`lib/arm64-v8a\`: $count libraries, $(mb "$raw"), $how" \
-            "(extractNativeLibs=${flag:-unset}); on the device: $(mb "$installed")" >> "$GITHUB_STEP_SUMMARY"
+            "(extractNativeLibs=${flag:-unset}); on the device: $(mb "$installed"); of the libraries, $openssl_version" \
+            "(\`libcrypto_3.so\`, \`libssl_3.so\`): $(mb "$openssl_size")" >> "$GITHUB_STEP_SUMMARY"
         done

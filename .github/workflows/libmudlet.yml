@@ -14,6 +14,7 @@ on:
       - scripts/build-libmudlet-desktop.sh
       - scripts/export-libmudlet.py
       - scripts/build-apk.sh
+      - scripts/build-openssl.sh
       - app/**
       - engine-service/**
       - protocol/**
@@ -113,6 +114,10 @@ jobs:
         with:
           gradle-version: "8.14.3"
 
+      - uses: ./.github/actions/android-openssl
+        with:
+          ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
+
       - name: Build the APK with libmudlet as the engine
         run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
 
@@ -157,6 +162,7 @@ jobs:
             echo "Qt ${{ steps.toolchain.outputs.qt-version }}, NDK ${{ steps.toolchain.outputs.ndk-version }}; dependencies:"
             echo
             sed 's/^/    /' deps/prefix/versions.txt 2>/dev/null || true
+            sed -n 's/^openssl /    openssl /p' deps/openssl-arm64-v8a/versions.txt 2>/dev/null || true
             echo
             echo "ccache $(ccache --show-stats 2>/dev/null | grep -m1 'Hits:')"
           } >> "$GITHUB_STEP_SUMMARY"

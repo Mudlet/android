@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -149,6 +150,7 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
     val s = c.status
     var host by rememberSaveable { mutableStateOf("aardmud.org") }
     var port by rememberSaveable { mutableStateOf("23") }
+    var tls by rememberSaveable { mutableStateOf(false) }
     var command by rememberSaveable { mutableStateOf("") }
     var showDebug by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -223,9 +225,11 @@ private fun SelfTestScreen(onKillUi: () -> Unit) {
                 port, { port = it }, Modifier.weight(0.4f), label = { Text("Port") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
+            Checkbox(tls, { tls = it })
+            Text("TLS")
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button({ c.send(Requests.connect(host.trim(), port.toIntOrNull() ?: 23)) }) { Text("Connect") }
+            Button({ c.send(Requests.connect(host.trim(), port.toIntOrNull() ?: 23, tls)) }) { Text("Connect") }
             Button({ c.send(Requests.disconnect()) }) { Text("Disconnect") }
             OutlinedButton({ showDebug = !showDebug }) { Text(if (showDebug) "Hide debug" else "Debug") }
         }

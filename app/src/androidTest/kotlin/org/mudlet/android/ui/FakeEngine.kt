@@ -1,5 +1,8 @@
 package org.mudlet.android.ui
 
+import android.net.LocalServerSocket
+import android.net.LocalSocket
+import android.net.LocalSocketAddress
 import org.json.JSONArray
 import org.json.JSONObject
 import org.mudlet.android.protocol.FrameWriter
@@ -8,9 +11,7 @@ import java.io.DataInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.net.InetAddress
-import java.net.ServerSocket
-import java.net.Socket
+import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -18,21 +19,28 @@ import kotlin.concurrent.thread
 /**
  * An engine for the UI to attach to, in the test's own process: it answers EngineClient's hello as the engine would
  * (docs/protocol.md, "Attaching") and then sends what a test tells it to. EngineClient reaches it through
- * [EngineClient.connector], over loopback TCP instead of the engine's local socket.
+ * [EngineClient.connector], over a local socket as it reaches the engine, but in the abstract namespace.
  */
 class FakeEngine : AutoCloseable {
-    private val server = ServerSocket(0, 4, InetAddress.getLoopbackAddress())
+    private val name = "mudlet-fake-engine-${UUID.randomUUID()}"
+    private val server = LocalServerSocket(name)
     private val sessions = LinkedBlockingQueue<Session>()
+
+    @Volatile private var closed = false
 
     /** The instance the next session says hello with: a new one is a new engine, as after the old one was killed. */
     @Volatile var instance = FIRST_INSTANCE
 
     init {
         thread(name = "fake-engine", isDaemon = true) {
-            while (!server.isClosed) {
+            while (true) {
                 val socket = try {
                     server.accept()
                 } catch (_: IOException) {
+                    break
+                }
+                if (closed) {
+                    socket.close()
                     break
                 }
                 try {
@@ -47,10 +55,10 @@ class FakeEngine : AutoCloseable {
 
     /** For [EngineClient.connector]. */
     fun connect(): Transport {
-        val socket = Socket(InetAddress.getLoopbackAddress(), server.localPort)
+        val socket = localSocket()
         return object : Transport {
-            override val input: InputStream = socket.getInputStream()
-            override val output: OutputStream = socket.getOutputStream()
+            override val input: InputStream = socket.inputStream
+            override val output: OutputStream = socket.outputStream
             override fun close() = socket.close()
         }
     }
@@ -60,19 +68,36 @@ class FakeEngine : AutoCloseable {
         ?: throw AssertionError("the UI did not attach to the fake engine within $timeoutMs ms")
 
     override fun close() {
+        closed = true
+        // Closing a LocalServerSocket does not wake its accept(): a last connection does
+        try {
+            localSocket().close()
+        } catch (_: IOException) {
+        }
         server.close()
         while (true) sessions.poll()?.close() ?: break
     }
 
-    class Session(private val socket: Socket, instance: String) : AutoCloseable {
-        private val writer = FrameWriter(socket.getOutputStream())
+    private fun localSocket(): LocalSocket {
+        val socket = LocalSocket()
+        try {
+            socket.connect(LocalSocketAddress(name, LocalSocketAddress.Namespace.ABSTRACT))
+        } catch (e: IOException) {
+            socket.close()
+            throw e
+        }
+        return socket
+    }
+
+    class Session(private val socket: LocalSocket, instance: String) : AutoCloseable {
+        private val writer = FrameWriter(socket.outputStream)
 
         /** The UI's hello: "instance" and "lastSeq" when it was attached to an engine before. */
         val hello: JSONObject
 
         init {
             socket.soTimeout = 10_000
-            hello = readFrame(DataInputStream(socket.getInputStream()))
+            hello = readFrame(DataInputStream(socket.inputStream))
             if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
             send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
         }
@@ -94,7 +119,15 @@ class FakeEngine : AutoCloseable {
         fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
 
         /** As the engine process dying: the UI sees the connection end. */
-        override fun close() = socket.close()
+        override fun close() {
+            // shutdownInput wakes the UI's reader at once, where close alone may leave it blocked
+            try {
+                socket.shutdownInput()
+                socket.shutdownOutput()
+            } catch (_: IOException) {
+            }
+            socket.close()
+        }
     }
 
     companion object {

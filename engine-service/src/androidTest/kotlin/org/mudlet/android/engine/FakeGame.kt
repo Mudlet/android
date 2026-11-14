@@ -4,12 +4,13 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.Collections
 import kotlin.concurrent.thread
 
 /**
- * A game server in the test's process, for the engine in :engine to connect to on 127.0.0.1: it sends a banner, and
- * keeps the first bytes each connection sends it, which for a client that wants TLS is its ClientHello.
+ * A game server in the test's process, for the engine in :engine to connect to on 127.0.0.1: it keeps the first bytes
+ * each connection sends it, which for a client that wants TLS is its ClientHello, and then sends a banner.
  * native/tests/fake_telnet.py is the full one, on the host.
  */
 class FakeGame : AutoCloseable {
@@ -42,15 +43,22 @@ class FakeGame : AutoCloseable {
 
     private fun serve(socket: Socket, index: Int) {
         try {
-            socket.getOutputStream().apply {
-                write(BANNER)
-                flush()
-            }
+            val input = socket.getInputStream()
             val buffer = ByteArray(512)
-            val n = socket.getInputStream().read(buffer)
+            // A client's first bytes before the banner: a TLS client that reads the banner before it has sent its
+            // ClientHello fails its handshake and may never send it
+            socket.soTimeout = FIRST_BYTES_MS
+            val n = try {
+                input.read(buffer)
+            } catch (_: SocketTimeoutException) {
+                0
+            }
+            if (n < 0) return
             if (n > 0) firstBytes[index] = buffer.copyOf(n)
+            socket.soTimeout = 0
+            socket.getOutputStream().write(BANNER)
             // Then keep the connection open, as a game does, until the engine or the test closes it
-            while (socket.getInputStream().read(buffer) >= 0) Unit
+            while (input.read(buffer) >= 0) Unit
         } catch (_: IOException) {
         } finally {
             socket.close()
@@ -65,6 +73,9 @@ class FakeGame : AutoCloseable {
     companion object {
         const val HOST = "127.0.0.1"
         const val BANNER_TEXT = "Welcome to the fake game"
+
+        // How long the game waits for a client's first bytes before it sends its banner
+        private const val FIRST_BYTES_MS = 500
 
         // A coloured line, then a prompt with GA
         private val BANNER = "\u001b[1;31m$BANNER_TEXT\u001b[0m\r\nHP:100> ".toByteArray() + byteArrayOf(0xFF.toByte(), 0xF9.toByte())

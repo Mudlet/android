@@ -256,7 +256,7 @@ jobs:
       # The unstripped engine goes too, for ndk-stack to name the frames of a crash on the emulator
       - uses: actions/upload-artifact@v6
         with:
-          name: emulator-apks${{ inputs.lua-fortify-fix && '' || '-without-lua-fortify-fix' }}
+          name: emulator-apks${{ !inputs.lua-fortify-fix && '-without-lua-fortify-fix' || '' }}
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
@@ -286,7 +286,12 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          name: emulator-apks${{ inputs.lua-fortify-fix && '' || '-without-lua-fortify-fix' }}
+          name: emulator-apks${{ !inputs.lua-fortify-fix && '-without-lua-fortify-fix' || '' }}
+
+      # The runner's SDK, which the env context sees only once a step puts it there (the toolchain action does
+      # that in the other jobs)
+      - name: SDK path
+        run: echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" >> "$GITHUB_ENV"
 
       - name: Enable KVM
         run: |

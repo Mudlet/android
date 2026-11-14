@@ -16,6 +16,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.engine.EngineNotifications
 
@@ -29,7 +30,7 @@ import org.mudlet.android.engine.EngineNotifications
 class NotificationPermissionTest {
     // The real engine is never started: the UI attaches to a fake one
     @get:Rule
-    val fake = FakeEngineRule()
+    val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(FakeEngineRule())
 
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     private val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -93,5 +94,8 @@ class NotificationPermissionTest {
         const val TELL = "Permission test tell"
         const val UI_MS = 15_000L
         const val QUIET_MS = 1_000L
+
+        // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
+        const val TIMEOUT_MS = 240_000L
     }
 }

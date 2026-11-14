@@ -67,7 +67,8 @@ class EngineServiceTest {
     @Test
     fun aStopFromTheNotificationIsNotUndoneByTheNextStart() {
         startEngine()
-        connectToGame(attach())
+        // The engine takes one UI at a time, the newest: this one goes before the next one attaches
+        attach().use { connectToGame(it) }
         assertEquals(1, game.accepted)
 
         // The engine notification's "Stop engine" action, as the user taps it
@@ -94,6 +95,7 @@ class EngineServiceTest {
         val first = attach()
         val firstInstance = first.attached().instance
         connectToGame(first)
+        // The engine takes one UI at a time, the newest: this one goes before the next one attaches
         first.close()
 
         // As the low-memory killer: no onDestroy, so no stop marker
@@ -105,7 +107,9 @@ class EngineServiceTest {
         assertNotEquals("a new engine", firstInstance, probe.attached().instance)
         probe.status("restore", RESTORE_MS) { it.startsWith("reconnected ") }
         assertEquals("connected", probe.status("connection") { true })
-        assertEquals("the engine connected to the game again", 2, game.accepted)
+        // The engine can see the connection up before the game's accept() has returned
+        await("the game to accept the engine's second connection") { if (game.accepted >= 2) Unit else null }
+        assertEquals("one reconnect", 2, game.accepted)
     }
 
     @Test
@@ -113,13 +117,18 @@ class EngineServiceTest {
         startEngine()
         val probe = attach()
         probe.attached()
-        // The game does not speak TLS, so the handshake fails; that it began shows Qt's TLS backend loaded OpenSSL
-        probe.send(Requests.connect(FakeGame.HOST, game.port, true))
-        probe.text(EngineProbe.ENGINE_START_MS) { it.contains("Secure handshake failed") }
-        val hello = await("the engine's first bytes to the game") { game.firstBytes.firstOrNull()?.takeIf { it.isNotEmpty() } }
+        // The game does not speak TLS, so the handshake fails; that it began shows Qt's TLS backend loaded OpenSSL. A
+        // secure connection needs a name, as a certificate names its server, not an address
+        probe.send(Requests.connect("localhost", game.port, true))
+        val profile = probe.status("profile", EngineProbe.ENGINE_START_MS) { it == "Android loaded" || it.startsWith("start failed") }
+        assertEquals("Android loaded", profile)
+        val hello = await("the engine's first bytes to the game", probe = probe) {
+            game.firstBytes.firstOrNull()?.takeIf { it.isNotEmpty() }
+        }
         // A TLS record of type handshake (22), version 3.x: a ClientHello
         assertEquals("a TLS handshake record: ${hello.take(8)}", 0x16, hello[0].toInt())
         assertEquals(3, hello[1].toInt())
+        probe.text { it.contains("Secure handshake failed") }
     }
 
     private fun attach() = EngineProbe(context).also { probes.add(it) }
@@ -152,11 +161,14 @@ class EngineServiceTest {
     private fun engineService(): ActivityManager.RunningServiceInfo? = context.getSystemService(ActivityManager::class.java)
         .getRunningServices(50).firstOrNull { it.service.className == EngineService::class.java.name }
 
-    private fun <T : Any> await(what: String, timeoutMs: Long = EngineProbe.TIMEOUT_MS, get: () -> T?): T {
+    /** Polls [get] until it answers; a timeout names [what], and what [probe]'s engine said if there is one. */
+    private fun <T : Any> await(what: String, timeoutMs: Long = EngineProbe.TIMEOUT_MS, probe: EngineProbe? = null, get: () -> T?): T {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (true) {
             get()?.let { return it }
-            if (System.currentTimeMillis() > deadline) throw AssertionError("timed out after $timeoutMs ms waiting for $what")
+            if (System.currentTimeMillis() > deadline) {
+                throw AssertionError("timed out after $timeoutMs ms waiting for $what" + (probe?.let { "; ${it.describe()}" } ?: ""))
+            }
             Thread.sleep(100)
         }
     }

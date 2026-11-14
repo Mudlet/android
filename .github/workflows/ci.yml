@@ -2,7 +2,7 @@ name: CI
 
 # The one workflow that pull requests and pushes to main start. It looks at which files changed and calls only the
 # workflows those files need (checks.yml, apks.yml, libmudlet.yml), then reports one result, "CI result", which is
-# the check to require: a required check that a path filter skipped would leave a pull request waiting. The nightly
+# the check to require: a workflow a path filter left out never reports, and a skipped job counts as passed. The nightly
 # and a manual run build everything, the nightly against Mudlet's latest development; a failed nightly opens or
 # updates an issue here.
 #

@@ -7,8 +7,9 @@ every runtime permission: NotificationPermissionTest needs the app freshly insta
 runs first, on its own, and the other app tests after it. The engine-service tests run from their own test APK,
 installed with -g, which instruments itself and runs EngineService in its own :engine process.
 
-A test fails the run if it fails, if the instrumentation crashes or reports fewer tests than it started, or if no test
-ran at all. A crash of one of the app's processes is given from logcat, symbolised as android_smoke.py does.
+A test fails the run if it fails or runs past TEST_TIMEOUT_MS, if the instrumentation crashes, hangs or reports fewer
+tests than it started, or if no test ran at all. A crash of one of the app's processes is given from logcat,
+symbolised as android_smoke.py does; for a hang, the stacks of the hung process's threads.
 
 usage: android_instrumented.py --app <app-debug.apk> --app-tests <app-debug-androidTest.apk>
                                --engine-tests <engine-service-debug-androidTest.apk> --out <dir> [--symbols <dir>]
@@ -29,6 +30,9 @@ RUNNER = "androidx.test.runner.AndroidJUnitRunner"
 PERMISSION_TEST = "org.mudlet.android.ui.NotificationPermissionTest"
 # am instrument's status codes for one test
 CODES = {0: "PASS", -1: "ERROR", -2: "FAIL", -3: "IGNORED", -4: "ASSUMPTION FAILED"}
+# AndroidJUnitRunner fails a test that runs longer, with the stack it was stuck in; the longest, EngineServiceTest's
+# restore, waits up to 180 s for the new engine
+TEST_TIMEOUT_MS = 300_000
 
 LOG = None
 
@@ -67,21 +71,32 @@ def parse(output):
     return tests, result
 
 
-def instrument(dev, name, package, title, *args):
-    """Runs one am instrument, keeping its output as instrument-<name>.txt; returns the failures, as text."""
+def instrument(dev, name, package, process, title, timeout, *args):
+    """Runs one am instrument, keeping its output as instrument-<name>.txt; returns the failures, as text. If it is
+    still running after timeout seconds, the stacks of process's threads go to the log and the run is stopped."""
     log(f"--- {title}")
-    command = " ".join(["am", "instrument", "-w", "-r", *args, f"{package}/{RUNNER}"])
-    output = adb("shell", command, check=False, timeout=1800)
+    command = " ".join(["am", "instrument", "-w", "-r", "-e", "timeout_msec", str(TEST_TIMEOUT_MS), *args,
+                        f"{package}/{RUNNER}"])
+    hung = None
+    try:
+        output = adb("shell", command, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        output = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else e.stdout or ""
+        hung = f"{title}: still running after {timeout} s; the threads of {process}:\n{thread_stacks(dev, name, process)}"
+        shell(f"am force-stop {process.split(':')[0]}", check=False)
     with open(os.path.join(dev.out, f"instrument-{name}.txt"), "w") as f:
         f.write(output)
     tests, result = parse(output)
     failures = []
-    for name, code, stack in tests:
-        log(f"{CODES.get(code, code)} {name}")
+    for test, code, stack in tests:
+        log(f"{CODES.get(code, code)} {test}")
         if code not in (0, -3):
-            failures.append(f"{name}: {stack.strip()}")
+            failures.append(f"{test}: {stack.strip()}")
     summary = result.get("stream", "").strip().splitlines()
-    if result.get("code") != -1 or "shortMsg" in result or result.get("other"):
+    if hung:
+        started = re.findall(r"INSTRUMENTATION_STATUS: test=(\S+)", output)
+        failures.append(hung + (f"\n(the last test to start: {started[-1]})" if started else ""))
+    elif result.get("code") != -1 or "shortMsg" in result or result.get("other"):
         failures.append(f"{title}: the instrumentation did not finish: {result}")
     elif not tests:
         failures.append(f"{title}: no test ran")
@@ -91,6 +106,28 @@ def instrument(dev, name, package, title, *args):
     if crash:
         failures.append(f"{title}: a process crashed:\n{crash}")
     return failures
+
+
+def thread_stacks(dev, name, process):
+    """The Java stacks of process's threads that run the app's or the tests' code, the rest in stacks-<name>.txt."""
+    pid = shell(f"pidof {process}", check=False).strip()
+    if not pid:
+        return f"{process} is not running"
+    # debuggerd needs root to dump another app's process; the emulator's google_apis images have su
+    dump = ""
+    for command in (f"debuggerd -j {pid}", f"su 0 debuggerd -j {pid}"):
+        try:
+            dump = adb("shell", f"{command} 2>&1", check=False, timeout=60)
+        except subprocess.TimeoutExpired:
+            continue
+        if '"main"' in dump:
+            break
+    else:
+        return f"debuggerd could not dump {process} (pid {pid}): {dump.strip()[:300]}"
+    with open(os.path.join(dev.out, f"stacks-{name}.txt"), "w") as f:
+        f.write(dump)
+    threads = [t for t in re.split(r"\n(?=\")", dump) if t.startswith('"main"') or "org.mudlet" in t]
+    return "\n".join(threads)[:6000]
 
 
 def install(apk, grant=False):
@@ -108,11 +145,12 @@ def run(dev, args):
     failures = []
     install(args.app)
     install(args.app_tests)
-    failures += instrument(dev, "app-permission", APP_TESTS, "the app, freshly installed: the notification permission",
-                           "-e", "class", PERMISSION_TEST)
-    failures += instrument(dev, "app", APP_TESTS, "the app's other tests", "-e", "notClass", PERMISSION_TEST)
+    failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
+                           480, "-e", "class", PERMISSION_TEST)
+    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 720, "-e", "notClass", PERMISSION_TEST)
     install(args.engine_tests, grant=True)
-    failures += instrument(dev, "engine-service", ENGINE_TESTS, "engine-service: EngineService on the device")
+    failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
+                           1320)
     return failures
 
 
@@ -137,13 +175,13 @@ def main():
     finally:
         try:
             dev.screenshot("instrumented-screenshot.png")
-        except OSError as e:
+        except (OSError, subprocess.SubprocessError) as e:
             log(f"no screenshot: {e}")
         dev.stop_logcat()
     if failures:
         log("\n" + "\n\n".join(f"FAIL {f}" for f in failures))
         if os.environ.get("GITHUB_ACTIONS"):
-            text = "\n\n".join(failures)[:4000] + "\n(the instrumentation output and logcat are in the emulator artifact)"
+            text = "\n\n".join(failures)[:4000] + "\n(the instrumentation output and logcat are in the job's artifact)"
             text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title=Instrumented tests::{text}", flush=True)
         sys.exit(1)

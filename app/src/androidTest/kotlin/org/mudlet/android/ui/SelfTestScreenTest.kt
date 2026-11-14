@@ -43,7 +43,7 @@ class SelfTestScreenTest {
     // The fake engine first, so the Activity attaches to it; the permission (Android 13 and later) so that its dialog
     // does not cover the screen
     @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(fake)
+    val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
         .around(compose)
 
@@ -156,6 +156,9 @@ class SelfTestScreenTest {
         val ANSI_GREEN = Color(0xFF00CD00)
         val ANSI_YELLOW = Color(0xFFCDCD00)
         val DEFAULT_FG = Color(0xFFC0C0C0)
+
+        // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
+        const val TIMEOUT_MS = 240_000L
     }
 }
 

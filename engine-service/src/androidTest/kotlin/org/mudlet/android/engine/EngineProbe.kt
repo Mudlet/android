@@ -76,6 +76,9 @@ class EngineProbe(context: Context) : AutoCloseable {
 
     fun restores(): List<String> = lock.withLock { restores.toList() }
 
+    /** What the engine has said, for a failure message. */
+    fun describe(): String = lock.withLock { "status $status, last lines ${texts.takeLast(10)}" }
+
     fun text(timeoutMs: Long = TIMEOUT_MS, pred: (String) -> Boolean): String = await("a line or tail to match", timeoutMs) {
         texts.firstOrNull(pred)
     }
@@ -87,7 +90,7 @@ class EngineProbe(context: Context) : AutoCloseable {
                 get()?.let { return it }
                 val left = deadline - System.nanoTime()
                 if (left <= 0) {
-                    throw AssertionError("timed out after $timeoutMs ms waiting for $what; status $status, last lines ${texts.takeLast(10)}")
+                    throw AssertionError("timed out after $timeoutMs ms waiting for $what; ${describe()}")
                 }
                 changed.awaitNanos(left)
             }

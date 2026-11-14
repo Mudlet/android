@@ -335,7 +335,7 @@ def main():
     if failure:
         log(f"\nFAIL {failure}")
         if os.environ.get("GITHUB_ACTIONS"):
-            text = failure + "\n(logcat, screenshot and the UI's state are in the emulator-tests artifact)"
+            text = failure + "\n(logcat, screenshot and the UI's state are in the job's artifact)"
             text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title=Emulator smoke test::{text}", flush=True)
         sys.exit(1)

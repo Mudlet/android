@@ -37,7 +37,7 @@ You need:
 
 - Qt 6.12.0 for `gcc_64` (host) and `android_arm64_v8a`;
 - an Android SDK with NDK 28.2.13676358, build-tools 37.0.0 and platform android-36;
-- JDK 21, Gradle 8.14 (the build uses AGP 8.13.2 and Kotlin 2.3.21), CMake and Ninja;
+- JDK 21, CMake and Ninja (Gradle is the wrapper's, `./gradlew`: 8.14.3, with AGP 8.13.2 and Kotlin 2.3.21);
 - Perl and make for OpenSSL's build;
 - Python 3 and the `openssl` command for the host tests.
 
@@ -58,7 +58,7 @@ prefix that script made (see "TLS" in [`docs/architecture.md`](docs/architecture
 name: `-PextractNativeLibs=true` has the installer extract the native libraries (see "Native libraries" in
 [`docs/architecture.md`](docs/architecture.md)).
 
-Gradle on its own (`gradle :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
+Gradle on its own (`./gradlew :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
 first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
 
 ### The APK with libmudlet
@@ -101,7 +101,7 @@ python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debu
     --symbols native/build-android-x86_64-mudlet/enginehost
 ```
 
-`gradle :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
+`./gradlew :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
 skipped. `ProtocolSpecTest` among them checks that [`docs/protocol.md`](docs/protocol.md), the C++ engine and the
 Kotlin client agree.
 

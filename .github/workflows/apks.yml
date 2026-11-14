@@ -13,6 +13,7 @@ on:
       - native/**
       - docs/protocol.md
       - gradle/**
+      - gradlew
       - "*.gradle.kts"
       - gradle.properties
       - scripts/build-apk.sh
@@ -57,9 +58,8 @@ jobs:
           # host Qt Gui, which the desktop engine links, needs the OpenGL headers to configure and the rest to run
           apt-packages: libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
 
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v5
-        with:
-          gradle-version: "8.14.3"
 
       - name: Stand-in engine desktop test
         if: matrix.tests

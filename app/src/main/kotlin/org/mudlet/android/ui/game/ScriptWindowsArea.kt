@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
@@ -77,6 +78,7 @@ import org.mudlet.android.protocol.ScriptWindows
 import org.mudlet.android.protocol.WindowKey
 import org.mudlet.android.protocol.WindowKind
 import org.mudlet.android.protocol.WindowLayout
+import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
@@ -224,7 +226,16 @@ private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metri
     val placedModifier = Modifier.placeAt(placed.rect, density).then(modifier)
     when (window.kind) {
         in ScriptWindows.CONSOLE_KINDS -> {
-            WindowConsole(placed, windows.text[window.name], windows.commandLineOf(window), windows.commandLines, metrics, density, placedModifier)
+            WindowConsole(
+                placed,
+                windows.text[window.name],
+                windows.links[window.name].orEmpty(),
+                windows.commandLineOf(window),
+                windows.commandLines,
+                metrics,
+                density,
+                placedModifier,
+            )
         }
 
         // A label places itself, as a clickable one's touch bounds can be larger than it
@@ -252,13 +263,16 @@ private fun Modifier.windowSemantics(description: String): Modifier = semantics 
 
 /**
  * A mini console, user window or MXP frame: its rows as the main console draws its lines, at the size that fits the
- * window's columns in its width. It follows new rows unless the player or a script scrolled it back. Its own
- * command line, when shown, goes along its bottom.
+ * window's columns in its width, and read as it reads them, with its [links] as [ConsoleLine] offers them. It follows
+ * new rows unless the player or a script scrolled it back. Its own command line, when shown, goes along its bottom.
+ *
+ * Its new rows are not read aloud as the main console's are: a script that wants one read calls `announce()`.
  */
 @Composable
 private fun WindowConsole(
     placed: PlacedWindow,
     text: EngineMessage.WindowText?,
+    links: Map<Int, EngineMessage.Link>,
     commandLine: ScriptWindow?,
     commandLines: Map<String, String>,
     metrics: ConsoleMetrics,
@@ -276,6 +290,8 @@ private fun WindowConsole(
     )
     val first = text?.first ?: 0
     val lines = remember(text) { text?.lines.orEmpty().map { UiLine(it.text, it.runs, it.prompt) } }
+    val spans = remember(text) { lines.map { linkSpans(it.runs, it.text.length) } }
+    val blankLines = Settings.blankLines.value
     val listState = rememberLazyListState()
     var following by remember { mutableStateOf(true) }
 
@@ -307,7 +323,15 @@ private fun WindowConsole(
                 // Each row's key is its number in the console, so the rows in view stay put as new ones come
                 items(lines.size, key = { first + it }) { i ->
                     val row = remember(lines[i]) { ansiText(lines[i]) }
-                    Text(row, Modifier.fillMaxWidth(), style = style, softWrap = false, maxLines = 1, overflow = TextOverflow.Clip)
+                    val rowSpans = spans[i]
+                    val rowLinks = if (rowSpans.isEmpty()) {
+                        null
+                    } else {
+                        // Asked about again for each new text, which may have changed them
+                        LaunchedEffect(text, rowSpans) { for (span in rowSpans) ScriptWindowsClient.requestLink(window.name, span.link) }
+                        LineLinks(rowSpans, links::get) { link, item -> ScriptWindowsClient.followLink(window.name, link, item) }
+                    }
+                    ConsoleLine(row, lines[i].text, style, Modifier.fillMaxWidth(), blankLines = blankLines, singleLine = true, links = rowLinks)
                 }
             }
         }

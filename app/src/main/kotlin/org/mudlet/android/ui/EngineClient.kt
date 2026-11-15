@@ -493,7 +493,7 @@ object EngineClient {
                 is EngineMessage.Announce -> post { Announcer.announce(message.text, message.assertive) }
 
                 is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
-                is EngineMessage.ButtonBars, is EngineMessage.Commands,
+                is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.Link,
                 -> post { ScriptWindowsClient.onMessage(message) }
 
                 is EngineMessage.Image -> {

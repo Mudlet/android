@@ -79,7 +79,13 @@ object ScriptWindowsClient {
     // How many of the labels drawn show each image; one none shows is let go first, the oldest first
     private val shownImages = HashMap<ImageRequest, Int>()
     private val imageOrder = LinkedHashSet<ImageRequest>()
-    private var nextId = 1L
+
+    // Apart from EngineClient's ids, which count from 1, so that the engine's error for one of these is never taken
+    // as the answer to a profile request
+    private var nextId = FIRST_ID
+
+    // The links of each console asked about since its text last came, answered or not
+    private val askedLinks = HashMap<String, HashSet<Int>>()
 
     // The label the player last touched, which is told when another is
     private var touchedLabel: String? = null
@@ -87,8 +93,14 @@ object ScriptWindowsClient {
     internal fun onMessage(message: EngineMessage) {
         when (message) {
             is EngineMessage.ButtonBars -> buttonBars = message.bars
+
             is EngineMessage.Commands -> commands = message.commands
-            else -> state = state.after(message)
+
+            else -> {
+                // New text may have changed the console's links, so they are asked about again
+                if (message is EngineMessage.WindowText && message.replyTo == null) askedLinks.remove(message.window)
+                state = state.after(message)
+            }
         }
     }
 
@@ -106,10 +118,14 @@ object ScriptWindowsClient {
         map = MapImage(bitmap, message.w, message.h, message.viewOnly)
     }
 
-    /** An `error` from the engine: the refusal of a map request is shown with the map. */
+    /**
+     * An `error` from the engine: the refusal of a map request is shown with the map. A link's is only logged, as a
+     * link a script let go of or disabled, or one the player tapped as it went, is no fault of theirs.
+     */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
         if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = message.message.substringAfter(':').trim()
+        if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -167,6 +183,7 @@ object ScriptWindowsClient {
         }
         // What the last link did not answer is asked again
         pendingImages.clear()
+        askedLinks.clear()
         askedImages.retainAll(images.keys)
         // Also a size that could not be sent while the link was down
         wantedSize?.let(::setMainWindowSize)
@@ -228,6 +245,19 @@ object ScriptWindowsClient {
         mapRefusal = null
     }
 
+    /** Asks the engine what the link [link] of the console [window] offers, unless it was asked since its text came; [state] gets it. */
+    fun requestLink(window: String, link: Int) {
+        val asked = askedLinks.getOrPut(window) { HashSet() }
+        if (!asked.add(link)) return
+        if (!EngineClient.send(Requests.getLink(link, window, nextId++))) asked.remove(link)
+    }
+
+    /**
+     * A tap on the link [link] of the console [window], or with [item], that item picked from its menu: what it runs
+     * changes the console, whose next text shows it. False as for [EngineClient.send].
+     */
+    fun followLink(window: String, link: Int, item: Int? = null): Boolean = EngineClient.send(Requests.followLink(link, item, window, nextId++))
+
     /** Asks the engine for [request], unless it was asked already; [images] gets it. */
     fun requestImage(request: ImageRequest) {
         if (request in images || request in askedImages) return
@@ -267,6 +297,7 @@ object ScriptWindowsClient {
     }
 
     private const val TAG = "ScriptWindows"
+    private const val FIRST_ID = 1L shl 40
 
     // The images kept beyond those shown: few enough that sized ones asked again as labels resize do not pile up
     private const val MAX_IMAGES = 64

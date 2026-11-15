@@ -55,6 +55,22 @@
     <string name="commands_menu_attention">Extensions, one needs attention</string>
     <string name="command_attention">Needs attention</string>
 
+    <!-- The map a game's scripts open (a Geyser.Mapper or openMapWidget()): its tab and what TalkBack reads of it, the
+         actions on it, which act on the room in the middle of the map, its buttons, and why the engine did not do what
+         was asked (%1$s, the engine's own words) -->
+    <string name="map_title">Map</string>
+    <string name="map_description">Map of the game</string>
+    <string name="map_not_drawn">Map, not drawn yet</string>
+    <string name="map_viewing">Viewing</string>
+    <string name="map_editing">Editing</string>
+    <string name="map_select_middle">Select the room in the middle</string>
+    <string name="map_walk_to_middle">Walk to the room in the middle</string>
+    <string name="map_zoom_in">Zoom in on the map</string>
+    <string name="map_zoom_out">Zoom out of the map</string>
+    <string name="map_edit">Edit the map</string>
+    <string name="map_refused">Map: %1$s</string>
+    <string name="map_refusal_dismiss">Dismiss</string>
+
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <string name="connection_disconnected">Disconnected</string>

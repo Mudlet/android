@@ -17,14 +17,17 @@ import org.mudlet.android.protocol.ButtonBar
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LabelLink
 import org.mudlet.android.protocol.LayoutMode
+import org.mudlet.android.protocol.MapPoint
+import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.MudletSize
+import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Placement
 import org.mudlet.android.protocol.PointerType
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.ScriptWindows
 
 /**
- * The script windows' part of [EngineClient] (docs/phase-f.md): the windows, button bars and commands the engine
+ * The script windows' part of [EngineClient] (docs/phase-f.md): the windows, button bars, commands and map the engine
  * describes, for the game screen to draw, and the requests about them. Main thread only, as EngineClient's state;
  * EngineClient hands it the engine's messages about them and tells it of each attach.
  */
@@ -36,6 +39,14 @@ object ScriptWindowsClient {
     var buttonBars by mutableStateOf(emptyList<ButtonBar>())
         private set
     var commands by mutableStateOf(emptyList<AddonCommand>())
+        private set
+
+    /** The map as the engine last drew it (docs/protocol.md, "The map"); null until it first does, for each engine instance. */
+    var map by mutableStateOf<MapImage?>(null)
+        private set
+
+    /** Why the engine refused the last map request, until the next one is sent or the player dismisses it. */
+    var mapRefusal by mutableStateOf<String?>(null)
         private set
 
     /** Fitted or stacked, or by the game area's width: the setting docs/phase-f.md's "Layout" offers the player. */
@@ -54,6 +65,9 @@ object ScriptWindowsClient {
             require((w == null) == (h == null)) { "an image is asked for at a size with both w and h, or neither" }
         }
     }
+
+    /** A `map` frame: [bitmap] its PNG, null if that did not decode, of [w] by [h] pixels; [viewOnly] false while the map is edited. */
+    class MapImage(val bitmap: ImageBitmap?, val w: Int, val h: Int, val viewOnly: Boolean)
 
     /** The images the engine sent, by what was asked; one not there yet is asked for with [requestImage]. */
     val images = mutableStateMapOf<ImageRequest, ImageBitmap>()
@@ -79,7 +93,24 @@ object ScriptWindowsClient {
     }
 
     /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
-    internal fun decode(message: EngineMessage.Image): ImageBitmap? = BitmapFactory.decodeByteArray(message.png, 0, message.png.size)?.asImageBitmap()
+    internal fun decode(message: EngineMessage.Image): ImageBitmap? = decodePng(message.png)
+
+    /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
+    internal fun decode(message: EngineMessage.Map): ImageBitmap? = decodePng(message.png)
+
+    private fun decodePng(png: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
+
+    /** A new `map`, with what [decode] made of it. */
+    internal fun onMap(message: EngineMessage.Map, bitmap: ImageBitmap?) {
+        if (bitmap == null) Log.w(TAG, "the engine's map, ${message.w} by ${message.h}, did not decode")
+        map = MapImage(bitmap, message.w, message.h, message.viewOnly)
+    }
+
+    /** An `error` from the engine: the refusal of a map request is shown with the map. */
+    internal fun onError(message: EngineMessage.Error) {
+        val request = message.message.substringBefore(':')
+        if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = message.message.substringAfter(':').trim()
+    }
 
     /** An answer to [requestImage], with what [decode] made of it. */
     internal fun onImage(message: EngineMessage.Image, bitmap: ImageBitmap?) {
@@ -124,6 +155,8 @@ object ScriptWindowsClient {
             state = ScriptWindows()
             buttonBars = emptyList()
             commands = emptyList()
+            map = null
+            mapRefusal = null
             sentSize = null
             sentPlacements.clear()
             touchedLabel = null
@@ -173,6 +206,27 @@ object ScriptWindowsClient {
 
     /** A tap on the command [command] of [commands]: a checkable one is ticked or unticked. False as for [EngineClient.send]. */
     fun activateCommand(command: Int): Boolean = EngineClient.send(Requests.activateCommand(command))
+
+    /**
+     * What the player did on the map at [at], in the pixels of the last [map]: a tap selects the room there ([type]
+     * press), a double tap walks to it, and a wheel turn of [wheelY] zooms about it. False as for [EngineClient.send].
+     */
+    fun mapPointer(type: MapPointerType, at: MapPoint, wheelY: Int = 0): Boolean {
+        mapRefusal = null
+        val button = if (type == MapPointerType.WHEEL) 0 else POINTER_LEFT
+        return EngineClient.send(Requests.mapPointer(type, at.x, at.y, button, 0, wheelY))
+    }
+
+    /** The map viewed only, or edited; the next [map] says which it is. False as for [EngineClient.send]. */
+    fun setMapViewOnly(viewOnly: Boolean): Boolean {
+        mapRefusal = null
+        return EngineClient.send(Requests.setMapViewOnly(viewOnly))
+    }
+
+    /** The player read [mapRefusal]. */
+    fun dismissMapRefusal() {
+        mapRefusal = null
+    }
 
     /** Asks the engine for [request], unless it was asked already; [images] gets it. */
     fun requestImage(request: ImageRequest) {

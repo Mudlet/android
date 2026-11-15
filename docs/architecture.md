@@ -26,9 +26,9 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console with the windows and button bars the game's scripts draw around it, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
-| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`). Its tests run on the JVM, against the desktop engine too |
+| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn and a pinch as wheel notches (`MapFit`, `ZoomNotches`). Its tests run on the JVM, against the desktop engine too |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
 | `native/standin/` | The stand-in engine for fast tests: minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
@@ -130,6 +130,23 @@ The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt`
   "Button <n> of <bar>" with only an icon; a push-down one reads as a switch, on or off; a folder says a tap opens its
   menu; a checkable command reads its state. The Extensions button is read with Back, before the console, as Material
   makes the top app bar a group read first. The buttons and commands are off while no engine is attached.
+
+### The map
+The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted by `MapFit` in `:protocol`):
+- A `Geyser.Mapper`, or another mapper a script put in the main window, is placed as any window. openMapWidget()'s map,
+  a dock the main window's size, is a "Map" page in either layout, and a mapper beside the text is one when stacked.
+- The frame is drawn only while it is the window's size, as the engine draws one at each new size; scaled alike both
+  ways to fit and centred, so a touch maps back to the frame's pixel under it.
+- A tap sends a `mapPointer` press with the left button, which selects the room there, on the finger's lift, so a
+  pinch selects nothing; a second tap within the double-tap timeout then sends a double click, which walks there.
+  A pinch turns the wheel a notch for each 7% it scales, as Mudlet's map zooms by notch, about the fingers' middle. A
+  drag does nothing.
+- Buttons in its corner zoom out and in by three notches about the map's middle, and a switch, on while the map is
+  edited, sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason
+  over the map's bottom, until dismissed or the next request.
+- With TalkBack the map reads as "Map of the game", viewing or editing, in the windows' group. A double tap selects the
+  room in its middle, and its actions walk there and zoom; the buttons and the switch read their names. Touches,
+  buttons and actions are off while no engine is attached or no frame of the window's size has come.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
@@ -285,7 +302,10 @@ device shows, below the UI's debug hook:
   bounds, a gauge read as its progress, a link's command, and a label's image asked of the engine; the button bars: a
   bar's buttons as 48 dp buttons above or beside the console and read after the windows, whose taps send
   `pressButton`, a push-down button as a switch, a folder's menu, an icon button's name and icon, and the Extensions
-  menu of commands, whose tap sends `activateCommand`; and the notification permission, asked on Android 13 and later,
+  menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper window, a tap, a double tap and a
+  pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and TalkBack's actions, the switch to
+  editing, a refusal until dismissed, a frame of another size not drawn, and the docked map as a page; and the
+  notification permission, asked on Android 13 and later,
   on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
   (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
   library needs API 34, so they run on the API 36 emulator only.
@@ -804,6 +824,14 @@ Item 13 of the on-device checklist covers this.
     - The Extensions button in the top bar lists the commands under their menu paths, and a tap runs one.
     - With TalkBack on: swiping goes from the console to the input line and the bar, then the windows, then each
       button bar, read as "<name> button bar" and then its buttons, a push-down one as a switch, on or off.
+20. The map, with the libmudlet APK and a profile with a map (one downloaded by its package, or rooms made with
+    `addRoom()` and `setExit()`), in a `Geyser.Mapper` and, with `lua openMapWidget()`, docked.
+    - The map looks as on the desktop, scaled to the window, and follows the player; the docked one is a "Map" tab.
+    - A tap selects the room under it, a double tap walks there, a pinch zooms about the fingers, and the zoom buttons
+      about the middle. The edit switch turns on and raises `mapModeChangeEvent` (`lua registerAnonymousEventHandler(
+      "mapModeChangeEvent", function(_, mode) echo(mode .. "\n") end)` prints `editing`), and off again.
+    - With TalkBack on: the map reads as "Map of the game, Viewing" after the console, and its actions walk to the
+      room in the middle and zoom; the zoom buttons and the switch read their names.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

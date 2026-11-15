@@ -369,6 +369,11 @@ object EngineClient {
                     post { ScriptWindowsClient.onImage(message, bitmap) }
                 }
 
+                is EngineMessage.Map -> {
+                    val bitmap = ScriptWindowsClient.decode(message)
+                    post { ScriptWindowsClient.onMap(message, bitmap) }
+                }
+
                 is EngineMessage.Notify -> post { notifyCount++ }
 
                 is EngineMessage.Gap -> post {
@@ -381,7 +386,10 @@ object EngineClient {
                     }
                 }
 
-                is EngineMessage.Error -> post { linkState = "engine error: ${message.message}" }
+                is EngineMessage.Error -> post {
+                    linkState = "engine error: ${message.message}"
+                    ScriptWindowsClient.onError(message)
+                }
 
                 else -> {}
             }

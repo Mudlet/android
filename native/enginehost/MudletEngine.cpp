@@ -17,8 +17,11 @@
 #include <QIcon>
 #include <QImage>
 #include <QImageReader>
+#include <QPainter>
 #include <QPixmap>
 #include <QStandardPaths>
+
+#include <algorithm>
 
 namespace {
 
@@ -257,6 +260,16 @@ AddonCommandInfo addonCommandInfo(const THeadlessSession::AddonCommand& command)
     return info;
 }
 
+// The mapper window's size while it shows, none otherwise
+std::optional<QSize> shownMapperSize(const QList<ScriptWindow>& windows)
+{
+    const auto mapper = std::ranges::find(windows, ScriptWindow::Kind::mapper, &ScriptWindow::kind);
+    if (mapper == windows.cend() || !mapper->shown) {
+        return std::nullopt;
+    }
+    return mapper->geometry.size();
+}
+
 QString settleConfigDir()
 {
     // As the GUI's, as the session reads Mudlet.ini and the keychain under them, and AppDataLocation follows them
@@ -432,6 +445,12 @@ void MudletEngine::connectSession()
     });
     connect(session, &THeadlessSession::buttonsChanged, this, &MudletEngine::pushButtonBars);
     connect(session, &THeadlessSession::addonCommandsChanged, this, &MudletEngine::pushCommands);
+    // A repaint comes from the event loop, once a turn; the view-only flag is in each frame
+    const auto pushShownMap = [this] {
+        pushMap(shownMapperSize(mSession->scriptWindows()));
+    };
+    connect(session, &THeadlessSession::mapRepaintRequested, this, pushShownMap);
+    connect(session, &THeadlessSession::mapViewOnlyChanged, this, pushShownMap);
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
         mFrontend->mainArea({mMainWindowSize, grid, textRect});
     });
@@ -947,13 +966,16 @@ void MudletEngine::onProfileClosed()
     mFrontend->windows({}, {});
     mFrontend->buttonBars({});
     mFrontend->commands({});
+    mMapSize.reset();
+    mFrontend->map(std::nullopt);
 }
 
 void MudletEngine::pushWindows(bool withText)
 {
     QList<ScriptWindowInfo> windows;
     QList<LabelInfo> labels;
-    for (const ScriptWindow& window : mSession->scriptWindows()) {
+    const QList<ScriptWindow> sessionWindows = mSession->scriptWindows();
+    for (const ScriptWindow& window : sessionWindows) {
         windows.append(windowInfo(window));
         if (window.kind != ScriptWindow::Kind::label) {
             continue;
@@ -963,6 +985,10 @@ void MudletEngine::pushWindows(bool withText)
         }
     }
     mFrontend->windows(windows, labels);
+    // mapRepaintRequested does not come for a mapper that only changed size, or hid
+    if (const std::optional<QSize> mapperSize = shownMapperSize(sessionWindows); mapperSize != mMapSize) {
+        pushMap(mapperSize);
+    }
     if (!withText) {
         return;
     }
@@ -1002,6 +1028,41 @@ void MudletEngine::pushCommands()
         commands.append(addonCommandInfo(command));
     }
     mFrontend->commands(commands);
+}
+
+void MudletEngine::pushMap(const std::optional<QSize>& mapperSize)
+{
+    mMapSize = mapperSize;
+    mFrontend->map(mapperSize ? drawMap(*mapperSize) : std::nullopt);
+}
+
+std::optional<MapFrame> MudletEngine::drawMap(const QSize& size)
+{
+    // A map widget opened before the UI gave the main window a size has none
+    if (size.isEmpty()) {
+        return std::nullopt;
+    }
+    if (size.width() > PngImage::maxSide || size.height() > PngImage::maxSide) {
+        qWarning("MudletEngine: the mapper, %dx%d, is larger than %d pixels a side, so the map is not drawn", size.width(), size.height(), PngImage::maxSide);
+        return std::nullopt;
+    }
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    const bool drawn = mSession->renderMap(painter, size);
+    painter.end();
+    if (!drawn) {
+        qWarning("MudletEngine: the map was not drawn: %s", qPrintable(mSession->errorString()));
+        return std::nullopt;
+    }
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+        qWarning("MudletEngine: the map could not be made a PNG");
+        return std::nullopt;
+    }
+    return MapFrame{png, size, mSession->mapViewOnly()};
 }
 
 QString MudletEngine::setMainWindowSize(int width, int height)
@@ -1133,6 +1194,40 @@ QString MudletEngine::activateCommand(int id)
         return QStringLiteral("no profile running");
     }
     return mSession->activateAddonCommand(id) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::mapPointer(const PointerEvent& event)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    THeadlessSession::MapPointerEvent sessionEvent;
+    switch (event.type) {
+    case PointerEvent::Type::press:
+        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::press;
+        break;
+    case PointerEvent::Type::doubleClick:
+        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::doubleClick;
+        break;
+    case PointerEvent::Type::wheel:
+        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::wheel;
+        break;
+    default:
+        return QStringLiteral("the map takes a press, a double-click or a wheel turn");
+    }
+    sessionEvent.position = event.position;
+    sessionEvent.button = Qt::MouseButton(event.button);
+    sessionEvent.modifiers = Qt::KeyboardModifiers::fromInt(event.modifiers);
+    sessionEvent.angleDelta = QPoint(0, event.wheelY);
+    return mSession->mapPointer(sessionEvent) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::setMapViewOnly(bool viewOnly)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setMapViewOnly(viewOnly) ? QString() : mSession->errorString();
 }
 
 void MudletEngine::setViewWidthPx(int px)

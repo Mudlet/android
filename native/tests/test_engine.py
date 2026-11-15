@@ -189,6 +189,23 @@ def buttons_and_commands(c):
         check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
 
 
+def no_map(c):
+    """The stand-in has no map: it refuses presses on it and switching it to editing, once their fields are right."""
+    for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False}):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: the stand-in engine has no map", f"{request['t']} is refused: {m}")
+    for request, message in (({"t": "mapPointer", "type": "move", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
+                             ({"t": "mapPointer", "type": "press", "x": "1", "y": 2}, "x and y must be numbers"),
+                             ({"t": "mapPointer", "type": "wheel", "x": 1, "y": 2, "wheelY": 0.5},
+                              "button and modifiers must be whole numbers from 0, wheelY a whole number"),
+                             ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "modifiers": -1},
+                              "button and modifiers must be whole numbers from 0, wheelY a whole number"),
+                             ({"t": "setMapViewOnly", "viewOnly": 1}, "viewOnly must be true or false"),
+                             ({"t": "setMapViewOnly"}, "viewOnly must be true or false")):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
+
+
 def main():
     faulthandler.register(signal.SIGUSR1)
     port = fake_telnet.start_in_thread()
@@ -211,6 +228,7 @@ def main():
     check(not any(m["t"] in ("mainArea", "windowText", "label") for m in hs), "nor a main area, window text or label")
     check([m for m in hs if m["t"] == "buttonBars"] == [{"t": "buttonBars", "bars": []}], "and that there are no button bars")
     check([m for m in hs if m["t"] == "commands"] == [{"t": "commands", "commands": []}], "or commands")
+    check(not any(m["t"] == "map" for m in hs), "and is sent no map")
 
     # Wrong protocol version is refused
     bad = Client(SOCK, version=99)
@@ -302,6 +320,7 @@ def main():
     check(m == {"t": "error", "message": "unknown type unknownThing", "re": 3}, f"an error carries the request's id: {m}")
     script_windows(c)
     buttons_and_commands(c)
+    no_map(c)
 
     # Latency
     samples = []

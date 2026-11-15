@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **9**.
+The current version is **10**.
 
 ## Transport
 
@@ -74,6 +74,8 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
 | `pressButton` | `button` | A click on the button or menu entry of `buttonBars` whose `id` is `button`, a whole number (`THeadlessSession::pressButton()`): it sends the button's command through the aliases and runs its script, as the GUI's button does, and a push-down button goes down, or up if it was down. To pick an entry of a folder's menu, the UI presses the entry, then the folder, as the GUI does. |
 | `activateCommand` | `command` | A click on the command of `commands` whose `id` is `command`, a whole number (`THeadlessSession::activateAddonCommand()`): a checkable command is ticked or unticked, then the event `sysCommandClicked` is raised with its id. Refused for a disabled command. |
+| `mapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | What the UI's pointer did on the map at `x`, `y`, in the pixels of the last `map` from its top left (`THeadlessSession::mapPointer()`, "The map" below). `type` is `press`, `doubleClick` or `wheel`; `button`, `modifiers` and `wheelY` are as for `pointer`, and 0 when absent. |
+| `setMapViewOnly` | `viewOnly` | `true` to only view the map, `false` to edit it, as the GUI's mapper menu does (`THeadlessSession::setMapViewOnly()`): the event `mapModeChangeEvent` is raised with `viewing` or `editing`. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
 handling that request, of the `profiles`, `windowText`, `image` or `error` that answers it, and into `pong`.
@@ -96,6 +98,11 @@ windows and refuses all seven.
 `pressButton` and `activateCommand` too are answered only when refused, with `error` as above: libmudlet refuses
 them while no profile is open, and for an id that is not one the last `buttonBars` or `commands` would list. The
 stand-in has no buttons or commands and refuses both.
+
+`mapPointer` and `setMapViewOnly` are answered only when refused, with `error` as above: libmudlet refuses them while no
+profile is open or no map is open, `setMapViewOnly` also while the map is hidden, and `mapPointer` as
+`THeadlessSession::mapPointer()` does: before the map has been drawn, for a double-click of another button than the
+left, and for a wheel turn of less than half a notch or with no area to zoom. The stand-in has no map and refuses both.
 
 ### Engine to UI
 
@@ -122,6 +129,7 @@ stand-in has no buttons or commands and refuses both.
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
+| `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
 ### Script windows
@@ -214,6 +222,28 @@ draws them.
 The engine keeps both lists and sends each whole, only when it differs from what it last sent. Only libmudlet sends
 anything in them; the stand-in sends both empty.
 
+### The map
+
+`map` is the profile's 2D map, as libmudlet's `THeadlessSession::renderMap()` draws it, at the size of the mapper
+window: the `windows` entry of kind `mapper`, named `mapper`, which a script makes with `Geyser.Mapper` or
+`createMapper()`, inside a window, or with `openMapWidget()`, as a dock the size of the main window. A point of the
+map is the same point of that window, so the UI draws the PNG over it, and sends what the pointer does there as
+`mapPointer`; `pointer` on the window `mapper` does the same for a press, double-click or wheel turn.
+
+- The engine draws the map again on upstream's `mapRepaintRequested`, at most once a turn of its event loop, when
+  `viewOnly` changes, and when the mapper shows or changes size. It sends `map` only when the PNG or `viewOnly`
+  differs from what it last sent.
+- While the mapper does not show (its `shown` false, or no such window), or has no size, as `Geyser.Mapper`'s `hide()`
+  leaves it, nothing is sent: the UI hides what it drew from the `windows` message. A mapper opened before
+  `setMainWindowSize` has no size, so nothing is drawn. The UI draws a `map` only while its `w` and `h` are the
+  mapper's: one of another size is from before the mapper changed, and stays so when the new size cannot be drawn.
+- A left `press` selects the room under it, as `getMapSelection()` then reads, and any press raises
+  `sysMapWindowMousePressEvent`. A left `doubleClick` on a room walks to it: Mudlet finds the path and calls
+  `doSpeedWalk()`, or echoes that there is none. A `wheel` turn zooms about its point, as the GUI's wheel does. A
+  drag and the right-click menu are the GUI's alone.
+- The map is drawn at the window's pixels, as the GUI draws it at a scale of 1. A mapper smaller than 10 pixels a
+  side or larger than 4096, or a map too large for a frame, gives none.
+
 ### Status keys
 
 `status` is how the engine reports everything that is not a line. The keys are not part of the protocol's version:
@@ -294,8 +324,8 @@ a UI says `hello`, the engine sends, in this order:
 
 1. its own `hello`;
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, then
-   `mainArea` if the engine has sent one, `windows` with `full` true, a `label` for each label, `buttonBars`,
-   `commands`, and a `windowText` of each console's last 300 rows;
+   `mainArea` if the engine has sent one, `windows` with `full` true, a `label` for each label, `map` while the
+   mapper shows, `buttonBars`, `commands`, and a `windowText` of each console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -321,7 +351,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 - When more than 4 MiB is queued unsent, the UI is lagging. The engine stops writing lines, tails, clears, notifies
   and statuses to it, but keeps them in the ring and its status table.
 - Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput`, `history`, the script
-  windows' state, the button bars and the commands again, as on attach, then the lines the UI has not had (with
+  windows' state, the map, the button bars and the commands again, as on attach, then the lines the UI has not had (with
   `clear` and `gap` as on attach, but without `replay`), then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `error`, the `windowText` that answers
   `getWindowText`, `image`, and a `status` that carries `re`.
@@ -333,17 +363,18 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 9, which added the button bars and commands (`buttonBars`, `commands`, `pressButton`,
-`activateCommand`). Version 8 added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and requests
-(`pointer`, `getImage`). Version 7 added the script windows' requests (`setMainWindowSize`,
-`getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and messages (`windows`,
-`windowText`, `mainArea`, `windowCommandLine`). Versions 4 to 6 are kept for changes still in review, so no engine speaks them. Version 3 added
-the input line's requests (`sendHidden`, `dismissHidden`, `complete`) and messages (`hiddenInput`, `history`,
-`commandLine`); version 2 added the profile requests and `profiles`:
+As implemented in version 10, which added the map (`map`, `mapPointer`, `setMapViewOnly`). Version 9 added the button
+bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`). Version 8 added the labels' messages
+(`label`, `image`, and `bgAlpha` in `windows`) and requests (`pointer`, `getImage`). Version 7 added the script
+windows' requests (`setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`,
+`sendWindowCommandLine`) and messages (`windows`, `windowText`, `mainArea`, `windowCommandLine`). Versions 4 to 6 are
+kept for changes still in review, so no engine speaks them. Version 3 added the input line's requests (`sendHidden`,
+`dismissHidden`, `complete`) and messages (`hiddenInput`, `history`, `commandLine`); version 2 added the profile
+requests and `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=9`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=10`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

@@ -152,7 +152,7 @@ fun InputLine(
         notice = if (sent) null else Notice.NOT_SENT
         if (sent) {
             at = HistoryPosition()
-            text.clearText()
+            // bite: not cleared
             sends++
         }
     }
@@ -249,7 +249,7 @@ fun InputLine(
                     label = { Text(stringResource(R.string.input_password_label)) },
                     supportingText = supportingText,
                     isError = notice == Notice.NOT_SENT,
-                    inputTransformation = clearsNotice,
+
                     textObfuscationMode = TextObfuscationMode.Hidden,
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.Send),
                     onKeyboardAction = { submitHidden() },
@@ -293,7 +293,7 @@ fun InputLine(
                     },
                     supportingText = supportingText,
                     isError = notice == Notice.NOT_SENT,
-                    inputTransformation = clearsNotice,
+
                     outputTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) },
                     // Game commands are not prose: corrections, suggestions and capitals would change them ("n" to "In")
                     keyboardOptions = KeyboardOptions(

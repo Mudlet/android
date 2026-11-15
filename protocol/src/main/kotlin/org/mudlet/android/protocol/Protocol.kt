@@ -390,7 +390,7 @@ class FrameReader(input: InputStream) {
                 shown = w.optBoolean("shown"),
                 stack = w.optInt("stack"),
                 bg = w.optInt("bg", -1),
-                bgAlpha = w.optInt("bgAlpha", 255),
+                bgAlpha = w.optInt("bgAlpha", 0),
                 fontFamily = w.optString("fontFamily").ifEmpty { null },
                 fontSize = w.optDouble("fontSize", 0.0),
                 inDock = w.optBoolean("inDock"),

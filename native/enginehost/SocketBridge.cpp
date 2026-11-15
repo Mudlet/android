@@ -178,9 +178,6 @@ void SocketBridge::sendState()
         windows.append(windowJson(window));
     }
     sendFrame({{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("full"), true}, {QStringLiteral("windows"), windows}});
-    for (const LabelInfo& label : std::as_const(mLabels)) {
-        sendFrame(labelMessage(label));
-    }
     if (!mEngine) {
         return;
     }
@@ -453,7 +450,7 @@ void SocketBridge::getImage(const QJsonObject& message)
     if (!frameValue.isUndefined()) {
         frame = wholeNumber(frameValue);
         if (!frame || *frame < 0) {
-            sendError(QStringLiteral("getImage: frame must be a whole number from 0"));
+            sendError(QStringLiteral("getImage: frame must be a number"));
             return;
         }
     }

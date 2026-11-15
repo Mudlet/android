@@ -987,7 +987,7 @@ QString MudletEngine::pointer(const QString& window, const PointerEvent& event)
         }
     }
     sessionEvent.position = event.position;
-    sessionEvent.button = Qt::MouseButton(event.button);
+    sessionEvent.button = Qt::MouseButton(event.button << 1);
     sessionEvent.buttons = Qt::MouseButtons::fromInt(event.buttons);
     sessionEvent.modifiers = Qt::KeyboardModifiers::fromInt(event.modifiers);
     sessionEvent.angleDelta = QPoint(0, event.wheelY);

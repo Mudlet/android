@@ -2,6 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.view.inputmethod.EditorInfo
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
@@ -138,11 +139,27 @@ class GameScreenTest {
     }
 
     @Test
+    fun anEditTheKeyboardSendsJustAfterASendLeavesTheLineEmpty() {
+        compose.onNode(input).performTextInput("north")
+        val send = compose.onNode(input).assertIsFocused().fetchSemanticsNode().config[SemanticsActions.OnImeAction].action
+        compose.runOnUiThread {
+            val keyboard = checkNotNull(compose.activity.window.decorView.findFocus()?.onCreateInputConnection(EditorInfo())) { "no input connection" }
+            // In one turn of the main thread, so no frame comes between them: a keyboard's edit that reaches the field
+            // before it is drawn again, as the keyboard marking the word before the cursor does after a send
+            checkNotNull(send)()
+            keyboard.setComposingRegion(0, "north".length)
+        }
+        assertEquals("north", session.receive("send").getString("text"))
+        compose.onNode(input).assert(editableText(""))
+    }
+
+    @Test
     fun theHistoryButtonsRecallEarlierCommands() {
         for (command in listOf("look", "north")) {
             compose.onNode(input).performTextInput(command)
             compose.onNode(input).performImeAction()
             assertEquals(command, session.receive("send").getString("text"))
+            compose.onNode(input).assert(editableText(""))
         }
         compose.onNode(input).performTextInput("draft")
 

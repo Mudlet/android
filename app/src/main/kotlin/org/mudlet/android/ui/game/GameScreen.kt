@@ -103,7 +103,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
                 val textSizeSp = Settings.textSize.value
                 val colors = ConsoleColors.of(c.status["consoleColors"])
                 // One map on the screen: none behind the text while a script's mapper window shows it
-                val mapBehind = Settings.mapBehindText.value && !mapperShown()
+                val mapBehind = !mapperShown()
                 // The map in front covers it all, so TalkBack does not read what is under it
                 val covered = if (mapOpen) Modifier.clearAndSetSemantics {} else Modifier
                 ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered)) { consoleModifier ->

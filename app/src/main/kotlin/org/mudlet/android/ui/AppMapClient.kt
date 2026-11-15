@@ -119,7 +119,7 @@ internal object AppMapClient : MapSource {
         when (request) {
             "appMapPointer", "showRoom", "setAppMapSize" -> {}
             "setMapViewOnly" -> if (!askedViewOnly) return false
-            "findRooms" -> closeSearch()
+            "findRooms" -> {}
             else -> return false
         }
         refused = reason
@@ -140,7 +140,6 @@ internal object AppMapClient : MapSource {
             map = null
             refused = null
         }
-        sent = Size.NONE
         if (pendingSearch != null) closeSearch()
         update()
     }

@@ -13,7 +13,7 @@ import kotlin.math.roundToInt
  */
 object MapBehindText {
     /** The most the map shows: a white room under the default grey text on black still leaves it [MIN_CONTRAST]. */
-    const val MAX_ALPHA = 0.3f
+    const val MAX_ALPHA = 0.5f
 
     /** WCAG's least contrast for text, AA. */
     const val MIN_CONTRAST = 4.5

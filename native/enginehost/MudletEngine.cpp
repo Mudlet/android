@@ -1358,7 +1358,7 @@ QString MudletEngine::setAppMapSize(const QSize& size, double scale)
         return QStringLiteral("the map at %1x%2 by %3 is larger than %4 pixels a side").arg(size.width()).arg(size.height()).arg(scale).arg(PngImage::maxSide);
     }
     mAppMapSize = size.isEmpty() ? QSize(0, 0) : size;
-    mAppMapScale = scale;
+    mAppMapScale = 1;
     if (!mAppMapSize.isEmpty()) {
         pushAppMap();
         return {};

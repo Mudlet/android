@@ -128,9 +128,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         scaleX = scale
         scaleY = scale
     }
-    Box(modifier.then(shrunk).background(CONSOLE_BACKGROUND)) {
-        // Touches between its controls stay off what it covers; under them, so they still take theirs
-        Box(Modifier.matchParentSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } })
+    Box(modifier.then(shrunk).background(CONSOLE_BACKGROUND).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } }) {
         // While the search is edited its last results are not shown: they are of the text before, and they would sit
         // where the keyboard leaves the map no room
         var editing by remember { mutableStateOf(false) }
@@ -156,7 +154,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 // command line, they wait for it: squeezed, their close button and rows would be cut off
                 val below = maxHeight - MAP_CONTROLS_HEIGHT
                 val search = AppMapClient.search
-                if (search != null && !editing && below >= RESULTS_HEAD + RESULT_ROW) {
+                if (search != null && !editing) {
                     val results = maxOf(below / 2, RESULTS_HEAD + RESULT_ROW)
                     RoomResults(search, Modifier.align(Alignment.TopStart).padding(top = MAP_CONTROLS_HEIGHT).fillMaxWidth().heightIn(max = results))
                 }

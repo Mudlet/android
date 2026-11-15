@@ -2,8 +2,9 @@
 """Checks the licences the app's About screen lists (app/src/main/assets/licences, docs/licences.md).
 
 Always, the repository: every component has a licence text for each identifier its SPDX expression names, every
-text is used, ids are unique, the libraries map names existing components, and the versions listed are the ones the
-build scripts pin (scripts/build-mudlet-deps.sh, scripts/build-openssl.sh, Qt and the NDK).
+text is used, ids are unique, the libraries map names existing components, the versions listed are the ones the
+build scripts pin (scripts/build-mudlet-deps.sh, scripts/build-openssl.sh, Qt and the NDK), and LICENSE is the text
+of the licence listed for this app's own code.
 
 --mudlet-source DIR: also that every Lua C module, font and third-party Lua file Mudlet's checkout builds into
 libmudlet has a component.
@@ -28,6 +29,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "app", "src", "main", "assets", "licences")
 ENGINES = {"standin", "mudlet"}
 GROUPS = {"app", "native"}
+# the component for this repository's own code, whose licence is in LICENSE
+APP_COMPONENT = "mudlet-android"
 # Mudlet's third-party Lua files (src/mudlet-lua/lua/3rdparty) and the component for each
 MUDLET_LUA_FILES = {"Inspect.lua": "inspect-lua"}
 # Mudlet's own 3rdparty/ directories an Android build of mudlet_core compiles in
@@ -96,6 +99,15 @@ def check_repository():
     used = {t for c in components.values() for t in texts_of(c)} | set(notices["pomLicences"].values())
     for unused in sorted(text_names - used):
         error(f"texts/{unused}.txt is no component's licence: remove it")
+    # this repository's LICENSE is the text of the licence the list gives this app's own code
+    app_licence = components.get(APP_COMPONENT, {}).get("licence")
+    if app_licence not in text_names:
+        error(f"notices.json has no component '{APP_COMPONENT}' (this app's own code) with a licence that has a text")
+    else:
+        with open(os.path.join(ROOT, "LICENSE"), "rb") as f, \
+                open(os.path.join(ASSETS, "texts", f"{app_licence}.txt"), "rb") as text:
+            if f.read() != text.read():
+                error(f"LICENSE is not texts/{app_licence}.txt, the licence notices.json gives {APP_COMPONENT}")
 
     def version_of(cid):
         return components.get(cid, {}).get("version")

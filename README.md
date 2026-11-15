@@ -229,7 +229,11 @@ APKs and libmudlet install the versions under [Building](#building) with `.githu
 through a pinned aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Mudlet's Android builds, Gradle, ccache and the
 emulators' system images are cached between runs.
 
-## Licences
+## Licence
+
+This repository's code is free software under the GNU General Public License, version 3 or later
+(`GPL-3.0-or-later`); the full text is in [`LICENSE`](LICENSE). The APK as a whole, with Mudlet, Qt and OpenSSL, is
+distributed under version 3 of the GPL.
 
 The app's About screen lists the licence of everything the APK bundles, with the texts: Mudlet (GPL v2 or later), Qt
 (LGPL v3), OpenSSL 3 (Apache 2.0), the stand-in engine's vendored Lua 5.1.5 (MIT, see

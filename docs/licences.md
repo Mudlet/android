@@ -26,8 +26,9 @@ with Mudlet's version and the commit it was built from, into `:engine-service`'s
   `lib/<abi>/*.so` must be claimed by a component of that APK's engine, the APK must carry the licence files as they
   are in the repository, and `android.json` with a text for each of its licences.
 - **The repository** (`scripts/check-licences.py` alone, also part of the above): every licence named has its text and
-  every text is used; the versions listed for OpenSSL, Qt, the NDK, the stand-in's Lua and each dependency
-  `build-mudlet-deps.sh` builds are the ones the scripts pin, so a bump that forgets the list fails.
+  every text is used; `LICENSE` is the text of the licence listed for this app's own code (`mudlet-android`); the
+  versions listed for OpenSSL, Qt, the NDK, the stand-in's Lua and each dependency `build-mudlet-deps.sh` builds are
+  the ones the scripts pin, so a bump that forgets the list fails.
 - **Mudlet's checkout** (`--mudlet-source`, in the libmudlet job, so also nightly against Mudlet's `development`):
   each Lua C module in Mudlet's `cmake/BundledLuaModules.cmake`, each font directory in `mudlet_fonts_common.qrc`,
   each file in `src/mudlet-lua/lua/3rdparty` and the `3rdparty/` libraries the core builds must have a component.
@@ -48,8 +49,10 @@ scripts/qt-attributions.py 6.12.0 ../qtbase=standin,mudlet ../qtsvg=mudlet ../qt
     ../qt5compat=mudlet ../qtspeech=mudlet
 ```
 
-## Mudlet and the GPL
+## This app, Mudlet and the GPL
 
+This repository's own code (the app, the engine host, the scripts) is under the GPL version 3 or later
+(`GPL-3.0-or-later`): [`LICENSE`](../LICENSE) has the text, and the About screen lists it as "Mudlet for Android".
 Mudlet is under the GPL version 2 or later. The APK combines it with Qt (LGPL v3) and OpenSSL (Apache 2.0), which
 are compatible with version 3 of the GPL but not with version 2 alone, so the app as a whole is distributed under
 GPL v3, as Mudlet's own desktop builds are. The About screen links the exact Mudlet commit the engine was built from
@@ -74,6 +77,8 @@ What the APK ships, as checked in the APKs CI builds:
 - **Notice:** the About screen says Qt is used under the LGPL v3, and carries the LGPL and the GPL v3 it builds on.
 - **Source:** the About screen links Qt 6.12.0's source on download.qt.io (Qt's own server: the binaries are built
   from that release unchanged), and the app's and Mudlet's source, which is everything needed to rebuild the APK.
+  The link is the `archive/qt/6.12/6.12.0/single/` path, which stays once 6.12 is superseded; while 6.12.0 is
+  current, the same files are also under `official_releases/qt/6.12/6.12.0/`.
 
 ### Rebuilding the app with your own Qt
 

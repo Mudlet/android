@@ -42,7 +42,7 @@
     <string name="about_qt_relink">How to rebuild the app with your own Qt</string>
     <string name="about_licences_heading">Licences</string>
     <!-- Headings of the licence list -->
-    <string name="about_group_app">Mudlet and Qt</string>
+    <string name="about_group_app">This app, Mudlet and Qt</string>
     <string name="about_group_native">Libraries, fonts and icons built in</string>
     <string name="about_group_qt">Code from others inside Qt</string>
     <string name="about_group_android">Android libraries</string>

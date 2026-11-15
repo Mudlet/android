@@ -71,6 +71,7 @@ class LicencesTest {
             }
             val ids = components.map { it.id }.toSet()
             assertTrue("$engine lists Qt", "qt" in ids)
+            assertEquals("$engine lists this app's own code as LICENSE has it", "GPL-3.0-or-later", components.single { it.id == "mudlet-android" }.licence)
             assertEquals("$engine lists Mudlet only with Mudlet's engine", engine == "mudlet", "mudlet" in ids)
             assertEquals("Lua's notice is in either engine", true, "lua51" in ids || "lua51-standin" in ids)
             assertFalse("$engine has Qt's third-party code", components.none { it.group == LicenceGroup.QT })

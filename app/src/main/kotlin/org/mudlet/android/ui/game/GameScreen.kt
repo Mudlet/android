@@ -17,11 +17,13 @@ import org.mudlet.android.ui.MudletTopBar
 
 /**
  * The console, the input line and the connection bar, top to bottom, which is also the order TalkBack reads them in.
- * The keyboard pushes them up, so the console shrinks above it.
+ * The keyboard pushes them up, so the console shrinks above it. The input line's suggestions come from the profile
+ * the engine runs ([rememberEngineSuggestions]), which learns from what the line sends.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit) {
     val c = EngineClient
+    val suggestions = rememberEngineSuggestions()
     Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Console(c.lines, c.tail, c.linesAdded, onWidth = c::setViewWidth, Modifier.weight(1f).fillMaxWidth())
@@ -30,11 +32,13 @@ fun GameScreen(onBack: () -> Unit) {
                 history = c.history,
                 commandLine = c.commandLine,
                 onCommandLineShown = c::commandLineShown,
-                onSend = c::sendCommand,
-                onSendHidden = c::sendHidden,
+                onSend = { line -> c.sendCommand(line).also { if (it) suggestions.sent(line) } },
+                onSendHidden = { secret -> c.sendHidden(secret).also { if (it) suggestions.sentHidden() } },
                 onDismissHidden = c::dismissHidden,
                 onComplete = c::complete,
                 modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                suggestions = suggestions.answer,
+                onInputChanged = suggestions::inputChanged,
             )
             ConnectionBar(
                 ConnectionState.of(engineAttached = c.enginePid > 0, connection = c.status["connection"]),

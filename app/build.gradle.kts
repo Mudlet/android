@@ -135,6 +135,7 @@ kotlin {
 
 dependencies {
     implementation(project(":protocol"))
+    implementation(project(":suggest"))
     implementation(project(":engine-service"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

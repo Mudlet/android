@@ -59,7 +59,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
 
-      # :suggest's tests: ranking, prediction, the saved form, hidden input never stored
+      # :suggest's tests: ranking, prediction, the saved form and file, the session's timing, hidden input never stored
       - name: Kotlin suggestion tests
         if: matrix.tests
         run: ./gradlew -PqtRoot="$QT_ROOT" :suggest:test

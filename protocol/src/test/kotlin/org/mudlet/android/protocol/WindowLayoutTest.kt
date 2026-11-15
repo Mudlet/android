@@ -94,7 +94,7 @@ class WindowLayoutTest {
         assertEquals(listOf("map", "side"), layout.pages.map { it.name })
         assertTrue(layout.windows.none { it.window.name in setOf("map", "gauge", "side") })
         assertEquals(PxRect(0f, 40f, 800f, 1520f), layout.pane)
-        assertEquals(listOf(PlacedWindow(layout.pages[0], PxRect(0f, 140f, 800f, 1420f), 800f)), layout.paneWindows)
+        assertEquals(listOf(PlacedWindow(layout.pages[0], PxRect(0f, 140f, 800f, 1420f), PxRect(0f, 140f, 800f, 1420f))), layout.paneWindows)
         assertEquals(Placement(0, 70, 400, 710, false), layout.placements["side"])
     }
 
@@ -135,7 +135,8 @@ class WindowLayoutTest {
         assertEquals(PxRect(1400f, 0f, 200f, 200f), layout.rectOf("box"))
         val inside = layout.windows.single { it.window.name == "inside" }
         assertEquals(PxRect(1400f, 0f, 200f, 100f), inside.rect)
-        assertEquals(400f, inside.fullWidth)
+        assertEquals(400f, inside.full.w)
+        assertEquals(PxRect(1400f, 0f, 400f, 100f), inside.full)
         assertTrue(layout.windows.none { it.window.name == "hidden" })
     }
 

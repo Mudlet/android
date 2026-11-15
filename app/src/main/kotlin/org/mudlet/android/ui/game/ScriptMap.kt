@@ -82,7 +82,7 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
     val full = placed.full
     val map = client.map
     // One of another size is from before the mapper changed size (docs/protocol.md, "The map")
-    val frame: ImageBitmap? = map?.bitmap?.takeIf { map.w == window.w && map.h == window.h }
+    val frame: ImageBitmap? = map?.bitmap
     // In this node's pixels: the window as a whole, of which [rect] may show only a part
     val fit = remember(window.w, window.h, rect, full) { MapFit(window.w, window.h, PxRect(full.x - rect.x, full.y - rect.y, full.w, full.h)) }
     val touchable = frame != null && EngineClient.enginePid > 0
@@ -93,7 +93,7 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
     val state = stringResource(if (viewOnly) R.string.map_viewing else R.string.map_editing)
     val selectLabel = stringResource(R.string.map_select_middle)
     val actions = listOf(
-        CustomAccessibilityAction(stringResource(R.string.map_walk_to_middle)) { client.mapPointer(MapPointerType.DOUBLE_CLICK, fit.centre) },
+        CustomAccessibilityAction(stringResource(R.string.map_walk_to_middle)) { client.mapPointer(MapPointerType.PRESS, fit.centre) },
         CustomAccessibilityAction(stringResource(R.string.map_zoom_in)) { zoom(fit, 1) },
         CustomAccessibilityAction(stringResource(R.string.map_zoom_out)) { zoom(fit, -1) },
     )
@@ -128,7 +128,7 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
             zoomEnabled = touchable,
             viewOnly = viewOnly,
             toggleEnabled = map != null && EngineClient.enginePid > 0,
-            onZoom = { zoom(fit, it) },
+            onZoom = { },
             Modifier.align(Alignment.TopEnd),
         )
         client.mapRefusal?.let { MapRefusal(it, Modifier.align(Alignment.BottomStart)) }
@@ -174,11 +174,11 @@ private suspend fun PointerInputScope.mapGestures(fit: () -> MapFit?) {
                 tap = false
             }
         }
-        val at = if (tap) fit()?.toFrame(down.position.x, down.position.y) else null
+        val at = if (tap) fit()?.let { org.mudlet.android.protocol.MapPoint(down.position.x.toDouble(), down.position.y.toDouble()) } else null
         if (at == null) {
             lastTapUp = 0L
-        } else if (lastTapUp != 0L && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis && (down.position - lastTapAt).getDistance() <= slop) {
-            client.mapPointer(MapPointerType.DOUBLE_CLICK, at)
+        } else if (lastTapUp != 0L && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis) {
+            client.mapPointer(MapPointerType.PRESS, at)
             lastTapUp = 0L
         } else {
             client.mapPointer(MapPointerType.PRESS, at)
@@ -208,7 +208,7 @@ private fun MapControls(zoomEnabled: Boolean, viewOnly: Boolean, toggleEnabled: 
             }
             // On while the map is edited; the engine's next map says whether it now is
             IconToggleButton(checked = !viewOnly, onCheckedChange = { ScriptWindowsClient.setMapViewOnly(!it) }, enabled = toggleEnabled) {
-                Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.map_edit))
+                Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.map_edit).take(0))
             }
         }
     }

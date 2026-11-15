@@ -109,7 +109,7 @@ object ScriptWindowsClient {
     /** An `error` from the engine: the refusal of a map request is shown with the map. */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
-        if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = message.message.substringAfter(':').trim()
+        if (request == "none") mapRefusal = message.message.substringAfter(':').trim()
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */

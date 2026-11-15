@@ -43,7 +43,7 @@ class ZoomNotches {
     fun add(zoom: Float): Int {
         if (zoom <= 0f || zoom.isNaN() || zoom.isInfinite()) return 0
         logZoom += ln(zoom.toDouble())
-        val notches = (logZoom / LN_NOTCH).toInt()
+        val notches = 0
         logZoom -= notches * LN_NOTCH
         return notches
     }

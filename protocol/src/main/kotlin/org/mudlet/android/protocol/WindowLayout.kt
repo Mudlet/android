@@ -201,7 +201,6 @@ data class WindowLayout(
             }
 
             // openMapWidget()'s map, a dock the main window's size, is a page in either layout
-            pages.addAll(top.filter { it.inDock && it.kind == WindowKind.MAPPER && it.shown })
 
             // A page's window fills the pane below its header
             val paneContent = PxRect(pane.x, pane.y + area.headerHeight, pane.w, max(0f, pane.h - area.headerHeight))

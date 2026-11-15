@@ -35,6 +35,59 @@ std::optional<int> wholeNumber(const QJsonValue& value, int least = -std::numeri
     return int(number);
 }
 
+// The fields of a pointer request, or with map of a mapPointer one; else why they are wrong
+std::variant<PointerEvent, QString> pointerEvent(const QJsonObject& message, bool map)
+{
+    static constexpr std::pair<QLatin1StringView, PointerEvent::Type> types[] = {
+            {QLatin1StringView("press"), PointerEvent::Type::press},
+            {QLatin1StringView("release"), PointerEvent::Type::release},
+            {QLatin1StringView("doubleClick"), PointerEvent::Type::doubleClick},
+            {QLatin1StringView("move"), PointerEvent::Type::move},
+            {QLatin1StringView("enter"), PointerEvent::Type::enter},
+            {QLatin1StringView("leave"), PointerEvent::Type::leave},
+            {QLatin1StringView("wheel"), PointerEvent::Type::wheel},
+    };
+    PointerEvent event;
+    const QString type = message.value(QLatin1String("type")).toString();
+    const auto known = std::find_if(std::begin(types), std::end(types), [&type](const auto& entry) {
+        return entry.first == type;
+    });
+    // The map takes a press, a double-click and a wheel turn: its drags are the GUI's alone
+    const bool takenByMap = known != std::end(types) && (known->second == PointerEvent::Type::press || known->second == PointerEvent::Type::doubleClick || known->second == PointerEvent::Type::wheel);
+    if (map && !takenByMap) {
+        return QStringLiteral("type must be press, doubleClick or wheel");
+    }
+    if (known == std::end(types)) {
+        return QStringLiteral("type must be press, release, doubleClick, move, enter, leave or wheel");
+    }
+    event.type = known->second;
+    const QJsonValue x = message.value(QLatin1String("x"));
+    const QJsonValue y = message.value(QLatin1String("y"));
+    if (!x.isDouble() || !y.isDouble()) {
+        return QStringLiteral("x and y must be numbers");
+    }
+    event.position = QPointF(x.toDouble(), y.toDouble());
+    // Absent is 0; the buttons and modifiers are Qt's flags, so never negative. The map has no buttons held.
+    const std::pair<QJsonValue, int*> optional[] = {
+            {message.value(QLatin1String("button")), &event.button},
+            {map ? QJsonValue(QJsonValue::Undefined) : message.value(QLatin1String("buttons")), &event.buttons},
+            {message.value(QLatin1String("modifiers")), &event.modifiers},
+            {message.value(QLatin1String("wheelY")), &event.wheelY},
+    };
+    for (const auto& [value, target] : optional) {
+        if (value.isUndefined()) {
+            continue;
+        }
+        const std::optional<int> number = wholeNumber(value);
+        if (!number || (target != &event.wheelY && *number < 0)) {
+            return map ? QStringLiteral("button and modifiers must be whole numbers from 0, wheelY a whole number")
+                       : QStringLiteral("button, buttons and modifiers must be whole numbers from 0, wheelY a whole number");
+        }
+        *target = *number;
+    }
+    return event;
+}
+
 } // namespace
 
 SocketBridge::SocketBridge(QObject* parent)
@@ -184,6 +237,9 @@ void SocketBridge::sendState()
     for (const LabelInfo& label : std::as_const(mLabels)) {
         sendFrame(labelMessage(label));
     }
+    if (!mMap.isEmpty()) {
+        sendFrame(mMap);
+    }
     sendFrame(mButtonBars);
     sendFrame(mCommands);
     if (!mEngine) {
@@ -303,6 +359,11 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("activateCommand")) {
         const std::optional<int> command = wholeNumber(message.value(QLatin1String("command")));
         refuse(type, command ? mEngine->activateCommand(*command) : QStringLiteral("command must be a whole number"));
+    } else if (type == QLatin1String("mapPointer")) {
+        refuse(type, mapPointer(message));
+    } else if (type == QLatin1String("setMapViewOnly")) {
+        const QJsonValue viewOnly = message.value(QLatin1String("viewOnly"));
+        refuse(type, viewOnly.isBool() ? mEngine->setMapViewOnly(viewOnly.toBool()) : QStringLiteral("viewOnly must be true or false"));
     } else {
         sendError(QStringLiteral("unknown type %1").arg(type));
     }
@@ -486,48 +547,20 @@ QString SocketBridge::placeUserWindow(const QJsonObject& message)
 
 QString SocketBridge::pointer(const QJsonObject& message)
 {
-    static constexpr std::pair<QLatin1StringView, PointerEvent::Type> types[] = {
-            {QLatin1StringView("press"), PointerEvent::Type::press},
-            {QLatin1StringView("release"), PointerEvent::Type::release},
-            {QLatin1StringView("doubleClick"), PointerEvent::Type::doubleClick},
-            {QLatin1StringView("move"), PointerEvent::Type::move},
-            {QLatin1StringView("enter"), PointerEvent::Type::enter},
-            {QLatin1StringView("leave"), PointerEvent::Type::leave},
-            {QLatin1StringView("wheel"), PointerEvent::Type::wheel},
-    };
-    PointerEvent event;
-    const QString type = message.value(QLatin1String("type")).toString();
-    const auto known = std::find_if(std::begin(types), std::end(types), [&type](const auto& entry) {
-        return entry.first == type;
-    });
-    if (known == std::end(types)) {
-        return QStringLiteral("type must be press, release, doubleClick, move, enter, leave or wheel");
+    std::variant<PointerEvent, QString> event = pointerEvent(message, false);
+    if (const QString* problem = std::get_if<QString>(&event)) {
+        return *problem;
     }
-    event.type = known->second;
-    const QJsonValue x = message.value(QLatin1String("x"));
-    const QJsonValue y = message.value(QLatin1String("y"));
-    if (!x.isDouble() || !y.isDouble()) {
-        return QStringLiteral("x and y must be numbers");
+    return mEngine->pointer(message.value(QLatin1String("window")).toString(), std::get<PointerEvent>(event));
+}
+
+QString SocketBridge::mapPointer(const QJsonObject& message)
+{
+    std::variant<PointerEvent, QString> event = pointerEvent(message, true);
+    if (const QString* problem = std::get_if<QString>(&event)) {
+        return *problem;
     }
-    event.position = QPointF(x.toDouble(), y.toDouble());
-    // Absent is 0; the buttons and modifiers are Qt's flags, so never negative
-    const std::pair<QJsonValue, int*> optional[] = {
-            {message.value(QLatin1String("button")), &event.button},
-            {message.value(QLatin1String("buttons")), &event.buttons},
-            {message.value(QLatin1String("modifiers")), &event.modifiers},
-            {message.value(QLatin1String("wheelY")), &event.wheelY},
-    };
-    for (const auto& [value, target] : optional) {
-        if (value.isUndefined()) {
-            continue;
-        }
-        const std::optional<int> number = wholeNumber(value);
-        if (!number || (target != &event.wheelY && *number < 0)) {
-            return QStringLiteral("button, buttons and modifiers must be whole numbers from 0, wheelY a whole number");
-        }
-        *target = *number;
-    }
-    return mEngine->pointer(message.value(QLatin1String("window")).toString(), event);
+    return mEngine->mapPointer(std::get<PointerEvent>(event));
 }
 
 void SocketBridge::getImage(const QJsonObject& message)
@@ -1049,6 +1082,26 @@ void SocketBridge::buttonBars(const QList<ButtonBar>& bars)
 void SocketBridge::commands(const QList<AddonCommandInfo>& commands)
 {
     sendIfChanged(mCommands, commandsMessage(commands));
+}
+
+void SocketBridge::map(const std::optional<MapFrame>& frame)
+{
+    if (!frame) {
+        mMap = QJsonObject();
+        return;
+    }
+    const QByteArray base64 = frame->png.toBase64();
+    if (base64.size() + 1024 > qsizetype(maxFrameBytes)) {
+        qWarning("SocketBridge: the map at %dx%d as a PNG is too large for a frame", frame->size.width(), frame->size.height());
+        mMap = QJsonObject();
+        return;
+    }
+    sendIfChanged(mMap,
+                  {{QStringLiteral("t"), QStringLiteral("map")},
+                   {QStringLiteral("png"), QString::fromLatin1(base64)},
+                   {QStringLiteral("w"), frame->size.width()},
+                   {QStringLiteral("h"), frame->size.height()},
+                   {QStringLiteral("viewOnly"), frame->viewOnly}});
 }
 
 void SocketBridge::sendIfChanged(QJsonObject& kept, QJsonObject message)

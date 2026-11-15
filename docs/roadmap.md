@@ -33,6 +33,7 @@ repository uses. What Phase E needs, and where it stands:
 | Password prompts | `hiddenInputWanted`, `submitHiddenInput()` | `hiddenInput`, `sendHidden`, `dismissHidden` |
 | Scripts setting the input line | `commandLineTextRequested`, `setCommandLineText()` | `commandLine` |
 | Button bars and commands (Phase F) | `buttonBars()`, `pressButton()`, `buttonsChanged`; `addonCommands()`, `activateAddonCommand()`, `addonCommandsChanged` | `buttonBars`, `commands`, `pressButton`, `activateCommand` (version 9); the app draws none of it yet |
+| The 2D map (Phase F) | `renderMap()`, `mapPointer()`, `setMapViewOnly()`, `mapRepaintRequested`, `mapViewOnlyChanged` | `map`, `mapPointer`, `setMapViewOnly` (version 10); the app draws none of it yet |
 | Script windows (Phase F) | `scriptWindows()`, `windowLines()`, `mainConsoleGrid()`, `setUserWindowGeometry()`, `closeUserWindow()`, `submitWindowCommandLine()` and their signals; `labelContent()`, `pointer()` | `windows`, `windowText`, `mainArea`, `windowCommandLine`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine` (version 7); `label`, `image`, `pointer`, `getImage` (version 8). The game screen draws the mini consoles and user windows, fitted or stacked with a window switcher, and their command lines, and the labels, with their style sheets, text, images and taps, and Geyser's gauges as progress bars; no maps or text boxes yet |
 | Screen reader announcements | `announcementRequested` (Lua `announce()`) | `announce` |
 | Backgrounded app | `setApplicationActive()`, `setWindowMinimized()`, `saveAsync()`, `attentionRequested` | `setAppState` (version 6), which saves when the app leaves the front; `attention` |
@@ -119,7 +120,7 @@ The screen-reader pull request adds:
 - **Phase F, what scripts draw:** mini consoles, user windows, labels, Geyser gauges and buttons (`scriptWindows()`,
   `windowLines()`, `labelContent()`, `pointer()`), button bars (`buttonBars()`), commands packages add
   (`addonCommands()`). Many games' GUI packages need these. Planned in [`phase-f.md`](phase-f.md).
-- The 2D map (`renderMap()`, `mapPointer()`), the last of Phase F's pull requests.
+- The 2D map's screen (`map`, `mapPointer`, version 10), behind Phase F; the protocol carries it.
 - A script editor for triggers, aliases, timers, keys and scripts.
 - A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
 - More than one profile at once: upstream allows one profile pool per process, so it needs either several engine

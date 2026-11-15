@@ -265,6 +265,7 @@ def main():
     script_windows()
     script_labels()
     button_bars()
+    map_view()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -1203,6 +1204,185 @@ def button_bars():
     c.send({"t": "runLua", "code": "removeCommand(speech)"})
     seen_or_next(c, lambda m: m["t"] == "commands" and not command_named(m, "Speech"), seen, since)
     check(True, "a removed command is gone from commands")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def png_pixel(data, x, y):
+    """The (r, g, b, a) of a pixel of an 8-bit RGB or RGBA PNG with no interlace, as Qt saves one."""
+    width, height = png_size(data)
+    chunks, at = {}, 8
+    while at < len(data):
+        length, kind = struct.unpack(">I4s", data[at:at + 8])
+        chunks.setdefault(kind, []).append(data[at + 8:at + 8 + length])
+        at += 12 + length
+    depth, colour, interlace = chunks[b"IHDR"][0][8], chunks[b"IHDR"][0][9], chunks[b"IHDR"][0][12]
+    if depth != 8 or colour not in (2, 6) or interlace:
+        raise ValueError(f"a PNG of depth {depth}, colour type {colour}, interlace {interlace}")
+    channels = 4 if colour == 6 else 3
+    raw, stride = zlib.decompress(b"".join(chunks[b"IDAT"])), width * channels
+    previous = bytearray(stride)
+    for row in range(y + 1):
+        kind, line = raw[row * (stride + 1)], bytearray(raw[row * (stride + 1) + 1:(row + 1) * (stride + 1)])
+        for i in range(stride):
+            left = line[i - channels] if i >= channels else 0
+            up, corner = previous[i], previous[i - channels] if i >= channels else 0
+            if kind == 1:
+                line[i] = (line[i] + left) & 0xFF
+            elif kind == 2:
+                line[i] = (line[i] + up) & 0xFF
+            elif kind == 3:
+                line[i] = (line[i] + (left + up) // 2) & 0xFF
+            elif kind == 4:
+                guess = left + up - corner
+                nearest = min((abs(guess - left), 0, left), (abs(guess - up), 1, up), (abs(guess - corner), 2, corner))[2]
+                line[i] = (line[i] + nearest) & 0xFF
+        previous = line
+    pixel = tuple(previous[x * channels:(x + 1) * channels])
+    return pixel if channels == 4 else pixel + (255,)
+
+
+def map_view():
+    """The 2D map as the UI gets it: a map a script builds in a Geyser.Mapper as map frames at the mapper's size, with
+    the rooms where the layout puts them; mapPointer selecting a room, walking to it and zooming; setMapViewOnly
+    switching to editing; pointer on the mapper window; the map to a UI that attaches, and none while it hides."""
+    profile = "Map Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(not any(m["t"] == "map" for m in seen), "with no profile open, a UI that attaches gets no map")
+    for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    # Opened with no game: the base UI builds its dock on what a game first sends, and then puts the profile's one
+    # mapper in a Geyser.Mapper of its own once the map has rooms, away from the one this test makes
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the map's profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    m = c.ask({"t": "mapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
+    check(m["message"] == "mapPointer: No map is open; a script opens one, as with openMapWidget().",
+          f"mapPointer before a script opens a map is refused: {m}")
+
+    # Rooms 1 and 2 two apart, east and west of each other, the player in 1: at a zoom of 10 the 300 pixels high
+    # mapper is 10 rooms high, so room 1 is in its middle and room 2 60 pixels to its right
+    room1, room2 = (200, 150), (260, 150)
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'local area = addAreaName("Map Test")',
+        "setCustomEnvColor(301, 200, 30, 30, 255)",
+        "for id, x in pairs({[1] = 0, [2] = 2}) do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, x, 0, 0)",
+        "end",
+        "setRoomEnv(2, 301)",
+        'setExit(1, 2, "e")',
+        'setExit(2, 1, "w")',
+        'testMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})',
+        "setMapZoom(10, area)",
+        "centerview(1)",
+        'function doSpeedWalk() echo("walk " .. table.concat(speedWalkDir, ",") .. " to " .. table.concat(speedWalkPath, ",") .. "\\n") end',
+        'registerAnonymousEventHandler("sysMapWindowMousePressEvent", function() echo("map pressed\\n") end)',
+        'registerAnonymousEventHandler("mapModeChangeEvent", function(_, mode) echo("map mode " .. mode .. "\\n") end)',
+        "function selected() local rooms = getMapSelection().rooms or {} table.sort(rooms) echo(\"selected \" .. table.concat(rooms, \",\") .. \"\\n\") end",
+    ])})
+
+    def room2_drawn(m):
+        return (m["t"] == "map" and (m["w"], m["h"]) == (400, 300)
+                and png_pixel(base64.b64decode(m["png"]), *room2)[:3] == (200, 30, 30))
+
+    try:
+        m = seen_or_next(c, room2_drawn, seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"a Geyser.Mapper with rooms in it sends the map with room 2 drawn in its colour: {e}")
+        stop_engine(proc)
+        return
+    png = base64.b64decode(m["png"])
+    # The windows come from the event loop too, before or after the frame
+    seen_or_next(c, windows_with("mapper", "mapper", lambda w: (w["w"], w["h"]) == (400, 300)), seen, since)
+    check(png_size(png) == (400, 300) and m["viewOnly"] is True and png_pixel(png, room2[0], room2[1] + 20)[:3] != (200, 30, 30),
+          f"a Geyser.Mapper sends the map at its size, viewed, with room 2 where the layout puts it and not below it: "
+          f"{png_size(png)}, {m['viewOnly']}")
+
+    def selection():
+        c.send({"t": "runLua", "code": "selected()"})
+        return seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("selected "), seen, since)["text"]
+
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "press", "x": room2[0], "y": room2[1], "button": 1})
+    seen_or_next(c, shown("map pressed"), seen, since)
+    got = selection()
+    check(got == "selected 2", f"a mapPointer press selects the room under it and raises sysMapWindowMousePressEvent: {got}")
+    since = len(seen)
+    c.send({"t": "pointer", "window": "mapper", "type": "press", "x": room1[0], "y": room1[1], "button": 1, "buttons": 1})
+    c.send({"t": "pointer", "window": "mapper", "type": "release", "x": room1[0], "y": room1[1], "button": 1})
+    seen_or_next(c, shown("map pressed"), seen, since)
+    got = selection()
+    check(got == "selected 1" and not any(m["t"] == "error" for m in seen[since:]),
+          f"a pointer press on the window mapper reaches the map, drawn at the window's size: {got}")
+
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "doubleClick", "x": room2[0], "y": room2[1], "button": 2})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"] == "mapPointer: Only a double-click of the left button acts on the map.",
+          f"a double-click of the right button is refused: {m}")
+    c.send({"t": "mapPointer", "type": "doubleClick", "x": room2[0], "y": room2[1], "button": 1})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("walk "), seen, since)
+    check(m["text"] == "walk e to 2", f"a double-click on a room walks there through doSpeedWalk(): {m}")
+
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "wheel", "x": room2[0], "y": room2[1], "wheelY": 59})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"] == "mapPointer: Less than half a notch of the wheel does not zoom the map.",
+          f"less than half a notch is refused: {m}")
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "wheel", "x": room2[0], "y": room2[1], "wheelY": -600})
+    c.send({"t": "runLua", "code": 'echo(string.format("zoom %.2f\\n", getMapZoom()))'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("zoom "), seen, since)
+    # The map is drawn again from the event loop, before or after the line of the next request's turn
+    before = last_of(seen[:since], "map")
+    seen_or_next(c, lambda f: f["t"] == "map" and f["png"] != before["png"], seen, since)
+    check(m["text"] == "zoom 14.03", f"five notches towards the player zoom out, as the GUI's wheel does, and the map comes again: {m}")
+
+    since = len(seen)
+    c.send({"t": "setMapViewOnly", "viewOnly": False})
+    seen_or_next(c, shown("map mode editing"), seen, since)
+    seen_or_next(c, lambda m: m["t"] == "map" and m["viewOnly"] is False, seen, since)
+    check(True, "setMapViewOnly false raises mapModeChangeEvent and sends the map, edited")
+    m = c.ask({"t": "setMapViewOnly", "viewOnly": "no"}, answers=("error",), collect=seen)
+    check(m["message"] == "setMapViewOnly: viewOnly must be true or false", f"a viewOnly that is no boolean is refused: {m}")
+
+    def attach():
+        nonlocal c
+        c.close()
+        c = Client(SOCK)
+        msgs = []
+        c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+        seen.extend(msgs)
+        return msgs
+
+    msgs = attach()
+    kinds = [m["t"] for m in msgs]
+    maps = [m for m in msgs if m["t"] == "map"]
+    check(len(maps) == 1 and (maps[0]["w"], maps[0]["h"], maps[0]["viewOnly"]) == (400, 300, False)
+          and kinds.index("windows") < kinds.index("map") < kinds.index("buttonBars"),
+          f"a UI that attaches gets the map, after the windows: {kinds}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "testMapper:hide()"})
+    seen_or_next(c, windows_with("mapper", "mapper", lambda w: not w["shown"] or (w["w"], w["h"]) == (0, 0)), seen, since)
+    msgs = attach()
+    check(not any(m["t"] == "map" for m in msgs), "a hidden mapper gives a UI that attaches no map")
+    # Geyser's hide() leaves the mapper shown at 0 by 0, so showing it again only sizes it, and no repaint follows:
+    # the map comes from the windows' sizes
+    since = len(seen)
+    c.send({"t": "runLua", "code": "testMapper:show()"})
+    seen_or_next(c, lambda m: m["t"] == "map" and (m["w"], m["h"]) == (400, 300), seen, since)
+    check(True, "shown again, it sends the map again")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

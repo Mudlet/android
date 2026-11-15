@@ -332,6 +332,34 @@ class ProtocolTest {
     }
 
     @Test
+    fun aMapFrameDecodesItsPng() {
+        val png = byteArrayOf(-119, 80, 78, 71)
+        val map = FrameReader.parse(
+            JSONObject().put("t", "map").put("png", Base64.getEncoder().encodeToString(png)).put("w", 400).put("h", 300).put("viewOnly", false),
+        ) as EngineMessage.Map
+        assertArrayEquals(png, map.png)
+        assertEquals(400 to 300, map.w to map.h)
+        assertEquals(false, map.viewOnly)
+        val broken = FrameReader.parse(JSONObject("""{"t":"map","png":"not base64!","w":1,"h":1}""")) as EngineMessage.Map
+        assertEquals(0, broken.png.size)
+        assertTrue("viewing is the default", broken.viewOnly)
+    }
+
+    @Test
+    fun theMapRequestsCarryWhatTheEngineReads() {
+        assertEquals(
+            mapOf("t" to "mapPointer", "type" to "press", "x" to 1.5, "y" to 2.0, "button" to POINTER_LEFT),
+            Requests.mapPointer(MapPointerType.PRESS, 1.5, 2.0, POINTER_LEFT, 0, 0).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "mapPointer", "type" to "wheel", "x" to 0.0, "y" to 0.0, "modifiers" to MODIFIER_CONTROL, "wheelY" to 120),
+            Requests.mapPointer(MapPointerType.WHEEL, 0.0, 0.0, 0, MODIFIER_CONTROL, 120).toMap(),
+        )
+        assertEquals("doubleClick", MapPointerType.DOUBLE_CLICK.wire)
+        assertEquals(mapOf("t" to "setMapViewOnly", "viewOnly" to false), Requests.setMapViewOnly(false).toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

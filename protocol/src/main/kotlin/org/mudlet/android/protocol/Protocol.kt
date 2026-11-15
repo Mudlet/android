@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 3
+const val PROTOCOL_VERSION = 4
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -54,6 +54,9 @@ sealed interface EngineMessage {
 
     /** A script set the whole input line to [text]. */
     data class CommandLine(val text: String) : EngineMessage
+
+    /** What a script asks screen readers to say; [assertive] interrupts what they are saying. */
+    data class Announce(val text: String, val assertive: Boolean) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -74,7 +77,9 @@ object Requests {
         .put("t", "complete").put("text", text).put("fromHistory", fromHistory).put("id", id)
     fun disconnect(): JSONObject = JSONObject().put("t", "disconnect")
     fun runLua(code: String, id: Long): JSONObject = JSONObject().put("t", "runLua").put("code", code).put("id", id)
-    fun setViewWidthPx(px: Int): JSONObject = JSONObject().put("t", "setViewWidthPx").put("px", px)
+
+    /** The console's size in characters, which a game that asks is told (NAWS); each from 1 to 65535. */
+    fun setScreenSize(columns: Int, rows: Int): JSONObject = JSONObject().put("t", "setScreenSize").put("columns", columns).put("rows", rows)
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
 
     // The profile requests: [id] comes back as the replyTo of the Profiles or Error that answers each
@@ -158,6 +163,8 @@ class FrameReader(input: InputStream) {
             "history" -> EngineMessage.History(parseStrings(o.optJSONArray("lines")))
 
             "commandLine" -> EngineMessage.CommandLine(o.optString("text"))
+
+            "announce" -> EngineMessage.Announce(o.optString("text"), o.optBoolean("assertive"))
 
             else -> EngineMessage.Unknown(t)
         }

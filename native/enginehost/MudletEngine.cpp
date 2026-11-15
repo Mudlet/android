@@ -227,12 +227,21 @@ void MudletEngine::connectSession()
     connect(session, &THeadlessSession::notificationRequested, this, [this](const QString&, const QString& title, const QString& text) {
         mFrontend->notify(title, text);
     });
+    connect(session, &THeadlessSession::announcementRequested, this, [this](const QString&, const QString& text, bool assertive) {
+        mFrontend->announce(text, assertive);
+    });
+    connect(session, &THeadlessSession::consoleColorsChanged, this, [this](const QString&, const QColor& foreground, const QColor& background) {
+        reportConsoleColors(foreground, background);
+    });
     connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
         mProfiles.markOpened(profile);
         showProfileInNotification(profile);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
         mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
         mFrontend->history(mSession->commandHistory());
+        reportConsoleColors(mSession->consoleForeground(), mSession->consoleBackground());
+        // As early as the profile takes it, so a game that asks as it connects is not first told 90 by 25
+        applyScreenSize();
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
@@ -378,9 +387,8 @@ void MudletEngine::reportFont()
 {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     font.setPixelSize(14);
-    mAdvancePx = QFontMetrics(font).horizontalAdvance(QLatin1Char('M'));
     mFrontend->status(QStringLiteral("fontFamily"), QFontInfo(font).family());
-    mFrontend->status(QStringLiteral("advanceM"), QString::number(mAdvancePx));
+    mFrontend->status(QStringLiteral("advanceM"), QString::number(QFontMetrics(font).horizontalAdvance(QLatin1Char('M'))));
     mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
@@ -431,6 +439,8 @@ void MudletEngine::onStartFinished(int result, const QString& error)
         return;
     }
     mState = State::started;
+    // Again, for a setScreenSize that came between profileLoaded and now; the same size changes nothing
+    applyScreenSize();
     if (mRestoring && !mKept.connect) {
         mRestoring = false;
         restoreStatus(QStringLiteral("restored"), mProfile);
@@ -745,11 +755,29 @@ void MudletEngine::keepPending()
     persist();
 }
 
-void MudletEngine::setViewWidthPx(int px)
+void MudletEngine::setScreenSize(int columns, int rows)
 {
-    const int columns = mAdvancePx > 0 ? px / mAdvancePx : 0;
-    mFrontend->status(QStringLiteral("viewWidthPx"), QString::number(px));
-    mFrontend->status(QStringLiteral("columns"), QString::number(columns));
+    mScreenSize = QSize(columns, rows);
+    if (mState == State::started) {
+        applyScreenSize();
+    }
+}
+
+void MudletEngine::applyScreenSize()
+{
+    if (mScreenSize.isEmpty()) {
+        return;
+    }
+    if (!mSession->setScreenSize(mScreenSize.width(), mScreenSize.height())) {
+        qWarning("MudletEngine: setScreenSize(%d, %d) refused: %s", mScreenSize.width(), mScreenSize.height(), qPrintable(mSession->errorString()));
+    }
+}
+
+void MudletEngine::reportConsoleColors(const QColor& foreground, const QColor& background)
+{
+    if (foreground.isValid() && background.isValid()) {
+        mFrontend->status(QStringLiteral("consoleColors"), QStringLiteral("%1 %2").arg(foreground.name(), background.name()));
+    }
 }
 
 // A line as the main console shows it once its triggers ran. It stays open, as the tail, until the next line or

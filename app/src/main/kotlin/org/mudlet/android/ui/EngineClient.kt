@@ -113,7 +113,8 @@ object EngineClient {
 
     @Volatile private var attached = false
 
-    @Volatile private var viewWidthPx = 0
+    // The console's columns and rows, as setScreenSize last sent them; null until the UI has measured it
+    @Volatile private var screenSize: Pair<Int, Int>? = null
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
     private var lostAt = 0L
@@ -234,9 +235,9 @@ object EngineClient {
 
     fun disconnect(): Boolean = send(Requests.disconnect())
 
-    fun setViewWidth(px: Int) {
-        viewWidthPx = px
-        if (attached) link.send(Requests.setViewWidthPx(px))
+    fun setScreenSize(columns: Int, rows: Int) {
+        screenSize = columns to rows
+        if (attached) link.send(Requests.setScreenSize(columns, rows))
     }
 
     fun runPings(count: Int = 300) {
@@ -289,8 +290,8 @@ object EngineClient {
 
     private val listener = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
-            // The engine forgets nothing across a reattach, but a new engine instance needs the width again
-            if (viewWidthPx > 0) link.send(Requests.setViewWidthPx(viewWidthPx))
+            // The engine forgets nothing across a reattach, but a new engine instance needs the size again
+            screenSize?.let { (columns, rows) -> link.send(Requests.setScreenSize(columns, rows)) }
             // The engine resends its whole status after hello, so the old instance's values must go first
             if (!sameInstance) resetStatus()
             post {

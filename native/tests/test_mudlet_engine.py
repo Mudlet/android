@@ -10,6 +10,7 @@ usage: test_mudlet_engine.py <path-to-engine-binary>
 """
 import glob
 import os
+import re
 import signal
 import ssl
 import struct
@@ -255,6 +256,7 @@ def main():
     tls_checks(port)
     profile_requests(port)
     input_line()
+    console()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -449,6 +451,62 @@ def input_line():
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     profile_checks.password_kept_out(check, secret, seen, LOG)
+
+
+
+def wait_naws(size, timeout=5):
+    """Whether the game's last NAWS becomes size within timeout: Mudlet tells it of a change once it has held 0.3 s."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if fake_telnet.NAWS_SIZES[-1:] == [size]:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def console():
+    """setScreenSize to the game's NAWS, consoleColors from the profile and a script's setBackgroundColor(), and a
+    script's announce()."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    profile = "Console Test"
+    proc, c = start_engine(profile)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    # Kept until the profile has loaded
+    c.send({"t": "setScreenSize", "columns": 80, "rows": 30})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    m = wait_status(c, "consoleColors", lambda v: True, msgs)
+    check(re.fullmatch(r"#[0-9a-f]{6} #[0-9a-f]{6}", m["value"]) is not None, f"consoleColors when the profile loads: {m}")
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    # Else the game's answer would continue the open "Login: " line
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
+
+    c.send({"t": "send", "text": "naws"})
+    c.wait_for(shown("NAWS asked"), collect=msgs)
+    check(wait_naws((80, 30)), f"the game's DO NAWS is answered with the size given before the profile loaded: {fake_telnet.NAWS_SIZES}")
+    c.send({"t": "setScreenSize", "columns": 72, "rows": 20})
+    check(wait_naws((72, 20)), f"a new size reaches the game: {fake_telnet.NAWS_SIZES}")
+    c.send({"t": "setScreenSize", "columns": 30, "rows": 20})
+    check(wait_naws((40, 20)), f"a width below 40 is told as 40, as Mudlet does: {fake_telnet.NAWS_SIZES}")
+
+    c.send({"t": "runLua", "id": "bg", "code": 'setBackgroundColor("main", 10, 20, 30)'})
+    m = wait_status(c, "consoleColors", lambda v: True, msgs, timeout=10)
+    check(m["value"].endswith(" #0a141e"), f"setBackgroundColor() on the main console changes consoleColors: {m}")
+
+    c.send({"t": "runLua", "id": "announce", "code": 'announce("hi") announce("now", "importantmostrecent")'})
+    got = [c.wait_for(lambda m: m["t"] == "announce", collect=msgs) for _ in range(2)]
+    check(got == [{"t": "announce", "text": "hi", "assertive": False}, {"t": "announce", "text": "now", "assertive": True}],
+          f"announce() gives announce, assertive for an important style: {got}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    colours = [m["value"] for m in msgs if m["t"] == "status" and m["key"] == "consoleColors"]
+    check(len(colours) == 1 and colours[0].endswith(" #0a141e"), f"a UI that attaches is told the colours: {colours}")
+    check(not any(m["t"] == "announce" for m in msgs), "but not the announcements it missed")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 if __name__ == "__main__":

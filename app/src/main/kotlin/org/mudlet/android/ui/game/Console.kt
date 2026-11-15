@@ -27,10 +27,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,15 +44,21 @@ import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
 
 private const val TAIL_KEY = "tail"
+private val CONSOLE_SIDE_PADDING = 4.dp
+private val consoleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp)
 
 /**
  * The game's text: [lines], then [tail] (the prompt), in their colours and styles. At the bottom it follows new lines;
  * scrolled up, it stays where it is and offers a button back to the bottom that counts the lines that came meanwhile.
- * [linesAdded] is EngineClient's count, which numbers the lines. [onWidth] gets the console's width in pixels.
+ * [linesAdded] is EngineClient's count, which numbers the lines. [onScreenSize] gets the columns and rows that fit.
  */
 @Composable
-fun Console(lines: List<UiLine>, tail: UiLine?, linesAdded: Long, onWidth: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun Console(lines: List<UiLine>, tail: UiLine?, linesAdded: Long, onScreenSize: (columns: Int, rows: Int) -> Unit, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val cell = remember(measurer, density) { measurer.measure("M", consoleStyle).size }
+    val sidePaddingPx = with(density) { (CONSOLE_SIDE_PADDING * 2).roundToPx() }
     var following by rememberSaveable { mutableStateOf(true) }
 
     // linesAdded when the player scrolled away from the bottom: the lines since then are new to them
@@ -85,15 +94,19 @@ fun Console(lines: List<UiLine>, tail: UiLine?, linesAdded: Long, onWidth: (Int)
 
     Box(modifier.background(CONSOLE_BACKGROUND)) {
         LazyColumn(
-            Modifier.fillMaxSize().onSizeChanged { onWidth(it.width) },
+            Modifier.fillMaxSize().onSizeChanged {
+                if (cell.width > 0 && cell.height > 0) {
+                    onScreenSize(((it.width - sidePaddingPx) / cell.width).coerceIn(1, 65535), (it.height / cell.height).coerceIn(1, 65535))
+                }
+            },
             state = listState,
-            contentPadding = PaddingValues(horizontal = 4.dp),
+            contentPadding = PaddingValues(horizontal = CONSOLE_SIDE_PADDING),
         ) {
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
                 val text = remember(line) { ansiText(line) }
-                Text(text, Modifier.fillMaxWidth(), color = CONSOLE_FOREGROUND, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                Text(text, Modifier.fillMaxWidth(), color = CONSOLE_FOREGROUND, style = consoleStyle)
             }
         }
         if (!following) {

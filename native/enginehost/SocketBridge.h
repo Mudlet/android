@@ -26,7 +26,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 3;
+    static constexpr int protocolVersion = 4;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -44,6 +44,7 @@ public:
     void hiddenInput(bool wanted) override;
     void history(const QStringList& lines) override;
     void commandLine(const QString& text) override;
+    void announce(const QString& text, bool assertive) override;
 
 private:
     struct StoredLine
@@ -71,6 +72,7 @@ private:
     QString saveProfile(const QJsonObject& message);
     QString openProfile(const QJsonObject& message);
     void complete(const QJsonObject& message);
+    void setScreenSize(const QJsonObject& message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }

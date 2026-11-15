@@ -11,6 +11,8 @@ Commands a client may send (one per line):
   tls             -> "TLS: <protocol>" of the connection, or "TLS: none"
   password        -> "Password: " and IAC WILL ECHO, as a game hides a password; the next line, whatever it is, gets
                      IAC WONT ECHO and "Password accepted"
+  naws            -> IAC DO NAWS, then "NAWS asked"
+  size            -> "SIZE: <columns>x<rows>" of the client's last NAWS, or "SIZE: none"
   quit            -> close
 Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
@@ -24,7 +26,7 @@ import threading
 import time
 
 IAC, DONT, DO, WONT, WILL, SB, GA, SE = 255, 254, 253, 252, 251, 250, 249, 240
-TTYPE, ECHO, GMCP = 24, 1, 201
+TTYPE, ECHO, NAWS, GMCP = 24, 1, 31, 201
 # (lines, start, end) of each flood, as seen by the sender
 FLOOD_TIMES = []
 # When each game connection was accepted (time.monotonic())
@@ -35,6 +37,8 @@ SENT = {}
 TLS_HANDSHAKES = []
 # Every line any client sent, in order
 RECEIVED = []
+# (columns, rows) of every NAWS any client sent, in order
+NAWS_SIZES = []
 
 BANNER = (
     bytes([IAC, DO, TTYPE, IAC, WILL, ECHO, IAC, WILL, GMCP])
@@ -58,6 +62,7 @@ class Session(threading.Thread):
         self.tls = tls
         self.negotiation = bytearray()
         self.password_next = False
+        self.size = None
 
     def run(self):
         conn = self.conn
@@ -87,10 +92,12 @@ class Session(threading.Thread):
                         self.negotiation.append(b)
                         if b == SE and self.negotiation[-2:-1] == bytes([IAC]):
                             in_sb = False
+                            self.subnegotiated(bytes(self.negotiation[sb_start:]))
                         i += 1
                         continue
                     if b == IAC and i + 1 < len(data) and data[i + 1] == SB:
                         in_sb = True
+                        sb_start = len(self.negotiation)
                         self.negotiation += data[i:i + 2]
                         i += 2
                         continue
@@ -109,6 +116,13 @@ class Session(threading.Thread):
             pass
         finally:
             conn.close()
+
+    def subnegotiated(self, sb):
+        """One IAC SB ... IAC SE the client sent: a NAWS one is kept, its doubled 255 bytes undone."""
+        body = sb[2:-2].replace(bytes([IAC, IAC]), bytes([IAC]))
+        if body[:1] == bytes([NAWS]) and len(body) == 5:
+            self.size = (body[1] << 8 | body[2], body[3] << 8 | body[4])
+            NAWS_SIZES.append(self.size)
 
     def handle(self, line):
         conn = self.conn
@@ -164,6 +178,10 @@ class Session(threading.Thread):
         elif line == "password":
             self.password_next = True
             conn.sendall(b"Password: " + bytes([IAC, WILL, ECHO]))
+        elif line == "naws":
+            conn.sendall(bytes([IAC, DO, NAWS]) + b"NAWS asked\r\n")
+        elif line == "size":
+            conn.sendall(f"SIZE: {self.size[0]}x{self.size[1]}\r\n".encode() if self.size else b"SIZE: none\r\n")
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False

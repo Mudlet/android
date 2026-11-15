@@ -19,14 +19,20 @@ data class ScriptWindows(
     val commandLines: Map<String, String> = emptyMap(),
     /** What each label shows, by its name. */
     val labels: Map<String, LabelContent> = emptyMap(),
+    /**
+     * What `getLink` last said of each console's links, by the console's name and the link's id: of those its text still
+     * has, kept until the engine answers again, as new text may have changed them.
+     */
+    val links: Map<String, Map<Int, EngineMessage.Link>> = emptyMap(),
 ) {
     /** This state after [message]; itself for a message about something else, and for an answer to `getWindowText`. */
     fun after(message: EngineMessage): ScriptWindows = when (message) {
         is EngineMessage.Windows -> afterWindows(message)
-        is EngineMessage.WindowText -> if (message.replyTo != null) this else copy(text = text + (message.window to message))
+        is EngineMessage.WindowText -> if (message.replyTo != null) this else copy(text = text + (message.window to message), links = linksAfter(message))
         is EngineMessage.MainArea -> copy(mainArea = message, charWidth = CharWidth.after(charWidth, message))
         is EngineMessage.WindowCommandLine -> copy(commandLines = commandLines + (message.name to message.text))
         is EngineMessage.Label -> copy(labels = labels + (message.label.name to message.label))
+        is EngineMessage.Link -> afterLink(message)
         else -> this
     }
 
@@ -43,11 +49,31 @@ data class ScriptWindows(
         it.kind == WindowKind.COMMAND_LINE && it.shown && it.parent == console.name && it.parentKind == console.kind
     }
 
+    // A link that has left the console's rows goes; the others wait for what the engine says of them now
+    private fun linksAfter(message: EngineMessage.WindowText): Map<String, Map<Int, EngineMessage.Link>> {
+        val old = links[message.window] ?: return links
+        val shown = message.lines.flatMapTo(HashSet()) { row -> linkSpans(row.runs, row.text.length).map { it.link } }
+        val kept = old.filterKeys { it in shown }
+        return if (kept.isEmpty()) links - message.window else links + (message.window to kept)
+    }
+
+    // The main console's links are not a script window's, and a console with no text has none to ask about
+    private fun afterLink(message: EngineMessage.Link): ScriptWindows {
+        val window = message.window ?: return this
+        if (window !in text) return this
+        return copy(links = links + (window to links[window].orEmpty() + (message.link to message)))
+    }
+
     private fun afterWindows(message: EngineMessage.Windows): ScriptWindows {
         if (message.full) {
             val consoles = message.windows.filter { it.console != null }.mapTo(HashSet()) { it.name }
             val labelNames = message.windows.filter { it.kind == WindowKind.LABEL }.mapTo(HashSet()) { it.name }
-            return copy(windows = message.windows, text = text.filterKeys { it in consoles }, labels = labels.filterKeys { it in labelNames })
+            return copy(
+                windows = message.windows,
+                text = text.filterKeys { it in consoles },
+                labels = labels.filterKeys { it in labelNames },
+                links = links.filterKeys { it in consoles },
+            )
         }
         val changed = message.windows.associateBy { it.key }
         val removed = message.removed.toSet()
@@ -56,7 +82,12 @@ data class ScriptWindows(
         // A console's text goes with it; the text of one not described yet stays, as it may come first
         val removedConsoles = removed.filter { it.kind in CONSOLE_KINDS }.mapTo(HashSet()) { it.name }
         val removedLabels = removed.filter { it.kind == WindowKind.LABEL }.mapTo(HashSet()) { it.name }
-        return copy(windows = kept + message.windows.filter { it.key !in keptKeys }, text = text - removedConsoles, labels = labels - removedLabels)
+        return copy(
+            windows = kept + message.windows.filter { it.key !in keptKeys },
+            text = text - removedConsoles,
+            labels = labels - removedLabels,
+            links = links - removedConsoles,
+        )
     }
 
     companion object {

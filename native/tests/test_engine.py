@@ -198,6 +198,18 @@ def main():
         m = c.wait_for(lambda m: m.get("re") == "link")
         check(m == {"t": "error", "message": message, "re": "link"}, f"{request} gets {message!r}: {m}")
 
+    # The stand-in takes setAppState and does nothing with it; only booleans are taken
+    c.send({"t": "setAppState", "active": False, "minimized": True, "id": "state"})
+    c.send({"t": "ping", "id": 77})
+    m = c.wait_for(lambda m: m.get("re") == "state" or m["t"] == "pong")
+    check(m == {"t": "pong", "id": 77}, f"setAppState is taken without an answer: {m}")
+    c.send({"t": "setAppState", "active": True, "minimized": False})
+    for bad in ({"active": "true", "minimized": False}, {"active": True}):
+        c.send(dict(bad, t="setAppState", id="state"))
+        m = c.wait_for(lambda m: m.get("re") == "state")
+        check(m == {"t": "error", "message": "setAppState: active and minimized must be true or false", "re": "state"},
+              f"setAppState {bad} is refused: {m}")
+
     # The stand-in has no TLS, and says so rather than connecting in the clear
     c.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
     m = c.wait_for(lambda m: m["t"] == "status" and m["key"] == "connection")

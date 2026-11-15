@@ -49,6 +49,16 @@ class EngineService : QtServiceBase() {
         return START_NOT_STICKY
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Any level: this process has no UI, so each says memory is short, and a kill, which saves nothing, may follow
+        try {
+            EngineNative.nativeSave()
+        } catch (e: UnsatisfiedLinkError) {
+            Log.w(TAG, "libengine is not loaded, so nothing was saved", e)
+        }
+    }
+
     override fun onDestroy() {
         EngineNotifications.engineShown = false
         // Only a stop gets here (stopService, or the notification's Quit), never a kill: the next engine restores nothing

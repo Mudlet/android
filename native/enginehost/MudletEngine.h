@@ -40,6 +40,8 @@ public:
     void setScreenSize(int columns, int rows) override;
     QString link(int id, Link& link) const override;
     QString followLink(int id, std::optional<int> item) override;
+    void setAppState(bool active, bool minimized) override;
+    void save() override;
     QList<Profile> profiles() const override { return mProfiles.profiles(); }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
@@ -95,6 +97,8 @@ private:
     void runNow(const QString& code);
     void reportFont();
     void applyScreenSize();
+    void applyAppActive();
+    void onSaveFinished(bool saved, const QString& error);
     void reportConsoleColors(const QColor& foreground, const QColor& background);
     void onHeartbeat();
     void flushCounters();
@@ -155,6 +159,10 @@ private:
 
     // The UI's last setScreenSize, given to each profile as it loads; empty until then
     QSize mScreenSize;
+    // The UI's last setAppState active; true before the first, as in THeadlessSession
+    bool mAppActive = true;
+    // A saveAsync() has not answered yet, which a shutdown would be refused for
+    bool mSaving = false;
 
     QTimer mHeartbeat;
     QTimer mCounterTimer;

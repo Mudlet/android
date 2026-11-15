@@ -42,4 +42,8 @@ public:
     virtual void announce(const QString& text, bool assertive) = 0;
     // What IEngine::link() gives for these links may have changed
     virtual void linksChanged(const QList<int>& ids) = 0;
+    // A script's alert() or the game's bell asks for the player's attention for that long, 0 until they come back
+    virtual void attention(int ms) = 0;
+    // What the player typed ahead of the game hiding input is to move from the input line into the masked one
+    virtual void moveTypedLine() = 0;
 };

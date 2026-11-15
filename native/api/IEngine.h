@@ -31,6 +31,10 @@ public:
     virtual QString link(int id, Link& link) const = 0;
     // Follows it as a tap does, or picks item from its menu; else why nothing ran, as "disabled"
     virtual QString followLink(int id, std::optional<int> item) = 0;
+    // The app in front (active) or not, and its window minimized or sent to the background; leaving the front saves
+    virtual void setAppState(bool active, bool minimized) = 0;
+    // Writes the profile now, as the system may stop the engine without warning
+    virtual void save() = 0;
 
     // The last opened or created first. The others return why they did nothing, empty once done.
     virtual QList<Profile> profiles() const = 0;

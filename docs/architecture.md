@@ -237,6 +237,9 @@ profile with `shutdownAsync(true)`, as Mudlet closes one, then starts the other 
 - When the engine quits, it calls `shutdownAsync(true)` and waits up to 5 s for the profile's
   sysExitEvent and save.
 - On the desktop, SIGTERM quits the engine the same way.
+- `setAppState` with `active` false raises sysApplicationFocusChangeEvent, then saves the profile (`saveAsync()`), as
+  the system may kill a process in the background without warning. `EngineService.onTrimMemory()` saves it too, through
+  `EngineNative.nativeSave()`. A switch or quit asked during a save waits for it, as Mudlet refuses to close then.
 - On Android this depends on QtServiceBase ending the event loop when the service is destroyed.
   That has not been tried on a device.
 
@@ -252,6 +255,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - a 3000-line flood that arrives whole and in order;
 - Lua errors;
 - the profile's save on quit;
+- `setAppState`: sysApplicationFocusChangeEvent to a Lua handler and a save each time the app leaves the front;
+  `alert()` as `attention`, and new text while minimized as `attention` 0 once the profile alerts on new data; and
+  `moveTypedLine` ahead of `hiddenInput` when a script's typed line is up as the game hides input;
 - the profile requests: each answered with `profiles` or `error`; profiles written in Mudlet's own files; a switch
   of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
   through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log;
@@ -271,6 +277,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator) starts a profile, so Mudlet's Lua
   (`luaL_openlibs` and Mudlet's Lua files) is up, and that the banner's coloured lines reach the UI;
 - that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
+- that `am send-trim-memory` has the engine save the profile;
 - that after `:engine` is killed, the UI starts a new engine and attaches to it.
 
 If the engine crashes, it stops with the crash from logcat, symbolised with `ndk-stack`.

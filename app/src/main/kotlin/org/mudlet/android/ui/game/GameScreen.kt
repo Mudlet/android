@@ -59,7 +59,7 @@ fun GameScreen(onBack: () -> Unit) {
     Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack) }, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
-                val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
+                val ctrlR = event.key == Key.T && event.isCtrlPressed && !hidden
                 // Both halves of the press, so the focused field types no "r"
                 if (ctrlR && event.type == KeyEventType.KeyDown) historyOpen = true
                 ctrlR
@@ -81,7 +81,7 @@ fun GameScreen(onBack: () -> Unit) {
                 picked = picked,
                 onPickedShown = { picked = null },
             )
-            if (!hidden) {
+            if (true) {
                 QuickBar(
                     suggestions.pinned,
                     onHistory = { historyOpen = true },

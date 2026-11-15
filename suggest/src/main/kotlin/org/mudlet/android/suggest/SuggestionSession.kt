@@ -96,7 +96,6 @@ class SuggestionSession(
     /** Forgets [command], as [CommandSuggester.forget] does, and saves that a while later. */
     fun forget(command: String) {
         worker.schedule(0) {
-            suggester.forget(command)
             learned()
         }
     }

@@ -20,10 +20,20 @@ object EngineNotifications {
     const val ENGINE_NOTIFICATION_ID = 1
     private val nextTellId = AtomicInteger(100)
 
+    @Volatile
+    private var profile = ""
+
+    // Only while EngineService is in the foreground: a notify() after it stops would leave an ongoing notification
+    // that nothing removes
+    @Volatile
+    var engineShown = false
+
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_ENGINE, "Engine running", NotificationManager.IMPORTANCE_LOW))
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_TELLS, "Tells", NotificationManager.IMPORTANCE_DEFAULT))
+        val engine = NotificationChannel(CHANNEL_ENGINE, context.getString(R.string.channel_engine), NotificationManager.IMPORTANCE_LOW)
+        engine.description = context.getString(R.string.channel_engine_description)
+        nm.createNotificationChannel(engine)
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_TELLS, context.getString(R.string.channel_tells), NotificationManager.IMPORTANCE_DEFAULT))
     }
 
     // The app's launcher Activity: this module does not know the UI's classes
@@ -50,13 +60,32 @@ object EngineNotifications {
         )
         return NotificationCompat.Builder(context, CHANNEL_ENGINE)
             .setSmallIcon(R.drawable.ic_engine)
-            .setContentTitle("Mudlet engine running")
-            .setContentText("Engine process pid ${android.os.Process.myPid()}")
+            .setContentTitle(
+                if (profile.isEmpty()) {
+                    context.getString(R.string.engine_notification_title)
+                } else {
+                    context.getString(R.string.engine_notification_title_profile, profile)
+                },
+            )
+            .setContentText(context.getString(R.string.engine_notification_text))
             .setOngoing(true)
             .setContentIntent(openUi(context))
-            .addAction(0, "Stop engine", stop)
+            .addAction(0, context.getString(R.string.engine_notification_quit), stop)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+    }
+
+    /** Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process; empty when no profile is open. */
+    @JvmStatic
+    fun showProfile(context: Context, profile: String) {
+        this.profile = profile
+        if (!engineShown) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        NotificationManagerCompat.from(context).notify(ENGINE_NOTIFICATION_ID, engineNotification(context))
     }
 
     /** Called from C++ (AndroidNotifier.cpp) on Qt's thread in the :engine process. */

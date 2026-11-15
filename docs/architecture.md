@@ -246,14 +246,14 @@ The instrumented tests, run on the same emulator boot by `native/tests/android_i
 device shows, below the UI's debug hook:
 - `engine-service/src/androidTest` runs `EngineService` from its own test APK, against a small game server in the
   test's process: the service in its own `:engine` process in the foreground, Qt's `serviceReadyWait` and QPA, the
-  socket handshake; the engine notification's Stop, after which the next start restores nothing; a killed engine,
+  socket handshake; the engine notification's Quit, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
 - `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
   way from the start screen to the game screen and the self-test and back, through the labels and click actions
   TalkBack uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
-  reattach to a new engine after one is lost, and to the same one; and the notification permission, asked on Android
-  13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
+  reattach to a new engine after one is lost, and to the same one; and the notification permission, explained and then
+  asked on Android 13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
   (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
   library needs API 34, so they run on the API 36 emulator only.
 
@@ -438,7 +438,7 @@ that attaches later is told too. The UI shows it as a marker line.
     test reproduces the bug and fails without the fix.
   - Killing the UI process instead gives a new UI the full 2000-line ring plus a
     `gap` marker, in 44 ms on the host.
-- **Service stopped** (the "Stop engine" button, or the notification's Stop action).
+- **Service stopped** (the "Stop engine" button, or the notification's Quit action).
   - *Expected.*
   - `stopService` leads to `QtServiceBase.onDestroy`: Qt terminates and then
     `System.exit(0)` ends **only** `:engine`.
@@ -481,10 +481,12 @@ that attaches later is told too. The UI shows it as a marker line.
   - All "Tells" notifications: Lua `notify()` goes through `SocketBridge::notify`
     and `AndroidNotifier` (JNI) to `EngineNotifications.postTell`. They work
     while the UI is dead or frozen.
-  - The Stop action is a service `PendingIntent` handled in `onStartCommand`.
+  - The Quit action is a service `PendingIntent` handled in `onStartCommand`.
   - The counters are sent to the UI as statuses.
 - **UI process:**
-  - The `POST_NOTIFICATIONS` runtime request, which needs an Activity.
+  - The `POST_NOTIFICATIONS` runtime request, which needs an Activity. A dialog says what the notifications are for
+    first. The engine's notification posted before the user allows is dropped, so on Allow the UI sends the service
+    another start, whose `startForeground` posts it.
   - The tap target: the notification's content intent opens `MainActivity`.
   - The UI only counts the `notify` frames it sees; it never posts.
 - **Both:** `Application.onCreate` runs in both processes, and channel creation
@@ -665,7 +667,7 @@ Item 13 of the on-device checklist covers this.
    - Then press "QPA next start: offscreen", "Stop engine" and "Start engine",
      and see whether the engine comes up with `offscreen`.
 3. Check the foreground service. The line should read
-   `FGS: foreground=true process=org.mudlet.mudlet:engine`, the "Engine running"
+   `FGS: foreground=true process=org.mudlet.mudlet:engine`, the "Keeping your game connected"
    notification should be visible, and the two process ids should differ.
 4. Connect to `aardmud.org:23`. Expect coloured output, a prompt and rising line
    counters.
@@ -697,7 +699,7 @@ Item 13 of the on-device checklist covers this.
     - Check with `adb shell ps -A | grep mudlet`.
     - Then press "Start engine". With libmudlet, no profile comes back and the
       game is not called.
-    - Repeat with the notification's Stop action.
+    - Repeat with the notification's Quit action.
 11. Leave the phone with the screen off for 30 minutes or more, connected to the
     game.
     - Afterwards, check the heartbeat's largest gap and whether the game is

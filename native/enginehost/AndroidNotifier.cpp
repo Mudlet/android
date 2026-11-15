@@ -18,4 +18,11 @@ void postTell(const QString& title, const QString& text)
                                        QJniObject::fromString(text).object<jstring>());
 }
 
+void showProfile(const QString& profile)
+{
+    const auto context = QNativeInterface::QAndroidApplication::context();
+    QJniObject::callStaticMethod<void>(
+            "org/mudlet/android/engine/EngineNotifications", "showProfile", "(Landroid/content/Context;Ljava/lang/String;)V", context.object(), QJniObject::fromString(profile).object<jstring>());
+}
+
 } // namespace AndroidNotifier

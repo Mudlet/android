@@ -71,12 +71,12 @@ class EngineServiceTest {
         attach().use { connectToGame(it) }
         assertEquals(1, game.accepted)
 
-        // The engine notification's "Stop engine" action, as the user taps it
+        // The engine notification's Quit action, as the user taps it
         val notification = await("the engine's notification") {
             context.getSystemService(NotificationManager::class.java).activeNotifications
                 .firstOrNull { it.id == EngineNotifications.ENGINE_NOTIFICATION_ID }
         }
-        notification.notification.actions.single { it.title.toString() == "Stop engine" }.actionIntent.send()
+        notification.notification.actions.single { it.title.toString() == context.getString(R.string.engine_notification_quit) }.actionIntent.send()
         awaitEngineGone()
         assertTrue("onDestroy wrote the stop marker", File(EngineSession.stopMarkerPath(context)).exists())
 

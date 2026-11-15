@@ -90,7 +90,7 @@ internal object SuggestCodec {
         out.append('\n')
     }
 
-    private fun escape(out: Appendable, field: String) {
+    fun escape(out: Appendable, field: String) {
         for (ch in field) {
             when (ch) {
                 '\\' -> out.append("\\\\")
@@ -103,7 +103,7 @@ internal object SuggestCodec {
     }
 
     // null for a dangling or unknown escape
-    private fun unescape(field: String): String? {
+    fun unescape(field: String): String? {
         if ('\\' !in field) return field
         val out = StringBuilder(field.length)
         var i = 0

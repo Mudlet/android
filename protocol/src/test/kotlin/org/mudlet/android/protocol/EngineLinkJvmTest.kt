@@ -138,6 +138,21 @@ class EngineLinkJvmTest {
     }
 
     @Test
+    fun theStandInHasNoButtonsOrCommands() {
+        val link = newLink()
+        link.start()
+        next<Attached>()
+        assertEquals(EngineMessage.ButtonBars(emptyList()), next<EngineMessage.ButtonBars>())
+        assertEquals(EngineMessage.Commands(emptyList()), next<EngineMessage.Commands>())
+        next<EngineMessage.Synced>()
+        link.send(Requests.pressButton(1))
+        assertEquals("pressButton: the stand-in engine has no buttons or commands", next<EngineMessage.Error>().message)
+        link.send(Requests.activateCommand(1))
+        assertEquals("activateCommand: the stand-in engine has no buttons or commands", next<EngineMessage.Error>().message)
+        link.stop()
+    }
+
+    @Test
     fun protocolLatencyThroughputAndEngineDeath() {
         val link = newLink()
         link.start()

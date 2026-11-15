@@ -46,6 +46,9 @@ public:
     QString sendWindowCommandLine(const QString&, const QString&) override { return noWindows(); }
     QString pointer(const QString&, const PointerEvent&) override { return noWindows(); }
     std::variant<PngImage, QString> image(const QString&, const QSize&, std::optional<int>) const override { return noWindows(); }
+    // Nor buttons or commands
+    QString pressButton(int) override { return noButtons(); }
+    QString activateCommand(int) override { return noButtons(); }
 
     // Called from Lua's notify() and announce()
     void luaNotify(const QString& title, const QString& text);
@@ -53,6 +56,7 @@ public:
 
 private:
     static QString noWindows() { return QStringLiteral("the stand-in engine has no script windows"); }
+    static QString noButtons() { return QStringLiteral("the stand-in engine has no buttons or commands"); }
 
     enum class TelnetState { Data, Iac, Option, Sub, SubIac };
 

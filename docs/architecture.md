@@ -190,6 +190,27 @@ The self-test's Connect saves and opens the profile `Self-test` at the address t
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
 `connect` stores a password and opens a profile as the profile list does.
 
+### Script windows' text: links and the screen reader
+A mini console's or user window's rows are drawn by `ui/game/ConsoleLine.kt`, as the main console's lines are, so
+both read alike:
+- Each row is one node for TalkBack whose text is the row's characters without colours or styles. "Blank lines from
+  the game" applies to an empty row as to the game's lines: Hide leaves it out, Space reads it as a space, labelled
+  "Space" since a blank alone is nothing a screen reader can say; it is still drawn, as Mudlet applies the setting to
+  the main console's game text only.
+- A window's rows are never read aloud as they change, and there is no setting to have them read: a chat or status
+  window rewrites its rows often, and reading them would bury the game's text. A script that wants a line heard calls
+  `announce()`, which the app speaks as it does for the main console.
+- A link's runs (`linkSpans` in `:protocol`) are asked about with `getLink` and the window's name once its row is
+  shown, and asked again after each `windowText` of the window, as a followed link turns visited and comes as the
+  window's text, not `linksChanged`; the last answer stands until the new one comes, and goes once the window's text no
+  longer has the link. A tap on a link follows it (`followLink`), unless the engine says it is disabled; a long press on
+  one with a menu opens it, its title a heading and a disabled item greyed out, showing the latest answer while its row
+  has the link. TalkBack offers each link not disabled as an action, "Follow link:" and its tool tip, or its text where
+  it has none, and one with a menu as another that opens it, as an inline link is too small for a 48 dp target. A tap,
+  pick or action while no engine is attached says the link was not sent.
+- The main console's links are not followed yet: its lines have their link runs, but no tap or action uses them.
+  `ConsoleLine` takes them as it does a window's, once the main console asks the engine about them.
+
 ### Button bars and commands
 The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt` and `ScriptCommands.kt`, laid out by
 `ButtonBarLayout` and `CommandMenu` in `:protocol`):
@@ -443,8 +464,10 @@ device shows, below the UI's debug hook:
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
   announcement, `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings
   send; the script windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
-  screen gives Mudlet's main window, the window switcher, a window's command line both ways and a user window's close
-  button; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the
+  screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
+  button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
+  aloud, and a link in one asked about with `getLink` and the window's name and followed by a tap, its menu and
+  TalkBack's actions; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the
   engine as `pointer` events, its 48 dp touch bounds, a gauge read as its progress, a link's command, and a label's
   image asked of the engine; the button bars: a bar's buttons as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
@@ -469,8 +492,8 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   Once the game has sent a GA, an unfinished line shows only when it ends.
 - A change to a line already sent isn't sent again (`lineShown` sends each line once). That
   needs new `THeadlessSession` API; a Mudlet PR for it is being prepared.
-- Links are marked by id, and the engine answers `getLink` and `followLink` and sends `linksChanged`, but the app
-  does not use them yet.
+- Links are marked by id, and the engine answers `getLink` and `followLink` and sends `linksChanged`. The app follows
+  the links of script windows (see "Script windows' text" above), not yet the main console's.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
 - No bundled fonts.
@@ -1062,6 +1085,18 @@ Item 13 of the on-device checklist covers this.
     - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,
       the field, its results and the map read as the mapper window's does, and the console under it is not read.
     - With the system font at its largest, the search field and its results still fit and read whole.
+25. Links and the screen reader in script windows, with the libmudlet APK: `lua win = Geyser.MiniConsole:new({name =
+    "win", x = "50%", y = 0, width = "50%", height = "30%"})`, then `lua echoLink("win", "go north", [[send("north")]],
+    "Go north", true) echo("win", "\n")` and `lua echoPopup("win", "stew", {[[send("look stew")]], [[send("eat
+    stew")]]}, {"Look", "Eat"}, true) echo("win", "\n\nend\n")`: the rows "go north", "stew", a blank one and "end".
+    - A tap on "go north" sends `north`, and the link turns the visited colour; a tap beside it does nothing. A long
+      press on "stew" opens a menu of Look and Eat, and Eat sends `eat stew`; a tap outside closes it.
+    - With TalkBack on: swiping through the window reads each row as its text, the blank row too; its actions offer
+      "Follow link: Go north" on the first row, and on the second "Follow link" and "Menu of link" with the stew link's
+      tool tip (its hints joined, as Mudlet does with as many hints as commands), whose menu TalkBack moves into.
+      Nothing in the window is read aloud as it comes; `lua announce("from win")` is.
+    - With "Blank lines from the game" on Hide, swiping skips the window's blank row, still drawn; on Space it reads as
+      "Space".
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

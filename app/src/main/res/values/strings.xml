@@ -203,6 +203,13 @@
     <string name="window_command_send">Send on %1$s</string>
     <string name="window_back_to_console">Close %1$s and go back to the console</string>
     <string name="window_close">Close %1$s</string>
+    <!-- TalkBack's actions on a link in a line of game text (in a mini console or user window). %1$s is the link's
+         tool tip, or the link's own text where it has none -->
+    <string name="console_link_follow">Follow link: %1$s</string>
+    <string name="console_link_menu">Menu of link: %1$s</string>
+    <!-- What TalkBack reads for a blank line of a mini console or user window with "Blank lines from the game" on
+         "Replace them with a space": the name of the space character -->
+    <string name="console_blank_line_space">Space</string>
 
     <!-- A script's labels and gauges: the actions TalkBack offers on a label (%1$s is a link's text, as the script
          wrote it), and a gauge's value where it has no text of its own -->

@@ -3,7 +3,8 @@
 What the Play Console asks for before a release, and the answers for Mudlet, each checked against the code on `main`
 in November 2026: the listing's text and graphics, the screenshots and how to take them, the accessibility statement,
 the Data safety form and the other App content declarations. [`ptb.md`](ptb.md) says where in Play Console each goes
-(step 6 of the one-time setup); [`privacy-policy.md`](privacy-policy.md) is the privacy policy that Play links to.
+(step 6 of the one-time setup); [`privacy-policy.md`](privacy-policy.md) is the privacy policy that Play links to, at
+<https://github.com/Mudlet/android/blob/main/docs/privacy-policy.md>.
 
 The listing describes the first usable client ([`roadmap.md`](roadmap.md), Phase E). Until a claim below is true on
 `main`, the Mudlet PTB listing leaves it out; "Claims to check" says which ones wait for what. Evidence for Mudlet's own
@@ -73,7 +74,7 @@ Each claim, and what on `main` makes it true. "Not yet" claims are left out of a
 | Colours, ANSI to 24-bit | Yes | `app/src/main/kotlin/org/mudlet/android/ui/AnsiText.kt:30-34`; [`protocol.md`](protocol.md), "Runs" |
 | History and completion, keyboard stays open | Yes | `InputLine.kt:68-72`, `:188-224`; `GameScreenTest.aSendReachesTheEngineAndLeavesFocusOnTheInputLine` |
 | Masked password field | Yes | `InputLine.kt:154-180` |
-| Background running, tells as notifications | Yes | `engine-service/src/main/AndroidManifest.xml:13-24`; `EngineNotifications.kt:62-81` |
+| Background running, tells as notifications | Yes | `engine-service/src/main/AndroidManifest.xml:13-24`; `EngineNotifications.kt:91-110` |
 | Engine restarted and reconnected after a kill | Yes, with libmudlet | [`architecture.md`](architecture.md), "Restoring the session" |
 | Triggers, aliases, timers, Lua, packages, GMCP and the rest | Yes, in the engine | libmudlet's `THeadlessSession` runs Mudlet's own core ([`architecture.md`](architecture.md), "libmudlet as the engine"); editing scripts in the app is Phase F, so a player brings them in a package or through the game |
 | TalkBack labels, announced connection state, no gesture-only actions | Yes | "Accessibility" below |
@@ -82,12 +83,13 @@ Each claim, and what on `main` makes it true. "Not yet" claims are left out of a
 
 ## Category, tags and contact
 
-- **App or game**: Game. **Category**: Role Playing (most MUDs are role-playing games; Adventure is the other fit).
-  Play's game categories describe the game; Mudlet is a client for many, so this is a judgement call for the Mudlet
-  team.
+- **App or game**: Game. **Category**: Role Playing, for both listings: most MUDs are role-playing games.
 - **Tags**: up to five, chosen from Play's own list when the listing is made; look for role playing, adventure,
   fantasy, multiplayer and text-based ones.
-- **Contact details**: an email address (required), the website `https://www.mudlet.org`, and the privacy policy URL.
+- **Contact details**: the email address Play requires (the Mudlet team's, typed into Play Console, not kept here),
+  the website `https://www.mudlet.org`, and the privacy policy URL,
+  `https://github.com/Mudlet/android/blob/main/docs/privacy-policy.md`. The privacy policy's own contact is the issues
+  page, <https://github.com/Mudlet/android/issues>.
 - **Content rating** (the IARC questionnaire): Mudlet itself has no violence, language or gambling, but players
   meet whatever the game they connect to has, and talk to other players there. Answer yes to "users can interact or
   exchange content", and no to the content questions about the app's own material. The listing then shows the interactive
@@ -105,8 +107,8 @@ Each claim, and what on `main` makes it true. "Not yet" claims are left out of a
 - **Feature graphic**: 1024 × 500, JPEG or 24-bit PNG without alpha. Play may crop it and lay its own controls over
   it, so keep the logo and words in the middle and away from the edges, and put nothing there that only reads at full
   size. A suggestion: Mudlet's logo and name on the left half, a phone showing the game screen with coloured text on
-  the right; the PTB's carries "PTB" or "Nightly" as Mudlet's PTB icon does. Use Mudlet's logo under the Mudlet team's
-  say; screenshot text must be from a game that agreed to it (below).
+  the right; the PTB's carries "PTB" or "Nightly" as Mudlet's PTB icon does. The phone shows the demo server's text,
+  as the screenshots do (below).
 - **Video**: optional; skip it. Play may ask for one separately for the foreground service declaration.
 
 ### Screenshots
@@ -116,15 +118,20 @@ the short one. At least four screenshots of 1080 px or more make the app eligibl
 layouts, and a 7-inch and a 10-inch tablet set let Play show it as a tablet app. Take each in portrait on a phone, and
 in landscape on the tablets.
 
+Every screenshot shows only the test game: the text of `native/tests/fake_telnet.py`, the demo server the host tests
+use, and the app's own screens. No real game's text, name or world appears in the listing, so no game's permission is
+needed. The demo server's lines come from a test script (its docstring lists the commands: `flood`, `tell`,
+`password` and the rest): coloured lines, a tell and a password prompt, which is what the screenshots show.
+
 | # | Screen | Phone | 7" tablet | 10" tablet | Notes |
 |---|---|---|---|---|---|
-| 1 | Game screen, connected: coloured game text, the prompt at the bottom, the input line and the connection bar | light, dark | dark | light, dark | The first screenshot is what most people see: make the text readable at thumbnail size |
+| 1 | Game screen, connected to the demo server: `flood 40`'s coloured lines, the prompt at the bottom, the input line and the connection bar | light, dark | dark | light, dark | The first screenshot is what most people see: make the text readable at thumbnail size |
 | 2 | Game screen scrolled up, with "Jump to the bottom: 12 new lines" | dark | | dark | Shows the scrollback holds still |
 | 3 | The masked password field as a game asks for the password | light | | light | `password` on the demo server below |
 | 4 | A tell as an Android notification, over the game screen, and the engine's notification in the shade | dark | dark | | Pull the shade down; `tell` on the demo server |
 | 5 | TalkBack on, its focus on the input line's Send button, with TalkBack's "Display speech output" captions | light | | light | Shows the labels; TalkBack, Settings, Advanced settings, Developer settings |
 | 6 | The game screen at the largest font size, the connection bar's buttons wrapped below the state | light | | | Shows the layout holds at 200% |
-| 7 | The profile list, once it lists games (U3) | light, dark | light | light | Not before the profile list exists; the placeholder is not worth a slot |
+| 7 | The profile list, once it lists games (U3), with the demo server's profile only | light, dark | light | light | Not before the profile list exists; the placeholder is not worth a slot |
 
 Light and dark follow the system setting (`app/src/main/kotlin/org/mudlet/android/ui/theme/Theme.kt`); the console
 itself stays black (`AnsiText.kt:19-21`), as Mudlet's does, so the difference shows in the bars around it.
@@ -137,6 +144,8 @@ Google APIs system image (it has TalkBack), make one AVD per device type in Andr
 
 ```sh
 adb install -r app/build/outputs/apk/smoke/app-x86_64-smoke.apk
+# Notifications allowed up front, so the app skips its "Allow notifications?" screen and can post the tell
+adb shell pm grant org.mudlet.mudlet android.permission.POST_NOTIFICATIONS
 # A clean status bar: 12:00, full battery and signal, no notifications
 adb shell settings put global sysui_demo_allowed 1
 adb shell am broadcast -a com.android.systemui.demo -e command enter
@@ -159,10 +168,6 @@ adb shell settings delete secure enabled_accessibility_services
 adb shell am broadcast -a com.android.systemui.demo -e command exit
 ```
 
-`fake_telnet.py`'s text is a test script's (its docstring lists the commands: `flood`, `tell`, `password` and the rest),
-so it shows colours but not a game anyone would want to play. For the listing, use a real game's text with that game's
-permission (its name and world are its own), or extend `fake_telnet.py` with a short scene written for the purpose.
-That choice is the Mudlet team's.
 
 ## Accessibility
 
@@ -207,9 +212,7 @@ text by moving to the console.
 Play's Data safety form asks what the app collects (sends off the device) and shares (passes to a third party), and
 how. The answers below come from what the code does. Mudlet runs no server the app talks to, and the Mudlet team
 receives nothing from it. Everything the app sends goes to the game server the player chose, or to addresses that game
-or the player's scripts name. Play's guidance does not spell out how to answer for traffic to a server the user picks
-and the developer does not run; terminal, SSH and IRC clients in the same position commonly answer that they collect
-nothing, and that is the answer here.
+or the player's scripts name. The answer is therefore **no data collected, no data shared**.
 
 ### The answers
 
@@ -219,10 +222,9 @@ nothing, and that is the answer here.
 | Is all of the user data encrypted in transit? | Not asked once the answer above is No | Games choose plain telnet or TLS; Mudlet offers TLS where the game does |
 | Do you provide a way for users to request that their data is deleted? | Not asked once the answer above is No | The app keeps data only on the device; uninstalling or clearing its storage deletes it |
 
-If Play's reviewers, or the Mudlet team, read player-to-game traffic as collection, the conservative alternative is:
-"Messages: Other in-app messages" and "App activity: Other user-generated content", collected, not shared, required
-for app functionality, processed ephemerally: no. It overstates what happens (the Mudlet team receives nothing), so
-it is not the default; which to give is the Mudlet team's decision.
+Should a Play review ever read player-to-game traffic as collection, the answer it would want is "Messages: Other
+in-app messages" and "App activity: Other user-generated content", collected, not shared, required for app
+functionality.
 
 ### The evidence
 
@@ -235,7 +237,7 @@ it is not the default; which to give is the Mudlet team's decision.
 - The app's libraries are AndroidX, Compose, `org.json` and Qt (`gradle/libs.versions.toml:29-47`): no analytics,
   advertising, crash reporting or Firebase SDK.
 - The engine connects to the host and port of the profile the player opens (`MudletEngine::start`,
-  `native/enginehost/MudletEngine.cpp:374-384`).
+  `native/enginehost/MudletEngine.cpp:387-397`).
 - Mudlet's desktop-only parts that reach other servers are not built for Android:
   - the updater, which asks GitHub for new releases, is built only on Linux, Windows and macOS
     ([`CMakeLists.txt:180-185`](https://github.com/Mudlet/Mudlet/blob/bfc932d9e76004d9624b6925b5e0278c17fdae2a/CMakeLists.txt#L180-L185));
@@ -249,7 +251,7 @@ it is not the default; which to give is the Mudlet team's decision.
     with its list of games, and the About dialog's links are GUI code (`dlgPackageManager.cpp`,
     `dlgConnectionProfiles.cpp`, `mudlet.cpp` are in `mudlet_app_SRCS`,
     [`src/CMakeLists.txt:224-278`](https://github.com/Mudlet/Mudlet/blob/bfc932d9e76004d9624b6925b5e0278c17fdae2a/src/CMakeLists.txt#L224-L278)).
-  
+
   `scripts/build-libmudlet.sh:104-108` fails the build if any of their symbols (Qt Widgets, `QProcess`, `QHttpServer`,
   `sentry_`) leak into libmudlet.
 - What Mudlet's core, which the app does run, may fetch, and when. None of it happens unless the game or the
@@ -285,14 +287,15 @@ device ([`roadmap.md`](roadmap.md), U3).
 
 **Crash reports and logs.** The app sends no crash report and no log. It writes to logcat, on the device: the engine's
 state changes and errors (`native/enginehost/MudletEngine.cpp`, `SocketBridge.cpp`), Mudlet's error console lines
-(`MudletEngine.cpp:211`), and the title of a tell it could not post (`EngineNotifications.kt:70`), never a password.
+(`MudletEngine.cpp:222`), and the title of a tell it could not post (`EngineNotifications.kt:99`), never a password.
 Google Play's Android vitals gathers crashes and ANRs through Android itself, from users who allow it; that is
 Google's, not the app's, and is not declared here. The release AAB carries the symbol tables those reports need
 (`app/build.gradle.kts:68-69`).
 
 **What is kept on the device.** Profiles, Mudlet's settings, scripts, packages, maps and logs a player turns on, in
-the app's private files (`native/enginehost/MudletEngine.cpp:83-95`); the engine's restore file
-(`engine-service/src/main/kotlin/org/mudlet/android/engine/EngineSession.kt:15-17`). Other apps cannot read them.
+the app's private files (`native/enginehost/MudletEngine.cpp:95-106`); the engine's restore file
+(`engine-service/src/main/kotlin/org/mudlet/android/engine/EngineSession.kt:15-17`); whether the app has asked for
+notifications (`app/src/main/kotlin/org/mudlet/android/ui/MainActivity.kt:79-84`). Other apps cannot read them.
 
 **Backups.** None: `android:allowBackup="false"` and `android:fullBackupContent="false"`
 (`app/src/main/AndroidManifest.xml:10-11`), and on Android 12 and later the data extraction rules exclude every
@@ -308,7 +311,7 @@ kept. As no copy leaves the device and there is no account, there is nothing for
 | `INTERNET` | The engine's connection to the game |
 | `ACCESS_NETWORK_STATE` | Qt's networking checks the connection |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE` | The engine's foreground service keeps the connection and scripts running in the background (`:13-24`, with the reason Play reads at `:18-20`) |
-| `POST_NOTIFICATIONS` | The engine's notification, and tells; asked at start on Android 13 and later (`MainActivity.kt:19`) |
+| `POST_NOTIFICATIONS` | The engine's notification, and tells; on Android 13 and later asked after a screen that says why, and not again after "Not now" (`MainActivity.kt:44-53`, `:69-77`) |
 
 Libraries can add permissions in the merged manifest. Before each first submission, check the release APK's list
 matches this one (AndroidX adds only its own signature permission, `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`):
@@ -321,6 +324,6 @@ matches this one (AndroidX adds only its own signature permission, `DYNAMIC_RECE
 
 Play asks apps that declare a foreground service type to say why: `specialUse`, with the reason in
 `engine-service/src/main/AndroidManifest.xml:18-20` (keeping the player's connection to a text game open and running
-their scripts while the app is in the background). The user sees it as the engine's notification, which has a Stop
-action (`EngineNotifications.kt:44-60`). If Play asks for a video, record the game screen, then Home, then the
+their scripts while the app is in the background). The user sees it as the engine's notification, which names the open
+profile and has a Quit action (`EngineNotifications.kt:54-76`). If Play asks for a video, record the game screen, then Home, then the
 notification, then a tell arriving while another app is in front: `adb shell screenrecord /sdcard/fgs.mp4`.

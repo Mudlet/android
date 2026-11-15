@@ -1,12 +1,12 @@
 # Mudlet for Android: privacy policy
 
-> **Draft.** Google Play needs this policy at a public URL, on a page that is not a PDF and not behind a login, for
-> both the Mudlet and the Mudlet PTB listings. Where it is published (for example a page on mudlet.org), the contact
-> address and the effective date are for the Mudlet team to fill in. It must say the same as the Data safety answers
+> For maintainers: this file is the privacy policy both the Mudlet and the Mudlet PTB listings give Google Play, at
+> <https://github.com/Mudlet/android/blob/main/docs/privacy-policy.md>. It must say the same as the Data safety answers
 > in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
 > change both together.
 
-**Effective date:** _to be set when published_
+**Effective date:** 2026-11-15; the file's
+[history](https://github.com/Mudlet/android/commits/main/docs/privacy-policy.md) shows every earlier version.
 
 This policy covers Mudlet for Android and Mudlet PTB, its nightly test build, made by the Mudlet team, a group of
 volunteers. In short: **Mudlet collects nothing about you.** It has no account, no ads, no analytics and no crash
@@ -69,11 +69,12 @@ can talk to other players.
 
 ## Changes
 
-If Mudlet's handling of data changes, this policy changes with it, and the date above is updated. The app's source
+If Mudlet's handling of data changes, this policy changes with it, and the new version takes effect the day it is
+merged, and the effective date above changes to that day. The app's source
 code is public at <https://github.com/Mudlet/android> and <https://github.com/Mudlet/Mudlet>, so anyone can check what it
 does.
 
 ## Contact
 
-_Contact address to be set by the Mudlet team._ You can also open an issue at
+For questions about this policy or about Mudlet and your data, open an issue at
 <https://github.com/Mudlet/android/issues>.

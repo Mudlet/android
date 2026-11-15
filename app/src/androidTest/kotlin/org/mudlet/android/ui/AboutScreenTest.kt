@@ -18,7 +18,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
-import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Before
@@ -104,11 +103,11 @@ class AboutScreenTest {
      * Back from far down a list. The accessibility checks are not run here: on the API 36 emulator,
      * SpeakableTextPresentCheck reports a one-line element at the list's top edge with no label once the list is
      * scrolled far, which no item of these lists lacks (docs/architecture.md's on-device checklist, item 17, has
-     * TalkBack read them). The Back button is still found by its label; the system's Back takes it.
+     * TalkBack read them). The Back button is still found by its label; the system Back (the activity's back dispatcher) takes it.
      */
     private fun backFromDeepInTheList() {
         compose.onNode(hasContentDescription(string(R.string.navigate_back)) and hasClickAction()).assertIsDisplayed()
-        Espresso.pressBack()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
     }
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */

@@ -806,10 +806,13 @@ def script_windows():
     check(m["message"].startswith("placeUserWindow: ") and "chat" in m["message"], f"a mini console is no user window: {m}")
 
     since = len(seen)
-    c.send({"t": "runLua", "code": "setBorderLeft(100)"})
+    # The profile's mudlet-base-ui package keeps its container attached to the right border, so the text ends there
+    c.send({"t": "runLua", "code": 'setBorderLeft(100)\necho(string.format("right border %d\\n", getBorderRight()))'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("right border "), seen, since)
+    right = int(m["text"].split()[-1])
     m = seen_or_next(c, lambda m: m["t"] == "mainArea", seen, since)
-    check(m["w"] == 1000 and (m["textX"], m["textW"]) == (100, 900) and m["columns"] < columns,
-          f"setBorderLeft() moves the main console's text: {m}")
+    check(m["w"] == 1000 and (m["textX"], m["textW"]) == (100, 900 - right) and m["columns"] < columns,
+          f"setBorderLeft() moves the main console's text: {m}, right border {right}")
     since = len(seen)
     c.send({"t": "setMainWindowSize", "w": 1, "h": 1})
     m = seen_or_next(c, lambda m: m["t"] in ("error", "mainArea"), seen, since)
@@ -817,7 +820,8 @@ def script_windows():
     since = len(seen)
     c.send({"t": "setMainWindowSize", "w": 1200, "h": 800})
     m = seen_or_next(c, lambda m: m["t"] == "mainArea", seen, since)
-    check((m["w"], m["h"], m["textX"], m["textW"]) == (1200, 800, 100, 1100), f"a size given while the profile runs is taken at once: {m}")
+    check((m["w"], m["h"], m["textX"], m["textW"]) == (1200, 800, 100, 1100 - right),
+          f"a size given while the profile runs is taken at once: {m}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": "\n".join([

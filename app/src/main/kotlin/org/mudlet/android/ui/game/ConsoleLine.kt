@@ -80,7 +80,6 @@ internal fun ConsoleLine(
 
             blankLines == Settings.BlankLines.SPACE -> {
                 this.text = AnnotatedString(" ")
-                contentDescription = space
             }
 
             else -> hideFromAccessibility()
@@ -88,7 +87,7 @@ internal fun ConsoleLine(
         if (actions.isNotEmpty()) customActions = actions
     }
 
-    if (links == null || links.spans.isEmpty()) {
+    if (links == null) {
         LineText(text, modifier.then(read(emptyList())), color, style, singleLine)
         return
     }
@@ -124,11 +123,11 @@ internal fun ConsoleLine(
     val open = menu
     val openSpan = open?.let { m -> links.spans.firstOrNull { it.link == m.link } }
     val openInfo = open?.let { links.info(it.link) }?.takeIf { it.menu }
-    if (open != null && (openSpan == null || openInfo == null)) SideEffect { menu = null }
+    if (open != null && openInfo == null) SideEffect { menu = null }
     Box(modifier) {
         LineText(text, Modifier.fillMaxWidth().then(touches).then(read(actions)), color, style, singleLine) { layout = it }
-        if (open != null && openSpan != null && openInfo != null) {
-            LinkMenuView(openInfo, open.x, linkLabel(openInfo, plain.substring(openSpan.start, openSpan.end)), ::follow) { menu = null }
+        if (open != null && openInfo != null) {
+            LinkMenuView(openInfo, open.x, linkLabel(openInfo, openSpan?.let { plain.substring(it.start, it.end) }.orEmpty()), ::follow) { menu = null }
         }
     }
 }

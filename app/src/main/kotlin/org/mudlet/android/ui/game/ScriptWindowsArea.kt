@@ -324,7 +324,7 @@ private fun WindowConsole(
                 items(lines.size, key = { first + it }) { i ->
                     val row = remember(lines[i]) { ansiText(lines[i]) }
                     val rowSpans = spans[i]
-                    val rowLinks = if (rowSpans.isEmpty()) {
+                    val rowLinks = if (lines[i].text.isEmpty()) {
                         null
                     } else {
                         // Asked about again for each new text, which may have changed them

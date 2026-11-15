@@ -36,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -130,8 +131,11 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier.then(shrunk).background(CONSOLE_BACKGROUND)) {
         // Touches between its controls stay off what it covers; under them, so they still take theirs
         Box(Modifier.matchParentSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } })
+        // While the search is edited its last results are not shown: they are of the text before, and they would sit
+        // where the keyboard leaves the map no room
+        var editing by remember { mutableStateOf(false) }
         Column(Modifier.matchParentSize()) {
-            RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onFocusChanged { editing = it.hasFocus })
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 var size by remember { mutableStateOf(IntSize.Zero) }
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
@@ -148,11 +152,13 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 )
                 // Under the map's buttons, whose touches and TalkBack they would take where they covered them, even
                 // the strip of a short list that left the buttons' bottom edge out; half the map below them, but at
-                // least a whole result under the results' head, where the map has the room
-                val below = (maxHeight - MAP_CONTROLS_HEIGHT).coerceAtLeast(0.dp)
-                val results = (below / 2).coerceAtLeast(minOf(below, RESULTS_HEAD + RESULT_ROW))
-                AppMapClient.search?.let {
-                    RoomResults(it, Modifier.align(Alignment.TopStart).padding(top = MAP_CONTROLS_HEIGHT).fillMaxWidth().heightIn(max = results))
+                // least their head and a whole result. Where the map has not that room, as with a keyboard up for the
+                // command line, they wait for it: squeezed, their close button and rows would be cut off
+                val below = maxHeight - MAP_CONTROLS_HEIGHT
+                val search = AppMapClient.search
+                if (search != null && !editing && below >= RESULTS_HEAD + RESULT_ROW) {
+                    val results = maxOf(below / 2, RESULTS_HEAD + RESULT_ROW)
+                    RoomResults(search, Modifier.align(Alignment.TopStart).padding(top = MAP_CONTROLS_HEIGHT).fillMaxWidth().heightIn(max = results))
                 }
             }
         }

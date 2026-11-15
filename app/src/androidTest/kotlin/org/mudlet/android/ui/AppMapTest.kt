@@ -350,7 +350,7 @@ class AppMapTest {
         waitFor("the rooms found are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText(string(R.string.app_map_room, "Great Hall", "Castle", 1))).assertIsDisplayed()
         assertTouchTarget(hallway)
-        assertResultsUnderTheButtons()
+        assertResultsFit()
         checkAccessibility()
 
         activate(hallway)
@@ -397,7 +397,7 @@ class AppMapTest {
         val none = hasText(string(R.string.app_map_no_rooms, "cellar"))
         waitFor("the search says nothing matched") { compose.onAllNodes(none).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(none).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
-        assertResultsUnderTheButtons()
+        assertResultsFit()
         activate(hasContentDescription(string(R.string.app_map_results_close)))
         waitFor("the results close") { compose.onAllNodes(none).fetchSemanticsNodes().isEmpty() }
 
@@ -405,8 +405,19 @@ class AppMapTest {
         session.send(rooms(request("findRooms", "the search is sent again"), "cellar", listOf(Triple(7, "Wine cellar", "Keep")), more = true))
         waitFor("the search says there were more") { compose.onAllNodes(hasText(string(R.string.app_map_more_rooms))).fetchSemanticsNodes().isNotEmpty() }
 
-        // A refused search is over: a late answer to it is not shown
-        searchAgain(field)
+        // Short of room, as with a keyboard up for the command line on a small screen, the results wait for it: cut
+        // off, their close button would be a target too small to touch
+        val height = bounds(mapShown()).height
+        withScreen { compose.onNode(hasSetTextAction() and hasText(string(R.string.input_label))).performSemanticsAction(SemanticsActions.RequestFocus) }
+        keyboardUp()
+        waitFor("the results are whole in the map, or wait for the room") { resultsFit() }
+        checkAccessibility()
+
+        // A refused search is over: a late answer to it is not shown. While the search is edited, its last results go
+        searchAgain(field, height) {
+            waitFor("the last results go while the search is edited") { compose.onAllNodes(resultsClose()).fetchSemanticsNodes().isEmpty() }
+            checkAccessibility()
+        }
         val refused = request("findRooms", "the search is sent a third time")
         session.refuse(refused, "no profile running")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
@@ -431,11 +442,14 @@ class AppMapTest {
         return field
     }
 
-    /** Sends again what the search [field] holds, from the field as a player comes back to it: a tap, the keyboard, then its Search key. */
-    private fun searchAgain(field: SemanticsMatcher) {
-        val height = bounds(mapShown()).height
+    /**
+     * Sends again what the search [field] holds, from the field as a player comes back to it: a tap, the keyboard,
+     * [whileEditing], then its Search key, after which the map has its [height] back.
+     */
+    private fun searchAgain(field: SemanticsMatcher, height: Float = bounds(mapShown()).height, whileEditing: () -> Unit = {}) {
         withScreen { compose.onNode(field).performSemanticsAction(SemanticsActions.RequestFocus) }
         keyboardUp()
+        whileEditing()
         sendSearch(field, height)
     }
 
@@ -470,13 +484,20 @@ class AppMapTest {
         }
     }
 
-    // The results' top, their close button's, is under the map's buttons, which they would hide from touch and TalkBack: the
-    // accessibility check sees that only on API 34 and up, and a short list leaves the buttons' bottom edge out, 4 dp high
-    private fun assertResultsUnderTheButtons() {
-        val results = bounds(hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction())
-        val buttons = bounds(hasContentDescription(string(R.string.map_edit)) and hasClickAction())
-        assertTrue("the results at $results are under the map's buttons at $buttons", results.top >= buttons.bottom)
+    // The results, their head at least, are whole between the map's buttons, which they would hide from touch and TalkBack,
+    // and the map's bottom, past which they would be cut off: the accessibility check sees either only on API 34 and up
+    private fun assertResultsFit() {
+        assertTrue("the results are whole under the map's buttons, in the map. ${screen()}", resultsFit())
     }
+
+    // The results' head is their close button's: true when they are not shown
+    private fun resultsFit(): Boolean {
+        val results = compose.onAllNodes(resultsClose()).fetchSemanticsNodes().singleOrNull()?.boundsInRoot ?: return true
+        val buttons = bounds(hasContentDescription(string(R.string.map_edit)) and hasClickAction())
+        return results.top >= buttons.bottom && results.bottom <= bounds(mapShown()).bottom
+    }
+
+    private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()
 
     private fun mapShown() = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
 

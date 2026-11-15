@@ -247,10 +247,12 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   buttons, the edit switch, refusals and TalkBack's actions), under a search field. TalkBack does not read what it
   covers. Back or the button again sends it back; with a predictive back gesture it shrinks as the gesture goes.
 - The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
-  result, read as "<room>, <area> (<number>)", is a 48 dp row, at least one of which shows where the map has the room
-  for it, and a tap sends `showRoom`, which centres the map on that room and selects it, until the player moves, so its
-  actions then walk there. "Finding rooms…", no match and more matches than shown are read out as they come. The
-  results sit under the map's buttons, which they would otherwise hide from touch and TalkBack.
+  result, read as "<room>, <area> (<number>)", is a 48 dp row, and a tap sends `showRoom`, which centres the map on
+  that room and selects it, until the player moves, so its actions then walk there. "Finding rooms…", no match and
+  more matches than shown are read out as they come. The results sit under the map's buttons, which they would
+  otherwise hide from touch and TalkBack, and show only where the map has the room for their head and one whole row
+  (not with a keyboard up on a small screen) and while the search is not being edited, so that none of their touch
+  targets is ever cut off.
 - The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
   shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
   0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms. It asks again at each attach,

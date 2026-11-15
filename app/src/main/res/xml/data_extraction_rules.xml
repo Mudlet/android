@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android 12 and later: no cloud backup and no device-to-device transfer, as android:allowBackup="false" has it on
-     older releases -->
+     older releases. The profiles' passwords (data/PasswordStore.kt) are named as well, so they stay out if the rest is
+     ever let in: their key stays in this device's KeyStore, so nowhere else could decrypt them. -->
 <data-extraction-rules>
     <cloud-backup>
+        <exclude domain="file" path="passwords/" />
         <exclude domain="root" path="." />
         <exclude domain="file" path="." />
         <exclude domain="database" path="." />
@@ -10,6 +12,7 @@
         <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
+        <exclude domain="file" path="passwords/" />
         <exclude domain="root" path="." />
         <exclude domain="file" path="." />
         <exclude domain="database" path="." />

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
@@ -23,18 +24,20 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.protocol.Profile
 
 /**
- * The app starts on the profile list and reaches the game screen and the self-test (debug builds) and back, as a
- * TalkBack user would: each control found by the label TalkBack reads and activated through its accessibility click
- * action, with no gesture.
+ * The app starts on the profile list and reaches a profile's editor, the game screen (by opening the profile) and the
+ * self-test (debug builds) and back, as a TalkBack user would: each control found by the label TalkBack reads and
+ * activated through its accessibility click action, with no gesture.
  */
 @RunWith(AndroidJUnit4::class)
 class NavigationTest {
+    private val fake = FakeEngineRule()
     private val compose = createAndroidComposeRule<MainActivity>()
 
     @get:Rule
-    val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(FakeEngineRule())
+    val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
         .around(compose)
 
@@ -47,8 +50,19 @@ class NavigationTest {
     @Test
     fun startsOnTheProfileListAndReachesEveryScreenThroughLabelledControls() {
         assertOnScreen(R.string.profiles_title)
+        val engine = fake.engine.nextSession()
+        val profiles = listOf(Profile("Nav", "n.example", 23, false, "", false))
+        engine.profiles(profiles, engine.receive("listProfiles"))
+        compose.waitUntil(10_000) { EngineClient.profiles == profiles }
 
-        activate(hasText(string(R.string.profiles_open_game)))
+        activate(hasContentDescription(string(R.string.profile_edit, "Nav")))
+        compose.onNodeWithText("Nav").assertIsDisplayed()
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        assertOnScreen(R.string.profiles_title)
+
+        activate(hasContentDescription(string(R.string.profile_connect_to, "Nav")))
+        engine.profiles(profiles, engine.receive("openProfile"))
+        compose.waitUntil(10_000) { compose.onAllNodesWithText(string(R.string.game_title)).fetchSemanticsNodes().isNotEmpty() }
         assertOnScreen(R.string.game_title)
         activate(hasContentDescription(string(R.string.navigate_back)))
         assertOnScreen(R.string.profiles_title)
@@ -59,7 +73,7 @@ class NavigationTest {
         assertOnScreen(R.string.profiles_title)
     }
 
-    private fun string(@StringRes id: Int) = compose.activity.getString(id)
+    private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     private fun assertOnScreen(@StringRes title: Int) {
         compose.onNodeWithText(string(title)).assertIsDisplayed()

@@ -7,8 +7,10 @@ It installs and launches the app, then drives the UI through the debug build's S
 (app/src/debug) and checks, from what the UI holds and from the device:
   1. the UI starts the engine service, Qt comes up in the :engine process, and the UI attaches to it;
   2. the service runs in the foreground in :engine;
-  3. connecting to fake_telnet.py on this host (10.0.2.2 from the emulator) starts a profile: Mudlet's Lua is up,
-     with luaL_openlibs and Mudlet's own Lua files;
+  3. connecting to fake_telnet.py on this host (10.0.2.2 from the emulator), as the profile list does, saves a
+     profile, stores its password in the app's KeyStore-encrypted store and opens the profile with it: the profile
+     starts, Mudlet's Lua is up, with luaL_openlibs and Mudlet's own Lua files, and Mudlet's auto-login sends the
+     profile's login and then that password to the game, which logcat never shows;
   4. the game's coloured lines reach the UI with their colours;
   5. a Lua trigger fires on a game line, cecho()s on it (a function from Mudlet's Lua files) and its
      showNotification() reaches the UI and is posted as an Android notification;
@@ -52,8 +54,10 @@ def set_package(package):
 set_package(PKG)
 # The emulator's address for the host's loopback, where fake_telnet listens
 HOST_FROM_EMULATOR = "10.0.2.2"
-# The profile MudletEngine makes when MUDLET_PROFILE is unset
-PROFILE = "Android"
+# The profile the test saves and opens, its character name, and a password for this run only
+PROFILE = "Smoke"
+LOGIN = "hero"
+PASSWORD = "smoke-pw-" + os.urandom(6).hex()
 BOLD = 1
 RUN_STRIDE = 6
 
@@ -254,11 +258,15 @@ def run(dev, apk):
                      lambda s: "foreground=true" in s["fgs"] and f"process={ENGINE_PROCESS}" in s["fgs"], 30)
     ok(f"foreground service: {state['fgs']}")
 
-    step(f"connect to {HOST_FROM_EMULATOR}:{port}: a profile starts, and the game's lines arrive")
-    dev.command("connect", host=HOST_FROM_EMULATOR, port=port)
+    step(f"connect to {HOST_FROM_EMULATOR}:{port} as the profile '{PROFILE}': it is saved with a stored password and "
+         "opened, it starts, and the game's lines arrive")
+    dev.command("connect", host=HOST_FROM_EMULATOR, port=port, profile=PROFILE, login=LOGIN, password=PASSWORD)
     state = dev.wait("the profile to load and the game's banner to arrive",
-                     lambda s: s["status"].get("profile", "").startswith("start failed")
+                     lambda s: s["profileAnswer"] not in ("waiting", "ok")
+                     or s["status"].get("profile", "").startswith("start failed")
                      or (s["status"].get("profile") == f"{PROFILE} loaded" and line_with(s, "bright blue 256 plain")), 180)
+    if state["profileAnswer"] not in ("waiting", "ok"):
+        raise SmokeFailure(f"the engine refused the profile: {state['profileAnswer']}")
     status = state["status"]
     if status["profile"].startswith("start failed"):
         raise SmokeFailure(f"the profile did not start: {status['profile']}")
@@ -273,6 +281,23 @@ def run(dev, apk):
     if not green or green[2] in (-1, first[2]):
         raise SmokeFailure(f"the banner's first line lacks its green run: {red}")
     ok(f"coloured game lines in the UI: {red['text']!r} with runs {runs_of(red)}")
+    listed = state["profiles"][0] if state["profiles"] else None
+    expected = {"name": PROFILE, "host": HOST_FROM_EMULATOR, "port": port, "tls": False, "login": LOGIN,
+                "autoReconnect": False}
+    if listed != expected:
+        raise SmokeFailure(f"the engine's profiles do not start with the one opened: {state['profiles']}")
+    ok(f"the engine lists '{PROFILE}' first: {listed}")
+
+    step("Mudlet's auto-login sends the profile's login, then the password the app stored and read back")
+    deadline = time.monotonic() + 30
+    while PASSWORD not in fake_telnet.RECEIVED:
+        if time.monotonic() > deadline:
+            raise SmokeFailure(f"the password never reached the game, which got {len(fake_telnet.RECEIVED)} lines")
+        time.sleep(0.5)
+    got = list(fake_telnet.RECEIVED)
+    if LOGIN not in got or got.index(LOGIN) > got.index(PASSWORD):
+        raise SmokeFailure(f"the login did not come before the password: the game got {len(got)} lines")
+    ok("the game got the login, then the password")
 
     step("a Lua trigger: cecho() on the line, and a notification")
     dev.command("lua", code='tempTrigger("tells you", function() cecho("<green>[smoke trigger]") '
@@ -311,6 +336,11 @@ def run(dev, apk):
     state = dev.wait("the new engine service in the foreground",
                      lambda s: "foreground=true" in s["fgs"] and f"pid={new_pid}" in s["fgs"], 30)
     ok(f"reattached to the new engine, pid {new_pid}: {state['link']}")
+
+    step("the password is nowhere in logcat")
+    if PASSWORD in dev.log_text():
+        raise SmokeFailure("logcat holds the profile's password")
+    ok("logcat does not hold the password")
 
 
 def main():

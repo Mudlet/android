@@ -52,6 +52,7 @@ import androidx.core.content.edit
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.engine.EngineService
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
@@ -60,6 +61,9 @@ import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ansiText
 
 private val consoleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+
+// The profile the self-test's Connect saves and opens
+private const val PROFILE = "Self-test"
 
 /**
  * The developers' screen, in debug builds only: connect to a game, see its coloured output, send commands and Lua,
@@ -75,6 +79,7 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
     var tls by rememberSaveable { mutableStateOf(false) }
     var command by rememberSaveable { mutableStateOf("") }
     var showDebug by rememberSaveable { mutableStateOf(false) }
+    var connectError by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -212,13 +217,21 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
                 }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button({ c.connect(host.trim(), port.toIntOrNull() ?: 23, tls) }) {
+                Button({
+                    connectError = ""
+                    c.saveAndOpenProfile(Profile(PROFILE, host.trim(), port.toIntOrNull() ?: 23, tls, "", false), null) {
+                        connectError = it ?: ""
+                    }
+                }) {
                     Text(stringResource(R.string.selftest_connect))
                 }
                 Button({ c.disconnect() }) { Text(stringResource(R.string.selftest_disconnect)) }
                 OutlinedButton({ showDebug = !showDebug }) {
                     Text(stringResource(if (showDebug) R.string.selftest_hide_debug else R.string.selftest_show_debug))
                 }
+            }
+            if (connectError.isNotEmpty()) {
+                Text(connectError, style = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.error))
             }
             if (showDebug) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

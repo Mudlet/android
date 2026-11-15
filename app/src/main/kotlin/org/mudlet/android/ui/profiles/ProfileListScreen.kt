@@ -2,9 +2,16 @@ package org.mudlet.android.ui.profiles
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -12,28 +19,85 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
+import org.mudlet.android.data.PasswordStore
+import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 
 /**
- * The start screen. A placeholder until the profiles come (docs/roadmap.md, "Features" item 1): for now it opens the
- * game screen, and, in debug builds, the self-test. Its top bar opens the About screen.
+ * The start screen: the engine's profiles, the last used first, each with Connect and Edit, and Add. Connect opens the
+ * profile with its stored password and goes to the game screen once the engine has begun to open it. Its top bar opens
+ * the About screen.
  */
 @Composable
-fun ProfileListScreen(onOpenGame: () -> Unit, onOpenSelfTest: (() -> Unit)?, onOpenAbout: () -> Unit) {
-    Scaffold(topBar = { MudletTopBar(stringResource(R.string.profiles_title), actions = { AboutButton(onOpenAbout) }) }) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+fun ProfileListScreen(onOpenGame: () -> Unit, onEditProfile: (name: String?) -> Unit, onOpenSelfTest: (() -> Unit)?, onOpenAbout: () -> Unit) {
+    val context = LocalContext.current
+    val passwords = remember { PasswordStore(context) }
+    val profiles = EngineClient.profiles
+    var error by remember { mutableStateOf<String?>(null) }
+    Scaffold(
+        topBar = { MudletTopBar(stringResource(R.string.profiles_title), actions = { AboutButton(onOpenAbout) }) },
+        floatingActionButton = {
+            val add = stringResource(R.string.profiles_add)
+            ExtendedFloatingActionButton(
+                onClick = { onEditProfile(null) },
+                // Material clears the text's semantics, so the icon names the button for TalkBack
+                icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = add) },
+                text = { Text(add) },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            // Room below the last item for the Add button, which floats over the list
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(stringResource(R.string.profiles_empty), style = MaterialTheme.typography.bodyLarge)
-            Button(onOpenGame) { Text(stringResource(R.string.profiles_open_game)) }
+            error?.let {
+                item {
+                    Text(
+                        it,
+                        Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            when {
+                profiles == null -> item { Text(stringResource(R.string.profiles_waiting), style = MaterialTheme.typography.bodyLarge) }
+
+                profiles.isEmpty() -> item { Text(stringResource(R.string.profiles_empty), style = MaterialTheme.typography.bodyLarge) }
+
+                else -> items(profiles, key = { it.name }) { profile ->
+                    ProfileItem(
+                        profile,
+                        onConnect = {
+                            error = null
+                            EngineClient.openProfile(profile.name, passwords.get(profile.name)) { refused ->
+                                if (refused == null) onOpenGame() else error = refused
+                            }
+                        },
+                        onEdit = { onEditProfile(profile.name) },
+                    )
+                }
+            }
             if (onOpenSelfTest != null) {
-                OutlinedButton(onOpenSelfTest) { Text(stringResource(R.string.selftest_title)) }
+                item { OutlinedButton(onOpenSelfTest) { Text(stringResource(R.string.selftest_title)) } }
             }
         }
     }
@@ -42,4 +106,22 @@ fun ProfileListScreen(onOpenGame: () -> Unit, onOpenSelfTest: (() -> Unit)?, onO
 @Composable
 private fun AboutButton(onOpenAbout: () -> Unit) {
     IconButton(onOpenAbout) { Icon(painterResource(R.drawable.ic_info), contentDescription = stringResource(R.string.about_title)) }
+}
+
+@Composable
+private fun ProfileItem(profile: Profile, onConnect: () -> Unit, onEdit: () -> Unit) {
+    val description = stringResource(R.string.profile_description, profile.name, profile.host, profile.port)
+    val connectLabel = stringResource(R.string.profile_connect_to, profile.name)
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = description }) {
+                Text(profile.name, style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.profile_address, profile.host, profile.port), style = MaterialTheme.typography.bodyMedium)
+            }
+            IconButton(onEdit) {
+                Icon(painterResource(R.drawable.ic_edit), contentDescription = stringResource(R.string.profile_edit, profile.name))
+            }
+            Button(onConnect, Modifier.semantics { contentDescription = connectLabel }) { Text(stringResource(R.string.profile_connect)) }
+        }
+    }
 }

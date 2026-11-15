@@ -42,6 +42,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.theme.MudletTheme
 
 /**
@@ -138,7 +139,11 @@ class TextSizeTest {
     }
 
     private fun openTheGameScreen() {
-        activate(hasText(string(R.string.profiles_open_game)))
+        session.profiles(listOf(GAME), session.receive("listProfiles"))
+        compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
+        activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
+        session.profiles(listOf(GAME), session.receive("openProfile"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
         // A line to measure the console's text by
         line("size")
@@ -162,6 +167,9 @@ class TextSizeTest {
             now != null && SystemClock.elapsedRealtime() - since >= SETTLE_MS
         }
         val size = last!!
+        // Connecting reads past what the UI sent before openProfile, which can be the size it resends on attaching
+        val earlier = session.received.lastOrNull { it.optString("t") == "setScreenSize" }
+        if (earlier != null && earlier.getInt("columns") to earlier.getInt("rows") == size) return size
         while (true) {
             val sent = session.receive("setScreenSize")
             if (sent.getInt("columns") to sent.getInt("rows") == size) return size
@@ -223,6 +231,8 @@ class TextSizeTest {
     }
 
     private companion object {
+        val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+
         const val DEFAULT_SIZE = 14
         const val WAIT_MS = 10_000L
 

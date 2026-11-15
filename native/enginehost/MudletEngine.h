@@ -38,8 +38,8 @@ public:
     void disconnectFromGame() override;
     void runLua(const QString& code) override;
     void setScreenSize(int columns, int rows) override;
-    QString link(int id, Link& link) const override;
-    QString followLink(int id, std::optional<int> item) override;
+    QString link(const QString& window, int id, Link& link) const override;
+    QString followLink(const QString& window, int id, std::optional<int> item) override;
     void setAppState(bool active, bool minimized) override;
     void save() override;
     QList<Profile> profiles() const override { return mProfiles.profiles(); }

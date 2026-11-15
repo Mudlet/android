@@ -26,7 +26,7 @@ repository uses. What Phase E needs, and where it stands:
 | Switch profile | One profile pool per process: `shutdownAsync()`, then `startAsync()` | `openProfile` closes the running one |
 | Lines with colours and styles | `lineShown`, `localTextStyled`, `mainConsoleCleared` | `line`, `tail`, `clear` |
 | A line changed after it was shown | None: `lineShown` sends each line once | No |
-| Links (MXP, OSC 8, `echoLink()`) | Ids in runs; `link()`, `followLink()`, `linksChanged` | `getLink`, `followLink`, `linksChanged` (version 5) |
+| Links (MXP, OSC 8, `echoLink()`) | Ids in runs; `link()`, `followLink()`, `linksChanged` | `getLink`, `followLink`, `linksChanged` (version 5); a script window's, with `window` (version 12) |
 | Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | `setScreenSize` (version 4), the console's columns and rows the game is told; `setMainWindowSize` (version 7), the main window's size in pixels that scripts see: the game screen sends the size that gives Mudlet's grid the console's, once the engine's `mainArea` has told it Mudlet's font |
 | Default colours, font, wrap | `consoleColors*`, `consoleFont()`, `consoleWrap()` and their signals | Colours only: status `consoleColors` |
 | Command history, completion | `commandHistory()`, `completeCommandLine()`, `completeCommandLineFromHistory()` | `history`, `complete` (version 3) |

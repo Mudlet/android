@@ -35,6 +35,21 @@ std::optional<int> wholeNumber(const QJsonValue& value, int least = -std::numeri
     return int(number);
 }
 
+// The console a link request names: empty for the main console, which an absent window, or main as in Mudlet, names;
+// nullopt for a window that is not a string
+std::optional<QString> linkWindow(const QJsonObject& message)
+{
+    const QJsonValue value = message.value(QLatin1String("window"));
+    if (value.isUndefined()) {
+        return QString();
+    }
+    if (!value.isString()) {
+        return std::nullopt;
+    }
+    const QString window = value.toString();
+    return window == QLatin1String("main") ? QString() : window;
+}
+
 // The fields of a pointer request, or with map of a mapPointer one; else why they are wrong
 std::variant<PointerEvent, QString> pointerEvent(const QJsonObject& message, bool map)
 {
@@ -461,12 +476,17 @@ void SocketBridge::setScreenSize(const QJsonObject& message)
 void SocketBridge::getLink(const QJsonObject& message)
 {
     const std::optional<int> id = wholeNumber(message.value(QLatin1String("link")), 1);
+    const std::optional<QString> window = linkWindow(message);
     if (!id) {
         sendError(QStringLiteral("getLink: link must be a whole number from 1"));
         return;
     }
+    if (!window) {
+        sendError(QStringLiteral("getLink: window must be a console's name"));
+        return;
+    }
     Link link;
-    if (const QString problem = mEngine->link(*id, link); !problem.isEmpty()) {
+    if (const QString problem = mEngine->link(*window, *id, link); !problem.isEmpty()) {
         sendError(QStringLiteral("getLink: %1").arg(problem));
         return;
     }
@@ -495,6 +515,9 @@ void SocketBridge::getLink(const QJsonObject& message)
     if (link.styles) {
         reply.insert(QStringLiteral("styles"), *link.styles);
     }
+    if (!window->isEmpty()) {
+        reply.insert(QStringLiteral("window"), *window);
+    }
     sendReply(reply);
 }
 
@@ -503,6 +526,7 @@ void SocketBridge::followLink(const QJsonObject& message)
     const std::optional<int> id = wholeNumber(message.value(QLatin1String("link")), 1);
     const QJsonValue itemValue = message.value(QLatin1String("item"));
     const std::optional<int> item = wholeNumber(itemValue, 0);
+    const std::optional<QString> window = linkWindow(message);
     if (!id) {
         sendError(QStringLiteral("followLink: link must be a whole number from 1"));
         return;
@@ -511,7 +535,11 @@ void SocketBridge::followLink(const QJsonObject& message)
         sendError(QStringLiteral("followLink: item must be a whole number from 0"));
         return;
     }
-    if (const QString problem = mEngine->followLink(*id, item); !problem.isEmpty()) {
+    if (!window) {
+        sendError(QStringLiteral("followLink: window must be a console's name"));
+        return;
+    }
+    if (const QString problem = mEngine->followLink(*window, *id, item); !problem.isEmpty()) {
         sendError(QStringLiteral("followLink: %1").arg(problem));
     }
 }

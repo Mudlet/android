@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **11**.
+The current version is **12**.
 
 ## Transport
 
@@ -61,8 +61,8 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `disconnect` | | Closes the game connection. |
 | `runLua` | `code`, `id` | Runs Lua in the engine. The result comes back as status `luaResult` with `re` set to `id`. |
 | `setScreenSize` | `columns`, `rows` | The UI's console in characters of the font it draws in, each a whole number from 1 to 65535 (else `error`): the UI does the measuring. A game that asks (telnet NAWS) is told it. libmudlet gives it to `setScreenSize()` now and to each profile as it loads, so the profile's scripts read it as the main window's size; as in Mudlet, a width below 40 counts as 40, the game is told no more than the profile's wrap width, and of a change once the size has held for 0.3 s. Until the UI sends one, a game is told 90 by 25. The stand-in tells the game at once, as it was given. |
-| `getLink` | `link`, `id`? | Asks what the main console's link with that id offers now, answered by `link`, or by `error` `getLink: unknown` for an id the console no longer holds, one from a line of a profile opened before the one running, or with no profile open. `link` is the id a run carries, a whole number from 1 (else `error`). The stand-in has no links, and answers `error` `getLink: not supported`. |
-| `followLink` | `link`, `item`?, `id`? | Follows the link as a tap does, or picks `item`, counted from 0, from `link`'s `items`, as its menu does (`followLink()`): a spoiler not yet revealed is only revealed, else its command or function runs. Nothing answers a link that ran or was revealed; `linksChanged` follows what that changed of it. Otherwise `error` answers with `followLink:` and the name of the `LinkResult`: `disabled` (a disabled link, or a menu's greyed-out item), `concealed`, `noSuchItem`, `unknown` (as for `getLink`), or `failed` or `refused` followed by a colon and why. A `link` that is not a whole number from 1, or an `item` that is not one from 0, gets `error`. The stand-in answers `error` `followLink: not supported`. |
+| `getLink` | `link`, `window`?, `id`? | Asks what the link with that id of the console `window` offers now, answered by `link`, or by `error` `getLink: unknown` for an id the console no longer holds, one from a main console line of a profile opened before the one running, a `window` that is no console's, or with no profile open. `window` is a mini console, user window or MXP frame as `windowText` names it, and the main console when absent, empty or `main`; one that is not a string gets `error`. `link` is the id a run carries, a whole number from 1 (else `error`). The stand-in has no links, and answers `error` `getLink: not supported`. |
+| `followLink` | `link`, `item`?, `window`?, `id`? | Follows the link of `window`, as for `getLink`, as a tap does, or picks `item`, counted from 0, from `link`'s `items`, as its menu does (`followLink()`): a spoiler not yet revealed is only revealed, else its command or function runs. Nothing answers a link that ran or was revealed; `linksChanged` follows what that changed of it, or for a script window's link that window's next `windowText`. Otherwise `error` answers with `followLink:` and the name of the `LinkResult`: `disabled` (a disabled link, or a menu's greyed-out item), `concealed`, `noSuchItem`, `unknown` (as for `getLink`), or `failed` or `refused` followed by a colon and why. A `link` that is not a whole number from 1, an `item` that is not one from 0, or a `window` that is not a string, gets `error`. The stand-in answers `error` `followLink: not supported`. |
 | `setAppState` | `active`, `minimized` | The app is in front (`active`) or not, and its window is minimized or sent to the background (`minimized`), each a boolean (else `error`). libmudlet gives `active` to `setApplicationActive()`, so a change raises `sysApplicationFocusChangeEvent` in the profile, as the GUI's window gaining or losing focus does, and `minimized` to `setWindowMinimized()`, so that, with the profile's "notify on new data while minimized" on, game text then asks for `attention`. When `active` turns false, the running profile is saved as Mudlet saves it at a close, but with no `sysExitEvent`, as the system may stop the engine without warning once the app has left the front: status `save` tells how that went. Until the first, `active` is true and `minimized` false; each holds for the profiles opened later. The stand-in takes it and does nothing. |
 | `listProfiles` | `id`? | Asks for `profiles`. |
 | `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile read its details when it started, so a change takes effect at its next start. |
@@ -136,8 +136,8 @@ it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`
 | `hiddenInput` | `wanted` | The game hides what the player types, as for a password (`wanted` true), or has stopped: the UI masks its input line and sends what is typed there with `sendHidden`. libmudlet sends it from `hiddenInputWanted`, which a disconnect or the profile closing also ends, and never while the profile shows passwords as they are typed; the stand-in from the game's telnet `WILL ECHO` and `WONT ECHO`. Sent on each change, and to each UI that attaches. |
 | `history` | `lines` | The input line's history, newest first, each line once, as Mudlet's up arrow walks it (`commandHistory()`): the lines `send` sent, as their aliases left them, and those the profile's earlier sessions kept, but nothing sent while input was hidden. Sent to each UI that attaches, and by libmudlet when a profile has loaded. In between, the UI adds the lines it sends itself; the next attach corrects what it guessed. The stand-in's is the lines `send` sent since it started. |
 | `announce` | `text`, `assertive` | What a script's `announce()` asks screen readers to say, as plain text (libmudlet's `announcementRequested`, which also carries Mudlet's own, as when a game's link is hidden or revealed). `assertive` is true for the `importantall` and `importantmostrecent` styles, which interrupt what is being said; otherwise it waits its turn. Not kept for a UI that attaches later. The stand-in's Lua has `announce()` too. |
-| `link` | `link`, `tooltip`, `menu`, `menuTitle`, `spoiler`, `revealed`, `disabled`, `concealed`, `visited`, `selected`, `fg`?, `bg`?, `styles`?, `items`: `label`, `enabled`, `separator`; `re`? | The answer to `getLink`, from `THeadlessSession::link()`. `tooltip` is plain text, empty for none. A tap follows the first of `items`; where `menu` is true, a long press lists them all, under `menuTitle` if it is not empty. An item has a `label`, is greyed out where `enabled` is false, and is a line between items, with no label, where `separator` is true. `spoiler` is a link a tap first reveals, `revealed` once it has been. A `disabled` link runs nothing; a `concealed` one the game's visibility settings hide, which the UI shows as blanks no tap reaches. `visited` it has been followed; `selected` it is the one chosen in its selection group. `fg`, `bg` (colours as in runs) and `styles` (attribute bits) are how it is painted now, absent where the run's own apply; `styles` replaces only the run's bold, italic, underline, overline and strike-out. |
-| `linksChanged` | `ids` | What `link` says of these links of the main console may have changed (libmudlet's `linksChanged`): one was followed, revealed, chosen or deselected in its group, concealed or revealed by the game, expired, or let go of with the lines holding it, after which `getLink` answers `unknown`. Empty `ids` means any link may have changed: the engine sends that to a UI that attaches, or catches up after lagging, when it missed a change. Only libmudlet sends it. |
+| `link` | `link`, `window`?, `tooltip`, `menu`, `menuTitle`, `spoiler`, `revealed`, `disabled`, `concealed`, `visited`, `selected`, `fg`?, `bg`?, `styles`?, `items`: `label`, `enabled`, `separator`; `re`? | The answer to `getLink`, from `THeadlessSession::link()`, or `windowLink()` for a script window's link: `window` is the console `getLink` named, absent for the main console. `tooltip` is plain text, empty for none. A tap follows the first of `items`; where `menu` is true, a long press lists them all, under `menuTitle` if it is not empty. An item has a `label`, is greyed out where `enabled` is false, and is a line between items, with no label, where `separator` is true. `spoiler` is a link a tap first reveals, `revealed` once it has been. A `disabled` link runs nothing; a `concealed` one the game's visibility settings hide, which the UI shows as blanks no tap reaches. `visited` it has been followed; `selected` it is the one chosen in its selection group. `fg`, `bg` (colours as in runs) and `styles` (attribute bits) are how it is painted now, absent where the run's own apply; `styles` replaces only the run's bold, italic, underline, overline and strike-out. |
+| `linksChanged` | `ids` | What `link` says of these links of the main console may have changed (libmudlet's `linksChanged`): one was followed, revealed, chosen or deselected in its group, concealed or revealed by the game, expired, or let go of with the lines holding it, after which `getLink` answers `unknown`. A script window's links are not in it: a change to one of them comes as that window's next `windowText`. Empty `ids` means any link may have changed: the engine sends that to a UI that attaches, or catches up after lagging, when it missed a change. Only libmudlet sends it. |
 | `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
@@ -178,7 +178,9 @@ What `windows` and `windowText` carry, from libmudlet's `THeadlessSession::scrip
   `scrollBar` and `timeStamps`, and `scrolledBackTo`, the row it is scrolled back to, while it does not follow new
   lines.
 - The runs of a console's rows are a `line`'s, with two differences: `fg` is always a colour, never -1, as the UI is
-  not told a console's own; a `bg` of -1 is the window's `bg`. Their `link` ids are the window's own.
+  not told a console's own; a `bg` of -1 is the window's `bg`. Their `link` ids are the window's own, which `getLink`
+  and `followLink` take with the window's name, and a change to one of those links sends the window's `windowText`
+  again.
 
 The engine keeps the list. Between attaches it sends one `windows` for each turn of its event loop that changed
 some, with only what changed. libmudlet sends every window of a profile as it loads, and `removed` for all of them
@@ -370,7 +372,10 @@ A colour (`fg`, `bg`) is one of:
 `link` is libmudlet's id of the link the run is part of, 0 for none, which `getLink` and `followLink` take. Each id
 names one link for the life of the engine instance, as libmudlet's ids, which each profile counts from 1, are offset by
 those of the profiles before it; a UI drops the links of lines from an earlier instance, as it does their statuses. In
-a script window's rows, `link` is among that window's links, which nothing can follow over the protocol yet.
+a script window's rows, `link` is among that window's links, counted on their own and not offset: `getLink` and
+`followLink` take it with the window's name. So an id from an earlier profile's window may name a link of the running
+profile's window of the same name: a UI drops a window's links with its text, when `windows` removes the window, as
+libmudlet does for each window of a profile that closes, and when the window's next `windowText` no longer has them.
 
 ## Attaching: hello, instance and lastSeq
 
@@ -419,11 +424,12 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 11, which added the app's map (`setAppMapSize`, `appMapPointer`, `showRoom`, `appMap`) and
-the room search (`findRooms`, `rooms`); version 10 added the map (`map`, `mapPointer`, `setMapViewOnly`); version 9
-added the button bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`); version 8 added the
-labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and requests (`pointer`, `getImage`); version 7 added
-the script windows' requests (`setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`,
+As implemented in version 12, which added `window` to `getLink`, `followLink` and `link`, so that a script window's
+links can be asked about and followed; version 11 added the app's map (`setAppMapSize`, `appMapPointer`, `showRoom`,
+`appMap`) and the room search (`findRooms`, `rooms`); version 10 added the map (`map`, `mapPointer`, `setMapViewOnly`);
+version 9 added the button bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`); version 8
+added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and requests (`pointer`, `getImage`); version
+7 added the script windows' requests (`setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`,
 `sendWindowCommandLine`) and messages (`windows`, `windowText`, `mainArea`, `windowCommandLine`); version 6 added
 `setAppState` and the messages `attention` and `moveTypedLine`; version 5 added the link requests (`getLink`,
 `followLink`) and messages (`link`, `linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns`
@@ -433,7 +439,7 @@ the profile requests and `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=11`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=12`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

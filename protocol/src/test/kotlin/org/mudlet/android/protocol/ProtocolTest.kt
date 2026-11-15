@@ -110,7 +110,7 @@ class ProtocolTest {
         )
         assertEquals(
             EngineMessage.Link(
-                3, "the stew", true, "Stew", listOf(LinkItem("Look", true, false), LinkItem("", false, true)),
+                3, null, "the stew", true, "Stew", listOf(LinkItem("Look", true, false), LinkItem("", false, true)),
                 spoiler = false, revealed = false, disabled = false, concealed = false, visited = true, selected = false,
                 fg = RUN_RGB or 0x00ffff, bg = null, styles = RUN_BOLD, replyTo = 7,
             ),
@@ -121,9 +121,26 @@ class ProtocolTest {
 
     @Test
     fun followLinkSendsAnItemOnlyWhenGiven() {
-        assertEquals(mapOf("t" to "followLink", "link" to 3, "id" to 1L), Requests.followLink(3, null, 1).toMap())
-        assertEquals(mapOf("t" to "followLink", "link" to 3, "item" to 0, "id" to 1L), Requests.followLink(3, 0, 1).toMap())
-        assertEquals(mapOf("t" to "getLink", "link" to 3, "id" to 1L), Requests.getLink(3, 1).toMap())
+        assertEquals(mapOf("t" to "followLink", "link" to 3, "id" to 1L), Requests.followLink(3, null, null, 1).toMap())
+        assertEquals(mapOf("t" to "followLink", "link" to 3, "item" to 0, "id" to 1L), Requests.followLink(3, 0, null, 1).toMap())
+        assertEquals(mapOf("t" to "getLink", "link" to 3, "id" to 1L), Requests.getLink(3, null, 1).toMap())
+    }
+
+    @Test
+    fun aScriptWindowsLinkIsAskedForAndFollowedByTheWindowsName() {
+        assertEquals(mapOf("t" to "getLink", "link" to 2, "window" to "chat", "id" to 4L), Requests.getLink(2, "chat", 4).toMap())
+        assertEquals(
+            mapOf("t" to "followLink", "link" to 2, "item" to 1, "window" to "chat", "id" to 4L),
+            Requests.followLink(2, 1, "chat", 4).toMap(),
+        )
+        val link = FrameReader.parse(
+            JSONObject(
+                """{"t":"link","link":2,"window":"chat","tooltip":"","menu":false,"menuTitle":"","spoiler":false,"revealed":false,
+                |"disabled":false,"concealed":false,"visited":false,"selected":false,"items":[]}
+                """.trimMargin(),
+            ),
+        ) as EngineMessage.Link
+        assertEquals("chat", link.window)
     }
 
     @Test

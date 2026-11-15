@@ -15,7 +15,9 @@ It installs and launches the app, then drives the UI through the debug build's S
   5. a Lua trigger fires on a game line, cecho()s on it (a function from Mudlet's Lua files) and its
      showNotification() reaches the UI and is posted as an Android notification;
   6. told that memory is short (am send-trim-memory), the engine saves the profile;
-  7. after the :engine process is killed, the UI starts a new engine and attaches to it.
+  7. a Geyser mini console a script makes reaches the UI, shown, with the line it cecho()s;
+  8. after the :engine process is killed, the UI starts a new engine and attaches to it;
+  9. the profile's password is nowhere in logcat.
 If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
 

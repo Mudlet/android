@@ -957,9 +957,10 @@ Item 13 of the on-device checklist covers this.
       drag. A link in a label's text runs its command.
     - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
       its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
-22. Button bars and commands, with the libmudlet APK and a package that adds a bar with a push-down button and a
-    folder, and commands. `lua tempButtonToolbar("Side", 1, 1) tempButton("Side", "Go", 1)` adds a left bar, and
-    `lua addCommand{name = "Speech", menuPath = "Tools/Voices", surfaces = {"menu"}}` a command.
+22. Button bars and commands, with the libmudlet APK. `lua tempButtonToolbar("Moves", 0, 0) tempButton("Moves",
+    "North", 0)` adds a top bar, `lua tempButtonToolbar("Side", 1, 1) tempButton("Side", "Go", 1)` a left bar, and
+    `lua addCommand{name = "Speech", menuPath = "Tools/Voices", surfaces = {"menu"}}` a command; a push-down button
+    and a folder come with a package whose bar has them, made in the desktop's Buttons editor.
     - At 600 dp and wider a left bar is beside the console and a top bar above it; narrower, both are rows above it.
       A tap on a button does what a click does on the desktop; a push-down button stays down until tapped again; a
       folder's menu runs the entry picked.

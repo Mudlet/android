@@ -104,17 +104,26 @@ fun ScriptButtonBars(modifier: Modifier = Modifier, content: @Composable (Modifi
 @Composable
 private fun BarRow(bars: List<PlacedBar>, maxHeight: Dp) {
     // Each scroll on a node of its own, as a node takes one scroll action
-    Box(Modifier.fillMaxWidth().heightIn(max = maxHeight).background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState())) {
+    Box(Modifier.fillMaxWidth().heightIn(max = maxHeight).background(MaterialTheme.colorScheme.surfaceContainer).barsSemantics().horizontalScroll(rememberScrollState())) {
         Row(Modifier.verticalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (bar in bars) key(bar.bar.id) { BarGrid(bar) }
         }
     }
 }
 
+/**
+ * A row or strip of bars is read after the script windows. The index is on the row or strip, beside the console and
+ * the windows, not on its bars: TalkBack orders by index only within a traversal group, and each scroll is one.
+ */
+private fun Modifier.barsSemantics(): Modifier = semantics {
+    isTraversalGroup = true
+    traversalIndex = BARS_TRAVERSAL_INDEX
+}
+
 /** Bars one above the other in a strip at a side of the game area, which scrolls when they do not fit. */
 @Composable
 private fun BarStrip(bars: List<PlacedBar>) {
-    Box(Modifier.fillMaxHeight().widthIn(max = MAX_STRIP_WIDTH).background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState())) {
+    Box(Modifier.fillMaxHeight().widthIn(max = MAX_STRIP_WIDTH).background(MaterialTheme.colorScheme.surfaceContainer).barsSemantics().horizontalScroll(rememberScrollState())) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (bar in bars) key(bar.bar.id) { BarGrid(bar) }
         }
@@ -123,7 +132,7 @@ private fun BarStrip(bars: List<PlacedBar>) {
 
 /**
  * A bar's buttons in its grid: a horizontal one as columns, each as wide as its widest button, a vertical one as rows
- * of equal places. TalkBack reads it after the script windows, as one group named by the bar.
+ * of equal places. TalkBack reads it as one group named by the bar.
  */
 @Composable
 private fun BarGrid(placed: PlacedBar) {
@@ -132,7 +141,6 @@ private fun BarGrid(placed: PlacedBar) {
     val group = Modifier.semantics {
         contentDescription = description
         isTraversalGroup = true
-        traversalIndex = BARS_TRAVERSAL_INDEX
     }
 
     if (placed.horizontal) {

@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -65,7 +64,7 @@ import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
 internal const val BARS_TRAVERSAL_INDEX = 2f
 
 // A button, and an empty place of a bar's grid, is never smaller than this
-private val MIN_BUTTON_SIZE = 48.dp
+private val MIN_BUTTON_SIZE = 0.dp
 private val ICON_SIZE = 24.dp
 
 // A strip at the side of the game area takes no more of its width than this, and scrolls instead
@@ -104,7 +103,7 @@ fun ScriptButtonBars(modifier: Modifier = Modifier, content: @Composable (Modifi
 @Composable
 private fun BarRow(bars: List<PlacedBar>, maxHeight: Dp) {
     // Each scroll on a node of its own, as a node takes one scroll action
-    Box(Modifier.fillMaxWidth().heightIn(max = maxHeight).background(MaterialTheme.colorScheme.surfaceContainer).barsSemantics().horizontalScroll(rememberScrollState())) {
+    Box(Modifier.fillMaxWidth().heightIn(max = maxHeight).background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState())) {
         Row(Modifier.verticalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (bar in bars) key(bar.bar.id) { BarGrid(bar) }
         }
@@ -123,7 +122,7 @@ private fun Modifier.barsSemantics(): Modifier = semantics {
 /** Bars one above the other in a strip at a side of the game area, which scrolls when they do not fit. */
 @Composable
 private fun BarStrip(bars: List<PlacedBar>) {
-    Box(Modifier.fillMaxHeight().widthIn(max = MAX_STRIP_WIDTH).background(MaterialTheme.colorScheme.surfaceContainer).barsSemantics().horizontalScroll(rememberScrollState())) {
+    Box(Modifier.fillMaxHeight().widthIn(max = MAX_STRIP_WIDTH).background(MaterialTheme.colorScheme.surfaceContainer).horizontalScroll(rememberScrollState())) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (bar in bars) key(bar.bar.id) { BarGrid(bar) }
         }
@@ -141,6 +140,7 @@ private fun BarGrid(placed: PlacedBar) {
     val group = Modifier.semantics {
         contentDescription = description
         isTraversalGroup = true
+        traversalIndex = BARS_TRAVERSAL_INDEX
     }
 
     if (placed.horizontal) {
@@ -187,8 +187,8 @@ private fun BarButtonView(button: BarButton, unnamed: String, modifier: Modifier
     val down = button.pushDown && button.checked
     val action = when {
         button.menu -> Modifier.clickable(enabled = engine, onClickLabel = stringResource(R.string.bar_open_menu), role = Role.Button) { menuOpen = true }
-        button.pushDown -> Modifier.toggleable(value = button.checked, enabled = engine, role = Role.Switch) { ScriptWindowsClient.pressButton(button.id) }
-        else -> Modifier.clickable(enabled = engine, role = Role.Button) { ScriptWindowsClient.pressButton(button.id) }
+        button.pushDown -> Modifier.clickable(enabled = engine, role = Role.Switch) { ScriptWindowsClient.pressButton(button.id) }
+        else -> Modifier.clickable(enabled = engine, role = Role.Button) { }
     }
     val name = if (button.name.isEmpty()) Modifier.semantics { contentDescription = unnamed } else Modifier
     Box(modifier.padding(2.dp)) {

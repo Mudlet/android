@@ -1050,7 +1050,7 @@ Item 13 of the on-device checklist covers this.
     - The title bar's map button brings it to the front: a tap selects, a double tap walks there, a pinch and the zoom
       buttons zoom, and the edit switch edits it. "Find a room" with part of a room's name lists the rooms that match;
       a tap on one centres the map on it. Back and the button again send it back; a predictive back gesture shrinks
-      the map as it goes, and cancelled, leaves it as it was.
+      the map as it goes, and a cancelled one leaves it as it was.
     - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,
       the field, its results and the map read as the mapper window's does, and the console under it is not read.
     - With the system font at its largest, the search field and its results still fit and read whole.

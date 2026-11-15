@@ -27,7 +27,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 9;
+    static constexpr int protocolVersion = 10;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -57,6 +57,7 @@ public:
     void windowCommandLine(const QString& name, const QString& text) override;
     void buttonBars(const QList<ButtonBar>& bars) override;
     void commands(const QList<AddonCommandInfo>& commands) override;
+    void map(const std::optional<MapFrame>& frame) override;
 
 private:
     struct StoredLine
@@ -94,6 +95,7 @@ private:
     void getWindowText(const QJsonObject& message);
     QString placeUserWindow(const QJsonObject& message);
     QString pointer(const QJsonObject& message);
+    QString mapPointer(const QJsonObject& message);
     void getImage(const QJsonObject& message);
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
     void sendIfChanged(QJsonObject& kept, QJsonObject message);
@@ -133,6 +135,8 @@ private:
     // As IFrontend::buttonBars() and commands() last gave them, as sent
     QJsonObject mButtonBars = buttonBarsMessage({});
     QJsonObject mCommands = commandsMessage({});
+    // The map message last sent, empty while no mapper shows
+    QJsonObject mMap;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

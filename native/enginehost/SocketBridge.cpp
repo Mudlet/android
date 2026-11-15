@@ -234,9 +234,7 @@ void SocketBridge::sendState()
     for (const LabelInfo& label : std::as_const(mLabels)) {
         sendFrame(labelMessage(label));
     }
-    if (!mMap.isEmpty()) {
-        sendFrame(mMap);
-    }
+    // BITE: the map is not resent on attach
     sendFrame(mButtonBars);
     sendFrame(mCommands);
     if (!mEngine) {

@@ -354,7 +354,7 @@ object Requests {
     fun mapPointer(type: MapPointerType, x: Double, y: Double, button: Int, modifiers: Int, wheelY: Int): JSONObject = JSONObject()
         .put("t", "mapPointer").put("type", type.wire).put("x", x).put("y", y)
         .apply {
-            if (button != 0) put("button", button)
+            // BITE: the button is not sent
             if (modifiers != 0) put("modifiers", modifiers)
             if (wheelY != 0) put("wheelY", wheelY)
         }
@@ -476,7 +476,8 @@ class FrameReader(input: InputStream) {
 
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
 
-            "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true))
+            // BITE: viewOnly not read
+            "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), true)
 
             else -> EngineMessage.Unknown(t)
         }

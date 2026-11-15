@@ -986,7 +986,8 @@ void MudletEngine::pushWindows(bool withText)
     }
     mFrontend->windows(windows, labels);
     // mapRepaintRequested does not come for a mapper that only changed size, or hid
-    if (const std::optional<QSize> mapperSize = shownMapperSize(sessionWindows); mapperSize != mMapSize) {
+    // BITE: a mapper shown again after Geyser's hide() is not drawn
+    if (const std::optional<QSize> mapperSize = shownMapperSize(sessionWindows); mapperSize != mMapSize && !(mMapSize && mMapSize->isEmpty())) {
         pushMap(mapperSize);
     }
     if (!withText) {
@@ -1216,9 +1217,11 @@ QString MudletEngine::mapPointer(const PointerEvent& event)
         return QStringLiteral("the map takes a press, a double-click or a wheel turn");
     }
     sessionEvent.position = event.position;
-    sessionEvent.button = Qt::MouseButton(event.button);
+    // BITE: a press is always of the right button, so it selects nothing
+    sessionEvent.button = event.type == PointerEvent::Type::press ? Qt::RightButton : Qt::MouseButton(event.button);
     sessionEvent.modifiers = Qt::KeyboardModifiers::fromInt(event.modifiers);
-    sessionEvent.angleDelta = QPoint(0, event.wheelY);
+    // BITE: the wheel turns the other way, so it zooms in
+    sessionEvent.angleDelta = QPoint(0, -event.wheelY);
     return mSession->mapPointer(sessionEvent) ? QString() : mSession->errorString();
 }
 

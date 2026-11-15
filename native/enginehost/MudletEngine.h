@@ -55,6 +55,8 @@ public:
     std::variant<PngImage, QString> image(const QString& path, const QSize& size, std::optional<int> frame) const override;
     QString pressButton(int id) override;
     QString activateCommand(int id) override;
+    QString mapPointer(const PointerEvent& event) override;
+    QString setMapViewOnly(bool viewOnly) override;
 
 private:
     // stopping: the profile closes, for the one in mPendingOpen to start
@@ -121,6 +123,10 @@ private:
     void pushMainArea();
     void pushButtonBars();
     void pushCommands();
+    // The map drawn at the size of the mapper window, which is none while it does not show
+    void pushMap(const std::optional<QSize>& mapperSize);
+    // The map drawn at size, or none where it cannot be, with a warning unless size is empty
+    std::optional<MapFrame> drawMap(const QSize& size);
 
     void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
@@ -147,6 +153,8 @@ private:
     bool mLoaded = false;
     // The main window's size the UI gave, which each profile takes as it loads; empty for none, or once a profile refused it
     QSize mMainWindowSize{0, 0};
+    // The size of the mapper window as pushMap() last had it: none while it did not show
+    std::optional<QSize> mMapSize;
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
     // Lua (connects included) asked for while the profile starts, run once it has

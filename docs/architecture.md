@@ -261,6 +261,7 @@ keeps the profiles' passwords in the KeyStore.
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
+| `renderMap()` at the mapper window's size, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -332,6 +333,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and
   `setCommandChecked()` as `commands`, `activateCommand` raising `sysCommandClicked` and ticking it; a disabled or
   unknown one refused, both lists to a UI that attaches, and `removeCommand()`;
+- the map: a map built with `addRoom()` and `setExit()` in a `Geyser.Mapper`, as `map` at the mapper's size with the
+  rooms drawn where the layout puts them; a `mapPointer` press selecting the room under it and raising
+  `sysMapWindowMousePressEvent`, a double-click walking to a room through `doSpeedWalk()`, a wheel turn zooming and
+  half a notch refused; `setMapViewOnly` raising `mapModeChangeEvent`; `pointer` on the window `mapper`; the map to a
+  UI that attaches, and none while the mapper hides;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

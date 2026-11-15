@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QList>
 #include <QRect>
 #include <QSize>
@@ -190,6 +191,16 @@ struct MainArea
     bool operator==(const MainArea&) const = default;
 };
 
+// The profile's 2D map as its mapper window shows it, drawn at that window's size in pixels, so that a point of it is a
+// point of the window
+struct MapFrame
+{
+    QByteArray png;
+    QSize size;
+    // Whether the map is only viewed, not edited
+    bool viewOnly = true;
+};
+
 // Everything the engine tells its host. Every method must be implementable
 // over a byte stream, so arguments are plain values only.
 class IFrontend
@@ -231,4 +242,6 @@ public:
     // The commands the profile's packages added, in the order they were added: whole each time, empty with no profile
     // open
     virtual void commands(const QList<AddonCommandInfo>& commands) = 0;
+    // The map drawn again while the mapper window shows; none once it hides or goes, or the map could not be drawn
+    virtual void map(const std::optional<MapFrame>& frame) = 0;
 };

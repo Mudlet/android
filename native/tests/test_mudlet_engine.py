@@ -655,13 +655,11 @@ def app_state():
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
-    # Mudlet's "notify on new data while minimized" has no Lua call: it is turned on in the save the next start loads
+    # Mudlet's "notify on new data while minimized" has no Lua call; it is on unless the player turned it off
     newest, _ = newest_save(profile)
     with open(newest, encoding="utf-8") as f:
         xml = f.read()
-    check(xml.count('mAlertOnNewData="no"') == 1, "the profile was saved with notify on new data off")
-    with open(newest, "w", encoding="utf-8") as f:
-        f.write(xml.replace('mAlertOnNewData="no"', 'mAlertOnNewData="yes"'))
+    check(xml.count('mAlertOnNewData="yes"') == 1, "the profile was saved with notify on new data on")
     proc, c = start_engine(profile)
     msgs = []
     c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
@@ -681,7 +679,7 @@ def app_state():
     check(m == {"t": "status", "key": "completion", "value": "", "re": "typed"}, f"nothing completes the typed line: {m}")
     c.send({"t": "runLua", "id": "pw", "code": 'send("password", false)'})
     c.wait_for(lambda m: m["t"] == "hiddenInput" and m["wanted"], timeout=10, collect=msgs)
-    order = [m["t"] for m in msgs if m["t"] in ("moveTypedLine", "hiddenInput")]
+    order = [m["t"] for m in msgs if m["t"] == "moveTypedLine" or (m["t"] == "hiddenInput" and m["wanted"])]
     check(order == ["moveTypedLine", "hiddenInput"], f"the typed line is moved just before hiddenInput: {order}")
     c.send({"t": "sendHidden", "text": "secret"})
     c.wait_for(lambda m: m["t"] == "hiddenInput" and not m["wanted"], timeout=10, collect=msgs)

@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **6**.
+The current version is **7**.
 
 ## Transport
 
@@ -68,6 +68,11 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile read its details when it started, so a change takes effect at its next start. |
 | `deleteProfile` | `name`, `id`? | Deletes the profile, with everything Mudlet keeps for it. Refused while it is running, being opened or closed, or waited for by a restore. |
 | `openProfile` | `name`, `password`?, `connect`?, `id`? | Starts the profile `name`. One already running is first closed and saved, as Mudlet closes a profile. `password` is for this run only: Mudlet's auto-login sends the profile's `login` and then this password once it connects, and nothing stores it. `connect`, true if absent, connects the profile to its own address. Opening the profile that is running leaves it running, with the password it was started with, and connects it if `connect` and it is not connected. While a profile is being opened, `connect`, `disconnect` and `runLua` are for it. |
+| `setMainWindowSize` | `w`, `h` | The main window's size in Mudlet's pixels, whole numbers above 0. The borders scripts set take their room from it, and the main console's font decides the grid in what is left (`mainArea`). libmudlet gives it to the running profile at once (`THeadlessSession::setMainWindowSize()`, which raises `sysWindowResizeEvent`) and keeps it for each profile that loads later, which may still refuse it: `mainArea` then gives 0 for it. |
+| `getWindowText` | `window`, `first`, `count`, `id`? | Up to `count` rows, at most 1000, of the console `window` (a mini console, user window or MXP frame; `main` is the main console, as in Mudlet) from row `first`, counted from 0. A negative `first` counts back from the end, so `-count` is the last `count` rows. Answered by `windowText`, or `error` for a name that is no console's. |
+| `placeUserWindow` | `name`, `x`, `y`, `w`, `h`, `floating` | Where the UI put the user window `name`, in the main window's pixels, docked or `floating` (`setUserWindowGeometry()`). A new size raises `sysUserWindowResizeEvent`. `w` and `h` above 0. |
+| `closeUserWindow` | `name` | The dock's close button: hides the user window, as `hideWindow()` does. |
+| `sendWindowCommandLine` | `name`, `text` | Enter on the command line `name`, a console's own from `enableCommandLine()` or one from `createCommandLine()`, holding `text` (`submitWindowCommandLine()`): the line's action, or else the aliases, take each line of it. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
 handling that request, of the `profiles` or `error` that answers it, and into `pong`. Statuses that come later, such
@@ -80,6 +85,10 @@ before any `openProfile` starts the profile `MUDLET_PROFILE` names (`Android` in
 exist, as in version 1; after one, it connects the profile opened. The stand-in keeps its profiles in
 `profiles.json` beside its socket, has no login, so a password goes nowhere, and connects a `connect` to the address
 it names whatever profile is open.
+
+The script windows' requests are answered only when refused, with `error` whose `message` is the request's name, a
+colon and why; `getWindowText` is always answered. libmudlet refuses all but `setMainWindowSize` while no profile is
+open. The stand-in has no script windows and refuses all five.
 
 ### Engine to UI
 
@@ -104,6 +113,41 @@ it names whatever profile is open.
 | `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
+| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
+| `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
+| `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
+| `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
+
+### Script windows
+
+What `windows` and `windowText` carry, from libmudlet's `THeadlessSession::scriptWindows()` and `windowLines()`:
+
+- A window is known by its `name` and `kind`, as a console's own command line has its console's name. `kind` is
+  upstream's: `miniConsole`, `userWindow`, `label`, `commandLine`, `textBox`, `scrollBox`, `mapper` or `mxpFrame`.
+  The app leaves out a kind it does not know.
+- They come parents first, each parent's windows from the lowest up, those of the main window's area before the
+  docks. `stack` counts from 0 among a parent's windows; a higher one is drawn over a lower one.
+- `parent` is the user window or scroll box a window is in, the console whose command line it is, or the MXP frame it
+  was opened in, with its kind in `parentKind`. It is empty, with no `parentKind`, for the main window's area, a dock
+  and an external MXP frame.
+- `x`, `y`, `w` and `h` are in the parent's pixels, a dock's in the main window's. They are all 0 for a console's own
+  command line, which goes along the console's bottom.
+- `visible` is the window's own flag, as `hideWindow()` and `showWindow()` set it; `shown` is whether it and every
+  window it is in are visible.
+- `bg` is a console's background colour, or a label's, as a run's colour. `fontFamily` and `fontSize`, in points, are
+  what a console, label or text box draws its text in.
+- `inDock` is true for a dock beside the main window's area rather than a window in it. A user window has `autoDock`
+  (whether the player may dock it, or only float it), `dockArea` (`left`, `right`, `top` or `bottom`),
+  `dockFloating` and `dockTitle`.
+- A console (a mini console, user window or MXP frame) has `columns` and `rows`, the grid of text it has room for,
+  `scrollBar` and `timeStamps`, and `scrolledBackTo`, the row it is scrolled back to, while it does not follow new
+  lines.
+- The runs of a console's rows are a `line`'s, with two differences: `fg` is always a colour, never -1, as the UI is
+  not told a console's own; a `bg` of -1 is the window's `bg`. Their `link` ids are the window's own.
+
+The engine keeps the list. Between attaches it sends one `windows` for each turn of its event loop that changed
+some, with only what changed. libmudlet sends every window of a profile as it loads, and `removed` for all of them
+as it closes. `windowText` is not kept: each console's last 300 rows come again on attach.
 
 ### Status keys
 
@@ -182,7 +226,8 @@ A colour (`fg`, `bg`) is one of:
 
 `link` is libmudlet's id of the link the run is part of, 0 for none, which `getLink` and `followLink` take. Each id
 names one link for the life of the engine instance, as libmudlet's ids, which each profile counts from 1, are offset by
-those of the profiles before it; a UI drops the links of lines from an earlier instance, as it does their statuses.
+those of the profiles before it; a UI drops the links of lines from an earlier instance, as it does their statuses. In
+a script window's rows, `link` is among that window's links, which nothing can follow over the protocol yet.
 
 ## Attaching: hello, instance and lastSeq
 
@@ -191,7 +236,8 @@ a UI says `hello`, the engine sends, in this order:
 
 1. its own `hello`;
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
-   `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach;
+   `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
+   engine has sent one, `windows` with `full` true, and a `windowText` of each console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -217,18 +263,21 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 - When more than 4 MiB is queued unsent, the UI is lagging. The engine stops writing lines, tails, clears, notifies
   and statuses to it, but keeps them in the ring and its status table.
 - Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput` and `history` again (and
-  `linksChanged`, as on attach), then the lines the UI has not had
+  `linksChanged`, as on attach), and the script windows' state, as on attach, then the lines the UI has not had
   (with `clear` and `gap` as on attach, but without `replay`), then the tail.
-- Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, and a `status` that carries `re`.
+- Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
+  `getWindowText`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
-nor is a `commandLine`, an `announce`, an `attention` or a `moveTypedLine`.
+nor is a `commandLine`, a `windowCommandLine`, an `announce`, an `attention` or a `moveTypedLine`.
 `synced.seq` is the newest line when greeting even if lag cut the replay short; the rest follows once the UI drains,
 and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 6, which added `setAppState` and the messages `attention` and `moveTypedLine`; version 5
+As implemented in version 7, which added the script windows' requests (`setMainWindowSize`, `getWindowText`,
+`placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and messages (`windows`, `windowText`, `mainArea`,
+`windowCommandLine`); version 6 added `setAppState` and the messages `attention` and `moveTypedLine`; version 5
 added the link requests (`getLink`, `followLink`) and messages (`link`, `linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with
 `setScreenSize` and added `announce`; version 3 added the input line's requests (`sendHidden`, `dismissHidden`,
 `complete`) and messages (`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and
@@ -236,7 +285,7 @@ added the link requests (`getLink`, `followLink`) and messages (`link`, `linksCh
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=6`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=7`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

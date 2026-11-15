@@ -5,7 +5,7 @@ import socket
 import struct
 import time
 
-PROTOCOL_VERSION = 6
+PROTOCOL_VERSION = 7
 
 
 class Closed(Exception):
@@ -69,12 +69,12 @@ class Client:
             if pred(msg):
                 return msg
 
-    def ask(self, msg, timeout=5.0, collect=None):
-        """Send a request with a fresh id and return the profiles or error frame that answers it."""
+    def ask(self, msg, timeout=5.0, collect=None, answers=("profiles", "error")):
+        """Send a request with a fresh id and return the frame of one of those types that answers it."""
         self.next_id += 1
         request_id = f"ask{self.next_id}"
         self.send(dict(msg, id=request_id))
-        return self.wait_for(lambda m: m["t"] in ("profiles", "error") and m.get("re") == request_id, timeout, collect)
+        return self.wait_for(lambda m: m["t"] in answers and m.get("re") == request_id, timeout, collect)
 
     def close(self):
         self.sock.close()

@@ -116,6 +116,22 @@ class EngineLinkJvmTest {
     private fun percentile(sorted: List<Long>, p: Int) = sorted[(sorted.size * p / 100).coerceAtMost(sorted.size - 1)]
 
     @Test
+    fun theStandInHasNoScriptWindows() {
+        val link = newLink()
+        link.start()
+        next<Attached>()
+        assertEquals(EngineMessage.Windows(true, emptyList(), emptyList()), next<EngineMessage.Windows>())
+        next<EngineMessage.Synced>()
+        link.send(Requests.getWindowText("chat", -300, 300, 5))
+        val refused = next<EngineMessage.Error>()
+        assertEquals("getWindowText: there is no console named \"chat\"", refused.message)
+        assertEquals(5, (refused.replyTo as Number).toInt())
+        link.send(Requests.placeUserWindow("side", 0, 0, 300, 200, false))
+        assertEquals("placeUserWindow: the stand-in engine has no script windows", next<EngineMessage.Error>().message)
+        link.stop()
+    }
+
+    @Test
     fun protocolLatencyThroughputAndEngineDeath() {
         val link = newLink()
         link.start()

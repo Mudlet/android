@@ -145,6 +145,26 @@ def input_line(c):
     return c
 
 
+def script_windows(c):
+    """The stand-in has no script windows: it refuses their requests, once their fields are right."""
+    refusal = "the stand-in engine has no script windows"
+    side = {"name": "side", "x": 0, "y": 0, "w": 300, "h": 200, "floating": False}
+    for request in ({"t": "setMainWindowSize", "w": 800, "h": 600}, dict(side, t="placeUserWindow"),
+                    {"t": "closeUserWindow", "name": "side"}, {"t": "sendWindowCommandLine", "name": "chat", "text": "hi"}):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: {refusal}", f"{request['t']} is refused: {m}")
+    m = c.ask({"t": "getWindowText", "window": "chat", "first": -300, "count": 300}, answers=("error", "windowText"))
+    check(m["t"] == "error" and m["message"] == 'getWindowText: there is no console named "chat"', f"getWindowText answers error: {m}")
+    for request, message in (
+            ({"t": "setMainWindowSize", "w": 0, "h": 600}, "w and h must be whole numbers above 0"),
+            ({"t": "setMainWindowSize", "w": 800.5, "h": 600}, "w and h must be whole numbers above 0"),
+            (dict(side, t="placeUserWindow", x="0"), "x, y, w and h must be whole numbers, w and h above 0"),
+            (dict(side, t="placeUserWindow", floating="no"), "floating must be true or false"),
+            ({"t": "getWindowText", "window": "chat", "first": 0, "count": 0}, "first and count must be whole numbers, count above 0")):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
+
+
 def main():
     faulthandler.register(signal.SIGUSR1)
     port = fake_telnet.start_in_thread()
@@ -162,6 +182,9 @@ def main():
     check(st.get("connection") == "disconnected", "initial connection status replayed")
     check(int(st.get("advanceM", "0")) > 0, f"font check: family={st.get('fontFamily')!r} advanceM={st.get('advanceM')} platform={st.get('platform')}")
     results["font"] = (st.get("fontFamily"), st.get("advanceM"))
+    windows = [m for m in hs if m["t"] == "windows"]
+    check(windows == [{"t": "windows", "full": True, "windows": []}], f"a UI that attaches is told there are no script windows: {windows}")
+    check(not any(m["t"] in ("mainArea", "windowText") for m in hs), "nor a main area or window text")
 
     # Wrong protocol version is refused
     bad = Client(SOCK, version=99)
@@ -292,6 +315,7 @@ def main():
     c.send({"t": "unknownThing", "id": 3})
     m = c.wait_for(lambda m: m["t"] == "error")
     check(m == {"t": "error", "message": "unknown type unknownThing", "re": 3}, f"an error carries the request's id: {m}")
+    script_windows(c)
 
     # Latency
     samples = []

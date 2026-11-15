@@ -21,6 +21,20 @@
 #include "AndroidNotifier.h"
 #endif
 
+namespace {
+
+// A JSON number that is a whole number an int holds, from least
+std::optional<int> wholeNumber(const QJsonValue& value, int least = -std::numeric_limits<int>::max())
+{
+    const double number = value.toDouble();
+    if (!value.isDouble() || number != std::floor(number) || number < least || number > std::numeric_limits<int>::max()) {
+        return std::nullopt;
+    }
+    return int(number);
+}
+
+} // namespace
+
 SocketBridge::SocketBridge(QObject* parent)
 : QObject(parent)
 , mServer(new QLocalServer(this))
@@ -157,6 +171,25 @@ void SocketBridge::sendState()
     if (std::exchange(mLinksMissed, false)) {
         sendFrame(linksChangedMessage({}));
     }
+    if (mMainArea) {
+        sendFrame(mainAreaMessage(*mMainArea));
+    }
+    QJsonArray windows;
+    for (const ScriptWindowInfo& window : std::as_const(mWindows)) {
+        windows.append(windowJson(window));
+    }
+    sendFrame({{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("full"), true}, {QStringLiteral("windows"), windows}});
+    if (!mEngine) {
+        return;
+    }
+    for (const ScriptWindowInfo& window : std::as_const(mWindows)) {
+        if (!window.console) {
+            continue;
+        }
+        if (const std::optional<WindowText> text = mEngine->windowText(window.name, -WindowText::recentRows, WindowText::recentRows)) {
+            sendFrame(windowTextMessage(window.name, *text));
+        }
+    }
 }
 
 void SocketBridge::sendLinesAfter(qint64 seq, bool replay)
@@ -243,6 +276,16 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         answerProfiles(type, mEngine->deleteProfile(message.value(QLatin1String("name")).toString()));
     } else if (type == QLatin1String("openProfile")) {
         answerProfiles(type, openProfile(message));
+    } else if (type == QLatin1String("setMainWindowSize")) {
+        refuse(type, setMainWindowSize(message));
+    } else if (type == QLatin1String("getWindowText")) {
+        getWindowText(message);
+    } else if (type == QLatin1String("placeUserWindow")) {
+        refuse(type, placeUserWindow(message));
+    } else if (type == QLatin1String("closeUserWindow")) {
+        refuse(type, mEngine->closeUserWindow(message.value(QLatin1String("name")).toString()));
+    } else if (type == QLatin1String("sendWindowCommandLine")) {
+        refuse(type, mEngine->sendWindowCommandLine(message.value(QLatin1String("name")).toString(), message.value(QLatin1String("text")).toString()));
     } else {
         sendError(QStringLiteral("unknown type %1").arg(type));
     }
@@ -311,19 +354,6 @@ void SocketBridge::setScreenSize(const QJsonObject& message)
     mEngine->setScreenSize(int(columns), int(rows));
 }
 
-namespace {
-
-std::optional<int> wholeNumber(const QJsonValue& value, int least)
-{
-    const double n = value.toDouble(-1);
-    if (!value.isDouble() || n != std::floor(n) || n < least || n > std::numeric_limits<int>::max()) {
-        return std::nullopt;
-    }
-    return int(n);
-}
-
-} // namespace
-
 void SocketBridge::getLink(const QJsonObject& message)
 {
     const std::optional<int> id = wholeNumber(message.value(QLatin1String("link")), 1);
@@ -391,6 +421,57 @@ void SocketBridge::setAppState(const QJsonObject& message)
         return;
     }
     mEngine->setAppState(active.toBool(), minimized.toBool());
+}
+
+QString SocketBridge::setMainWindowSize(const QJsonObject& message)
+{
+    const std::optional<int> width = wholeNumber(message.value(QLatin1String("w")));
+    const std::optional<int> height = wholeNumber(message.value(QLatin1String("h")));
+    if (!width || !height || *width < 1 || *height < 1) {
+        return QStringLiteral("w and h must be whole numbers above 0");
+    }
+    return mEngine->setMainWindowSize(*width, *height);
+}
+
+void SocketBridge::getWindowText(const QJsonObject& message)
+{
+    const QString window = message.value(QLatin1String("window")).toString();
+    const std::optional<int> first = wholeNumber(message.value(QLatin1String("first")));
+    const std::optional<int> count = wholeNumber(message.value(QLatin1String("count")));
+    if (!first || !count || *count < 1) {
+        sendError(QStringLiteral("getWindowText: first and count must be whole numbers, count above 0"));
+        return;
+    }
+    // An empty name would be the main console's in Mudlet
+    const std::optional<WindowText> text = window.isEmpty() ? std::nullopt : mEngine->windowText(window, *first, std::min(*count, maxWindowTextRows));
+    if (!text) {
+        sendError(QStringLiteral("getWindowText: there is no console named \"%1\"").arg(window));
+        return;
+    }
+    sendReply(windowTextMessage(window, *text));
+}
+
+QString SocketBridge::placeUserWindow(const QJsonObject& message)
+{
+    const std::optional<int> x = wholeNumber(message.value(QLatin1String("x")));
+    const std::optional<int> y = wholeNumber(message.value(QLatin1String("y")));
+    const std::optional<int> width = wholeNumber(message.value(QLatin1String("w")));
+    const std::optional<int> height = wholeNumber(message.value(QLatin1String("h")));
+    const QJsonValue floating = message.value(QLatin1String("floating"));
+    if (!x || !y || !width || !height || *width < 1 || *height < 1) {
+        return QStringLiteral("x, y, w and h must be whole numbers, w and h above 0");
+    }
+    if (!floating.isBool()) {
+        return QStringLiteral("floating must be true or false");
+    }
+    return mEngine->placeUserWindow(message.value(QLatin1String("name")).toString(), QRect(*x, *y, *width, *height), floating.toBool());
+}
+
+void SocketBridge::refuse(const QString& request, const QString& problem)
+{
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("%1: %2").arg(request, problem));
+    }
 }
 
 void SocketBridge::answerProfiles(const QString& request, const QString& problem)
@@ -480,6 +561,75 @@ QJsonObject SocketBridge::linksChangedMessage(const QList<int>& ids)
         json.append(id);
     }
     return {{QStringLiteral("t"), QStringLiteral("linksChanged")}, {QStringLiteral("ids"), json}};
+}
+
+QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
+{
+    QJsonObject json{{QStringLiteral("name"), window.name},
+                     {QStringLiteral("kind"), window.kind},
+                     {QStringLiteral("parent"), window.parent},
+                     {QStringLiteral("x"), window.geometry.x()},
+                     {QStringLiteral("y"), window.geometry.y()},
+                     {QStringLiteral("w"), window.geometry.width()},
+                     {QStringLiteral("h"), window.geometry.height()},
+                     {QStringLiteral("visible"), window.visible},
+                     {QStringLiteral("shown"), window.shown},
+                     {QStringLiteral("stack"), window.stackOrder},
+                     {QStringLiteral("inDock"), window.inDock}};
+    if (!window.parentKind.isEmpty()) {
+        json.insert(QStringLiteral("parentKind"), window.parentKind);
+    }
+    if (window.background != -1) {
+        json.insert(QStringLiteral("bg"), window.background);
+    }
+    if (!window.fontFamily.isEmpty()) {
+        json.insert(QStringLiteral("fontFamily"), window.fontFamily);
+    }
+    if (window.fontSize > 0) {
+        json.insert(QStringLiteral("fontSize"), window.fontSize);
+    }
+    if (window.dock) {
+        json.insert(QStringLiteral("autoDock"), window.dock->autoDock);
+        json.insert(QStringLiteral("dockArea"), window.dock->area);
+        json.insert(QStringLiteral("dockFloating"), window.dock->floating);
+        json.insert(QStringLiteral("dockTitle"), window.dock->title);
+    }
+    if (window.console) {
+        if (window.console->scrolledBackTo) {
+            json.insert(QStringLiteral("scrolledBackTo"), *window.console->scrolledBackTo);
+        }
+        json.insert(QStringLiteral("columns"), window.console->columns);
+        json.insert(QStringLiteral("rows"), window.console->rows);
+        json.insert(QStringLiteral("scrollBar"), window.console->scrollBar);
+        json.insert(QStringLiteral("timeStamps"), window.console->timeStamps);
+    }
+    return json;
+}
+
+QJsonObject SocketBridge::windowTextMessage(const QString& window, const WindowText& text)
+{
+    QJsonArray lines;
+    for (const WindowText::Row& row : text.rows) {
+        lines.append(QJsonObject{{QStringLiteral("text"), row.text}, {QStringLiteral("runs"), runsJson(row.runs)}, {QStringLiteral("prompt"), row.prompt}, {QStringLiteral("wrapped"), row.wrapped}});
+    }
+    return {{QStringLiteral("t"), QStringLiteral("windowText")},
+            {QStringLiteral("window"), window},
+            {QStringLiteral("lineCount"), text.lineCount},
+            {QStringLiteral("first"), text.first},
+            {QStringLiteral("lines"), lines}};
+}
+
+QJsonObject SocketBridge::mainAreaMessage(const MainArea& area)
+{
+    return {{QStringLiteral("t"), QStringLiteral("mainArea")},
+            {QStringLiteral("w"), area.size.width()},
+            {QStringLiteral("h"), area.size.height()},
+            {QStringLiteral("columns"), area.grid.width()},
+            {QStringLiteral("rows"), area.grid.height()},
+            {QStringLiteral("textX"), area.textRect.x()},
+            {QStringLiteral("textY"), area.textRect.y()},
+            {QStringLiteral("textW"), area.textRect.width()},
+            {QStringLiteral("textH"), area.textRect.height()}};
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)
@@ -606,5 +756,64 @@ void SocketBridge::moveTypedLine()
 {
     if (clientLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("moveTypedLine")}});
+    }
+}
+
+// Only what changed is sent, keyed by name and kind; a UI that attaches or drains gets them all
+void SocketBridge::windows(const QList<ScriptWindowInfo>& windows)
+{
+    using Key = std::pair<QString, QString>;
+    QHash<Key, const ScriptWindowInfo*> before;
+    for (const ScriptWindowInfo& window : std::as_const(mWindows)) {
+        before.insert({window.name, window.kind}, &window);
+    }
+    QJsonArray changed;
+    for (const ScriptWindowInfo& window : windows) {
+        const ScriptWindowInfo* was = before.take({window.name, window.kind});
+        if (!was || !(*was == window)) {
+            changed.append(windowJson(window));
+        }
+    }
+    QJsonArray removed;
+    for (const ScriptWindowInfo& window : std::as_const(mWindows)) {
+        if (before.contains({window.name, window.kind})) {
+            removed.append(QJsonObject{{QStringLiteral("name"), window.name}, {QStringLiteral("kind"), window.kind}});
+        }
+    }
+    mWindows = windows;
+    if (!clientLive() || (changed.isEmpty() && removed.isEmpty())) {
+        return;
+    }
+    QJsonObject message{{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("windows"), changed}};
+    if (!removed.isEmpty()) {
+        message.insert(QStringLiteral("removed"), removed);
+    }
+    sendFrame(message);
+}
+
+// Not kept: a UI that attaches or drains gets every console's from IEngine::windowText()
+void SocketBridge::windowText(const QString& window, const WindowText& text)
+{
+    if (clientLive()) {
+        sendFrame(windowTextMessage(window, text));
+    }
+}
+
+void SocketBridge::mainArea(const MainArea& area)
+{
+    if (mMainArea == area) {
+        return;
+    }
+    mMainArea = area;
+    if (clientLive()) {
+        sendFrame(mainAreaMessage(area));
+    }
+}
+
+// Not kept, as commandLine is not
+void SocketBridge::windowCommandLine(const QString& name, const QString& text)
+{
+    if (clientLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("windowCommandLine")}, {QStringLiteral("name"), name}, {QStringLiteral("text"), text}});
     }
 }

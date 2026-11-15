@@ -46,6 +46,11 @@ public:
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
     QString openProfile(const QString& name, const QString& password, bool connect) override;
+    QString setMainWindowSize(int width, int height) override;
+    std::optional<WindowText> windowText(const QString& window, int first, int count) const override;
+    QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) override;
+    QString closeUserWindow(const QString& name) override;
+    QString sendWindowCommandLine(const QString& name, const QString& text) override;
 
 private:
     // stopping: the profile closes, for the one in mPendingOpen to start
@@ -103,6 +108,13 @@ private:
     void onHeartbeat();
     void flushCounters();
     void markCountersDirty();
+    // Loaded, and not closing: the script windows' calls reach it
+    bool profileOpen() const { return mLoaded && mState != State::stopping; }
+    void onProfileClosed();
+    // The script windows, and with withText each console's last rows
+    void pushWindows(bool withText);
+    void pushWindowText(const QString& window);
+    void pushMainArea();
 
     void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
@@ -125,6 +137,10 @@ private:
     // What mKept was before a switch began, for a close that is refused
     SessionStore::Session mKeptBeforeSwitch;
     State mState = State::idle;
+    // The profile has loaded, since its start
+    bool mLoaded = false;
+    // The main window's size the UI gave, which each profile takes as it loads; empty for none, or once a profile refused it
+    QSize mMainWindowSize{0, 0};
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
     // Lua (connects included) asked for while the profile starts, run once it has

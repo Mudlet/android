@@ -43,6 +43,18 @@
     <string name="label_follow_link">Follow link: %1$s</string>
     <string name="gauge_percent">%1$d%%</string>
 
+    <!-- A script's button bars and the commands packages add (Mudlet's buttons and addCommand()). %1$s in
+         bar_description is the bar's name; in bar_button_unnamed %1$d is the button's place in its bar or menu, from 1,
+         and %2$s the bar's or the folder's name -->
+    <string name="bar_description">%1$s button bar</string>
+    <string name="bar_button_unnamed">Button %1$d of %2$s</string>
+    <string name="bar_open_menu">Open its menu</string>
+    <string name="menu_back">Back</string>
+    <string name="menu_submenu">Submenu</string>
+    <string name="commands_menu">Extensions</string>
+    <string name="commands_menu_attention">Extensions, one needs attention</string>
+    <string name="command_attention">Needs attention</string>
+
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <string name="connection_disconnected">Disconnected</string>

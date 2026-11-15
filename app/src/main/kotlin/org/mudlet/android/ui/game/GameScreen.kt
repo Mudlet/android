@@ -23,7 +23,7 @@ import org.mudlet.android.ui.MudletTopBar
 @Composable
 fun GameScreen(onBack: () -> Unit) {
     val c = EngineClient
-    Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack) }) { padding ->
+    Scaffold(topBar = { MudletTopBar(stringResource(R.string.game_title), onBack) { ScriptCommandsButton() } }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             ScriptWindowsArea(Modifier.weight(1f).fillMaxWidth()) { consoleModifier ->
                 Console(c.lines, c.tail, c.linesAdded, onWidth = c::setViewWidth, consoleModifier)

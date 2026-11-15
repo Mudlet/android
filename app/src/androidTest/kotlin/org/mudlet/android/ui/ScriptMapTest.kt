@@ -51,7 +51,7 @@ import kotlin.math.min
 
 /**
  * The map (docs/architecture.md, "The map"), against a fake engine: the engine's frame drawn in the mapper window,
- * a tap, a double tap and a pinch sent as `mapPointer` at the point of the frame under them, the zoom buttons and
+ * a tap, a double tap (not two taps apart) and a pinch sent as `mapPointer` at the point of the frame under them, the zoom buttons and
  * TalkBack's actions that do the same without a gesture, the switch between viewing and editing it, a refusal shown
  * until dismissed, a frame of another size not drawn, and openMapWidget()'s docked map as a page.
  */
@@ -115,7 +115,7 @@ class ScriptMapTest {
     }
 
     @Test
-    fun aDoubleTapWalksToTheRoomUnderItAfterSelectingIt() {
+    fun aDoubleTapWalksToTheRoomUnderItAfterSelectingItAndTwoTapsApartSelectEach() {
         showMap()
         val map = drawnMap()
         val drawn = bounds(map)
@@ -127,6 +127,20 @@ class ScriptMapTest {
             assertEquals(POINTER_LEFT, event.getInt("button"))
             assertPoint(80.0, 200.0, event)
         }
+
+        // A second tap as soon, but far from the first, selects the room there instead
+        val near = at(drawn, 20.0, 20.0)
+        val far = at(drawn, 380.0, 280.0)
+        assertTrue("the taps are ${(far - near).getDistance()} apart", (far - near).getDistance() > with(compose.density) { 100.dp.toPx() })
+        compose.onNode(map).performTouchInput {
+            click(near)
+            advanceEventTime(100)
+            click(far)
+        }
+        val first = session.receive("mapPointer")
+        val second = session.receive("mapPointer")
+        assertEquals(listOf("press", "press"), listOf(first.getString("type"), second.getString("type")))
+        assertPoint(380.0, 280.0, second)
     }
 
     @Test
@@ -137,7 +151,7 @@ class ScriptMapTest {
         val zoomOut = hasContentDescription(string(R.string.map_zoom_out)) and hasClickAction()
         val min = with(compose.density) { 48.dp.toPx() }
         for (button in listOf(zoomIn, zoomOut)) {
-            val touch = bounds(button)
+            val touch = touchBounds(button)
             assertTrue("a zoom button is ${touch.width} by ${touch.height}", touch.width >= min - 1 && touch.height >= min - 1)
         }
 
@@ -174,7 +188,7 @@ class ScriptMapTest {
         val map = drawnMap()
         val edit = hasContentDescription(string(R.string.map_edit)) and hasClickAction()
         compose.onNode(edit).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
-        val touch = bounds(edit)
+        val touch = touchBounds(edit)
         val min = with(compose.density) { 48.dp.toPx() }
         assertTrue("the switch is ${touch.width} by ${touch.height}", touch.width >= min - 1 && touch.height >= min - 1)
 
@@ -318,6 +332,9 @@ class ScriptMapTest {
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     private fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
+
+    // Where a touch reaches it: a Material icon button is drawn at 40 dp and touched within 48
+    private fun touchBounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().touchBoundsInRoot
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
     private fun activate(label: SemanticsMatcher) {

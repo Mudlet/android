@@ -285,6 +285,58 @@ class CommandSuggesterTest {
     }
 
     @Test
+    fun searchFindsHistoryLooselyBestMatchFirst() {
+        val s = suggester()
+        s.send("get coins from corpse", "look", "say hello", "go")
+        assertEquals(listOf("get coins from corpse"), s.search("gc", 10))
+        // A prefix outranks a scattered match, and a query that is no subsequence finds nothing
+        assertEquals(listOf("go", "get coins from corpse"), s.search("go", 10))
+        assertEquals(emptyList<String>(), s.search("xyz", 10))
+        assertEquals(listOf("say hello"), s.search("  SAY ", 10))
+    }
+
+    @Test
+    fun searchRanksEqualMatchesByFrecency() {
+        val s = suggester()
+        s.send("open gate")
+        repeat(5) { s.send("open door") }
+        assertEquals(listOf("open door", "open gate"), s.search("open", 10))
+        // Used often but long ago counts less than once just now
+        now += 60 * day
+        s.send("open gate")
+        assertEquals(listOf("open gate", "open door"), s.search("open", 10))
+    }
+
+    @Test
+    fun aBlankSearchListsTheWholeHistoryMostFrecentFirstUpToTheLimit() {
+        val s = suggester()
+        s.send("look", "north")
+        repeat(3) { s.send("score") }
+        assertEquals(listOf("score", "north", "look"), s.search("", 10))
+        assertEquals(listOf("score", "north"), s.search(" ", 2))
+        assertEquals(emptyList<String>(), s.search("", 0))
+    }
+
+    @Test
+    fun searchOffersOnlyWhatWasSent() {
+        val s = suggester()
+        s.send("kill rat", "loot", "kill rat")
+        s.observeLine("You see a lantern.")
+        assertEquals(emptyList<String>(), s.search("lan", 10))
+        // No prediction lifts "loot", the usual next command, over the more frecent "kill rat"
+        assertEquals(listOf("kill rat", "loot"), s.search("", 10))
+        s.recordSent("hunter2", hidden = true)
+        assertEquals(emptyList<String>(), s.search("hunter", 10))
+        s.forget("Loot")
+        assertEquals(listOf("kill rat"), s.search("", 10))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun aNegativeSearchLimitIsRefused() {
+        suggester().search("a", -1)
+    }
+
+    @Test
     fun clearForgetsEverything() {
         val s = suggester()
         s.send("kill rat", "loot")

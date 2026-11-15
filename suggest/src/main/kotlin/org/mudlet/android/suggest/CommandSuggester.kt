@@ -149,8 +149,24 @@ class CommandSuggester(
         Suggestions.of(input, cursor, items)
     }
 
+    /**
+     * The history's commands that [query] matches, as [suggest] matches them (a loose subsequence, ranked by the
+     * match and frecency), best first, at most [limit]; for a blank query every command, most frecent first. Unlike
+     * [suggest] it offers only what was sent: no predictions lift an entry and no words from the output are added.
+     */
+    override fun search(query: String, limit: Int): List<String> = synchronized(lock) {
+        require(limit >= 0) { "negative limit $limit" }
+        val now = clock()
+        val q = query.trim()
+        val scored = history.values.mapNotNull { entry ->
+            val match = FuzzyMatch.score(q, entry.text) ?: return@mapNotNull null
+            entry.text to match + frecencyScore(entry, now)
+        }
+        scored.sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first }).take(limit).map { it.first }
+    }
+
     /** Forgets a command: its history entry and every prediction of it. */
-    fun forget(command: String) = synchronized(lock) {
+    override fun forget(command: String): Unit = synchronized(lock) {
         val key = normalizeCommand(command)
         history.remove(key)
         sequences.removeNext(key)

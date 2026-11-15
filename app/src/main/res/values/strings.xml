@@ -35,6 +35,31 @@
          greyed after it; %1$s is the whole line it gives -->
     <string name="input_accept_suggestion">Accept the suggestion: %1$s</string>
 
+    <!-- The row of buttons below the input line: the button that opens the command history, then a button for each
+         command the player pinned, which sends it; %1$s is the command -->
+    <string name="history_open">History</string>
+    <string name="pinned_command">Pinned: %1$s</string>
+    <!-- The command history: a sheet over the game screen, opened by the History button or Ctrl+R, that searches
+         the commands the player sent; each row puts its command on the input line, and has buttons that send, pin
+         or unpin, and forget it; %1$s is the command -->
+    <string name="history_title">Command history</string>
+    <string name="history_close">Close the history</string>
+    <string name="history_search">Search the history</string>
+    <string name="history_pinned">Pinned</string>
+    <string name="history_sent">Sent</string>
+    <string name="history_empty">No commands sent yet</string>
+    <string name="history_no_match">No command matches</string>
+    <string name="history_put_on_line">put it on the command line</string>
+    <string name="history_send">Send %1$s</string>
+    <string name="history_pin">Pin %1$s</string>
+    <string name="history_unpin">Unpin %1$s</string>
+    <string name="history_forget">Forget %1$s</string>
+    <!-- Shown when the player tries to pin a command while as many are pinned as can be; %1$d is that number -->
+    <plurals name="history_pins_full">
+        <item quantity="one">%1$d command is pinned, the most there can be: unpin it first</item>
+        <item quantity="other">%1$d commands are pinned, the most there can be: unpin one first</item>
+    </plurals>
+
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <string name="connection_disconnected">Disconnected</string>

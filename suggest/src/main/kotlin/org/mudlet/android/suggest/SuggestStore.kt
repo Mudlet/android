@@ -37,7 +37,13 @@ class SuggestFile(val file: File) : SuggestStore {
     }
 
     companion object {
-        /** The file for [profile] in [dir]: its name URL-encoded, so any profile name is one file name. */
-        fun forProfile(dir: File, profile: String) = SuggestFile(File(dir, URLEncoder.encode(profile, "UTF-8") + ".txt"))
+        /** The suggestions' file for [profile] in [dir]: its name URL-encoded, so any profile name is one file name. */
+        fun forProfile(dir: File, profile: String) = named(dir, profile, ".txt")
+
+        /** The pinned commands' file for [profile] in [dir], beside its suggestions' file. */
+        fun pinsForProfile(dir: File, profile: String) = named(dir, profile, ".pins")
+
+        // Each kind ends in its own extension, so no profile's pins are another profile's suggestions ("a.pins" + ".txt")
+        private fun named(dir: File, profile: String, extension: String) = SuggestFile(File(dir, URLEncoder.encode(profile, "UTF-8") + extension))
     }
 }

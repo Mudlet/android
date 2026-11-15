@@ -63,14 +63,21 @@ int attributeBits(THeadlessSession::TextStyles styles)
     return attributes;
 }
 
-// Runs that are the profile's own colours with no style or link are left out, as the stand-in leaves them
-QList<ColorRun> colorRuns(const QList<TextRun>& runs)
+// Runs that are the profile's own colours with no style or link are left out, as the stand-in leaves them. A link's id
+// is the session's plus linkBase; linkTop is raised to the highest one.
+QList<ColorRun> colorRuns(const QList<TextRun>& runs, int linkBase, int& linkTop)
 {
     QList<ColorRun> out;
     for (const TextRun& run : runs) {
-        const ColorRun converted{run.start, run.length, colourCode(run.foreground, run.defaultForeground), colourCode(run.background, run.defaultBackground), attributeBits(run.styles), run.link};
+        const ColorRun converted{run.start,
+                                 run.length,
+                                 colourCode(run.foreground, run.defaultForeground),
+                                 colourCode(run.background, run.defaultBackground),
+                                 attributeBits(run.styles),
+                                 run.link == 0 ? 0 : linkBase + run.link};
         if (converted.length > 0 && (converted.fg != -1 || converted.bg != -1 || converted.attributes != 0 || converted.link != 0)) {
             out.append(converted);
+            linkTop = std::max(linkTop, converted.link);
         }
     }
     return out;
@@ -202,12 +209,12 @@ void MudletEngine::connectSession()
         markCountersDirty();
     });
     connect(session, &THeadlessSession::lineShown, this, [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64, bool continuesLine) {
-        onLineShown(text, isPrompt, colorRuns(runs), continuesLine);
+        onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mLinkTop), continuesLine);
     });
     connect(session, &THeadlessSession::localTextStyled, this, [this](const QString&, const QString& text, const QList<TextRun>& runs, bool continuesLine) {
         mLocalLines += text.count(QLatin1Char('\n'));
         markCountersDirty();
-        onLocalText(text, colorRuns(runs), continuesLine);
+        onLocalText(text, colorRuns(runs, mLinkBase, mLinkTop), continuesLine);
     });
     connect(session, &THeadlessSession::mainConsoleCleared, this, &MudletEngine::onMainConsoleCleared);
     connect(session, &THeadlessSession::errorConsoleText, this, [this](const QString&, const QString& text) {
@@ -232,6 +239,14 @@ void MudletEngine::connectSession()
     });
     connect(session, &THeadlessSession::consoleColorsChanged, this, [this](const QString&, const QColor& foreground, const QColor& background) {
         reportConsoleColors(foreground, background);
+    });
+    connect(session, &THeadlessSession::linksChanged, this, [this](const QString&, const QList<int>& links) {
+        QList<int> ids;
+        ids.reserve(links.size());
+        for (const int link : links) {
+            ids.append(mLinkBase + link);
+        }
+        mFrontend->linksChanged(ids);
     });
     connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
         mProfiles.markOpened(profile);
@@ -408,6 +423,8 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
         mProfileTls = mProfiles.read(folder).tls;
     }
     options.configDir = mConfigDir;
+    // The new profile counts its links from 1 again
+    mLinkBase = mLinkTop;
     mKept.profile = mProfile;
     mKept.tls = tls;
     persist();
@@ -771,6 +788,58 @@ void MudletEngine::applyScreenSize()
     if (!mSession->setScreenSize(mScreenSize.width(), mScreenSize.height())) {
         qWarning("MudletEngine: setScreenSize(%d, %d) refused: %s", mScreenSize.width(), mScreenSize.height(), qPrintable(mSession->errorString()));
     }
+}
+
+QString MudletEngine::link(int id, Link& link) const
+{
+    // An id of an earlier profile's line names none of this one's links
+    const std::optional<THeadlessSession::Link> found = id > mLinkBase ? mSession->link(id - mLinkBase) : std::nullopt;
+    if (!found) {
+        return QStringLiteral("unknown");
+    }
+    link.tooltip = found->tooltip;
+    link.menu = found->menu;
+    link.menuTitle = found->menuTitle;
+    link.items.clear();
+    for (const THeadlessSession::LinkItem& item : found->items) {
+        link.items.append({item.label, item.enabled, item.separator});
+    }
+    link.spoiler = found->spoiler;
+    link.revealed = found->revealed;
+    link.disabled = found->disabled;
+    link.concealed = found->concealed;
+    link.visited = found->visited;
+    link.selected = found->selected;
+    link.fg = found->foreground ? std::optional<int>(colourCode(*found->foreground, false)) : std::nullopt;
+    link.bg = found->background ? std::optional<int>(colourCode(*found->background, false)) : std::nullopt;
+    link.styles = found->styles ? std::optional<int>(attributeBits(*found->styles)) : std::nullopt;
+    return {};
+}
+
+// Empty where it ran, or revealed a spoiler, which linksChanged then tells of; else the LinkResult's name
+QString MudletEngine::followLink(int id, std::optional<int> item)
+{
+    if (id <= mLinkBase) {
+        return QStringLiteral("unknown");
+    }
+    switch (mSession->followLink(id - mLinkBase, item)) {
+    case THeadlessSession::LinkResult::ran:
+    case THeadlessSession::LinkResult::revealedSpoiler:
+        return {};
+    case THeadlessSession::LinkResult::disabled:
+        return QStringLiteral("disabled");
+    case THeadlessSession::LinkResult::concealed:
+        return QStringLiteral("concealed");
+    case THeadlessSession::LinkResult::noSuchItem:
+        return QStringLiteral("noSuchItem");
+    case THeadlessSession::LinkResult::unknown:
+        return QStringLiteral("unknown");
+    case THeadlessSession::LinkResult::failed:
+        return QStringLiteral("failed: %1").arg(mSession->errorString());
+    case THeadlessSession::LinkResult::refused:
+        return QStringLiteral("refused: %1").arg(mSession->errorString());
+    }
+    return QStringLiteral("unknown");
 }
 
 void MudletEngine::reportConsoleColors(const QColor& foreground, const QColor& background)

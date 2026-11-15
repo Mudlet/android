@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 4
+const val PROTOCOL_VERSION = 5
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -28,6 +28,9 @@ const val RUN_CONCEALED = 256
 
 /** A profile as the engine lists it; the password is never part of one. */
 data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
+
+/** An item of a link's menu; a [separator] has no label. */
+data class LinkItem(val label: String, val enabled: Boolean, val separator: Boolean)
 
 sealed interface EngineMessage {
     data class Hello(val version: Int, val pid: Int, val instance: String) : EngineMessage
@@ -57,6 +60,32 @@ sealed interface EngineMessage {
 
     /** What a script asks screen readers to say; [assertive] interrupts what they are saying. */
     data class Announce(val text: String, val assertive: Boolean) : EngineMessage
+
+    /**
+     * What the main console's link [link] offers now, the answer to [Requests.getLink]. [fg], [bg] and [styles] (run
+     * colours and attribute bits) are how it is painted now, null where the run's own apply; [styles] replaces only
+     * the run's bold, italic, underline, overline and strike-out.
+     */
+    data class Link(
+        val link: Int,
+        val tooltip: String,
+        val menu: Boolean,
+        val menuTitle: String,
+        val items: List<LinkItem>,
+        val spoiler: Boolean,
+        val revealed: Boolean,
+        val disabled: Boolean,
+        val concealed: Boolean,
+        val visited: Boolean,
+        val selected: Boolean,
+        val fg: Int?,
+        val bg: Int?,
+        val styles: Int?,
+        val replyTo: Any?,
+    ) : EngineMessage
+
+    /** What [Link] says of these links may have changed; empty [ids] means any of them. */
+    data class LinksChanged(val ids: List<Int>) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -80,6 +109,14 @@ object Requests {
 
     /** The console's size in characters, which a game that asks is told (NAWS); each from 1 to 65535. */
     fun setScreenSize(columns: Int, rows: Int): JSONObject = JSONObject().put("t", "setScreenSize").put("columns", columns).put("rows", rows)
+
+    /** Answered by [EngineMessage.Link], or an Error, with [id] as its replyTo. */
+    fun getLink(link: Int, id: Long): JSONObject = JSONObject().put("t", "getLink").put("link", link).put("id", id)
+
+    /** Follows [link] as a tap does, or picks its menu's [item]; only an Error answers, when nothing ran. */
+    fun followLink(link: Int, item: Int?, id: Long): JSONObject = JSONObject().put("t", "followLink").put("link", link).put("id", id)
+        .apply { if (item != null) put("item", item) }
+
     fun ping(id: Long): JSONObject = JSONObject().put("t", "ping").put("id", id)
 
     // The profile requests: [id] comes back as the replyTo of the Profiles or Error that answers each
@@ -166,6 +203,26 @@ class FrameReader(input: InputStream) {
 
             "announce" -> EngineMessage.Announce(o.optString("text"), o.optBoolean("assertive"))
 
+            "link" -> EngineMessage.Link(
+                o.getInt("link"),
+                o.optString("tooltip"),
+                o.optBoolean("menu"),
+                o.optString("menuTitle"),
+                parseLinkItems(o.optJSONArray("items")),
+                o.optBoolean("spoiler"),
+                o.optBoolean("revealed"),
+                o.optBoolean("disabled"),
+                o.optBoolean("concealed"),
+                o.optBoolean("visited"),
+                o.optBoolean("selected"),
+                optInt(o, "fg"),
+                optInt(o, "bg"),
+                optInt(o, "styles"),
+                o.opt("re"),
+            )
+
+            "linksChanged" -> EngineMessage.LinksChanged(o.optJSONArray("ids")?.let { ids -> List(ids.length()) { ids.getInt(it) } } ?: emptyList())
+
             else -> EngineMessage.Unknown(t)
         }
 
@@ -176,6 +233,16 @@ class FrameReader(input: InputStream) {
                 Profile(p.getString("name"), p.optString("host"), p.optInt("port", 23), p.optBoolean("tls"), p.optString("login"), p.optBoolean("autoReconnect"))
             }
         }
+
+        private fun parseLinkItems(items: JSONArray?): List<LinkItem> {
+            if (items == null) return emptyList()
+            return List(items.length()) { i ->
+                val item = items.getJSONObject(i)
+                LinkItem(item.optString("label"), item.optBoolean("enabled", true), item.optBoolean("separator"))
+            }
+        }
+
+        private fun optInt(o: JSONObject, key: String): Int? = if (o.has(key)) o.getInt(key) else null
 
         private fun parseStrings(strings: JSONArray?): List<String> = if (strings == null) emptyList() else List(strings.length()) { strings.optString(it) }
 

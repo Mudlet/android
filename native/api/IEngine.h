@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Link.h"
 #include "Profile.h"
 
 #include <QList>
@@ -26,6 +27,10 @@ public:
     virtual void runLua(const QString& code) = 0;
     // The UI's console in characters, which a game that asks is told (NAWS)
     virtual void setScreenSize(int columns, int rows) = 0;
+    // The main console's link with that id, as runs name it; else why not, as "unknown"
+    virtual QString link(int id, Link& link) const = 0;
+    // Follows it as a tap does, or picks item from its menu; else why nothing ran, as "disabled"
+    virtual QString followLink(int id, std::optional<int> item) = 0;
 
     // The last opened or created first. The others return why they did nothing, empty once done.
     virtual QList<Profile> profiles() const = 0;

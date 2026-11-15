@@ -26,7 +26,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 4;
+    static constexpr int protocolVersion = 5;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -45,6 +45,7 @@ public:
     void history(const QStringList& lines) override;
     void commandLine(const QString& text) override;
     void announce(const QString& text, bool assertive) override;
+    void linksChanged(const QList<int>& ids) override;
 
 private:
     struct StoredLine
@@ -73,6 +74,8 @@ private:
     QString openProfile(const QJsonObject& message);
     void complete(const QJsonObject& message);
     void setScreenSize(const QJsonObject& message);
+    void getLink(const QJsonObject& message);
+    void followLink(const QJsonObject& message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
@@ -81,6 +84,7 @@ private:
     QJsonObject tailMessage() const;
     QJsonObject hiddenInputMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
+    static QJsonObject linksChangedMessage(const QList<int>& ids);
 
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
@@ -91,6 +95,8 @@ private:
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;
+    // A linksChanged went to no live UI, so the next to attach or catch up is told any link may have changed
+    bool mLinksMissed = false;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

@@ -299,8 +299,8 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   Once the game has sent a GA, an unfinished line shows only when it ends.
 - A change to a line already sent isn't sent again (`lineShown` sends each line once). That
   needs new `THeadlessSession` API; a Mudlet PR for it is being prepared.
-- Links are marked by id, but the UI can't follow them yet (`link()`, `followLink()`,
-  `linksChanged`).
+- Links are marked by id, and the engine answers `getLink` and `followLink` and sends `linksChanged`, but the app
+  does not use them yet.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
 - `consoleColors` and `announce` reach the app, which does not use them yet.

@@ -26,10 +26,10 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, and the connection bar) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), and the model of the engine (`ui/EngineClient.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
-| `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
+| `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
 | `native/standin/` | The stand-in engine for fast tests: minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
@@ -124,6 +124,8 @@ per profile, from `SuggesterRegistry.forProfile(name)`:
 - `save(Appendable)` and `load(Reader)`, a line-based text (`SuggestCodec`) the app keeps in its private storage,
   one file per profile; a damaged line is skipped, and `load`'s `LoadResult` says how many were and whether the text
   was this format at all. `forget(command)` and `clear()` for the player.
+- `search(query, limit)` for the history sheet: the commands sent, matched as the history source below and ranked by
+  match plus frecency; a blank query lists them all, most frecent first.
 
 What it ranks:
 
@@ -155,6 +157,19 @@ order the UI asked for it:
   carry on in memory; after a failed load nothing is saved, so the file is not replaced with less.
 - While the game hides input there is neither strip nor ghost: nothing typed reaches the session, and the masked
   send is recorded only as `recordSent("", hidden = true)`.
+
+The History button below the input line, or Ctrl+R on a hardware keyboard, opens `HistorySheet`, a
+`ModalBottomSheet` whose search field takes the focus. The session answers each change of it at once with up to 100
+of `search`'s commands, under the pinned ones that match. A row's text puts its command on the input line without
+sending it; its buttons send it, pin or unpin it, and forget it (`forget`, saved as a send is). Picking, sending,
+Back and the close button close the sheet.
+
+Pinned commands (`PinnedCommands`, `:suggest`) are the buttons after History in `QuickBar`, which scrolls sideways;
+one sends its command. Up to 12 per profile, in the order pinned, saved whole on the session's thread as
+`files/suggest/<name>.pins` beside the suggestions, the same way and with the same handling of a damaged file or an
+I/O error. They are unpinned from the sheet's Pinned section. While the game hides input there is no quick bar,
+the sheet closes and Ctrl+R does nothing; nothing reaches the search, and a pin can only come from the history,
+which a hidden send never enters.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
@@ -750,20 +765,28 @@ Item 13 of the on-device checklist covers this.
       the line without sending it; the arrow button at the start of the row, or a hardware keyboard's right arrow at
       the end of the line, takes the greyed text. After a send, the empty line's buttons offer what usually came next.
       With nothing to offer the row is gone. Close the app from the recent apps and reopen it: they are still there.
+    - The history: "History" below the line opens a sheet with the commands sent, best first, and the keyboard on
+      its search field; typing "od" keeps "open door". A row's text puts the command on the line without sending it
+      and closes the sheet; its Send button sends it. Pin one: it shows as a button below the line, which sends it
+      at a tap, and it is still there after the app is closed from the recent apps and reopened. Unpin it from the
+      sheet's Pinned section. With a hardware keyboard, Ctrl+R opens the sheet; Back closes it.
     - Scroll up while the game sends text: the console stays put and "Jump to the bottom: N new lines" counts up; the
       button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
       and again with a half-typed line: both stay. The same in split screen.
     - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
       the connection state is read out when it changes (connecting, connected, disconnected), without moving focus.
       The line reads only what was typed, never the greyed text. Swiping goes from the console's lines to the input
-      line, then "Accept the suggestion: ..." and each "Suggestion: ...", then the up, down and Send buttons, then the
-      connection bar.
+      line, then "Accept the suggestion: ..." and each "Suggestion: ...", then the up, down and Send buttons, then
+      "History" and each "Pinned: ...", then the connection bar. History moves the focus into the sheet: its title,
+      "Close the history", "Search the history", then each row's command ("double tap to put it on the command line")
+      and its "Send ...", "Pin ..." or "Unpin ..." and "Forget ..." buttons. Back closes it and the focus goes back.
 16. The input line's engine features, connected to a game with the libmudlet APK.
     - At a password prompt (any game's login), the input line becomes a "Password" field with the keyboard's password
       layout, still open. TalkBack reads it as a password field and says "dot" or nothing for what is typed, never the
-      letters. There are no suggestions and no greyed text while it shows. Send logs in; the field goes back to the
-      command line, with what was typed there before, and the password is not among the suggestions afterwards. Its
-      close button gives the command line back without sending.
+      letters. There are no suggestions, no greyed text and no quick bar while it shows, and Ctrl+R opens nothing.
+      Send logs in; the field goes back to the command line, with what was typed there before, and the password is
+      not among the suggestions or in the history sheet afterwards. Its close button gives the command line back
+      without sending.
     - The up button walks the commands of the profile's earlier sessions too (close and reopen the app first).
     - Type the start of a word the game sent, then the Tab button (or Tab on a hardware keyboard): the word is
       completed, and again goes on to the next match. TalkBack reads "Complete the word, button", and "No completion"

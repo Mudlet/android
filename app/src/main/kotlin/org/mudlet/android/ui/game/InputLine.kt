@@ -87,7 +87,8 @@ private const val BUTTON_ORDER = 2f
  * leaves the keyboard open; an `on...` that returns false could not send its request, and the line then stays.
  * The up and down buttons, and a hardware keyboard's arrow keys, step through [history] (newest first). The completion
  * button, or a hardware Tab, hands the line to [onComplete], whose answer replaces it. A [commandLine] from a script
- * replaces the line, which then calls [onCommandLineShown].
+ * replaces the line, which then calls [onCommandLineShown]; a [picked] command (from the command history) replaces it
+ * too and takes the focus, and then calls [onPickedShown].
  *
  * While [hiddenInput] holds, a masked password field takes the line's place and sends with [onSendHidden]; its close
  * button calls [onDismissHidden]. What is typed there is not saved across a rotation, to keep it out of saved state.
@@ -111,6 +112,8 @@ fun InputLine(
     modifier: Modifier = Modifier,
     suggestions: SuggestionSession.Answer? = null,
     onInputChanged: (text: String, cursor: Int) -> Unit = { _, _ -> },
+    picked: String? = null,
+    onPickedShown: () -> Unit = {},
 ) {
     var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var secret by remember { mutableStateOf(TextFieldValue()) }
@@ -190,6 +193,14 @@ fun InputLine(
         at = HistoryPosition()
         show(commandLine)
         onCommandLineShown()
+    }
+    LaunchedEffect(picked) {
+        if (picked == null) return@LaunchedEffect
+        at = HistoryPosition()
+        show(picked)
+        // Only the command line has this requester: the masked field has a focus of its own
+        if (!hiddenInput) focus.requestFocus()
+        onPickedShown()
     }
 
     val supportingText: (@Composable () -> Unit)? = notice?.let {

@@ -55,7 +55,8 @@ The first usable client has:
      (`printCmdLine()`), and a masked field while the game hides input. Suggestions as the player types, since typing
      is the slowest part of playing on a phone: history matched loosely ("gc" for "get coins from corpse"), the
      command that usually comes next, and words from the game's output (`:suggest`, architecture.md, "Command
-     suggestions").
+     suggestions"). A searchable history (the History button, or Ctrl+R on a hardware keyboard) and up to 12 pinned
+     commands as one-tap buttons below the line.
    - The soft keyboard: the console shrinks above it and keeps its bottom line in view; rotation and split screen
      keep the scroll position and the typed text.
    - A connection bar: connecting, connected, disconnected, with Reconnect and Disconnect.
@@ -181,6 +182,7 @@ come after #31, whose fake engine (`FakeEngine`) and emulator jobs run the app's
 | U8 | Background: notification with profile and connection state, Disconnect action, app state to the engine | U2, P5 |
 | S1 | Command suggestions' ranking core, `:suggest`: plain Kotlin, no UI | - |
 | S2 | Suggestions in the input line: a row of candidates above it and ghost text with an accept button, learned and saved per profile on the device, none while input is hidden | U4, S1 |
+| S3 | History search and pinned quick buttons: a sheet that searches the profile's history and sends, pins or forgets a command; pinned commands as buttons below the input line, saved per profile; neither while input is hidden | S2 |
 
 ```
 #31 ─┬─ U1 ─┬─ U2 ─┬───────────────── U4, U5, U6, U7, U8 (each also needs its P)

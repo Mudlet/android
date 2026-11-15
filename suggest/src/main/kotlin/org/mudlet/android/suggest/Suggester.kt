@@ -13,6 +13,10 @@ interface Suggester {
 
     fun suggest(input: String, cursor: Int = input.length, limit: Int = 8): Suggestions
 
+    fun search(query: String, limit: Int): List<String>
+
+    fun forget(command: String)
+
     fun save(out: Appendable)
 
     fun load(input: Reader): CommandSuggester.LoadResult

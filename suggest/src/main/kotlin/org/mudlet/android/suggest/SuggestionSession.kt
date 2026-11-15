@@ -5,16 +5,17 @@ import java.io.IOException
 /**
  * One profile's suggestions while the app runs. [open] loads what [store] kept; then the session learns from what
  * the input line sends ([sent]) and what the game shows ([lineShown]), answers the input as it is typed
- * ([inputChanged]), and saves what it learned a while after a send and on [save].
+ * ([inputChanged]) and searches through the history ([search]), forgets a command the player asks it to
+ * ([forget]), and saves what it learned a while after a send or a forget, and on [save].
  *
  * Every call to [suggester] and [store] runs on [worker], in the order the calls here were made: a command sent
  * while the saved state still loads is learned on top of it. The calls here come from one thread, the UI's, and
- * return at once; [listener] gets the answers on the worker's thread.
+ * return at once; [listener] and [searchListener] get the answers on the worker's thread.
  *
  * Hidden input (a password) never reaches the session: [sentHidden] takes no text, and nothing is answered while
- * [hiddenChanged] says the game hides input. An I/O error goes to [log] and the session carries on in memory;
- * after a failed load it saves nothing, so a file it could not read is not replaced with less. [log] is never given
- * a command or a game line.
+ * [hiddenChanged] says the game hides input, not even a search. An I/O error goes to [log] and the session carries on
+ * in memory; after a failed load it saves nothing, so a file it could not read is not replaced with less. [log] is
+ * never given a command or a game line.
  */
 class SuggestionSession(
     private val suggester: Suggester,
@@ -29,9 +30,16 @@ class SuggestionSession(
     /** Gets each answer, on the worker's thread. */
     @Volatile var listener: ((Answer) -> Unit)? = null
 
+    /** The history's commands that [query] matched, best first. */
+    data class SearchAnswer(val query: String, val commands: List<String>)
+
+    /** Gets each search's answer, on the worker's thread. */
+    @Volatile var searchListener: ((SearchAnswer) -> Unit)? = null
+
     // The calling thread's
     private var opened = false
     private var pendingAnswer: Cancellable? = null
+    private var pendingSearch: Cancellable? = null
 
     @Volatile private var hidden = false
 
@@ -73,15 +81,43 @@ class SuggestionSession(
         }
     }
 
+    /**
+     * Searches the history for [query], as [CommandSuggester.search] does, for at most [SEARCH_LIMIT] commands. A newer
+     * call drops the answer an older one has not begun on.
+     */
+    fun search(query: String) {
+        dropPendingSearch()
+        if (hidden) return
+        pendingSearch = worker.schedule(0) {
+            if (!hidden) searchListener?.invoke(SearchAnswer(query, suggester.search(query, SEARCH_LIMIT)))
+        }
+    }
+
+    /** Forgets [command], as [CommandSuggester.forget] does, and saves that a while later. */
+    fun forget(command: String) {
+        worker.schedule(0) {
+            suggester.forget(command)
+            learned()
+        }
+    }
+
     /** Whether the game hides what is typed (a password). While it does, nothing is answered. */
     fun hiddenChanged(hidden: Boolean) {
         this.hidden = hidden
-        if (hidden) dropPendingAnswer()
+        if (hidden) {
+            dropPendingAnswer()
+            dropPendingSearch()
+        }
     }
 
     private fun dropPendingAnswer() {
         pendingAnswer?.cancel()
         pendingAnswer = null
+    }
+
+    private fun dropPendingSearch() {
+        pendingSearch?.cancel()
+        pendingSearch = null
     }
 
     /** The input line sent [command]. The game's echo of it, the next line or one of the two after, is not learned from. */
@@ -150,10 +186,13 @@ class SuggestionSession(
         /** How many suggestions an answer has at most. */
         const val LIMIT = 5
 
+        /** How many commands a search answers with at most. */
+        const val SEARCH_LIMIT = 100
+
         /** How long the input stays unchanged before it is answered. */
         const val TYPING_DELAY_MS = 120L
 
-        /** How long after a send what was learned is saved, at the latest. */
+        /** How long after a send or a forget what was learned is saved, at the latest. */
         const val SAVE_DELAY_MS = 5_000L
 
         /** How many lines after a send may be its echo. */

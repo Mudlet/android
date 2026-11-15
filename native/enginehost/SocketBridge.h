@@ -27,7 +27,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 7;
+    static constexpr int protocolVersion = 8;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -47,7 +47,7 @@ public:
     void hiddenInput(bool wanted) override;
     void history(const QStringList& lines) override;
     void commandLine(const QString& text) override;
-    void windows(const QList<ScriptWindowInfo>& windows) override;
+    void windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels) override;
     void windowText(const QString& window, const WindowText& text) override;
     void mainArea(const MainArea& area) override;
     void windowCommandLine(const QString& name, const QString& text) override;
@@ -83,6 +83,8 @@ private:
     QString setMainWindowSize(const QJsonObject& message);
     void getWindowText(const QJsonObject& message);
     QString placeUserWindow(const QJsonObject& message);
+    QString pointer(const QJsonObject& message);
+    void getImage(const QJsonObject& message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
@@ -92,6 +94,7 @@ private:
     QJsonObject hiddenInputMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
     static QJsonObject windowJson(const ScriptWindowInfo& window);
+    static QJsonObject labelMessage(const LabelInfo& label);
     static QJsonObject windowTextMessage(const QString& window, const WindowText& text);
     static QJsonObject mainAreaMessage(const MainArea& area);
 
@@ -106,6 +109,7 @@ private:
     bool mHiddenInput = false;
     // As IFrontend::windows() last gave them
     QList<ScriptWindowInfo> mWindows;
+    QList<LabelInfo> mLabels;
     // None until the engine has sent one
     std::optional<MainArea> mMainArea;
     std::deque<StoredLine> mScrollback;

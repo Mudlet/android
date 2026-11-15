@@ -8,6 +8,7 @@ with -DLIBMUDLET_BUILD_DIR=<that build>).
 
 usage: test_mudlet_engine.py <path-to-engine-binary>
 """
+import base64
 import glob
 import os
 import signal
@@ -17,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_telnet  # noqa: E402
@@ -256,6 +258,7 @@ def main():
     profile_requests(port)
     input_line()
     script_windows()
+    script_labels()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -615,6 +618,167 @@ def script_windows():
     c.send({"t": "runLua", "code": 'deleteMiniConsole("chat")'})
     m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
     check({"name": "chat", "kind": "miniConsole"} in m["removed"], f"a deleted console is removed: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+
+def png_file(path, width, height):
+    """A PNG of width by height opaque red pixels."""
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\0" + b"\xff\0\0" * width for _ in range(height))
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
+def png_size(data):
+    """The width and height in a PNG's header, or None for what is not a PNG."""
+    if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    return struct.unpack(">II", data[16:24])
+
+
+def label_of(msgs, name):
+    """The last label message for a label, or None."""
+    return next((m for m in reversed(msgs) if m["t"] == "label" and m["name"] == name), None)
+
+
+def script_labels():
+    """What labels show: a Geyser.Label's text, stylesheet, image and accessible name as label messages, the image as
+    a PNG from getImage, and its click callback run by pointer; a Geyser.Gauge as three labels whose geometry gives
+    its value, with its text label transparent; a deleted label removed; and every label again for a UI that
+    attaches."""
+    picture = os.path.join(TMP, "dot.png")
+    png_file(picture, 4, 3)
+    vector = os.path.join(TMP, "square.svg")
+    with open(vector, "w") as f:
+        f.write('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16"/></svg>')
+    game = fake_telnet.start_in_thread()
+    proc, c = start_engine("Label Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    m = c.ask({"t": "getImage", "path": picture}, answers=("image", "error"), collect=seen)
+    check(m["t"] == "image" and (m["w"], m["h"]) == (4, 3) and png_size(base64.b64decode(m["png"])) == (4, 3),
+          f"getImage needs no profile, and answers with the file as a PNG: {str(m)[:200]}")
+    c.send({"t": "pointer", "window": "main", "type": "move", "x": 1, "y": 1})
+    m = c.wait_for(lambda m: m["t"] == "error", collect=seen)
+    check(m["message"] == "pointer: no profile running", f"pointer with no profile open is refused: {m}")
+
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'box = Geyser.Label:new({name = "box", x = 20, y = 20, width = 120, height = 40})',
+        'box:echo("hello label")',
+        'box:setStyleSheet([[QLabel { border: 2px solid red; }]])',
+        'box:setClickCallback(function(event) echo(string.format("clicked %s %d,%d\\n", event.button, event.x, event.y)) end)',
+        'box:setAccessibleName("Hit me")',
+        'box:setToolTip("a tip")',
+        'pic = Geyser.Label:new({name = "pic", x = 200, y = 20, width = 40, height = 30})',
+        'pic:echo("covered")',
+        f'pic:setBackgroundImage([==[{picture}]==])',
+        'ico = Geyser.Label:new({name = "ico", x = 260, y = 20, width = 32, height = 32})',
+        f'ico:setBackgroundImage([==[{vector}]==])',
+        'ico:setSvgTint(0, 128, 255)',
+        'ico:setSvgRotation(90)',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "box" and m["accessibleName"] == "Hit me", seen, since)
+    check("hello label" in m["text"] and m["styleSheet"] == "QLabel { border: 2px solid red; }" and m["accessibleButton"]
+          and m["toolTip"] == "a tip" and m["image"] == "" and not m["clickThrough"] and m["movie"] == "",
+          f"a Geyser.Label's echo(), stylesheet, click callback, accessible name and tool tip: {m}")
+    first_label = next(i for i, m in enumerate(seen) if m["t"] == "label" and m["name"] == "box")
+    first_window = next((i for i, m in enumerate(seen) if windows_with("box", "label")(m)), len(seen))
+    check(first_window < first_label, "the label comes after the windows message that has it")
+    box = window_of(seen, "box", "label")
+    check(box is not None and (box["x"], box["y"], box["w"], box["h"]) == (20, 20, 120, 40) and box["shown"],
+          f"and is a label window at its place: {box}")
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "pic" and m["image"], seen, since)
+    check(m["image"] == picture and m["text"] == "" and not m["svg"], f"setBackgroundImage() shows the file in place of the text: {m}")
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "ico" and m.get("svgRotation"), seen, since)
+    check(m["image"] == vector and m["svg"] and m.get("svgTint") == 0x1000000 | 0x0080FF and "svgTintAlpha" not in m
+          and m["svgRotation"] == 90, f"an SVG one with its tint and rotation: {m}")
+
+    m = c.ask({"t": "getImage", "path": picture, "w": 8, "h": 6}, answers=("image", "error"), collect=seen)
+    check(m["t"] == "image" and (m["w"], m["h"]) == (8, 6) and png_size(base64.b64decode(m["png"])) == (8, 6)
+          and m["path"] == picture, f"getImage scales it to the size asked: {str(m)[:200]}")
+    m = c.ask({"t": "getImage", "path": picture, "frame": 0}, answers=("image", "error"), collect=seen)
+    check(m["t"] == "image" and (m["w"], m["h"]) == (4, 3), f"a still image's frame 0 is the image: {str(m)[:200]}")
+    m = c.ask({"t": "getImage", "path": picture, "frame": 1}, answers=("image", "error"), collect=seen)
+    check(m["t"] == "error" and m["message"] == f"getImage: no frame 1 in {picture}", f"and it has no frame 1: {m}")
+    m = c.ask({"t": "getImage", "path": os.path.join(TMP, "nonesuch.png")}, answers=("image", "error"), collect=seen)
+    check(m["t"] == "error" and m["message"].startswith("getImage: ") and "nonesuch.png" in m["message"],
+          f"and refuses a file there is not: {m}")
+
+    since = len(seen)
+    c.send({"t": "pointer", "window": "box", "type": "press", "x": 5, "y": 3, "button": 1, "buttons": 1})
+    c.send({"t": "pointer", "window": "box", "type": "release", "x": 5, "y": 3, "button": 1})
+    c.send({"t": "runLua", "code": 'echo("after the click\\n")'})
+    seen_or_next(c, shown("after the click"), seen, since)
+    # A line, as the echo after it ends it
+    clicks = [m["text"] for m in lines_of(seen[since:]) if m["text"].startswith("clicked")]
+    errors = [m for m in seen[since:] if m["t"] == "error"]
+    check(clicks == ["clicked LeftButton 5,3"] and not errors,
+          f"a pointer press runs the label's click callback, with the event table, and the release does not: {clicks} {errors}")
+    since = len(seen)
+    c.send({"t": "pointer", "window": "nonesuch", "type": "press", "x": 5, "y": 3, "button": 1, "buttons": 1})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"].startswith("pointer: ") and "nonesuch" in m["message"], f"pointer on a window there is not is refused: {m}")
+    since = len(seen)
+    c.send({"t": "pointer", "window": "box", "type": "move", "x": 500, "y": 3})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"].startswith("pointer: "), f"and outside the window: {m}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'box:echo("new words")'})
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "box" and "new words" in m["text"], seen, since)
+    check(m["accessibleName"] == "Hit me" and not any(windows_with("box", "label")(w) for w in seen[since:]),
+          f"a label whose content alone changed is sent again, with no windows message for it: {m}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'hp = Geyser.Gauge:new({name = "hp", x = 10, y = 600, width = 200, height = 20})',
+        'hp:setValue(30, 60, "30/60")',
+    ])})
+    seen_or_next(c, windows_with("hp_front", "label", lambda w: w["w"] == 100), seen, since)
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "hp_text" and "30/60" in m["text"], seen, since)
+    back, front, text = (window_of(seen, f"hp_{part}", "label") for part in ("back", "front", "text"))
+    check(back is not None and (back["parent"], back["x"], back["y"], back["w"], back["h"]) == ("", 10, 600, 200, 20)
+          and back.get("bgAlpha") == 100 and "bg" in back, f"a Geyser.Gauge's back label is the gauge, half see-through: {back}")
+    check((front["x"], front["y"], front["w"], front["h"]) == (10, 600, 100, 20) and "bgAlpha" not in front,
+          f"its front label's width against the back's is the value: {front}")
+    check(text is not None and (text["x"], text["w"]) == (10, 200) and text.get("bgAlpha") == 0
+          and back["stack"] < front["stack"] < text["stack"], f"and its text label is transparent, on top: {text}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "hp:setValue(15, 60)"})
+    seen_or_next(c, windows_with("hp_front", "label", lambda w: w["w"] == 50), seen, since)
+    c.send({"t": "runLua", "code": 'echo("gauge sent\\n")'})
+    seen_or_next(c, shown("gauge sent"), seen, since)
+    front = window_of(seen, "hp_front", "label")
+    resent = [m["name"] for m in seen[since:] if m["t"] == "label"]
+    check((front["x"], front["w"]) == (10, 50) and not resent,
+          f"a new value resizes the front label, and sends no label whose content stayed: {front} {resent}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen += msgs
+    full = next((i for i, m in enumerate(msgs) if m["t"] == "windows" and m.get("full")), None)
+    names = {m["name"]: i for i, m in enumerate(msgs) if m["t"] == "label"}
+    check(full is not None and {"box", "pic", "ico", "hp_back", "hp_front", "hp_text"} <= set(names)
+          and all(i > full for i in names.values()), f"a UI that attaches gets every label after the windows: {sorted(names)}")
+    box = label_of(msgs, "box")
+    check(box is not None and box["accessibleName"] == "Hit me" and "new words" in box["text"], f"as it was: {box}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'deleteLabel("pic")'})
+    m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
+    check({"name": "pic", "kind": "label"} in m["removed"] and label_of(seen[since:], "pic") is None,
+          f"a deleted label is removed, with no label message: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

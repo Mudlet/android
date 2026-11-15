@@ -38,6 +38,8 @@ public:
     QString placeUserWindow(const QString&, const QRect&, bool) override { return noWindows(); }
     QString closeUserWindow(const QString&) override { return noWindows(); }
     QString sendWindowCommandLine(const QString&, const QString&) override { return noWindows(); }
+    QString pointer(const QString&, const PointerEvent&) override { return noWindows(); }
+    std::variant<PngImage, QString> image(const QString&, const QSize&, std::optional<int>) const override { return noWindows(); }
 
     // Called from Lua's notify()
     void luaNotify(const QString& title, const QString& text);

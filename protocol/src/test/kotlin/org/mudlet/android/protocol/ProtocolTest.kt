@@ -3,9 +3,11 @@ package org.mudlet.android.protocol
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.OutputStream
+import java.util.Base64
 
 /** The run encoding and message types of native/enginehost/SocketBridge.cpp, without an engine. */
 class ProtocolTest {
@@ -100,18 +102,22 @@ class ProtocolTest {
                     """"dockFloating":true,"dockTitle":"Side","scrolledBackTo":12,"columns":40,"rows":10,"scrollBar":true,"timeStamps":false},""" +
                     """{"name":"side","kind":"commandLine","parent":"side","parentKind":"userWindow","x":0,"y":0,"w":0,"h":0,""" +
                     """"visible":true,"shown":false,"stack":1,"inDock":false},""" +
+                    """{"name":"hp_text","kind":"label","parent":"","x":10,"y":600,"w":200,"h":20,"visible":true,"shown":true,"stack":3,""" +
+                    """"bg":$RUN_RGB,"bgAlpha":0,"inDock":false},""" +
                     """{"name":"later","kind":"hologram","parent":"","x":0,"y":0,"w":1,"h":1,"visible":true,"shown":true,"stack":2,"inDock":false}],""" +
                     """"removed":[{"name":"chat","kind":"miniConsole"},{"name":"x","kind":"hologram"}]}""",
             ),
         ) as EngineMessage.Windows
         assertTrue(message.full)
         val side = ScriptWindow(
-            "side", WindowKind.USER_WINDOW, "", null, 0, 0, 300, 200, true, true, 0, RUN_RGB or 0x102030, "Mono", 10.5, true,
+            "side", WindowKind.USER_WINDOW, "", null, 0, 0, 300, 200, true, true, 0, RUN_RGB or 0x102030, 255, "Mono", 10.5, true,
             ScriptWindow.Dock(false, "left", true, "Side"), ScriptWindow.Console(12, 40, 10, true, false),
         )
-        val line = ScriptWindow("side", WindowKind.COMMAND_LINE, "side", WindowKind.USER_WINDOW, 0, 0, 0, 0, true, false, 1, -1, null, 0.0, false, null, null)
+        val line = ScriptWindow("side", WindowKind.COMMAND_LINE, "side", WindowKind.USER_WINDOW, 0, 0, 0, 0, true, false, 1, -1, 255, null, 0.0, false, null, null)
+        // A transparent background, as a gauge's text label has
+        val text = ScriptWindow("hp_text", WindowKind.LABEL, "", null, 10, 600, 200, 20, true, true, 3, RUN_RGB, 0, null, 0.0, false, null, null)
         // A kind the app does not know is left out
-        assertEquals(listOf(side, line), message.windows)
+        assertEquals(listOf(side, line, text), message.windows)
         assertEquals(WindowKey("side", WindowKind.COMMAND_LINE), line.key)
         assertEquals(listOf(WindowKey("chat", WindowKind.MINI_CONSOLE)), message.removed)
         val update = FrameReader.parse(JSONObject("""{"t":"windows","windows":[]}""")) as EngineMessage.Windows
@@ -154,6 +160,69 @@ class ProtocolTest {
         )
         assertEquals(mapOf("t" to "closeUserWindow", "name" to "side"), Requests.closeUserWindow("side").toMap())
         assertEquals(mapOf("t" to "sendWindowCommandLine", "name" to "chat", "text" to "look"), Requests.sendWindowCommandLine("chat", "look").toMap())
+    }
+
+    @Test
+    fun labelsParseWithTheirOptionalParts() {
+        val full = FrameReader.parse(
+            JSONObject(
+                """{"t":"label","name":"box","text":"<b>hi</b>","image":"/data/a.svg","svg":true,"svgTint":${RUN_RGB or 0xff0000},""" +
+                    """"svgTintAlpha":128,"svgRotation":90.5,"svgShearX":0.25,"svgShearY":-0.5,"movie":"/data/b.gif","moviePaused":true,""" +
+                    """"movieFrame":3,"movieSpeed":50,"movieW":64,"movieH":48,"toolTip":"tip","clickThrough":true,"accessibleName":"Box",""" +
+                    """"accessibleButton":true,"styleSheet":"QLabel { color: red; }"}""",
+            ),
+        )
+        assertEquals(
+            EngineMessage.Label(
+                LabelContent(
+                    "box", "<b>hi</b>", "/data/a.svg", true, RUN_RGB or 0xff0000, 128, 90.5, 0.25, -0.5, "/data/b.gif", true, 3, 50, 64, 48,
+                    "tip", true, "Box", true, "QLabel { color: red; }",
+                ),
+            ),
+            full,
+        )
+        // The engine leaves out the parts at their defaults
+        val plain = FrameReader.parse(
+            JSONObject(
+                """{"t":"label","name":"box","text":"","image":"","svg":false,"movie":"","moviePaused":false,"movieFrame":-1,""" +
+                    """"movieSpeed":100,"toolTip":"","clickThrough":false,"accessibleName":"","accessibleButton":false,"styleSheet":""}""",
+            ),
+        ) as EngineMessage.Label
+        assertEquals(LabelContent("box", "", "", false, -1, 255, 0.0, 0.0, 0.0, "", false, -1, 100, null, null, "", false, "", false, ""), plain.label)
+    }
+
+    @Test
+    fun anImageDecodesItsPng() {
+        val png = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0, -1)
+        val image = FrameReader.parse(
+            JSONObject().put("t", "image").put("path", "/data/a.png").put("png", Base64.getEncoder().encodeToString(png)).put("w", 4).put("h", 3).put("re", 9),
+        ) as EngineMessage.Image
+        assertEquals("/data/a.png", image.path)
+        assertArrayEquals(png, image.png)
+        assertEquals(4 to 3, image.w to image.h)
+        assertEquals(9, image.replyTo)
+        // Not base64: empty, and the link goes on
+        val broken = FrameReader.parse(JSONObject("""{"t":"image","path":"x","png":"not base64!","w":1,"h":1}""")) as EngineMessage.Image
+        assertEquals(0, broken.png.size)
+    }
+
+    @Test
+    fun thePointerAndImageRequestsCarryWhatTheEngineReads() {
+        assertEquals(
+            mapOf("t" to "pointer", "window" to "box", "type" to "press", "x" to 1.5, "y" to 2.0, "button" to POINTER_LEFT, "buttons" to POINTER_LEFT),
+            Requests.pointer("box", PointerType.PRESS, 1.5, 2.0, POINTER_LEFT, POINTER_LEFT, 0, 0).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "pointer", "window" to "main", "type" to "wheel", "x" to 0.0, "y" to 0.0, "modifiers" to (MODIFIER_SHIFT or MODIFIER_CONTROL), "wheelY" to -120),
+            Requests.pointer("main", PointerType.WHEEL, 0.0, 0.0, 0, 0, MODIFIER_SHIFT or MODIFIER_CONTROL, -120).toMap(),
+        )
+        assertEquals("doubleClick", PointerType.DOUBLE_CLICK.wire)
+        assertEquals(mapOf("t" to "getImage", "path" to "a.png", "id" to 3L), Requests.getImage("a.png", null, null, null, 3).toMap())
+        assertEquals(
+            mapOf("t" to "getImage", "path" to "a.gif", "w" to 16, "h" to 8, "frame" to 2, "id" to 4L),
+            Requests.getImage("a.gif", 16, 8, 2, 4).toMap(),
+        )
+        assertThrows(IllegalArgumentException::class.java) { Requests.getImage("a.png", 16, null, null, 5) }
     }
 
     @Test

@@ -2,6 +2,7 @@
 
 #include "THeadlessSession.h"
 
+#include <QBuffer>
 #include <QCoreApplication>
 #include <QDataStream>
 #include <QDateTime>
@@ -13,6 +14,10 @@
 #include <QFontInfo>
 #include <QFontMetrics>
 #include <QGuiApplication>
+#include <QIcon>
+#include <QImage>
+#include <QImageReader>
+#include <QPixmap>
 #include <QStandardPaths>
 
 namespace {
@@ -140,6 +145,9 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
     info.shown = window.shown;
     info.stackOrder = window.stackOrder;
     info.background = colourCode(window.background, false);
+    if (info.background >= 0) {
+        info.backgroundAlpha = window.background.alpha();
+    }
     // The other kinds have a default QFont, which draws nothing
     if (isConsole(window.kind) || window.kind == ScriptWindow::Kind::label || window.kind == ScriptWindow::Kind::textBox) {
         info.fontFamily = window.font.family();
@@ -152,6 +160,33 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
     if (isConsole(window.kind)) {
         info.console = ScriptWindowInfo::Console{window.scrolledBackTo, window.grid.width(), window.grid.height(), window.scrollBar, window.timeStamps};
     }
+    return info;
+}
+
+LabelInfo labelInfo(const QString& name, const THeadlessSession::LabelContent& content)
+{
+    LabelInfo info;
+    info.name = name;
+    info.text = content.text;
+    info.image = content.image;
+    info.svg = content.svg;
+    info.svgTint = colourCode(content.svgTint, false);
+    if (info.svgTint >= 0) {
+        info.svgTintAlpha = content.svgTint.alpha();
+    }
+    info.svgRotation = content.svgRotation;
+    info.svgShearX = content.svgShearX;
+    info.svgShearY = content.svgShearY;
+    info.movie = content.movie;
+    info.moviePaused = content.moviePaused;
+    info.movieFrame = content.movieFrame;
+    info.movieSpeed = content.movieSpeed;
+    info.movieSize = content.movieSize;
+    info.toolTip = content.toolTip;
+    info.clickThrough = content.clickThrough;
+    info.accessibleName = content.accessibleName;
+    info.accessibleButton = content.accessibleButton;
+    info.styleSheet = content.styleSheet;
     return info;
 }
 
@@ -838,16 +873,23 @@ void MudletEngine::keepPending()
 void MudletEngine::onProfileClosed()
 {
     mLoaded = false;
-    mFrontend->windows({});
+    mFrontend->windows({}, {});
 }
 
 void MudletEngine::pushWindows(bool withText)
 {
     QList<ScriptWindowInfo> windows;
+    QList<LabelInfo> labels;
     for (const ScriptWindow& window : mSession->scriptWindows()) {
         windows.append(windowInfo(window));
+        if (window.kind != ScriptWindow::Kind::label) {
+            continue;
+        }
+        if (const std::optional<THeadlessSession::LabelContent> content = mSession->labelContent(window.name)) {
+            labels.append(labelInfo(window.name, *content));
+        }
     }
-    mFrontend->windows(windows);
+    mFrontend->windows(windows, labels);
     if (!withText) {
         return;
     }
@@ -921,6 +963,69 @@ QString MudletEngine::sendWindowCommandLine(const QString& name, const QString& 
         return QStringLiteral("no profile running");
     }
     return mSession->submitWindowCommandLine(name, text) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::pointer(const QString& window, const PointerEvent& event)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    static constexpr std::pair<PointerEvent::Type, THeadlessSession::WindowPointerEvent::Type> types[] = {
+            {PointerEvent::Type::press, THeadlessSession::WindowPointerEvent::Type::press},
+            {PointerEvent::Type::release, THeadlessSession::WindowPointerEvent::Type::release},
+            {PointerEvent::Type::doubleClick, THeadlessSession::WindowPointerEvent::Type::doubleClick},
+            {PointerEvent::Type::move, THeadlessSession::WindowPointerEvent::Type::move},
+            {PointerEvent::Type::enter, THeadlessSession::WindowPointerEvent::Type::enter},
+            {PointerEvent::Type::leave, THeadlessSession::WindowPointerEvent::Type::leave},
+            {PointerEvent::Type::wheel, THeadlessSession::WindowPointerEvent::Type::wheel},
+    };
+    THeadlessSession::WindowPointerEvent sessionEvent;
+    for (const auto& [ours, theirs] : types) {
+        if (ours == event.type) {
+            sessionEvent.type = theirs;
+            break;
+        }
+    }
+    sessionEvent.position = event.position;
+    sessionEvent.button = Qt::MouseButton(event.button);
+    sessionEvent.buttons = Qt::MouseButtons::fromInt(event.buttons);
+    sessionEvent.modifiers = Qt::KeyboardModifiers::fromInt(event.modifiers);
+    sessionEvent.angleDelta = QPoint(0, event.wheelY);
+    return mSession->pointer(window, sessionEvent) ? QString() : mSession->errorString();
+}
+
+std::variant<PngImage, QString> MudletEngine::image(const QString& path, const QSize& size, std::optional<int> frame) const
+{
+    QImage image;
+    QImageReader reader(path);
+    if (reader.canRead()) {
+        const QSize own = reader.size();
+        if (!size.isEmpty()) {
+            reader.setScaledSize(size);
+        } else if (own.width() > PngImage::maxSide || own.height() > PngImage::maxSide) {
+            return QStringLiteral("%1 is larger than %2 pixels a side: ask for a size").arg(path).arg(PngImage::maxSide);
+        }
+        // Read up to it, as QMovie reaches a frame, since few formats jump to one
+        for (int read = 0; read <= frame.value_or(0); ++read) {
+            if (!reader.read(&image)) {
+                return read > 0 ? QStringLiteral("no frame %1 in %2").arg(*frame).arg(path) : QStringLiteral("%1: %2").arg(path, reader.errorString());
+            }
+        }
+    } else if (!size.isEmpty() && !frame) {
+        // An icon file, or a name in the icon theme
+        const QIcon icon = QFileInfo::exists(path) ? QIcon(path) : QIcon::fromTheme(path);
+        image = icon.pixmap(size).toImage();
+    }
+    if (image.isNull()) {
+        return QStringLiteral("%1: %2").arg(path, reader.errorString());
+    }
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "PNG")) {
+        return QStringLiteral("%1 could not be made a PNG").arg(path);
+    }
+    return PngImage{png, image.size()};
 }
 
 void MudletEngine::setViewWidthPx(int px)

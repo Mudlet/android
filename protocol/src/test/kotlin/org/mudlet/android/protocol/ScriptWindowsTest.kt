@@ -31,6 +31,7 @@ fun window(
     shown = shown,
     stack = stack,
     bg = -1,
+    bgAlpha = 255,
     fontFamily = null,
     fontSize = 0.0,
     inDock = dock != null,

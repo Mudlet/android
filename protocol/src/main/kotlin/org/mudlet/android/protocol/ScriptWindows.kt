@@ -17,6 +17,8 @@ data class ScriptWindows(
     val charWidth: CharWidth? = null,
     /** What scripts set the windows' command lines to, by name, until the UI shows it and calls [commandLineShown]. */
     val commandLines: Map<String, String> = emptyMap(),
+    /** What each label shows, by its name. */
+    val labels: Map<String, LabelContent> = emptyMap(),
 ) {
     /** This state after [message]; itself for a message about something else, and for an answer to `getWindowText`. */
     fun after(message: EngineMessage): ScriptWindows = when (message) {
@@ -24,8 +26,15 @@ data class ScriptWindows(
         is EngineMessage.WindowText -> if (message.replyTo != null) this else copy(text = text + (message.window to message))
         is EngineMessage.MainArea -> copy(mainArea = message, charWidth = CharWidth.after(charWidth, message))
         is EngineMessage.WindowCommandLine -> copy(commandLines = commandLines + (message.name to message.text))
+        is EngineMessage.Label -> copy(labels = labels + (message.label.name to message.label))
         else -> this
     }
+
+    /** The Geyser gauges among the labels, by their back label's name. */
+    val gauges: Map<String, Gauge> by lazy { Gauge.of(windows) }
+
+    /** The gauge each label of one is part of, by the label's key. */
+    val gaugeParts: Map<WindowKey, Gauge> by lazy { gauges.values.flatMap { gauge -> gauge.parts.map { it to gauge } }.toMap() }
 
     fun commandLineShown(name: String): ScriptWindows = copy(commandLines = commandLines - name)
 
@@ -37,7 +46,8 @@ data class ScriptWindows(
     private fun afterWindows(message: EngineMessage.Windows): ScriptWindows {
         if (message.full) {
             val consoles = message.windows.filter { it.console != null }.mapTo(HashSet()) { it.name }
-            return copy(windows = message.windows, text = text.filterKeys { it in consoles })
+            val labelNames = message.windows.filter { it.kind == WindowKind.LABEL }.mapTo(HashSet()) { it.name }
+            return copy(windows = message.windows, text = text.filterKeys { it in consoles }, labels = labels.filterKeys { it in labelNames })
         }
         val changed = message.windows.associateBy { it.key }
         val removed = message.removed.toSet()
@@ -45,7 +55,8 @@ data class ScriptWindows(
         val keptKeys = kept.mapTo(HashSet()) { it.key }
         // A console's text goes with it; the text of one not described yet stays, as it may come first
         val removedConsoles = removed.filter { it.kind in CONSOLE_KINDS }.mapTo(HashSet()) { it.name }
-        return copy(windows = kept + message.windows.filter { it.key !in keptKeys }, text = text - removedConsoles)
+        val removedLabels = removed.filter { it.kind == WindowKind.LABEL }.mapTo(HashSet()) { it.name }
+        return copy(windows = kept + message.windows.filter { it.key !in keptKeys }, text = text - removedConsoles, labels = labels - removedLabels)
     }
 
     companion object {

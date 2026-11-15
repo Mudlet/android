@@ -24,7 +24,7 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 |---|---|
 | [`app/`](app) | `:app`, the UI process: Compose, the app's screens and, in debug builds, the self-test |
 | [`engine-service/`](engine-service) | `:engine-service`, an Android library: `EngineService` in the `:engine` process, its notifications, the Qt glue, and the Qt libraries staged for the APK |
-| [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, the script windows' state and layout, and their tests |
+| [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, the script windows' state and layout, what a label draws, and their tests |
 | [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
 | [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md) |

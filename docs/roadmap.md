@@ -52,7 +52,10 @@ The first usable client has:
      the bottom" button with a count of new lines.
    - The input line: Send on the keyboard's action key, the keyboard staying open after a send, history (the
      engine's, so the profile's earlier sessions count), Tab completion as a button, the text a script sets
-     (`printCmdLine()`), and a masked field while the game hides input.
+     (`printCmdLine()`), and a masked field while the game hides input. Suggestions as the player types, since typing
+     is the slowest part of playing on a phone: history matched loosely ("gc" for "get coins from corpse"), the
+     command that usually comes next, and words from the game's output (`:suggest`, architecture.md, "Command
+     suggestions").
    - The soft keyboard: the console shrinks above it and keeps its bottom line in view; rotation and split screen
      keep the scroll position and the typed text.
    - A connection bar: connecting, connected, disconnected, with Reconnect and Disconnect.
@@ -176,6 +179,8 @@ come after #31, whose fake engine (`FakeEngine`) and emulator jobs run the app's
 | U7 | Links: tap, menu, accessibility actions | U2, P4 |
 | P5 | App state and save on background | P4 |
 | U8 | Background: notification with profile and connection state, Disconnect action, app state to the engine | U2, P5 |
+| S1 | Command suggestions' ranking core, `:suggest`: plain Kotlin, no UI | - |
+| S2 | Suggestions in the input line: a row of candidates and ghost text, saved per profile | U4, S1 |
 
 ```
 #31 ─┬─ U1 ─┬─ U2 ─┬───────────────── U4, U5, U6, U7, U8 (each also needs its P)

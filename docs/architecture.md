@@ -138,9 +138,9 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 - The frame is drawn only while it is the window's size, as the engine draws one at each new size; scaled alike both
   ways to fit and centred, so a touch maps back to the frame's pixel under it.
 - A tap sends a `mapPointer` press with the left button, which selects the room there, on the finger's lift, so a
-  pinch selects nothing; a second tap within the double-tap timeout then sends a double click, which walks there.
-  A pinch turns the wheel a notch for each 7% it scales, as Mudlet's map zooms by notch, about the fingers' middle. A
-  drag does nothing.
+  pinch selects nothing; a second tap near it within the double-tap timeout then sends a double click, which walks
+  there. A pinch turns the wheel a notch for each 7% it scales, as Mudlet's map zooms by notch, about the fingers'
+  middle. A drag does nothing.
 - Buttons in its corner zoom out and in by three notches about the map's middle, and a switch, on while the map is
   edited, sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason
   over the map's bottom, until dismissed or the next request.

@@ -7,7 +7,7 @@ import kotlin.math.min
 data class MapPoint(val x: Double, val y: Double)
 
 /**
- * Where the game screen draws a map frame [frameW] by [frameH] pixels in [box], a rectangle of the game area: scaled
+ * Where the game screen draws a map frame [frameW] by [frameH] pixels in [box], in the pixels of what draws it: scaled
  * alike across and down, as large as fits, and centred, so a touch on it goes back to the point of the frame under it.
  */
 class MapFit(val frameW: Int, val frameH: Int, val box: PxRect) {
@@ -20,7 +20,7 @@ class MapFit(val frameW: Int, val frameH: Int, val box: PxRect) {
     /** The frame's middle, where the zoom buttons zoom about. */
     val centre: MapPoint = MapPoint(frameW / 2.0, frameH / 2.0)
 
-    /** The point of the frame under [x], [y] in the game area's pixels; null off what is drawn. */
+    /** The point of the frame under [x], [y], in [box]'s pixels; null off what is drawn. */
     fun toFrame(x: Float, y: Float): MapPoint? {
         if (scale <= 0f || x < drawn.x || y < drawn.y || x >= drawn.right || y >= drawn.bottom) return null
         // Kept inside the frame, which float rounding at its far edges could leave

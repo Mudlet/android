@@ -264,6 +264,7 @@ def main():
     app_state()
     script_windows()
     script_labels()
+    button_bars()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -1042,6 +1043,169 @@ def script_labels():
           f"a deleted label is removed, with no label message: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def last_of(msgs, kind):
+    """The last message of a kind, or None."""
+    return next((m for m in reversed(msgs) if m["t"] == kind), None)
+
+
+def bar_named(msg, name):
+    return next((b for b in msg["bars"] if b["name"] == name), None) if msg else None
+
+
+def command_named(msg, name):
+    return next((k for k in msg["commands"] if k["name"] == name), None) if msg else None
+
+
+def received_after(start, text, timeout=5):
+    """What the game received from the start'th line on, once text is among it or the time is up."""
+    deadline = time.monotonic() + timeout
+    while text not in fake_telnet.RECEIVED[start:] and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return fake_telnet.RECEIVED[start:]
+
+
+def action_xml(name, children=(), folder=False, push=False, active=True, **fields):
+    """An Action of a Mudlet package, with the elements XMLimport reads; fields fill the ones named."""
+    yes = {True: "yes", False: "no"}
+    values = dict(script="", css="", commandButtonUp="", commandButtonDown="", icon="", orientation=0, location=0,
+                  buttonRotation=0, sizeX=0, sizeY=0, mButtonState=1, buttonColumn=1, buttonFillerOffset=0, posX=0, posY=0)
+    values.update(fields)
+    body = "".join(f"<{k}>{v}</{k}>" for k, v in values.items())
+    return (f'<Action isActive="{yes[active]}" isFolder="{yes[folder]}" isPushButton="{yes[push]}" isFlatButton="no" '
+            f'useCustomLayout="no"><name>{name}</name><packageName></packageName>{body}{"".join(children)}</Action>')
+
+
+def button_bars():
+    """What a package's buttons and commands give the UI: its bars, their buttons and a folder's menu as buttonBars, a
+    press running a button's command and script and a push-down button going down and up; the commands addCommand()
+    adds as commands, a click raising sysCommandClicked and ticking a checkable one, a disabled one refused; and both
+    again for a UI that attaches."""
+    package = os.path.join(TMP, "buttontest.xml")
+    folder_icon = os.path.join(TMP, "more.png")
+    lamp = action_xml("Lamp", push=True, css="QPushButton { color: blue; }", commandButtonDown="push on",
+                      commandButtonUp="push off", script='echo(string.format("pushed %d\\n", getButtonState()))')
+    more = action_xml("More", folder=True, icon=folder_icon, children=(
+        action_xml("Look", commandButtonDown="look"), action_xml("Hidden", active=False)))
+    tools = action_xml("Tools", folder=True, css="QToolBar { color: red; }", buttonColumn=2, buttonFillerOffset=1,
+                       children=(lamp, more))
+    with open(package, "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE MudletPackage>\n<MudletPackage version="1.001">'
+                f"<ActionPackage>{tools}</ActionPackage></MudletPackage>\n")
+    game = fake_telnet.start_in_thread()
+    proc, c = start_engine("Button Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "buttonBars", "bars": []} in seen and {"t": "commands", "commands": []} in seen,
+          "with no profile open, a UI that attaches is told of no button bars and no commands")
+    for request in ({"t": "pressButton", "button": 1}, {"t": "activateCommand", "command": 1}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        f"local ok, err = installPackage([==[{package}]==])",
+        'echo(string.format("installed %s %s\\n", tostring(ok), tostring(err)))',
+        # Before Side, so the bars that have Side were read with it there
+        'tempButtonToolbar("Float", 3, 0)',
+        'tempButton("Float", "Fly", 0)',
+        'tempButtonToolbar("Side", 1, 1)',
+        'tempButton("Side", "Go", 1)',
+    ])})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "buttonBars" and bar_named(m, "Tools") and bar_named(m, "Side"), seen, since,
+                         timeout=15)
+    except TimeoutError as e:
+        check(False, f"installing a package with a bar, and tempButtonToolbar(), send buttonBars: {e}")
+        stop_engine(proc)
+        return
+    tools, side, floating = bar_named(m, "Tools"), bar_named(m, "Side"), bar_named(m, "Float")
+    check((tools["place"], tools["vertical"], tools["columns"], tools["fillerOffset"], tools["styleSheet"])
+          == ("top", False, 2, 1, "QToolBar { color: red; }") and [b["name"] for b in tools["buttons"]] == ["Lamp", "More"],
+          f"a package's bar at the top, with its grid, stylesheet and buttons: {tools}")
+    lamp, more = tools["buttons"]
+    check(lamp["pushDown"] and not lamp["checked"] and not lamp["menu"] and lamp["styleSheet"] == "QPushButton { color: blue; }"
+          and lamp["children"] == [], f"a push-down button, up: {lamp}")
+    check(more["menu"] and more["icon"] == folder_icon and [e["name"] for e in more["children"]] == ["Look"]
+          and more["children"][0]["icon"] == folder_icon and more["children"][0]["styleSheet"] == "",
+          f"a folder is a menu of its active buttons, each with the folder's icon: {more}")
+    check((side["place"], side["vertical"]) == ("left", True) and [b["name"] for b in side["buttons"]] == ["Go"],
+          f"tempButtonToolbar() at the left, vertical: {side}")
+    check(floating is not None and (floating["place"], floating["vertical"]) == ("floating", False)
+          and [b["name"] for b in floating["buttons"]] == ["Fly"], f"and one that floats, horizontal: {floating}")
+
+    def lamp_down(down):
+        return lambda m: m["t"] == "buttonBars" and any(b["id"] == lamp["id"] and b["checked"] == down
+                                                        for b in (bar_named(m, "Tools") or {}).get("buttons", ()))
+
+    since = len(seen)
+    sent = len(fake_telnet.RECEIVED)
+    c.send({"t": "pressButton", "button": lamp["id"]})
+    seen_or_next(c, lamp_down(True), seen, since)
+    seen_or_next(c, shown("pushed 2"), seen, since)
+    got = received_after(sent, "push on")
+    check("push on" in got, f"pressButton sends a push-down button's command for down, runs its script, which sees it down, "
+          f"and the bars come again with it checked: {got}")
+    since = len(seen)
+    sent = len(fake_telnet.RECEIVED)
+    c.send({"t": "pressButton", "button": lamp["id"]})
+    seen_or_next(c, lamp_down(False), seen, since)
+    seen_or_next(c, shown("pushed 1"), seen, since)
+    got = received_after(sent, "push off")
+    check("push off" in got, f"pressed again it comes up, with its command for up: {got}")
+    sent = len(fake_telnet.RECEIVED)
+    c.send({"t": "pressButton", "button": more["children"][0]["id"]})
+    got = received_after(sent, "look")
+    check("look" in got, f"a menu entry is pressed as a button: {got}")
+    since = len(seen)
+    c.send({"t": "pressButton", "button": 999999})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"] == "pressButton: The profile shows no button 999999.", f"a button the bars do not show is refused: {m}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'speech = addCommand{name = "Speech", tooltip = "Read aloud", menuPath = "Tools/Voices", surfaces = {"menu"}}',
+        "setCommandChecked(speech, false)",
+        'registerAnonymousEventHandler("sysCommandClicked", function(_, id) echo(string.format("clicked command %d\\n", id)) end)',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] == "commands" and command_named(m, "Speech"), seen, since, timeout=10)
+    speech = command_named(m, "Speech")
+    check(speech["tooltip"] == "Read aloud" and speech["menuPath"] == "Tools/Voices" and speech["onMenu"]
+          and not speech["onToolbar"] and speech["enabled"] and speech["checkable"] and not speech["checked"]
+          and not speech["pinned"] and not speech["pulse"] and speech["icon"] == "" and "package" in speech,
+          f"addCommand() and setCommandChecked() give a checkable command on the menu: {speech}")
+    since = len(seen)
+    c.send({"t": "activateCommand", "command": speech["id"]})
+    seen_or_next(c, shown(f"clicked command {speech['id']}"), seen, since)
+    seen_or_next(c, lambda m: m["t"] == "commands" and (command_named(m, "Speech") or {}).get("checked"), seen, since)
+    check(True, "activateCommand raises sysCommandClicked with its id, and ticks it")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "disableCommand(speech)"})
+    seen_or_next(c, lambda m: m["t"] == "commands" and (command_named(m, "Speech") or {}).get("enabled") is False, seen, since)
+    m = c.ask({"t": "activateCommand", "command": speech["id"]}, answers=("error",), collect=seen)
+    check(m["message"] == 'activateCommand: The command "Speech" is disabled.', f"a disabled command is refused: {m}")
+    m = c.ask({"t": "activateCommand", "command": 999999}, answers=("error",), collect=seen)
+    check(m["message"] == "activateCommand: The profile has no command 999999.", f"and one there is not: {m}")
+
+    bars, commands = last_of(seen, "buttonBars"), last_of(seen, "commands")
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen += msgs
+    check(last_of(msgs, "buttonBars") == bars and last_of(msgs, "commands") == commands,
+          "a UI that attaches gets the bars and commands as they were")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "removeCommand(speech)"})
+    seen_or_next(c, lambda m: m["t"] == "commands" and not command_named(m, "Speech"), seen, since)
+    check(True, "a removed command is gone from commands")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
 
 if __name__ == "__main__":
     main()

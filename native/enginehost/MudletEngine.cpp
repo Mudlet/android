@@ -207,6 +207,73 @@ LabelInfo labelInfo(const QString& name, const THeadlessSession::LabelContent& c
     return info;
 }
 
+QString placeName(THeadlessSession::ButtonBar::Place place)
+{
+    switch (place) {
+    case THeadlessSession::ButtonBar::Place::top:
+        return QStringLiteral("top");
+    case THeadlessSession::ButtonBar::Place::left:
+        return QStringLiteral("left");
+    case THeadlessSession::ButtonBar::Place::right:
+        return QStringLiteral("right");
+    case THeadlessSession::ButtonBar::Place::floating:
+        return QStringLiteral("floating");
+    }
+    return {};
+}
+
+BarButton barButton(const THeadlessSession::Button& button)
+{
+    BarButton info;
+    info.id = button.id;
+    info.name = button.name;
+    info.icon = button.icon;
+    info.styleSheet = button.styleSheet;
+    info.pushDown = button.pushDown;
+    info.checked = button.checked;
+    info.menu = button.menu;
+    for (const THeadlessSession::Button& child : button.children) {
+        info.children.append(barButton(child));
+    }
+    return info;
+}
+
+ButtonBar buttonBar(const THeadlessSession::ButtonBar& bar)
+{
+    ButtonBar info;
+    info.id = bar.id;
+    info.name = bar.name;
+    info.styleSheet = bar.styleSheet;
+    info.place = placeName(bar.place);
+    info.vertical = bar.orientation == Qt::Vertical;
+    info.columns = bar.columns;
+    info.fillerOffset = bar.fillerOffset;
+    for (const THeadlessSession::Button& button : bar.buttons) {
+        info.buttons.append(barButton(button));
+    }
+    return info;
+}
+
+AddonCommandInfo addonCommandInfo(const THeadlessSession::AddonCommand& command)
+{
+    AddonCommandInfo info;
+    info.id = command.id;
+    info.package = command.package;
+    info.name = command.name;
+    info.icon = command.icon;
+    info.tooltip = command.tooltip;
+    info.menuPath = command.menuPath;
+    info.shortcut = command.shortcut;
+    info.onMenu = command.onMenu;
+    info.onToolbar = command.onToolbar;
+    info.enabled = command.enabled;
+    info.checkable = command.checkable;
+    info.checked = command.checked;
+    info.pinned = command.pinned;
+    info.pulse = command.pulse;
+    return info;
+}
+
 QString settleConfigDir()
 {
     // As the GUI's, as the session reads Mudlet.ini and the keychain under them, and AppDataLocation follows them
@@ -388,6 +455,8 @@ void MudletEngine::connectSession()
         }
         pushMainArea();
         pushWindows(true);
+        pushButtonBars();
+        pushCommands();
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
@@ -411,6 +480,8 @@ void MudletEngine::connectSession()
             }
         }
     });
+    connect(session, &THeadlessSession::buttonsChanged, this, &MudletEngine::pushButtonBars);
+    connect(session, &THeadlessSession::addonCommandsChanged, this, &MudletEngine::pushCommands);
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
         mFrontend->mainArea({mMainWindowSize, grid, textRect});
     });
@@ -934,6 +1005,8 @@ void MudletEngine::onProfileClosed()
 {
     mLoaded = false;
     mFrontend->windows({}, {});
+    mFrontend->buttonBars({});
+    mFrontend->commands({});
 }
 
 void MudletEngine::pushWindows(bool withText)
@@ -971,6 +1044,24 @@ void MudletEngine::pushWindowText(const QString& window)
 void MudletEngine::pushMainArea()
 {
     mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect()});
+}
+
+void MudletEngine::pushButtonBars()
+{
+    QList<ButtonBar> bars;
+    for (const THeadlessSession::ButtonBar& bar : mSession->buttonBars()) {
+        bars.append(buttonBar(bar));
+    }
+    mFrontend->buttonBars(bars);
+}
+
+void MudletEngine::pushCommands()
+{
+    QList<AddonCommandInfo> commands;
+    for (const THeadlessSession::AddonCommand& command : mSession->addonCommands()) {
+        commands.append(addonCommandInfo(command));
+    }
+    mFrontend->commands(commands);
 }
 
 QString MudletEngine::setMainWindowSize(int width, int height)
@@ -1088,6 +1179,22 @@ std::variant<PngImage, QString> MudletEngine::image(const QString& path, const Q
         return QStringLiteral("%1 could not be made a PNG").arg(path);
     }
     return PngImage{png, image.size()};
+}
+
+QString MudletEngine::pressButton(int id)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->pressButton(id) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::activateCommand(int id)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->activateAddonCommand(id) ? QString() : mSession->errorString();
 }
 
 void MudletEngine::setScreenSize(int columns, int rows)

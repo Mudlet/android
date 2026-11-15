@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 8
+const val PROTOCOL_VERSION = 9
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -145,6 +145,74 @@ enum class PointerType(val wire: String) {
     WHEEL("wheel"),
 }
 
+/** Where a button bar goes, as upstream names it on the wire: a strip of the main console, or a floating toolbar. */
+enum class BarPlace(val wire: String) {
+    TOP("top"),
+    LEFT("left"),
+    RIGHT("right"),
+    FLOATING("floating"),
+    ;
+
+    companion object {
+        /** Null for a place this app does not know, whose bars it leaves out. */
+        fun fromWire(wire: String): BarPlace? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/** A bar of buttons, as THeadlessSession::buttonBars() gives it (docs/protocol.md, `buttonBars`). */
+data class ButtonBar(
+    val id: Int,
+    val name: String,
+    /** The bar's, which the engine does not interpret. */
+    val styleSheet: String,
+    val place: BarPlace,
+    val vertical: Boolean,
+    /** A horizontal bar fills each column top to bottom with this many buttons, a vertical one each row left to right. */
+    val columns: Int,
+    /** How many places of that grid are left empty before the first button. */
+    val fillerOffset: Int,
+    val buttons: List<BarButton>,
+)
+
+/** A button on a [ButtonBar], or an entry of a folder's menu; [id] is what Requests.pressButton takes. */
+data class BarButton(
+    val id: Int,
+    val name: String,
+    /** The icon's file, for Requests.getImage; empty for none. */
+    val icon: String,
+    /** Its own, over its bar's; empty for a menu entry. */
+    val styleSheet: String,
+    /** It stays down, [checked], from one press to the next. */
+    val pushDown: Boolean,
+    val checked: Boolean,
+    /** A folder, whose press opens a menu of its [children]. */
+    val menu: Boolean,
+    val children: List<BarButton>,
+)
+
+/** A command a package's addCommand() added (docs/protocol.md, `commands`); [id] is what Requests.activateCommand takes. */
+data class AddonCommand(
+    val id: Int,
+    /** The package whose code added it; empty for none. */
+    val packageName: String,
+    val name: String,
+    val icon: String,
+    val tooltip: String,
+    /** The submenus it sits in, separated by '/', and its shortcut as the script wrote it; both empty off the menu. */
+    val menuPath: String,
+    val shortcut: String,
+    val onMenu: Boolean,
+    val onToolbar: Boolean,
+    val enabled: Boolean,
+    /** True once a script's setCommandChecked() made it checkable; it is ticked while [checked]. */
+    val checkable: Boolean,
+    val checked: Boolean,
+    /** The GUI keeps it on the menu whichever profile is in front. */
+    val pinned: Boolean,
+    /** Its toolbar button flashes. */
+    val pulse: Boolean,
+)
+
 /** A row of a script window's console: [runs] as [EngineMessage.Line]'s, but a bg of -1 is the window's bg. */
 data class WindowRow(val text: String, val runs: IntArray, val prompt: Boolean, val wrapped: Boolean)
 
@@ -226,6 +294,12 @@ sealed interface EngineMessage {
 
     /** The answer to getImage: [png] is a PNG of [w] by [h] pixels, empty if it did not decode. */
     data class Image(val path: String, val png: ByteArray, val w: Int, val h: Int, val replyTo: Any?) : EngineMessage
+
+    /** The profile's button bars, whole; empty with no profile open. */
+    data class ButtonBars(val bars: List<ButtonBar>) : EngineMessage
+
+    /** The commands the profile's packages added, whole; empty with no profile open. */
+    data class Commands(val commands: List<AddonCommand>) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -301,6 +375,12 @@ object Requests {
             if (modifiers != 0) put("modifiers", modifiers)
             if (wheelY != 0) put("wheelY", wheelY)
         }
+
+    /** A click on the [BarButton] [button]: its command and script run. Answered only by an Error, when refused. */
+    fun pressButton(button: Int): JSONObject = JSONObject().put("t", "pressButton").put("button", button)
+
+    /** A click on the [AddonCommand] [command]. Answered only by an Error, when refused. */
+    fun activateCommand(command: Int): JSONObject = JSONObject().put("t", "activateCommand").put("command", command)
 
     /** Answered by [EngineMessage.Image] with [id] as its replyTo: the file at [path], scaled to [w] by [h], given both, or its [frame]. */
     fun getImage(path: String, w: Int?, h: Int?, frame: Int?, id: Long): JSONObject {
@@ -438,6 +518,10 @@ class FrameReader(input: InputStream) {
 
             "image" -> EngineMessage.Image(o.optString("path"), decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.opt("re"))
 
+            "buttonBars" -> EngineMessage.ButtonBars(objects(o.optJSONArray("bars")).mapNotNull(::parseButtonBar))
+
+            "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
+
             else -> EngineMessage.Unknown(t)
         }
 
@@ -516,6 +600,49 @@ class FrameReader(input: InputStream) {
             accessibleName = l.optString("accessibleName"),
             accessibleButton = l.optBoolean("accessibleButton"),
             styleSheet = l.optString("styleSheet"),
+        )
+
+        // Null for a bar in a place this app does not know
+        private fun parseButtonBar(b: JSONObject): ButtonBar? {
+            val place = BarPlace.fromWire(b.optString("place")) ?: return null
+            return ButtonBar(
+                id = b.optInt("id"),
+                name = b.optString("name"),
+                styleSheet = b.optString("styleSheet"),
+                place = place,
+                vertical = b.optBoolean("vertical"),
+                columns = b.optInt("columns", 1),
+                fillerOffset = b.optInt("fillerOffset"),
+                buttons = objects(b.optJSONArray("buttons")).map(::parseButton),
+            )
+        }
+
+        private fun parseButton(b: JSONObject): BarButton = BarButton(
+            id = b.optInt("id"),
+            name = b.optString("name"),
+            icon = b.optString("icon"),
+            styleSheet = b.optString("styleSheet"),
+            pushDown = b.optBoolean("pushDown"),
+            checked = b.optBoolean("checked"),
+            menu = b.optBoolean("menu"),
+            children = objects(b.optJSONArray("children")).map(::parseButton),
+        )
+
+        private fun parseCommand(c: JSONObject) = AddonCommand(
+            id = c.optInt("id"),
+            packageName = c.optString("package"),
+            name = c.optString("name"),
+            icon = c.optString("icon"),
+            tooltip = c.optString("tooltip"),
+            menuPath = c.optString("menuPath"),
+            shortcut = c.optString("shortcut"),
+            onMenu = c.optBoolean("onMenu"),
+            onToolbar = c.optBoolean("onToolbar"),
+            enabled = c.optBoolean("enabled", true),
+            checkable = c.optBoolean("checkable"),
+            checked = c.optBoolean("checked"),
+            pinned = c.optBoolean("pinned"),
+            pulse = c.optBoolean("pulse"),
         )
 
         // Empty for what is not base64, as an engine's bad frame should not end the link

@@ -96,7 +96,7 @@ private val HEADER_HEIGHT = 48.dp
 private val SWITCHER_HEIGHT = 56.dp
 
 // Script windows come after the console, the input line and the screen's buttons, which keep the default of 0
-private const val WINDOWS_TRAVERSAL_INDEX = 1f
+internal const val WINDOWS_TRAVERSAL_INDEX = 1f
 
 private val WindowKeySaver = listSaver<WindowKey?, String>(
     save = { if (it == null) emptyList() else listOf(it.name, it.kind.wire) },
@@ -200,7 +200,7 @@ private fun rememberConsoleMetrics(textSizeSp: Int): ConsoleMetrics {
     }
 }
 
-private fun Modifier.placeAt(rect: PxRect, density: Density): Modifier = with(density) {
+internal fun Modifier.placeAt(rect: PxRect, density: Density): Modifier = with(density) {
     // Never a negative size, which Compose refuses, should the area be squeezed below a header's height
     this@placeAt.offset { IntOffset(rect.x.roundToInt(), rect.y.roundToInt()) }
         .size(rect.w.coerceAtLeast(0f).toDp(), rect.h.coerceAtLeast(0f).toDp())
@@ -208,7 +208,7 @@ private fun Modifier.placeAt(rect: PxRect, density: Density): Modifier = with(de
 
 private fun title(window: ScriptWindow): String = window.dock?.title?.ifEmpty { null } ?: window.name
 
-private fun windowColour(code: Int, default: Color): Color = if (code >= RUN_RGB) Color(0xFF000000.toInt() or (code and 0xFFFFFF)) else default
+internal fun windowColour(code: Int, default: Color): Color = if (code >= RUN_RGB) Color(0xFF000000.toInt() or (code and 0xFFFFFF)) else default
 
 @Composable
 private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier) {
@@ -219,8 +219,8 @@ private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metri
             WindowConsole(placed, windows.text[window.name], windows.commandLineOf(window), windows.commandLines, metrics, density, placedModifier)
         }
 
-        // A label's text and images come with its content, later; its colour now
-        WindowKind.LABEL -> if (window.bg != -1) Box(placedModifier.background(windowColour(window.bg, Color.Transparent)))
+        // A label places itself, as a clickable one's touch bounds can be larger than it
+        WindowKind.LABEL -> ScriptLabel(placed, windows.labels[window.name], windows.gaugeParts[window.key], density, modifier)
 
         // One a script made with createCommandLine(), where it put it
         WindowKind.COMMAND_LINE -> {

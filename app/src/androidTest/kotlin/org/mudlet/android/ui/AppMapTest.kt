@@ -421,20 +421,50 @@ class AppMapTest {
     /** Types [text] in the map's search field and sends it as [searchAgain] does; returns the field. */
     private fun search(text: String): SemanticsMatcher {
         val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
+        // The map's height before the keyboard takes its share
+        val height = bounds(mapShown()).height
         withScreen { compose.onNode(field).performTextInput(text) }
-        searchAgain(field)
+        keyboardUp()
+        sendSearch(field, height)
         return field
     }
 
-    /**
-     * Sends what the search [field] holds with the keyboard's Search key. The field lets go of the focus, the keyboard goes,
-     * and the map has its room back, which on a small screen the keyboard took near all of, results and buttons with it.
-     */
+    /** Sends again what the search [field] holds, from the field as a player comes back to it: a tap, the keyboard, then its Search key. */
     private fun searchAgain(field: SemanticsMatcher) {
         val height = bounds(mapShown()).height
+        withScreen { compose.onNode(field).performSemanticsAction(SemanticsActions.RequestFocus) }
+        keyboardUp()
+        sendSearch(field, height)
+    }
+
+    /**
+     * Sends what the focused search [field] holds with the keyboard's Search key. The field lets go of the focus, the keyboard
+     * goes, and the map has its [height] back, which on a small screen the keyboard took near all of, results and buttons with
+     * it; and they stay so, with no keyboard coming back for the field.
+     */
+    private fun sendSearch(field: SemanticsMatcher, height: Float) {
         withScreen { compose.onNode(field).performImeAction() }
-        waitFor("the search field lets go of the focus, the keyboard goes and the map is $height high again") {
-            compose.onAllNodes(field and isFocused()).fetchSemanticsNodes().isEmpty() && !keyboardShown() && bounds(mapShown()).height == height
+        var since = 0L
+        waitFor("the search field lets go of the focus, the keyboard goes and the map is $height high again, for $STEADY_MS ms") {
+            val back = compose.onAllNodes(field and isFocused()).fetchSemanticsNodes().isEmpty() && !keyboardShown() && bounds(mapShown()).height == height
+            val now = System.currentTimeMillis()
+            since = when {
+                !back -> 0L
+                since == 0L -> now
+                else -> since
+            }
+            back && now - since >= STEADY_MS
+        }
+    }
+
+    /**
+     * Waits for the keyboard a focused field asks for, which comes in its own time: a Search key pressed before it has would
+     * hide it before it shows, to show after all. A device with no keyboard on the screen shows none, and the test goes on.
+     */
+    private fun keyboardUp() {
+        try {
+            compose.waitUntil(KEYBOARD_MS) { keyboardShown() }
+        } catch (_: ComposeTimeoutException) {
         }
     }
 
@@ -621,6 +651,12 @@ class AppMapTest {
         // A read of the engine's socket: a receive's 10 s, a frame that comes just before their end, and the quiet that
         // ends a receiveLast
         const val READ_MS = 30_000L
+
+        // How long the keyboard a focused field asks for may take to show
+        const val KEYBOARD_MS = 5_000L
+
+        // How long the screen stays as a search leaves it before the test goes on: no keyboard comes back
+        const val STEADY_MS = 1_000L
         const val TIMEOUT_MS = 240_000L
     }
 }

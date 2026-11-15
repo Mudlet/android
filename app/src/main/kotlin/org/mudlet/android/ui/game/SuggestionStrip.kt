@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.OutputTransformation
+import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -20,14 +22,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.suggest.Suggestion
@@ -65,23 +61,14 @@ fun SuggestionStrip(items: List<Suggestion>, accepted: String?, onAccept: () -> 
 }
 
 /**
- * Shows [ghost] in [color] after the text, fish style, without changing the text: the cursor stays within what was
- * typed. The field's semantics keep the typed text, so TalkBack does not read the ghost as part of it.
+ * Shows [ghost] in [color] after the text, fish style, without changing the text: the field's state, and so the
+ * keyboard, holds only what was typed, and the cursor stays within it. InputLine sets the field's semantics to the
+ * typed text, so TalkBack does not read the ghost as part of it.
  */
-data class GhostTransformation(val ghost: String, val color: Color) : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val typed = text.length
-        val shown = buildAnnotatedString {
-            append(text)
-            withStyle(SpanStyle(color = color)) { append(ghost) }
-        }
-        return TransformedText(
-            shown,
-            object : OffsetMapping {
-                override fun originalToTransformed(offset: Int) = offset
-
-                override fun transformedToOriginal(offset: Int) = offset.coerceAtMost(typed)
-            },
-        )
+data class GhostTransformation(val ghost: String, val color: Color) : OutputTransformation {
+    override fun TextFieldBuffer.transformOutput() {
+        val typed = length
+        append(ghost)
+        addStyle(SpanStyle(color = color), typed, length)
     }
 }

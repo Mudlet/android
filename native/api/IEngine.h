@@ -83,4 +83,8 @@ public:
     // The image file, or icon, at path as PNG, scaled to size unless it is empty, or that frame of an animated one;
     // else why there is none. Size is at most PngImage::maxSide a side.
     virtual std::variant<PngImage, QString> image(const QString& path, const QSize& size, std::optional<int> frame) const = 0;
+    // A click on a button or menu entry of IFrontend::buttonBars(), by its id
+    virtual QString pressButton(int id) = 0;
+    // A click on a command of IFrontend::commands(), by its id
+    virtual QString activateCommand(int id) = 0;
 };

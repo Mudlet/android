@@ -177,6 +177,18 @@ def script_windows(c):
         check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
 
 
+def buttons_and_commands(c):
+    """The stand-in has no button bars or commands: it refuses presses of them, once their fields are right."""
+    for request in ({"t": "pressButton", "button": 1}, {"t": "activateCommand", "command": 1}):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: the stand-in engine has no buttons or commands", f"{request['t']} is refused: {m}")
+    for request, message in (({"t": "pressButton", "button": "1"}, "button must be a whole number"),
+                             ({"t": "pressButton", "button": 1.5}, "button must be a whole number"),
+                             ({"t": "activateCommand"}, "command must be a whole number")):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
+
+
 def main():
     faulthandler.register(signal.SIGUSR1)
     port = fake_telnet.start_in_thread()
@@ -197,6 +209,8 @@ def main():
     windows = [m for m in hs if m["t"] == "windows"]
     check(windows == [{"t": "windows", "full": True, "windows": []}], f"a UI that attaches is told there are no script windows: {windows}")
     check(not any(m["t"] in ("mainArea", "windowText", "label") for m in hs), "nor a main area, window text or label")
+    check([m for m in hs if m["t"] == "buttonBars"] == [{"t": "buttonBars", "bars": []}], "and that there are no button bars")
+    check([m for m in hs if m["t"] == "commands"] == [{"t": "commands", "commands": []}], "or commands")
 
     # Wrong protocol version is refused
     bad = Client(SOCK, version=99)
@@ -287,6 +301,7 @@ def main():
     m = c.wait_for(lambda m: m["t"] == "error")
     check(m == {"t": "error", "message": "unknown type unknownThing", "re": 3}, f"an error carries the request's id: {m}")
     script_windows(c)
+    buttons_and_commands(c)
 
     # Latency
     samples = []

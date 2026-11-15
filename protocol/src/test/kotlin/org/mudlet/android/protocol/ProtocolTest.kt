@@ -360,6 +360,48 @@ class ProtocolTest {
     }
 
     @Test
+    fun theAppsMapAndTheRoomsDecode() {
+        val png = byteArrayOf(-119, 80, 78, 71)
+        val map = FrameReader.parse(
+            JSONObject().put("t", "appMap").put("png", Base64.getEncoder().encodeToString(png)).put("w", 360).put("h", 640).put("viewOnly", false),
+        ) as EngineMessage.AppMap
+        assertArrayEquals(png, map.png)
+        assertEquals(360 to 640, map.w to map.h)
+        assertEquals(false, map.viewOnly)
+        val nothing = FrameReader.parse(JSONObject("""{"t":"appMap","png":"","w":0,"h":0,"viewOnly":true}""")) as EngineMessage.AppMap
+        assertEquals(0 to 0, nothing.w to nothing.h)
+        assertEquals(0, nothing.png.size)
+        val rooms = FrameReader.parse(
+            JSONObject(
+                """{"t":"rooms","text":"hall","rooms":[{"id":12,"name":"Great Hall","area":"Castle"},"junk",{"id":3,"name":"hall","area":""}],"more":true,"re":4}""",
+            ),
+        ) as EngineMessage.Rooms
+        assertEquals("hall", rooms.text)
+        assertEquals(listOf(RoomMatch(12, "Great Hall", "Castle"), RoomMatch(3, "hall", "")), rooms.rooms)
+        assertTrue(rooms.more)
+        assertEquals(4, rooms.replyTo)
+        val none = FrameReader.parse(JSONObject("""{"t":"rooms","text":"x"}""")) as EngineMessage.Rooms
+        assertEquals(emptyList<RoomMatch>(), none.rooms)
+        assertEquals(false, none.more)
+    }
+
+    @Test
+    fun theAppMapRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "setAppMapSize", "w" to 360, "h" to 640, "scale" to 2.75), Requests.setAppMapSize(360, 640, 2.75).toMap())
+        assertEquals(mapOf("t" to "setAppMapSize", "w" to 0, "h" to 0, "scale" to 1.0), Requests.setAppMapSize(0, 0, 1.0).toMap())
+        assertEquals(
+            mapOf("t" to "appMapPointer", "type" to "doubleClick", "x" to 1.5, "y" to 2.0, "button" to POINTER_LEFT),
+            Requests.appMapPointer(MapPointerType.DOUBLE_CLICK, 1.5, 2.0, POINTER_LEFT, 0, 0).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "appMapPointer", "type" to "wheel", "x" to 0.0, "y" to 0.0, "wheelY" to -120),
+            Requests.appMapPointer(MapPointerType.WHEEL, 0.0, 0.0, 0, 0, -120).toMap(),
+        )
+        assertEquals(mapOf("t" to "findRooms", "text" to "hall", "id" to 7L), Requests.findRooms("hall", 7).toMap())
+        assertEquals(mapOf("t" to "showRoom", "room" to 12), Requests.showRoom(12).toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

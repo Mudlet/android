@@ -52,6 +52,15 @@ public:
     // Nor a map
     QString mapPointer(const PointerEvent&) override { return noMap(); }
     QString setMapViewOnly(bool) override { return noMap(); }
+    // The app's map is taken, and is always nothing to draw
+    QString setAppMapSize(const QSize&, double) override
+    {
+        mFrontend->appMap(std::nullopt);
+        return {};
+    }
+    QString appMapPointer(const PointerEvent&) override { return noMap(); }
+    std::variant<RoomList, QString> findRooms(const QString&) const override { return noMap(); }
+    QString showRoom(int) override { return noMap(); }
 
     // Called from Lua's notify() and announce()
     void luaNotify(const QString& title, const QString& text);

@@ -102,4 +102,15 @@ public:
     virtual QString mapPointer(const PointerEvent& event) = 0;
     // Viewing the map, or editing it
     virtual QString setMapViewOnly(bool viewOnly) = 0;
+    // The app's own map, apart from the mapper window, drawn for IFrontend::appMap() at size, in the map's pixels, with
+    // scale device pixels to each, from now on and for the next profile too; an empty size stops it. Scale is from 1
+    // to maxAppMapScale.
+    static constexpr double maxAppMapScale = 4.0;
+    virtual QString setAppMapSize(const QSize& size, double scale) = 0;
+    // What mapPointer() does, at a point of the last IFrontend::appMap() frame, in the map's pixels
+    virtual QString appMapPointer(const PointerEvent& event) = 0;
+    // The rooms whose name holds text, ignoring case, and the room whose id it is; else why none were looked for
+    virtual std::variant<RoomList, QString> findRooms(const QString& text) const = 0;
+    // The app's map centred on that room, which it selects, until the player moves
+    virtual QString showRoom(int room) = 0;
 };

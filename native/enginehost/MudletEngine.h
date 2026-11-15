@@ -57,6 +57,10 @@ public:
     QString activateCommand(int id) override;
     QString mapPointer(const PointerEvent& event) override;
     QString setMapViewOnly(bool viewOnly) override;
+    QString setAppMapSize(const QSize& size, double scale) override;
+    QString appMapPointer(const PointerEvent& event) override;
+    std::variant<RoomList, QString> findRooms(const QString& text) const override;
+    QString showRoom(int room) override;
 
 private:
     // stopping: the profile closes, for the one in mPendingOpen to start
@@ -127,6 +131,9 @@ private:
     void pushMap(const std::optional<QSize>& mapperSize);
     // The map drawn at size, or none where it cannot be, with a warning unless size is empty
     std::optional<MapFrame> drawMap(const QSize& size);
+    // The app's map drawn at the size the UI asked for, or none while it asks for none, no profile is open or the map
+    // has no rooms
+    void pushAppMap();
 
     void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
@@ -155,6 +162,9 @@ private:
     QSize mMainWindowSize{0, 0};
     // The size of the mapper window as pushMap() last had it: none while it did not show
     std::optional<QSize> mMapSize;
+    // The app's map as setAppMapSize() asked for it: empty for none
+    QSize mAppMapSize{0, 0};
+    double mAppMapScale = 1;
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
     // Lua (connects included) asked for while the profile starts, run once it has

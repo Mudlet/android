@@ -300,6 +300,30 @@ QString settleConfigDir()
     return QDir(dir).absolutePath();
 }
 
+// A pointer event on a map, as the session takes it; none for a type the map does not take
+std::optional<THeadlessSession::MapPointerEvent> mapPointerEvent(const PointerEvent& event)
+{
+    THeadlessSession::MapPointerEvent sessionEvent;
+    switch (event.type) {
+    case PointerEvent::Type::press:
+        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::press;
+        break;
+    case PointerEvent::Type::doubleClick:
+        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::doubleClick;
+        break;
+    case PointerEvent::Type::wheel:
+        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::wheel;
+        break;
+    default:
+        return std::nullopt;
+    }
+    sessionEvent.position = event.position;
+    sessionEvent.button = Qt::MouseButton(event.button);
+    sessionEvent.modifiers = Qt::KeyboardModifiers::fromInt(event.modifiers);
+    sessionEvent.angleDelta = QPoint(0, event.wheelY);
+    return sessionEvent;
+}
+
 } // namespace
 
 MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent)
@@ -470,6 +494,7 @@ void MudletEngine::connectSession()
         pushWindows(true);
         pushButtonBars();
         pushCommands();
+        pushAppMap();
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
@@ -498,6 +523,7 @@ void MudletEngine::connectSession()
     // A repaint comes from the event loop, once a turn; the view-only flag is in each frame
     const auto pushShownMap = [this] {
         pushMap(shownMapperSize(mSession->scriptWindows()));
+        pushAppMap();
     };
     connect(session, &THeadlessSession::mapRepaintRequested, this, pushShownMap);
     connect(session, &THeadlessSession::mapViewOnlyChanged, this, pushShownMap);
@@ -1028,6 +1054,7 @@ void MudletEngine::onProfileClosed()
     mFrontend->commands({});
     mMapSize.reset();
     mFrontend->map(std::nullopt);
+    mFrontend->appMap(std::nullopt);
 }
 
 void MudletEngine::pushWindows(bool withText)
@@ -1123,6 +1150,30 @@ std::optional<MapFrame> MudletEngine::drawMap(const QSize& size)
         return std::nullopt;
     }
     return MapFrame{png, size, mSession->mapViewOnly()};
+}
+
+void MudletEngine::pushAppMap()
+{
+    if (mAppMapSize.isEmpty() || !profileOpen()) {
+        mFrontend->appMap(std::nullopt);
+        return;
+    }
+    // Drawn in the map's pixels onto an image of the device's, so the lines and names are as sharp as the screen
+    QImage image(mAppMapSize * mAppMapScale, QImage::Format_ARGB32_Premultiplied);
+    image.setDevicePixelRatio(mAppMapScale);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    const bool drawn = mSession->renderAppMap(painter, mAppMapSize);
+    painter.end();
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    // A map with no rooms is the usual reason for none, so it is not warned of
+    if (!drawn || !image.save(&buffer, "PNG")) {
+        mFrontend->appMap(std::nullopt);
+        return;
+    }
+    mFrontend->appMap(MapFrame{png, mAppMapSize, mSession->mapViewOnly()});
 }
 
 QString MudletEngine::setMainWindowSize(int width, int height)
@@ -1263,25 +1314,11 @@ QString MudletEngine::mapPointer(const PointerEvent& event)
     if (!profileOpen()) {
         return QStringLiteral("no profile running");
     }
-    THeadlessSession::MapPointerEvent sessionEvent;
-    switch (event.type) {
-    case PointerEvent::Type::press:
-        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::press;
-        break;
-    case PointerEvent::Type::doubleClick:
-        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::doubleClick;
-        break;
-    case PointerEvent::Type::wheel:
-        sessionEvent.type = THeadlessSession::MapPointerEvent::Type::wheel;
-        break;
-    default:
+    const std::optional<THeadlessSession::MapPointerEvent> sessionEvent = mapPointerEvent(event);
+    if (!sessionEvent) {
         return QStringLiteral("the map takes a press, a double-click or a wheel turn");
     }
-    sessionEvent.position = event.position;
-    sessionEvent.button = Qt::MouseButton(event.button);
-    sessionEvent.modifiers = Qt::KeyboardModifiers::fromInt(event.modifiers);
-    sessionEvent.angleDelta = QPoint(0, event.wheelY);
-    return mSession->mapPointer(sessionEvent) ? QString() : mSession->errorString();
+    return mSession->mapPointer(*sessionEvent) ? QString() : mSession->errorString();
 }
 
 QString MudletEngine::setMapViewOnly(bool viewOnly)
@@ -1290,6 +1327,58 @@ QString MudletEngine::setMapViewOnly(bool viewOnly)
         return QStringLiteral("no profile running");
     }
     return mSession->setMapViewOnly(viewOnly) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::setAppMapSize(const QSize& size, double scale)
+{
+    if (size.width() * scale > PngImage::maxSide || size.height() * scale > PngImage::maxSide) {
+        return QStringLiteral("the map at %1x%2 by %3 is larger than %4 pixels a side").arg(size.width()).arg(size.height()).arg(scale).arg(PngImage::maxSide);
+    }
+    mAppMapSize = size.isEmpty() ? QSize(0, 0) : size;
+    mAppMapScale = scale;
+    if (mAppMapSize.isEmpty() && profileOpen()) {
+        mSession->closeAppMap();
+    }
+    pushAppMap();
+    return {};
+}
+
+QString MudletEngine::appMapPointer(const PointerEvent& event)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    const std::optional<THeadlessSession::MapPointerEvent> sessionEvent = mapPointerEvent(event);
+    if (!sessionEvent) {
+        return QStringLiteral("the map takes a press, a double-click or a wheel turn");
+    }
+    return mSession->appMapPointer(*sessionEvent) ? QString() : mSession->errorString();
+}
+
+std::variant<RoomList, QString> MudletEngine::findRooms(const QString& text) const
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    QList<THeadlessSession::RoomMatch> found = mSession->findRooms(text);
+    std::sort(found.begin(), found.end(), [](const THeadlessSession::RoomMatch& a, const THeadlessSession::RoomMatch& b) {
+        const int byName = a.name.compare(b.name, Qt::CaseInsensitive);
+        return byName != 0 ? byName < 0 : a.id < b.id;
+    });
+    RoomList list;
+    list.more = found.size() > RoomList::maxRooms;
+    for (const THeadlessSession::RoomMatch& room : found.first(std::min<qsizetype>(found.size(), RoomList::maxRooms))) {
+        list.rooms.append({room.id, room.name, room.areaName});
+    }
+    return list;
+}
+
+QString MudletEngine::showRoom(int room)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->showRoomOnAppMap(room) ? QString() : mSession->errorString();
 }
 
 void MudletEngine::setScreenSize(int columns, int rows)

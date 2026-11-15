@@ -266,6 +266,7 @@ def main():
     script_labels()
     button_bars()
     map_view()
+    app_map()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -1383,6 +1384,150 @@ def map_view():
     c.send({"t": "runLua", "code": "testMapper:show()"})
     seen_or_next(c, lambda m: m["t"] == "map" and (m["w"], m["h"]) == (400, 300), seen, since)
     check(True, "shown again, it sends the map again")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def app_map():
+    """The app's own map, with no script mapper: setAppMapSize drawing the profile's map as appMap frames at the size and
+    scale asked for, with nothing to draw before a profile or rooms; appMapPointer selecting and walking without the
+    script's mapper events; findRooms by name and id; showRoom centring the map on a room; setMapViewOnly with only
+    this map open; the frame to a UI that attaches; and 0 by 0 stopping it."""
+    profile = "App Map Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(not any(m["t"] == "appMap" for m in seen), "a UI that attaches before asking for the app's map gets none")
+    empty = {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 2})
+    m = seen_or_next(c, lambda m: m["t"] in ("appMap", "error"), seen, since)
+    check(m == empty, f"with no profile open the app's map has nothing to draw: {m}")
+    for request in ({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, {"t": "showRoom", "room": 1},
+                    {"t": "findRooms", "text": "hall"}):
+        m = c.ask(request, answers=("error", "rooms"), collect=seen)
+        check(m.get("message") == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    m = c.ask({"t": "setAppMapSize", "w": 3000, "h": 10, "scale": 2}, answers=("error",), collect=seen)
+    check(m["message"] == "setAppMapSize: the map at 3000x10 by 2 is larger than 4096 pixels a side",
+          f"a map larger than a PNG may be is refused: {m}")
+
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the app map's profile is made: {m}")
+    since = len(seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    m = c.ask({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
+    check(m["message"] == "appMapPointer: The app's map has not been drawn yet; the position is in what renderAppMap() drew.",
+          f"a press on a map with no rooms, so never drawn, is refused: {m}")
+    check(not any(m["t"] == "appMap" and m["w"] for m in seen[since:]), "a profile whose map has no rooms draws nothing")
+
+    # As in map_view(): rooms 1 and 2 two apart, the player in 1, but at the area's first zoom of 20, as setMapZoom()
+    # needs a script's mapper: on a map 300 high room 1 is in the middle and room 2 30 pixels to its right; the PNG is
+    # at twice that. Nothing opens a script mapper.
+    room1, room2, middle = (200, 150), (230, 150), (200, 150)
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'local area = addAreaName("App Map Area")',
+        "setCustomEnvColor(301, 200, 30, 30, 255)",
+        "for id, x in pairs({[1] = 0, [2] = 2, [3] = 0}) do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, x, id == 3 and 4 or 0, 0)",
+        "end",
+        'setRoomName(1, "Great Hall")',
+        'setRoomName(2, "Kitchen")',
+        'setRoomName(3, "hallway")',
+        "setRoomEnv(2, 301)",
+        'setExit(1, 2, "e")',
+        'setExit(2, 1, "w")',
+        "centerview(1)",
+        "updateMap()",
+        'function doSpeedWalk() echo("walk " .. table.concat(speedWalkDir, ",") .. " to " .. table.concat(speedWalkPath, ",") .. "\\n") end',
+        'registerAnonymousEventHandler("sysMapWindowMousePressEvent", function() echo("map pressed\\n") end)',
+        'registerAnonymousEventHandler("mapModeChangeEvent", function(_, mode) echo("map mode " .. mode .. "\\n") end)',
+    ])})
+
+    def pixel(m, point):
+        return png_pixel(base64.b64decode(m["png"]), point[0] * 2, point[1] * 2)
+
+    # Only in a frame at the scale asked for, whose pixels the points are read at
+    def red_at(m, point):
+        return png_size(base64.b64decode(m["png"])) == (800, 600) and pixel(m, point)[:3] == (200, 30, 30)
+
+    # Its size first: the pixels below are read at the scale asked for, so a PNG at another size has none of them
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"], seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"a map with rooms sends the app's map: {e}")
+        stop_engine(proc)
+        return
+    png = base64.b64decode(m["png"])
+    sized = (m["w"], m["h"], m["viewOnly"]) == (400, 300, True) and png_size(png) == (800, 600)
+    check(sized, f"the app's map comes at the size asked for, its PNG at the scale: "
+                 f"{m['w']}x{m['h']} {png_size(png)} {m['viewOnly']}")
+    if not sized:
+        stop_engine(proc)
+        return
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and red_at(m, room2), seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"a map with rooms sends the app's map with room 2 drawn in its colour: {e}")
+        stop_engine(proc)
+        return
+    first = m
+    check(not red_at(m, middle), f"and the player's room is in the middle, not room 2: {pixel(m, middle)}")
+    check(not any(m["t"] == "map" for m in seen), "and no script map is sent, as no script opened a mapper")
+
+    m = c.ask({"t": "findRooms", "text": "HALL"}, answers=("rooms", "error"), collect=seen)
+    check(m == {"t": "rooms", "text": "HALL", "more": False, "re": m.get("re"),
+                "rooms": [{"id": 1, "name": "Great Hall", "area": "App Map Area"}, {"id": 3, "name": "hallway", "area": "App Map Area"}]},
+          f"findRooms finds the rooms whose name holds the text, ignoring case, by name: {m}")
+    m = c.ask({"t": "findRooms", "text": "2"}, answers=("rooms", "error"), collect=seen)
+    check([r["id"] for r in m.get("rooms", [])] == [2], f"and the room whose id it is: {m}")
+    m = c.ask({"t": "findRooms", "text": "cellar"}, answers=("rooms", "error"), collect=seen)
+    check(m.get("rooms") == [] and m.get("more") is False, f"and none when none match: {m}")
+
+    since = len(seen)
+    c.send({"t": "appMapPointer", "type": "press", "x": room2[0], "y": room2[1], "button": 1})
+    c.send({"t": "appMapPointer", "type": "doubleClick", "x": room2[0], "y": room2[1], "button": 1})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail", "error") and (m["t"] == "error" or m["text"].startswith("walk ")), seen, since)
+    check(m.get("text") == "walk e to 2", f"a double-click on a room of the app's map walks there: {m}")
+    c.send({"t": "runLua", "code": 'echo("marker\\n")'})
+    seen_or_next(c, shown("marker"), seen, since)
+    check(not any(m["t"] in ("line", "tail") and m["text"] == "map pressed" for m in seen[since:]),
+          "a press on the app's map raises no sysMapWindowMousePressEvent, as it is not a script's map")
+
+    # Room 2 is selected now, so drawn shaded rather than red: room 1, the player's, is what shows where the map moved
+    player = pixel(first, middle)
+    since = len(seen)
+    c.send({"t": "showRoom", "room": 2})
+    left = (room1[0] - (room2[0] - room1[0]), room1[1])
+    m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "appMap" and m["w"] and pixel(m, left) == player), seen, since)
+    check(m["t"] == "appMap" and pixel(m, middle) != player, f"showRoom centres the app's map on that room: {m.get('message', m['t'])}")
+    m = c.ask({"t": "showRoom", "room": 99}, answers=("error",), collect=seen)
+    check(m["message"] == "showRoom: There is no room 99 in the map.", f"showRoom of a room not in the map is refused: {m}")
+
+    since = len(seen)
+    c.send({"t": "setMapViewOnly", "viewOnly": False})
+    seen_or_next(c, shown("map mode editing"), seen, since)
+    seen_or_next(c, lambda m: m["t"] == "appMap" and m["viewOnly"] is False, seen, since)
+    check(True, "setMapViewOnly works with only the app's map open, and its frame comes again, edited")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    kinds = [m["t"] for m in msgs]
+    check(kinds.count("appMap") == 1 and kinds.index("windows") < kinds.index("appMap") < kinds.index("buttonBars"),
+          f"a UI that attaches gets the app's map, after the windows: {kinds}")
+
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 0, "h": 0, "scale": 1})
+    m = seen_or_next(c, lambda m: m["t"] in ("appMap", "error"), seen, since)
+    check(m == empty, f"0 by 0 stops the app's map: {m}")
+    m = c.ask({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
+    check(m["message"].startswith("appMapPointer: The app's map has not been drawn yet"), f"and lets its view go: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

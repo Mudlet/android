@@ -11,6 +11,7 @@ import java.io.DataInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -192,6 +193,27 @@ class FakeEngine : AutoCloseable {
         )
 
         fun windowCommandLine(name: String, text: String) = send(JSONObject().put("t", "windowCommandLine").put("name", name).put("text", text))
+
+        /** What the label [name] shows (docs/protocol.md, `label`): [text] as rich text, or the file [image]. */
+        fun label(
+            name: String,
+            text: String = "",
+            image: String = "",
+            toolTip: String = "",
+            accessibleName: String = "",
+            accessibleButton: Boolean = false,
+            styleSheet: String = "",
+        ) = send(
+            JSONObject().put("t", "label").put("name", name).put("text", text).put("image", image).put("svg", false)
+                .put("movie", "").put("moviePaused", false).put("movieFrame", -1).put("movieSpeed", 100).put("toolTip", toolTip)
+                .put("clickThrough", false).put("accessibleName", accessibleName).put("accessibleButton", accessibleButton)
+                .put("styleSheet", styleSheet),
+        )
+
+        /** The answer to the `getImage` whose id was [re]: [png], a PNG of [w] by [h] pixels. */
+        fun image(path: String, png: ByteArray, w: Int, h: Int, re: Any) = send(
+            JSONObject().put("t", "image").put("path", path).put("png", Base64.getEncoder().encodeToString(png)).put("w", w).put("h", h).put("re", re),
+        )
 
         /** As the engine process dying: the UI sees the connection end. */
         override fun close() {

@@ -244,7 +244,9 @@ device shows, below the UI's debug hook:
   TalkBack uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; the script windows: a mini console at its scaled
   place in the fitted and the stacked layout, the size the game screen gives Mudlet's main window, the window
-  switcher, a window's command line both ways and a user window's close button; and the notification permission, asked on Android
+  switcher, a window's command line both ways and a user window's close button; the labels: a label's text at its
+  scaled place, a clickable one as a button whose click and tap reach the engine as `pointer` events, its 48 dp touch
+  bounds, a gauge read as its progress, a link's command, and a label's image asked of the engine; and the notification permission, asked on Android
   13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
   (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
   library needs API 34, so they run on the API 36 emulator only.
@@ -745,6 +747,14 @@ Item 13 of the on-device checklist covers this.
     - With TalkBack on: swiping goes from the console to the input line and the bar, then the windows, each read as
       "<name> window", then the tabs; a window's command line, its Send button and a user window's close button read
       their names.
+18. Labels and gauges, with the same package and the libmudlet APK.
+    - Labels look as on the desktop: their colours, borders, rounded corners, text and its alignment, and images,
+      scaled with their windows. A gauge's front follows its value.
+    - A tap on a clickable label does what a click does on the desktop, a double tap what a double click does, and a
+      long press opens a Geyser right-click menu and shows the label's tool tip. A slider made of labels follows a
+      drag. A link in a label's text runs its command.
+    - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
+      its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

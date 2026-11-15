@@ -37,6 +37,12 @@
     <string name="window_back_to_console">Close %1$s and go back to the console</string>
     <string name="window_close">Close %1$s</string>
 
+    <!-- A script's labels and gauges: the actions TalkBack offers on a label (%1$s is a link's text, as the script
+         wrote it), and a gauge's value where it has no text of its own -->
+    <string name="label_right_click">Right-click</string>
+    <string name="label_follow_link">Follow link: %1$s</string>
+    <string name="gauge_percent">%1$d%%</string>
+
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <string name="connection_disconnected">Disconnected</string>

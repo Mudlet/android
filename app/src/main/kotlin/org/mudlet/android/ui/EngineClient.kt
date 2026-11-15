@@ -360,8 +360,13 @@ object EngineClient {
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
-                is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine ->
+                is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label ->
                     post { ScriptWindowsClient.onMessage(message) }
+
+                is EngineMessage.Image -> {
+                    val bitmap = ScriptWindowsClient.decode(message)
+                    post { ScriptWindowsClient.onImage(message, bitmap) }
+                }
 
                 is EngineMessage.Notify -> post { notifyCount++ }
 

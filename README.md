@@ -219,7 +219,8 @@ side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on an
 **PTB** (`.github/workflows/ptb.yml`), outside CI, runs every night and on pull requests that change how the release
 is built. It builds the release from Mudlet's `development` for arm64-v8a and x86_64, as the separate app Mudlet PTB
 (`org.mudlet.mudlet.ptb`), runs its minified x86_64 build through the emulator smoke test, and from `main` uploads it
-to Google Play's open testing track and replaces the `ptb` GitHub pre-release. It skips a night when neither Mudlet
+to Google Play's open testing track and replaces the `ptb` GitHub pre-release, whose APKs come with the source
+code they are built from. It skips a night when neither Mudlet
 nor this repository changed, and publishes nothing without its secrets or off `main`. See [`docs/ptb.md`](docs/ptb.md).
 
 Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
@@ -229,9 +230,16 @@ APKs and libmudlet install the versions under [Building](#building) with `.githu
 through a pinned aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Mudlet's Android builds, Gradle, ccache and the
 emulators' system images are cached between runs.
 
-## Licences
+## Licence
 
-The stand-in engine vendors Lua 5.1.5 (MIT, see [`native/third_party/lua-5.1.5/COPYRIGHT`](native/third_party/lua-5.1.5/COPYRIGHT)).
-The APK carries OpenSSL 3, under the Apache License 2.0.
+This repository's code is free software under the GNU General Public License, version 3 or later
+(`GPL-3.0-or-later`); the full text is in [`LICENSE`](LICENSE). The APK as a whole, with Mudlet, Qt and OpenSSL, is
+distributed under version 3 of the GPL.
+
+The app's About screen lists the licence of everything the APK bundles, with the texts: Mudlet (GPL v2 or later), Qt
+(LGPL v3), OpenSSL 3 (Apache 2.0), the stand-in engine's vendored Lua 5.1.5 (MIT, see
+[`native/third_party/lua-5.1.5/COPYRIGHT`](native/third_party/lua-5.1.5/COPYRIGHT)), Mudlet's dependencies and the
+Android libraries. Where the list comes from, the checks that keep it complete, and how to rebuild the app with your
+own Qt are in [`docs/licences.md`](docs/licences.md).
 The launcher icon is made from Mudlet's logo, by Thorsten Wilms, from Mudlet/Mudlet (GPL-2.0-or-later); see
 [`docs/launcher-icon.md`](docs/launcher-icon.md).

@@ -1,10 +1,11 @@
 #!/bin/bash
 # Checks each debug APK in a directory: that it holds Qt and the engine library, and OpenSSL as Qt's TLS backend
 # loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load segments), that they are
-# stored or compressed as the manifest's extractNativeLibs says, and that its launcher icon is an adaptive icon with a
-# monochrome layer; then writes each APK's size, its size on the device, and OpenSSL's share, to $GITHUB_STEP_SUMMARY
-# (or stdout); with SIZE_BUDGET, checks each APK's size against that line of scripts/apk-size-budget.txt
-# (scripts/check-apk-size.sh). CI runs it through .github/actions/check-apk.
+# stored or compressed as the manifest's extractNativeLibs says, that its launcher icon is an adaptive icon with a
+# monochrome layer, and that it lists the licence of each library and Gradle module it bundles
+# (scripts/check-licences.py); then writes each APK's size, its size on the device, and OpenSSL's share, to
+# $GITHUB_STEP_SUMMARY (or stdout); with SIZE_BUDGET, checks each APK's size against that line of
+# scripts/apk-size-budget.txt (scripts/check-apk-size.sh). CI runs it through .github/actions/check-apk.
 #
 # Usage: scripts/check-apk.sh [apk-dir]   (default app/build/outputs/apk/debug)
 # Optional: ABI (arm64-v8a), EXTRACTED=true for an APK built with -PextractNativeLibs=true, ENGINE (libengine: the
@@ -107,6 +108,9 @@ for apk in "${apks[@]}"; do
     done <<< "$files"
   done
   flag=$(sed -n 's/.*:extractNativeLibs([^)]*)=\([a-z]*\).*/\1/p' <<< "$manifest")
+  # each native library and Gradle module with its licence and the licence's text, as the About screen lists them
+  python3 "$root/scripts/check-licences.py" --apk "$apk_dir/$apk" --abi "$ABI" --aapt2 "$aapt2" \
+    || { echo "::error::$apk does not list the licence of everything it bundles (above; docs/licences.md)"; exit 1; }
   apk_size=$(stat -c %s "$apk")
   if [ "$EXTRACTED" = true ]; then
     (( deflated == count )) \

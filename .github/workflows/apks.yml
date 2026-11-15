@@ -1,9 +1,10 @@
 name: APKs
 
 # The app's debug APK for arm64-v8a with the stand-in engine, after the stand-in's desktop test, the Kotlin
-# protocol tests (against that desktop engine too) and the command suggestions' tests, and a second time with its
-# libraries extracted at install. Both carry OpenSSL for Qt's TLS backend. Android lint runs once the first APK has
-# staged the Qt jars it needs. The APK with libmudlet as its engine is built in libmudlet.yml.
+# protocol tests (against that desktop engine too) and the command suggestions' tests, and followed by the app's JVM
+# tests, and a second time with its libraries extracted at install. Both carry OpenSSL for Qt's TLS backend. Android
+# lint runs once the first APK has staged the Qt jars it needs. The APK with libmudlet as its engine is built in
+# libmudlet.yml.
 # ci.yml calls it when a file it builds from changed; a manual run builds them on any branch.
 on:
   workflow_call:
@@ -70,6 +71,11 @@ jobs:
 
       - name: Build APK
         run: ${{ matrix.build }}
+
+      # the About screen's licence data (app/src/test), after the build staged :engine-service's resources
+      - name: App JVM tests
+        if: matrix.tests
+        run: ./gradlew -PqtRoot="$QT_ROOT" :app:testDebugUnitTest
 
       # needs the Qt jars the APK build staged; a warning fails it too (lint.xml)
       - name: Android lint

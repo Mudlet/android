@@ -2,7 +2,8 @@ name: PTB
 
 # Public test builds (docs/ptb.md): every night, Mudlet's latest development as the app org.mudlet.mudlet.ptb, built
 # for arm64-v8a and x86_64, minified, signed, and run on an emulator; then, from main only, the AAB goes to Google
-# Play's open testing track and the APKs to the rolling `ptb` GitHub pre-release. A night on which neither Mudlet's
+# Play's open testing track and the APKs, with the source code they are built from, to the rolling `ptb` GitHub
+# pre-release. A night on which neither Mudlet's
 # development nor this repository changed since the last PTB (as the `ptb` pre-release's notes record it) builds
 # nothing. Without the signing secrets it signs with a throwaway key and publishes nothing; on any branch but main it
 # publishes nothing either (a dry run), as on a pull request that changes how the release is built.
@@ -11,6 +12,7 @@ on:
     paths:
       - .github/workflows/ptb.yml
       - scripts/build-release.sh
+      - scripts/build-source-bundle.sh
       - scripts/merge-qtdeploy.py
       - scripts/check-apk-size.sh
       - scripts/apk-size-budget.txt
@@ -233,6 +235,41 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  # The source code the release is built from (scripts/build-source-bundle.sh), which the GitHub pre-release carries
+  # beside the APKs: this repository and the Mudlet checkout at the commits built, the Lua modules Mudlet fetches, the
+  # dependencies' sources and Qt's modules. Every run builds it; only one that publishes keeps it
+  source:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: Mudlet/Mudlet
+          ref: ${{ needs.plan.outputs.mudlet-sha }}
+          path: mudlet
+
+      - name: Build the source bundle
+        run: |
+          scripts/build-source-bundle.sh mudlet dist/mudlet-ptb-source.tar
+          tar -xOf dist/mudlet-ptb-source.tar mudlet-ptb-source/SOURCES.txt
+          echo "Source bundle: $(du -h dist/mudlet-ptb-source.tar | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: needs.plan.outputs.publish == 'true'
+        with:
+          name: ptb-source
+          path: dist/mudlet-ptb-source.tar
+          if-no-files-found: error
+          retention-days: 3
+          # its archives are compressed already
+          compression-level: 0
+
   # The AAB, an APK for each ABI and the smoke build (scripts/build-release.sh), signed with the upload key from the
   # secrets when publishing, otherwise with a key made here and thrown away
   package:
@@ -408,6 +445,9 @@ jobs:
             echo "cannot update the other: uninstall Mudlet PTB before switching. It installs beside Mudlet, and keeps its"
             echo "own profiles. More in [docs/ptb.md]($android/blob/main/docs/ptb.md)."
             echo
+            echo "\`mudlet-ptb-source.tar\` is the source code this build is made from, Qt's and the dependencies' included;"
+            echo "its \`SOURCES.txt\` says what is in it. The app is free software under the GNU GPL version 3."
+            echo
             echo "<!-- mudlet: $MUDLET_SHA -->"
             echo "<!-- android: $android_sha -->"
             echo "<!-- versionCode: $VERSION_CODE -->"
@@ -520,10 +560,10 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Google Play's open testing track ("beta" in the API), from main, once the smoke test passed. The service
-  # account's key is best kept in the `play` environment, limited to main (docs/ptb.md)
+  # Google Play's open testing track ("beta" in the API), from main, once the smoke test passed and the source bundle
+  # is built. The service account's key is best kept in the `play` environment, limited to main (docs/ptb.md)
   play:
-    needs: [plan, package, smoke]
+    needs: [plan, package, smoke, source]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -564,11 +604,11 @@ jobs:
           status: completed
           whatsNewDirectory: dist/whatsnew
 
-  # The rolling `ptb` pre-release, replaced by each PTB: the APKs, their checksums and the notes, whose markers the
-  # next run's plan reads. Only for an APK signed with the upload key: a throwaway key would change every night, and
-  # no installed PTB could take the next one
+  # The rolling `ptb` pre-release, replaced by each PTB: the APKs, the source bundle, their checksums and the notes,
+  # whose markers the next run's plan reads. Only for an APK signed with the upload key: a throwaway key would change
+  # every night, and no installed PTB could take the next one
   github-release:
-    needs: [plan, package, smoke, play]
+    needs: [plan, package, smoke, play, source]
     if: needs.plan.outputs.publish == 'true' && needs.package.outputs.signed-with == 'upload'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -579,23 +619,29 @@ jobs:
         with:
           name: ptb
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: ptb-source
+          path: dist
+
       - name: Replace the ptb pre-release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION_NAME: ${{ needs.plan.outputs.version-name }}
         run: |
+          (cd dist && sha256sum mudlet-ptb-source.tar >> SHA256SUMS.txt)
           if ! out=$(gh release delete ptb --cleanup-tag --yes 2>&1); then
             grep -q 'release not found' <<< "$out" || { echo "::error::could not delete the old ptb pre-release: $out"; exit 1; }
           fi
           gh release create ptb --target "$GITHUB_SHA" --prerelease --latest=false \
             --title "Mudlet PTB $VERSION_NAME" --notes-file dist/release-notes.md \
-            dist/mudlet-ptb-arm64-v8a.apk dist/mudlet-ptb-x86_64.apk dist/SHA256SUMS.txt
+            dist/mudlet-ptb-arm64-v8a.apk dist/mudlet-ptb-x86_64.apk dist/mudlet-ptb-source.tar dist/SHA256SUMS.txt
           echo "Published $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/ptb" >> "$GITHUB_STEP_SUMMARY"
 
   # GitHub mails a failed scheduled run only to whoever last edited the cron line
   report-nightly-failure:
-    needs: [plan, engine, package, smoke, play, github-release]
+    needs: [plan, engine, source, package, smoke, play, github-release]
     # a job that hits timeout-minutes is cancelled, not failed; a job skipped because neither commit changed is fine
     if: >-
       always() && github.event_name == 'schedule'

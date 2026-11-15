@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.net.toUri
+import org.mudlet.android.protocol.AddonCommand
+import org.mudlet.android.protocol.ButtonBar
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LabelLink
 import org.mudlet.android.protocol.LayoutMode
@@ -22,12 +24,18 @@ import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.ScriptWindows
 
 /**
- * The script windows' part of [EngineClient] (docs/phase-f.md): the windows the engine describes, for the game screen
- * to draw, and the requests about them. Main thread only, as EngineClient's state; EngineClient hands it the engine's
- * messages about windows and tells it of each attach.
+ * The script windows' part of [EngineClient] (docs/phase-f.md): the windows, button bars and commands the engine
+ * describes, for the game screen to draw, and the requests about them. Main thread only, as EngineClient's state;
+ * EngineClient hands it the engine's messages about them and tells it of each attach.
  */
 object ScriptWindowsClient {
     var state by mutableStateOf(ScriptWindows())
+        private set
+
+    /** The profile's button bars and its packages' commands, each as the engine last sent them whole. */
+    var buttonBars by mutableStateOf(emptyList<ButtonBar>())
+        private set
+    var commands by mutableStateOf(emptyList<AddonCommand>())
         private set
 
     /** Fitted or stacked, or by the game area's width: the setting docs/phase-f.md's "Layout" offers the player. */
@@ -63,7 +71,11 @@ object ScriptWindowsClient {
     private var touchedLabel: String? = null
 
     internal fun onMessage(message: EngineMessage) {
-        state = state.after(message)
+        when (message) {
+            is EngineMessage.ButtonBars -> buttonBars = message.bars
+            is EngineMessage.Commands -> commands = message.commands
+            else -> state = state.after(message)
+        }
     }
 
     /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
@@ -110,6 +122,8 @@ object ScriptWindowsClient {
     internal fun onAttached(sameInstance: Boolean) {
         if (!sameInstance) {
             state = ScriptWindows()
+            buttonBars = emptyList()
+            commands = emptyList()
             sentSize = null
             sentPlacements.clear()
             touchedLabel = null
@@ -150,6 +164,15 @@ object ScriptWindowsClient {
     fun commandLineShown(name: String) {
         state = state.commandLineShown(name)
     }
+
+    /**
+     * A tap on the button or menu entry [button] of [buttonBars]: its command and script run, and a push-down one goes
+     * down or up, which the next [buttonBars] shows. False as for [EngineClient.send].
+     */
+    fun pressButton(button: Int): Boolean = EngineClient.send(Requests.pressButton(button))
+
+    /** A tap on the command [command] of [commands]: a checkable one is ticked or unticked. False as for [EngineClient.send]. */
+    fun activateCommand(command: Int): Boolean = EngineClient.send(Requests.activateCommand(command))
 
     /** Asks the engine for [request], unless it was asked already; [images] gets it. */
     fun requestImage(request: ImageRequest) {

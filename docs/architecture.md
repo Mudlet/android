@@ -26,9 +26,9 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows and button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
-| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`). Its tests run on the JVM, against the desktop engine too |
+| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
@@ -189,6 +189,29 @@ can no longer be decrypted is forgotten, and the player types it again.
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
 `connect` stores a password and opens a profile as the profile list does.
+
+### Button bars and commands
+The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt` and `ScriptCommands.kt`, laid out by
+`ButtonBarLayout` and `CommandMenu` in `:protocol`):
+- A `top` bar is a row above the game area, the console with its windows. In the fitted layout (600 dp and wider) a
+  `left` or `right` bar is a strip at that side, as Mudlet's are beside its main console, and a floating bar, which the
+  GUI lets the player dock, is a row below, or a strip at the end when it is vertical. Narrower, a `left` bar is a row
+  above and a `right` or floating one a row below, lying along it. The windows are fitted when the bars are, and
+  Mudlet's main window is what the bars leave, as the GUI's bars take their room from its main console. A row takes
+  at most a quarter of the area's height and a strip 160 dp of its width; both scroll.
+- A bar's buttons are in its grid, as `docs/protocol.md` gives it. A button is at least 48 dp square, with its icon
+  (asked of the engine at 24 dp) and its name; style sheets are not drawn.
+- A tap sends `pressButton`, and the next `buttonBars` shows what it did. A push-down button is a switch, on, with a
+  tick, while it is down. A folder opens a menu of its entries, a folder among them opening its own in place with a
+  Back entry; the entry picked is pressed and then the folder, whose script the GUI runs once its menu closes, so a menu
+  closed without a pick presses the folder alone. A floating bar's folder shows its buttons at once, not itself.
+- The commands are in the menu of an Extensions button in the top app bar, shown while one is on the GUI's menu or
+  toolbar, nested by their menu paths; a tap sends `activateCommand`. A checkable command has a tick while checked, a
+  disabled one is greyed out, and one that pulses has a dot, as the button has then. Shortcuts and pinning are not used.
+- With TalkBack each bar is a group, "<name> button bar", read after the script windows. A button reads its name, or
+  "Button <n> of <bar>" with only an icon; a push-down one reads as a switch, on or off; a folder says a tap opens its
+  menu; a checkable command reads its state. The Extensions button is read with Back, before the console, as Material
+  makes the top app bar a group read first. The buttons and commands are off while no engine is attached.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
@@ -357,8 +380,11 @@ device shows, below the UI's debug hook:
   screen gives Mudlet's main window, the window switcher, a window's command line both ways and a user window's close
   button; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the
   engine as `pointer` events, its 48 dp touch bounds, a gauge read as its progress, a link's command, and a label's
-  image asked of the engine; and the notification permission, explained and then asked on Android 13 and later, on a
-  fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
+  image asked of the engine; the button bars: a bar's buttons as 48 dp buttons above or beside the console and read
+  after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
+  name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; and the notification
+  permission, explained and then asked on Android 13 and later, on a fresh install. Each Compose test rule has the
+  Accessibility Test Framework's checks on
   (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
   library needs API 34, so they run on the API 36 emulator only.
 
@@ -931,6 +957,16 @@ Item 13 of the on-device checklist covers this.
       drag. A link in a label's text runs its command.
     - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
       its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
+22. Button bars and commands, with the libmudlet APK. `lua tempButtonToolbar("Moves", 0, 0) tempButton("Moves",
+    "North", 0)` adds a top bar, `lua tempButtonToolbar("Side", 1, 1) tempButton("Side", "Go", 1)` a left bar, and
+    `lua addCommand{name = "Speech", menuPath = "Tools/Voices", surfaces = {"menu"}}` a command; a push-down button
+    and a folder come with a package whose bar has them, made in the desktop's Buttons editor.
+    - At 600 dp and wider a left bar is beside the console and a top bar above it; narrower, both are rows above it.
+      A tap on a button does what a click does on the desktop; a push-down button stays down until tapped again; a
+      folder's menu runs the entry picked.
+    - The Extensions button in the top bar lists the commands under their menu paths, and a tap runs one.
+    - With TalkBack on: swiping goes from the console to the input line and the bar, then the windows, then each
+      button bar, read as "<name> button bar" and then its buttons, a push-down one as a switch, on or off.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

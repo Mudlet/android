@@ -113,10 +113,17 @@ private class ConsoleMetrics(val charWidth: Float, val glyphWidthPerSp: Float, v
  * The game area: the main console, drawn by [content] with the modifier it is given, and around and over it the
  * windows the profile's scripts made, placed as [WindowLayout] says; below it, while there are any, the window
  * switcher's tabs, which open a window in a pane over the console. It gives Mudlet's main window the size that makes
- * Mudlet's grid the console's, at the console's [textSizeSp], and tells the engine where it put the user windows.
+ * Mudlet's grid the console's, at the console's [textSizeSp], and tells the engine where it put the user windows. The
+ * profile's button bars go around all of it ([ScriptButtonBars]).
  */
 @Composable
 fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
+    ScriptButtonBars(modifier) { area, fitted -> WindowsArea(textSizeSp, area, fitted, content) }
+}
+
+// [fitted] is the whole game area's, bars and all, so the windows are fitted when the bars are
+@Composable
+private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, content: @Composable (Modifier) -> Unit) {
     val client = ScriptWindowsClient
     val windows = client.state
     val metrics = rememberConsoleMetrics(textSizeSp)
@@ -128,7 +135,6 @@ fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @
     BoxWithConstraints(modifier.background(CONSOLE_BACKGROUND).clipToBounds()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
-        val fitted = WindowLayout.fitted(client.layoutMode, maxWidth.value)
         val layout = remember(windows, w, h, fitted, metrics, headerHeight, switcherHeight, selected) {
             val full = WindowLayout.of(windows, WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, selected))
             // Which windows are pages does not depend on the height, so the switcher's row can be taken from it

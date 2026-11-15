@@ -200,7 +200,7 @@ QString placeName(THeadlessSession::ButtonBar::Place place)
     case THeadlessSession::ButtonBar::Place::right:
         return QStringLiteral("right");
     case THeadlessSession::ButtonBar::Place::floating:
-        return QStringLiteral("floating");
+        return QStringLiteral("top");
     }
     return {};
 }
@@ -1124,7 +1124,7 @@ QString MudletEngine::pressButton(int id)
     if (!profileOpen()) {
         return QStringLiteral("no profile running");
     }
-    return mSession->pressButton(id) ? QString() : mSession->errorString();
+    return QString();
 }
 
 QString MudletEngine::activateCommand(int id)

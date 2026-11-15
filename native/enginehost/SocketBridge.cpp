@@ -181,7 +181,6 @@ void SocketBridge::sendState()
     for (const LabelInfo& label : std::as_const(mLabels)) {
         sendFrame(labelMessage(label));
     }
-    sendFrame(mButtonBars);
     sendFrame(mCommands);
     if (!mEngine) {
         return;
@@ -704,7 +703,7 @@ QJsonObject SocketBridge::commandsMessage(const QList<AddonCommandInfo>& command
                                 {QStringLiteral("checkable"), command.checkable},
                                 {QStringLiteral("checked"), command.checked},
                                 {QStringLiteral("pinned"), command.pinned},
-                                {QStringLiteral("pulse"), command.pulse}});
+                                {QStringLiteral("pulsing"), command.pulse}});
     }
     return {{QStringLiteral("t"), QStringLiteral("commands")}, {QStringLiteral("commands"), json}};
 }

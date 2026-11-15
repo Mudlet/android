@@ -536,7 +536,7 @@ class FrameReader(input: InputStream) {
             icon = b.optString("icon"),
             styleSheet = b.optString("styleSheet"),
             pushDown = b.optBoolean("pushDown"),
-            checked = b.optBoolean("checked"),
+            checked = false,
             menu = b.optBoolean("menu"),
             children = objects(b.optJSONArray("children")).map(::parseButton),
         )

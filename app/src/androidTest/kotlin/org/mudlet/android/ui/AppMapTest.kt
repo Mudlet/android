@@ -25,6 +25,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -35,6 +36,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONArray
@@ -330,9 +333,7 @@ class AppMapTest {
     fun aRoomFoundByNameIsWhereTheMapGoes() {
         openMap()
         drawnMap()
-        val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
-        compose.onNode(field).performTextInput("hall")
-        compose.onNode(field).performImeAction()
+        search("hall")
         val find = session.receive("findRooms")
         assertEquals("hall", find.getString("text"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.app_map_searching))).fetchSemanticsNodes().isNotEmpty() }
@@ -372,9 +373,7 @@ class AppMapTest {
         assertEquals(360, wheel.getInt("wheelY"))
         assertPoint(w / 2.0, h / 2.0, wheel)
 
-        val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
-        compose.onNode(field).performTextInput("hall")
-        compose.onNode(field).performImeAction()
+        search("hall")
         session.send(rooms(session.receive("findRooms"), "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
         val hallway = hasText(string(R.string.app_map_room, "hallway", "Castle", 3))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
@@ -385,9 +384,7 @@ class AppMapTest {
     @Test
     fun aSearchSaysWhenNothingOrTooMuchMatchesAndWhyTheEngineRefusedIt() {
         openMap()
-        val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
-        compose.onNode(field).performTextInput("cellar")
-        compose.onNode(field).performImeAction()
+        val field = search("cellar")
         session.send(rooms(session.receive("findRooms"), "cellar", emptyList()))
         val none = hasText(string(R.string.app_map_no_rooms, "cellar"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(none).fetchSemanticsNodes().isNotEmpty() }
@@ -395,12 +392,12 @@ class AppMapTest {
         activate(hasContentDescription(string(R.string.app_map_results_close)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(none).fetchSemanticsNodes().isEmpty() }
 
-        compose.onNode(field).performImeAction()
+        searchAgain(field)
         session.send(rooms(session.receive("findRooms"), "cellar", listOf(Triple(7, "Wine cellar", "Keep")), more = true))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.app_map_more_rooms))).fetchSemanticsNodes().isNotEmpty() }
 
         // A refused search is over: a late answer to it is not shown
-        compose.onNode(field).performImeAction()
+        searchAgain(field)
         val refused = session.receive("findRooms")
         session.refuse(refused, "no profile running")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
@@ -409,6 +406,32 @@ class AppMapTest {
         session.assertNoRequest("findRooms", QUIET_MS)
         compose.waitForIdle()
         assertTrue(compose.onAllNodes(hasText(string(R.string.app_map_room, "Wine cellar", "Keep", 7))).fetchSemanticsNodes().isEmpty())
+    }
+
+    /** Types [text] in the map's search field and sends it as [searchAgain] does; returns the field. */
+    private fun search(text: String): SemanticsMatcher {
+        val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
+        compose.onNode(field).performTextInput(text)
+        searchAgain(field)
+        return field
+    }
+
+    /**
+     * Sends what the search [field] holds with the keyboard's Search key. The field lets go of the focus, the keyboard goes,
+     * and the map has its room back, which on a small screen the keyboard took near all of, results and buttons with it.
+     */
+    private fun searchAgain(field: SemanticsMatcher) {
+        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
+        val height = bounds(map).height
+        compose.onNode(field).performImeAction()
+        compose.waitUntil(WAIT_MS) {
+            compose.onAllNodes(field and isFocused()).fetchSemanticsNodes().isEmpty() && !keyboardShown() && bounds(map).height == height
+        }
+    }
+
+    private fun keyboardShown(): Boolean {
+        val view = compose.activity.window.decorView
+        return compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
     }
 
     // Opens the map in front, and returns the size it is asked at, once the engine has drawn it

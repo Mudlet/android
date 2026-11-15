@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -65,6 +67,10 @@ import org.mudlet.android.ui.ScriptWindowsClient
 
 // How much smaller the map in front is at the end of a back gesture
 private const val BACK_SHRINK = 0.1f
+
+// A result's row, a touch target's least, and the results' head, its close button's
+private val RESULT_ROW = 48.dp
+private val RESULTS_HEAD = 48.dp
 
 // The keyboard and the window resize the map in many small steps: only where it comes to rest is drawn anew
 private const val MAP_SIZE_SETTLE_MS = 200L
@@ -140,7 +146,9 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     drawn = map != null,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                 )
-                AppMapClient.search?.let { RoomResults(it, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = maxHeight / 2)) }
+                // Half the map, but at least a whole result under the results' head, where the map has the room
+                val results = (maxHeight / 2).coerceAtLeast(minOf(maxHeight, RESULTS_HEAD + RESULT_ROW))
+                AppMapClient.search?.let { RoomResults(it, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = results)) }
             }
         }
     }
@@ -166,9 +174,17 @@ private fun AskForMap(owner: AppMapClient.Owner, size: IntSize) {
 private fun RoomSearchField(modifier: Modifier = Modifier) {
     var text by rememberSaveable { mutableStateOf("") }
     val attached = EngineClient.enginePid > 0
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
 
+    // The keyboard goes, so that the results have the room it took: on a small screen it leaves none. The field lets go
+    // of the focus too, or the keyboard would come back for it when its input starts after this, as it can when the
+    // search follows the first letters at once
     fun find() {
-        if (text.isNotBlank()) AppMapClient.findRooms(text.trim())
+        if (text.isBlank()) return
+        keyboard?.hide()
+        focus.clearFocus()
+        AppMapClient.findRooms(text.trim())
     }
 
     OutlinedTextField(
@@ -219,7 +235,7 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                 items(rooms.orEmpty(), key = { it.id }) { room ->
                     Text(
                         stringResource(R.string.app_map_room, room.name, room.area, room.id),
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { AppMapClient.showRoom(room.id) }
+                        Modifier.fillMaxWidth().heightIn(min = RESULT_ROW).clickable(role = Role.Button) { AppMapClient.showRoom(room.id) }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         style = MaterialTheme.typography.bodyLarge,
                     )

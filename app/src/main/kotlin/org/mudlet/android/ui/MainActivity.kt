@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.edit
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.theme.MudletTheme
 
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         EngineClient.init(this)
+        Settings.init(this)
         explainNotifications = shouldAskForNotifications()
         EngineClient.refreshServiceState()
         if (EngineClient.engineWanted && EngineClient.fgsState == "not running") EngineClient.startEngine()

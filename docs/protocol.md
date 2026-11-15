@@ -275,6 +275,9 @@ profile with a map has one without a script that opens a mapper.
 - It is drawn for the size the last `setAppMapSize` asked for, with the profile's map and the player's room in the
   middle, and drawn again as `map` is: on `mapRepaintRequested`, when `viewOnly` changes, on a new size, and when a
   profile loads. The engine sends `appMap` only when it differs from what it last sent.
+- Once asked for, it opens the map for scripts as opening the desktop's mapper does (`Host::mapOpen()`), until the
+  profile closes, 0 by 0 or not: with no script mapper, a mapper script's `centerview()` moves the player on it, which
+  it follows, and `getPlayerRoom()` answers.
 - It has its own centre and selection: a `showRoom`, or a press, moves only it. The zoom is the area's, as on the
   desktop, so a `wheel` on it zooms a mapper of the same area too. `setMapViewOnly` switches both.
 - A left `press` selects the room under it and a left `doubleClick` walks to it, as on the mapper; neither raises

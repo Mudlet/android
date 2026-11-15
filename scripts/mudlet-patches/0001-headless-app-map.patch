@@ -5,11 +5,53 @@ find a room by name. An app on a phone shows the map whatever the scripts made, 
 offers its mapper, and lets the player find a room on it. This adds a second TNullMapView the session owns, which
 scripts do not hear of (no sysMapAreaChanged or sysMapWindowMousePressEvent from it): renderAppMap(),
 appMapPointer(), showRoomOnAppMap() and closeAppMap(), and findRooms(), which matches room names as searchRoom()
-does and the room id. setMapViewOnly() also switches while only the app's map is open.
+does and the room id. setMapViewOnly() also switches while only the app's map is open, and once the app's map is
+made, scripts see the map as open (Host::mapOpen()), as once the player opens the GUI's mapper, so a mapper script's
+centerview() moves the player on it with no script mapper.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 
-diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 54ff520..bd61174 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -3096,7 +3096,7 @@ bool Host::hasConsoleView() const
+ 
+ bool Host::mapOpen() const
+ {
+-    return mpMap && mapViewFrontend();
++    return mpMap && (mapViewFrontend() || (!hasConsoleView() && mpNullConsoleFrontend->mAppMapOpened));
+ }
+ 
+ TMapViewFrontend* Host::mapViewFrontend() const
+diff --git a/src/Host.h b/src/Host.h
+index 994ffec..f7a224e 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -399,7 +399,8 @@ public:
+     // through it and has no other windows.
+     TConsoleFrontend* consoleFrontend() const;
+     bool hasConsoleView() const;
+-    // Whether scripts see the map as open: once there is a mapper, a closed one included
++    // Whether scripts see the map as open: once there is a mapper, a closed one included, or once an app showed its
++    // own map, as the GUI's main window's mapper is once the player opens it
+     bool mapOpen() const;
+     // The mapper whose 2D map scripts ask about; with no console view, the one the null view has recorded
+     TMapViewFrontend* mapViewFrontend() const;
+diff --git a/src/TNullConsoleFrontend.h b/src/TNullConsoleFrontend.h
+index 069eb72..1d64586 100644
+--- a/src/TNullConsoleFrontend.h
++++ b/src/TNullConsoleFrontend.h
+@@ -392,6 +392,9 @@ public:
+     TMapViewFrontend* mapView() const { return mpEmbeddedMapper ? mpEmbeddedMapper.data() : mMapWidget ? mMapWidget->pView.get() : nullptr; }
+     // Called by the map view where the GUI asks T2DMap for an update(), for an app that draws the map
+     std::function<void()> mMapRepaintRequested;
++    // Set once an app has its own map of the profile (THeadlessSession::renderAppMap()), which opens the map for
++    // scripts as the player opening the GUI's mapper does, so centerview() follows the player on it: Host::mapOpen()
++    bool mAppMapOpened = false;
+     void restoreOwnMapper() override {}
+     // TMainConsole shows the dlgMapper drawing the map after a load; a closed map widget's dock keeps it hidden
+     void showLoadedMap() override { showEmbeddedMapper(); }
 diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
 index 8f6fd9d..38a4aa2 100644
 --- a/src/TNullMapView.cpp
@@ -118,7 +160,7 @@ index bcd59b6..c4b83b9 100644
      bool mPaintScheduled = false;
      // What T2DMap keeps between frames: the view last drawn, as the pointer and the selection have changed it since,
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index b7f8711..cd504d9 100644
+index b7f8711..701da71 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
 @@ -52,6 +52,7 @@ class QTimer;
@@ -129,7 +171,7 @@ index b7f8711..cd504d9 100644
  class QKeyEvent;
  class QMimeData;
  class QPoint;
-@@ -619,6 +620,37 @@ public:
+@@ -619,6 +620,39 @@ public:
      // script opens in a profile saved as editing raises mapModeChangeEvent with "editing" before it is there, as the
      // GUI's does, with no mapViewOnlyChanged.
      bool setMapViewOnly(bool viewOnly);
@@ -138,8 +180,10 @@ index b7f8711..cd504d9 100644
 +    // area's, so shared), following the player as the GUI's does. Scripts do not hear of it: it raises neither
 +    // sysMapAreaChanged nor sysMapWindowMousePressEvent, and getMapSelection() does not see its selection; a
 +    // double-click on it speedwalks as on theirs. It is made on the first call that needs it and goes with the
-+    // profile, or with closeAppMap(). mapRepaintRequested is emitted for it as for the script's, and
-+    // setMapViewOnly() switches it too, also while no script has opened a map.
++    // profile, or with closeAppMap(). Once made, scripts see the map as open (Host::mapOpen()), closed or not, as
++    // once the player opened the GUI's mapper: centerview() moves the player on it, and getPlayerRoom() answers.
++    // mapRepaintRequested is emitted for it as for the script's, and setMapViewOnly() switches it too, also while
++    // no script has opened a map.
 +    // Draws it as renderMap() draws the script's. False, with errorString() saying why, where renderMap() is, and
 +    // for a map with no rooms, where the GUI would say there are none: an app shows nothing in its place.
 +    bool renderAppMap(QPainter& painter, const QSize& size);
@@ -167,7 +211,7 @@ index b7f8711..cd504d9 100644
      // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
      // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
      // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
-@@ -1159,9 +1191,15 @@ private:
+@@ -1159,9 +1193,15 @@ private:
      // pointer() on the mapper's window
      bool pointMapper(const ScriptWindow& mapper, const WindowPointerEvent& event);
      void noteMapPointer(const QPointF& position);
@@ -184,7 +228,7 @@ index b7f8711..cd504d9 100644
      bool mShuttingDown = false;
      bool mLoadFailed = false;
 diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
-index 4afec87..de19681 100644
+index 4afec87..a713389 100644
 --- a/src/headless/THeadlessSessionMap.cpp
 +++ b/src/headless/THeadlessSessionMap.cpp
 @@ -24,8 +24,13 @@
@@ -244,7 +288,7 @@ index 4afec87..de19681 100644
          noteMapPointer(event.position);
      }
      switch (event.type) {
-@@ -185,6 +200,103 @@ bool THeadlessSession::pointMap(const MapPointerEvent& event, const Qt::MouseBut
+@@ -185,6 +200,106 @@ bool THeadlessSession::pointMap(const MapPointerEvent& event, const Qt::MouseBut
      return false;
  }
  
@@ -257,6 +301,9 @@ index 4afec87..de19681 100644
 +    if (!mpAppMap || mpAppMap->parent() != mpHost) {
 +        mpAppMap = new TNullMapView(mpHost, mpHost, false);
 +        mpAppMap->setShown(true);
++        if (auto* pFrontend = dynamic_cast<TNullConsoleFrontend*>(mpHost->consoleFrontend())) {
++            pFrontend->mAppMapOpened = true;
++        }
 +    }
 +    return mpAppMap;
 +}

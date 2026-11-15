@@ -234,12 +234,14 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 The game screen also has a map of its own, which needs no script: `appMap`, the engine's second map view
 (docs/protocol.md, "The app's map"; `ui/AppMapClient.kt`, drawn by `ui/game/AppMap.kt`).
 - Behind the text, while the setting "Map behind the text" (`Settings.mapBehindText`, on by default) has it there: it
-  fills the main console, between the console's background and its text (Console's `behindText`), and follows the
-  player as the desktop's mapper does. Its alpha is the most, up to 30%, at which the console's default text colour
-  (`consoleColors`) keeps WCAG's 4.5:1 over the map's lightest and darkest colours alike (`MapBehindText` in
-  `:protocol`): 30% for the default grey on black, less for dimmer text or a light background, none for text already
-  below 4.5:1. The console's colours, ANSI ones included, are not changed; text the game colours is not weighed, so a
-  dim colour of the game's reads less well over the map. It takes no touches, which reach the text as before, and TalkBack does not read it.
+  fills the main console, between the console's background and its text (Console's `behindText`), and follows the player
+  as the desktop's mapper does: asked for, it opens the map for scripts as opening the desktop's mapper does, so a
+  mapper script's `centerview()` moves the player on it with no script mapper. Its alpha is the most, up to 30%, at
+  which the console's default text colour (`consoleColors`) keeps WCAG's 4.5:1 over the map's lightest and darkest
+  colours alike (`MapBehindText` in `:protocol`): 30% for the default grey on black, less for dimmer text or a light
+  background, none for text already below 4.5:1. The console's colours, ANSI ones included, are not changed; text the
+  game colours is not weighed, so a dim colour of the game's reads less well over the map. It takes no touches, which
+  reach the text as before, and TalkBack does not read it.
 - In front: the title bar's map button, a toggle read as "Map" with its state, covers the game area (not the input line)
   with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, pinch, the zoom
   buttons, the edit switch, refusals and TalkBack's actions), under a search field. TalkBack does not read what it
@@ -1042,8 +1044,9 @@ Item 13 of the on-device checklist covers this.
       room in the middle and zoom; the zoom buttons and the switch read their names.
 24. The map behind the text, with the libmudlet APK and a profile with a map but no `Geyser.Mapper` (rooms made with
     `addRoom()`, `setExit()`, `setRoomArea()` and `centerview()` do).
-    - The map shows faintly behind the console's text, filling it, and follows the player as they walk; the text and
-      its ANSI colours read as without it, and a swipe scrolls the text and a pinch sizes it, as before.
+    - The map shows faintly behind the console's text, filling it, and follows the player as they walk
+      (`lua centerview(<room>)` moves it there); the text and its ANSI colours read as without it, and a swipe scrolls
+      the text and a pinch sizes it, as before.
     - Turning "Map behind the text" off in the settings takes it away; on, it comes back. Opening a mapper
       (`lua myMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})`) takes it away
       too, and closing it (`lua myMapper:hide()`) brings it back.

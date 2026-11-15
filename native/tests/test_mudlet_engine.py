@@ -1391,8 +1391,9 @@ def map_view():
 def app_map():
     """The app's own map, with no script mapper: setAppMapSize drawing the profile's map as appMap frames at the size and
     scale asked for, with nothing to draw before a profile or rooms; appMapPointer selecting and walking without the
-    script's mapper events; findRooms by name and id; showRoom centring the map on a room; setMapViewOnly with only
-    this map open; the frame to a UI that attaches; and 0 by 0 stopping it."""
+    script's mapper events; centerview() moving the player on it, as it opens the map for scripts; findRooms by name
+    and id, sorted and at most 100; showRoom centring the map on a room; setMapViewOnly with only this map open; a
+    script's mapper beside it, each with its own centre; the frame to a UI that attaches; and 0 by 0 stopping it."""
     profile = "App Map Test"
     proc, c = start_engine(profile)
     seen = []
@@ -1479,6 +1480,25 @@ def app_map():
     check(not red_at(m, middle), f"and the player's room is in the middle, not room 2: {pixel(m, middle)}")
     check(not any(m["t"] == "map" for m in seen), "and no script map is sent, as no script opened a mapper")
 
+    # The app's map opens the map for scripts, as opening the GUI's mapper does, so a mapper script's centerview()
+    # moves the player on it: to room 2, which is then in the middle under the player's mark and room 1 30 pixels to its
+    # left, and back to 1, whichever room the map has first
+    player = pixel(first, middle)
+    left = (room1[0] - (room2[0] - room1[0]), room1[1])
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'centerview(2) echo("player " .. tostring(getPlayerRoom()) .. "\\n")'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("player "), seen, since)
+    check(m["text"] == "player 2", f"with only the app's map, scripts see the map open and the player where centerview() put it: {m}")
+    try:
+        seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and pixel(m, middle) == player and pixel(m, left)[3] == 255
+                     and pixel(m, left) != player and not red_at(m, room2), seen, since)
+        since = len(seen)
+        c.send({"t": "runLua", "code": "centerview(1)"})
+        first = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and red_at(m, room2) and pixel(m, middle) == player, seen, since)
+        check(True, "the app's map follows the player that centerview() moves, with no script mapper")
+    except TimeoutError as e:
+        check(False, f"the app's map follows the player that centerview() moves, with no script mapper: {e}")
+
     m = c.ask({"t": "findRooms", "text": "HALL"}, answers=("rooms", "error"), collect=seen)
     check(m == {"t": "rooms", "text": "HALL", "more": False, "re": m.get("re"),
                 "rooms": [{"id": 1, "name": "Great Hall", "area": "App Map Area"}, {"id": 3, "name": "hallway", "area": "App Map Area"}]},
@@ -1487,6 +1507,22 @@ def app_map():
     check([r["id"] for r in m.get("rooms", [])] == [2], f"and the room whose id it is: {m}")
     m = c.ask({"t": "findRooms", "text": "cellar"}, answers=("rooms", "error"), collect=seen)
     check(m.get("rooms") == [] and m.get("more") is False, f"and none when none match: {m}")
+    # 105 cells in an area of their own, named so their names sort against their ids, two by two the same but for case
+    c.send({"t": "runLua", "code": "\n".join([
+        'local cells = addAreaName("Cells")',
+        "for id = 101, 205 do",
+        "  addRoom(id)",
+        "  setRoomArea(id, cells)",
+        "  setRoomCoordinates(id, id, 0, 0)",
+        '  setRoomName(id, string.format("%s %d", id % 2 == 0 and "cell" or "CELL", 400 - math.floor(id / 2)))',
+        "end",
+    ])})
+    cells = sorted(((f"{'cell' if i % 2 == 0 else 'CELL'} {400 - i // 2}", i) for i in range(101, 206)), key=lambda c: (c[0].lower(), c[1]))
+    m = c.ask({"t": "findRooms", "text": "Cell"}, answers=("rooms", "error"), collect=seen)
+    check(m.get("more") is True and [(r["name"], r["id"]) for r in m.get("rooms", [])] == cells[:100]
+          and all(r["area"] == "Cells" for r in m["rooms"]),
+          f"of 105 rooms found, the first 100 by name, ignoring case, then by id, and more: {m.get('more')}, "
+          f"{[r['id'] for r in m.get('rooms', [])][:6]}...")
 
     since = len(seen)
     c.send({"t": "appMapPointer", "type": "press", "x": room2[0], "y": room2[1], "button": 1})
@@ -1499,10 +1535,8 @@ def app_map():
           "a press on the app's map raises no sysMapWindowMousePressEvent, as it is not a script's map")
 
     # Room 2 is selected now, so drawn shaded rather than red: room 1, the player's, is what shows where the map moved
-    player = pixel(first, middle)
     since = len(seen)
     c.send({"t": "showRoom", "room": 2})
-    left = (room1[0] - (room2[0] - room1[0]), room1[1])
     m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "appMap" and m["w"] and pixel(m, left) == player), seen, since)
     check(m["t"] == "appMap" and pixel(m, middle) != player, f"showRoom centres the app's map on that room: {m.get('message', m['t'])}")
     m = c.ask({"t": "showRoom", "room": 99}, answers=("error",), collect=seen)
@@ -1513,6 +1547,35 @@ def app_map():
     seen_or_next(c, shown("map mode editing"), seen, since)
     seen_or_next(c, lambda m: m["t"] == "appMap" and m["viewOnly"] is False, seen, since)
     check(True, "setMapViewOnly works with only the app's map open, and its frame comes again, edited")
+
+    # A script's mapper beside it: each map has its own centre, and a press on the app's is still no script's
+    def script_map_centred(m):
+        return m["t"] == "map" and (m["w"], m["h"]) == (400, 300) and png_pixel(base64.b64decode(m["png"]), *room2)[:3] == (200, 30, 30)
+
+    since = len(seen)
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "runLua", "code": 'testMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})'})
+    try:
+        seen_or_next(c, script_map_centred, seen, since, timeout=15)
+        # Room 3 is 4 rooms north of room 1, so centred on 3 the app's map has room 1 60 pixels below its middle
+        since = len(seen)
+        c.send({"t": "showRoom", "room": 3})
+        below = (middle[0], middle[1] + 60)
+        m = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and pixel(m, below) == player, seen, since)
+    except TimeoutError as e:
+        check(False, f"with a script's mapper open, showRoom still moves the app's map: {e}")
+        stop_engine(proc)
+        return
+    maps = [m for m in seen if m["t"] == "map"]
+    check(all(script_map_centred(m) for m in maps[-1:] + [m for m in seen[since:] if m["t"] == "map"]),
+          "with a script's mapper open, showRoom moves the app's map and leaves the script's on the player")
+    since = len(seen)
+    c.send({"t": "appMapPointer", "type": "press", "x": below[0], "y": below[1], "button": 1})
+    seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"], seen, since)
+    c.send({"t": "runLua", "code": 'echo("marker\\n")'})
+    seen_or_next(c, shown("marker"), seen, since)
+    check(not any(m["t"] in ("line", "tail") and m["text"] == "map pressed" for m in seen[since:]),
+          "a press on the app's map still sends it again, and raises no script's mapper event")
 
     c.close()
     c = Client(SOCK)

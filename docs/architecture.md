@@ -28,7 +28,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 |---|---|
 | `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
-| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`). Its tests run on the JVM, against the desktop engine too |
+| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
@@ -349,10 +349,12 @@ device shows, below the UI's debug hook:
   announcement, `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings
   send; the script windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
   screen gives Mudlet's main window, the window switcher, a window's command line both ways and a user window's close
-  button; and the notification permission, explained and then asked on Android 13 and later, on a fresh install. Each
-  Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a test
-  on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
-  emulator only.
+  button; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the
+  engine as `pointer` events, its 48 dp touch bounds, a gauge read as its progress, a link's command, and a label's
+  image asked of the engine; and the notification permission, explained and then asked on Android 13 and later, on a
+  fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
+  (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
+  library needs API 34, so they run on the API 36 emulator only.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 
@@ -915,6 +917,14 @@ Item 13 of the on-device checklist covers this.
     - With TalkBack on: swiping goes from the console to the input line, the quick bar and the connection bar, then
       the windows, each read as "<name> window", then the tabs; a window's command line, its Send button and a user
       window's close button read their names.
+21. Labels and gauges, with the same package and the libmudlet APK.
+    - Labels look as on the desktop: their colours, borders, rounded corners, text and its alignment, and images,
+      scaled with their windows. A gauge's front follows its value.
+    - A tap on a clickable label does what a click does on the desktop, a double tap what a double click does, and a
+      long press opens a Geyser right-click menu and shows the label's tool tip. A slider made of labels follows a
+      drag. A link in a label's text runs its command.
+    - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
+      its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

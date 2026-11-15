@@ -1,0 +1,123 @@
+package org.mudlet.android.protocol
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** The style sheet subset the app draws of a label (docs/phase-f.md, "Labels"). */
+class LabelStyleTest {
+    @Test
+    fun colours() {
+        assertEquals(0xFFFF0000.toInt(), CssColor.parse("red"))
+        assertEquals(0xFF2F4F4F.toInt(), CssColor.parse("DarkSlateGray"))
+        assertEquals(0, CssColor.parse("transparent"))
+        assertEquals(0xFFAABBCC.toInt(), CssColor.parse("#abc"))
+        assertEquals(0xFF102030.toInt(), CssColor.parse("#102030"))
+        // Qt's eight digits put the alpha first
+        assertEquals(0x80102030.toInt(), CssColor.parse("#80102030"))
+        assertEquals(0xFF0A141E.toInt(), CssColor.parse("rgb(10, 20, 30)"))
+        assertEquals(0xFFFF8000.toInt(), CssColor.parse("rgb(100%, 50%, 0%)"))
+        assertEquals(0x7F0A141E, CssColor.parse("rgba(10,20,30,127)"))
+        assertEquals(0x800A141E.toInt(), CssColor.parse("rgba(10, 20, 30, 0.5)"))
+        assertEquals(0x800A141E.toInt(), CssColor.parse("rgba(10, 20, 30, 50%)"))
+        assertNull(CssColor.parse("#12345"))
+        assertNull(CssColor.parse("#ggg"))
+        assertNull(CssColor.parse("rgb(1, 2)"))
+        assertNull(CssColor.parse("notacolour"))
+    }
+
+    @Test
+    fun aGeyserLabelsSheet() {
+        val style = LabelStyle.parse(
+            """
+            background-color: rgba(0, 0, 0, 50%); /* half see-through */
+            border: 2px solid white;
+            border-radius: 5px;
+            color: #ffd700;
+            font-size: 12pt;
+            font-weight: bold;
+            font-style: italic;
+            font-family: "Bitstream Vera Sans Mono", monospace;
+            padding: 1px 2px;
+            margin: 3px;
+            qproperty-alignment: 'AlignRight | AlignBottom';
+            """.trimIndent(),
+        )
+        assertEquals(LabelFill.Solid(0x80000000.toInt()), style.background)
+        assertEquals(2f, style.borderWidth)
+        assertTrue(style.borderStyled)
+        assertEquals(2f, style.drawnBorderWidth)
+        assertEquals(0xFFFFFFFF.toInt(), style.borderColor)
+        assertEquals(5f, style.borderRadius)
+        assertEquals(0xFFFFD700.toInt(), style.color)
+        assertEquals(16f, style.fontSizePx)
+        assertEquals(700, style.fontWeight)
+        assertEquals(true, style.italic)
+        assertEquals("Bitstream Vera Sans Mono", style.fontFamily)
+        assertEquals(Edges(1f, 2f, 1f, 2f), style.padding)
+        assertEquals(Edges(3f, 3f, 3f, 3f), style.margin)
+        assertEquals(HAlign.RIGHT, style.hAlign)
+        assertEquals(VAlign.BOTTOM, style.vAlign)
+    }
+
+    @Test
+    fun aBorderWithoutAStyleIsNotDrawn() {
+        val style = LabelStyle.parse("border-width: 3px; border-color: red;")
+        assertEquals(3f, style.borderWidth)
+        assertFalse(style.borderStyled)
+        assertEquals(0f, style.drawnBorderWidth)
+        assertEquals(3f, LabelStyle.parse("border-width: 3px; border-style: dashed").drawnBorderWidth)
+        assertEquals(0f, LabelStyle.parse("border: 3px solid red; border-style: none").drawnBorderWidth)
+    }
+
+    @Test
+    fun onlyTheLabelsOwnRulesApply() {
+        val style = LabelStyle.parse(
+            "color: red; QLabel { background-color: blue; } QLabel:hover { color: green; } QPushButton { color: pink } " +
+                "QLabel#other { color: gray } TLabel, QFrame { font-size: 10px }",
+        )
+        assertEquals(0xFFFF0000.toInt(), style.color)
+        assertEquals(LabelFill.Solid(0xFF0000FF.toInt()), style.background)
+        assertEquals(10f, style.fontSizePx)
+    }
+
+    @Test
+    fun gradientsAndImages() {
+        val style = LabelStyle.parse(
+            "background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255, 0, 0, 255), stop:1 #0000ff);" +
+                "border-image: url(\"/data/hp.png\") 0 0 0 0 stretch stretch;",
+        )
+        assertEquals(LabelFill.Gradient(0f, 0f, 0f, 1f, listOf(0f to 0xFFFF0000.toInt(), 1f to 0xFF0000FF.toInt())), style.background)
+        assertEquals("/data/hp.png", style.borderImage)
+        val tiled = LabelStyle.parse("background: #222 url(tile.png) repeat;")
+        assertEquals(LabelFill.Solid(0xFF222222.toInt()), tiled.background)
+        assertEquals("tile.png", tiled.backgroundImage)
+        // Radial and conical gradients are drawn as their first colour
+        assertEquals(
+            LabelFill.Solid(0xFF00FF00.toInt()),
+            LabelStyle.parse("background: qradialgradient(cx:0.5, cy:0.5, radius:1, stop:0 lime, stop:1 black)").background,
+        )
+    }
+
+    @Test
+    fun lengthsInPixelsOrPoints() {
+        assertEquals(4f, LabelStyle.length("4"))
+        assertEquals(4f, LabelStyle.length("4px"))
+        assertEquals(12f, LabelStyle.length("9pt"))
+        assertEquals(1.5f, LabelStyle.length(".5PX")!! * 3)
+        assertNull(LabelStyle.length("2em"))
+        assertNull(LabelStyle.length("bold"))
+    }
+
+    @Test
+    fun whatItCannotReadLeavesTheRestAlone() {
+        val style = LabelStyle.parse("color: nonsense; font-size: large; padding: 1px 2px 3px 4px 5px; ; : ; background-color: #00ff00 !important")
+        assertNull(style.color)
+        assertNull(style.fontSizePx)
+        assertEquals(Edges.ZERO, style.padding)
+        assertEquals(LabelFill.Solid(0xFF00FF00.toInt()), style.background)
+        assertEquals(LabelStyle(), LabelStyle.parse(""))
+    }
+}

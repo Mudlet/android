@@ -25,8 +25,8 @@ data class MudletSize(val w: Int, val h: Int)
 /** Where the app put a user window, in Mudlet's pixels from the game area's top left: `placeUserWindow`'s fields. */
 data class Placement(val x: Int, val y: Int, val w: Int, val h: Int, val floating: Boolean)
 
-/** A window to draw at [rect], cut to what its parents show; [fullWidth] is its width before that cut. */
-data class PlacedWindow(val window: ScriptWindow, val rect: PxRect, val fullWidth: Float)
+/** A window to draw at [rect], cut to what its parents show; [full] is where it is before that cut. */
+data class PlacedWindow(val window: ScriptWindow, val rect: PxRect, val full: PxRect)
 
 /** A docked user window's title row, with its close button, above its content. */
 data class DockHeader(val window: ScriptWindow, val rect: PxRect)
@@ -107,7 +107,7 @@ data class WindowLayout(
             // [full] where the window would be, [clip] what may show of it
             fun place(window: ScriptWindow, full: PxRect, clip: PxRect) {
                 val shown = full.intersect(clip) ?: return
-                placed.add(PlacedWindow(window, shown, full.w))
+                placed.add(PlacedWindow(window, shown, full))
                 tree.placeChildren(window, full, shown, placed)
             }
 
@@ -206,7 +206,7 @@ data class WindowLayout(
             val selected = pages.firstOrNull { it.key == area.selectedPage }
             val paneWindows = ArrayList<PlacedWindow>()
             if (selected != null && paneContent.h > 0) {
-                paneWindows.add(PlacedWindow(selected, paneContent, paneContent.w))
+                paneWindows.add(PlacedWindow(selected, paneContent, paneContent))
                 tree.placeChildren(selected, paneContent, paneContent, paneWindows)
             }
             return WindowLayout(
@@ -244,7 +244,7 @@ data class WindowLayout(
                 if (!child.shown) continue
                 val full = PxRect(rect.x + child.x * sx, rect.y + child.y * sy, child.w * sx, child.h * sy)
                 val shown = full.intersect(clip) ?: continue
-                out.add(PlacedWindow(child, shown, full.w))
+                out.add(PlacedWindow(child, shown, full))
                 placeChildren(child, full, shown, out)
             }
         }

@@ -1,5 +1,6 @@
 """The profile requests (listProfiles, saveProfile, deleteProfile, openProfile) through the protocol, as both host
 tests run them: the stand-in's (test_engine.py) and libmudlet's (test_mudlet_engine.py)."""
+import time
 
 
 def profile(name, port, login="", auto_reconnect=False):
@@ -29,6 +30,14 @@ def round_trips(c, check, port, password, game_connections, logged_in=lambda: No
             if pred(m):
                 return m
         return c.wait_for(pred, timeout, seen)
+
+    def wait_connections(beyond):
+        """game_connections(), waiting up to the timeout for it to pass beyond: the engine reports "connected" once the
+        kernel has made the connection, which can be before the game's accept thread counts it."""
+        deadline = time.monotonic() + timeout
+        while game_connections() <= beyond and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return game_connections()
 
     m = ask({"t": "listProfiles"})
     check(m["t"] == "profiles" and "Alpha" not in names(m), f"listProfiles answers with the profiles: {names(m)}")
@@ -73,7 +82,8 @@ def round_trips(c, check, port, password, game_connections, logged_in=lambda: No
     check(m["t"] == "profiles" and names(m)[:2] == ["Beta", "Alpha"], f"openProfile switches profiles: {names(m)}")
     wait_since(mark, is_status("profile", "Beta loaded"))
     wait_since(mark, is_status("connection", "connected"))
-    check(game_connections() > connections, "the profile switched to is connected to its game")
+    count = wait_connections(connections)
+    check(count > connections, f"the profile switched to is connected to its game: {count} connections, {connections} before")
 
     m = ask({"t": "deleteProfile", "name": "alpha"})
     check(m["t"] == "profiles" and "Alpha" not in names(m) and names(m)[:1] == ["Beta"],
@@ -96,8 +106,10 @@ def round_trips(c, check, port, password, game_connections, logged_in=lambda: No
     m = ask({"t": "openProfile", "name": "Beta"})
     check(m["t"] == "profiles", f"openProfile of the running profile: {m}")
     wait_since(mark, is_status("connection", "connected"))
-    check(game_connections() > connections and not [x for x in seen[mark:] if is_status("profile", "Beta closing")(x)],
-          "connects it again, disconnected, without closing it")
+    closed = [x for x in seen[mark:] if is_status("profile", "Beta closing")(x)]
+    count = wait_connections(connections)
+    check(count > connections and not closed,
+          f"connects it again, disconnected, without closing it: {count} connections, {connections} before; {closed}")
     return seen
 
 

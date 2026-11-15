@@ -129,9 +129,12 @@ class FakeEngine : AutoCloseable {
 
         fun clear() = send(JSONObject().put("t", "clear"))
 
-        /** [runs]: each [start, length, fg, bg, attributes], as docs/protocol.md's "Runs" says. */
-        fun line(seq: Long, text: String, runs: List<List<Int>> = emptyList(), prompt: Boolean = false) = send(
-            JSONObject().put("t", "line").put("seq", seq).put("text", text).put("prompt", prompt)
+        /**
+         * [runs]: each [start, length, fg, bg, attributes], as docs/protocol.md's "Runs" says. [replay]: one of the
+         * lines an engine sends again to a UI that attached.
+         */
+        fun line(seq: Long, text: String, runs: List<List<Int>> = emptyList(), prompt: Boolean = false, replay: Boolean = false) = send(
+            JSONObject().put("t", "line").put("seq", seq).put("text", text).put("prompt", prompt).put("replay", replay)
                 .put("runs", JSONArray(runs.map { JSONArray(it) })),
         )
 
@@ -148,6 +151,8 @@ class FakeEngine : AutoCloseable {
         fun history(lines: List<String>) = send(JSONObject().put("t", "history").put("lines", JSONArray(lines)))
 
         fun commandLine(text: String) = send(JSONObject().put("t", "commandLine").put("text", text))
+
+        fun announce(text: String, assertive: Boolean) = send(JSONObject().put("t", "announce").put("text", text).put("assertive", assertive))
 
         fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
 

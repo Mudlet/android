@@ -171,8 +171,15 @@ def start_game(port):
     return proc
 
 
-def accepted_since(t):
-    return sum(1 for a in fake_telnet.ACCEPTED if a >= t)
+def accepted_since(t, at_least=0):
+    """The game's connections since t. With at_least, waits up to 5 s for that many: the engine reports a connection
+    once the kernel has made it, which can be before the game's accept thread counts it."""
+    deadline = time.monotonic() + 5
+    while True:
+        n = sum(1 for a in fake_telnet.ACCEPTED if a >= t)
+        if n >= at_least or time.monotonic() >= deadline:
+            return n
+        time.sleep(0.01)
 
 
 def restarted_after_kill(port):
@@ -196,7 +203,8 @@ def restarted_after_kill(port):
     check(value == f"reconnected {target}", f"the restore reports the reconnect: {value}")
     check(f"restore: reconnecting {target}\n" in e.log(), "and reported reconnecting first")
     check(e.wait_status("profile", lambda v: v.endswith("loaded")) == f"{PROFILE} loaded", "the profile was loaded again")
-    check(accepted_since(t0) == 2, f"the game saw one new connection: {accepted_since(t0)} in all")
+    count = accepted_since(t0, at_least=2)
+    check(count == 2, f"the game saw one new connection: {count} in all")
     e.send({"t": "send", "text": "echo after the restore"})
     e.wait(lambda m: m["t"] in ("line", "tail") and m["text"] == "You said: after the restore")
     check(True, f"the restored profile takes commands; engine start to reconnected {reconnect_ms:.0f} ms")

@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, and the connection bar), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`) and the app's own settings (`data/Settings.kt`, in SharedPreferences). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list, the game screen in `ui/game/` (the console, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`) and the app's own settings (`data/Settings.kt`, in SharedPreferences). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client. Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -289,13 +289,14 @@ device shows, below the UI's debug hook:
   socket handshake; the engine notification's Quit, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
-- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
-  way from the start screen to the game screen and the self-test and back, through the labels and click actions
-  TalkBack uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
-  reattach to a new engine after one is lost, and to the same one; and the notification permission, explained and then
-  asked on Android 13 and later, on a fresh install. Each Compose test rule has the Accessibility Test Framework's checks on
-  (`enableAccessibilityChecks()`), which fail a test on a control with no label or a touch target under 48 dp; the
-  library needs API 34, so they run on the API 36 emulator only.
+- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the way
+  from the start screen to the game screen and the self-test and back, through the labels and click actions TalkBack
+  uses; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the reattach to a
+  new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one announcement,
+  `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings send; and the
+  notification permission, explained and then asked on Android 13 and later, on a fresh install. Each Compose test rule has the
+  Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a test on a control with no label
+  or a touch target under 48 dp; the library needs API 34, so they run on the API 36 emulator only.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 
@@ -310,7 +311,6 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   does not use them yet.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
-- The game screen's console draws in `consoleColors`; `announce` reaches the app, which does not use it yet.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
 - A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.
@@ -829,6 +829,18 @@ Item 13 of the on-device checklist covers this.
       settings screen's text is not cut off.
     - `lua setBackgroundColor("main", 0, 0, 80)` turns the console's background dark blue; text in default colours
       keeps them.
+18. Screen reader output, with TalkBack on, connected to a game with the libmudlet APK.
+    - On the first run with TalkBack on (clear the app's data first), the app asks whether to tell games you use a
+      screen reader; the answer shows in Settings as "Tell games I use a screen reader".
+    - New text is read as it arrives, without moving focus. A burst (`look` in a busy room, or
+      `lua for i = 1, 20 do echo("line " .. i .. "\n") end`) is read once, as its count and its last lines, not
+      queued line by line. With "Read new text aloud" off in Settings, nothing is read.
+    - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
+      interrupts it. The same announcement twice is read twice.
+    - Swiping through the console moves line by line, and each line is read as its text, without colour or style
+      names. Swiping past the connection bar reaches the last announcement.
+    - "Blank lines from the game": Hide them, then send a command whose answer has blank lines: they are gone from
+      the console, and TalkBack does not stop on them.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

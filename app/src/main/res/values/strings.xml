@@ -82,6 +82,28 @@
     <string name="settings_text_larger">Larger text</string>
     <!-- A line of the kind a game sends, to show the text size -->
     <string name="settings_text_size_sample">You see a brass lantern here.</string>
+    <string name="settings_screen_reader">Screen reader</string>
+    <string name="settings_read_new_text">Read new text aloud</string>
+    <string name="settings_read_new_text_hint">While TalkBack is on, the game\'s new text is read out as it arrives.</string>
+    <string name="settings_advertise_screen_reader">Tell games I use a screen reader</string>
+    <string name="settings_advertise_screen_reader_hint">Games that ask are told, and some then send text laid out for screen readers.</string>
+    <!-- The heading of three choices: what becomes of the empty lines a game sends -->
+    <string name="settings_blank_lines">Blank lines from the game</string>
+    <string name="settings_blank_lines_show">Show them</string>
+    <string name="settings_blank_lines_hide">Hide them</string>
+    <string name="settings_blank_lines_space">Replace them with a space</string>
+
+    <!-- Asked once, the first time the app runs with TalkBack on -->
+    <string name="screen_reader_offer_title">Tell games you use a screen reader?</string>
+    <string name="screen_reader_offer_text">Games that ask are told, and some then send text laid out for screen readers. You can change this in the settings.</string>
+    <string name="screen_reader_offer_yes">Tell games</string>
+    <string name="screen_reader_offer_no">Don\'t tell</string>
+
+    <!-- What TalkBack says for many game lines that came at once: %1$d is how many, %2$s the last few of them -->
+    <plurals name="announce_burst">
+        <item quantity="one">%1$d new line: %2$s</item>
+        <item quantity="other">%1$d new lines, ending: %2$s</item>
+    </plurals>
 
     <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
     <string name="console_jump_to_bottom">Jump to the bottom</string>

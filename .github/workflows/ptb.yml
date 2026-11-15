@@ -12,6 +12,8 @@ on:
       - .github/workflows/ptb.yml
       - scripts/build-release.sh
       - scripts/merge-qtdeploy.py
+      - scripts/check-apk-size.sh
+      - scripts/apk-size-budget.txt
       - engine-service/consumer-rules.pro
       - app/build.gradle.kts
       - engine-service/build.gradle.kts
@@ -324,6 +326,9 @@ jobs:
             want="package: name='$PACKAGE' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
             grep -qF "$want" <<< "$badging" || { echo "::error::$apk is not $want: $(head -1 <<< "$badging")"; exit 1; }
             grep -qxF "native-code: '$abi'" <<< "$badging" || { echo "::error::$apk is not for $abi only"; exit 1; }
+            # the Baseline Profiles Compose and AndroidX ship, which AGP merges in, for ART to compile their code ahead
+            grep -qxF assets/dexopt/baseline.prof <<< "$(unzip -Z1 "$apk")" \
+              || { echo "::error::$apk has no assets/dexopt/baseline.prof"; exit 1; }
             certs=$("$BUILD_TOOLS/apksigner" verify --print-certs "$apk")
             digests=$(sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' <<< "$certs" | sort -u)
             [ "$digests" = "$CERT_SHA256" ] \
@@ -339,6 +344,9 @@ jobs:
           for meta in com.android.tools.build.obfuscation/proguard.map com.android.tools.build.debugsymbols/; do
             grep -q "^BUNDLE-METADATA/$meta" <<< "$entries" || { echo "::error::the AAB has no BUNDLE-METADATA/$meta"; exit 1; }
           done
+          # the Baseline Profiles in the AAB, which Play delivers with each APK it serves
+          grep -qxF BUNDLE-METADATA/com.android.tools.build.profiles/baseline.prof <<< "$entries" \
+            || { echo "::error::the AAB has no Baseline Profile (BUNDLE-METADATA/com.android.tools.build.profiles/baseline.prof)"; exit 1; }
           echo "Signed with the $SIGNED_WITH key, certificate SHA-256 $CERT_SHA256" >> "$GITHUB_STEP_SUMMARY"
 
       # scripts/check-apk.sh, as on every APK CI builds; it takes a directory of APKs of one ABI
@@ -351,6 +359,19 @@ jobs:
             cp "app/build/outputs/apk/release/app-$abi-release.apk" "check/$abi/"
             ABI=$abi TITLE="PTB APK ($abi)" scripts/check-apk.sh "check/$abi"
           done
+
+      # The APKs' and the AAB's size budgets (scripts/apk-size-budget.txt). They fail a pull request; a nightly or
+      # manual PTB still publishes past them, with the error in its summary: libmudlet growing with Mudlet's
+      # development already fails the libmudlet nightly in ci.yml, which opens an issue.
+      - name: Size budgets
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
+        run: |
+          status=0
+          for abi in arm64-v8a x86_64; do
+            scripts/check-apk-size.sh "ptb-$abi" "app/build/outputs/apk/release/app-$abi-release.apk" || status=1
+          done
+          scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab || status=1
+          exit $status
 
       # What the GitHub pre-release and Play get: fixed file names, so a download link stays the same, checksums,
       # the notes with both commits, and Play's "what's new" (two lines of at most 240, under Play's 500)

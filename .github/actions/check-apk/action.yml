@@ -2,8 +2,10 @@ name: Check APK
 description: >
   Checks each debug APK in a directory with scripts/check-apk.sh: that it holds Qt and the engine library, and
   OpenSSL as Qt's TLS backend loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load
-  segments), that they are stored or compressed as the manifest's extractNativeLibs says, and that its launcher icon
-  is an adaptive icon with a monochrome layer; then adds each APK's size, its size on the device, and OpenSSL's share, to the job summary.
+  segments), that they are stored or compressed as the manifest's extractNativeLibs says, that its launcher icon is
+  an adaptive icon with a monochrome layer, and that its size keeps to its budget in scripts/apk-size-budget.txt
+  (scripts/check-apk-size.sh); then adds each APK's size, its size on the device, and OpenSSL's share, to the job
+  summary.
 inputs:
   apk-dir:
     description: Directory holding the APKs
@@ -13,6 +15,9 @@ inputs:
     required: true
   title:
     description: Heading in the job summary
+    required: true
+  size-budget:
+    description: The APK's line in scripts/apk-size-budget.txt (scripts/check-apk-size.sh)
     required: true
   extracted:
     description: "true when the APK was built to extract its libraries at install (useLegacyPackaging)"
@@ -35,5 +40,6 @@ runs:
         ENGINE: ${{ inputs.engine }}
         BUILD_TOOLS: ${{ inputs.build-tools-dir }}
         ABI: ${{ inputs.abi }}
+        SIZE_BUDGET: ${{ inputs.size-budget }}
         APK_DIR: ${{ inputs.apk-dir }}
       run: scripts/check-apk.sh "$APK_DIR"

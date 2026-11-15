@@ -21,11 +21,14 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
 2. **engine** (arm64-v8a and x86_64 at once): libmudlet and its dependencies, with libmudlet.yml's caches, and the
    engine staged by `STAGE_ONLY=1 scripts/build-apk.sh`. libmudlet is built with `MUDLET_VERSION_BUILD=-ptb-<date>`,
    as Mudlet's own PTBs are, so the engine calls itself `<version>-ptb-<date>-<commit>`.
-3. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs), an
-   APK for each ABI, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every
-   APK (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon), and that the AAB and the APKs carry the
-   PTB's application id, version and signing certificate, libraries for exactly the two ABIs, and in the AAB R8's
-   mapping and the native symbol tables, which Play uses for its crash reports.
+3. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs), an APK
+   for each ABI, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every APK
+   (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon), and that the AAB and the APKs
+   carry the PTB's application id, version and signing certificate, libraries for exactly the two ABIs, the Baseline
+   Profiles Compose and AndroidX ship (`docs/roadmap.md` on one of the app's own), and in the AAB R8's mapping and the
+   native symbol tables, which Play uses for its crash reports. It checks the APKs' and the AAB's sizes against their
+   budgets (`scripts/check-apk-size.sh`, CONTRIBUTING.md's "APK size budget"): over budget fails a pull request, while
+   a nightly or manual PTB still publishes, with the error in its summary.
 4. **smoke**: the x86_64 smoke build on an Android 15 emulator, with the test libmudlet.yml runs on the debug build
    (`native/tests/android_smoke.py`): the engine service and Qt come up, a profile connects and runs Mudlet's Lua, a
    trigger fires and notifies, and the UI reattaches to a restarted engine. This is what shows that R8 kept what Qt

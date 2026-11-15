@@ -1,0 +1,17 @@
+# The size budget of each APK and AAB CI builds, checked by scripts/check-apk-size.sh: bytes, from CI's builds.
+# A size may grow headroom-percent above its budget; past that CI fails. A size more than lower-below-percent under
+# its budget gets a notice to lower the budget. To change a budget on purpose, see CONTRIBUTING.md, "APK size budget".
+headroom-percent 5
+lower-below-percent 10
+
+# name                               total        libraries    dex
+# the debug APKs with the stand-in engine (apks.yml)
+standin-arm64-v8a                    55901070     27028808     28115296
+standin-arm64-v8a-extracted-libs     40069658     11369234     28115296
+# the debug APKs with libmudlet, built from Mudlet's development (libmudlet.yml)
+libmudlet-arm64-v8a                  104401670    75313920     28199880
+libmudlet-x86_64                     107710577    78610904     28199880
+# the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
+ptb-arm64-v8a                        78725774     75318288     2767584
+ptb-x86_64                           82018405     78613384     2767584
+ptb-aab                              110223265    71485572     1348047

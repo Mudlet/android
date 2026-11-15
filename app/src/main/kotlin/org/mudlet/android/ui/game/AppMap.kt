@@ -4,6 +4,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -99,8 +100,7 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
 /**
  * The app's map in front, where [modifier] puts it: a search for rooms by name or number, whose results centre the map
  * on a room, over the map as [MapView] draws it, which a tap selects in and a double tap walks on. Back calls
- * [onClose], after the map shrinks with a predictive back gesture.
- * It covers what is under it, touches and all.
+ * [onClose], after the map shrinks with a predictive back gesture. It covers what is under it, touches and all.
  */
 @Composable
 internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -121,23 +121,27 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         scaleX = scale
         scaleY = scale
     }
-    Column(modifier.then(shrunk).background(CONSOLE_BACKGROUND).pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } }) {
-        RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            var size by remember { mutableStateOf(IntSize.Zero) }
-            AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
-            val map = AppMapClient.map
-            // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
-            val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
-            MapView(
-                AppMapClient,
-                map?.bitmap,
-                fit,
-                viewOnly = map?.viewOnly ?: true,
-                drawn = map != null,
-                modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
-            )
-            AppMapClient.search?.let { RoomResults(it, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = maxHeight / 2)) }
+    Box(modifier.then(shrunk).background(CONSOLE_BACKGROUND)) {
+        // Touches between its controls stay off what it covers; under them, so they still take theirs
+        Box(Modifier.matchParentSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } })
+        Column(Modifier.matchParentSize()) {
+            RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                var size by remember { mutableStateOf(IntSize.Zero) }
+                AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
+                val map = AppMapClient.map
+                // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
+                val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
+                MapView(
+                    AppMapClient,
+                    map?.bitmap,
+                    fit,
+                    viewOnly = map?.viewOnly ?: true,
+                    drawn = map != null,
+                    modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
+                )
+                AppMapClient.search?.let { RoomResults(it, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = maxHeight / 2)) }
+            }
         }
     }
 }

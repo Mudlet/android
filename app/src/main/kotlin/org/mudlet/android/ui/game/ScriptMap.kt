@@ -128,9 +128,10 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
 /**
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways.
  * A tap selects the room under it, a double tap walks there and a pinch zooms about the fingers, each sent to [source]
- * at that point of the frame. In its corner are buttons that zoom about its middle and switch between viewing ([viewOnly])
- * and editing it, which works once the engine [drawn] the map, and at its bottom why the engine refused a request.
- * TalkBack reads it as the map, viewed or edited, whose actions select or walk to the room in its middle and zoom.
+ * at that point of the frame. In its corner are buttons that zoom about its middle and switch between viewing
+ * ([viewOnly]) and editing it, which works once the engine has drawn the map ([drawn]), and at its bottom why the engine
+ * refused a request. TalkBack reads it as the map, viewed or edited, whose actions select or walk to the room in its
+ * middle and zoom.
  */
 @Composable
 internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier) {

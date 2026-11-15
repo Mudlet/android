@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -112,9 +113,9 @@ class AppMapTest {
         }
     }
 
-    // The first ask may come before the game screen's openProfile, which the test reads past
     @Test
     fun theMapIsDrawnFaintlyBehindTheTextWhichTalkBackAndTouchesStillReach() {
+        // The first ask may come before the game screen's openProfile, which the test reads past
         val size = session.receiveLast("setAppMapSize", readPast = true)
         val bounds = bounds(console)
         val density = compose.density.density
@@ -350,6 +351,33 @@ class AppMapTest {
     }
 
     @Test
+    fun aFingerThatMovesALittleStillTapsTheMapInFrontsControls() {
+        val (w, h) = openMap()
+        drawnMap()
+        // A finger moves a little between down and up, under the touch slop: still a tap
+        val jitter: TouchInjectionScope.() -> Unit = {
+            down(center)
+            moveBy(Offset(3f, 2f))
+            moveBy(Offset(-2f, 1f))
+            up()
+        }
+        compose.onNode(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()).performTouchInput(jitter)
+        val wheel = session.receive("appMapPointer")
+        assertEquals("wheel", wheel.getString("type"))
+        assertEquals(360, wheel.getInt("wheelY"))
+        assertPoint(w / 2.0, h / 2.0, wheel)
+
+        val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
+        compose.onNode(field).performTextInput("hall")
+        compose.onNode(field).performImeAction()
+        session.send(rooms(session.receive("findRooms"), "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
+        val hallway = hasText(string(R.string.app_map_room, "hallway", "Castle", 3))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hallway and hasClickAction()).performTouchInput(jitter)
+        assertEquals(3, session.receive("showRoom").getInt("room"))
+    }
+
+    @Test
     fun aSearchSaysWhenNothingOrTooMuchMatchesAndWhyTheEngineRefusedIt() {
         openMap()
         val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
@@ -366,13 +394,15 @@ class AppMapTest {
         session.send(rooms(session.receive("findRooms"), "cellar", listOf(Triple(7, "Wine cellar", "Keep")), more = true))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.app_map_more_rooms))).fetchSemanticsNodes().isNotEmpty() }
 
-        // A refused search is over: an answer to no search the map is waiting on is not shown
+        // A refused search is over: a late answer to it is not shown
         compose.onNode(field).performImeAction()
         val refused = session.receive("findRooms")
         session.refuse(refused, "no profile running")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
-        session.send(rooms(refused.put("id", -1), "cellar", listOf(Triple(7, "Wine cellar", "Keep"))))
-        session.assertNoRequest("showRoom", QUIET_MS)
+        session.send(rooms(refused, "cellar", listOf(Triple(7, "Wine cellar", "Keep"))))
+        // Time for the answer to arrive, were it to show
+        session.assertNoRequest("findRooms", QUIET_MS)
+        compose.waitForIdle()
         assertTrue(compose.onAllNodes(hasText(string(R.string.app_map_room, "Wine cellar", "Keep", 7))).fetchSemanticsNodes().isEmpty())
     }
 

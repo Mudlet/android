@@ -52,7 +52,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         ) {
             TextSize(Settings.textSize)
             ScreenReader()
-            Map()
+            MapSettings()
         }
     }
 }
@@ -70,7 +70,7 @@ private fun ScreenReader() {
 
 /** The map's settings, the app's own. */
 @Composable
-private fun Map() {
+private fun MapSettings() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.settings_map), style = MaterialTheme.typography.titleMedium)
         SwitchRow(Settings.mapBehindText, R.string.settings_map_behind_text, R.string.settings_map_behind_text_hint)

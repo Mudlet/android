@@ -12,7 +12,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
-| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and `launcher-icons.py` |
+| `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and `launcher-icons.py` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md) |
 | `.github/` | The workflows (`ci.yml`, which calls `checks.yml`, `apks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |

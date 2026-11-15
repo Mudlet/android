@@ -219,7 +219,8 @@ side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on an
 **PTB** (`.github/workflows/ptb.yml`), outside CI, runs every night and on pull requests that change how the release
 is built. It builds the release from Mudlet's `development` for arm64-v8a and x86_64, as the separate app Mudlet PTB
 (`org.mudlet.mudlet.ptb`), runs its minified x86_64 build through the emulator smoke test, and from `main` uploads it
-to Google Play's open testing track and replaces the `ptb` GitHub pre-release. It skips a night when neither Mudlet
+to Google Play's open testing track and replaces the `ptb` GitHub pre-release, whose APKs come with the source
+code they are built from. It skips a night when neither Mudlet
 nor this repository changed, and publishes nothing without its secrets or off `main`. See [`docs/ptb.md`](docs/ptb.md).
 
 Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the

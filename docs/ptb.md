@@ -5,7 +5,8 @@ A public test build (PTB) is the app built every night from Mudlet's latest `dev
 
 - **Google Play's open testing track** of the app **Mudlet PTB** (`org.mudlet.mudlet.ptb`): join with a link,
   install from Play, and Play keeps it up to date;
-- the rolling **`ptb` GitHub pre-release**: an APK for each ABI, for people without Play.
+- the rolling **`ptb` GitHub pre-release**: an APK for each ABI, for people without Play, and the source code
+  they are built from.
 
 `.github/workflows/ptb.yml` builds and publishes them. This page says how it works, what the maintainer sets up once,
 how testers join, and how to roll a bad PTB back.
@@ -21,28 +22,60 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
 2. **engine** (arm64-v8a and x86_64 at once): libmudlet and its dependencies, with libmudlet.yml's caches, and the
    engine staged by `STAGE_ONLY=1 scripts/build-apk.sh`. libmudlet is built with `MUDLET_VERSION_BUILD=-ptb-<date>`,
    as Mudlet's own PTBs are, so the engine calls itself `<version>-ptb-<date>-<commit>`.
-3. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs), an APK
+3. **source** (beside engine): `scripts/build-source-bundle.sh` builds `mudlet-ptb-source.tar`, the source code
+   the release is built from ("The source bundle" below). Every run builds it, so a dry run shows it still builds;
+   only a run that publishes keeps it.
+4. **package**: `scripts/build-release.sh` merges the two staged engines and builds the release AAB (both ABIs), an APK
    for each ABI, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every APK
-   (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon), and that the AAB and the APKs
-   carry the PTB's application id, version and signing certificate, libraries for exactly the two ABIs, the Baseline
-   Profiles Compose and AndroidX ship (`docs/roadmap.md` on one of the app's own), and in the AAB R8's mapping and the
-   native symbol tables, which Play uses for its crash reports. It checks the APKs' and the AAB's sizes against their
-   budgets (`scripts/check-apk-size.sh`, CONTRIBUTING.md's "APK size budget"): over budget fails a pull request, while
-   a nightly or manual PTB still publishes, with the error in its summary.
-4. **smoke**: the x86_64 smoke build on an Android 15 emulator, with the test libmudlet.yml runs on the debug build
+   (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon, the licences), and that the AAB
+   and the APKs carry the PTB's application id, version and signing certificate, libraries for exactly the two ABIs, the
+   Baseline Profiles Compose and AndroidX ship (`docs/roadmap.md` on one of the app's own), and in the AAB R8's mapping
+   and the native symbol tables, which Play uses for its crash reports. It checks the APKs' and the AAB's sizes against
+   their budgets (`scripts/check-apk-size.sh`, CONTRIBUTING.md's "APK size budget"): over budget fails a pull request,
+   while a nightly or manual PTB still publishes, with the error in its summary.
+5. **smoke**: the x86_64 smoke build on an Android 15 emulator, with the test libmudlet.yml runs on the debug build
    (`native/tests/android_smoke.py`): the engine service and Qt come up, a profile connects and runs Mudlet's Lua, a
    trigger fires and notifies, and the UI reattaches to a restarted engine. This is what shows that R8 kept what Qt
    and the engine reach by name.
-5. **play**: uploads the AAB to the open testing track (`beta` in Play's API) with
+6. **play**: uploads the AAB to the open testing track (`beta` in Play's API) with
    [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play), pinned to a commit.
-6. **github-release**: replaces the `ptb` pre-release, its tag on this repository's commit, with the APKs,
-   `SHA256SUMS.txt` and notes naming both commits.
+7. **github-release**: replaces the `ptb` pre-release, its tag on this repository's commit, with the APKs, the
+   source bundle, `SHA256SUMS.txt` and notes naming both commits.
 
-Steps 5 and 6 run only on `main`, only after the smoke test passed, and only with the secrets below; the GitHub
+Steps 6 and 7 run only on `main`, only after the smoke test passed and the source bundle was built, and only with
+the secrets below; the GitHub
 pre-release only after Play took the AAB, or when no Play credentials are set. On any other branch, and on a pull
 request that changes the release build (the workflow, `scripts/build-release.sh`, `scripts/merge-qtdeploy.py`, the
 R8 rules or the Gradle files), the run is a dry run: it builds, signs with a throwaway key, runs the smoke test and
 publishes nothing. A failed nightly opens or updates the issue "Nightly PTB fails".
+
+### The source bundle
+
+The app is free software under the GPL v3 ([`licences.md`](licences.md)), which asks for its source to be offered
+with the binaries for as long as they are, and the LGPL v3 the same for Qt. Links to GitHub and to Qt's and the
+dependencies' servers are not in this project's hands, so each pre-release carries `mudlet-ptb-source.tar` beside
+the APKs, a tar of compressed archives:
+
+- `mudlet-android-<commit>.tar.gz`: this repository at the commit built (`git archive`), with the scripts that build
+  the APK;
+- `mudlet-<commit>.tar.gz`: Mudlet at the commit the engine is built from;
+- `lua-modules/`: the Lua C modules Mudlet's CMake fetches at configure time (`cmake/BundledLuaModules.cmake`), at
+  their pinned commits;
+- `deps/`: the archives `scripts/build-mudlet-deps.sh` and `scripts/build-openssl.sh` build from, which each
+  downloads and checks against its pinned SHA-256 with `FETCH_ONLY=1`;
+- `qt/`: the source of the five Qt modules the APK ships (qtbase, qtsvg, qtmultimedia, qt5compat, qtspeech) and of
+  the FFmpeg release Qt Multimedia loads;
+- `SOURCES.txt`: where each came from, and every file's SHA-256.
+
+Qt's whole source (`qt-everywhere-src`, about 1 GB) is not in it, only linked: the five modules are all the APK has
+of Qt, and the bundle stays a few hundred MB, which a runner builds in minutes. The script checks that the link the
+About screen gives for Qt's whole source answers, and fetches the modules from the same `archive/` path, so a moved
+link fails the run. The Android SDK, NDK and Gradle are tools, and the Android libraries are Apache 2.0 or similar,
+listed in the About screen with their sources; none is in the bundle.
+
+```sh
+scripts/build-source-bundle.sh ../mudlet mudlet-ptb-source.tar   # a Mudlet checkout at the commit built
+```
 
 ### Identity: an app of its own
 
@@ -187,7 +220,8 @@ for you to publish them.
   developers privately.
 - **From GitHub**: on <https://github.com/Mudlet/android/releases/tag/ptb>, download `mudlet-ptb-arm64-v8a.apk` for
   a phone or tablet (`mudlet-ptb-x86_64.apk` for a Chromebook with an Intel or AMD chip, or an emulator), check it
-  against `SHA256SUMS.txt`, open it and allow your browser to install apps. The links
+  against `SHA256SUMS.txt`, open it and allow your browser to install apps (`mudlet-ptb-source.tar` beside it is
+  the source code, which installing does not need). The links
   (`.../releases/download/ptb/mudlet-ptb-arm64-v8a.apk`) always give the latest PTB; installing a newer one updates
   it. It cannot update an install from Play, or be updated by one: uninstall first.
 

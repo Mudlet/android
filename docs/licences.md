@@ -58,6 +58,12 @@ are compatible with version 3 of the GPL but not with version 2 alone, so the ap
 GPL v3, as Mudlet's own desktop builds are. The About screen links the exact Mudlet commit the engine was built from
 and the commit of this repository the APK was built from, whose scripts are how the APK is built.
 
+The links are to servers outside this project, so every GitHub release of the app also carries the source itself:
+`scripts/build-source-bundle.sh` makes a tar of this repository and Mudlet at the commits built, the Lua modules,
+the dependencies' and OpenSSL's source archives, and Qt's source of the modules the APK ships with Qt's FFmpeg
+([`ptb.md`](ptb.md), "The source bundle", says what is in it, and why Qt's whole source is linked rather than
+bundled).
+
 ## Qt and the LGPL v3
 
 What the APK ships, as checked in the APKs CI builds:
@@ -76,7 +82,8 @@ What the APK ships, as checked in the APKs CI builds:
   covers.
 - **Notice:** the About screen says Qt is used under the LGPL v3, and carries the LGPL and the GPL v3 it builds on.
 - **Source:** the About screen links Qt 6.12.0's source on download.qt.io (Qt's own server: the binaries are built
-  from that release unchanged), and the app's and Mudlet's source, which is everything needed to rebuild the APK.
+  from that release unchanged), and the app's and Mudlet's source, which is everything needed to rebuild the APK;
+  each GitHub release carries Qt's source of the modules the APK ships.
   The link is the `archive/qt/6.12/6.12.0/single/` path, which stays once 6.12 is superseded; while 6.12.0 is
   current, the same files are also under `official_releases/qt/6.12/6.12.0/`.
 

@@ -9,14 +9,16 @@
 # Optional: ANDROID_ABI (arm64-v8a or x86_64), ANDROID_API (28), JOBS (nproc), WORK_DIR (default <prefix>.work: a
 # scratch directory for this script alone, as the whole directory is deleted when the script succeeds unless
 # KEEP_WORK=1).
+# FETCH_ONLY=1 builds nothing and needs no NDK: it downloads and checks the source tarball into <prefix>, for
+# scripts/build-source-bundle.sh.
 set -euo pipefail
 
 prefix=$(realpath -m "${1:?usage: $0 <prefix>}")
 abi=${ANDROID_ABI:-arm64-v8a}
 api=${ANDROID_API:-28}
-ndk=${ANDROID_NDK_ROOT:?set ANDROID_NDK_ROOT}
 jobs=${JOBS:-$(nproc)}
 work=$(realpath -m "${WORK_DIR:-$prefix.work}")
+fetch_only=${FETCH_ONLY:-0}
 
 openssl_version=3.5.9 # an LTS release, supported until April 2030
 openssl_sha256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a
@@ -29,17 +31,24 @@ case $abi in
     *) echo "ANDROID_ABI=$abi: only arm64-v8a and x86_64 are supported" >&2; exit 2 ;;
 esac
 
-bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
-[ -x "$bin/clang" ] || { echo "no NDK clang in $bin" >&2; exit 1; }
-
-mkdir -p "$work/dl"
+dl=$work/dl
+[ "$fetch_only" = 1 ] && dl=$prefix
+mkdir -p "$dl"
 url="https://github.com/openssl/openssl/releases/download/openssl-$openssl_version/openssl-$openssl_version.tar.gz"
-file="$work/dl/$(basename "$url")"
+file="$dl/$(basename "$url")"
 if [ ! -f "$file" ]; then
     curl -fsSL --retry 3 -o "$file.part" "$url"
     mv "$file.part" "$file"
 fi
 echo "$openssl_sha256  $file" | sha256sum -c --quiet - || { echo "checksum mismatch: $url" >&2; exit 1; }
+if [ "$fetch_only" = 1 ]; then
+    echo "OpenSSL $openssl_version's source is in $prefix"
+    exit 0
+fi
+
+ndk=${ANDROID_NDK_ROOT:?set ANDROID_NDK_ROOT}
+bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+[ -x "$bin/clang" ] || { echo "no NDK clang in $bin" >&2; exit 1; }
 src="$work/openssl"
 rm -rf "$src"
 mkdir -p "$src"

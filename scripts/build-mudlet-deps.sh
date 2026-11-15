@@ -7,16 +7,16 @@
 # Optional: QT_ANDROID / QT_HOST_PATH instead of QT_ROOT, ANDROID_ABI (arm64-v8a), ANDROID_API (28), JOBS (nproc),
 # WORK_DIR (default <prefix>.work: a scratch directory for this script alone, as the whole directory is deleted
 # when the script succeeds unless KEEP_WORK=1).
+# FETCH_ONLY=1 builds nothing and needs neither the NDK nor Qt: it downloads and checks the sources, and leaves their
+# archives in <prefix> (a git archive for those fetched by commit), for scripts/build-source-bundle.sh.
 set -euo pipefail
 
 prefix=$(realpath -m "${1:?usage: $0 <prefix>}")
 abi=${ANDROID_ABI:-arm64-v8a}
 api=${ANDROID_API:-28}
-ndk=${ANDROID_NDK_ROOT:?set ANDROID_NDK_ROOT}
-qt_android=${QT_ANDROID:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/android_${abi//-/_}}
-qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/gcc_64}
 jobs=${JOBS:-$(nproc)}
 work=$(realpath -m "${WORK_DIR:-$prefix.work}")
+fetch_only=${FETCH_ONLY:-0}
 
 pcre2_version=10.45
 pugixml_version=1.15
@@ -30,16 +30,20 @@ qtkeychain_version=0.17.0
 qtkeychain_commit=875f77d9f61bd97fd84cca47ce3bc71186dfbd09 # tag 0.17.0
 boost_version=1.89.0
 
-mkdir -p "$prefix" "$work/dl"
+# the downloads, kept in <prefix> when that is all this does
+dl=$work/dl
+[ "$fetch_only" = 1 ] && dl=$prefix
+mkdir -p "$prefix" "$dl"
 
 fetch() { # name url sha256 [member of the archive to extract] -> $work/<name>
     local name=$1 url=$2 sha=$3 member=${4:-} file
-    file="$work/dl/$(basename "$url")"
+    file="$dl/$(basename "$url")"
     if [ ! -f "$file" ]; then
         curl -fsSL --retry 3 -o "$file.part" "$url"
         mv "$file.part" "$file"
     fi
     echo "$sha  $file" | sha256sum -c --quiet - || { echo "checksum mismatch: $url" >&2; exit 1; }
+    [ "$fetch_only" = 1 ] && return
     rm -rf "${work:?}/$name"
     mkdir -p "$work/$name"
     if [[ $file == *.zip ]]; then
@@ -56,6 +60,10 @@ git_fetch() { # name url commit -> $work/<name>
     rm -rf "${work:?}/$name"
     git init -q "$work/$name"
     git -C "$work/$name" fetch -q --depth 1 "$url" "$commit"
+    if [ "$fetch_only" = 1 ]; then
+        git -C "$work/$name" archive --format=tar.gz --prefix="$name-$commit/" -o "$dl/$name-$commit.tar.gz" FETCH_HEAD
+        return
+    fi
     git -C "$work/$name" -c advice.detachedHead=false checkout -q FETCH_HEAD
 }
 
@@ -83,23 +91,44 @@ cmake_build() { # name source-dir [cmake args...]
     echo "built $name"
 }
 
+# Every source first, so that FETCH_ONLY=1 stops before the build needs the NDK and Qt
 fetch pcre2 "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-$pcre2_version/pcre2-$pcre2_version.tar.gz" \
     0e138387df7835d7403b8351e2226c1377da804e0737db0e071b48f07c9d12ee
+fetch pugixml "https://github.com/zeux/pugixml/releases/download/v$pugixml_version/pugixml-$pugixml_version.tar.gz" \
+    655ade57fa703fb421c2eb9a0113b5064bddb145d415dd1f88c79353d90d511a
+fetch libzip "https://github.com/nih-at/libzip/releases/download/v$libzip_version/libzip-$libzip_version.tar.gz" \
+    82e9f2f2421f9d7c2466bbc3173cd09595a88ea37db0d559a9d0a2dc60dc722e
+git_fetch yajl https://github.com/lloyd/yajl.git "$yajl_commit"
+fetch hunspell "https://github.com/hunspell/hunspell/releases/download/v$hunspell_version/hunspell-$hunspell_version.tar.gz" \
+    11ddfa39afe28c28539fe65fc4f1592d410c1e9b6dd7d8a91ca25d85e9ec65b8
+fetch sqlite "https://www.sqlite.org/$sqlite_file" \
+    1d3049dd0f830a025a53105fc79fd2ab9431aea99e137809d064d8ee8356b032
+# The same commit as Mudlet's 3rdparty/qtkeychain submodule
+git_fetch qtkeychain https://github.com/frankosterfeld/qtkeychain.git "$qtkeychain_commit"
+boost_dir=boost_${boost_version//./_}
+fetch boost "https://archives.boost.io/release/$boost_version/source/$boost_dir.tar.gz" \
+    9de758db755e8330a01d995b0a24d09798048400ac25c03fc5ea9be364b13c93 "$boost_dir/boost"
+
+if [ "$fetch_only" = 1 ]; then
+    rm -rf "${work:?}"
+    echo "the sources' archives are in $prefix"
+    exit 0
+fi
+
+ndk=${ANDROID_NDK_ROOT:?set ANDROID_NDK_ROOT}
+qt_android=${QT_ANDROID:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/android_${abi//-/_}}
+qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/gcc_64}
+
 cmake_build pcre2 "$work/pcre2" -DPCRE2_BUILD_PCRE2_8=ON -DPCRE2_BUILD_PCRE2_16=OFF -DPCRE2_BUILD_PCRE2_32=OFF \
     -DPCRE2_SUPPORT_UNICODE=ON -DPCRE2_SUPPORT_JIT=ON -DPCRE2_BUILD_TESTS=OFF -DPCRE2_BUILD_PCRE2GREP=OFF
 
-fetch pugixml "https://github.com/zeux/pugixml/releases/download/v$pugixml_version/pugixml-$pugixml_version.tar.gz" \
-    655ade57fa703fb421c2eb9a0113b5064bddb145d415dd1f88c79353d90d511a
 cmake_build pugixml "$work/pugixml" -DPUGIXML_BUILD_TESTS=OFF
 
-fetch libzip "https://github.com/nih-at/libzip/releases/download/v$libzip_version/libzip-$libzip_version.tar.gz" \
-    82e9f2f2421f9d7c2466bbc3173cd09595a88ea37db0d559a9d0a2dc60dc722e
 cmake_build libzip "$work/libzip" -DBUILD_TOOLS=OFF -DBUILD_REGRESS=OFF -DBUILD_OSSFUZZ=OFF -DBUILD_EXAMPLES=OFF \
     -DBUILD_DOC=OFF -DENABLE_BZIP2=OFF -DENABLE_LZMA=OFF -DENABLE_ZSTD=OFF -DENABLE_OPENSSL=OFF -DENABLE_GNUTLS=OFF \
     -DENABLE_MBEDTLS=OFF -DENABLE_COMMONCRYPTO=OFF -DENABLE_WINDOWS_CRYPTO=OFF
 
 # yajl's own CMake also builds its tools and tests; only the library is wanted
-git_fetch yajl https://github.com/lloyd/yajl.git "$yajl_commit"
 cat > "$work/yajl/CMakeLists.txt" <<EOF
 cmake_minimum_required(VERSION 3.16)
 project(yajl C)
@@ -118,8 +147,6 @@ EOF
 cmake_build yajl "$work/yajl"
 
 # hunspell ships autotools only; its library is plain C++ with one generated header
-fetch hunspell "https://github.com/hunspell/hunspell/releases/download/v$hunspell_version/hunspell-$hunspell_version.tar.gz" \
-    11ddfa39afe28c28539fe65fc4f1592d410c1e9b6dd7d8a91ca25d85e9ec65b8
 cat > "$work/hunspell/src/hunspell/hunvisapi.h" <<'EOF'
 #ifndef HUNVISAPI_H_
 #define HUNVISAPI_H_
@@ -141,8 +168,6 @@ EOF
 cmake_build hunspell "$work/hunspell"
 
 # Only Mudlet's bundled luasql.sqlite3 module uses it
-fetch sqlite "https://www.sqlite.org/$sqlite_file" \
-    1d3049dd0f830a025a53105fc79fd2ab9431aea99e137809d064d8ee8356b032
 cat > "$work/sqlite/CMakeLists.txt" <<'EOF'
 cmake_minimum_required(VERSION 3.16)
 project(sqlite3 C)
@@ -153,16 +178,11 @@ install(FILES sqlite3.h sqlite3ext.h DESTINATION include)
 EOF
 cmake_build sqlite "$work/sqlite"
 
-# The same commit as Mudlet's 3rdparty/qtkeychain submodule
-git_fetch qtkeychain https://github.com/frankosterfeld/qtkeychain.git "$qtkeychain_commit"
 cmake_build qtkeychain "$work/qtkeychain" -DQT_HOST_PATH="$qt_host" \
     -DCMAKE_PREFIX_PATH="$prefix;$qt_android" -DCMAKE_FIND_ROOT_PATH="$prefix;$qt_android" \
     -DBUILD_WITH_QT6=ON -DBUILD_TRANSLATIONS=OFF -DBUILD_TEST_APPLICATION=OFF
 
 # Mudlet uses only header-only Boost (graph, range); find_package(Boost CONFIG) gets a small config for them
-boost_dir=boost_${boost_version//./_}
-fetch boost "https://archives.boost.io/release/$boost_version/source/$boost_dir.tar.gz" \
-    9de758db755e8330a01d995b0a24d09798048400ac25c03fc5ea9be364b13c93 "$boost_dir/boost"
 rm -rf "$prefix/include/boost"
 mv "$work/boost/boost" "$prefix/include/boost"
 mkdir -p "$prefix/lib/cmake/Boost-$boost_version"

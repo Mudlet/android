@@ -154,6 +154,11 @@ class InputLineTest {
         session.reply("completion", "", again.get("id"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(string(R.string.input_no_completion)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(input).assertIsFocused().assert(editableText("look"))
+
+        // Typing on clears the notice
+        compose.onNode(input).performTextInput("s")
+        compose.onNode(input).assert(editableText("looks"))
+        assertTrue("no notice once the player types", compose.onAllNodesWithText(string(R.string.input_no_completion)).fetchSemanticsNodes().isEmpty())
     }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)

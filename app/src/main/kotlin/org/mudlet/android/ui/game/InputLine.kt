@@ -3,11 +3,17 @@ package org.mudlet.android.ui.game
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +26,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -44,9 +51,6 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.VisualTransformation
 import org.mudlet.android.R
 import org.mudlet.android.suggest.Suggestion
 import org.mudlet.android.suggest.SuggestionSession
@@ -115,8 +119,10 @@ fun InputLine(
     picked: String? = null,
     onPickedShown: () -> Unit = {},
 ) {
-    var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
-    var secret by remember { mutableStateOf(TextFieldValue()) }
+    // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
+    // keyboard sends before the next frame, which a value and onValueChange field would apply to the old text
+    val text = rememberTextFieldState()
+    val secret = remember { TextFieldState() }
     var at by rememberSaveable(stateSaver = HistoryPosition.Saver) { mutableStateOf(HistoryPosition()) }
     var notice by rememberSaveable { mutableStateOf<Notice?>(null) }
     var focused by remember { mutableStateOf(false) }
@@ -124,9 +130,15 @@ fun InputLine(
     var sends by remember { mutableIntStateOf(0) }
     val focus = remember { FocusRequester() }
     val hiddenFocus = remember { FocusRequester() }
+    // The player's own edits of the text or the cursor clear a notice, at once and so before any send they precede;
+    // the line's other changes (a send, a recall, a completion) set the notice themselves
+    val clearsNotice = remember { InputTransformation { notice = null } }
 
     fun show(line: String, cursor: Int = line.length) {
-        text = TextFieldValue(line, TextRange(cursor))
+        text.edit {
+            replace(0, length, line)
+            selection = TextRange(cursor.coerceIn(0, line.length))
+        }
         notice = null
     }
 
@@ -136,38 +148,40 @@ fun InputLine(
     }
 
     fun submit() {
-        val sent = onSend(text.text)
+        val sent = onSend(text.text.toString())
         notice = if (sent) null else Notice.NOT_SENT
         if (sent) {
             at = HistoryPosition()
-            text = TextFieldValue()
+            text.clearText()
             sends++
         }
     }
 
     fun submitHidden() {
-        val sent = onSendHidden(secret.text)
+        val sent = onSendHidden(secret.text.toString())
         notice = if (sent) null else Notice.NOT_SENT
-        if (sent) secret = TextFieldValue()
+        if (sent) secret.clearText()
     }
 
     fun complete() {
-        val asked = text.text
+        val asked = text.text.toString()
         val sent = onComplete(asked) { completed ->
             // The player typed on meanwhile: their line wins
-            if (text.text != asked) return@onComplete
+            if (text.text.toString() != asked) return@onComplete
             if (completed.isEmpty()) notice = Notice.NO_COMPLETION else show(completed)
         }
         notice = if (sent) null else Notice.NOT_SENT
     }
 
     val items = if (hiddenInput) emptyList() else suggestions?.suggestions?.items.orEmpty()
+    val line = text.text.toString()
+    val cursor = text.selection
     // Only for the line as it is now: an answer for an older one would put the wrong text after the cursor
-    val ghost = suggestions?.takeIf { !hiddenInput && it.input == text.text && text.selection.collapsed && it.cursor == text.selection.end }?.suggestions?.ghost
+    val ghost = suggestions?.takeIf { !hiddenInput && it.input == line && cursor.collapsed && it.cursor == cursor.end }?.suggestions?.ghost
 
     fun accept() {
         if (ghost == null) return
-        show(text.text + ghost)
+        show(line + ghost)
         focus.requestFocus()
     }
 
@@ -177,14 +191,15 @@ fun InputLine(
     }
 
     val inputChanged by rememberUpdatedState(onInputChanged)
-    LaunchedEffect(text.text, text.selection, hiddenInput, sends) {
-        if (!hiddenInput) inputChanged(text.text, text.selection.end)
+    LaunchedEffect(hiddenInput) {
+        if (hiddenInput) return@LaunchedEffect
+        snapshotFlow { Triple(text.text.toString(), text.selection.end, sends) }.collect { (changed, end) -> inputChanged(changed, end) }
     }
 
     // Read as the field swaps, before the old one's focus is gone: the new one takes the focus it had
     val hadFocus = remember(hiddenInput) { focused }
     LaunchedEffect(hiddenInput) {
-        if (!hiddenInput) secret = TextFieldValue()
+        if (!hiddenInput) secret.clearText()
         notice = null
         if (hadFocus) (if (hiddenInput) hiddenFocus else focus).requestFocus()
     }
@@ -216,7 +231,7 @@ fun InputLine(
         if (items.isNotEmpty()) {
             SuggestionStrip(
                 items,
-                accepted = ghost?.let { text.text + it },
+                accepted = ghost?.let { line + it },
                 onAccept = ::accept,
                 onPick = ::pick,
                 Modifier.fillMaxWidth().semantics {
@@ -227,21 +242,17 @@ fun InputLine(
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (hiddenInput) {
-                OutlinedTextField(
-                    value = secret,
-                    onValueChange = {
-                        secret = it
-                        notice = null
-                    },
+                // Password semantics: TalkBack says "password", not what is typed
+                OutlinedSecureTextField(
+                    state = secret,
                     modifier = Modifier.weight(1f).focusRequester(hiddenFocus).then(trackFocus).semantics { traversalIndex = FIELD_ORDER },
                     label = { Text(stringResource(R.string.input_password_label)) },
                     supportingText = supportingText,
                     isError = notice == Notice.NOT_SENT,
-                    singleLine = true,
-                    // Password semantics: TalkBack says "password", not what is typed
-                    visualTransformation = PasswordVisualTransformation(),
+                    inputTransformation = clearsNotice,
+                    textObfuscationMode = TextObfuscationMode.Hidden,
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { submitHidden() }),
+                    onKeyboardAction = { submitHidden() },
                 )
                 IconButton({ if (!onDismissHidden()) notice = Notice.NOT_SENT }, buttonOrder) {
                     Icon(painterResource(R.drawable.ic_close), stringResource(R.string.input_password_close))
@@ -254,15 +265,11 @@ fun InputLine(
                 }
             } else {
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = {
-                        text = it
-                        notice = null
-                    },
+                    state = text,
                     modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).semantics {
                         traversalIndex = FIELD_ORDER
                         // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
-                        if (ghost != null) editableText = AnnotatedString(text.text)
+                        if (ghost != null) editableText = AnnotatedString(line)
                     }.onPreviewKeyEvent { event ->
                         val tab = event.key == Key.Tab && !event.isShiftPressed
                         // Both halves of Tab's press, so neither the field nor the focus acts on it
@@ -271,7 +278,7 @@ fun InputLine(
                         // Right takes the ghost, which is only there with the cursor at the end, where it does nothing else
                         when {
                             tab -> complete()
-                            event.key == Key.DirectionUp && at.canGoBack(history) -> move(at.back(history, text.text))
+                            event.key == Key.DirectionUp && at.canGoBack(history) -> move(at.back(history, text.text.toString()))
                             event.key == Key.DirectionDown && at.canGoForward -> move(at.forward())
                             event.key == Key.DirectionRight && ghost != null -> accept()
                             else -> return@onPreviewKeyEvent false
@@ -286,17 +293,18 @@ fun InputLine(
                     },
                     supportingText = supportingText,
                     isError = notice == Notice.NOT_SENT,
-                    visualTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) } ?: VisualTransformation.None,
-                    singleLine = true,
+                    inputTransformation = clearsNotice,
+                    outputTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) },
                     // Game commands are not prose: corrections, suggestions and capitals would change them ("n" to "In")
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
                         autoCorrectEnabled = false,
                         imeAction = ImeAction.Send,
                     ),
-                    keyboardActions = KeyboardActions(onSend = { submit() }),
+                    onKeyboardAction = { submit() },
+                    lineLimits = TextFieldLineLimits.SingleLine,
                 )
-                IconButton({ move(at.back(history, text.text)) }, buttonOrder, enabled = at.canGoBack(history)) {
+                IconButton({ move(at.back(history, text.text.toString())) }, buttonOrder, enabled = at.canGoBack(history)) {
                     Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
                 }
                 IconButton({ move(at.forward()) }, buttonOrder, enabled = at.canGoForward) {

@@ -149,9 +149,9 @@ order the UI asked for it:
 - It records each send, and observes each game line but the echo of a send: one of the three lines after the send
   that ends with the command as a whole word.
 - It answers the input line once the typing has paused for 120 ms, with up to five suggestions. `SuggestionStrip`
-  shows them as buttons above the line, after an accept button for the ghost text. The ghost shows greyed through a
-  `VisualTransformation`, and only for the line as it is now; the field's semantics keep just the typed text, so
-  TalkBack does not read it. A hardware right arrow at the end of the line also accepts it.
+  shows them as buttons above the line, after an accept button for the ghost text. The ghost shows greyed through an
+  `OutputTransformation`, and only for the line as it is now; the field's state and semantics keep just the typed
+  text, so the keyboard does not see it and TalkBack does not read it. A hardware right arrow at the end of the line also accepts it.
 - It saves 5 s after a send and when the app leaves the front (`MainActivity.onStop`), to a temporary file that
   then replaces the old one. An I/O error is logged (tag `MudletSuggest`) without any command and the suggestions
   carry on in memory; after a failed load nothing is saved, so the file is not replaced with less.
@@ -844,6 +844,12 @@ Item 13 of the on-device checklist covers this.
 - **`pkill -f test_engine.py` from a shell whose own command line contains that
   string kills the shell.** Use the pid.
 - **`/usr/bin/time` is not installed.** Use the bash `time` builtin.
+- **A sent line came back on the input line** (`GameScreenTest`, once on API 28: "northdraft"). The field took a
+  `TextFieldValue` and `onValueChange`; its copy of the text, which the keyboard edits, catches up with the value only
+  when it recomposes. A keyboard edit between the send's clear and the next frame (here LatinIME marking the word
+  before the cursor) was applied to the old text, and `onValueChange` put it back. `InputLine` now uses
+  `TextFieldState` fields, which the keyboard edits directly; `anEditTheKeyboardSendsJustAfterASendLeavesTheLineEmpty`
+  sends and edits in one turn of the main thread.
 
 ## Measurements (prototype C, October 2026)
 

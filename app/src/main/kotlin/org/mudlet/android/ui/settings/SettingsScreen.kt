@@ -52,6 +52,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         ) {
             TextSize(Settings.textSize)
             ScreenReader()
+            Map()
         }
     }
 }
@@ -64,6 +65,15 @@ private fun ScreenReader() {
         SwitchRow(Settings.readNewText, R.string.settings_read_new_text, R.string.settings_read_new_text_hint)
         SwitchRow(Settings.advertiseScreenReader, R.string.settings_advertise_screen_reader, R.string.settings_advertise_screen_reader_hint)
         BlankLines(Settings.blankLines)
+    }
+}
+
+/** The map's settings, the app's own. */
+@Composable
+private fun Map() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.settings_map), style = MaterialTheme.typography.titleMedium)
+        SwitchRow(Settings.mapBehindText, R.string.settings_map_behind_text, R.string.settings_map_behind_text_hint)
     }
 }
 

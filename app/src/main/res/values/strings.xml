@@ -119,6 +119,11 @@
     <string name="settings_read_new_text_hint">While TalkBack is on, the game\'s new text is read out as it arrives.</string>
     <string name="settings_advertise_screen_reader">Tell games I use a screen reader</string>
     <string name="settings_advertise_screen_reader_hint">Games that ask are told, and some then send text laid out for screen readers.</string>
+    <!-- The settings screen's map section: whether the game's map is drawn faintly behind the game's text. The map
+         button above the game's text brings it to the front either way. -->
+    <string name="settings_map">Map</string>
+    <string name="settings_map_behind_text">Map behind the text</string>
+    <string name="settings_map_behind_text_hint">The game\'s map shows faintly behind the game\'s text, following you. The map button brings it to the front.</string>
     <!-- The heading of three choices: what becomes of the empty lines a game sends -->
     <string name="settings_blank_lines">Blank lines from the game</string>
     <string name="settings_blank_lines_show">Show them</string>
@@ -232,6 +237,20 @@
     <string name="map_edit">Edit the map</string>
     <string name="map_refused">Map: %1$s</string>
     <string name="map_refusal_dismiss">Dismiss</string>
+
+    <!-- The game screen's own map, brought to the front over the game's text by a button in the title bar: the button,
+         which TalkBack reads with its state (on while the map is in front), the search for rooms by name or number
+         above the map, and its results; each result is a room's name (%1$s), its area's name (%2$s) and its number
+         (%3$d) -->
+    <string name="app_map_show">Map</string>
+    <string name="app_map_search">Find a room</string>
+    <string name="app_map_search_hint">Room name or number</string>
+    <string name="app_map_search_go">Find</string>
+    <string name="app_map_room">%1$s, %2$s (%3$d)</string>
+    <string name="app_map_searching">Finding rooms…</string>
+    <string name="app_map_no_rooms">No room matches \"%1$s\"</string>
+    <string name="app_map_more_rooms">More rooms match than are shown: try more of the name</string>
+    <string name="app_map_results_close">Close the results</string>
 
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>

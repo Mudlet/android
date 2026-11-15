@@ -66,7 +66,11 @@ object ScriptWindowsClient {
         }
     }
 
-    /** A `map` frame: [bitmap] its PNG, null if that did not decode, of [w] by [h] pixels; [viewOnly] false while the map is edited. */
+    /**
+     * A `map` or `appMap` frame: [w] by [h] its size in the map's pixels, and [bitmap] its PNG, null if that did not
+     * decode, of as many pixels for `map` and larger by the scale asked for `appMap`; [viewOnly] false while the map is
+     * edited.
+     */
     class MapImage(val bitmap: ImageBitmap?, val w: Int, val h: Int, val viewOnly: Boolean)
 
     /** The images the engine sent, by what was asked; one not there yet is asked for with [requestImage]. */
@@ -106,10 +110,12 @@ object ScriptWindowsClient {
         map = MapImage(bitmap, message.w, message.h, message.viewOnly)
     }
 
-    /** An `error` from the engine: the refusal of a map request is shown with the map. */
+    /** An `error` from the engine: the refusal of a map request is shown with the map that asked, this or [AppMapClient]'s. */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
-        if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = message.message.substringAfter(':').trim()
+        val reason = message.message.substringAfter(':').trim()
+        if (AppMapClient.onRefused(request, reason)) return
+        if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -170,6 +176,7 @@ object ScriptWindowsClient {
         askedImages.retainAll(images.keys)
         // Also a size that could not be sent while the link was down
         wantedSize?.let(::setMainWindowSize)
+        AppMapClient.onAttached(sameInstance)
     }
 
     /** Gives Mudlet's main window [size], unless this engine instance has it already; again to a new one. */
@@ -220,6 +227,7 @@ object ScriptWindowsClient {
     /** The map viewed only, or edited; the next [map] says which it is. False as for [EngineClient.send]. */
     fun setMapViewOnly(viewOnly: Boolean): Boolean {
         mapRefusal = null
+        AppMapClient.viewOnlyAskedByMapper()
         return EngineClient.send(Requests.setMapViewOnly(viewOnly))
     }
 

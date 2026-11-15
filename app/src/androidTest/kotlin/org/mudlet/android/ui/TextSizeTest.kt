@@ -187,7 +187,12 @@ class TextSizeTest {
         return results.single()
     }
 
-    /** No text is clipped or cut short, and every control is within the window's width. */
+    /**
+     * No text is clipped or cut short, and every control is within the window's width. Not hasVisualOverflow: a String
+     * Text answers GetTextLayoutResult with its text laid out again at its whole maximum width, so didOverflowWidth
+     * holds for any such Text narrower than that maximum. That layout wraps what the real one did not, so text too
+     * wide for its space overflows its height there.
+     */
     private fun assertNothingCutOff() {
         compose.onRoot().tryPerformAccessibilityChecks()
         val width = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
@@ -195,7 +200,9 @@ class TextSizeTest {
             val results = mutableListOf<TextLayoutResult>()
             node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
             for (result in results) {
-                assertTrue("'${result.layoutInput.text}' overflows its space", !result.hasVisualOverflow)
+                val widestLine = (0 until result.lineCount).maxOf { result.getLineRight(it) - result.getLineLeft(it) }
+                val fits = !result.didOverflowHeight && widestLine <= result.size.width
+                assertTrue("'${result.layoutInput.text}' overflows its space ${result.size}: widest line $widestLine, height ${result.multiParagraph.height}", fits)
             }
         }
         for (node in compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()) {

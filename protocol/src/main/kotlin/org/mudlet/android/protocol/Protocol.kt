@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 9
+const val PROTOCOL_VERSION = 10
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -142,6 +142,13 @@ enum class PointerType(val wire: String) {
     WHEEL("wheel"),
 }
 
+/** What a pointer did on the map, as upstream's MapPointerEvent has it; the map takes no drags. */
+enum class MapPointerType(val wire: String) {
+    PRESS("press"),
+    DOUBLE_CLICK("doubleClick"),
+    WHEEL("wheel"),
+}
+
 /** Where a button bar goes, as upstream names it on the wire: a strip of the main console, or a floating toolbar. */
 enum class BarPlace(val wire: String) {
     TOP("top"),
@@ -262,6 +269,13 @@ sealed interface EngineMessage {
 
     /** The commands the profile's packages added, whole; empty with no profile open. */
     data class Commands(val commands: List<AddonCommand>) : EngineMessage
+
+    /**
+     * The 2D map as the mapper window shows it, drawn again: [png] is a PNG of [w] by [h] pixels, the window's size,
+     * empty if it did not decode; [viewOnly] while the map is viewed, not edited. Drawn over the mapper only while [w]
+     * and [h] are its size; none comes while the mapper hides or has no size.
+     */
+    data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -330,6 +344,23 @@ object Requests {
 
     /** A click on the [AddonCommand] [command]. Answered only by an Error, when refused. */
     fun activateCommand(command: Int): JSONObject = JSONObject().put("t", "activateCommand").put("command", command)
+
+    /**
+     * What the pointer did at [x], [y] in the pixels of the last [EngineMessage.Map]: [button] as POINTER_*, with
+     * which a press of POINTER_LEFT selects the room there and a double-click speedwalks to it; [modifiers] as
+     * MODIFIER_*; [wheelY] in eighths of a degree, which zooms. Each of those is sent only when not 0. Answered only
+     * by an Error, when refused.
+     */
+    fun mapPointer(type: MapPointerType, x: Double, y: Double, button: Int, modifiers: Int, wheelY: Int): JSONObject = JSONObject()
+        .put("t", "mapPointer").put("type", type.wire).put("x", x).put("y", y)
+        .apply {
+            if (button != 0) put("button", button)
+            if (modifiers != 0) put("modifiers", modifiers)
+            if (wheelY != 0) put("wheelY", wheelY)
+        }
+
+    /** The map viewed only, or edited. Answered only by an Error, when refused. */
+    fun setMapViewOnly(viewOnly: Boolean): JSONObject = JSONObject().put("t", "setMapViewOnly").put("viewOnly", viewOnly)
 
     /** Answered by [EngineMessage.Image] with [id] as its replyTo: the file at [path], scaled to [w] by [h], given both, or its [frame]. */
     fun getImage(path: String, w: Int?, h: Int?, frame: Int?, id: Long): JSONObject {
@@ -444,6 +475,8 @@ class FrameReader(input: InputStream) {
             "buttonBars" -> EngineMessage.ButtonBars(objects(o.optJSONArray("bars")).mapNotNull(::parseButtonBar))
 
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
+
+            "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true))
 
             else -> EngineMessage.Unknown(t)
         }

@@ -43,6 +43,9 @@ public:
     // Nor buttons or commands
     QString pressButton(int) override { return noButtons(); }
     QString activateCommand(int) override { return noButtons(); }
+    // Nor a map
+    QString mapPointer(const PointerEvent&) override { return noMap(); }
+    QString setMapViewOnly(bool) override { return noMap(); }
 
     // Called from Lua's notify()
     void luaNotify(const QString& title, const QString& text);
@@ -50,6 +53,7 @@ public:
 private:
     static QString noWindows() { return QStringLiteral("the stand-in engine has no script windows"); }
     static QString noButtons() { return QStringLiteral("the stand-in engine has no buttons or commands"); }
+    static QString noMap() { return QStringLiteral("the stand-in engine has no map"); }
 
     enum class TelnetState { Data, Iac, Option, Sub, SubIac };
 

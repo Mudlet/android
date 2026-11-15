@@ -87,4 +87,9 @@ public:
     virtual QString pressButton(int id) = 0;
     // A click on a command of IFrontend::commands(), by its id
     virtual QString activateCommand(int id) = 0;
+    // What the UI's pointer did on the map, at a point of the last IFrontend::map() frame: a press, a double-click or
+    // a wheel turn; its buttons are not read
+    virtual QString mapPointer(const PointerEvent& event) = 0;
+    // Viewing the map, or editing it
+    virtual QString setMapViewOnly(bool viewOnly) = 0;
 };

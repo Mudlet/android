@@ -153,6 +153,19 @@ class EngineLinkJvmTest {
     }
 
     @Test
+    fun theStandInHasNoMap() {
+        val link = newLink()
+        link.start()
+        next<Attached>()
+        next<EngineMessage.Synced>()
+        link.send(Requests.mapPointer(MapPointerType.DOUBLE_CLICK, 1.5, 2.0, POINTER_LEFT, 0, 0))
+        assertEquals("mapPointer: the stand-in engine has no map", next<EngineMessage.Error>().message)
+        link.send(Requests.setMapViewOnly(false))
+        assertEquals("setMapViewOnly: the stand-in engine has no map", next<EngineMessage.Error>().message)
+        link.stop()
+    }
+
+    @Test
     fun protocolLatencyThroughputAndEngineDeath() {
         val link = newLink()
         link.start()

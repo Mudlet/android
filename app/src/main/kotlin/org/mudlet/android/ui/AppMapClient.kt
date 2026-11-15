@@ -118,14 +118,8 @@ internal object AppMapClient : MapSource {
     internal fun onRefused(request: String, reason: String): Boolean {
         when (request) {
             "appMapPointer", "showRoom", "setAppMapSize" -> {}
-
             "setMapViewOnly" -> if (!askedViewOnly) return false
-
-            "findRooms" -> {
-                pendingSearch = null
-                search = null
-            }
-
+            "findRooms" -> closeSearch()
             else -> return false
         }
         refused = reason
@@ -144,10 +138,7 @@ internal object AppMapClient : MapSource {
             refused = null
             sent = Size.NONE
         }
-        if (pendingSearch != null) {
-            pendingSearch = null
-            search = null
-        }
+        if (pendingSearch != null) closeSearch()
         // Also a size that could not be sent while the link was down
         update()
     }

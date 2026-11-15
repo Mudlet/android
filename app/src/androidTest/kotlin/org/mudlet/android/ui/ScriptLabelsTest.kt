@@ -238,10 +238,11 @@ class ScriptLabelsTest {
     fun anImageLabelAsksTheEngineForItsImageOnce() {
         session.windows(listOf(label("key", w = 100, h = 100)), full = true)
         session.label("key", image = "/data/key.png", accessibleName = "Map key")
+        // The test's clock recomposes only while the test waits on Compose, so the label is drawn, and asks, first
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription("Map key")).fetchSemanticsNodes().isNotEmpty() }
         val request = session.receive("getImage")
         assertEquals("/data/key.png", request.getString("path"))
         assertTrue(!request.has("w") && !request.has("frame"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription("Map key")).fetchSemanticsNodes().isNotEmpty() }
 
         session.image("/data/key.png", png(8, 4), 8, 4, request.get("id"))
         compose.waitUntil(WAIT_MS) { ScriptWindowsClient.images[ScriptWindowsClient.ImageRequest("/data/key.png")]?.width == 8 }

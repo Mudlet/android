@@ -15,8 +15,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
@@ -93,8 +95,11 @@ class ScriptButtonBarsTest {
         waitFor(north)
         compose.onNode(north).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         val group = hasContentDescription(string(R.string.bar_description, "Moves"))
-        compose.onNode(group).assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 2f))
         compose.onNode(group).assert(SemanticsMatcher.expectValue(SemanticsProperties.IsTraversalGroup, true))
+        // Read after the windows: the index is on the bars' row, beside the console, the input line and the windows,
+        // not inside a scroll, which is a traversal group of its own where the index would order only the bars
+        val afterWindows = SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 2f)
+        compose.onNode(afterWindows and hasAnyDescendant(group)).assert(!hasAnyAncestor(hasScrollAction()))
 
         val button = bounds(north)
         val min = with(compose.density) { 48.dp.toPx() }

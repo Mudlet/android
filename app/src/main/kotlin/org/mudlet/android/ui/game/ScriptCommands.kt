@@ -51,11 +51,7 @@ fun ScriptCommandsButton() {
     Box {
         IconButton({ expanded = true }) {
             val description = stringResource(if (pulsing) R.string.commands_menu_attention else R.string.commands_menu)
-            if (pulsing) {
-                BadgedBox(badge = { Badge() }) { Icon(painterResource(R.drawable.ic_extension), description) }
-            } else {
-                Icon(painterResource(R.drawable.ic_extension), description)
-            }
+            BadgedBox(badge = { if (pulsing) Badge() }) { Icon(painterResource(R.drawable.ic_extension), description) }
         }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             if (opened.isNotEmpty()) MenuBackItem { opened = opened.dropLast(1) }

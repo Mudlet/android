@@ -88,7 +88,9 @@ class ButtonBarLayoutTest {
         val b = command(2, onMenu = false, onToolbar = true)
         val c = command(3, "Tools")
         val d = command(4, " Tools / Voices ")
+        // Neither on the menu nor on the toolbar: the GUI does not show it
         val e = command(5, onMenu = false)
+        // On the menu with no submenu: in the menu itself
         val f = command(6, "")
         assertEquals(
             listOf(
@@ -97,7 +99,6 @@ class ButtonBarLayoutTest {
                     listOf(CommandEntry.Submenu("Voices", listOf(CommandEntry.Command(a), CommandEntry.Command(d))), CommandEntry.Command(c)),
                 ),
                 CommandEntry.Command(b),
-                // Neither on the menu nor on the toolbar: the GUI does not show it
                 CommandEntry.Command(f),
             ),
             CommandMenu.of(listOf(a, b, c, d, e, f)),

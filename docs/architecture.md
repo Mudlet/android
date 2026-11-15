@@ -233,6 +233,9 @@ keeps the profiles' passwords in the KeyStore.
 | `setMainWindowSize()`, then `mainConsoleGrid()` and `mainConsoleTextRect()` at `profileLoaded` and at each `mainConsoleAreaChanged` | `setMainWindowSize`, kept and given again to each profile as it loads; `mainArea` |
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
+| `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
+| `pointer()` | `pointer`, answered only when refused |
+| none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -294,6 +297,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `printCmdLine()` as `windowCommandLine` and `sendWindowCommandLine` running `setCmdLineAction()`'s function;
   `getWindowText`; hiding, `closeUserWindow`, a `full` `windows` and each console's text to a UI that attaches, and
   `removed`;
+- labels: a Geyser `Label`'s `echo()`, `setStyleSheet()`, `setAccessibleName()`, tool tip and click callback as
+  `label`, its click callback run by a `pointer` press, and `pointer` refused off the window; a new `echo()` as
+  `label` alone; `setBackgroundImage()` as the label's `image`, and that file as a PNG from `getImage`, scaled; an
+  SVG one with `setSvgTint()` and `setSvgRotation()`; a Geyser `Gauge`'s three labels, whose front width is its value
+  and whose text label is transparent; every label to a UI that attaches; `deleteLabel()` as `removed`;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

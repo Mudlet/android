@@ -6,10 +6,11 @@ import java.io.DataInputStream
 import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 7
+const val PROTOCOL_VERSION = 8
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -25,6 +26,15 @@ const val RUN_OVERLINE = 32
 const val RUN_BLINK = 64
 const val RUN_FAST_BLINK = 128
 const val RUN_CONCEALED = 256
+
+// Qt's mouse buttons and keyboard modifiers, as Requests.pointer takes them
+const val POINTER_LEFT = 1
+const val POINTER_RIGHT = 2
+const val POINTER_MIDDLE = 4
+const val MODIFIER_SHIFT = 0x02000000
+const val MODIFIER_CONTROL = 0x04000000
+const val MODIFIER_ALT = 0x08000000
+const val MODIFIER_META = 0x10000000
 
 /** A profile as the engine lists it; the password is never part of one. */
 data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
@@ -69,6 +79,8 @@ data class ScriptWindow(
     val stack: Int,
     /** As a run's colour; -1 for none. */
     val bg: Int,
+    /** [bg]'s alpha, from 0 (transparent) to 255, which a label's may be below. */
+    val bgAlpha: Int,
     val fontFamily: String?,
     /** In points; 0 for none. */
     val fontSize: Double,
@@ -85,6 +97,52 @@ data class ScriptWindow(
 
     /** [scrolledBackTo] is the row it is scrolled back to, null while it follows new lines. */
     data class Console(val scrolledBackTo: Int?, val columns: Int, val rows: Int, val scrollBar: Boolean, val timeStamps: Boolean)
+}
+
+/** What a label shows, as THeadlessSession::labelContent() gives it (docs/protocol.md, `label`). */
+data class LabelContent(
+    val name: String,
+    /** Rich text, as echo() or setLabelText() gave it; empty while an image or movie shows in its place. */
+    val text: String,
+    /** The file setBackgroundImage() gave it, a raster image or, with [svg], an SVG drawn under the text. */
+    val image: String,
+    val svg: Boolean,
+    /** As a run's colour, -1 for none, with its alpha from 0 to 255. */
+    val svgTint: Int,
+    val svgTintAlpha: Int,
+    /** In degrees. */
+    val svgRotation: Double,
+    val svgShearX: Double,
+    val svgShearY: Double,
+    /** The file setMovie() gave it, shown in place of the text. */
+    val movie: String,
+    val moviePaused: Boolean,
+    /** The frame a paused movie shows; -1 while it plays. */
+    val movieFrame: Int,
+    /** In percent of the file's own speed. */
+    val movieSpeed: Int,
+    /** The size scaleMovie() gave it; null for the file's own. */
+    val movieW: Int?,
+    val movieH: Int?,
+    val toolTip: String,
+    /** The pointer passes through it to what is under it. */
+    val clickThrough: Boolean,
+    val accessibleName: String,
+    /** It has a click or release callback, so a screen reader is told it is a button. */
+    val accessibleButton: Boolean,
+    /** As setLabelStyleSheet() gave it, which the engine does not interpret. */
+    val styleSheet: String,
+)
+
+/** What a pointer did, as upstream's WindowPointerEvent names it on the wire. */
+enum class PointerType(val wire: String) {
+    PRESS("press"),
+    RELEASE("release"),
+    DOUBLE_CLICK("doubleClick"),
+    MOVE("move"),
+    ENTER("enter"),
+    LEAVE("leave"),
+    WHEEL("wheel"),
 }
 
 /** A row of a script window's console: [runs] as [EngineMessage.Line]'s, but a bg of -1 is the window's bg. */
@@ -162,6 +220,12 @@ sealed interface EngineMessage {
 
     /** A script set the command line [name] of a script window to [text]. */
     data class WindowCommandLine(val name: String, val text: String) : EngineMessage
+
+    /** A label's content, new or changed; it follows the [Windows] that has the label. */
+    data class Label(val label: LabelContent) : EngineMessage
+
+    /** The answer to getImage: [png] is a PNG of [w] by [h] pixels, empty if it did not decode. */
+    data class Image(val path: String, val png: ByteArray, val w: Int, val h: Int, val replyTo: Any?) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -223,6 +287,30 @@ object Requests {
 
     fun closeUserWindow(name: String): JSONObject = JSONObject().put("t", "closeUserWindow").put("name", name)
     fun sendWindowCommandLine(name: String, text: String): JSONObject = JSONObject().put("t", "sendWindowCommandLine").put("name", name).put("text", text)
+
+    /**
+     * What the pointer did at [x], [y] in [window]'s pixels ("main" for the main console's area): [button] that
+     * changed and [buttons] held after it as POINTER_*, [modifiers] as MODIFIER_*, [wheelY] in eighths of a degree.
+     * Each of those is sent only when not 0. Answered only by an Error, when refused.
+     */
+    fun pointer(window: String, type: PointerType, x: Double, y: Double, button: Int, buttons: Int, modifiers: Int, wheelY: Int): JSONObject = JSONObject()
+        .put("t", "pointer").put("window", window).put("type", type.wire).put("x", x).put("y", y)
+        .apply {
+            if (button != 0) put("button", button)
+            if (buttons != 0) put("buttons", buttons)
+            if (modifiers != 0) put("modifiers", modifiers)
+            if (wheelY != 0) put("wheelY", wheelY)
+        }
+
+    /** Answered by [EngineMessage.Image] with [id] as its replyTo: the file at [path], scaled to [w] by [h], given both, or its [frame]. */
+    fun getImage(path: String, w: Int?, h: Int?, frame: Int?, id: Long): JSONObject {
+        require((w == null) == (h == null)) { "getImage takes w and h together" }
+        return JSONObject().put("t", "getImage").put("path", path).put("id", id)
+            .apply {
+                if (w != null && h != null) put("w", w).put("h", h)
+                if (frame != null) put("frame", frame)
+            }
+    }
 }
 
 /**
@@ -346,6 +434,10 @@ class FrameReader(input: InputStream) {
 
             "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))
 
+            "label" -> EngineMessage.Label(parseLabel(o))
+
+            "image" -> EngineMessage.Image(o.optString("path"), decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.opt("re"))
+
             else -> EngineMessage.Unknown(t)
         }
 
@@ -385,6 +477,7 @@ class FrameReader(input: InputStream) {
                 shown = w.optBoolean("shown"),
                 stack = w.optInt("stack"),
                 bg = w.optInt("bg", -1),
+                bgAlpha = w.optInt("bgAlpha", 255),
                 fontFamily = w.optString("fontFamily").ifEmpty { null },
                 fontSize = w.optDouble("fontSize", 0.0),
                 inDock = w.optBoolean("inDock"),
@@ -400,6 +493,36 @@ class FrameReader(input: InputStream) {
                     null
                 },
             )
+        }
+
+        private fun parseLabel(l: JSONObject) = LabelContent(
+            name = l.optString("name"),
+            text = l.optString("text"),
+            image = l.optString("image"),
+            svg = l.optBoolean("svg"),
+            svgTint = l.optInt("svgTint", -1),
+            svgTintAlpha = l.optInt("svgTintAlpha", 255),
+            svgRotation = l.optDouble("svgRotation", 0.0),
+            svgShearX = l.optDouble("svgShearX", 0.0),
+            svgShearY = l.optDouble("svgShearY", 0.0),
+            movie = l.optString("movie"),
+            moviePaused = l.optBoolean("moviePaused"),
+            movieFrame = l.optInt("movieFrame", -1),
+            movieSpeed = l.optInt("movieSpeed", 100),
+            movieW = if (l.has("movieW")) l.optInt("movieW") else null,
+            movieH = if (l.has("movieH")) l.optInt("movieH") else null,
+            toolTip = l.optString("toolTip"),
+            clickThrough = l.optBoolean("clickThrough"),
+            accessibleName = l.optString("accessibleName"),
+            accessibleButton = l.optBoolean("accessibleButton"),
+            styleSheet = l.optString("styleSheet"),
+        )
+
+        // Empty for what is not base64, as an engine's bad frame should not end the link
+        private fun decodeBase64(text: String): ByteArray = try {
+            Base64.getDecoder().decode(text)
+        } catch (_: IllegalArgumentException) {
+            ByteArray(0)
         }
 
         private fun parseStrings(strings: JSONArray?): List<String> = if (strings == null) emptyList() else List(strings.length()) { strings.optString(it) }

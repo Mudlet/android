@@ -76,9 +76,11 @@ class ProtocolSpecTest {
                     when (type) {
                         String::class.java -> "x"
                         Int::class.javaPrimitiveType, Int::class.javaObjectType -> 1
+                        Double::class.javaPrimitiveType -> 1.0
                         Long::class.javaPrimitiveType -> 1L
                         Boolean::class.javaPrimitiveType -> true
                         Profile::class.java -> Profile("x", "x", 1, true, "x", true)
+                        PointerType::class.java -> PointerType.PRESS
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

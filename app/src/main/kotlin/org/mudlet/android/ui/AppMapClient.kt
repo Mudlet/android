@@ -68,7 +68,7 @@ internal object AppMapClient : MapSource {
 
     private val wanted = EnumMap<Owner, Size>(Owner::class.java)
 
-    // The size this engine instance was last given; null when it could not be sent, so the next attach sends it
+    // The size the engine was last given since the UI attached; null when it could not be sent
     private var sent: Size? = Size.NONE
     private var pendingSearch: Long? = null
     private var nextId = 1L
@@ -131,15 +131,17 @@ internal object AppMapClient : MapSource {
         askedViewOnly = false
     }
 
-    /** A new engine instance draws no map until asked, and answers nothing the last was asked. */
+    /**
+     * The engine forgets the size when the UI goes, so it is asked again at each attach; a new instance has no map to
+     * show either, and answers nothing the last was asked.
+     */
     internal fun onAttached(sameInstance: Boolean) {
         if (!sameInstance) {
             map = null
             refused = null
-            sent = Size.NONE
         }
+        sent = Size.NONE
         if (pendingSearch != null) closeSearch()
-        // Also a size that could not be sent while the link was down
         update()
     }
 

@@ -1054,7 +1054,7 @@ void MudletEngine::onProfileClosed()
     mFrontend->commands({});
     mMapSize.reset();
     mFrontend->map(std::nullopt);
-    mFrontend->appMap(std::nullopt);
+    pushAppMap();
 }
 
 void MudletEngine::pushWindows(bool withText)
@@ -1152,9 +1152,13 @@ std::optional<MapFrame> MudletEngine::drawMap(const QSize& size)
     return MapFrame{png, size, mSession->mapViewOnly()};
 }
 
+// Nothing while none is asked for: setAppMapSize() said so once
 void MudletEngine::pushAppMap()
 {
-    if (mAppMapSize.isEmpty() || !profileOpen()) {
+    if (mAppMapSize.isEmpty()) {
+        return;
+    }
+    if (!profileOpen()) {
         mFrontend->appMap(std::nullopt);
         return;
     }
@@ -1341,10 +1345,14 @@ QString MudletEngine::setAppMapSize(const QSize& size, double scale)
     }
     mAppMapSize = size.isEmpty() ? QSize(0, 0) : size;
     mAppMapScale = scale;
-    if (mAppMapSize.isEmpty() && profileOpen()) {
+    if (!mAppMapSize.isEmpty()) {
+        pushAppMap();
+        return {};
+    }
+    if (profileOpen()) {
         mSession->closeAppMap();
     }
-    pushAppMap();
+    mFrontend->appMap(std::nullopt);
     return {};
 }
 

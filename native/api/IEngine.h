@@ -103,8 +103,8 @@ public:
     // Viewing the map, or editing it
     virtual QString setMapViewOnly(bool viewOnly) = 0;
     // The app's own map, apart from the mapper window, drawn for IFrontend::appMap() at size, in the map's pixels, with
-    // scale device pixels to each, from now on and for the next profile too; an empty size stops it. Scale is from 1
-    // to maxAppMapScale.
+    // scale device pixels to each, from now on and for the next profile too; an empty size stops it, as SocketBridge
+    // asks when the UI goes. Scale is from 1 to maxAppMapScale.
     static constexpr double maxAppMapScale = 4.0;
     virtual QString setAppMapSize(const QSize& size, double scale) = 0;
     // What mapPointer() does, at a point of the last IFrontend::appMap() frame, in the map's pixels

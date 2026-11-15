@@ -262,6 +262,7 @@ public:
     // The map drawn again while the mapper window shows; none once it hides or goes, or the map could not be drawn
     virtual void map(const std::optional<MapFrame>& frame) = 0;
     // The app's own map (IEngine::setAppMapSize()) drawn again, as it was asked for or as it changed; none while
-    // there is nothing to draw, as with no profile open or a map with no rooms
+    // there is nothing to draw, as with no profile open or a map with no rooms, and once as an empty size stops it,
+    // with nothing more until a size is asked for again
     virtual void appMap(const std::optional<MapFrame>& frame) = 0;
 };

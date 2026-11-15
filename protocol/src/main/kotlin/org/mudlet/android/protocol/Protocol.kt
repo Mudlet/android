@@ -321,7 +321,8 @@ sealed interface EngineMessage {
     /**
      * The app's own map (Requests.setAppMapSize), drawn again: [png] is a PNG of [w] by [h] of the map's pixels, at the
      * scale asked for, empty if it did not decode; [viewOnly] as for [Map]. [w] and [h] are 0, and [png] empty, while
-     * there is nothing to draw, as with no profile open or a map with no rooms.
+     * there is nothing to draw, as with no profile open or a map with no rooms. Sent only while asked for: the engine
+     * forgets the size when the UI goes, so one that attaches is sent none until it asks again.
      */
     data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
 

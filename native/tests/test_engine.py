@@ -191,7 +191,7 @@ def buttons_and_commands(c):
 
 def no_map(c):
     """The stand-in has no map: it refuses presses on it and switching it to editing, once their fields are right. It takes
-    a size for the app's map, and tells the UI there is nothing to draw."""
+    a size for the app's map, and tells the UI there is nothing to draw, until that UI goes."""
     c.send({"t": "setAppMapSize", "w": 360, "h": 640, "scale": 2.75})
     m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
     check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"the app's map has nothing to draw: {m}")
@@ -222,9 +222,10 @@ def no_map(c):
     c.close()
     c = Client(SOCK)
     frames = handshake(c)
-    check([m for m in frames if m["t"] == "appMap"] == [{"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}],
-          "a UI that attaches is told what the app's map last was")
+    check([m for m in frames if m["t"] == "appMap"] == [], "a UI that attaches is told nothing of the app's map until it asks")
     c.send({"t": "setAppMapSize", "w": 0, "h": 0, "scale": 1})
+    m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
+    check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"asked again, it says so again: {m}")
     return c
 
 

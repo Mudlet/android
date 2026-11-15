@@ -1393,7 +1393,7 @@ def app_map():
     scale asked for, with nothing to draw before a profile or rooms; appMapPointer selecting and walking without the
     script's mapper events; centerview() moving the player on it, as it opens the map for scripts; findRooms by name
     and id, sorted and at most 100; showRoom centring the map on a room; setMapViewOnly with only this map open; a
-    script's mapper beside it, each with its own centre; the frame to a UI that attaches; and 0 by 0 stopping it."""
+    script's mapper beside it, each with its own centre; a UI that goes stopping it, and 0 by 0."""
     profile = "App Map Test"
     proc, c = start_engine(profile)
     seen = []
@@ -1582,8 +1582,14 @@ def app_map():
     msgs = []
     c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
     kinds = [m["t"] for m in msgs]
-    check(kinds.count("appMap") == 1 and kinds.index("windows") < kinds.index("appMap") < kinds.index("buttonBars"),
-          f"a UI that attaches gets the app's map, after the windows: {kinds}")
+    check("appMap" not in kinds, f"a UI that attaches is told nothing of the app's map until it asks: {kinds}")
+    m = c.ask({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
+    check(m["message"].startswith("appMapPointer: The app's map has not been drawn yet"),
+          f"the UI that went took the app's map with it: {m}")
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 2})
+    m = seen_or_next(c, lambda m: m["t"] in ("appMap", "error"), seen, since)
+    check(m["t"] == "appMap" and (m["w"], m["h"]) == (400, 300), f"asked for again, it is drawn again: {m}")
 
     since = len(seen)
     c.send({"t": "setAppMapSize", "w": 0, "h": 0, "scale": 1})

@@ -103,6 +103,7 @@ private:
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
     void sendIfChanged(QJsonObject& kept, QJsonObject message);
     void dropClient(const QString& reason);
+    void forgetClient();
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
     static QJsonObject lineMessage(const StoredLine& stored, bool replay);
@@ -142,7 +143,8 @@ private:
     QJsonObject mCommands = commandsMessage({});
     // The map message last sent, empty while no mapper shows
     QJsonObject mMap;
-    // The appMap message last sent, empty until the engine has drawn the app's map or said there is nothing to draw
+    // The appMap message last sent to this UI, empty until the engine has drawn the app's map or said there is nothing to
+    // draw
     QJsonObject mAppMap;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};

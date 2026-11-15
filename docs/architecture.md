@@ -251,7 +251,8 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   there. "Finding rooms…", no match and more matches than shown are read out as they come.
 - The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
   shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
-  0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms.
+  0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms. It asks again at each attach,
+  as the engine stops drawing the map when its UI goes (in the background too) and forgets the size.
 - With a script's mapper: the app's map is a view of its own, with its own centre and selection; zoom is the area's,
   so shared, as between two maps on the desktop, and so is viewing or editing. So that one map shows on the screen,
   none is drawn behind the text while a mapper window (`Geyser.Mapper`, openMapWidget()'s dock) is shown; the map in
@@ -317,7 +318,7 @@ keeps the profiles' passwords in the KeyStore.
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
 | `renderMap()` at the mapper window's size, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
-| `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and to a UI that attaches while asked for; `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms`; `setAppMapSize` 0 by 0 |
+| `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -397,8 +398,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the app's map, with no script mapper: `setAppMapSize` drawing it as `appMap` at the size and scale asked, an empty
   one with no profile or no rooms, and one larger than a PNG may be refused; `appMapPointer` walking with a double-click
   and raising no `sysMapWindowMousePressEvent`; `findRooms` by name, ignoring case, and by number; `showRoom` centring
-  the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; the frame to a UI
-  that attaches; and 0 by 0 stopping it;
+  the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; a UI that goes
+  stopping it, and the next sent none until it asks; and 0 by 0 stopping it;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
@@ -446,14 +447,14 @@ device shows, below the UI's debug hook:
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
-  docked map as a page; the app's map (`AppMapTest`): asked at the console's size and drawn faintly behind its text,
-  which TalkBack and touches still reach, none with the setting off or a mapper window shown, the title bar's toggle
-  bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions reach it as
-  `appMapPointer`, and Back sending it back, and the room search with its results, no match, more matches and a
-  refusal; and the notification permission, explained and then asked on Android 13 and later, on a fresh
-  install. Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`),
-  which fail a test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on
-  the API 36 emulator only.
+  docked map as a page; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
+  faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
+  the title bar's toggle bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions
+  reach it as `appMapPointer`, and Back sending it back, and the room search with its results, no match, more matches
+  and a refusal; and the notification permission, explained and then asked on Android 13 and later, on a fresh install.
+  Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
+  test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
+  emulator only.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 

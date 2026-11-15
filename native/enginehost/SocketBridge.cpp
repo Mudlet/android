@@ -134,6 +134,7 @@ void SocketBridge::onNewConnection()
             if (mClient == socket) {
                 mClient = nullptr;
                 mClientGreeted = false;
+                forgetClient();
             }
             socket->deleteLater();
         });
@@ -151,6 +152,17 @@ void SocketBridge::dropClient(const QString& reason)
     mClient->deleteLater();
     mClient = nullptr;
     mClientGreeted = false;
+    forgetClient();
+}
+
+// The app's map is drawn only for the UI that asked for it, so one that goes stops it, and the next is told nothing of
+// it until it asks: a UI that died cannot take back its size, and none is drawn while none is attached
+void SocketBridge::forgetClient()
+{
+    if (mEngine) {
+        mEngine->setAppMapSize(QSize(0, 0), 1);
+    }
+    mAppMap = QJsonObject();
 }
 
 void SocketBridge::onReadyRead()

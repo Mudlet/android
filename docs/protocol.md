@@ -79,7 +79,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `activateCommand` | `command` | A click on the command of `commands` whose `id` is `command`, a whole number (`THeadlessSession::activateAddonCommand()`): a checkable command is ticked or unticked, then the event `sysCommandClicked` is raised with its id. Refused for a disabled command. |
 | `mapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | What the UI's pointer did on the map at `x`, `y`, in the pixels of the last `map` from its top left (`THeadlessSession::mapPointer()`, "The map" below). `type` is `press`, `doubleClick` or `wheel`; `button`, `modifiers` and `wheelY` are as for `pointer`, and 0 when absent. |
 | `setMapViewOnly` | `viewOnly` | `true` to only view the map, `false` to edit it, as the GUI's mapper menu does (`THeadlessSession::setMapViewOnly()`): the event `mapModeChangeEvent` is raised with `viewing` or `editing`. |
-| `setAppMapSize` | `w`, `h`, `scale` | Asks for the app's own map, drawn at `w` by `h` of the map's pixels with `scale` device pixels to each, and sent as `appMap` whenever it changes ("The app's map" below); `w` and `h` 0 stop it. `w` and `h` are whole numbers, both above 0 or both 0; `scale` a number from 1 to 4. libmudlet keeps it for each profile that loads later, and refuses a map of more than 4096 device pixels a side. The stand-in takes it, and sends an `appMap` with nothing to draw. |
+| `setAppMapSize` | `w`, `h`, `scale` | Asks for the app's own map, drawn at `w` by `h` of the map's pixels with `scale` device pixels to each, and sent as `appMap` whenever it changes ("The app's map" below); `w` and `h` 0 stop it. `w` and `h` are whole numbers, both above 0 or both 0; `scale` a number from 1 to 4. libmudlet keeps it for each profile that loads later, until the UI that asked goes, and refuses a map of more than 4096 device pixels a side. The stand-in takes it, and sends an `appMap` with nothing to draw. |
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`. `text` must not be blank. |
 | `showRoom` | `room` | Centres the app's map on the room whose id is `room`, a whole number, and selects it, as a pan on the desktop's mapper does (`THeadlessSession::showRoomOnAppMap()`): it stays until the player moves or a script centres the map. |
@@ -108,10 +108,10 @@ stand-in has no buttons or commands and refuses both.
 
 `mapPointer` and `setMapViewOnly` are answered only when refused, with `error` as above: libmudlet refuses them while no
 profile is open, `mapPointer` also while no script has opened a map, `setMapViewOnly` also while no script's map shows
-and the app's map is not open (no `setAppMapSize` above 0 by 0 since the profile loaded, or 0 by 0 since), and
-`mapPointer` as `THeadlessSession::mapPointer()` does: before the map has been drawn, for a double-click of another
-button than the left, and for a wheel turn of less than half a notch or with no area to zoom. The stand-in has no map
-and refuses both.
+and the app's map is not open (no `setAppMapSize` above 0 by 0 since the profile loaded, or 0 by 0 or the UI that asked
+gone since), and `mapPointer` as `THeadlessSession::mapPointer()` does: before the map has been drawn, for a
+double-click of another button than the left, and for a wheel turn of less than half a notch or with no area to zoom.
+The stand-in has no map and refuses both.
 
 `setAppMapSize`, `appMapPointer` and `showRoom` too are answered only when refused, and `findRooms` by `rooms` or
 `error`, as above. libmudlet refuses all but `setAppMapSize` while no profile is open, `appMapPointer` before the
@@ -149,7 +149,7 @@ it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 | `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
-| `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and to a UI that attaches once one has been sent. |
+| `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
@@ -275,6 +275,9 @@ profile with a map has one without a script that opens a mapper.
 - It is drawn for the size the last `setAppMapSize` asked for, with the profile's map and the player's room in the
   middle, and drawn again as `map` is: on `mapRepaintRequested`, when `viewOnly` changes, on a new size, and when a
   profile loads. The engine sends `appMap` only when it differs from what it last sent.
+- It is the attached UI's: when that UI goes, the engine stops drawing it as at 0 by 0, so none is drawn while no UI
+  is attached, its `showRoom` and selection go with it, and a UI that attaches, a new one or the same again, is sent
+  none until it asks with `setAppMapSize`.
 - Once asked for, it opens the map for scripts as opening the desktop's mapper does (`Host::mapOpen()`), until the
   profile closes, 0 by 0 or not: with no script mapper, a mapper script's `centerview()` moves the player on it, which
   it follows, and `getPlayerRoom()` answers.
@@ -378,7 +381,7 @@ a UI says `hello`, the engine sends, in this order:
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
    `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
    engine has sent one, `windows` with `full` true, a `label` for each label, `map` while the mapper shows,
-   `appMap` once one has been sent, `buttonBars`, `commands`, and a `windowText` of each console's last 300 rows;
+   `buttonBars`, `commands`, and a `windowText` of each console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`

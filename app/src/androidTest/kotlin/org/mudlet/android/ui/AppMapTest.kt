@@ -196,10 +196,15 @@ class AppMapTest {
     }
 
     @Test
-    fun aNewEngineIsAskedForTheMapByItselfAndAnEmptyFrameClearsIt() {
+    fun theEngineIsAskedForTheMapAgainAtEachAttachAndAnEmptyFrameClearsIt() {
         val size = session.receiveLast("setAppMapSize", readPast = true)
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
+
+        // The UI went and came back to the same engine, which forgot the size as the UI went: it is asked again
+        session.close()
+        session = fake.engine.nextSession()
+        assertEquals(size.toString(), session.receiveLast("setAppMapSize").toString())
 
         // Android restarted the engine: the new one draws nothing until asked, which the UI does without the player
         fake.engine.instance = "$INSTANCE-${System.nanoTime()}"

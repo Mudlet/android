@@ -29,8 +29,8 @@ public:
     void runLua(const QString& code) override;
     void setScreenSize(int columns, int rows) override;
     // The stand-in's runs carry no links
-    QString link(int, Link&) const override { return QStringLiteral("not supported"); }
-    QString followLink(int, std::optional<int>) override { return QStringLiteral("not supported"); }
+    QString link(const QString&, int, Link&) const override { return QStringLiteral("not supported"); }
+    QString followLink(const QString&, int, std::optional<int>) override { return QStringLiteral("not supported"); }
     // Nothing to tell a game, and its profiles are written as they change
     void setAppState(bool, bool) override {}
     void save() override {}

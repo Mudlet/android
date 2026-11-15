@@ -255,9 +255,14 @@ def main():
               f"setScreenSize {bad} is refused: {m}")
     c.send({"t": "setScreenSize", "columns": 100, "rows": 30})
 
-    # The stand-in has no links, and says so; a link id or item that is not a whole number is refused first
+    # The stand-in has no links, and says so, of a window's as of the main console's; a link id or item that is not a
+    # whole number, or a window that is not a name, is refused first
     for request, message in [({"t": "getLink", "link": 1}, "getLink: not supported"),
                              ({"t": "followLink", "link": 1, "item": 0}, "followLink: not supported"),
+                             ({"t": "getLink", "link": 1, "window": "chat"}, "getLink: not supported"),
+                             ({"t": "followLink", "link": 1, "window": "main"}, "followLink: not supported"),
+                             ({"t": "getLink", "link": 1, "window": 5}, "getLink: window must be a console's name"),
+                             ({"t": "followLink", "link": 1, "window": None}, "followLink: window must be a console's name"),
                              ({"t": "getLink", "link": 0}, "getLink: link must be a whole number from 1"),
                              ({"t": "followLink", "link": "1"}, "followLink: link must be a whole number from 1"),
                              ({"t": "followLink", "link": 1, "item": 1.5}, "followLink: item must be a whole number from 0")]:

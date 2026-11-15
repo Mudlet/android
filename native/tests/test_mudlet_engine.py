@@ -263,6 +263,7 @@ def main():
     links()
     app_state()
     script_windows()
+    window_links()
     script_labels()
     button_bars()
     map_view()
@@ -882,6 +883,103 @@ def script_windows():
     c.send({"t": "runLua", "code": 'deleteMiniConsole("chat")'})
     m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
     check({"name": "chat", "kind": "miniConsole"} in m["removed"], f"a deleted console is removed: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def window_links():
+    """getLink and followLink with a window's name, for a mini console's echoLink() and echoPopup(): the window's own
+    link ids, its menu, the command reaching the game, the window's text sent again as a followed link changes, and the
+    refusals for a window or id there is not; main names the main console. In the next profile opened, whose main
+    console's ids are offset, a window's are still its own."""
+    game = fake_telnet.start_in_thread()
+    proc, c = start_engine("Window Links Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=60)
+
+    def ask_link(request):
+        return c.ask(request, answers=("link", "error"), collect=seen)
+
+    def window_link_ids(m):
+        return [r[5] for line in m["lines"] for r in line["runs"] if len(r) == 6 and r[5] > 0]
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'win = Geyser.MiniConsole:new({name = "win", x = 0, y = 0, width = "30%", height = "40%"})',
+        'win:echo("go: ")',
+        'echoLink("win", "go", [[send("winlink")]], "win tip", true)',
+        'win:echo(" food: ")',
+        'echoPopup("win", "stew", {[[send("look win stew")]], [[send("eat win stew")]]}, {"Look", "Eat"}, true)',
+        'win:echo("\\n")',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] == "windowText" and m["window"] == "win" and m["lines"]
+                     and m["lines"][0]["text"] == "go: go food: stew" and len(window_link_ids(m)) >= 2, seen, since, timeout=10)
+    ids = list(dict.fromkeys(window_link_ids(m)))
+    check(len(ids) == 2, f"the window's row marks its two links: {m}")
+    go_id, stew_id = ids[0], ids[-1]
+
+    m = ask_link({"t": "getLink", "link": go_id, "window": "win"})
+    check(m.get("t") == "link" and m["link"] == go_id and m.get("window") == "win" and m["tooltip"] == "win tip"
+          and not m["menu"] and not m["visited"], f"getLink with the window's name gives its echoLink(): {m}")
+    m = ask_link({"t": "getLink", "link": stew_id, "window": "win"})
+    check(m.get("t") == "link" and m["menu"] and [i["label"] for i in m["items"]] == ["Look", "Eat"],
+          f"and its echoPopup()'s menu: {m}")
+
+    since = len(seen)
+    c.send({"t": "followLink", "link": go_id, "window": "win", "id": "follow"})
+    check(wait_received("winlink"), f"followLink with the window's name runs its send(), which reaches the game: {fake_telnet.RECEIVED[-3:]}")
+    m = seen_or_next(c, lambda m: m["t"] == "windowText" and m["window"] == "win" and "re" not in m, seen, since, timeout=10)
+    check(bool(m["lines"]), f"the link turning visited sends the window's text again, which is how a UI learns of it: {m}")
+    m = ask_link({"t": "getLink", "link": go_id, "window": "win"})
+    check(m.get("visited") is True, f"and leaves it visited: {m}")
+    check(not any(m.get("re") == "follow" for m in seen[since:]), "a followLink that ran is not answered")
+    check(not any(m["t"] == "linksChanged" and go_id in m["ids"] for m in seen[since:]),
+          "a window's link changing is no linksChanged, which is the main console's")
+    c.send({"t": "followLink", "link": stew_id, "item": 1, "window": "win"})
+    check(wait_received("eat win stew"), f"followLink with an item runs that item of the window's menu: {fake_telnet.RECEIVED[-3:]}")
+
+    for request, message in [({"t": "getLink", "link": go_id, "window": "nonesuch"}, "getLink: unknown"),
+                             ({"t": "followLink", "link": go_id, "window": "nonesuch"}, "followLink: unknown"),
+                             ({"t": "getLink", "link": 99999, "window": "win"}, "getLink: unknown"),
+                             ({"t": "followLink", "link": stew_id, "item": 2, "window": "win"}, "followLink: noSuchItem"),
+                             ({"t": "getLink", "link": go_id, "window": 5}, "getLink: window must be a console's name")]:
+        m = ask_link(request)
+        check(m.get("t") == "error" and m["message"] == message, f"{request} gets {message!r}: {m}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'echo("main: ") echoLink("m", [[send("mainlink")]], "main tip") echo("\\n")'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].endswith("main: m") and link_ids(m), seen, since)
+    main_id = link_ids(m)[-1]
+    for window in ("main", ""):
+        m = ask_link({"t": "getLink", "link": main_id, "window": window})
+        check(m.get("tooltip") == "main tip" and "window" not in m, f"window {window!r} names the main console: {m}")
+
+    m = c.ask({"t": "saveProfile", "name": "Window Links Other", "host": "127.0.0.1", "port": game, "tls": False,
+               "login": "", "autoReconnect": False})
+    check(m["t"] == "profiles", f"saveProfile: {m}")
+    m = c.ask({"t": "openProfile", "name": "Window Links Other", "connect": False})
+    check(m["t"] == "profiles", f"openProfile: {m}")
+    wait_status(c, "profile", lambda v: v == "Window Links Other loaded", seen, timeout=60)
+    # The link's send() reaches the game only while this profile is connected
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=60)
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'win = Geyser.MiniConsole:new({name = "win", x = 0, y = 0, width = "30%", height = "40%"})',
+        'echoLink("win", "again", [[send("other winlink")]], "other win tip", true)',
+        'win:echo("\\n")',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] == "windowText" and m["window"] == "win" and m["lines"]
+                     and m["lines"][0]["text"] == "again" and window_link_ids(m), seen, since, timeout=10)
+    other_id = window_link_ids(m)[0]
+    m = ask_link({"t": "getLink", "link": other_id, "window": "win"})
+    check(m.get("tooltip") == "other win tip", f"in the next profile, a window's link id is its own, not offset: {m}")
+    c.send({"t": "followLink", "link": other_id, "window": "win"})
+    check(wait_received("other winlink"), f"and followLink runs it: {fake_telnet.RECEIVED[-3:]}")
+    m = ask_link({"t": "getLink", "link": main_id})
+    check(m.get("t") == "error" and m["message"] == "getLink: unknown", f"while the main console's id from before names none: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

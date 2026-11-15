@@ -1358,10 +1358,24 @@ void MudletEngine::onSaveFinished(bool saved, const QString& error)
     }
 }
 
-QString MudletEngine::link(int id, Link& link) const
+namespace {
+// As in libmudlet, "main" names the main console too, whose ids are offset
+bool isMainConsole(const QString& window)
 {
-    // An id of an earlier profile's line names none of this one's links
-    const std::optional<THeadlessSession::Link> found = id > mLinkBase ? mSession->link(id - mLinkBase) : std::nullopt;
+    return window.isEmpty() || window == QLatin1String("main");
+}
+} // namespace
+
+QString MudletEngine::link(const QString& window, int id, Link& link) const
+{
+    std::optional<THeadlessSession::Link> found;
+    if (!isMainConsole(window)) {
+        // A window's link ids are its own, not offset as the main console's are
+        found = mSession->windowLink(window, id);
+    } else if (id > mLinkBase) {
+        // An id of an earlier profile's line names none of this one's links
+        found = mSession->link(id - mLinkBase);
+    }
     if (!found) {
         return QStringLiteral("unknown");
     }
@@ -1384,13 +1398,16 @@ QString MudletEngine::link(int id, Link& link) const
     return {};
 }
 
-// Empty where it ran, or revealed a spoiler, which linksChanged then tells of; else the LinkResult's name
-QString MudletEngine::followLink(int id, std::optional<int> item)
+// Empty where it ran, or revealed a spoiler, which linksChanged, or for a window its windowText, then tells of; else
+// the LinkResult's name
+QString MudletEngine::followLink(const QString& window, int id, std::optional<int> item)
 {
-    if (id <= mLinkBase) {
+    const bool mainConsole = isMainConsole(window);
+    if (mainConsole && id <= mLinkBase) {
         return QStringLiteral("unknown");
     }
-    switch (mSession->followLink(id - mLinkBase, item)) {
+    const THeadlessSession::LinkResult result = mainConsole ? mSession->followLink(id - mLinkBase, item) : mSession->followWindowLink(window, id, item);
+    switch (result) {
     case THeadlessSession::LinkResult::ran:
     case THeadlessSession::LinkResult::revealedSpoiler:
         return {};

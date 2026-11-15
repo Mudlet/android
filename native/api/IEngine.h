@@ -60,10 +60,11 @@ public:
     virtual void runLua(const QString& code) = 0;
     // The UI's console in characters, which a game that asks is told (NAWS)
     virtual void setScreenSize(int columns, int rows) = 0;
-    // The main console's link with that id, as runs name it; else why not, as "unknown"
-    virtual QString link(int id, Link& link) const = 0;
+    // The link with that id, as runs name it, of the console window (a mini console, user window or MXP frame), or
+    // of the main console where window is empty or "main"; else why not, as "unknown"
+    virtual QString link(const QString& window, int id, Link& link) const = 0;
     // Follows it as a tap does, or picks item from its menu; else why nothing ran, as "disabled"
-    virtual QString followLink(int id, std::optional<int> item) = 0;
+    virtual QString followLink(const QString& window, int id, std::optional<int> item) = 0;
     // The app in front (active) or not, and its window minimized or sent to the background; leaving the front saves
     virtual void setAppState(bool active, bool minimized) = 0;
     // Writes the profile now, as the system may stop the engine without warning

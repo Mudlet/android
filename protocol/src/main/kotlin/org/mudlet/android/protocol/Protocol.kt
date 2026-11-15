@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 10
+const val PROTOCOL_VERSION = 12
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -253,12 +253,13 @@ sealed interface EngineMessage {
     data class Announce(val text: String, val assertive: Boolean) : EngineMessage
 
     /**
-     * What the main console's link [link] offers now, the answer to [Requests.getLink]. [fg], [bg] and [styles] (run
-     * colours and attribute bits) are how it is painted now, null where the run's own apply; [styles] replaces only
-     * the run's bold, italic, underline, overline and strike-out.
+     * What the link [link] of the console [window] offers now, the answer to [Requests.getLink]; [window] is null for
+     * the main console. [fg], [bg] and [styles] (run colours and attribute bits) are how it is painted now, null where
+     * the run's own apply; [styles] replaces only the run's bold, italic, underline, overline and strike-out.
      */
     data class Link(
         val link: Int,
+        val window: String?,
         val tooltip: String,
         val menu: Boolean,
         val menuTitle: String,
@@ -338,12 +339,19 @@ object Requests {
     /** The console's size in characters, which a game that asks is told (NAWS); each from 1 to 65535. */
     fun setScreenSize(columns: Int, rows: Int): JSONObject = JSONObject().put("t", "setScreenSize").put("columns", columns).put("rows", rows)
 
-    /** Answered by [EngineMessage.Link], or an Error, with [id] as its replyTo. */
-    fun getLink(link: Int, id: Long): JSONObject = JSONObject().put("t", "getLink").put("link", link).put("id", id)
+    /**
+     * Answered by [EngineMessage.Link], or an Error, with [id] as its replyTo. [link] is a link of the console [window],
+     * a script window's as its `windowText` names it, or of the main console where [window] is null.
+     */
+    fun getLink(link: Int, window: String?, id: Long): JSONObject = JSONObject().put("t", "getLink").put("link", link).put("id", id)
+        .apply { if (window != null) put("window", window) }
 
-    /** Follows [link] as a tap does, or picks its menu's [item]; only an Error answers, when nothing ran. */
-    fun followLink(link: Int, item: Int?, id: Long): JSONObject = JSONObject().put("t", "followLink").put("link", link).put("id", id)
-        .apply { if (item != null) put("item", item) }
+    /** Follows [link] of [window], as for [getLink], as a tap does, or picks its menu's [item]; only an Error answers, when nothing ran. */
+    fun followLink(link: Int, item: Int?, window: String?, id: Long): JSONObject = JSONObject().put("t", "followLink").put("link", link).put("id", id)
+        .apply {
+            if (item != null) put("item", item)
+            if (window != null) put("window", window)
+        }
 
     /** The app in front ([active]) or not, and its window minimized or in the background; leaving the front saves the profile. */
     fun setAppState(active: Boolean, minimized: Boolean): JSONObject = JSONObject().put("t", "setAppState").put("active", active).put("minimized", minimized)
@@ -496,6 +504,7 @@ class FrameReader(input: InputStream) {
 
             "link" -> EngineMessage.Link(
                 o.getInt("link"),
+                if (o.has("window")) o.optString("window") else null,
                 o.optString("tooltip"),
                 o.optBoolean("menu"),
                 o.optString("menuTitle"),

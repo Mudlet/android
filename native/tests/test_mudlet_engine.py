@@ -985,8 +985,8 @@ def map_view():
     """The 2D map as the UI gets it: a map a script builds in a Geyser.Mapper as map frames at the mapper's size, with
     the rooms where the layout puts them; mapPointer selecting a room, walking to it and zooming; setMapViewOnly
     switching to editing; pointer on the mapper window; the map to a UI that attaches, and none while it hides."""
-    game = fake_telnet.start_in_thread()
-    proc, c = start_engine("Map Test")
+    profile = "Map Test"
+    proc, c = start_engine(profile)
     seen = []
     c.wait_for(lambda m: m["t"] == "synced", collect=seen)
     check(not any(m["t"] == "map" for m in seen), "with no profile open, a UI that attaches gets no map")
@@ -995,8 +995,13 @@ def map_view():
         check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
 
     c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
-    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
-    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+    # Opened with no game: the base UI builds its dock on what a game first sends, and then puts the profile's one
+    # mapper in a Geyser.Mapper of its own once the map has rooms, away from the one this test makes
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the map's profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
     m = c.ask({"t": "mapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
     check(m["message"] == "mapPointer: No map is open; a script opens one, as with openMapWidget().",
           f"mapPointer before a script opens a map is refused: {m}")
@@ -1036,11 +1041,11 @@ def map_view():
         stop_engine(proc)
         return
     png = base64.b64decode(m["png"])
-    mapper = window_of(seen, "mapper", "mapper")
-    check(png_size(png) == (400, 300) and m["viewOnly"] is True and mapper is not None
-          and (mapper["w"], mapper["h"]) == (400, 300) and png_pixel(png, room2[0], room2[1] + 20)[:3] != (200, 30, 30),
+    # The windows come from the event loop too, before or after the frame
+    seen_or_next(c, windows_with("mapper", "mapper", lambda w: (w["w"], w["h"]) == (400, 300)), seen, since)
+    check(png_size(png) == (400, 300) and m["viewOnly"] is True and png_pixel(png, room2[0], room2[1] + 20)[:3] != (200, 30, 30),
           f"a Geyser.Mapper sends the map at its size, viewed, with room 2 where the layout puts it and not below it: "
-          f"{png_size(png)}, {m['viewOnly']}, {mapper}")
+          f"{png_size(png)}, {m['viewOnly']}")
 
     def selection():
         c.send({"t": "runLua", "code": "selected()"})
@@ -1077,10 +1082,10 @@ def map_view():
     c.send({"t": "mapPointer", "type": "wheel", "x": room2[0], "y": room2[1], "wheelY": -600})
     c.send({"t": "runLua", "code": 'echo(string.format("zoom %.2f\\n", getMapZoom()))'})
     m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("zoom "), seen, since)
-    # The map is drawn again from the event loop, after the turn that zoomed it
-    zoomed = seen_or_next(c, lambda m: m["t"] == "map", seen, seen.index(m) + 1)
-    check(m["text"] == "zoom 14.03" and zoomed["png"] != last_of(seen[:since], "map")["png"],
-          f"five notches towards the player zoom out, as the GUI's wheel does, and the map comes again: {m}")
+    # The map is drawn again from the event loop, before or after the line of the next request's turn
+    before = last_of(seen[:since], "map")
+    seen_or_next(c, lambda f: f["t"] == "map" and f["png"] != before["png"], seen, since)
+    check(m["text"] == "zoom 14.03", f"five notches towards the player zoom out, as the GUI's wheel does, and the map comes again: {m}")
 
     since = len(seen)
     c.send({"t": "setMapViewOnly", "viewOnly": False})
@@ -1111,6 +1116,8 @@ def map_view():
     seen_or_next(c, windows_with("mapper", "mapper", lambda w: not w["shown"] or (w["w"], w["h"]) == (0, 0)), seen, since)
     msgs = attach()
     check(not any(m["t"] == "map" for m in msgs), "a hidden mapper gives a UI that attaches no map")
+    # Geyser's hide() leaves the mapper shown at 0 by 0, so showing it again only sizes it, and no repaint follows:
+    # the map comes from the windows' sizes
     since = len(seen)
     c.send({"t": "runLua", "code": "testMapper:show()"})
     seen_or_next(c, lambda m: m["t"] == "map" and (m["w"], m["h"]) == (400, 300), seen, since)

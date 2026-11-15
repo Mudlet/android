@@ -79,6 +79,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
     Scaffold(
         topBar = {
             MudletTopBar(stringResource(R.string.game_title), onBack) {
+                ScriptCommandsButton()
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }

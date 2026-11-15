@@ -51,6 +51,8 @@ public:
     QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) override;
     QString closeUserWindow(const QString& name) override;
     QString sendWindowCommandLine(const QString& name, const QString& text) override;
+    QString pointer(const QString& window, const PointerEvent& event) override;
+    std::variant<PngImage, QString> image(const QString& path, const QSize& size, std::optional<int> frame) const override;
 
 private:
     // stopping: the profile closes, for the one in mPendingOpen to start

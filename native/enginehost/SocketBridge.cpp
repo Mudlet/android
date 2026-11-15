@@ -10,9 +10,11 @@
 #include <QLocalSocket>
 #include <QtEndian>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
+#include <variant>
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -179,6 +181,9 @@ void SocketBridge::sendState()
         windows.append(windowJson(window));
     }
     sendFrame({{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("full"), true}, {QStringLiteral("windows"), windows}});
+    for (const LabelInfo& label : std::as_const(mLabels)) {
+        sendFrame(labelMessage(label));
+    }
     if (!mEngine) {
         return;
     }
@@ -286,6 +291,10 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, mEngine->closeUserWindow(message.value(QLatin1String("name")).toString()));
     } else if (type == QLatin1String("sendWindowCommandLine")) {
         refuse(type, mEngine->sendWindowCommandLine(message.value(QLatin1String("name")).toString(), message.value(QLatin1String("text")).toString()));
+    } else if (type == QLatin1String("pointer")) {
+        refuse(type, pointer(message));
+    } else if (type == QLatin1String("getImage")) {
+        getImage(message);
     } else {
         sendError(QStringLiteral("unknown type %1").arg(type));
     }
@@ -467,6 +476,99 @@ QString SocketBridge::placeUserWindow(const QJsonObject& message)
     return mEngine->placeUserWindow(message.value(QLatin1String("name")).toString(), QRect(*x, *y, *width, *height), floating.toBool());
 }
 
+QString SocketBridge::pointer(const QJsonObject& message)
+{
+    static constexpr std::pair<QLatin1StringView, PointerEvent::Type> types[] = {
+            {QLatin1StringView("press"), PointerEvent::Type::press},
+            {QLatin1StringView("release"), PointerEvent::Type::release},
+            {QLatin1StringView("doubleClick"), PointerEvent::Type::doubleClick},
+            {QLatin1StringView("move"), PointerEvent::Type::move},
+            {QLatin1StringView("enter"), PointerEvent::Type::enter},
+            {QLatin1StringView("leave"), PointerEvent::Type::leave},
+            {QLatin1StringView("wheel"), PointerEvent::Type::wheel},
+    };
+    PointerEvent event;
+    const QString type = message.value(QLatin1String("type")).toString();
+    const auto known = std::find_if(std::begin(types), std::end(types), [&type](const auto& entry) {
+        return entry.first == type;
+    });
+    if (known == std::end(types)) {
+        return QStringLiteral("type must be press, release, doubleClick, move, enter, leave or wheel");
+    }
+    event.type = known->second;
+    const QJsonValue x = message.value(QLatin1String("x"));
+    const QJsonValue y = message.value(QLatin1String("y"));
+    if (!x.isDouble() || !y.isDouble()) {
+        return QStringLiteral("x and y must be numbers");
+    }
+    event.position = QPointF(x.toDouble(), y.toDouble());
+    // Absent is 0; the buttons and modifiers are Qt's flags, so never negative
+    const std::pair<QJsonValue, int*> optional[] = {
+            {message.value(QLatin1String("button")), &event.button},
+            {message.value(QLatin1String("buttons")), &event.buttons},
+            {message.value(QLatin1String("modifiers")), &event.modifiers},
+            {message.value(QLatin1String("wheelY")), &event.wheelY},
+    };
+    for (const auto& [value, target] : optional) {
+        if (value.isUndefined()) {
+            continue;
+        }
+        const std::optional<int> number = wholeNumber(value);
+        if (!number || (target != &event.wheelY && *number < 0)) {
+            return QStringLiteral("button, buttons and modifiers must be whole numbers from 0, wheelY a whole number");
+        }
+        *target = *number;
+    }
+    return mEngine->pointer(message.value(QLatin1String("window")).toString(), event);
+}
+
+void SocketBridge::getImage(const QJsonObject& message)
+{
+    const QString path = message.value(QLatin1String("path")).toString();
+    if (path.isEmpty()) {
+        sendError(QStringLiteral("getImage: path must not be empty"));
+        return;
+    }
+    const QJsonValue widthValue = message.value(QLatin1String("w"));
+    const QJsonValue heightValue = message.value(QLatin1String("h"));
+    const QJsonValue frameValue = message.value(QLatin1String("frame"));
+    QSize size;
+    if (!widthValue.isUndefined() || !heightValue.isUndefined()) {
+        const std::optional<int> width = wholeNumber(widthValue);
+        const std::optional<int> height = wholeNumber(heightValue);
+        if (!width || !height || *width < 1 || *height < 1 || *width > PngImage::maxSide || *height > PngImage::maxSide) {
+            sendError(QStringLiteral("getImage: w and h go together, whole numbers from 1 to %1").arg(PngImage::maxSide));
+            return;
+        }
+        size = QSize(*width, *height);
+    }
+    std::optional<int> frame;
+    if (!frameValue.isUndefined()) {
+        frame = wholeNumber(frameValue);
+        if (!frame || *frame < 0) {
+            sendError(QStringLiteral("getImage: frame must be a whole number from 0"));
+            return;
+        }
+    }
+    const std::variant<PngImage, QString> image = mEngine->image(path, size, frame);
+    if (const QString* problem = std::get_if<QString>(&image)) {
+        sendError(QStringLiteral("getImage: %1").arg(*problem));
+        return;
+    }
+    const PngImage& png = std::get<PngImage>(image);
+    const QByteArray base64 = png.png.toBase64();
+    // With room for the path, each of its characters escaped at worst, and the other fields
+    if (base64.size() + path.size() * 6 + 1024 > qsizetype(maxFrameBytes)) {
+        sendError(QStringLiteral("getImage: %1 as a PNG is too large for a frame").arg(path));
+        return;
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("image")},
+               {QStringLiteral("path"), path},
+               {QStringLiteral("png"), QString::fromLatin1(base64)},
+               {QStringLiteral("w"), png.size.width()},
+               {QStringLiteral("h"), png.size.height()}});
+}
+
 void SocketBridge::refuse(const QString& request, const QString& problem)
 {
     if (!problem.isEmpty()) {
@@ -581,6 +683,9 @@ QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
     }
     if (window.background != -1) {
         json.insert(QStringLiteral("bg"), window.background);
+        if (window.backgroundAlpha < 255) {
+            json.insert(QStringLiteral("bgAlpha"), window.backgroundAlpha);
+        }
     }
     if (!window.fontFamily.isEmpty()) {
         json.insert(QStringLiteral("fontFamily"), window.fontFamily);
@@ -602,6 +707,44 @@ QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
         json.insert(QStringLiteral("rows"), window.console->rows);
         json.insert(QStringLiteral("scrollBar"), window.console->scrollBar);
         json.insert(QStringLiteral("timeStamps"), window.console->timeStamps);
+    }
+    return json;
+}
+
+QJsonObject SocketBridge::labelMessage(const LabelInfo& label)
+{
+    QJsonObject json{{QStringLiteral("t"), QStringLiteral("label")},
+                     {QStringLiteral("name"), label.name},
+                     {QStringLiteral("text"), label.text},
+                     {QStringLiteral("image"), label.image},
+                     {QStringLiteral("svg"), label.svg},
+                     {QStringLiteral("movie"), label.movie},
+                     {QStringLiteral("moviePaused"), label.moviePaused},
+                     {QStringLiteral("movieFrame"), label.movieFrame},
+                     {QStringLiteral("movieSpeed"), label.movieSpeed},
+                     {QStringLiteral("toolTip"), label.toolTip},
+                     {QStringLiteral("clickThrough"), label.clickThrough},
+                     {QStringLiteral("accessibleName"), label.accessibleName},
+                     {QStringLiteral("accessibleButton"), label.accessibleButton},
+                     {QStringLiteral("styleSheet"), label.styleSheet}};
+    if (label.svgTint != -1) {
+        json.insert(QStringLiteral("svgTint"), label.svgTint);
+        if (label.svgTintAlpha < 255) {
+            json.insert(QStringLiteral("svgTintAlpha"), label.svgTintAlpha);
+        }
+    }
+    if (label.svgRotation != 0) {
+        json.insert(QStringLiteral("svgRotation"), label.svgRotation);
+    }
+    if (label.svgShearX != 0) {
+        json.insert(QStringLiteral("svgShearX"), label.svgShearX);
+    }
+    if (label.svgShearY != 0) {
+        json.insert(QStringLiteral("svgShearY"), label.svgShearY);
+    }
+    if (label.movieSize.isValid()) {
+        json.insert(QStringLiteral("movieW"), label.movieSize.width());
+        json.insert(QStringLiteral("movieH"), label.movieSize.height());
     }
     return json;
 }
@@ -759,8 +902,9 @@ void SocketBridge::moveTypedLine()
     }
 }
 
-// Only what changed is sent, keyed by name and kind; a UI that attaches or drains gets them all
-void SocketBridge::windows(const QList<ScriptWindowInfo>& windows)
+// Only what changed is sent, the windows keyed by name and kind and the labels by name, each label after the windows
+// so that the UI knows its window first; a UI that attaches or drains gets them all
+void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels)
 {
     using Key = std::pair<QString, QString>;
     QHash<Key, const ScriptWindowInfo*> before;
@@ -780,15 +924,32 @@ void SocketBridge::windows(const QList<ScriptWindowInfo>& windows)
             removed.append(QJsonObject{{QStringLiteral("name"), window.name}, {QStringLiteral("kind"), window.kind}});
         }
     }
+    QHash<QString, const LabelInfo*> labelsBefore;
+    for (const LabelInfo& label : std::as_const(mLabels)) {
+        labelsBefore.insert(label.name, &label);
+    }
+    QList<QJsonObject> changedLabels;
+    for (const LabelInfo& label : labels) {
+        const LabelInfo* was = labelsBefore.value(label.name);
+        if (!was || *was != label) {
+            changedLabels.append(labelMessage(label));
+        }
+    }
     mWindows = windows;
-    if (!clientLive() || (changed.isEmpty() && removed.isEmpty())) {
+    mLabels = labels;
+    if (!clientLive()) {
         return;
     }
-    QJsonObject message{{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("windows"), changed}};
-    if (!removed.isEmpty()) {
-        message.insert(QStringLiteral("removed"), removed);
+    if (!changed.isEmpty() || !removed.isEmpty()) {
+        QJsonObject message{{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("windows"), changed}};
+        if (!removed.isEmpty()) {
+            message.insert(QStringLiteral("removed"), removed);
+        }
+        sendFrame(message);
     }
-    sendFrame(message);
+    for (const QJsonObject& label : std::as_const(changedLabels)) {
+        sendFrame(label);
+    }
 }
 
 // Not kept: a UI that attaches or drains gets every console's from IEngine::windowText()

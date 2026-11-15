@@ -128,6 +128,12 @@ class EngineLinkJvmTest {
         assertEquals(5, (refused.replyTo as Number).toInt())
         link.send(Requests.placeUserWindow("side", 0, 0, 300, 200, false))
         assertEquals("placeUserWindow: the stand-in engine has no script windows", next<EngineMessage.Error>().message)
+        link.send(Requests.pointer("box", PointerType.PRESS, 1.5, 2.0, POINTER_LEFT, POINTER_LEFT, 0, 0))
+        assertEquals("pointer: the stand-in engine has no script windows", next<EngineMessage.Error>().message)
+        link.send(Requests.getImage("/no/such.png", 16, 16, null, 6))
+        val noImage = next<EngineMessage.Error>()
+        assertEquals("getImage: the stand-in engine has no script windows", noImage.message)
+        assertEquals(6, (noImage.replyTo as Number).toInt())
         link.stop()
     }
 

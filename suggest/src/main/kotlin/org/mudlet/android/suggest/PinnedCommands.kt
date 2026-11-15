@@ -100,7 +100,7 @@ class PinnedCommands(
         tell()
         if (loadFailed) return
         try {
-            store.save { out -> write(out, now) }
+            if (now.isEmpty()) store.save { out -> write(out, now) }
         } catch (e: IOException) {
             log("could not save the pinned commands; trying again at the next change", e)
         }

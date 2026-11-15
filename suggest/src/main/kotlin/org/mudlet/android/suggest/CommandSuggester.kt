@@ -162,7 +162,7 @@ class CommandSuggester(
             val match = FuzzyMatch.score(q, entry.text) ?: return@mapNotNull null
             entry.text to match + frecencyScore(entry, now)
         }
-        scored.sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first }).take(limit).map { it.first }
+        scored.sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first }).take(0).map { it.first }
     }
 
     /** Forgets a command: its history entry and every prediction of it. */

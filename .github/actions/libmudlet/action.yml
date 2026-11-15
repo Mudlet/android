@@ -1,7 +1,7 @@
 name: libmudlet for Android
 description: >
   Mudlet's checkout built for Android into build/ by scripts/build-libmudlet.sh, against the dependencies
-  scripts/build-mudlet-deps.sh puts in deps/prefix. A build of the same Mudlet commit with the same scripts, toolchain
+  scripts/build-mudlet-deps.sh puts in deps/prefix. A build of the same Mudlet commit with the same scripts, Mudlet patches, toolchain
   and FORTIFY choice comes from the cache instead, so a change to the app alone does not build Mudlet again; the
   dependencies are always restored, as an app links them with libmudlet. Run after the android-toolchain action.
 inputs:
@@ -35,6 +35,12 @@ runs:
       shell: bash
       run: echo "sha=$(git -C "${{ inputs.mudlet-dir }}" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+    # On every run, as a build from the cache leaves the checkout as it came: the app's engine compiles against the
+    # checkout's headers (libmudlet.cmake), so it needs them patched too
+    - name: Apply the Mudlet patches
+      shell: bash
+      run: scripts/apply-mudlet-patches.sh "${{ inputs.mudlet-dir }}"
+
     - name: Restore the libmudlet build
       id: build-cache
       uses: actions/cache/restore@v6
@@ -42,7 +48,7 @@ runs:
         path: |
           build
           !build/**/*.o
-        key: libmudlet-build-${{ inputs.abi }}-${{ steps.commit.outputs.sha }}-fortify${{ inputs.lua-fortify-fix }}-qt${{ inputs.qt-version }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh', 'scripts/build-libmudlet.sh', 'scripts/export-libmudlet.py') }}
+        key: libmudlet-build-${{ inputs.abi }}-${{ steps.commit.outputs.sha }}-fortify${{ inputs.lua-fortify-fix }}-qt${{ inputs.qt-version }}-ndk${{ inputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh', 'scripts/build-libmudlet.sh', 'scripts/export-libmudlet.py', 'scripts/apply-mudlet-patches.sh', 'scripts/mudlet-patches/**') }}
 
     # restore and save are separate steps so the prefix is kept even when Mudlet then fails to build
     - name: Restore dependencies

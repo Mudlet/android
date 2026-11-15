@@ -233,9 +233,16 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
 one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
-public API, from Mudlet's `development` with no patch: it includes no Mudlet header but
+public API, from Mudlet's `development`: it includes no Mudlet header but
 `THeadlessSession.h` (which brings `TDebug.h` and `utils.h`) and sets none of Mudlet's
-defines. [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
+defines. What the app needs of that API and Mudlet does not have yet is carried in
+`scripts/mudlet-patches/`, each patch going upstream to Mudlet/Mudlet and dropped here once merged.
+`scripts/apply-mudlet-patches.sh`, which both libmudlet build scripts run first, applies them to the
+checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
+compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
+is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
+is one: the app's own map and the room search (see "The map behind the text").
+[`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
 **Build.** The same scripts as CI's libmudlet job:

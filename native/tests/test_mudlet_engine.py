@@ -727,6 +727,20 @@ def windows_with(name, kind, pred=lambda w: True):
     return lambda m: m["t"] == "windows" and any(w["name"] == name and w["kind"] == kind and pred(w) for w in m["windows"])
 
 
+def seen_or_next(c, pred, seen, since, timeout=5.0):
+    """The first message from seen[since:] that pred takes, or else the next one to come. The session sends a turn's
+    main console lines as it runs and its script windows, their text and command lines from the event loop after it,
+    so a wait for one of those has already collected a line the same turn wrote. On a timeout, says what came."""
+    found = next((m for m in seen[since:] if pred(m)), None)
+    if found is not None:
+        return found
+    try:
+        return c.wait_for(pred, timeout=timeout, collect=seen)
+    except TimeoutError:
+        came = [str(m)[:200] for m in seen[since:]]
+        raise TimeoutError(f"message not received; since the request: {came}") from None
+
+
 def script_windows():
     """What scripts draw: a Geyser MiniConsole and UserWindow as windows, with the console's text as windowText; the
     main window's size from setMainWindowSize, and the borders a script sets, as mainArea; placeUserWindow raising
@@ -753,6 +767,7 @@ def script_windows():
     columns = m["columns"]
     wait_status(c, "connection", lambda v: v == "connected", seen)
 
+    since = len(seen)
     c.send({"t": "runLua", "code": "\n".join([
         'chat = Geyser.MiniConsole:new({name = "chat", x = 0, y = 0, width = "30%", height = "40%"})',
         'chat:cecho("<red>red<reset> plain\\n")',
@@ -763,12 +778,12 @@ def script_windows():
         'local mw, mh = getMainWindowSize()',
         'echo(string.format("main window %dx%d\\n", mw, mh))',
     ])})
-    m = c.wait_for(lambda m: m["t"] == "windowText" and m["window"] == "chat" and m["lines"]
-                   and m["lines"][0]["text"] == "red plain", collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] == "windowText" and m["window"] == "chat" and m["lines"]
+                     and m["lines"][0]["text"] == "red plain", seen, since)
     check("re" not in m and m["first"] == 0 and m["lineCount"] >= 1, f"chat:cecho() gives the console's text: {m}")
     runs = m["lines"][0]["runs"]
     check(bool(runs) and runs[0][:3] == [0, 3, 0x1000000 | 0xFF0000], f"with its colours: {runs}")
-    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("main window "), collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("main window "), seen, since)
     check(m["text"] == "main window 1000x800", f"scripts read the size the UI gave as the main window's: {m['text']}")
     chat = window_of(seen, "chat", "miniConsole")
     check(chat is not None and (chat["x"], chat["y"], chat["w"], chat["h"]) == (0, 0, 300, 320) and chat["parent"] == ""
@@ -778,39 +793,46 @@ def script_windows():
     check(side is not None and side["inDock"] and "dockArea" in side and "columns" in side,
           f"a Geyser UserWindow is a userWindow in a dock: {side}")
 
+    since = len(seen)
     c.send({"t": "placeUserWindow", "name": "side", "x": 10, "y": 20, "w": 250, "h": 400, "floating": False})
-    c.wait_for(shown("resized side 250x400"), collect=seen)
-    c.wait_for(windows_with("side", "userWindow", lambda w: w["w"] == 250), collect=seen)
+    seen_or_next(c, shown("resized side 250x400"), seen, since)
+    seen_or_next(c, windows_with("side", "userWindow", lambda w: w["w"] == 250), seen, since)
     side = window_of(seen, "side", "userWindow")
     check((side["x"], side["y"], side["w"], side["h"]) == (10, 20, 250, 400),
           f"placeUserWindow places it, and raises sysUserWindowResizeEvent: {side}")
+    since = len(seen)
     c.send({"t": "placeUserWindow", "name": "chat", "x": 0, "y": 0, "w": 10, "h": 10, "floating": False})
-    m = c.wait_for(lambda m: m["t"] == "error", collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
     check(m["message"].startswith("placeUserWindow: ") and "chat" in m["message"], f"a mini console is no user window: {m}")
 
+    since = len(seen)
     c.send({"t": "runLua", "code": "setBorderLeft(100)"})
-    m = c.wait_for(lambda m: m["t"] == "mainArea", collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] == "mainArea", seen, since)
     check(m["w"] == 1000 and (m["textX"], m["textW"]) == (100, 900) and m["columns"] < columns,
           f"setBorderLeft() moves the main console's text: {m}")
+    since = len(seen)
     c.send({"t": "setMainWindowSize", "w": 1, "h": 1})
-    m = c.wait_for(lambda m: m["t"] in ("error", "mainArea"), collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] in ("error", "mainArea"), seen, since)
     check(m["t"] == "error" and m["message"].startswith("setMainWindowSize: "), f"a size with no room for a character is refused: {m}")
+    since = len(seen)
     c.send({"t": "setMainWindowSize", "w": 1200, "h": 800})
-    m = c.wait_for(lambda m: m["t"] == "mainArea", collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] == "mainArea", seen, since)
     check((m["w"], m["h"], m["textX"], m["textW"]) == (1200, 800, 100, 1100), f"a size given while the profile runs is taken at once: {m}")
 
+    since = len(seen)
     c.send({"t": "runLua", "code": "\n".join([
         'enableCommandLine("chat")',
         'setCmdLineAction("chat", function(text) echo("acted " .. text .. "\\n") end)',
         'printCmdLine("chat", "typed")',
     ])})
-    m = c.wait_for(lambda m: m["t"] == "windowCommandLine" and m["text"], collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] == "windowCommandLine" and m["text"], seen, since)
     check(m == {"t": "windowCommandLine", "name": "chat", "text": "typed"}, f"printCmdLine() on a console's line: {m}")
     line = window_of(seen, "chat", "commandLine")
     check(line is not None and line["parent"] == "chat" and line.get("parentKind") == "miniConsole" and line["shown"],
           f"enableCommandLine() gives the console a commandLine: {line}")
+    since = len(seen)
     c.send({"t": "sendWindowCommandLine", "name": "chat", "text": "look"})
-    c.wait_for(shown("acted look"), collect=seen)
+    seen_or_next(c, shown("acted look"), seen, since)
     check(True, "sendWindowCommandLine runs the line's action")
 
     m = c.ask({"t": "getWindowText", "window": "chat", "first": 0, "count": 10}, answers=("windowText", "error"), collect=seen)
@@ -820,14 +842,16 @@ def script_windows():
               collect=seen)
     check(m["t"] == "error" and "nonesuch" in m["message"], f"and refuses a console there is not: {m}")
 
+    since = len(seen)
     c.send({"t": "runLua", "code": "chat:hide()"})
-    c.wait_for(windows_with("chat", "miniConsole", lambda w: not w["shown"]), collect=seen)
+    seen_or_next(c, windows_with("chat", "miniConsole", lambda w: not w["shown"]), seen, since)
     chat = window_of(seen, "chat", "miniConsole")
     line = window_of(seen, "chat", "commandLine")
     check(not chat["visible"] and line is not None and line["visible"] and not line["shown"],
           f"hiding it hides what it holds: {chat} {line}")
+    since = len(seen)
     c.send({"t": "closeUserWindow", "name": "side"})
-    c.wait_for(windows_with("side", "userWindow", lambda w: not w["visible"]), collect=seen)
+    seen_or_next(c, windows_with("side", "userWindow", lambda w: not w["visible"]), seen, since)
     check(True, "closeUserWindow hides the user window")
 
     c.close()
@@ -845,8 +869,9 @@ def script_windows():
     areas = [m for m in msgs if m["t"] == "mainArea"]
     check(len(areas) == 1 and (areas[0]["w"], areas[0]["textX"]) == (1200, 100), f"and the main area: {areas}")
 
+    since = len(seen)
     c.send({"t": "runLua", "code": 'deleteMiniConsole("chat")'})
-    m = c.wait_for(lambda m: m["t"] == "windows" and m.get("removed"), collect=seen)
+    m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
     check({"name": "chat", "kind": "miniConsole"} in m["removed"], f"a deleted console is removed: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")

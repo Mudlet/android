@@ -101,7 +101,7 @@ class FakeEngine : AutoCloseable {
         val hello: JSONObject
 
         init {
-            socket.soTimeout = 10_000
+            socket.soTimeout = READ_TIMEOUT_MS
             hello = readFrame(input)
             if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
             send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
@@ -154,6 +154,31 @@ class FakeEngine : AutoCloseable {
         fun refuse(request: JSONObject, why: String) = send(
             JSONObject().put("t", "error").put("re", request.opt("id")).put("message", "${request.optString("t")}: $why"),
         )
+
+        /**
+         * The last request of type [type] the UI sent before it went quiet for [quietMs]: what it settled on, where it
+         * may first have sent what it held from before, as ScriptWindowsClient sends a new engine the last size. With
+         * [readPast], one already read past counts: ScriptWindowsClient sends no size twice, and connecting to a
+         * profile reads past the one it sends as it attaches.
+         */
+        fun receiveLast(type: String, quietMs: Int = 1_000, readPast: Boolean = false): JSONObject {
+            var last = (if (readPast) received.lastOrNull { it.optString("t") == type } else null) ?: receive(type)
+            socket.soTimeout = quietMs
+            try {
+                while (true) {
+                    val frame = try {
+                        readFrame(input)
+                    } catch (_: IOException) {
+                        break
+                    }
+                    received.add(frame)
+                    if (frame.optString("t") == type) last = frame
+                }
+            } finally {
+                socket.soTimeout = READ_TIMEOUT_MS
+            }
+            return last
+        }
 
         fun clear() = send(JSONObject().put("t", "clear"))
 
@@ -226,6 +251,9 @@ class FakeEngine : AutoCloseable {
             .put("tls", tls)
             .put("login", login)
             .put("autoReconnect", autoReconnect)
+
+        // How long a read waits for the UI
+        const val READ_TIMEOUT_MS = 10_000
 
         /**
          * A shown window of a `windows` message (docs/protocol.md): a mini console, unless told, in the main window at

@@ -59,6 +59,8 @@ import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
 import java.io.ByteArrayOutputStream
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -119,7 +121,7 @@ class AppMapTest {
     @Test
     fun theMapIsDrawnFaintlyBehindTheTextWhichTalkBackAndTouchesStillReach() {
         // The first ask may come before the game screen's openProfile, which the test reads past
-        val size = session.receiveLast("setAppMapSize", readPast = true)
+        val size = lastRequest("setAppMapSize", readPast = true)
         val bounds = bounds(console)
         val density = compose.density.density
         // The console's size in dp, drawn as sharp as the screen
@@ -141,34 +143,34 @@ class AppMapTest {
         compose.onRoot().tryPerformAccessibilityChecks()
         // A tap on the console is the console's, not the map's
         compose.onNode(console).performTouchInput { click(center) }
-        session.assertNoRequest("appMapPointer", QUIET_MS)
+        noRequest("appMapPointer")
     }
 
     @Test
     fun noMapIsDrawnBehindTheTextWhenTheSettingIsOffOrAScriptsMapperShowsIt() {
-        val size = session.receiveLast("setAppMapSize", readPast = true)
+        val size = lastRequest("setAppMapSize", readPast = true)
         assertTrue("asked for at $size", size.getInt("w") > 0)
         compose.runOnIdle { Settings.mapBehindText.set(false) }
-        assertNone(session.receiveLast("setAppMapSize"))
+        assertNone(lastRequest("setAppMapSize"))
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
-        session.assertNoRequest("setAppMapSize", QUIET_MS)
+        noRequest("setAppMapSize")
         assertBackground(Color.Black)
 
         compose.runOnIdle { Settings.mapBehindText.set(true) }
-        assertEquals(size.toString(), session.receiveLast("setAppMapSize").toString())
+        assertEquals(size.toString(), lastRequest("setAppMapSize").toString())
 
         // A Geyser.Mapper shows the map: one map on the screen
         val mapper = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = 400, h = 300)
         session.windows(listOf(mapper), full = true)
-        assertNone(session.receiveLast("setAppMapSize"))
+        assertNone(lastRequest("setAppMapSize"))
         // Hidden by its script, the map goes back behind the text
         session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = 400, h = 300).put("shown", false)), full = true)
-        assertTrue(session.receiveLast("setAppMapSize").getInt("w") > 0)
+        assertTrue(lastRequest("setAppMapSize").getInt("w") > 0)
     }
 
     @Test
     fun theSettingsSwitchTurnsTheMapBehindTheTextOff() {
-        assertTrue(session.receiveLast("setAppMapSize", readPast = true).getInt("w") > 0)
+        assertTrue(lastRequest("setAppMapSize", readPast = true).getInt("w") > 0)
         activate(hasContentDescription(string(R.string.settings_title)))
         val row = hasText(string(R.string.settings_map_behind_text)) and hasClickAction()
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
@@ -179,12 +181,12 @@ class AppMapTest {
         // Back on the game screen, no map is asked for
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("the main console")).fetchSemanticsNodes().isNotEmpty() }
-        assertNone(session.receiveLast("setAppMapSize"))
+        assertNone(lastRequest("setAppMapSize"))
     }
 
     @Test
     fun theMapIsAsFaintAsTheConsolesColoursNeedAndNoneWhereTheyLeaveNoRoom() {
-        val size = session.receiveLast("setAppMapSize", readPast = true)
+        val size = lastRequest("setAppMapSize", readPast = true)
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
         // Dimmer text, as a profile may set: a fainter map
@@ -194,26 +196,26 @@ class AppMapTest {
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - dim) < 0.03f }
         // Text too faint on its own background already: no map at all, nor any asked for
         session.status("consoleColors", "#000080 #000000")
-        assertNone(session.receiveLast("setAppMapSize"))
+        assertNone(lastRequest("setAppMapSize"))
         assertBackground(Color.Black)
     }
 
     @Test
     fun theEngineIsAskedForTheMapAgainAtEachAttachAndAnEmptyFrameClearsIt() {
-        val size = session.receiveLast("setAppMapSize", readPast = true)
+        val size = lastRequest("setAppMapSize", readPast = true)
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
 
         // The UI went and came back to the same engine, which forgot the size as the UI went: it is asked again
         session.close()
         session = fake.engine.nextSession()
-        assertEquals(size.toString(), session.receiveLast("setAppMapSize").toString())
+        assertEquals(size.toString(), lastRequest("setAppMapSize").toString())
 
         // Android restarted the engine: the new one draws nothing until asked, which the UI does without the player
         fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
         session.close()
         session = fake.engine.nextSession()
-        assertEquals(size.toString(), session.receiveLast("setAppMapSize").toString())
+        assertEquals(size.toString(), lastRequest("setAppMapSize").toString())
         assertBackground(Color.Black)
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
@@ -227,7 +229,7 @@ class AppMapTest {
 
     @Test
     fun theButtonBringsTheMapToTheFrontWhereATapSelectsADoubleTapWalksAndBackSendsItBack() {
-        val behind = session.receiveLast("setAppMapSize", readPast = true)
+        val behind = lastRequest("setAppMapSize", readPast = true)
         compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         assertTouchTarget(button)
         val (w, h) = openMap()
@@ -244,7 +246,7 @@ class AppMapTest {
         assertEquals("press", press.getString("type"))
         assertEquals(POINTER_LEFT, press.getInt("button"))
         assertPoint(w * 0.25, h * 0.75, press)
-        session.assertNoRequest("mapPointer", QUIET_MS)
+        noRequest("mapPointer")
 
         compose.onNode(map).performTouchInput { doubleClick(at(drawn, w, h, w * 0.75, h * 0.25)) }
         assertEquals("press", session.receive("appMapPointer").getString("type"))
@@ -257,17 +259,17 @@ class AppMapTest {
         compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.onNode(hasText("the main console")).assertIsDisplayed()
         // Behind the text again, at the console's size
-        assertEquals(behind.toString(), session.receiveLast("setAppMapSize").toString())
+        assertEquals(behind.toString(), lastRequest("setAppMapSize").toString())
 
         // The button sends it back too
         activate(button)
         drawnMap()
-        assertEquals(w.toInt(), session.receiveLast("setAppMapSize").getInt("w"))
+        assertEquals(w.toInt(), lastRequest("setAppMapSize").getInt("w"))
         activate(button)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(map).fetchSemanticsNodes().isEmpty() }
         compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.onNode(hasText("the main console")).assertIsDisplayed()
-        assertEquals(behind.toString(), session.receiveLast("setAppMapSize").toString())
+        assertEquals(behind.toString(), lastRequest("setAppMapSize").toString())
     }
 
     @Test
@@ -285,7 +287,7 @@ class AppMapTest {
         compose.onNode(map).assertIsDisplayed()
         compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
         // Still asked for at the size in front, not sent back behind the text
-        session.assertNoRequest("setAppMapSize", QUIET_MS)
+        noRequest("setAppMapSize")
     }
 
     @Test
@@ -403,7 +405,7 @@ class AppMapTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
         session.send(rooms(refused, "cellar", listOf(Triple(7, "Wine cellar", "Keep"))))
         // Time for the answer to arrive, were it to show
-        session.assertNoRequest("findRooms", QUIET_MS)
+        noRequest("findRooms")
         compose.waitForIdle()
         assertTrue(compose.onAllNodes(hasText(string(R.string.app_map_room, "Wine cellar", "Keep", 7))).fetchSemanticsNodes().isEmpty())
     }
@@ -429,6 +431,27 @@ class AppMapTest {
         }
     }
 
+    /** The last [type] the UI sent before it went quiet, read while the test waits on Compose: see [whileComposing]. */
+    private fun lastRequest(type: String, readPast: Boolean = false): JSONObject = whileComposing { session.receiveLast(type, readPast = readPast) }
+
+    /** Fails if the UI sends a [type] for a while the test waits on Compose: see [whileComposing]. */
+    private fun noRequest(type: String) = whileComposing { session.assertNoRequest(type, QUIET_MS) }
+
+    /**
+     * What [read] reads from the engine's socket, read on another thread while this one waits on Compose. The test's
+     * clock lets the UI compose, and so make a request it owes a change of state, only while the test waits on Compose: a
+     * read alone would wait out the socket's timeout for a request the UI could not make yet, or see none that it would.
+     */
+    private fun <T> whileComposing(read: () -> T): T {
+        val result = CompletableFuture.supplyAsync { read() }
+        compose.waitUntil(READ_MS) { result.isDone }
+        return try {
+            result.get()
+        } catch (e: ExecutionException) {
+            throw e.cause ?: e
+        }
+    }
+
     private fun keyboardShown(): Boolean {
         val view = compose.activity.window.decorView
         return compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
@@ -438,7 +461,7 @@ class AppMapTest {
     private fun openMap(): Pair<Double, Double> {
         activate(button)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
-        val size = session.receiveLast("setAppMapSize")
+        val size = lastRequest("setAppMapSize")
         val w = size.getInt("w")
         val h = size.getInt("h")
         session.send(appMap(w, h, scale = size.getDouble("scale")))
@@ -523,6 +546,9 @@ class AppMapTest {
         const val BACKGROUND_INSET = 8
         const val QUIET_MS = 500
         const val WAIT_MS = 10_000L
+
+        // A read of the engine's socket: the socket's timeout, and the quiet that ends a receiveLast
+        const val READ_MS = 15_000L
         const val TIMEOUT_MS = 240_000L
     }
 }

@@ -2,8 +2,8 @@ name: Check APK
 description: >
   Checks each debug APK in a directory with scripts/check-apk.sh: that it holds Qt and the engine library, and
   OpenSSL as Qt's TLS backend loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load
-  segments), and that they are stored or compressed as the manifest's extractNativeLibs says; then adds each APK's
-  size, its size on the device, and OpenSSL's share, to the job summary.
+  segments), that they are stored or compressed as the manifest's extractNativeLibs says, and that its launcher icon
+  is an adaptive icon with a monochrome layer; then adds each APK's size, its size on the device, and OpenSSL's share, to the job summary.
 inputs:
   apk-dir:
     description: Directory holding the APKs

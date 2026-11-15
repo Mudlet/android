@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The stable app's launcher icon background: a pale sky behind the arch -->
+<resources>
+    <color name="ic_launcher_background">#E3EEF7</color>
+</resources>

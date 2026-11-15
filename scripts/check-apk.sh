@@ -1,8 +1,9 @@
 #!/bin/bash
 # Checks each debug APK in a directory: that it holds Qt and the engine library, and OpenSSL as Qt's TLS backend
-# loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load segments), and that they
-# are stored or compressed as the manifest's extractNativeLibs says; then writes each APK's size, its size on the
-# device, and OpenSSL's share, to $GITHUB_STEP_SUMMARY (or stdout). CI runs it through .github/actions/check-apk.
+# loads it, that its libraries are 16 KB aligned (their offsets in the APK and their load segments), that they are
+# stored or compressed as the manifest's extractNativeLibs says, and that its launcher icon is an adaptive icon with a
+# monochrome layer; then writes each APK's size, its size on the device, and OpenSSL's share, to $GITHUB_STEP_SUMMARY
+# (or stdout). CI runs it through .github/actions/check-apk.
 #
 # Usage: scripts/check-apk.sh [apk-dir]   (default app/build/outputs/apk/debug)
 # Optional: ABI (arm64-v8a), EXTRACTED=true for an APK built with -PextractNativeLibs=true, ENGINE (libengine: the
@@ -84,6 +85,24 @@ for apk in "${apks[@]}"; do
     || { echo "::error::$apk: unzip -v listed $count libraries, but ${#sos[@]} were extracted"; exit 1; }
   manifest=$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")
   grep -q 'E: application' <<< "$manifest" || { echo "::error::no <application> in $apk's manifest dump"; exit 1; }
+  # The launcher icon, as icon and as roundIcon: an adaptive icon, with the monochrome layer Android 13's themed
+  # icons need. The manifest names each by resource id, and the resource table gives the file of each id
+  application=$(awk '/E: application/ { on = 1; next } on && /E: / { exit } on' <<< "$manifest")
+  resources=$("$aapt2" dump resources "$apk")
+  for attr in icon roundIcon; do
+    id=$(sed -n "s/.*android:$attr([^)]*)=@\(0x[0-9a-f]*\).*/\1/p" <<< "$application")
+    [ -n "$id" ] || { echo "::error::$apk: <application> has no android:$attr"; exit 1; }
+    files=$(awk -v id="$id" '$1 == "resource" { on = ($2 == id); next }
+                             on { for (i = 1; i < NF; i++) if ($i == "(file)") print $(i + 1) }' <<< "$resources")
+    [ -n "$files" ] || { echo "::error::$apk: android:$attr is $id, which is no file in the resource table"; exit 1; }
+    while read -r file; do
+      tree=$("$aapt2" dump xmltree --file "$file" "$apk")
+      grep -q 'E: adaptive-icon' <<< "$tree" || { echo "::error::$apk: android:$attr ($file) is not an adaptive icon"; exit 1; }
+      for layer in background foreground monochrome; do
+        grep -q "E: $layer" <<< "$tree" || { echo "::error::$apk: android:$attr ($file) has no $layer layer"; exit 1; }
+      done
+    done <<< "$files"
+  done
   flag=$(sed -n 's/.*:extractNativeLibs([^)]*)=\([a-z]*\).*/\1/p' <<< "$manifest")
   apk_size=$(stat -c %s "$apk")
   if [ "$EXTRACTED" = true ]; then

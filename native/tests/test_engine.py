@@ -146,11 +146,13 @@ def input_line(c):
 
 
 def script_windows(c):
-    """The stand-in has no script windows: it refuses their requests, once their fields are right."""
+    """The stand-in has no script windows or labels: it refuses their requests, once their fields are right."""
     refusal = "the stand-in engine has no script windows"
     side = {"name": "side", "x": 0, "y": 0, "w": 300, "h": 200, "floating": False}
     for request in ({"t": "setMainWindowSize", "w": 800, "h": 600}, dict(side, t="placeUserWindow"),
-                    {"t": "closeUserWindow", "name": "side"}, {"t": "sendWindowCommandLine", "name": "chat", "text": "hi"}):
+                    {"t": "closeUserWindow", "name": "side"}, {"t": "sendWindowCommandLine", "name": "chat", "text": "hi"},
+                    {"t": "pointer", "window": "box", "type": "press", "x": 1.5, "y": 2, "button": 1, "buttons": 1},
+                    {"t": "getImage", "path": "/no/such.png", "w": 16, "h": 16, "frame": 0}):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: {refusal}", f"{request['t']} is refused: {m}")
     m = c.ask({"t": "getWindowText", "window": "chat", "first": -300, "count": 300}, answers=("error", "windowText"))
@@ -160,7 +162,17 @@ def script_windows(c):
             ({"t": "setMainWindowSize", "w": 800.5, "h": 600}, "w and h must be whole numbers above 0"),
             (dict(side, t="placeUserWindow", x="0"), "x, y, w and h must be whole numbers, w and h above 0"),
             (dict(side, t="placeUserWindow", floating="no"), "floating must be true or false"),
-            ({"t": "getWindowText", "window": "chat", "first": 0, "count": 0}, "first and count must be whole numbers, count above 0")):
+            ({"t": "getWindowText", "window": "chat", "first": 0, "count": 0}, "first and count must be whole numbers, count above 0"),
+            ({"t": "pointer", "window": "box", "type": "tap", "x": 1, "y": 2}, "type must be press, release, doubleClick, move, enter, leave or wheel"),
+            ({"t": "pointer", "window": "box", "type": "press", "x": "1", "y": 2}, "x and y must be numbers"),
+            ({"t": "pointer", "window": "box", "type": "press", "x": 1, "y": 2, "button": -1},
+             "button, buttons and modifiers must be whole numbers from 0, wheelY a whole number"),
+            ({"t": "pointer", "window": "box", "type": "wheel", "x": 1, "y": 2, "wheelY": 0.5},
+             "button, buttons and modifiers must be whole numbers from 0, wheelY a whole number"),
+            ({"t": "getImage", "path": "a.png", "w": 16}, "w and h go together, whole numbers from 1 to 4096"),
+            ({"t": "getImage", "path": "a.png", "w": 16, "h": 5000}, "w and h go together, whole numbers from 1 to 4096"),
+            ({"t": "getImage", "path": "a.png", "frame": -1}, "frame must be a whole number from 0"),
+            ({"t": "getImage", "path": ""}, "path must not be empty")):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
 
@@ -184,7 +196,7 @@ def main():
     results["font"] = (st.get("fontFamily"), st.get("advanceM"))
     windows = [m for m in hs if m["t"] == "windows"]
     check(windows == [{"t": "windows", "full": True, "windows": []}], f"a UI that attaches is told there are no script windows: {windows}")
-    check(not any(m["t"] in ("mainArea", "windowText") for m in hs), "nor a main area or window text")
+    check(not any(m["t"] in ("mainArea", "windowText", "label") for m in hs), "nor a main area, window text or label")
 
     # Wrong protocol version is refused
     bad = Client(SOCK, version=99)

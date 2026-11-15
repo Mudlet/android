@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **7**.
+The current version is **8**.
 
 ## Transport
 
@@ -73,10 +73,12 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `placeUserWindow` | `name`, `x`, `y`, `w`, `h`, `floating` | Where the UI put the user window `name`, in the main window's pixels, docked or `floating` (`setUserWindowGeometry()`). A new size raises `sysUserWindowResizeEvent`. `w` and `h` above 0. |
 | `closeUserWindow` | `name` | The dock's close button: hides the user window, as `hideWindow()` does. |
 | `sendWindowCommandLine` | `name`, `text` | Enter on the command line `name`, a console's own from `enableCommandLine()` or one from `createCommandLine()`, holding `text` (`submitWindowCommandLine()`): the line's action, or else the aliases, take each line of it. |
+| `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | What the UI's pointer did at `x`, `y` (numbers, which may have fractions) in the pixels of the window `window`, from its top left; `main` is the main console's area (`THeadlessSession::pointer()`). `type` is `press`, `release`, `doubleClick`, `move`, `enter`, `leave` or `wheel`. `button` is the one that changed, for a press, release or double-click, and `buttons` those held after it, as Qt's flags: 1 left, 2 right, 4 middle. `modifiers` are Qt's: 0x02000000 Shift, 0x04000000 Control, 0x08000000 Alt, 0x10000000 Meta. `wheelY` is the wheel's turn in eighths of a degree, 120 a notch, positive away from the player. Each of those four is 0 when absent. A label's callback runs as the GUI's would, with the event table it gives (`button` `LeftButton` and the rest, `x`, `y`); a press or release no label takes goes on to the console under it. |
+| `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles` or `error` that answers it, and into `pong`. Statuses that come later, such
-as `connection` once a connect succeeds, carry no `re`.
+handling that request, of the `profiles`, `windowText`, `image` or `error` that answers it, and into `pong`.
+Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
 Each profile request is answered with `profiles`, or with `error` whose `message` is the request's name, a colon and
 why it was refused: a bad name or field, a profile that does not exist, or one that is in use. An `openProfile`
@@ -87,8 +89,10 @@ exist, as in version 1; after one, it connects the profile opened. The stand-in 
 it names whatever profile is open.
 
 The script windows' requests are answered only when refused, with `error` whose `message` is the request's name, a
-colon and why; `getWindowText` is always answered. libmudlet refuses all but `setMainWindowSize` while no profile is
-open. The stand-in has no script windows and refuses all five.
+colon and why; `getWindowText` and `getImage` are always answered. libmudlet refuses all but `setMainWindowSize` and
+`getImage` while no profile is open, and `pointer` as `THeadlessSession::pointer()` does: for a window that is not
+shown, a point outside it, or another window than the one a held button went down on. The stand-in has no script
+windows and refuses all seven.
 
 ### Engine to UI
 
@@ -113,10 +117,12 @@ open. The stand-in has no script windows and refuses all five.
 | `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
-| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
+| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
+| `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
+| `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 
 ### Script windows
 
@@ -148,6 +154,33 @@ What `windows` and `windowText` carry, from libmudlet's `THeadlessSession::scrip
 The engine keeps the list. Between attaches it sends one `windows` for each turn of its event loop that changed
 some, with only what changed. libmudlet sends every window of a profile as it loads, and `removed` for all of them
 as it closes. `windowText` is not kept: each console's last 300 rows come again on attach.
+
+A label's `bg` may be partly or wholly transparent: `bgAlpha`, from 0 to 254, is its alpha, absent for an opaque
+one. A `Geyser.Gauge` is three labels in the gauge's parent, `<name>_back`, `<name>_front` and `<name>_text`, drawn
+in that order: the front's width (or height, for a vertical gauge) against the back's is the gauge's value, and the
+text label, transparent, holds the text.
+
+### Labels
+
+What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which scripts set with `echo()`,
+`setLabelStyleSheet()`, `setBackgroundImage()` and the rest:
+
+- `text` is the rich text `echo()` or `setLabelText()` gave it, which Qt's rich text draws; it is empty while an
+  image or movie shows in its place.
+- `image` is the file `setBackgroundImage()` gave it while that shows: a raster image, which text or a movie takes
+  down, or with `svg` true an SVG drawn under the text. An SVG may have `svgTint`, a colour as a run's with its alpha
+  in `svgTintAlpha` when below 255, and `svgRotation` in degrees, `svgShearX` and `svgShearY`, each absent for 0.
+- `movie` is the file `setMovie()` gave it, shown in place of the text. `moviePaused` is true once `pauseMovie()`
+  paused it or it played to its end, `movieFrame` the frame it then shows (-1 while it plays), `movieSpeed` its
+  speed in percent, and `movieW` and `movieH` the size `scaleMovie()` gave it, absent for the file's own.
+- `toolTip` is the label's tool tip. With `clickThrough` true the pointer passes through it to what is under it.
+- `accessibleName` is what a screen reader says for it, and `accessibleButton` is true once it has a click or release
+  callback, so a screen reader is told it is a button.
+- `styleSheet` is what `setLabelStyleSheet()` gave it, which the engine does not interpret; drawing it is the UI's.
+
+The files are the engine's: the UI asks for one with `getImage`. A label's cursor is not sent. The engine keeps each
+label's content and sends a `label` only when it differs from what it last sent; a label that goes is in the
+`windows` message's `removed`, with no `label`.
 
 ### Status keys
 
@@ -237,7 +270,8 @@ a UI says `hello`, the engine sends, in this order:
 1. its own `hello`;
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
    `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
-   engine has sent one, `windows` with `full` true, and a `windowText` of each console's last 300 rows;
+   engine has sent one, `windows` with `full` true, a `label` for each label, and a `windowText` of each console's
+   last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -266,7 +300,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
   `linksChanged`, as on attach), and the script windows' state, as on attach, then the lines the UI has not had
   (with `clear` and `gap` as on attach, but without `replay`), then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
-  `getWindowText`, and a `status` that carries `re`.
+  `getWindowText`, `image`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
 nor is a `commandLine`, a `windowCommandLine`, an `announce`, an `attention` or a `moveTypedLine`.
@@ -275,7 +309,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 7, which added the script windows' requests (`setMainWindowSize`, `getWindowText`,
+As implemented in version 8, which added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and
+requests (`pointer`, `getImage`); version 7 added the script windows' requests (`setMainWindowSize`, `getWindowText`,
 `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and messages (`windows`, `windowText`, `mainArea`,
 `windowCommandLine`); version 6 added `setAppState` and the messages `attention` and `moveTypedLine`; version 5
 added the link requests (`getLink`, `followLink`) and messages (`link`, `linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with
@@ -285,7 +320,7 @@ added the link requests (`getLink`, `followLink`) and messages (`link`, `linksCh
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=7`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=8`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

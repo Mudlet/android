@@ -146,9 +146,14 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     drawn = map != null,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                 )
-                // Half the map, but at least a whole result under the results' head, where the map has the room
-                val results = (maxHeight / 2).coerceAtLeast(minOf(maxHeight, RESULTS_HEAD + RESULT_ROW))
-                AppMapClient.search?.let { RoomResults(it, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = results)) }
+                // Under the map's buttons, whose touches and TalkBack they would take where they covered them, even
+                // the strip of a short list that left the buttons' bottom edge out; half the map below them, but at
+                // least a whole result under the results' head, where the map has the room
+                val below = (maxHeight - MAP_CONTROLS_HEIGHT).coerceAtLeast(0.dp)
+                val results = (below / 2).coerceAtLeast(minOf(below, RESULTS_HEAD + RESULT_ROW))
+                AppMapClient.search?.let {
+                    RoomResults(it, Modifier.align(Alignment.TopStart).padding(top = MAP_CONTROLS_HEIGHT).fillMaxWidth().heightIn(max = results))
+                }
             }
         }
     }

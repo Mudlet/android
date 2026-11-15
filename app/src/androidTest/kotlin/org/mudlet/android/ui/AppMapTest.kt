@@ -350,6 +350,7 @@ class AppMapTest {
         waitFor("the rooms found are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText(string(R.string.app_map_room, "Great Hall", "Castle", 1))).assertIsDisplayed()
         assertTouchTarget(hallway)
+        assertResultsUnderTheButtons()
         checkAccessibility()
 
         activate(hallway)
@@ -396,6 +397,7 @@ class AppMapTest {
         val none = hasText(string(R.string.app_map_no_rooms, "cellar"))
         waitFor("the search says nothing matched") { compose.onAllNodes(none).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(none).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        assertResultsUnderTheButtons()
         activate(hasContentDescription(string(R.string.app_map_results_close)))
         waitFor("the results close") { compose.onAllNodes(none).fetchSemanticsNodes().isEmpty() }
 
@@ -466,6 +468,14 @@ class AppMapTest {
             compose.waitUntil(KEYBOARD_MS) { keyboardShown() }
         } catch (_: ComposeTimeoutException) {
         }
+    }
+
+    // The results' top, their close button's, is under the map's buttons, which they would hide from touch and TalkBack: the
+    // accessibility check sees that only on API 34 and up, and a short list leaves the buttons' bottom edge out, 4 dp high
+    private fun assertResultsUnderTheButtons() {
+        val results = bounds(hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction())
+        val buttons = bounds(hasContentDescription(string(R.string.map_edit)) and hasClickAction())
+        assertTrue("the results at $results are under the map's buttons at $buttons", results.top >= buttons.bottom)
     }
 
     private fun mapShown() = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))

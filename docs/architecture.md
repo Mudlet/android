@@ -249,7 +249,8 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
 - The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
   result, read as "<room>, <area> (<number>)", is a 48 dp row, at least one of which shows where the map has the room
   for it, and a tap sends `showRoom`, which centres the map on that room and selects it, until the player moves, so its
-  actions then walk there. "Finding rooms…", no match and more matches than shown are read out as they come.
+  actions then walk there. "Finding rooms…", no match and more matches than shown are read out as they come. The
+  results sit under the map's buttons, which they would otherwise hide from touch and TalkBack.
 - The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
   shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
   0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms. It asks again at each attach,

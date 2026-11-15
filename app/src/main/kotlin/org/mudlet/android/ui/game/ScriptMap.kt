@@ -66,6 +66,12 @@ private const val BUTTON_NOTCHES = 3
 // The buttons' backing lets a little of the map show through
 private const val CONTROLS_ALPHA = 0.85f
 
+// The space round the buttons' backing
+private val CONTROLS_PADDING = 4.dp
+
+/** How far down the map its buttons reach, from its top: their 48 dp and the space round them. */
+internal val MAP_CONTROLS_HEIGHT = 48.dp + CONTROLS_PADDING * 2
+
 // A second tap further than this from the first is a tap of its own, as Android's and Qt's double-tap slop has it
 private val DOUBLE_TAP_SLOP = 100.dp
 
@@ -241,7 +247,7 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, fit: () -> 
 private fun MapControls(zoomEnabled: Boolean, viewOnly: Boolean, toggleEnabled: Boolean, onZoom: (Int) -> Unit, onViewOnly: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge
     Surface(
-        modifier.wrapContentSize(Alignment.TopEnd, unbounded = true).padding(4.dp),
+        modifier.wrapContentSize(Alignment.TopEnd, unbounded = true).padding(CONTROLS_PADDING),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
         // Not the surface's own colour, which contentColorFor() would not know as it

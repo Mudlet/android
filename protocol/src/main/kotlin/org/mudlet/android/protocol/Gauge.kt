@@ -38,7 +38,7 @@ data class Gauge(val name: String, val back: ScriptWindow, val front: ScriptWind
             if (!front.shown) return 0f
             val vertical = back.w - front.w < back.h - front.h
             val (part, whole) = if (vertical) front.h to back.h else front.w to back.w
-            return if (whole > 0) (part.toFloat() / whole).coerceIn(0f, 1f) else 0f
+            return if (whole > 0) (1f - part.toFloat() / whole).coerceIn(0f, 1f) else 0f
         }
     }
 }

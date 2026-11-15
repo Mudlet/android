@@ -26,7 +26,7 @@ sealed interface LabelLink {
 
     /** What to send the engine for this link, with [id] for its answer; null for one the engine has no part in. */
     fun request(id: Long): JSONObject? = when (this) {
-        is Send -> Requests.runLua("expandAlias(${luaString(command)})", id)
+        is Send -> Requests.runLua("send(${luaString(command)})", id)
         is Prompt -> Requests.runLua("printCmdLine(${luaString(text)})", id)
         is Lua -> Requests.runLua(code, id)
         is Web, is NotRun -> null

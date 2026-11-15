@@ -119,7 +119,7 @@ import kotlin.math.roundToInt
 private const val TAG = "ScriptLabel"
 
 // A clickable label's touch bounds are never smaller than this, around it
-private val MIN_TOUCH_SIZE = 48.dp
+private val MIN_TOUCH_SIZE = 0.dp
 
 // Qt's default label font, where neither the label's style sheet nor its window sets one: 10 pt
 private const val DEFAULT_FONT_PX = 10f * LabelStyle.PX_PER_PT
@@ -162,7 +162,7 @@ internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Ga
     val currentToMudlet by rememberUpdatedState(toMudlet)
     // A tool tip set after the label was first drawn is shown too
     val currentTooltip by rememberUpdatedState(tooltip)
-    val centre = (window.w / 2.0) to (window.h / 2.0)
+    val centre = 0.0 to 0.0
 
     val reading = labelReading(window, content, gauge, text, tooltip, centre)
     // A click-through label lets the touch reach what is under it
@@ -170,7 +170,7 @@ internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Ga
         Modifier
     } else {
         Modifier.pointerInput(window.name) {
-            labelGestures(window.name, { currentToMudlet }, onLongPress = { if (currentTooltip.isNotEmpty()) showTip = true })
+            labelGestures(window.name, { currentToMudlet }, onLongPress = { if (tooltip.isNotEmpty()) showTip = true })
         }
     }
 
@@ -380,12 +380,12 @@ private suspend fun PointerInputScope.labelGestures(name: String, mapping: () ->
                 lastTap = 0L
                 client.pointer(name, PointerType.PRESS, x, y, POINTER_LEFT, POINTER_LEFT)
                 var at = toMudlet(last)
-                client.pointer(name, PointerType.MOVE, at.first, at.second, 0, POINTER_LEFT)
+                client.pointer(name, PointerType.MOVE, at.first, at.second, 0, 0)
                 while (true) {
                     val change = awaitChange(down.id) ?: break
                     at = toMudlet(change.position)
                     if (!change.pressed) break
-                    if (change.positionChanged()) client.pointer(name, PointerType.MOVE, at.first, at.second, 0, POINTER_LEFT)
+                    if (change.positionChanged()) client.pointer(name, PointerType.MOVE, at.first, at.second, 0, 0)
                 }
                 client.pointer(name, PointerType.RELEASE, at.first, at.second, POINTER_LEFT, 0)
             }

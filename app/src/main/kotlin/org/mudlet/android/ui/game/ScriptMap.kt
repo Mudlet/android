@@ -24,6 +24,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -59,6 +60,12 @@ import kotlin.math.roundToInt
 // Each tap of a zoom button turns the wheel this many notches, zooming the map by about a fifth
 private const val BUTTON_NOTCHES = 3
 
+// The buttons' backing lets a little of the map show through
+private const val CONTROLS_ALPHA = 0.85f
+
+// A second tap further than this from the first is a tap of its own, as Android's and Qt's double-tap slop has it
+private val DOUBLE_TAP_SLOP = 100.dp
+
 /**
  * The mapper window (docs/architecture.md, "The map") at [placed]'s place, where [modifier] puts it: the engine's last
  * `map`, scaled alike both ways to fit, while it is the window's size. A tap selects the room under it, a double tap
@@ -86,10 +93,10 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
     val state = stringResource(if (viewOnly) R.string.map_viewing else R.string.map_editing)
     val selectLabel = stringResource(R.string.map_select_middle)
     val actions = listOf(
-        stringResource(R.string.map_walk_to_middle) to { client.mapPointer(MapPointerType.DOUBLE_CLICK, fit.centre) },
-        stringResource(R.string.map_zoom_in) to { zoom(fit, 1) },
-        stringResource(R.string.map_zoom_out) to { zoom(fit, -1) },
-    ).map { (label, act) -> CustomAccessibilityAction(label, act) }
+        CustomAccessibilityAction(stringResource(R.string.map_walk_to_middle)) { client.mapPointer(MapPointerType.DOUBLE_CLICK, fit.centre) },
+        CustomAccessibilityAction(stringResource(R.string.map_zoom_in)) { zoom(fit, 1) },
+        CustomAccessibilityAction(stringResource(R.string.map_zoom_out)) { zoom(fit, -1) },
+    )
 
     Box(
         modifier.background(CONSOLE_BACKGROUND).semantics {
@@ -133,12 +140,14 @@ private fun zoom(fit: MapFit, direction: Int) = ScriptWindowsClient.mapPointer(M
 
 /**
  * The player's touches on the map, at the points of the frame [fit] gives, while it gives one: a tap is a press, a
- * second tap soon after a double click, and a pinch turns the wheel about the middle of the fingers, or the map's
- * middle when that is off it. A drag does nothing, as the map's drags are the GUI's alone.
+ * second tap soon after and near it a double click, and a pinch turns the wheel about the middle of the fingers, or
+ * the map's middle when that is off it. A drag does nothing, as the map's drags are the GUI's alone.
  */
 private suspend fun PointerInputScope.mapGestures(fit: () -> MapFit?) {
     val client = ScriptWindowsClient
+    val slop = DOUBLE_TAP_SLOP.toPx()
     var lastTapUp = 0L
+    var lastTapAt = Offset.Zero
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         down.consume()
@@ -156,9 +165,10 @@ private suspend fun PointerInputScope.mapGestures(fit: () -> MapFit?) {
             if (pressed.size >= 2) {
                 tap = false
                 val turn = notches.add(event.calculateZoom())
-                if (turn != 0) {
+                val current = fit()
+                if (turn != 0 && current != null) {
                     val centroid = event.calculateCentroid()
-                    fit()?.let { it.toFrame(centroid.x, centroid.y) ?: it.centre }?.let { client.mapPointer(MapPointerType.WHEEL, it, turn * ZoomNotches.WHEEL_NOTCH) }
+                    client.mapPointer(MapPointerType.WHEEL, current.toFrame(centroid.x, centroid.y) ?: current.centre, turn * ZoomNotches.WHEEL_NOTCH)
                 }
             } else if ((pressed[0].position - down.position).getDistance() > viewConfiguration.touchSlop) {
                 tap = false
@@ -167,12 +177,13 @@ private suspend fun PointerInputScope.mapGestures(fit: () -> MapFit?) {
         val at = if (tap) fit()?.toFrame(down.position.x, down.position.y) else null
         if (at == null) {
             lastTapUp = 0L
-        } else if (lastTapUp != 0L && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis) {
+        } else if (lastTapUp != 0L && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis && (down.position - lastTapAt).getDistance() <= slop) {
             client.mapPointer(MapPointerType.DOUBLE_CLICK, at)
             lastTapUp = 0L
         } else {
             client.mapPointer(MapPointerType.PRESS, at)
             lastTapUp = upAt
+            lastTapAt = down.position
         }
     }
 }
@@ -222,5 +233,3 @@ private fun MapRefusal(text: String, modifier: Modifier = Modifier) {
         }
     }
 }
-
-private const val CONTROLS_ALPHA = 0.85f

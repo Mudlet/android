@@ -155,6 +155,36 @@ class WindowLayoutTest {
         assertEquals(listOf("low", "inLow", "high"), layout.windows.map { it.window.name })
     }
 
+    @Test
+    fun aMapInTheMainAreaIsPlacedAsAnyWindowAndADockedOneIsAPage() {
+        val main = mainArea(800, 500, 100, 25, 0, 0, 600, 500)
+        val geyser = window("mapper", WindowKind.MAPPER, x = 600, y = 0, w = 200, h = 250)
+        val fitted = WindowLayout.of(state(main, geyser), area(1600f, 1000f, fitted = true))
+        assertEquals(PxRect(1200f, 0f, 400f, 500f), fitted.rectOf("mapper"))
+        assertTrue(fitted.pages.isEmpty())
+
+        // openMapWidget()'s, a dock the size of the main window, in either layout
+        val docked = window("mapper", WindowKind.MAPPER, w = 800, h = 500).copy(inDock = true)
+        for (isFitted in listOf(true, false)) {
+            val layout = WindowLayout.of(state(main, docked), area(1600f, 1000f, isFitted, selectedPage = docked.key))
+            assertTrue(layout.windows.isEmpty())
+            assertEquals(listOf(docked), layout.pages)
+            assertEquals(docked, layout.paneWindows.single().window)
+        }
+        // Hidden, as by closeMapWidget(), it is no page
+        assertTrue(WindowLayout.of(state(main, docked.copy(shown = false)), area(1600f, 1000f, fitted = true)).pages.isEmpty())
+    }
+
+    @Test
+    fun stackedAMapBesideTheTextIsAPageAsAConsoleThereIs() {
+        val layout = WindowLayout.of(
+            state(mainArea(1000, 500, 100, 25, 100, 50, 800, 400), window("mapper", WindowKind.MAPPER, x = 900, y = 50, w = 100, h = 400)),
+            area(800f, 1600f, fitted = false),
+        )
+        assertEquals(listOf("mapper"), layout.pages.map { it.name })
+        assertTrue(layout.windows.isEmpty())
+    }
+
     private companion object {
         const val HEADER = 100f
     }

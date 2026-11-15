@@ -40,9 +40,9 @@ enum class LayoutMode { AUTO, FITTED, STACKED }
  * Fitted, the main window's area is drawn as on the desktop, scaled: the console in `mainArea`'s text rectangle, the
  * area's windows over it, docked user windows in columns or rows beside it. Stacked, Mudlet is given the area's size
  * in landscape; the console fills the width, with the windows over its text over it, those of the top and bottom
- * borders above and below it, and those of the left and right borders and the docks are pages. A page shows in a pane
- * over the console, chosen by the window switcher; floating user windows, and docks beyond the room for them, are
- * pages in either layout.
+ * borders above and below it, and the consoles and maps of the left and right borders and the docks are pages. A page
+ * shows in a pane over the console, chosen by the window switcher; floating user windows, docks beyond the room for
+ * them, and the docked map are pages in either layout.
  */
 data class WindowLayout(
     val fitted: Boolean,
@@ -181,7 +181,7 @@ data class WindowLayout(
                                 bottomBand,
                             )
 
-                            cx < text.x || cx > text.right -> if (window.kind in ScriptWindows.CONSOLE_KINDS) pages.add(window)
+                            cx < text.x || cx > text.right -> if (window.kind in ScriptWindows.CONSOLE_KINDS || window.kind == WindowKind.MAPPER) pages.add(window)
 
                             // Over the text: kept at the top or the bottom of the console, whichever it is nearer
                             else -> {
@@ -199,6 +199,9 @@ data class WindowLayout(
                 pages.addAll(docks)
                 mainWindowSize = scale?.let { MudletSize((area.h / it).roundToInt().coerceAtLeast(1), (area.w / it).roundToInt().coerceAtLeast(1)) }
             }
+
+            // openMapWidget()'s map, a dock the main window's size, is a page in either layout
+            pages.addAll(top.filter { it.inDock && it.kind == WindowKind.MAPPER && it.shown })
 
             // A page's window fills the pane below its header
             val paneContent = PxRect(pane.x, pane.y + area.headerHeight, pane.w, max(0f, pane.h - area.headerHeight))

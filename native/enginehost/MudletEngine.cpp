@@ -1155,34 +1155,48 @@ std::optional<MapFrame> MudletEngine::drawMap(const QSize& size)
 // Nothing while none is asked for: setAppMapSize() said so once
 void MudletEngine::pushAppMap()
 {
-    if (mAppMapSize.isEmpty()) {
-        return;
+    if (!mAppMapSize.isEmpty()) {
+        mFrontend->appMap(profileOpen() ? drawAppMap() : std::nullopt);
     }
-    if (!profileOpen()) {
-        mFrontend->appMap(std::nullopt);
-        return;
-    }
+}
+
+std::optional<MapFrame> MudletEngine::drawAppMap()
+{
     // Drawn in the map's pixels onto an image of the device's, so the lines and names are as sharp as the screen
-    QImage image(mAppMapSize * mAppMapScale, QImage::Format_ARGB32_Premultiplied);
+    const QSize pixels = mAppMapSize * mAppMapScale;
+    QImage image(pixels, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull()) {
+        warnAppMapUndrawn(QStringLiteral("no memory for an image of %1x%2 pixels").arg(pixels.width()).arg(pixels.height()));
+        return std::nullopt;
+    }
     image.setDevicePixelRatio(mAppMapScale);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     const bool drawn = mSession->renderAppMap(painter, mAppMapSize);
     painter.end();
-    // A map with no rooms is the usual reason for none, so it is not warned of
     if (!drawn) {
-        mFrontend->appMap(std::nullopt);
-        return;
+        warnAppMapUndrawn(mSession->errorString());
+        return std::nullopt;
     }
     QByteArray png;
     QBuffer buffer(&png);
     buffer.open(QIODevice::WriteOnly);
     if (!image.save(&buffer, "PNG")) {
-        qWarning("MudletEngine: the app's map could not be made a PNG");
-        mFrontend->appMap(std::nullopt);
+        warnAppMapUndrawn(QStringLiteral("it could not be made a PNG"));
+        return std::nullopt;
+    }
+    mAppMapUndrawn.clear();
+    return MapFrame{png, mAppMapSize, mSession->mapViewOnly()};
+}
+
+// Once for each reason in a row, as each repaint meets it again: a map with no rooms is warned of once
+void MudletEngine::warnAppMapUndrawn(const QString& why)
+{
+    if (why == mAppMapUndrawn) {
         return;
     }
-    mFrontend->appMap(MapFrame{png, mAppMapSize, mSession->mapViewOnly()});
+    mAppMapUndrawn = why;
+    qWarning("MudletEngine: the app's map, %dx%d by %g, was not drawn: %s", mAppMapSize.width(), mAppMapSize.height(), mAppMapScale, qPrintable(why));
 }
 
 QString MudletEngine::setMainWindowSize(int width, int height)

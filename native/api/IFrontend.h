@@ -37,8 +37,9 @@ struct ScriptWindowInfo
     bool visible = false;
     bool shown = false;
     int stackOrder = 0;
-    // As ColorRun's, -1 for none
+    // As ColorRun's, -1 for none; its alpha from 0 to 255, which a label's may have below 255
     int background = -1;
+    int backgroundAlpha = 255;
     // Empty and 0 for none
     QString fontFamily;
     double fontSize = 0;
@@ -89,6 +90,39 @@ struct WindowText
     static constexpr int recentRows = 300;
 };
 
+// What a label shows, as THeadlessSession::LabelContent describes it: its geometry, background and font are its
+// ScriptWindowInfo's
+struct LabelInfo
+{
+    QString name;
+    // Qt rich text; empty while an image or movie shows
+    QString text;
+    // The file of a raster image while it shows, or of an SVG one, drawn under the text with the tint, rotation and shear
+    QString image;
+    bool svg = false;
+    // As ColorRun's, -1 for none, with its alpha from 0 to 255
+    int svgTint = -1;
+    int svgTintAlpha = 255;
+    double svgRotation = 0;
+    double svgShearX = 0;
+    double svgShearY = 0;
+    // The file of a movie while it plays or is paused; the frame it shows while paused, -1 while it plays
+    QString movie;
+    bool moviePaused = false;
+    int movieFrame = -1;
+    // In percent of the file's own speed
+    int movieSpeed = 100;
+    // Invalid for the file's own
+    QSize movieSize;
+    QString toolTip;
+    bool clickThrough = false;
+    QString accessibleName;
+    bool accessibleButton = false;
+    // The label's own, which Mudlet does not interpret
+    QString styleSheet;
+    bool operator==(const LabelInfo&) const = default;
+};
+
 // The main window's area: the size the UI gave (empty for none), the main console's grid in characters, and where its
 // text goes in pixels, which is the area less the borders scripts set
 struct MainArea
@@ -118,8 +152,9 @@ public:
     virtual void history(const QStringList& lines) = 0;
     // A script set the whole input line
     virtual void commandLine(const QString& text) = 0;
-    // Every window the profile's scripts made, parents first: whole each time, empty with no profile open
-    virtual void windows(const QList<ScriptWindowInfo>& windows) = 0;
+    // Every window the profile's scripts made, parents first, and what each of its labels shows: whole each time,
+    // empty with no profile open
+    virtual void windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels) = 0;
     // A console's last WindowText::recentRows rows, as they may have changed; IEngine::windowText() is read at other times
     virtual void windowText(const QString& window, const WindowText& text) = 0;
     // Sent when it changes

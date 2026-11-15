@@ -3,11 +3,42 @@
 #include "IFrontend.h"
 #include "Profile.h"
 
+#include <QByteArray>
 #include <QList>
+#include <QPointF>
 #include <QRect>
+#include <QSize>
 #include <QString>
 
 #include <optional>
+#include <variant>
+
+// The UI's pointer on a script window, as THeadlessSession::WindowPointerEvent describes it
+struct PointerEvent
+{
+    // As upstream names them on the wire
+    enum class Type { press, release, doubleClick, move, enter, leave, wheel };
+    Type type = Type::move;
+    // In the window's pixels, from its top left corner
+    QPointF position;
+    // Qt's values: the button that changed, for a press, release or double-click, and those held after it
+    int button = 0;
+    int buttons = 0;
+    // Qt::KeyboardModifiers
+    int modifiers = 0;
+    // The wheel's turn in eighths of a degree, as QWheelEvent::angleDelta().y()
+    int wheelY = 0;
+};
+
+// An image as PNG, and its size in pixels
+struct PngImage
+{
+    // The largest side IEngine::image() scales to or reads, so that a huge file is not decoded whole for a UI that
+    // could not take it in one frame
+    static constexpr int maxSide = 4096;
+    QByteArray png;
+    QSize size;
+};
 
 // What the host asks of an engine: the stand-in, or libmudlet behind MudletEngine
 class IEngine
@@ -47,4 +78,9 @@ public:
     virtual QString closeUserWindow(const QString& name) = 0;
     // Enter on a window's command line holding text
     virtual QString sendWindowCommandLine(const QString& name, const QString& text) = 0;
+    // What the UI's pointer did on a window
+    virtual QString pointer(const QString& window, const PointerEvent& event) = 0;
+    // The image file, or icon, at path as PNG, scaled to size unless it is empty, or that frame of an animated one;
+    // else why there is none. Size is at most PngImage::maxSide a side.
+    virtual std::variant<PngImage, QString> image(const QString& path, const QSize& size, std::optional<int> frame) const = 0;
 };

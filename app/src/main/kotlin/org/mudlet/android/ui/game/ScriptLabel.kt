@@ -504,7 +504,7 @@ private fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: De
 
 /** The engine's image for [request], asked for once of each engine instance; null until it comes, or for no request. */
 @Composable
-private fun engineImage(request: ImageRequest?): ImageBitmap? {
+internal fun engineImage(request: ImageRequest?): ImageBitmap? {
     // Kept while it is shown
     DisposableEffect(request) {
         request?.let(ScriptWindowsClient::imageShown)

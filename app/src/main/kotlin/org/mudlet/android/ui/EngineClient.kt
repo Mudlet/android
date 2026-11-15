@@ -492,8 +492,9 @@ object EngineClient {
 
                 is EngineMessage.Announce -> post { Announcer.announce(message.text, message.assertive) }
 
-                is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label ->
-                    post { ScriptWindowsClient.onMessage(message) }
+                is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
+                is EngineMessage.ButtonBars, is EngineMessage.Commands,
+                -> post { ScriptWindowsClient.onMessage(message) }
 
                 is EngineMessage.Image -> {
                     val bitmap = ScriptWindowsClient.decode(message)

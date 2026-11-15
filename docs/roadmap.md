@@ -32,6 +32,7 @@ repository uses. What Phase E needs, and where it stands:
 | Command history, completion | `commandHistory()`, `completeCommandLine()`, `completeCommandLineFromHistory()` | `history`, `complete` (version 3) |
 | Password prompts | `hiddenInputWanted`, `submitHiddenInput()` | `hiddenInput`, `sendHidden`, `dismissHidden` |
 | Scripts setting the input line | `commandLineTextRequested`, `setCommandLineText()` | `commandLine` |
+| Button bars and commands (Phase F) | `buttonBars()`, `pressButton()`, `buttonsChanged`; `addonCommands()`, `activateAddonCommand()`, `addonCommandsChanged` | `buttonBars`, `commands`, `pressButton`, `activateCommand` (version 9); the app draws none of it yet |
 | Script windows (Phase F) | `scriptWindows()`, `windowLines()`, `mainConsoleGrid()`, `setUserWindowGeometry()`, `closeUserWindow()`, `submitWindowCommandLine()` and their signals; `labelContent()`, `pointer()` | `windows`, `windowText`, `mainArea`, `windowCommandLine`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine` (version 7); `label`, `image`, `pointer`, `getImage` (version 8); the app draws none of it yet |
 | Screen reader announcements | `announcementRequested` (Lua `announce()`) | `announce` |
 | Backgrounded app | `setApplicationActive()`, `setWindowMinimized()`, `saveAsync()`, `attentionRequested` | `setAppState` (version 6), which saves when the app leaves the front; `attention` |

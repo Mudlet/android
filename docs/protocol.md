@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **8**.
+The current version is **9**.
 
 ## Transport
 
@@ -75,6 +75,8 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `sendWindowCommandLine` | `name`, `text` | Enter on the command line `name`, a console's own from `enableCommandLine()` or one from `createCommandLine()`, holding `text` (`submitWindowCommandLine()`): the line's action, or else the aliases, take each line of it. |
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | What the UI's pointer did at `x`, `y` (numbers, which may have fractions) in the pixels of the window `window`, from its top left; `main` is the main console's area (`THeadlessSession::pointer()`). `type` is `press`, `release`, `doubleClick`, `move`, `enter`, `leave` or `wheel`. `button` is the one that changed, for a press, release or double-click, and `buttons` those held after it, as Qt's flags: 1 left, 2 right, 4 middle. `modifiers` are Qt's: 0x02000000 Shift, 0x04000000 Control, 0x08000000 Alt, 0x10000000 Meta. `wheelY` is the wheel's turn in eighths of a degree, 120 a notch, positive away from the player. Each of those four is 0 when absent. A label's callback runs as the GUI's would, with the event table it gives (`button` `LeftButton` and the rest, `x`, `y`); a press or release no label takes goes on to the console under it. |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
+| `pressButton` | `button` | A click on the button or menu entry of `buttonBars` whose `id` is `button`, a whole number (`THeadlessSession::pressButton()`): it sends the button's command through the aliases and runs its script, as the GUI's button does, and a push-down button goes down, or up if it was down. To pick an entry of a folder's menu, the UI presses the entry, then the folder, as the GUI does. |
+| `activateCommand` | `command` | A click on the command of `commands` whose `id` is `command`, a whole number (`THeadlessSession::activateAddonCommand()`): a checkable command is ticked or unticked, then the event `sysCommandClicked` is raised with its id. Refused for a disabled command. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
 handling that request, of the `profiles`, `windowText`, `image` or `error` that answers it, and into `pong`.
@@ -93,6 +95,10 @@ colon and why; `getWindowText` and `getImage` are always answered. libmudlet ref
 `getImage` while no profile is open, and `pointer` as `THeadlessSession::pointer()` does: for a window that is not
 shown, a point outside it, or another window than the one a held button went down on. The stand-in has no script
 windows and refuses all seven.
+
+`pressButton` and `activateCommand` too are answered only when refused, with `error` as above: libmudlet refuses
+them while no profile is open, and for an id that is not one the last `buttonBars` or `commands` would list. The
+stand-in has no buttons or commands and refuses both.
 
 ### Engine to UI
 
@@ -123,6 +129,8 @@ windows and refuses all seven.
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
+| `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
+| `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
 ### Script windows
 
@@ -181,6 +189,38 @@ What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which
 The files are the engine's: the UI asks for one with `getImage`. A label's cursor is not sent. The engine keeps each
 label's content and sends a `label` only when it differs from what it last sent; a label that goes is in the
 `windows` message's `removed`, with no `label`.
+
+### Button bars and commands
+
+`buttonBars` is libmudlet's `THeadlessSession::buttonBars()`: the bars of the profile's buttons, from its button
+editor, its packages and `tempButtonToolbar()`, in the order of its actions, each with its active buttons, as the GUI
+draws them.
+
+- `place` is where the GUI puts the bar: `top`, `left` or `right`, a strip of the main console, or `floating`, a
+  toolbar the player docks or floats. `vertical` is true for a vertical bar. A horizontal bar fills each column top to
+  bottom with `columns` buttons, then the next column to its right; a vertical bar fills each row left to right with
+  `columns`, then the next row below. The first `fillerOffset` places of that grid, in the order it fills them, are
+  left empty. `styleSheet` is the bar's, which the engine does not interpret.
+- A button's `id` is what `pressButton` takes. `icon` is its icon's file, as `getImage` reads it, empty for none, and
+  `styleSheet` its own, over its bar's. A `pushDown` button stays down from one press to the next, `checked` while
+  down. With `menu` true it is a folder, whose press opens a menu of the entries in `children`: buttons too, with no
+  style sheet, which may be folders themselves. On a `top`, `left` or `right` bar the menu holds the folder's active
+  buttons, each with the folder's icon; on a `floating` bar it holds one entry, the folder itself, whose `children`
+  are all of its buttons, active or not, each with its own icon, as the GUI's toolbar menu does.
+
+`commands` is libmudlet's `THeadlessSession::addonCommands()`, in the order they were added:
+
+- `id` is what `addCommand()` returned, which `activateCommand` takes and `sysCommandClicked` carries. `package` is
+  the package whose code added it, empty for none.
+- `name` is its label, `icon` its icon's file and `tooltip` its tool tip. With `onMenu` it goes on the menu, in the
+  submenus `menuPath` names, separated by `/`, with `shortcut`, its keyboard shortcut as the script wrote it; both are
+  empty off the menu. With `onToolbar` it goes on the toolbar too.
+- `enabled` is false once `disableCommand()` disabled it. `checkable` is true once `setCommandChecked()` was called
+  for it, and `checked` while it is ticked. `pinned` keeps it on the GUI's menu whichever profile is in front.
+  `pulse` is true while `setCommandPulse()` makes its toolbar button flash; its colours and interval are not sent.
+
+The engine keeps both lists and sends each whole, only when it differs from what it last sent. Only libmudlet sends
+anything in them; the stand-in sends both empty.
 
 ### Status keys
 
@@ -270,8 +310,8 @@ a UI says `hello`, the engine sends, in this order:
 1. its own `hello`;
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
    `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
-   engine has sent one, `windows` with `full` true, a `label` for each label, and a `windowText` of each console's
-   last 300 rows;
+   engine has sent one, `windows` with `full` true, a `label` for each label, `buttonBars`, `commands`, and a
+   `windowText` of each console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -297,8 +337,8 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 - When more than 4 MiB is queued unsent, the UI is lagging. The engine stops writing lines, tails, clears, notifies
   and statuses to it, but keeps them in the ring and its status table.
 - Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput` and `history` again (and
-  `linksChanged`, as on attach), and the script windows' state, as on attach, then the lines the UI has not had
-  (with `clear` and `gap` as on attach, but without `replay`), then the tail.
+  `linksChanged`, as on attach), and the script windows' state, the button bars and the commands, as on attach, then
+  the lines the UI has not had (with `clear` and `gap` as on attach, but without `replay`), then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
   `getWindowText`, `image`, and a `status` that carries `re`.
 
@@ -309,7 +349,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 8, which added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and
+As implemented in version 9, which added the button bars and commands (`buttonBars`, `commands`, `pressButton`,
+`activateCommand`); version 8 added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and
 requests (`pointer`, `getImage`); version 7 added the script windows' requests (`setMainWindowSize`, `getWindowText`,
 `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and messages (`windows`, `windowText`, `mainArea`,
 `windowCommandLine`); version 6 added `setAppState` and the messages `attention` and `moveTypedLine`; version 5
@@ -320,7 +361,7 @@ added the link requests (`getLink`, `followLink`) and messages (`link`, `linksCh
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=8`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=9`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

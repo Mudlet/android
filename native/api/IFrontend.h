@@ -123,6 +123,63 @@ struct LabelInfo
     bool operator==(const LabelInfo&) const = default;
 };
 
+// A button on a button bar, or an entry of a button's menu, as THeadlessSession::Button describes it
+struct BarButton
+{
+    // Its action's id, which IEngine::pressButton() takes
+    int id = 0;
+    QString name;
+    // The icon's file, for IEngine::image(); empty for none
+    QString icon;
+    // Its own, over its bar's; empty for a menu entry
+    QString styleSheet;
+    // A push-down button stays down, checked, from one press to the next
+    bool pushDown = false;
+    bool checked = false;
+    // A folder, whose press opens a menu of its children
+    bool menu = false;
+    QList<BarButton> children;
+};
+
+// A bar of buttons a profile's scripts or packages made, as THeadlessSession::ButtonBar describes it
+struct ButtonBar
+{
+    int id = 0;
+    QString name;
+    QString styleSheet;
+    // Upstream's enum name: top, left or right for the strip of the main console it is in, floating for a toolbar
+    QString place;
+    bool vertical = false;
+    // A horizontal bar fills each column top to bottom with this many buttons, a vertical one each row left to right
+    int columns = 1;
+    // How many places of that grid are left empty before the first button
+    int fillerOffset = 0;
+    QList<BarButton> buttons;
+};
+
+// A command a package's addCommand() added, as THeadlessSession::AddonCommand describes it; its pulse colours and
+// interval are left out
+struct AddonCommandInfo
+{
+    // What addCommand() returned, which IEngine::activateCommand() takes
+    int id = 0;
+    // Empty for one no package's code added
+    QString package;
+    QString name;
+    QString icon;
+    QString tooltip;
+    // The submenus it sits in, separated by '/', and its shortcut as the script wrote it; both empty off the menu
+    QString menuPath;
+    QString shortcut;
+    bool onMenu = false;
+    bool onToolbar = false;
+    bool enabled = true;
+    bool checkable = false;
+    bool checked = false;
+    bool pinned = false;
+    bool pulse = false;
+};
+
 // The main window's area: the size the UI gave (empty for none), the main console's grid in characters, and where its
 // text goes in pixels, which is the area less the borders scripts set
 struct MainArea
@@ -169,4 +226,9 @@ public:
     virtual void mainArea(const MainArea& area) = 0;
     // A script set a window's command line, or Mudlet emptied it after a command
     virtual void windowCommandLine(const QString& name, const QString& text) = 0;
+    // The profile's button bars, in the order of its actions: whole each time, empty with no profile open
+    virtual void buttonBars(const QList<ButtonBar>& bars) = 0;
+    // The commands the profile's packages added, in the order they were added: whole each time, empty with no profile
+    // open
+    virtual void commands(const QList<AddonCommandInfo>& commands) = 0;
 };

@@ -100,7 +100,7 @@ class FakeEngine : AutoCloseable {
         val hello: JSONObject
 
         init {
-            socket.soTimeout = 10_000
+            socket.soTimeout = READ_TIMEOUT_MS
             hello = readFrame(input)
             if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
             send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
@@ -125,6 +125,29 @@ class FakeEngine : AutoCloseable {
                 if (frame.optString("t") == type) return frame
             }
             throw AssertionError("the UI sent no '$type' within $timeoutMs ms")
+        }
+
+        /**
+         * The last request of type [type] the UI sent before it went quiet for [quietMs]: what it settled on, where it
+         * may first have sent what it held from before, as ScriptWindowsClient sends a new engine the last size.
+         */
+        fun receiveLast(type: String, quietMs: Int = 1_000): JSONObject {
+            var last = receive(type)
+            socket.soTimeout = quietMs
+            try {
+                while (true) {
+                    val frame = try {
+                        readFrame(input)
+                    } catch (_: IOException) {
+                        break
+                    }
+                    received.add(frame)
+                    if (frame.optString("t") == type) last = frame
+                }
+            } finally {
+                socket.soTimeout = READ_TIMEOUT_MS
+            }
+            return last
         }
 
         fun clear() = send(JSONObject().put("t", "clear"))
@@ -185,6 +208,9 @@ class FakeEngine : AutoCloseable {
     companion object {
         const val FAKE_PID = 4242
         const val FIRST_INSTANCE = "fake-1"
+
+        // How long a read waits for the UI
+        const val READ_TIMEOUT_MS = 10_000
 
         /**
          * A shown window of a `windows` message (docs/protocol.md): a mini console, unless told, in the main window at

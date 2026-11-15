@@ -12,6 +12,6 @@ standin-arm64-v8a-extracted-libs     40069658     11369234     28115296
 libmudlet-arm64-v8a                  104401670    75313920     28199880
 libmudlet-x86_64                     107710577    78610904     28199880
 # the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
-ptb-arm64-v8a                        78314941     75308680     2470008
-ptb-x86_64                           81623956     78606024     2470008
-ptb-aab                              109698013    71482956     1200016
+ptb-arm64-v8a                        78725774     75318288     2767584
+ptb-x86_64                           82018405     78613384     2767584
+ptb-aab                              110223265    71485572     1348047

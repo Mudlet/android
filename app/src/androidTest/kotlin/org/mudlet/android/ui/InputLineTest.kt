@@ -20,6 +20,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -40,6 +41,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.protocol.Profile
 
 /**
  * The input line's engine features against a fake engine: the masked field while the game hides input, the engine's
@@ -66,7 +68,11 @@ class InputLineTest {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
         if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
         session = fake.engine.nextSession()
-        activate(hasText(string(R.string.profiles_open_game)))
+        session.profiles(listOf(GAME), session.receive("listProfiles"))
+        compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
+        activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
+        session.profiles(listOf(GAME), session.receive("openProfile"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
     }
 
@@ -210,6 +216,8 @@ class InputLineTest {
     }
 
     private companion object {
+        val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+
         const val WAIT_MS = 10_000L
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first

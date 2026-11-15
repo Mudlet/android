@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -34,6 +35,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.ui.game.Announcer
 
@@ -65,7 +67,11 @@ class ScreenReaderTest {
         // EngineClient lives as long as the process, so an earlier test's lines would still be there
         session.clear()
         session.synced(0)
-        activate(hasText(string(R.string.profiles_open_game)))
+        session.profiles(listOf(GAME), session.receive("listProfiles"))
+        compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
+        activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
+        session.profiles(listOf(GAME), session.receive("openProfile"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
     }
 
@@ -206,6 +212,8 @@ class ScreenReaderTest {
     }
 
     private companion object {
+        val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+
         const val WAIT_MS = 10_000L
 
         // Well past the Announcer's wait for more lines

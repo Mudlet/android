@@ -21,6 +21,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
@@ -43,6 +44,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.suggest.SuggestionSession
 import org.mudlet.android.ui.game.CommandSuggestions
@@ -66,6 +68,7 @@ class SuggestionStripTest {
 
     private lateinit var session: FakeEngine.Session
     private val profile = "suggestions ${System.nanoTime()}"
+    private val game = Profile(profile, "127.0.0.1", 4000, false, "", false)
     private lateinit var saved: File
 
     private val password = SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)
@@ -81,7 +84,11 @@ class SuggestionStripTest {
         session.clear()
         session.synced(0)
         saved = SuggestFile.forProfile(CommandSuggestions.dir(compose.activity), profile).file
-        activate(hasText(string(R.string.profiles_open_game)))
+        session.profiles(listOf(game), session.receive("listProfiles"))
+        compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
+        activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, game.name)))
+        session.profiles(listOf(game), session.receive("openProfile"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
         session.status("profile", "$profile loaded")
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { CommandSuggestions.profile } == profile }

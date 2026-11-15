@@ -804,6 +804,9 @@ Item 13 of the on-device checklist covers this.
       download page, and docs/licences.md. A row of the list reads its name, version and licence, and "double tap to
       read its licence"; its screen reads the full licence texts paragraph by paragraph, and Back returns to the list
       where it was.
+    - Far down the list and far into a licence text, swipe through: every element TalkBack lands on reads its text,
+      including a line half scrolled off at the top (the emulator's accessibility check reports one there as
+      unlabelled, which `AboutScreenTest` therefore does not check).
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

@@ -111,10 +111,10 @@ private class ConsoleMetrics(val charWidth: Float, val glyphWidthPerSp: Float, v
 
 /**
  * The game area: the main console, drawn by [content] with the modifier it is given, and around and over it the
- * windows the profile's scripts made, placed as [WindowLayout] says; below it, while there are any, the window
- * switcher's tabs, which open a window in a pane over the console. It gives Mudlet's main window the size that makes
- * Mudlet's grid the console's, at the console's [textSizeSp], and tells the engine where it put the user windows. The
- * profile's button bars go around all of it ([ScriptButtonBars]).
+ * windows the profile's scripts made, the map among them ([ScriptMap]), placed as [WindowLayout] says; below it, while
+ * there are any, the window switcher's tabs, which open a window in a pane over the console. It gives Mudlet's main
+ * window the size that makes Mudlet's grid the console's, at the console's [textSizeSp], and tells the engine where it
+ * put the user windows. The profile's button bars go around all of it ([ScriptButtonBars]).
  */
 @Composable
 fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
@@ -212,7 +212,9 @@ internal fun Modifier.placeAt(rect: PxRect, density: Density): Modifier = with(d
         .size(rect.w.coerceAtLeast(0f).toDp(), rect.h.coerceAtLeast(0f).toDp())
 }
 
-private fun title(window: ScriptWindow): String = window.dock?.title?.ifEmpty { null } ?: window.name
+// The mapper's name is always "mapper", so it is called the map
+@Composable
+private fun title(window: ScriptWindow): String = if (window.kind == WindowKind.MAPPER) stringResource(R.string.map_title) else window.dock?.title?.ifEmpty { null } ?: window.name
 
 internal fun windowColour(code: Int, default: Color): Color = if (code >= RUN_RGB) Color(0xFF000000.toInt() or (code and 0xFFFFFF)) else default
 
@@ -234,7 +236,9 @@ private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metri
             WindowCommandLine(window.name, windows.commandLines[window.name], placedModifier.windowSemantics(description))
         }
 
-        // A scroll box only holds windows; maps and text boxes are drawn later
+        WindowKind.MAPPER -> ScriptMap(placed, placedModifier)
+
+        // A scroll box only holds windows; text boxes are drawn later
         else -> {}
     }
 }

@@ -39,6 +39,30 @@ fun window(
     console = if (kind in ScriptWindows.CONSOLE_KINDS) ScriptWindow.Console(null, 80, 20, false, false) else null,
 )
 
+/** A label's content with [text] and nothing else set. */
+fun label(name: String, text: String = "", styleSheet: String = "", accessibleButton: Boolean = false) = LabelContent(
+    name = name,
+    text = text,
+    image = "",
+    svg = false,
+    svgTint = -1,
+    svgTintAlpha = 255,
+    svgRotation = 0.0,
+    svgShearX = 0.0,
+    svgShearY = 0.0,
+    movie = "",
+    moviePaused = false,
+    movieFrame = -1,
+    movieSpeed = 100,
+    movieW = null,
+    movieH = null,
+    toolTip = "",
+    clickThrough = false,
+    accessibleName = "",
+    accessibleButton = accessibleButton,
+    styleSheet = styleSheet,
+)
+
 fun text(window: String, vararg rows: String, replyTo: Any? = null) = EngineMessage.WindowText(window, rows.size, 0, rows.map { WindowRow(it, IntArray(0), false, false) }, replyTo)
 
 fun mainArea(w: Int, h: Int, columns: Int, rows: Int, textX: Int, textY: Int, textW: Int, textH: Int) = EngineMessage.MainArea(w, h, columns, rows, textX, textY, textW, textH)
@@ -102,6 +126,47 @@ class ScriptWindowsTest {
         val state = ScriptWindows().after(EngineMessage.WindowCommandLine("chat", "say hi"))
         assertEquals(mapOf("chat" to "say hi"), state.commandLines)
         assertEquals(emptyMap<String, String>(), state.commandLineShown("chat").commandLines)
+    }
+
+    @Test
+    fun aLabelsContentIsKeptUntilItGoesOrAFullListLeavesItOut() {
+        val hp = window("hp", WindowKind.LABEL)
+        val state = ScriptWindows()
+            .after(windows(hp, window("mp", WindowKind.LABEL)))
+            .after(EngineMessage.Label(label("hp", "100")))
+            .after(EngineMessage.Label(label("mp", "50")))
+            .after(EngineMessage.Label(label("hp", "90")))
+        assertEquals(mapOf("hp" to "90", "mp" to "50"), state.labels.mapValues { it.value.text })
+        // A console of the same name is another window
+        val consoleGone = state.after(windows(removed = listOf(WindowKey("hp", WindowKind.MINI_CONSOLE))))
+        assertEquals(setOf("hp", "mp"), consoleGone.labels.keys)
+        assertEquals(setOf("mp"), state.after(windows(removed = listOf(hp.key))).labels.keys)
+        assertEquals(setOf("hp"), state.after(windows(hp, full = true)).labels.keys)
+    }
+
+    @Test
+    fun aGaugeIsItsThreeLabelsWithTheFrontsShareOfTheBackAsItsValue() {
+        val back = window("hp_back", WindowKind.LABEL, x = 10, y = 10, w = 200, h = 20)
+        val front = window("hp_front", WindowKind.LABEL, x = 10, y = 10, w = 50, h = 20)
+        val text = window("hp_text", WindowKind.LABEL, x = 10, y = 10, w = 200, h = 20)
+        val state = ScriptWindows().after(windows(back, front, text, window("other", WindowKind.LABEL)))
+        val gauge = state.gauges.getValue("hp_back")
+        assertEquals(mapOf(back.key to gauge, front.key to gauge, text.key to gauge), state.gaugeParts)
+        assertEquals("hp", gauge.name)
+        assertEquals(0.25f, gauge.value, 1e-6f)
+        assertEquals(25, gauge.percent)
+        assertEquals(setOf(back.key, front.key, text.key), gauge.parts)
+
+        // Vertical, inset by the back's margins of 2 px: the height decides
+        val vertical = Gauge.of(listOf(window("mp_back", WindowKind.LABEL, w = 24, h = 100), window("mp_front", WindowKind.LABEL, x = 2, y = 62, w = 20, h = 36)))
+        assertEquals(0.36f, vertical.getValue("mp_back").value, 1e-6f)
+        assertNull(vertical.getValue("mp_back").text)
+
+        // A hidden front is empty; a front in another parent, or with no back, is no gauge
+        assertEquals(0f, Gauge.of(listOf(back, front.copy(shown = false))).getValue("hp_back").value)
+        assertEquals(emptyMap<String, Gauge>(), Gauge.of(listOf(back, front.copy(parent = "box", parentKind = WindowKind.LABEL))))
+        assertEquals(emptyMap<String, Gauge>(), Gauge.of(listOf(front, text)))
+        assertEquals(emptyMap<String, Gauge>(), Gauge.of(listOf(back.copy(kind = WindowKind.MINI_CONSOLE), front)))
     }
 
     @Test

@@ -257,7 +257,7 @@ private fun WindowConsole(
 ) {
     val window = placed.window
     val columns = window.console?.columns ?: 0
-    val wantedSp = if (columns > 0) placed.fullWidth / columns / metrics.glyphWidthPerSp else metrics.fontSp
+    val wantedSp = if (columns > 0) placed.full.w / columns / metrics.glyphWidthPerSp else metrics.fontSp
     val fontSp = wantedSp.coerceIn(MIN_WINDOW_FONT_SP, MAX_WINDOW_FONT_SP)
     // Too small to read at its own width: drawn at the smallest size, as wide as its rows need, and scrolled sideways
     val rowsWidth = if (wantedSp < MIN_WINDOW_FONT_SP) with(density) { (columns * metrics.glyphWidthPerSp * fontSp).toDp() } else null

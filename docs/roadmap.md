@@ -26,14 +26,14 @@ repository uses. What Phase E needs, and where it stands:
 | Switch profile | One profile pool per process: `shutdownAsync()`, then `startAsync()` | `openProfile` closes the running one |
 | Lines with colours and styles | `lineShown`, `localTextStyled`, `mainConsoleCleared` | `line`, `tail`, `clear` |
 | A line changed after it was shown | None: `lineShown` sends each line once | No |
-| Links (MXP, OSC 8, `echoLink()`) | Ids in runs; `link()`, `followLink()`, `linksChanged` | Ids in runs only |
-| Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | No: the game is told 90 by 25 |
-| Default colours, font, wrap | `consoleColors*`, `consoleFont()`, `consoleWrap()` and their signals | No |
+| Links (MXP, OSC 8, `echoLink()`) | Ids in runs; `link()`, `followLink()`, `linksChanged` | `getLink`, `followLink`, `linksChanged` (version 5) |
+| Screen size for NAWS | `setScreenSize()`, `setMainWindowSize()` | `setScreenSize` (version 4) |
+| Default colours, font, wrap | `consoleColors*`, `consoleFont()`, `consoleWrap()` and their signals | Colours only: status `consoleColors` |
 | Command history, completion | `commandHistory()`, `completeCommandLine()`, `completeCommandLineFromHistory()` | `history`, `complete` (version 3) |
 | Password prompts | `hiddenInputWanted`, `submitHiddenInput()` | `hiddenInput`, `sendHidden`, `dismissHidden` |
 | Scripts setting the input line | `commandLineTextRequested`, `setCommandLineText()` | `commandLine` |
-| Screen reader announcements | `announcementRequested` (Lua `announce()`) | No |
-| Backgrounded app | `setApplicationActive()`, `setWindowMinimized()`, `saveAsync()`, `attentionRequested` | No |
+| Screen reader announcements | `announcementRequested` (Lua `announce()`) | `announce` |
+| Backgrounded app | `setApplicationActive()`, `setWindowMinimized()`, `saveAsync()`, `attentionRequested` | `setAppState` (version 6), which saves when the app leaves the front; `attention` |
 | Notifications | `notificationRequested` | `notify`, posted by the engine |
 | Reconnect | The profile's own "Reconnect automatically"; `connecting`, `connected`, `disconnected` | Status `connection`; restore after a kill |
 | GMCP, MSDP, triggers, aliases, timers, Lua | Run inside the profile as on the desktop | `runLua`, `send` |

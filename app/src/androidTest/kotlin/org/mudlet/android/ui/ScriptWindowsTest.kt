@@ -106,8 +106,9 @@ class ScriptWindowsTest {
         assertNear("width", area.width / 2, chat.width)
         assertNear("height", area.height / 2, chat.height)
 
-        // Mudlet's grid as the console's: its main window as many of its characters wide as the console is of the app's
-        val size = session.receive("setMainWindowSize")
+        // Mudlet's grid as the console's: its main window as many of its characters wide as the console is of the app's;
+        // the last size sent, as the first may be the one an earlier test left, which a new engine gets as it attaches
+        val size = session.receiveLast("setMainWindowSize", readPast = true)
         val scale = appCharWidth() / mudletCharWidth()
         assertNear("Mudlet's width", area.width / scale, size.getInt("w").toFloat(), area.width / scale * TOLERANCE)
         assertNear("Mudlet's height", area.height / scale, size.getInt("h").toFloat(), area.height / scale * TOLERANCE)
@@ -146,7 +147,7 @@ class ScriptWindowsTest {
 
         // Mudlet's main window as the area would be turned on its side
         val area = Rect(text.left, text.top - 50 * b, text.right, text.bottom + 50 * b)
-        val size = session.receive("setMainWindowSize")
+        val size = session.receiveLast("setMainWindowSize", readPast = true)
         val scale = appCharWidth() / mudletCharWidth()
         assertNear("Mudlet's width", area.height / scale, size.getInt("w").toFloat(), area.height / scale * TOLERANCE)
         assertNear("Mudlet's height", area.width / scale, size.getInt("h").toFloat(), area.width / scale * TOLERANCE)

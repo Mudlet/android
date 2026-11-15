@@ -1165,11 +1165,16 @@ void MudletEngine::pushAppMap()
     QPainter painter(&image);
     const bool drawn = mSession->renderAppMap(painter, mAppMapSize);
     painter.end();
+    // A map with no rooms is the usual reason for none, so it is not warned of
+    if (!drawn) {
+        mFrontend->appMap(std::nullopt);
+        return;
+    }
     QByteArray png;
     QBuffer buffer(&png);
     buffer.open(QIODevice::WriteOnly);
-    // A map with no rooms is the usual reason for none, so it is not warned of
-    if (!drawn || !image.save(&buffer, "PNG")) {
+    if (!image.save(&buffer, "PNG")) {
+        qWarning("MudletEngine: the app's map could not be made a PNG");
         mFrontend->appMap(std::nullopt);
         return;
     }

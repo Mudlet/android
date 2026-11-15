@@ -1406,7 +1406,7 @@ QString MudletEngine::followLink(const QString& window, int id, std::optional<in
     if (mainConsole && id <= mLinkBase) {
         return QStringLiteral("unknown");
     }
-    const THeadlessSession::LinkResult result = mainConsole ? mSession->followLink(id - mLinkBase, item) : mSession->followWindowLink(window, id, item);
+    const THeadlessSession::LinkResult result = mainConsole ? mSession->followLink(id - mLinkBase, item) : mSession->followWindowLink(window, id - mLinkBase, item);
     switch (result) {
     case THeadlessSession::LinkResult::ran:
     case THeadlessSession::LinkResult::revealedSpoiler:

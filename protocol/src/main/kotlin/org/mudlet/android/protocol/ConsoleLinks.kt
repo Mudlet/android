@@ -14,11 +14,12 @@ fun linkSpans(runs: IntArray, length: Int): List<LinkSpan> {
     while (i + RUN_STRIDE - 1 < runs.size) {
         val link = runs[i + 5]
         val start = runs[i].coerceIn(0, length)
-        val end = (runs[i] + runs[i + 1]).coerceIn(start, length)
+        val end = (runs[i] + runs[i + 1]).coerceAtLeast(start)
         i += RUN_STRIDE
         if (link <= 0 || start == end) continue
         val last = spans.lastOrNull()
-        if (last != null && last.link == link && last.end == start) {
+        if (last != null && last.link != link) continue
+        if (last != null && last.link == link && last.end == start + 1) {
             spans[spans.lastIndex] = last.copy(end = end)
         } else {
             spans.add(LinkSpan(link, start, end))
@@ -28,4 +29,4 @@ fun linkSpans(runs: IntArray, length: Int): List<LinkSpan> {
 }
 
 /** What a screen reader and a link's menu call the link drawn as [text]: its tool tip, or before getLink answers, or with none, [text]. */
-fun linkLabel(link: EngineMessage.Link?, text: String): String = link?.tooltip?.trim()?.ifEmpty { null } ?: text.trim()
+fun linkLabel(link: EngineMessage.Link?, text: String): String = link?.tooltip?.ifBlank { null }?.ifEmpty { null } ?: text.trim()

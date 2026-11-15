@@ -350,7 +350,7 @@ object Requests {
     fun followLink(link: Int, item: Int?, window: String?, id: Long): JSONObject = JSONObject().put("t", "followLink").put("link", link).put("id", id)
         .apply {
             if (item != null) put("item", item)
-            if (window != null) put("window", window)
+            if (window != null && item == null) put("window", window)
         }
 
     /** The app in front ([active]) or not, and its window minimized or in the background; leaving the front saves the profile. */

@@ -28,7 +28,7 @@ data class ScriptWindows(
     /** This state after [message]; itself for a message about something else, and for an answer to `getWindowText`. */
     fun after(message: EngineMessage): ScriptWindows = when (message) {
         is EngineMessage.Windows -> afterWindows(message)
-        is EngineMessage.WindowText -> if (message.replyTo != null) this else copy(text = text + (message.window to message), links = linksAfter(message))
+        is EngineMessage.WindowText -> if (message.replyTo != null) this else copy(text = text + (message.window to message), links = links - message.window)
         is EngineMessage.MainArea -> copy(mainArea = message, charWidth = CharWidth.after(charWidth, message))
         is EngineMessage.WindowCommandLine -> copy(commandLines = commandLines + (message.name to message.text))
         is EngineMessage.Label -> copy(labels = labels + (message.label.name to message.label))
@@ -60,7 +60,6 @@ data class ScriptWindows(
     // The main console's links are not a script window's, and a console with no text has none to ask about
     private fun afterLink(message: EngineMessage.Link): ScriptWindows {
         val window = message.window ?: return this
-        if (window !in text) return this
         return copy(links = links + (window to links[window].orEmpty() + (message.link to message)))
     }
 

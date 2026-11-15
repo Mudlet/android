@@ -28,7 +28,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
@@ -83,7 +82,7 @@ internal fun ConsoleLine(
                 contentDescription = space
             }
 
-            else -> hideFromAccessibility()
+            else -> this.text = AnnotatedString(plain)
         }
         if (actions.isNotEmpty()) customActions = actions
     }
@@ -151,7 +150,7 @@ private fun LineText(text: AnnotatedString, modifier: Modifier, color: Color, st
 private fun TextLayoutResult.characterAt(position: Offset, length: Int): Int? {
     // The caret nearest the point is on one side or the other of the character under it
     val caret = getOffsetForPosition(position)
-    return listOf(caret, caret - 1).firstOrNull { it in 0 until length && getBoundingBox(it).contains(position) }
+    return listOf(caret, caret - 1).firstOrNull { it in 0 until length }
 }
 
 /**

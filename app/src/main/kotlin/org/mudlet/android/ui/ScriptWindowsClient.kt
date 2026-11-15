@@ -98,7 +98,6 @@ object ScriptWindowsClient {
 
             else -> {
                 // New text may have changed the console's links, so they are asked about again
-                if (message is EngineMessage.WindowText && message.replyTo == null) askedLinks.remove(message.window)
                 state = state.after(message)
             }
         }

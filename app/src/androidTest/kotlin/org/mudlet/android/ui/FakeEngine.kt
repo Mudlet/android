@@ -101,7 +101,7 @@ class FakeEngine : AutoCloseable {
         val hello: JSONObject
 
         init {
-            socket.soTimeout = 10_000
+            socket.soTimeout = READ_TIMEOUT_MS
             hello = readFrame(input)
             if (hello.optString("t") != "hello") throw IOException("the UI began with $hello")
             send(JSONObject().put("t", "hello").put("v", 1).put("pid", FAKE_PID).put("instance", instance))
@@ -155,6 +155,31 @@ class FakeEngine : AutoCloseable {
             JSONObject().put("t", "error").put("re", request.opt("id")).put("message", "${request.optString("t")}: $why"),
         )
 
+        /**
+         * The last request of type [type] the UI sent before it went quiet for [quietMs]: what it settled on, where it
+         * may first have sent what it held from before, as ScriptWindowsClient sends a new engine the last size. With
+         * [readPast], one already read past counts: ScriptWindowsClient sends no size twice, and connecting to a
+         * profile reads past the one it sends as it attaches.
+         */
+        fun receiveLast(type: String, quietMs: Int = 1_000, readPast: Boolean = false): JSONObject {
+            var last = (if (readPast) received.lastOrNull { it.optString("t") == type } else null) ?: receive(type)
+            socket.soTimeout = quietMs
+            try {
+                while (true) {
+                    val frame = try {
+                        readFrame(input)
+                    } catch (_: IOException) {
+                        break
+                    }
+                    received.add(frame)
+                    if (frame.optString("t") == type) last = frame
+                }
+            } finally {
+                socket.soTimeout = READ_TIMEOUT_MS
+            }
+            return last
+        }
+
         fun clear() = send(JSONObject().put("t", "clear"))
 
         /**
@@ -184,6 +209,25 @@ class FakeEngine : AutoCloseable {
 
         fun synced(seq: Long) = send(JSONObject().put("t", "synced").put("seq", seq))
 
+        /** [windows] as [window] makes them; [removed]: each the name and the kind of a window that went. */
+        fun windows(windows: List<JSONObject>, full: Boolean = false, removed: List<Pair<String, String>> = emptyList()) = send(
+            JSONObject().put("t", "windows").put("full", full).put("windows", JSONArray(windows))
+                .put("removed", JSONArray(removed.map { (name, kind) -> JSONObject().put("name", name).put("kind", kind) })),
+        )
+
+        /** The last rows of the console [window], [rows] of them up to its last row, without colours. */
+        fun windowText(window: String, rows: List<String>, lineCount: Int = rows.size) = send(
+            JSONObject().put("t", "windowText").put("window", window).put("lineCount", lineCount).put("first", lineCount - rows.size)
+                .put("lines", JSONArray(rows.map { JSONObject().put("text", it).put("runs", JSONArray()).put("prompt", false).put("wrapped", false) })),
+        )
+
+        fun mainArea(w: Int, h: Int, columns: Int, rows: Int, textX: Int, textY: Int, textW: Int, textH: Int) = send(
+            JSONObject().put("t", "mainArea").put("w", w).put("h", h).put("columns", columns).put("rows", rows)
+                .put("textX", textX).put("textY", textY).put("textW", textW).put("textH", textH),
+        )
+
+        fun windowCommandLine(name: String, text: String) = send(JSONObject().put("t", "windowCommandLine").put("name", name).put("text", text))
+
         /** As the engine process dying: the UI sees the connection end. */
         override fun close() {
             // shutdownInput wakes the UI's reader at once, where close alone may leave it blocked
@@ -207,6 +251,33 @@ class FakeEngine : AutoCloseable {
             .put("tls", tls)
             .put("login", login)
             .put("autoReconnect", autoReconnect)
+
+        // How long a read waits for the UI
+        const val READ_TIMEOUT_MS = 10_000
+
+        /**
+         * A shown window of a `windows` message (docs/protocol.md): a mini console, unless told, in the main window at
+         * [x], [y] in Mudlet's pixels. A console has [columns] and [rows]; [dockArea] puts a user window in a dock.
+         */
+        fun window(
+            name: String,
+            kind: String = "miniConsole",
+            x: Int = 0,
+            y: Int = 0,
+            w: Int = 100,
+            h: Int = 100,
+            columns: Int = 40,
+            rows: Int = 10,
+            parent: String = "",
+            parentKind: String = "",
+            dockArea: String? = null,
+        ): JSONObject {
+            val window = JSONObject().put("name", name).put("kind", kind).put("parent", parent).put("parentKind", parentKind)
+                .put("x", x).put("y", y).put("w", w).put("h", h).put("visible", true).put("shown", true).put("stack", 0)
+            if (kind == "miniConsole" || kind == "userWindow") window.put("columns", columns).put("rows", rows)
+            if (dockArea != null) window.put("inDock", true).put("dockArea", dockArea).put("dockFloating", false).put("dockTitle", name)
+            return window
+        }
 
         private fun readFrame(input: DataInputStream): JSONObject {
             val n = input.readInt()

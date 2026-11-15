@@ -335,9 +335,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   unknown one refused, both lists to a UI that attaches, and `removeCommand()`;
 - the map: a map built with `addRoom()` and `setExit()` in a `Geyser.Mapper`, as `map` at the mapper's size with the
   rooms drawn where the layout puts them; a `mapPointer` press selecting the room under it and raising
-  `sysMapWindowMousePressEvent`, a double-click walking to a room through `doSpeedWalk()`, a wheel turn zooming and
-  half a notch refused; `setMapViewOnly` raising `mapModeChangeEvent`; `pointer` on the window `mapper`; the map to a
-  UI that attaches, and none while the mapper hides;
+  `sysMapWindowMousePressEvent`, a double-click walking to a room through `doSpeedWalk()`, a wheel turn zooming and less
+  than half a notch refused; `setMapViewOnly` raising `mapModeChangeEvent`; `pointer` on the window `mapper`; the map to
+  a UI that attaches, and none while the mapper hides;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

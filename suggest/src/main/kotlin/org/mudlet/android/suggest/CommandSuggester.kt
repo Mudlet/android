@@ -155,7 +155,7 @@ class CommandSuggester(
      * [suggest] it offers only what was sent: no predictions lift an entry and no words from the output are added.
      */
     override fun search(query: String, limit: Int): List<String> = synchronized(lock) {
-        require(limit >= 0) { "negative limit $limit" }
+        if (limit < 0) return emptyList()
         val now = clock()
         val q = query.trim()
         val scored = history.values.mapNotNull { entry ->

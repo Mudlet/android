@@ -34,7 +34,6 @@ class PinnedCommands(
     @Volatile var listener: ((List<String>) -> Unit)? = null
         set(value) {
             field = value
-            if (value != null) worker.schedule(0) { tell() }
         }
 
     // The calling thread's
@@ -79,11 +78,9 @@ class PinnedCommands(
 
     /** Pins [command] last, unless it is blank, longer than [MAX_LENGTH], already pinned, or [max] are. */
     fun pin(command: String) {
-        worker.schedule(0) {
-            val text = command.trim()
-            if (text.isEmpty() || text.length > MAX_LENGTH || pins.size >= max || pins.any { same(it, text) }) return@schedule
-            changed(pins + text)
-        }
+        val text = command.trim()
+        if (text.isEmpty() || text.length > MAX_LENGTH || pins.size >= max || pins.any { same(it, text) }) return
+        changed(pins + text)
     }
 
     /** Unpins [command], if it is pinned. */
@@ -98,7 +95,6 @@ class PinnedCommands(
         pins = now
         version++
         tell()
-        if (loadFailed) return
         try {
             store.save { out -> write(out, now) }
         } catch (e: IOException) {
@@ -150,6 +146,7 @@ class PinnedCommands(
                 val key = command?.let { CommandSuggester.normalizeCommand(it) }
                 if (command == null || key.isNullOrEmpty() || command.length > MAX_LENGTH || commands.size >= max || !keys.add(key)) {
                     skipped++
+                    break
                 } else {
                     commands += command
                 }

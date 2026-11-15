@@ -27,7 +27,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 8;
+    static constexpr int protocolVersion = 9;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -51,6 +51,8 @@ public:
     void windowText(const QString& window, const WindowText& text) override;
     void mainArea(const MainArea& area) override;
     void windowCommandLine(const QString& name, const QString& text) override;
+    void buttonBars(const QList<ButtonBar>& bars) override;
+    void commands(const QList<AddonCommandInfo>& commands) override;
 
 private:
     struct StoredLine
@@ -85,6 +87,8 @@ private:
     QString placeUserWindow(const QJsonObject& message);
     QString pointer(const QJsonObject& message);
     void getImage(const QJsonObject& message);
+    // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
+    void sendIfChanged(QJsonObject& kept, QJsonObject message);
     void dropClient(const QString& reason);
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
@@ -97,6 +101,9 @@ private:
     static QJsonObject labelMessage(const LabelInfo& label);
     static QJsonObject windowTextMessage(const QString& window, const WindowText& text);
     static QJsonObject mainAreaMessage(const MainArea& area);
+    static QJsonArray buttonsJson(const QList<BarButton>& buttons);
+    static QJsonObject buttonBarsMessage(const QList<ButtonBar>& bars);
+    static QJsonObject commandsMessage(const QList<AddonCommandInfo>& commands);
 
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
@@ -112,6 +119,9 @@ private:
     QList<LabelInfo> mLabels;
     // None until the engine has sent one
     std::optional<MainArea> mMainArea;
+    // As IFrontend::buttonBars() and commands() last gave them, as sent
+    QJsonObject mButtonBars = buttonBarsMessage({});
+    QJsonObject mCommands = commandsMessage({});
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

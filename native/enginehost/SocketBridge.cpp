@@ -181,6 +181,8 @@ void SocketBridge::sendState()
     for (const LabelInfo& label : std::as_const(mLabels)) {
         sendFrame(labelMessage(label));
     }
+    sendFrame(mButtonBars);
+    sendFrame(mCommands);
     if (!mEngine) {
         return;
     }
@@ -286,6 +288,12 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, pointer(message));
     } else if (type == QLatin1String("getImage")) {
         getImage(message);
+    } else if (type == QLatin1String("pressButton")) {
+        const std::optional<int> button = wholeNumber(message.value(QLatin1String("button")));
+        refuse(type, button ? mEngine->pressButton(*button) : QStringLiteral("button must be a whole number"));
+    } else if (type == QLatin1String("activateCommand")) {
+        const std::optional<int> command = wholeNumber(message.value(QLatin1String("command")));
+        refuse(type, command ? mEngine->activateCommand(*command) : QStringLiteral("command must be a whole number"));
     } else {
         sendError(QStringLiteral("unknown type %1").arg(type));
     }
@@ -647,6 +655,60 @@ QJsonObject SocketBridge::labelMessage(const LabelInfo& label)
     return json;
 }
 
+QJsonArray SocketBridge::buttonsJson(const QList<BarButton>& buttons)
+{
+    QJsonArray json;
+    for (const BarButton& button : buttons) {
+        json.append(QJsonObject{{QStringLiteral("id"), button.id},
+                                {QStringLiteral("name"), button.name},
+                                {QStringLiteral("icon"), button.icon},
+                                {QStringLiteral("styleSheet"), button.styleSheet},
+                                {QStringLiteral("pushDown"), button.pushDown},
+                                {QStringLiteral("checked"), button.checked},
+                                {QStringLiteral("menu"), button.menu},
+                                {QStringLiteral("children"), buttonsJson(button.children)}});
+    }
+    return json;
+}
+
+QJsonObject SocketBridge::buttonBarsMessage(const QList<ButtonBar>& bars)
+{
+    QJsonArray json;
+    for (const ButtonBar& bar : bars) {
+        json.append(QJsonObject{{QStringLiteral("id"), bar.id},
+                                {QStringLiteral("name"), bar.name},
+                                {QStringLiteral("styleSheet"), bar.styleSheet},
+                                {QStringLiteral("place"), bar.place},
+                                {QStringLiteral("vertical"), bar.vertical},
+                                {QStringLiteral("columns"), bar.columns},
+                                {QStringLiteral("fillerOffset"), bar.fillerOffset},
+                                {QStringLiteral("buttons"), buttonsJson(bar.buttons)}});
+    }
+    return {{QStringLiteral("t"), QStringLiteral("buttonBars")}, {QStringLiteral("bars"), json}};
+}
+
+QJsonObject SocketBridge::commandsMessage(const QList<AddonCommandInfo>& commands)
+{
+    QJsonArray json;
+    for (const AddonCommandInfo& command : commands) {
+        json.append(QJsonObject{{QStringLiteral("id"), command.id},
+                                {QStringLiteral("package"), command.package},
+                                {QStringLiteral("name"), command.name},
+                                {QStringLiteral("icon"), command.icon},
+                                {QStringLiteral("tooltip"), command.tooltip},
+                                {QStringLiteral("menuPath"), command.menuPath},
+                                {QStringLiteral("shortcut"), command.shortcut},
+                                {QStringLiteral("onMenu"), command.onMenu},
+                                {QStringLiteral("onToolbar"), command.onToolbar},
+                                {QStringLiteral("enabled"), command.enabled},
+                                {QStringLiteral("checkable"), command.checkable},
+                                {QStringLiteral("checked"), command.checked},
+                                {QStringLiteral("pinned"), command.pinned},
+                                {QStringLiteral("pulse"), command.pulse}});
+    }
+    return {{QStringLiteral("t"), QStringLiteral("commands")}, {QStringLiteral("commands"), json}};
+}
+
 QJsonObject SocketBridge::windowTextMessage(const QString& window, const WindowText& text)
 {
     QJsonArray lines;
@@ -838,5 +900,26 @@ void SocketBridge::windowCommandLine(const QString& name, const QString& text)
 {
     if (clientLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("windowCommandLine")}, {QStringLiteral("name"), name}, {QStringLiteral("text"), text}});
+    }
+}
+
+void SocketBridge::buttonBars(const QList<ButtonBar>& bars)
+{
+    sendIfChanged(mButtonBars, buttonBarsMessage(bars));
+}
+
+void SocketBridge::commands(const QList<AddonCommandInfo>& commands)
+{
+    sendIfChanged(mCommands, commandsMessage(commands));
+}
+
+void SocketBridge::sendIfChanged(QJsonObject& kept, QJsonObject message)
+{
+    if (message == kept) {
+        return;
+    }
+    kept = std::move(message);
+    if (clientLive()) {
+        sendFrame(kept);
     }
 }

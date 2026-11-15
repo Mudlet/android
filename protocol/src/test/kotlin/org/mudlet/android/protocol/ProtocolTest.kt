@@ -226,6 +226,61 @@ class ProtocolTest {
     }
 
     @Test
+    fun buttonBarsParseWithTheirMenus() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"buttonBars","bars":[""" +
+                    """{"id":4,"name":"Tools","styleSheet":"QToolBar{}","place":"top","vertical":false,"columns":2,"fillerOffset":1,"buttons":[""" +
+                    """{"id":5,"name":"push","icon":"/a.png","styleSheet":"b{}","pushDown":true,"checked":true,"menu":false,"children":[]},""" +
+                    """{"id":6,"name":"more","icon":"","styleSheet":"","pushDown":false,"checked":false,"menu":true,"children":[""" +
+                    """{"id":7,"name":"one","icon":"","styleSheet":"","pushDown":false,"checked":false,"menu":false,"children":[]}]}]},""" +
+                    """{"id":8,"name":"Later","styleSheet":"","place":"bottom","vertical":false,"columns":1,"fillerOffset":0,"buttons":[]},""" +
+                    """{"id":9,"name":"Side","styleSheet":"","place":"floating","vertical":true,"columns":1,"fillerOffset":0,"buttons":[]}]}""",
+            ),
+        ) as EngineMessage.ButtonBars
+        val one = BarButton(7, "one", "", "", false, false, false, emptyList())
+        assertEquals(
+            listOf(
+                ButtonBar(
+                    4,
+                    "Tools",
+                    "QToolBar{}",
+                    BarPlace.TOP,
+                    false,
+                    2,
+                    1,
+                    listOf(BarButton(5, "push", "/a.png", "b{}", true, true, false, emptyList()), BarButton(6, "more", "", "", false, false, true, listOf(one))),
+                ),
+                // The bar in a place this app does not know is left out
+                ButtonBar(9, "Side", "", BarPlace.FLOATING, true, 1, 0, emptyList()),
+            ),
+            message.bars,
+        )
+        assertEquals(EngineMessage.ButtonBars(emptyList()), FrameReader.parse(JSONObject("""{"t":"buttonBars","bars":[]}""")))
+    }
+
+    @Test
+    fun commandsParse() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"commands","commands":[{"id":3,"package":"voices","name":"Speech","icon":"s.png","tooltip":"Read aloud",""" +
+                    """"menuPath":"Tools/Voices","shortcut":"Ctrl+Shift+S","onMenu":true,"onToolbar":false,"enabled":false,""" +
+                    """"checkable":true,"checked":true,"pinned":true,"pulse":true}]}""",
+            ),
+        ) as EngineMessage.Commands
+        assertEquals(
+            listOf(AddonCommand(3, "voices", "Speech", "s.png", "Read aloud", "Tools/Voices", "Ctrl+Shift+S", true, false, false, true, true, true, true)),
+            message.commands,
+        )
+    }
+
+    @Test
+    fun theButtonAndCommandRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "pressButton", "button" to 5), Requests.pressButton(5).toMap())
+        assertEquals(mapOf("t" to "activateCommand", "command" to 3), Requests.activateCommand(3).toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

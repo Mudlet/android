@@ -154,6 +154,8 @@ keeps the profiles' passwords in the KeyStore.
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
 | `pointer()` | `pointer`, answered only when refused |
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
+| `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
+| `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -214,6 +216,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `label` alone; `setBackgroundImage()` as the label's `image`, and that file as a PNG from `getImage`, scaled; an
   SVG one with `setSvgTint()` and `setSvgRotation()`; a Geyser `Gauge`'s three labels, whose front width is its value
   and whose text label is transparent; every label to a UI that attaches; `deleteLabel()` as `removed`;
+- button bars and commands: a package's bar, with its grid, a push-down button and a folder's menu, and
+  `tempButtonToolbar()` bars at the left and floating, as `buttonBars`; `pressButton` sending a push-down button's
+  command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and
+  `setCommandChecked()` as `commands`, `activateCommand` raising `sysCommandClicked` and ticking it; a disabled or
+  unknown one refused, both lists to a UI that attaches, and `removeCommand()`;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

@@ -170,6 +170,50 @@ class ScriptWindowsTest {
     }
 
     @Test
+    fun aWindowsLinksAreKeptWhileItsTextHasThemOrUntilItGoes() {
+        val state = ScriptWindows()
+            .after(windows(window("chat"), window("side", WindowKind.USER_WINDOW)))
+            .after(linkedText("chat", 1, 2))
+            .after(linkedText("side", 1))
+            .after(link(1, "chat", "go there"))
+            .after(link(2, "chat", "stay"))
+            .after(link(1, "side", "look here"))
+        assertEquals(mapOf("chat" to mapOf(1 to "go there", 2 to "stay"), "side" to mapOf(1 to "look here")), state.links.tooltips())
+
+        // New rows keep what was said of the links still in them, until the engine answers again, and drop the rest
+        val newRows = state.after(linkedText("chat", 2, 3))
+        assertEquals(mapOf("chat" to mapOf(2 to "stay"), "side" to mapOf(1 to "look here")), newRows.links.tooltips())
+        assertEquals(mapOf(2 to "stay now"), newRows.after(link(2, "chat", "stay now")).links["chat"]?.mapValues { it.value.tooltip })
+        assertEquals(mapOf("side" to mapOf(1 to "look here")), state.after(text("chat", "go", "on")).links.tooltips())
+        // An answer to getWindowText changes nothing
+        assertSame(state, state.after(text("chat", "old", replyTo = 3L)))
+        assertEquals(setOf("side"), state.after(windows(removed = listOf(WindowKey("chat", WindowKind.MINI_CONSOLE)))).links.keys)
+        assertEquals(setOf("chat"), state.after(windows(window("chat"), full = true)).links.keys)
+        // A label of the same name is another window
+        assertEquals(setOf("chat", "side"), state.after(windows(removed = listOf(WindowKey("chat", WindowKind.LABEL)))).links.keys)
+    }
+
+    @Test
+    fun aLinkOfTheMainConsoleOrOfAConsoleWithNoTextIsNotKept() {
+        val state = ScriptWindows().after(windows(window("chat"))).after(text("chat", "go"))
+        assertSame(state, state.after(link(1, null, "the main console's")))
+        assertSame(state, state.after(link(1, "gone", "no text")))
+    }
+
+    // A row of one character for each link of [ids], each its own run
+    private fun linkedText(window: String, vararg ids: Int) = EngineMessage.WindowText(
+        window,
+        1,
+        0,
+        listOf(WindowRow("x".repeat(ids.size), ids.withIndex().flatMap { (i, id) -> listOf(i, 1, -1, -1, 0, id) }.toIntArray(), false, false)),
+        null,
+    )
+
+    private fun link(id: Int, window: String?, tooltip: String) = EngineMessage.Link(id, window, tooltip, false, "", emptyList(), false, false, false, false, false, false, null, null, null, null)
+
+    private fun Map<String, Map<Int, EngineMessage.Link>>.tooltips() = mapValues { (_, links) -> links.mapValues { it.value.tooltip } }
+
+    @Test
     fun otherMessagesLeaveItAsItIs() {
         val state = ScriptWindows().after(windows(window("a")))
         assertSame(state, state.after(EngineMessage.Clear))

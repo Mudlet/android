@@ -11,7 +11,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.assert
@@ -34,6 +36,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
@@ -58,6 +61,8 @@ import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
 import java.io.ByteArrayOutputStream
+import java.io.EOFException
+import java.io.IOException
 import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
@@ -140,7 +145,7 @@ class AppMapTest {
         assertTrue(compose.onAllNodes(hasContentDescription(string(R.string.map_description)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         compose.onNode(hasText("the main console")).assertIsDisplayed()
-        compose.onRoot().tryPerformAccessibilityChecks()
+        checkAccessibility()
         // A tap on the console is the console's, not the map's
         compose.onNode(console).performTouchInput { click(center) }
         noRequest("appMapPointer")
@@ -151,7 +156,7 @@ class AppMapTest {
         val size = lastRequest("setAppMapSize", readPast = true)
         assertTrue("asked for at $size", size.getInt("w") > 0)
         compose.runOnIdle { Settings.mapBehindText.set(false) }
-        assertNone(lastRequest("setAppMapSize"))
+        assertNone(lastRequest("setAppMapSize", "the setting off lets go of the map behind the text"))
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         noRequest("setAppMapSize")
         assertBackground(Color.Black)
@@ -209,13 +214,13 @@ class AppMapTest {
         // The UI went and came back to the same engine, which forgot the size as the UI went: it is asked again
         session.close()
         session = fake.engine.nextSession()
-        assertEquals(size.toString(), lastRequest("setAppMapSize").toString())
+        assertEquals(size.toString(), lastRequest("setAppMapSize", "the same engine is asked again when the UI comes back").toString())
 
         // Android restarted the engine: the new one draws nothing until asked, which the UI does without the player
         fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
         session.close()
         session = fake.engine.nextSession()
-        assertEquals(size.toString(), lastRequest("setAppMapSize").toString())
+        assertEquals(size.toString(), lastRequest("setAppMapSize", "a restarted engine is asked").toString())
         assertBackground(Color.Black)
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
@@ -238,19 +243,19 @@ class AppMapTest {
         compose.onNode(map).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.map_viewing)))
         // What the map covers is not read
         assertTrue(compose.onAllNodes(hasText("the main console")).fetchSemanticsNodes().isEmpty())
-        compose.onRoot().tryPerformAccessibilityChecks()
+        checkAccessibility()
 
         val drawn = bounds(map)
         compose.onNode(map).performTouchInput { click(at(drawn, w, h, w * 0.25, h * 0.75)) }
-        val press = session.receive("appMapPointer")
+        val press = request("appMapPointer", "a tap on the map in front is its press")
         assertEquals("press", press.getString("type"))
         assertEquals(POINTER_LEFT, press.getInt("button"))
         assertPoint(w * 0.25, h * 0.75, press)
         noRequest("mapPointer")
 
         compose.onNode(map).performTouchInput { doubleClick(at(drawn, w, h, w * 0.75, h * 0.25)) }
-        assertEquals("press", session.receive("appMapPointer").getString("type"))
-        val walk = session.receive("appMapPointer")
+        assertEquals("press", request("appMapPointer", "a double tap on the map in front presses first").getString("type"))
+        val walk = request("appMapPointer", "and then walks")
         assertEquals("doubleClick", walk.getString("type"))
         assertPoint(w * 0.75, h * 0.25, walk)
 
@@ -297,14 +302,14 @@ class AppMapTest {
         val zoomIn = hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()
         assertTouchTarget(zoomIn)
         activate(zoomIn)
-        val wheel = session.receive("appMapPointer")
+        val wheel = request("appMapPointer", "the zoom button zooms the map in front")
         assertEquals("wheel", wheel.getString("type"))
         assertEquals(360, wheel.getInt("wheelY"))
         assertPoint(w / 2.0, h / 2.0, wheel)
 
         val edit = hasContentDescription(string(R.string.map_edit)) and hasClickAction()
         activate(edit)
-        assertFalse(session.receive("setMapViewOnly").getBoolean("viewOnly"))
+        assertFalse(request("setMapViewOnly", "the edit switch asks to edit").getBoolean("viewOnly"))
         session.send(appMap(w.toInt(), h.toInt(), viewOnly = false))
         compose.waitUntil(WAIT_MS) {
             compose.onAllNodes(edit and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On)).fetchSemanticsNodes().isNotEmpty()
@@ -312,16 +317,16 @@ class AppMapTest {
         compose.onNode(map).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.map_editing)))
         // Its refusal is shown with this map, not the mapper window's
         activate(edit)
-        val view = session.receive("setMapViewOnly")
+        val view = request("setMapViewOnly", "the edit switch asks to view again")
         assertTrue(view.getBoolean("viewOnly"))
         session.refuse(view, "no profile running")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
         activate(hasContentDescription(string(R.string.map_refusal_dismiss)))
 
-        compose.onRoot().tryPerformAccessibilityChecks()
+        checkAccessibility()
         val actions = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions]
         compose.runOnIdle { actions.single { it.label == string(R.string.map_walk_to_middle) }.action() }
-        val walk = session.receive("appMapPointer")
+        val walk = request("appMapPointer", "TalkBack's action walks to the middle")
         assertEquals("doubleClick", walk.getString("type"))
         assertPoint(w / 2.0, h / 2.0, walk)
 
@@ -336,21 +341,21 @@ class AppMapTest {
         openMap()
         drawnMap()
         search("hall")
-        val find = session.receive("findRooms")
+        val find = request("findRooms", "the search is sent")
         assertEquals("hall", find.getString("text"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.app_map_searching))).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the search says it is searching") { compose.onAllNodes(hasText(string(R.string.app_map_searching))).fetchSemanticsNodes().isNotEmpty() }
 
         session.send(rooms(find, "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
         val hallway = hasText(string(R.string.app_map_room, "hallway", "Castle", 3))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the rooms found are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasText(string(R.string.app_map_room, "Great Hall", "Castle", 1))).assertIsDisplayed()
         assertTouchTarget(hallway)
-        compose.onRoot().tryPerformAccessibilityChecks()
+        checkAccessibility()
 
         activate(hallway)
-        val show = session.receive("showRoom")
+        val show = request("showRoom", "a room found is shown on the map")
         assertEquals(3, show.getInt("room"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isEmpty() }
+        waitFor("the list goes once a room is shown") { compose.onAllNodes(hallway).fetchSemanticsNodes().isEmpty() }
         // The map in front stays
         drawnMap()
         // And says why, when the room is gone
@@ -370,50 +375,53 @@ class AppMapTest {
             up()
         }
         compose.onNode(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()).performTouchInput(jitter)
-        val wheel = session.receive("appMapPointer")
+        val wheel = request("appMapPointer", "a finger that moves a little still taps the zoom button")
         assertEquals("wheel", wheel.getString("type"))
         assertEquals(360, wheel.getInt("wheelY"))
         assertPoint(w / 2.0, h / 2.0, wheel)
 
         search("hall")
-        session.send(rooms(session.receive("findRooms"), "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
+        session.send(rooms(request("findRooms", "the search is sent"), "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
         val hallway = hasText(string(R.string.app_map_room, "hallway", "Castle", 3))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the rooms found are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hallway and hasClickAction()).performTouchInput(jitter)
-        assertEquals(3, session.receive("showRoom").getInt("room"))
+        assertEquals(3, request("showRoom", "a finger that moves a little still taps a room found").getInt("room"))
     }
 
     @Test
     fun aSearchSaysWhenNothingOrTooMuchMatchesAndWhyTheEngineRefusedIt() {
         openMap()
         val field = search("cellar")
-        session.send(rooms(session.receive("findRooms"), "cellar", emptyList()))
+        session.send(rooms(request("findRooms", "the search is sent"), "cellar", emptyList()))
         val none = hasText(string(R.string.app_map_no_rooms, "cellar"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(none).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the search says nothing matched") { compose.onAllNodes(none).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(none).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
         activate(hasContentDescription(string(R.string.app_map_results_close)))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(none).fetchSemanticsNodes().isEmpty() }
+        waitFor("the results close") { compose.onAllNodes(none).fetchSemanticsNodes().isEmpty() }
 
         searchAgain(field)
-        session.send(rooms(session.receive("findRooms"), "cellar", listOf(Triple(7, "Wine cellar", "Keep")), more = true))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.app_map_more_rooms))).fetchSemanticsNodes().isNotEmpty() }
+        session.send(rooms(request("findRooms", "the search is sent again"), "cellar", listOf(Triple(7, "Wine cellar", "Keep")), more = true))
+        waitFor("the search says there were more") { compose.onAllNodes(hasText(string(R.string.app_map_more_rooms))).fetchSemanticsNodes().isNotEmpty() }
 
         // A refused search is over: a late answer to it is not shown
         searchAgain(field)
-        val refused = session.receive("findRooms")
+        val refused = request("findRooms", "the search is sent a third time")
         session.refuse(refused, "no profile running")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
         session.send(rooms(refused, "cellar", listOf(Triple(7, "Wine cellar", "Keep"))))
         // Time for the answer to arrive, were it to show
         noRequest("findRooms")
         compose.waitForIdle()
-        assertTrue(compose.onAllNodes(hasText(string(R.string.app_map_room, "Wine cellar", "Keep", 7))).fetchSemanticsNodes().isEmpty())
+        assertTrue(
+            "a late answer to a refused search is not shown",
+            compose.onAllNodes(hasText(string(R.string.app_map_room, "Wine cellar", "Keep", 7))).fetchSemanticsNodes().isEmpty(),
+        )
     }
 
     /** Types [text] in the map's search field and sends it as [searchAgain] does; returns the field. */
     private fun search(text: String): SemanticsMatcher {
         val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
-        compose.onNode(field).performTextInput(text)
+        withScreen { compose.onNode(field).performTextInput(text) }
         searchAgain(field)
         return field
     }
@@ -423,33 +431,96 @@ class AppMapTest {
      * and the map has its room back, which on a small screen the keyboard took near all of, results and buttons with it.
      */
     private fun searchAgain(field: SemanticsMatcher) {
-        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
-        val height = bounds(map).height
-        compose.onNode(field).performImeAction()
-        compose.waitUntil(WAIT_MS) {
-            compose.onAllNodes(field and isFocused()).fetchSemanticsNodes().isEmpty() && !keyboardShown() && bounds(map).height == height
+        val height = bounds(mapShown()).height
+        withScreen { compose.onNode(field).performImeAction() }
+        waitFor("the search field lets go of the focus, the keyboard goes and the map is $height high again") {
+            compose.onAllNodes(field and isFocused()).fetchSemanticsNodes().isEmpty() && !keyboardShown() && bounds(mapShown()).height == height
         }
     }
 
-    /** The last [type] the UI sent before it went quiet, read while the test waits on Compose: see [whileComposing]. */
-    private fun lastRequest(type: String, readPast: Boolean = false): JSONObject = whileComposing { session.receiveLast(type, readPast = readPast) }
+    private fun mapShown() = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
 
-    /** Fails if the UI sends a [type] for a while the test waits on Compose: see [whileComposing]. */
-    private fun noRequest(type: String) = whileComposing { session.assertNoRequest(type, QUIET_MS) }
+    /** The last [type] the UI sent before it went quiet, read while the test waits on Compose: see [read]. */
+    private fun lastRequest(type: String, what: String = "the UI asks for the map", readPast: Boolean = false): JSONObject = read(type, what) { session.receiveLast(type, readPast = readPast) }
+
+    /** The next [type] the UI sends, read while the test waits on Compose: see [read]. */
+    private fun request(type: String, what: String): JSONObject = read(type, what) { session.receive(type) }
 
     /**
-     * What [read] reads from the engine's socket, read on another thread while this one waits on Compose. The test's
-     * clock lets the UI compose, and so make a request it owes a change of state, only while the test waits on Compose: a
-     * read alone would wait out the socket's timeout for a request the UI could not make yet, or see none that it would.
+     * What [receive] reads of the UI's [type] requests, read as [whileComposing] does. When the UI sends none, the read
+     * times out as the socket is quiet; as the UI was composing all that time, the UI did not send it, which the failure
+     * says as [what] did not happen, with what the UI sent instead.
      */
-    private fun <T> whileComposing(read: () -> T): T {
+    private fun read(type: String, what: String, receive: () -> JSONObject): JSONObject {
+        val before = session.received.size
+        val start = System.currentTimeMillis()
+        try {
+            return whileComposing(what, receive)
+        } catch (e: AssertionError) {
+            val quiet = e.cause?.cause.let { it is IOException && it !is EOFException }
+            if (!quiet) throw e
+            val sent = session.received.drop(before).map { it.optString("t") }
+            throw AssertionError("$what: the UI sent no $type in the ${System.currentTimeMillis() - start} ms it composed, only $sent")
+        }
+    }
+
+    /** Fails if the UI sends a [type] for a while the test waits on Compose: see [whileComposing]. */
+    private fun noRequest(type: String) = whileComposing("the UI sends no $type") { session.assertNoRequest(type, QUIET_MS) }
+
+    /**
+     * What [read] reads from the engine's socket, read on another thread while this one waits on Compose; [what] it shows,
+     * which a failure says. The test's clock lets the UI compose, and so make a request it owes a change of state, only while
+     * the test waits on Compose: a read alone would wait out the socket's timeout for a request the UI could not make yet, or
+     * see none that it would.
+     */
+    private fun <T> whileComposing(what: String, read: () -> T): T {
         val result = CompletableFuture.supplyAsync { read() }
-        compose.waitUntil(READ_MS) { result.isDone }
+        waitFor("$what: the socket read ends", READ_MS) { result.isDone }
         return try {
             result.get()
         } catch (e: ExecutionException) {
-            throw e.cause ?: e
+            val cause = e.cause ?: e
+            throw if (cause is AssertionError) AssertionError("$what: ${cause.message}", cause) else cause
         }
+    }
+
+    /** Waits for [condition]; a failure says [what] did not happen, and what is on the screen instead: see [screen]. */
+    private fun waitFor(what: String, timeoutMs: Long = WAIT_MS, condition: () -> Boolean) {
+        try {
+            compose.waitUntil(timeoutMs, condition)
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("$what: not within $timeoutMs ms. ${screen()}", e)
+        }
+    }
+
+    /** Runs [action]; a failure of it, such as its accessibility checks', says what is on the screen too: see [screen]. */
+    private fun <T> withScreen(action: () -> T): T = try {
+        action()
+    } catch (e: Throwable) {
+        throw AssertionError("${e.message}\n${screen()}", e)
+    }
+
+    private fun checkAccessibility() = withScreen { compose.onRoot().tryPerformAccessibilityChecks() }
+
+    /** What is on the screen, for a failure to say: the window and its keyboard, the map's bounds, what has the focus, and every node. */
+    private fun screen(): String {
+        val view = compose.activity.window.decorView
+        val window = compose.runOnUiThread {
+            val insets = ViewCompat.getRootWindowInsets(view)
+            "window ${view.width}x${view.height}, keyboard shown ${insets?.isVisible(WindowInsetsCompat.Type.ime())}, " +
+                "its insets ${insets?.getInsets(WindowInsetsCompat.Type.ime())}"
+        }
+        val map = runCatching { compose.onAllNodes(mapShown()).fetchSemanticsNodes().map { it.boundsInRoot } }.getOrElse { "$it" }
+        // First, as a long tree's end can be cut off: the accessibility check's bounds are these, less what covers them
+        val targets = runCatching {
+            compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().map { node ->
+                val label = node.config.getOrNull(SemanticsProperties.ContentDescription) ?: node.config.getOrNull(SemanticsProperties.Text)
+                "$label at ${node.touchBoundsInRoot}"
+            }
+        }.getOrElse { "$it" }
+        val focused = runCatching { compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().map { it.config } }.getOrElse { "$it" }
+        val tree = runCatching { compose.onRoot(useUnmergedTree = true).printToString() }.getOrElse { "$it" }
+        return "On the screen: touch targets $targets; $window; the map at $map; focused $focused; the tree:\n$tree"
     }
 
     private fun keyboardShown(): Boolean {
@@ -530,7 +601,7 @@ class AppMapTest {
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
     private fun activate(label: SemanticsMatcher) {
-        compose.onRoot().tryPerformAccessibilityChecks()
+        checkAccessibility()
         compose.onNode(label and hasClickAction()).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
     }
 
@@ -547,8 +618,9 @@ class AppMapTest {
         const val QUIET_MS = 500
         const val WAIT_MS = 10_000L
 
-        // A read of the engine's socket: the socket's timeout, and the quiet that ends a receiveLast
-        const val READ_MS = 15_000L
+        // A read of the engine's socket: a receive's 10 s, a frame that comes just before their end, and the quiet that
+        // ends a receiveLast
+        const val READ_MS = 30_000L
         const val TIMEOUT_MS = 240_000L
     }
 }

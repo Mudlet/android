@@ -1,6 +1,7 @@
 package org.mudlet.android.engine
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -131,6 +132,8 @@ object EngineNotifications {
     }
 
     /** Shows the ongoing notification again, with the games as they are now, while the service is in the foreground. */
+    // mayPost checks POST_NOTIFICATIONS: lint does not look into it
+    @SuppressLint("MissingPermission")
     fun refresh(context: Context) {
         if (!engineShown || !mayPost(context)) return
         NotificationManagerCompat.from(context).notify(ENGINE_NOTIFICATION_ID, engineNotification(context))
@@ -146,6 +149,7 @@ object EngineNotifications {
      * under it, in a group of its own, and its tap opens that profile's game; [profile] is empty for one from none.
      */
     @JvmStatic
+    @SuppressLint("MissingPermission") // mayPost checks POST_NOTIFICATIONS: lint does not look into it
     fun postTell(context: Context, profile: String, title: String, text: String) {
         if (!mayPost(context)) {
             Log.i(EngineService.TAG, "not posting the tell '$title': the user has not allowed notifications")

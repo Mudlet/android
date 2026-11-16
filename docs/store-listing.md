@@ -74,7 +74,7 @@ Each claim, and what on `main` makes it true. "Not yet" claims are left out of a
 | Colours, ANSI to 24-bit | Yes | `app/src/main/kotlin/org/mudlet/android/ui/AnsiText.kt:30-34`; [`protocol.md`](protocol.md), "Runs" |
 | History and completion, keyboard stays open | Yes | `InputLine.kt:68-72`, `:188-224`; `GameScreenTest.aSendReachesTheEngineAndLeavesFocusOnTheInputLine` |
 | Masked password field | Yes | `InputLine.kt:154-180` |
-| Background running, tells as notifications | Yes | `engine-service/src/main/AndroidManifest.xml:13-24`; `EngineNotifications.kt:144-177` |
+| Background running, tells as notifications | Yes | `engine-service/src/main/AndroidManifest.xml:13-24`; `EngineNotifications.kt:147-181` |
 | Engine restarted and reconnected after a kill | Yes, with libmudlet | [`architecture.md`](architecture.md), "Restoring the session" |
 | Triggers, aliases, timers, Lua, packages, GMCP and the rest | Yes, in the engine | libmudlet's `THeadlessSession` runs Mudlet's own core ([`architecture.md`](architecture.md), "libmudlet as the engine"); editing scripts in the app is Phase F, so a player brings them in a package or through the game |
 | TalkBack labels, announced connection state, no gesture-only actions | Yes | "Accessibility" below |
@@ -287,7 +287,7 @@ device ([`roadmap.md`](roadmap.md), U3).
 
 **Crash reports and logs.** The app sends no crash report and no log. It writes to logcat, on the device: the engine's
 state changes and errors (`native/enginehost/MudletEngine.cpp`, `SocketBridge.cpp`), Mudlet's error console lines
-(`MudletEngine.cpp:222`), and the title of a tell it could not post (`EngineNotifications.kt:151`), never a password.
+(`MudletEngine.cpp:222`), and the title of a tell it could not post (`EngineNotifications.kt:155`), never a password.
 Google Play's Android vitals gathers crashes and ANRs through Android itself, from users who allow it; that is
 Google's, not the app's, and is not declared here. The release AAB carries the symbol tables those reports need
 (`app/build.gradle.kts:68-69`).
@@ -325,5 +325,5 @@ matches this one (AndroidX adds only its own signature permission, `DYNAMIC_RECE
 Play asks apps that declare a foreground service type to say why: `specialUse`, with the reason in
 `engine-service/src/main/AndroidManifest.xml:18-20` (keeping the player's connection to a text game open and running
 their scripts while the app is in the background). The user sees it as the engine's notification, which names the open
-game (or counts the open games) and has a Quit action (`EngineNotifications.kt:69-103`). If Play asks for a video, record the game screen, then Home, then the
+game (or counts the open games) and has a Quit action (`EngineNotifications.kt:70-104`). If Play asks for a video, record the game screen, then Home, then the
 notification, then a tell arriving while another app is in front: `adb shell screenrecord /sdcard/fgs.mp4`.

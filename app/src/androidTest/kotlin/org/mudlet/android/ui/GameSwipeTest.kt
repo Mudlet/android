@@ -8,6 +8,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -22,6 +23,9 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.withKeyDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
@@ -252,6 +256,7 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
     private fun left(name: String) = compose.onNode(hasText("$name says hello")).fetchSemanticsNode().boundsInRoot.left
 
     // On the input line of the game in front, as a keyboard's keys go to the focused field
+    @OptIn(ExperimentalTestApi::class)
     private fun ctrlTab(shift: Boolean = false) {
         compose.onNode(input).requestFocus()
         compose.onNode(input).performKeyInput {

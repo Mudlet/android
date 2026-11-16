@@ -28,11 +28,11 @@ import org.mudlet.android.protocol.ScriptWindows
 import org.mudlet.android.protocol.TextBoxContent
 
 /**
- * The script windows' part of [EngineClient] (docs/phase-f.md): the windows, button bars, commands and map the engine
- * describes, for the game screen to draw, and the requests about them. Main thread only, as EngineClient's state;
- * EngineClient hands it the engine's messages about them and tells it of each attach.
+ * The script windows' part of a [ProfileSession] (docs/phase-f.md): the windows, button bars, commands and map the
+ * profile's engine describes, for the game screen to draw, and the requests about them. Main thread only, as the
+ * session's state; the session hands it the messages about them and tells it of each attach.
  */
-object ScriptWindowsClient {
+class ScriptWindowsClient internal constructor(private val session: ProfileSession) {
     var state by mutableStateOf(ScriptWindows())
         private set
 
@@ -49,9 +49,6 @@ object ScriptWindowsClient {
     /** Why the engine refused the last map request, until the next one is sent or the player dismisses it. */
     var mapRefusal by mutableStateOf<String?>(null)
         private set
-
-    /** Fitted or stacked, or by the game area's width: the setting docs/phase-f.md's "Layout" offers the player. */
-    var layoutMode by mutableStateOf(LayoutMode.AUTO)
 
     // The size the game screen wants Mudlet's main window to be, and the one this engine instance last got
     private var wantedSize: MudletSize? = null
@@ -113,14 +110,6 @@ object ScriptWindowsClient {
         }
     }
 
-    /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
-    internal fun decode(message: EngineMessage.Image): ImageBitmap? = decodePng(message.png)
-
-    /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
-    internal fun decode(message: EngineMessage.Map): ImageBitmap? = decodePng(message.png)
-
-    private fun decodePng(png: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
-
     /** A new `map`, with what [decode] made of it. */
     internal fun onMap(message: EngineMessage.Map, bitmap: ImageBitmap?) {
         if (bitmap == null) Log.w(TAG, "the engine's map, ${message.w} by ${message.h}, did not decode")
@@ -128,7 +117,7 @@ object ScriptWindowsClient {
     }
 
     /**
-     * An `error` from the engine: the refusal of a map request is shown with the map that asked, this or
+     * An `error` from the engine: the refusal of a map request is shown with the map that asked, this or the session's
      * [AppMapClient]'s; that of [setMapScale] is only logged. A link's is only logged too, as a link a script let go of
      * or disabled, or one the player tapped as it went, is no fault of theirs; so is a text box's, which a script made
      * read-only or hid as the player typed.
@@ -136,7 +125,7 @@ object ScriptWindowsClient {
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
         val reason = message.message.substringAfter(':').trim()
-        if (AppMapClient.onRefused(request, reason)) return
+        if (session.appMap.onRefused(request, reason)) return
         if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
         // The box's own textBox follows, which puts back what it holds
@@ -210,39 +199,39 @@ object ScriptWindowsClient {
         wantedSize?.let(::setMainWindowSize)
         sentMapScale = 1.0
         setMapScale(wantedMapScale)
-        AppMapClient.onAttached(sameInstance)
+        session.appMap.onAttached(sameInstance)
     }
 
     /** Gives Mudlet's main window [size], unless this engine instance has it already; again to a new one. */
     fun setMainWindowSize(size: MudletSize) {
         wantedSize = size
         if (size == sentSize) return
-        sentSize = if (EngineClient.send(Requests.setMainWindowSize(size.w, size.h))) size else null
+        sentSize = if (session.send(Requests.setMainWindowSize(size.w, size.h))) size else null
     }
 
     /** Has the engine draw [map] at [scale] device pixels to each of the mapper window's, unless it does already. */
     fun setMapScale(scale: Double) {
         wantedMapScale = scale
         if (scale == sentMapScale) return
-        sentMapScale = if (EngineClient.send(Requests.setMapScale(scale))) scale else null
+        sentMapScale = if (session.send(Requests.setMapScale(scale))) scale else null
     }
 
     /** Tells the engine where the user window [name] is, unless it was told already. */
     fun placeUserWindow(name: String, placement: Placement) {
         if (sentPlacements[name] == placement) return
-        val sent = EngineClient.send(Requests.placeUserWindow(name, placement.x, placement.y, placement.w, placement.h, placement.floating))
+        val sent = session.send(Requests.placeUserWindow(name, placement.x, placement.y, placement.w, placement.h, placement.floating))
         if (sent) sentPlacements[name] = placement else sentPlacements.remove(name)
     }
 
     /** The close button of a user window: the engine hides it. */
     fun closeUserWindow(name: String) {
-        EngineClient.send(Requests.closeUserWindow(name))
+        session.send(Requests.closeUserWindow(name))
     }
 
-    /** Enter on the command line [name]. False as for [EngineClient.send]. */
+    /** Enter on the command line [name]. False as for [ProfileSession.send]. */
     fun sendWindowCommandLine(name: String, text: String): Boolean {
         flushTyping()
-        return EngineClient.send(Requests.sendWindowCommandLine(name, text))
+        return session.send(Requests.sendWindowCommandLine(name, text))
     }
 
     fun commandLineShown(name: String) {
@@ -266,7 +255,7 @@ object ScriptWindowsClient {
             return
         }
         val plain = TextBoxContent.plain(text)
-        val connection = EngineClient.sendOn(Requests.setTextBoxText(name, plain))
+        val connection = session.sendOn(Requests.setTextBoxText(name, plain))
         if (connection == 0) return
         typing.remove(name)
         state = state.textBoxTyped(name, plain, connection)
@@ -279,35 +268,35 @@ object ScriptWindowsClient {
 
     /**
      * A tap on the button or menu entry [button] of [buttonBars]: its command and script run, and a push-down one goes
-     * down or up, which the next [buttonBars] shows. False as for [EngineClient.send].
+     * down or up, which the next [buttonBars] shows. False as for [ProfileSession.send].
      */
     fun pressButton(button: Int): Boolean {
         flushTyping()
-        return EngineClient.send(Requests.pressButton(button))
+        return session.send(Requests.pressButton(button))
     }
 
-    /** A tap on the command [command] of [commands]: a checkable one is ticked or unticked. False as for [EngineClient.send]. */
+    /** A tap on the command [command] of [commands]: a checkable one is ticked or unticked. False as for [ProfileSession.send]. */
     fun activateCommand(command: Int): Boolean {
         flushTyping()
-        return EngineClient.send(Requests.activateCommand(command))
+        return session.send(Requests.activateCommand(command))
     }
 
     /**
      * What the player did on the map at [at], in the pixels of the last [map]: a tap selects the room there ([type]
-     * press), a double tap walks to it, and a wheel turn of [wheelY] zooms about it. False as for [EngineClient.send].
+     * press), a double tap walks to it, and a wheel turn of [wheelY] zooms about it. False as for [ProfileSession.send].
      */
     fun mapPointer(type: MapPointerType, at: MapPoint, wheelY: Int = 0): Boolean {
         mapRefusal = null
         flushTyping()
         val button = if (type == MapPointerType.WHEEL) 0 else POINTER_LEFT
-        return EngineClient.send(Requests.mapPointer(type, at.x, at.y, button, 0, wheelY))
+        return session.send(Requests.mapPointer(type, at.x, at.y, button, 0, wheelY))
     }
 
-    /** The map viewed only, or edited; the next [map] says which it is. False as for [EngineClient.send]. */
+    /** The map viewed only, or edited; the next [map] says which it is. False as for [ProfileSession.send]. */
     fun setMapViewOnly(viewOnly: Boolean): Boolean {
         mapRefusal = null
-        AppMapClient.viewOnlyAskedByMapper()
-        return EngineClient.send(Requests.setMapViewOnly(viewOnly))
+        session.appMap.viewOnlyAskedByMapper()
+        return session.send(Requests.setMapViewOnly(viewOnly))
     }
 
     /** The player read [mapRefusal]. */
@@ -319,23 +308,23 @@ object ScriptWindowsClient {
     fun requestLink(window: String, link: Int) {
         val asked = askedLinks.getOrPut(window) { HashSet() }
         if (!asked.add(link)) return
-        if (!EngineClient.send(Requests.getLink(link, window, EngineClient.newRequestId()))) asked.remove(link)
+        if (!session.send(Requests.getLink(link, window, session.newRequestId()))) asked.remove(link)
     }
 
     /**
      * A tap on the link [link] of the console [window], or with [item], that item picked from its menu: what it runs
-     * changes the console, whose next text shows it. False as for [EngineClient.send].
+     * changes the console, whose next text shows it. False as for [ProfileSession.send].
      */
     fun followLink(window: String, link: Int, item: Int? = null): Boolean {
         flushTyping()
-        return EngineClient.send(Requests.followLink(link, item, window, EngineClient.newRequestId()))
+        return session.send(Requests.followLink(link, item, window, session.newRequestId()))
     }
 
     /** Asks the engine for [request], unless it was asked already; [images] gets it. */
     fun requestImage(request: ImageRequest) {
         if (request in images || request in askedImages) return
-        val id = EngineClient.newRequestId()
-        if (EngineClient.send(Requests.getImage(request.path, request.w, request.h, request.frame, id))) {
+        val id = session.newRequestId()
+        if (session.send(Requests.getImage(request.path, request.w, request.h, request.frame, id))) {
             askedImages.add(request)
             pendingImages[id] = request
         }
@@ -349,10 +338,10 @@ object ScriptWindowsClient {
         flushTyping()
         if (type == PointerType.ENTER) {
             if (touchedLabel == label) return
-            touchedLabel?.let { EngineClient.send(Requests.pointer(it, PointerType.LEAVE, 0.0, 0.0, 0, 0, 0, 0)) }
+            touchedLabel?.let { session.send(Requests.pointer(it, PointerType.LEAVE, 0.0, 0.0, 0, 0, 0, 0)) }
             touchedLabel = label
         }
-        EngineClient.send(Requests.pointer(label, type, x, y, button, buttons, 0, 0))
+        session.send(Requests.pointer(label, type, x, y, button, buttons, 0, 0))
     }
 
     /** Follows a link the player tapped in a label's text, as [LabelLink] says. */
@@ -366,15 +355,28 @@ object ScriptWindowsClient {
 
             is LabelLink.NotRun -> Log.w(TAG, "the label link \"$href\" was not run: ${link.scheme}: is not a scheme Mudlet handles, and the link is not a Lua command")
 
-            else -> link.request(EngineClient.newRequestId())?.let {
+            else -> link.request(session.newRequestId())?.let {
                 flushTyping()
-                EngineClient.send(it)
+                session.send(it)
             }
         }
     }
 
-    private const val TAG = "ScriptWindows"
+    companion object {
+        /** Fitted or stacked, or by the game area's width: the setting docs/phase-f.md's "Layout" offers the player. */
+        var layoutMode by mutableStateOf(LayoutMode.AUTO)
 
-    // The images kept beyond those shown: few enough that sized ones asked again as labels resize do not pile up
-    private const val MAX_IMAGES = 64
+        /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
+        internal fun decode(message: EngineMessage.Image): ImageBitmap? = decodePng(message.png)
+
+        /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
+        internal fun decode(message: EngineMessage.Map): ImageBitmap? = decodePng(message.png)
+
+        private fun decodePng(png: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
+
+        private const val TAG = "ScriptWindows"
+
+        // The images kept beyond those shown: few enough that sized ones asked again as labels resize do not pile up
+        private const val MAX_IMAGES = 64
+    }
 }

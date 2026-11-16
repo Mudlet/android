@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
+import org.mudlet.android.ui.ProfileSession
 
 /**
  * The console with the windows the game's scripts draw around it, the input line, the quick bar and the connection bar,
@@ -54,11 +56,28 @@ import org.mudlet.android.ui.MudletTopBar
  * nor history. Why the engine could not send something shows over the console's foot, where the keyboard does not hide
  * it. The map is behind the console's text while the setting has it there ([BackgroundMap]), and the title bar's map
  * button brings it to the front over all but the title bar and the connection bar ([FullScreenMap]), input line and
- * quick bar included, until Back or the button again.
+ * quick bar included, until Back or the button again. All of it is the front profile's ([EngineClient.front]), and what
+ * the screen keeps of a profile, such as the typed line and where the console is scrolled to, waits for it while
+ * another is in front.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
-    val c = EngineClient
+    val front = EngineClient.front
+    val kept = rememberSaveableStateHolder()
+    val open = EngineClient.sessions.map { it.name }
+    val shown = remember { HashSet<String>() }
+    // A profile that closed takes what was kept of it along
+    LaunchedEffect(front.name, open) {
+        shown.add(front.name)
+        val closed = shown.filter { it !in open && it != front.name }
+        closed.forEach(kept::removeState)
+        shown.removeAll(closed.toSet())
+    }
+    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, onBack, onOpenSettings) }
+}
+
+@Composable
+private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSettings: () -> Unit) {
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
     var mapOpen by rememberSaveable { mutableStateOf(false) }
@@ -125,7 +144,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
                                 textSizeSp = textSizeSp,
                                 colors = colors,
                                 onTextSize = Settings.textSize::set,
-                                onScreenSize = c::setScreenSize,
+                                onScreenSize = EngineClient::setScreenSize,
                                 consoleModifier,
                             ) { if (mapBehind) BackgroundMap(colors) }
                         }
@@ -162,10 +181,10 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
                 }
             }
             ConnectionBar(
-                ConnectionState.of(engineAttached = c.enginePid > 0, connection = c.status["connection"]),
-                canReconnect = c.canReconnect,
+                ConnectionState.of(engineAttached = EngineClient.enginePid > 0, connection = c.status["connection"]),
+                canReconnect = EngineClient.canReconnect,
                 onReconnect = {
-                    c.reconnect(passwords::get) { error ->
+                    EngineClient.reconnect(passwords::get) { error ->
                         scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_reconnect_refused, error), withDismissAction = true) }
                     }
                 },

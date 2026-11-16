@@ -84,7 +84,7 @@ private const val MAX_ROW_SHARE = 0.25f
  */
 @Composable
 fun ScriptButtonBars(modifier: Modifier = Modifier, content: @Composable (Modifier, fitted: Boolean) -> Unit) {
-    val bars = ScriptWindowsClient.buttonBars
+    val bars = EngineClient.front.windows.buttonBars
     BoxWithConstraints(modifier) {
         val fitted = WindowLayout.fitted(ScriptWindowsClient.layoutMode, maxWidth.value)
         val sides = remember(bars, fitted) { ButtonBarLayout.of(bars, fitted).groupBy { it.side } }
@@ -188,8 +188,8 @@ private fun BarButtonView(button: BarButton, unnamed: String, modifier: Modifier
     val down = button.pushDown && button.checked
     val action = when {
         button.menu -> Modifier.clickable(enabled = engine, onClickLabel = stringResource(R.string.bar_open_menu), role = Role.Button) { menuOpen = true }
-        button.pushDown -> Modifier.toggleable(value = button.checked, enabled = engine, role = Role.Switch) { ScriptWindowsClient.pressButton(button.id) }
-        else -> Modifier.clickable(enabled = engine, role = Role.Button) { ScriptWindowsClient.pressButton(button.id) }
+        button.pushDown -> Modifier.toggleable(value = button.checked, enabled = engine, role = Role.Switch) { EngineClient.front.windows.pressButton(button.id) }
+        else -> Modifier.clickable(enabled = engine, role = Role.Button) { EngineClient.front.windows.pressButton(button.id) }
     }
     val name = if (button.name.isEmpty()) Modifier.semantics { contentDescription = unnamed } else Modifier
     Box(modifier.padding(2.dp)) {
@@ -209,8 +209,8 @@ private fun BarButtonView(button: BarButton, unnamed: String, modifier: Modifier
             FolderMenu(button, unnamed, expanded = menuOpen) { picked ->
                 menuOpen = false
                 // As the GUI: the entry picked runs, then the folder's own script, once its menu has closed
-                picked?.let { ScriptWindowsClient.pressButton(it.id) }
-                ScriptWindowsClient.pressButton(button.id)
+                picked?.let { EngineClient.front.windows.pressButton(it.id) }
+                EngineClient.front.windows.pressButton(button.id)
             }
         }
     }

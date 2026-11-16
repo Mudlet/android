@@ -31,7 +31,6 @@ import org.mudlet.android.protocol.AddonCommand
 import org.mudlet.android.protocol.CommandEntry
 import org.mudlet.android.protocol.CommandMenu
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.ScriptWindowsClient
 
 /**
  * The top bar's Extensions button, while the profile's packages added commands the GUI shows: a menu of them, nested by
@@ -40,7 +39,7 @@ import org.mudlet.android.ui.ScriptWindowsClient
  */
 @Composable
 fun ScriptCommandsButton() {
-    val commands = ScriptWindowsClient.commands
+    val commands = EngineClient.front.windows.commands
     val entries = remember(commands) { CommandMenu.of(commands) }
     if (entries.isEmpty()) return
     var expanded by remember { mutableStateOf(false) }
@@ -61,7 +60,7 @@ fun ScriptCommandsButton() {
 
                     is CommandEntry.Command -> CommandItem(entry.command) {
                         expanded = false
-                        ScriptWindowsClient.activateCommand(entry.command.id)
+                        EngineClient.front.windows.activateCommand(entry.command.id)
                     }
                 }
             }

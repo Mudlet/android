@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 /** What EngineClient holds for the UI from the engine's messages, read on the main thread as the UI reads it. */
 @RunWith(AndroidJUnit4::class)
 class EngineClientTest {
-    private val fake = FakeEngineRule()
+    private val fake = FakeEngineRule(open = listOf(PROFILE))
 
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
@@ -27,12 +27,10 @@ class EngineClientTest {
 
     @Before
     fun attach() {
-        onMain {
-            // EngineClient lives as long as the process
-            EngineClient.typedLineMoved()
-            EngineClient.attach()
-        }
+        onMain { EngineClient.attach() }
         session = fake.engine.nextSession()
+        // EngineClient lives as long as the process, and keeps the session of a profile that stays open
+        onMain { EngineClient.front.typedLineMoved() }
         session.synced(0)
     }
 
@@ -41,34 +39,34 @@ class EngineClientTest {
 
     @Test
     fun moveTypedLineHoldsUntilTheLineHasMovedIt() {
-        assertFalse(onMain { EngineClient.moveTypedLine })
+        assertFalse(onMain { EngineClient.front.moveTypedLine })
         session.send(JSONObject().put("t", "moveTypedLine"))
-        waitUntil("moveTypedLine set") { EngineClient.moveTypedLine }
-        onMain { EngineClient.typedLineMoved() }
-        assertFalse(onMain { EngineClient.moveTypedLine })
+        waitUntil("moveTypedLine set") { EngineClient.front.moveTypedLine }
+        onMain { EngineClient.front.typedLineMoved() }
+        assertFalse(onMain { EngineClient.front.moveTypedLine })
     }
 
     @Test
     fun aNewEngineDropsAMoveTheLineHasNotMade() {
         session.send(JSONObject().put("t", "moveTypedLine"))
-        waitUntil("moveTypedLine set") { EngineClient.moveTypedLine }
+        waitUntil("moveTypedLine set") { EngineClient.front.moveTypedLine }
         fake.engine.instance = "after-move"
         session.close()
         fake.engine.nextSession().synced(0)
-        waitUntil("moveTypedLine dropped by the new engine") { !EngineClient.moveTypedLine }
+        waitUntil("moveTypedLine dropped by the new engine") { !EngineClient.front.moveTypedLine }
     }
 
     @Test
     fun theMapSearchsRefusalIsNoProfileRequestsAnswer() {
-        // The fake has answered the hello before the link has read it, and a request sent sooner is dropped
-        waitUntil("the link attached") { EngineClient.linkState.startsWith("attached to pid") }
+        // The fake has answered the hellos before the links have read them, and a request sent sooner is dropped
+        waitUntil("the links attached") { EngineClient.linkState.startsWith("attached to pid") && EngineClient.front.linkState.startsWith("attached") }
         val answers = LinkedBlockingQueue<String>()
         fun askProfile(): JSONObject {
             onMain { EngineClient.deleteProfile("Nobody") { answers.add(it ?: "done") } }
             return session.receive("deleteProfile")
         }
         fun askSearch(): JSONObject {
-            assertTrue("the search was not sent", onMain { AppMapClient.findRooms("hall") })
+            assertTrue("the search was not sent", onMain { EngineClient.front.appMap.findRooms("hall") })
             return session.receive("findRooms")
         }
         // The request whose id is behind is asked again until its id reaches the other's, as ids from separate
@@ -85,8 +83,8 @@ class EngineClientTest {
         session.refuse(profile, "no such profile")
         assertEquals("deleteProfile: no such profile", answers.poll(10, TimeUnit.SECONDS))
         onMain {
-            AppMapClient.dismissRefusal()
-            AppMapClient.closeSearch()
+            EngineClient.front.appMap.dismissRefusal()
+            EngineClient.front.appMap.closeSearch()
         }
     }
 
@@ -106,5 +104,6 @@ class EngineClientTest {
 
     companion object {
         const val TIMEOUT_MS = 60_000L
+        const val PROFILE = "Client"
     }
 }

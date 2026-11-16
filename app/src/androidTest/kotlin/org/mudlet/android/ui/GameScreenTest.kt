@@ -128,7 +128,7 @@ class GameScreenTest {
 
         // The oldest lines are dropped as new ones come: the lines in view must not move with them
         compose.onNode(console).performScrollToIndex(100)
-        val held = compose.runOnIdle { EngineClient.lines[100].text }
+        val held = compose.runOnIdle { EngineClient.front.lines[100].text }
         waitUntilDisplayed(held)
         for (n in total + 2..total + 4) session.line(n.toLong(), "line $n")
         waitForJumpButton(newLines = 3)
@@ -202,7 +202,7 @@ class GameScreenTest {
     fun theConnectionBarShowsTheStateAndItsButtonsConnectAndDisconnect() {
         session.status("connection", "disconnected")
         waitUntilDisplayed(string(R.string.connection_disconnected))
-        compose.runOnIdle { EngineClient.connect("127.0.0.1", 4000, false) }
+        compose.runOnIdle { EngineClient.front.connect("127.0.0.1", 4000, false) }
         session.receive("connect")
         session.status("connection", "connecting 127.0.0.1:4000")
         waitUntilDisplayed(compose.activity.getString(R.string.connection_connecting_to, "127.0.0.1:4000"))

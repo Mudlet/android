@@ -11,7 +11,6 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.ScriptWindowsClient
 import org.mudlet.android.ui.UiLine
 
 /**
@@ -81,14 +80,16 @@ class SmokeTestReceiver : BroadcastReceiver() {
         return if (profileAnswer == "waiting") null else profileAnswer
     }
 
-    private fun sendOrError(message: JSONObject): String? = notSentError(EngineClient.send(message))
+    // To the front profile, the one the connect opened
+    private fun sendOrError(message: JSONObject): String? = notSentError(EngineClient.front.send(message))
 
-    private fun notSentError(sent: Boolean): String? = if (sent) null else "the UI is not attached to the engine: ${EngineClient.linkState}"
+    private fun notSentError(sent: Boolean): String? = if (sent) null else "the UI is not attached to the profile: ${EngineClient.front.linkState}"
 
     private fun state(): JSONObject {
         val c = EngineClient
+        val p = c.front
         val lines = JSONArray()
-        c.lines.takeLast(LINES).forEach { lines.put(it.toJson()) }
+        p.lines.takeLast(LINES).forEach { lines.put(it.toJson()) }
         return JSONObject()
             .put("link", c.linkState)
             .put("uiPid", Process.myPid())
@@ -97,9 +98,10 @@ class SmokeTestReceiver : BroadcastReceiver() {
             .put("engineLosses", c.engineLosses)
             .put("fgs", c.fgsState)
             .put("notifyCount", c.notifyCount)
-            .put("status", JSONObject(c.status.toMap()))
+            // The engine's statuses and the front profile's, as the self-test screen shows them
+            .put("status", JSONObject(c.engineStatus + p.status))
             .put("lines", lines)
-            .put("tail", c.tail?.toJson() ?: JSONObject.NULL)
+            .put("tail", p.tail?.toJson() ?: JSONObject.NULL)
             .put("profiles", JSONArray(c.profiles.orEmpty().map { it.toJson() }))
             .put("profileAnswer", profileAnswer)
             .put("windows", windows())
@@ -107,7 +109,7 @@ class SmokeTestReceiver : BroadcastReceiver() {
 
     // The script windows the UI knows of, each with the text of its last rows if it is a console
     private fun windows(): JSONArray {
-        val state = ScriptWindowsClient.state
+        val state = EngineClient.front.windows.state
         val windows = JSONArray()
         for (w in state.windows) {
             val rows = state.text[w.name]?.lines.orEmpty().takeLast(WINDOW_ROWS).map { it.text }

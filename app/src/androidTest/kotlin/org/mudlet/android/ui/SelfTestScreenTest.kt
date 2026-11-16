@@ -42,7 +42,8 @@ import org.mudlet.android.protocol.RUN_UNDERLINE
  */
 @RunWith(AndroidJUnit4::class)
 class SelfTestScreenTest {
-    private val fake = FakeEngineRule()
+    // The screen shows the front profile's console
+    private val fake = FakeEngineRule(open = listOf("Self-test"))
     private val compose = createAndroidComposeRule<MainActivity>()
 
     // The fake engine first, so the Activity attaches to it; the permission (Android 13 and later) so that its dialog
@@ -117,7 +118,7 @@ class SelfTestScreenTest {
         assertEquals(FakeEngine.FIRST_INSTANCE, second.hello.optString("instance"))
         assertEquals(1L, second.hello.optLong("lastSeq"))
         second.line(1, "from the new engine")
-        second.status("restore", "reconnected 127.0.0.1:4000")
+        second.engineStatus("restore", "reconnected 127.0.0.1:4000")
         second.synced(1)
         waitForText("--- Reconnected to 127.0.0.1:4000 after the engine restarted ---")
         compose.onNodeWithText("--- new engine instance second ---").assertExists()
@@ -176,16 +177,19 @@ class SelfTestScreenTest {
     }
 }
 
-/** A [FakeEngine] that EngineClient attaches to instead of the engine, which is never started. */
-class FakeEngineRule : ExternalResource() {
+/**
+ * A [FakeEngine] that EngineClient attaches to instead of the engine, which is never started, with the profiles [open]
+ * open from the start.
+ */
+class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalResource() {
     lateinit var engine: FakeEngine
-    private lateinit var previous: () -> org.mudlet.android.protocol.Transport
+    private lateinit var previous: (String) -> org.mudlet.android.protocol.Transport
 
     override fun before() {
         EngineClient.init(InstrumentationRegistry.getInstrumentation().targetContext)
         // So MainActivity does not start the real engine
         EngineClient.engineWanted = false
-        engine = FakeEngine()
+        engine = FakeEngine(open)
         previous = EngineClient.connector
         EngineClient.connector = engine::connect
     }

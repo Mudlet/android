@@ -150,7 +150,7 @@ class ScreenReaderTest {
         // The answer to the app's own runLua is no script's result
         session.reply("luaResult", "ran", all.getLong("id"))
         line("after the answer")
-        compose.runOnIdle { assertEquals("a script's", EngineClient.lastLuaResult) }
+        compose.runOnIdle { assertEquals("a script's", EngineClient.front.lastLuaResult) }
 
         activate(hasContentDescription(string(R.string.settings_title)))
         activate(hasText(string(R.string.settings_read_new_text)), scroll = true)

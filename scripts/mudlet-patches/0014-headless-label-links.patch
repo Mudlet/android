@@ -362,7 +362,7 @@ index 0887446..03ea83c 100644
      // no profile open. A getter, so it may be called from any handler.
      bool timeStampsShown() const;
 diff --git a/src/headless/THeadlessSessionLinks.cpp b/src/headless/THeadlessSessionLinks.cpp
-index 0c244c7..e345450 100644
+index 0c244c7..5d6fc98 100644
 --- a/src/headless/THeadlessSessionLinks.cpp
 +++ b/src/headless/THeadlessSessionLinks.cpp
 @@ -22,6 +22,9 @@
@@ -375,7 +375,7 @@ index 0c244c7..e345450 100644
  
  #include <QFile>
  #include <QPointer>
-@@ -138,6 +141,62 @@ THeadlessSession::LinkResult THeadlessSession::followWindowLink(const QString& w
+@@ -138,6 +141,55 @@ THeadlessSession::LinkResult THeadlessSession::followWindowLink(const QString& w
      return LinkResult::failed;
  }
  
@@ -396,13 +396,6 @@ index 0c244c7..e345450 100644
 +        //: Error from a frontend with no window asked to follow a link in a label whose text has no link to that address; %1 is the label's name, %2 the link it gave
 +        mErrorString = tr("The label \"%1\" has no link to \"%2\".").arg(label, href);
 +        return LinkResult::unknown;
-+    }
-+    // The GUI puts a prompt: link's text in its hidden-input box while the game hides what is typed; with no window
-+    // there is no such box, and the main command line takes nothing then, so the link is not followed at all
-+    if (mpHost->passwordEntryWanted() && TLabelModel::linkScheme(href) == qsl("prompt")) {
-+        //: Error from a frontend with no window asked to follow a prompt: link in a label, which puts text on the input line, while the game hides what is typed, as for a password
-+        mErrorString = tr("The game is hiding input, so the link's text was not put on the input line.");
-+        return LinkResult::failed;
 +    }
 +    pView->visitLabelLink(label, href);
 +    QString errorText;

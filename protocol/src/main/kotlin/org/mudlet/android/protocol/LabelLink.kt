@@ -36,5 +36,5 @@ private fun trimmed(link: String) = link.trim { (it.isWhitespace() && it !in '\u
 private fun scheme(link: String): String? {
     val href = trimmed(link)
     val colon = href.indexOf(':')
-    return if (colon > 0) href.substring(0, colon).lowercase() else null
+    return if (colon > 0) href.substring(0, colon) else null
 }

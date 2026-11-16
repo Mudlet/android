@@ -1552,7 +1552,7 @@ QString MudletProfile::followLabelLink(const QString& label, const QString& href
             return QStringLiteral("the UI opens web links");
         }
     }
-    return mSession->followLabelLink(label, href) == THeadlessSession::LinkResult::ran ? QString() : mSession->errorString();
+    return mSession->followLabelLink(label, href) == THeadlessSession::LinkResult::failed ? mSession->errorString() : QString();
 }
 
 QString MudletProfile::pointer(const QString& window, const PointerEvent& event)

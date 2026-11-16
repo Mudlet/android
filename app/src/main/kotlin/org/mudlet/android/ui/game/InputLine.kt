@@ -256,7 +256,6 @@ fun InputLine(
     }
     LaunchedEffect(takeFocus) {
         if (!takeFocus) return@LaunchedEffect
-        if (!hiddenInput) focus.requestFocus()
         onFocusTaken()
     }
 

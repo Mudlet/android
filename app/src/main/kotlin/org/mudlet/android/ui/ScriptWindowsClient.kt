@@ -401,7 +401,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
 
             is LabelLink.Engine -> {
                 flushTyping()
-                if (session.send(Requests.followLabelLink(label, link.href, session.newRequestId())) && link.prompts) focusInput = true
+                if (session.send(Requests.followLabelLink(label, link.href.trim(), session.newRequestId())) && link.prompts) focusInput = true
             }
         }
     }

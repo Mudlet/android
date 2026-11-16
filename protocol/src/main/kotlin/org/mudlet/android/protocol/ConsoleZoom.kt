@@ -21,7 +21,7 @@ data class ConsoleZoom(val chosen: Int, val scripts: Int, val inFlight: Set<Int>
         size == chosen -> copy(inFlight = emptySet()) to null
         size in inFlight -> this to null
         size == scripts && inFlight.isNotEmpty() -> this to null
-        else -> ConsoleZoom(chosen, size, setOf(chosen)) to chosen
+        else -> copy(scripts = size, inFlight = setOf(chosen)) to chosen
     }
 
     /** The player picks [size]: the state after it, which awaits the engine's report of [size]. */

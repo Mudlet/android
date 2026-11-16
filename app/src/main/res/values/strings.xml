@@ -426,6 +426,50 @@
     <!-- Words a player might search the settings for to find "Prepare trigger variables as scripts read them", besides the words of its name and
          description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_lazy_trigger_variables_keywords">performance, speed, faster, matches, multimatches, Lua</string>
+    <!-- A switch on a game's Advanced page: a script's errors also appear in the game's text -->
+    <string name="settings_show_script_errors">Show script errors in the game\'s text</string>
+    <!-- Under "Show script errors in the game's text", what the switch does -->
+    <string name="settings_show_script_errors_hint">So you can see why a script or package is not working.</string>
+    <!-- Words a player might search the settings for to find "Show script errors in the game's text", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_show_script_errors_keywords">Lua, error, debug, bug, broken, package</string>
+    <!-- A page of each game's own settings: the certificate errors a secure connection lets past, and what the game
+         may install or play on the phone -->
+    <string name="settings_security">Security</string>
+    <!-- Under "Security" in the list of settings pages, what that page holds -->
+    <string name="settings_security_summary">Certificates, and what the game may install or play</string>
+    <!-- A switch on a game's Security page: let the game install its own script packages, such as its own interface -->
+    <string name="settings_game_installs_packages">Let the game install its packages</string>
+    <!-- Under "Let the game install its packages", what the switch does. GMCP is a game protocol and stays as it is. -->
+    <string name="settings_game_installs_packages_hint">Some games send their own interface or scripts over GMCP, which Mudlet installs.</string>
+    <!-- Words a player might search the settings for to find "Let the game install its packages", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_game_installs_packages_keywords">interface, GUI, scripts, download, server</string>
+    <!-- A switch on a game's Security page: let the game play its own sounds and music -->
+    <string name="settings_game_plays_media">Let the game play sounds and music</string>
+    <!-- Under "Let the game play sounds and music", what the switch does. GMCP is a game protocol and stays as it
+         is. -->
+    <string name="settings_game_plays_media_hint">The sounds and music a game sends over GMCP, which Mudlet downloads. Needs GMCP on the Connection page.</string>
+    <!-- Words a player might search the settings for to find "Let the game play sounds and music", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_game_plays_media_keywords">audio, sound, music, media, download</string>
+    <!-- A switch on a game's Security page: accept the game's secure certificate even after it has expired -->
+    <string name="settings_accept_expired_certificate">Accept an expired certificate</string>
+    <!-- Under "Accept an expired certificate", what the switch does and why it is a risk -->
+    <string name="settings_accept_expired_certificate_hint">Connects securely to a game whose certificate has run out. Someone could pretend to be the game.</string>
+    <!-- Words a player might search the settings for to find the three certificate switches on the Security page,
+         besides the words of their names and descriptions, separated by commas. Use the words a player of your
+         language would search for. -->
+    <string name="settings_certificate_keywords">TLS, SSL, secure, encryption, certificate, error</string>
+    <!-- A switch on a game's Security page: accept a certificate the game made itself rather than one a certificate
+         authority issued -->
+    <string name="settings_accept_self_signed_certificate">Accept a self-signed certificate</string>
+    <!-- Under "Accept a self-signed certificate", what the switch does and why it is a risk -->
+    <string name="settings_accept_self_signed_certificate_hint">Connects securely to a game that signed its own certificate. Someone could pretend to be the game.</string>
+    <!-- A switch on a game's Security page: ignore every certificate error -->
+    <string name="settings_accept_any_certificate">Ignore all certificate errors</string>
+    <!-- Under "Ignore all certificate errors", what the switch does and why it is a risk -->
+    <string name="settings_accept_any_certificate_hint">The connection is still encrypted, but nothing checks that it goes to the game. Use only if you must.</string>
     <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
          game's text, the map behind the text). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>

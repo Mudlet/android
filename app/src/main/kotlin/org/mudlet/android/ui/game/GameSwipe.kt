@@ -63,9 +63,10 @@ class GameSwipe(private val scope: CoroutineScope) {
 
     /**
      * The finger lifted, flinging left (-1), right (1) or not (0). Slides in [leftward], the game a slide to the left
-     * brings, or [rightward], with [switch] bringing it to the front, and is true; false when it springs back.
+     * brings, or [rightward], with [switch] bringing it to the front and [onSwitched] following once it has; otherwise
+     * springs back.
      */
-    fun release(fling: Int, leftward: String?, rightward: String?, switch: (String) -> Boolean): Boolean {
+    fun release(fling: Int, leftward: String?, rightward: String?, switch: (String) -> Boolean, onSwitched: () -> Unit) {
         val direction = when {
             fling != 0 -> if (fling.toFloat() == sign(offset)) fling else 0
             offset <= -COMMIT -> -1
@@ -79,14 +80,17 @@ class GameSwipe(private val scope: CoroutineScope) {
         }
         if (target == null) {
             settle()
-            return false
+            return
         }
-        val out = direction.toFloat()
         launchSlide {
-            animate(offset, out, animationSpec = tween(OUT_MS)) { value, _ -> offset = value }
-            if (switch(target)) arriving(out < 0) else settling()
+            animate(offset, direction.toFloat(), animationSpec = tween(OUT_MS)) { value, _ -> offset = value }
+            if (switch(target)) {
+                onSwitched()
+                arriving(direction < 0)
+            } else {
+                settling()
+            }
         }
-        return true
     }
 
     /** Springs back to rest, as when the system took the drag for its back gesture. */
@@ -124,7 +128,7 @@ private val FLING_VELOCITY = 500.dp
 
 /**
  * Takes a horizontal drag for [swipe], with the games a slide to the left and to the right brings ([leftward] and
- * [rightward]), which [switch] brings to the front; [onSwitched] follows each switch it starts. Only a drag past the
+ * [rightward]), which [switch] brings to the front; [onSwitched] follows each switch that happens. Only a drag past the
  * touch slop is taken, so a tap still taps, and a drag the system takes back, as for its back gesture, springs back.
  * Read on each drag, so the lambdas may give what changes.
  */
@@ -152,13 +156,13 @@ fun Modifier.gameSwipe(
             moved(change.positionChange().x / width)
             change.consume()
         }
-        if (!lifted) {
+        if (lifted) {
+            val speed = velocity.calculateVelocity().x
+            val fling = if (abs(speed) >= FLING_VELOCITY.toPx()) sign(speed).toInt() else 0
+            swipe.release(fling, leftward(), rightward(), switch, onSwitched)
+        } else {
             swipe.settle()
-            return@awaitEachGesture
         }
-        val speed = velocity.calculateVelocity().x
-        val fling = if (abs(speed) >= FLING_VELOCITY.toPx()) sign(speed).toInt() else 0
-        if (swipe.release(fling, leftward(), rightward(), switch)) onSwitched()
     }
 }
 

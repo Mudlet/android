@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -27,6 +28,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -185,6 +187,32 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
     }
 
     @Test
+    fun theConsoleFollowsTheFinger_givesOnlyALittleAtTheEnd_andADragTheSystemTakesBackSwitchesNothing() {
+        show(BETA.name)
+        val screen = compose.onRoot().fetchSemanticsNode().size.width
+        val rest = left(BETA.name)
+        dragPill()
+        // Most of the way, less the touch slop
+        assertTrue("the console at ${left(BETA.name)}, from $rest", left(BETA.name) < rest - screen * 0.5f)
+        // As the system's back gesture takes it
+        compose.onNode(pill).performTouchInput { cancel() }
+        compose.waitForIdle()
+        stillOn(BETA.name)
+        assertEquals(rest, left(BETA.name), 1f)
+        assertEquals(0, ticks())
+
+        swipePill(towardStart = true, rtl = false)
+        switchedTo(GAMMA.name)
+        dragPill()
+        val shift = rest - left(GAMMA.name)
+        assertTrue("the console moved $shift of $screen with no game beside", shift > 0 && shift < screen * 0.15f + 1)
+        compose.onNode(pill).performTouchInput { up() }
+        compose.waitForIdle()
+        stillOn(GAMMA.name)
+        assertEquals(rest, left(GAMMA.name), 1f)
+    }
+
+    @Test
     fun ctrlTabBringsTheNextGameAndCtrlShiftTabThePrevious_withoutGoingRound() {
         show(ALPHA.name)
         ctrlTab()
@@ -214,6 +242,15 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
         stillOn(BETA.name)
     }
 
+    // Most of the pill's width toward the left, in steps, the finger still down
+    private fun dragPill() = compose.onNode(pill).performTouchInput {
+        down(center)
+        repeat(10) { moveBy(Offset(-width * 0.09f, 0f)) }
+    }
+
+    // Where the console's line of the profile [name] starts
+    private fun left(name: String) = compose.onNode(hasText("$name says hello")).fetchSemanticsNode().boundsInRoot.left
+
     // On the input line of the game in front, as a keyboard's keys go to the focused field
     private fun ctrlTab(shift: Boolean = false) {
         compose.onNode(input).requestFocus()
@@ -225,7 +262,7 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
     }
 
     private companion object {
-        // Short of GameSwipe.COMMIT, with the touch slop taken off
+        // Short of GameSwipe.COMMIT, the more so with the touch slop taken off
         const val SHORT = 0.35f
     }
 }

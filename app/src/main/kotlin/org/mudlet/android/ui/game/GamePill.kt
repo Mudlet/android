@@ -66,7 +66,7 @@ fun GamePill(
     modifier: Modifier = Modifier,
 ) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    // The game a slide to the left brings, as the content moves on toward the start in left-to-right layouts
+    // What a slide to the left brings: the next game in left-to-right layouts, where the games run left to right
     val leftward by rememberUpdatedState(if (rtl) previous else next)
     val rightward by rememberUpdatedState(if (rtl) next else previous)
     val currentSwitch by rememberUpdatedState(onSwitch)

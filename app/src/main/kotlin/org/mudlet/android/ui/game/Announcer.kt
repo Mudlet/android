@@ -125,7 +125,7 @@ object Announcer {
 
 // After all of the game screen, the button bars too: TalkBack's order has the region beside the bars, the script
 // windows and the console, not after a group of them, so only a larger index puts it last
-internal const val ANNOUNCEMENT_TRAVERSAL_INDEX = BARS_TRAVERSAL_INDEX + 1f
+internal const val ANNOUNCEMENT_TRAVERSAL_INDEX = -1f
 
 /**
  * Has TalkBack say [Announcer.current], through two live regions, each a node 1 dp square that shows nothing: an

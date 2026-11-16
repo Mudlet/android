@@ -15,6 +15,17 @@ class MapFitTest {
     }
 
     @Test
+    fun theMapIsAskedForAtTheScaleItIsDrawnAtWithinWhatTheEngineTakes() {
+        assertEquals(3.0, MapFit(200, 100, PxRect(50f, 20f, 600f, 400f)).renderScale, 0.0)
+        // A small mapper filling a phone's pane: drawn 6.17 times larger
+        assertEquals(6.17, MapFit(175, 150, PxRect(0f, 0f, 1080f, 2000f)).renderScale, 1e-9)
+        // Within the engine's 1 to 8, and 1 for no size
+        assertEquals(1.0, MapFit(400, 300, PxRect(0f, 0f, 200f, 150f)).renderScale, 0.0)
+        assertEquals(MapFit.MAX_RENDER_SCALE, MapFit(20, 20, PxRect(0f, 0f, 1000f, 1000f)).renderScale, 0.0)
+        assertEquals(1.0, MapFit(0, 100, PxRect(0f, 0f, 100f, 100f)).renderScale, 0.0)
+    }
+
+    @Test
     fun aTouchGoesBackToThePointOfTheFrameUnderIt() {
         val fit = MapFit(200, 100, PxRect(50f, 20f, 600f, 400f))
         assertEquals(MapPoint(0.0, 0.0), fit.toFrame(50f, 70f))

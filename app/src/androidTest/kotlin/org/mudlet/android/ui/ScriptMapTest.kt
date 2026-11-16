@@ -115,6 +115,23 @@ class ScriptMapTest {
     }
 
     @Test
+    fun theMapIsAskedForAtTheScaleItIsShownAtSoItIsNotBlurred() {
+        // A small docked mapper, as the starter UI's: a page, which fills the pane, many times Mudlet's pixels
+        session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", w = SMALL_W, h = SMALL_H).put("inDock", true)), full = true)
+        session.send(mapFrame(SMALL_W, SMALL_H))
+        val tab = hasText(string(R.string.map_title)) and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tab).fetchSemanticsNodes().isNotEmpty() }
+        activate(tab)
+        val map = drawnMap()
+        assertScaleAsked(bounds(map), SMALL_W, SMALL_H)
+
+        // The UI went and came back to the same engine, which went back to the window's pixels as the UI went
+        session.close()
+        session = fake.engine.nextSession()
+        assertScaleAsked(bounds(map), SMALL_W, SMALL_H)
+    }
+
+    @Test
     fun aDoubleTapWalksToTheRoomUnderItAfterSelectingItAndTwoTapsApartSelectEach() {
         showMap()
         val map = drawnMap()
@@ -324,6 +341,15 @@ class ScriptMapTest {
         return Offset(left + (x * scale).toFloat(), top + (y * scale).toFloat())
     }
 
+    /** The engine was last asked to draw the map at the scale a [w] by [h] frame is shown at in [bounds], at most the engine's 8. */
+    private fun assertScaleAsked(bounds: Rect, w: Int, h: Int) {
+        val shown = min(bounds.width / w, bounds.height / h).toDouble()
+        assertTrue("the map is shown at $shown, not larger than Mudlet's pixels", shown > 1.1)
+        val asked = session.receiveLast("setMapScale", readPast = true).getDouble("scale")
+        // Hundredths, down, of a box that rounds to the screen's pixels
+        assertEquals("the map shown at $shown is asked for at $asked", shown.coerceAtMost(8.0), asked, 0.02)
+    }
+
     private fun assertPoint(x: Double, y: Double, event: JSONObject, within: Double = POINTS) {
         assertEquals("x of $event", x, event.getDouble("x"), within)
         assertEquals("y of $event", y, event.getDouble("y"), within)
@@ -355,6 +381,10 @@ class ScriptMapTest {
         const val INSTANCE = "fake-map"
         const val MAP_W = 400
         const val MAP_H = 300
+
+        // Small enough to be drawn larger in a pane on any screen
+        const val SMALL_W = 200
+        const val SMALL_H = 150
 
         // A frame's pixels a touch may land from where it was aimed, rounding to the screen's
         const val POINTS = 1.5

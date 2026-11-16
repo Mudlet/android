@@ -193,10 +193,13 @@ def buttons_and_commands(c):
 
 def no_map(c):
     """The stand-in has no map: it refuses presses on it, switching it to editing and downloading it, once their fields are
-    right. It takes a size for the app's map, and tells the UI there is nothing to draw, until that UI goes."""
+    right. It takes a size for the app's map, and tells the UI there is nothing to draw, until that UI goes, and a scale
+    for the mapper's map."""
+    # Refused, its error would come before the appMap
+    c.send({"t": "setMapScale", "scale": 2.75})
     c.send({"t": "setAppMapSize", "w": 360, "h": 640, "scale": 2.75})
     m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
-    check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"the app's map has nothing to draw: {m}")
+    check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"setMapScale is taken, and the app's map has nothing to draw: {m}")
     for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False},
                     {"t": "appMapPointer", "type": "doubleClick", "x": 1, "y": 2, "button": 1}, {"t": "showRoom", "room": 1},
                     {"t": "downloadMap"}, {"t": "cancelMapDownload"}):
@@ -216,7 +219,10 @@ def no_map(c):
                              ({"t": "setAppMapSize", "w": 0, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
                              ({"t": "setAppMapSize", "w": 1.5, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
                              ({"t": "setAppMapSize", "w": 10, "h": 10, "scale": 0.5}, "scale must be a number from 1 to 4"),
-                             ({"t": "setAppMapSize", "w": 10, "h": 10}, "scale must be a number from 1 to 4")):
+                             ({"t": "setAppMapSize", "w": 10, "h": 10}, "scale must be a number from 1 to 4"),
+                             ({"t": "setMapScale", "scale": 0.5}, "scale must be a number from 1 to 8"),
+                             ({"t": "setMapScale", "scale": 8.5}, "scale must be a number from 1 to 8"),
+                             ({"t": "setMapScale", "scale": "2"}, "scale must be a number from 1 to 8")):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
     m = c.ask({"t": "findRooms", "text": "Hall"}, answers=("error", "rooms"))

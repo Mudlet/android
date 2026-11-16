@@ -1615,8 +1615,9 @@ def png_pixel(data, x, y):
 
 def map_view():
     """The 2D map as the UI gets it: a map a script builds in a Geyser.Mapper as map frames at the mapper's size, with
-    the rooms where the layout puts them; mapPointer selecting a room, walking to it and zooming; setMapViewOnly
-    switching to editing; pointer on the mapper window; the map to a UI that attaches, and none while it hides."""
+    the rooms where the layout puts them; mapPointer selecting a room, walking to it and zooming; setMapScale drawing it
+    on more pixels; setMapViewOnly switching to editing; pointer on the mapper window; the map to a UI that attaches, at
+    the window's pixels again, and none while it hides."""
     profile = "Map Test"
     proc, c = start_engine(profile)
     seen = []
@@ -1696,6 +1697,22 @@ def map_view():
     check(got == "selected 1" and not any(m["t"] == "error" for m in seen[since:]),
           f"a pointer press on the window mapper reaches the map, drawn at the window's size: {got}")
 
+    # At the scale the UI shows it at: the same map on twice the pixels, sharp, its size and points still the window's
+    since = len(seen)
+    c.send({"t": "setMapScale", "scale": 2})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "map" and png_size(base64.b64decode(m["png"])) == (800, 600), seen, since)
+        png = base64.b64decode(m["png"])
+        check((m["w"], m["h"]) == (400, 300) and png_pixel(png, room2[0] * 2, room2[1] * 2)[:3] == (200, 30, 30)
+              and png_pixel(png, room2[0], room2[1])[:3] != (200, 30, 30),
+              f"setMapScale 2 sends the map as a PNG of 800 by 600 for the 400 by 300 mapper, room 2 where the "
+              f"window's point doubled is: {m['w']}x{m['h']} {png_size(png)}")
+    except TimeoutError as e:
+        check(False, f"setMapScale 2 sends the map at twice the mapper's pixels: {e}")
+    c.send({"t": "mapPointer", "type": "press", "x": room2[0], "y": room2[1], "button": 1})
+    got = selection()
+    check(got == "selected 2", f"a press at a point of the window still selects the room there: {got}")
+
     since = len(seen)
     c.send({"t": "mapPointer", "type": "doubleClick", "x": room2[0], "y": room2[1], "button": 2})
     m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
@@ -1740,8 +1757,10 @@ def map_view():
     kinds = [m["t"] for m in msgs]
     maps = [m for m in msgs if m["t"] == "map"]
     check(len(maps) == 1 and (maps[0]["w"], maps[0]["h"], maps[0]["viewOnly"]) == (400, 300, False)
+          and png_size(base64.b64decode(maps[0]["png"])) == (400, 300)
           and kinds.index("windows") < kinds.index("map") < kinds.index("buttonBars"),
-          f"a UI that attaches gets the map, after the windows: {kinds}")
+          f"a UI that attaches gets the map, after the windows, at the window's pixels, as the UI that asked for "
+          f"another scale went: {kinds}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": "testMapper:hide()"})

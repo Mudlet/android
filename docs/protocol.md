@@ -80,6 +80,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `activateCommand` | `command` | A click on the command of `commands` whose `id` is `command`, a whole number (`THeadlessSession::activateAddonCommand()`): a checkable command is ticked or unticked, then the event `sysCommandClicked` is raised with its id. Refused for a disabled command. |
 | `mapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | What the UI's pointer did on the map at `x`, `y`, in the pixels of the last `map` from its top left (`THeadlessSession::mapPointer()`, "The map" below). `type` is `press`, `doubleClick` or `wheel`; `button`, `modifiers` and `wheelY` are as for `pointer`, and 0 when absent. |
 | `setMapViewOnly` | `viewOnly` | `true` to only view the map, `false` to edit it, as the GUI's mapper menu does (`THeadlessSession::setMapViewOnly()`): the event `mapModeChangeEvent` is raised with `viewing` or `editing`. |
+| `setMapScale` | `scale` | Draws `map` from now on with `scale` device pixels to each of the mapper window's, a number from 1 to 8, so that it is as sharp as the UI shows it ("The map" below). libmudlet keeps it until the UI that asked goes, and draws at most 4096 pixels a side, at a smaller scale where that one would be larger. The stand-in takes it. |
 | `setAppMapSize` | `w`, `h`, `scale` | Asks for the app's own map, drawn at `w` by `h` of the map's pixels with `scale` device pixels to each, and sent as `appMap` whenever it changes ("The app's map" below); `w` and `h` 0 stop it. `w` and `h` are whole numbers, both above 0 or both 0; `scale` a number from 1 to 4. libmudlet keeps it for each profile that loads later, until the UI that asked goes, and refuses a map of more than 4096 device pixels a side. The stand-in takes it, and sends an `appMap` with nothing to draw. |
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`. `text` must not be blank. |
@@ -116,6 +117,8 @@ and the app's map is not open (no `setAppMapSize` above 0 by 0 since the profile
 gone since), and `mapPointer` as `THeadlessSession::mapPointer()` does: before the map has been drawn, for a
 double-click of another button than the left, and for a wheel turn of less than half a notch or with no area to zoom.
 The stand-in has no map and refuses both.
+
+`setMapScale` is answered only when refused, for a `scale` that is not a number from 1 to 8.
 
 `setAppMapSize`, `appMapPointer` and `showRoom` too are answered only when refused, and `findRooms` by `rooms` or
 `error`, as above. libmudlet refuses all but `setAppMapSize` while no profile is open, `appMapPointer` before the
@@ -158,7 +161,7 @@ loaded. The stand-in has no map and refuses both.
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
-| `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
+| `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
 | `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
@@ -295,7 +298,7 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
 `mapPointer`; `pointer` on the window `mapper` does the same for a press, double-click or wheel turn.
 
 - The engine draws the map again on upstream's `mapRepaintRequested`, at most once a turn of its event loop, when
-  `viewOnly` changes, and when the mapper shows or changes size. It sends `map` only when the PNG or `viewOnly`
+  `viewOnly` changes, when the mapper shows or changes size, and on a new `setMapScale`. It sends `map` only when the PNG or `viewOnly`
   differs from what it last sent.
 - While the mapper does not show (its `shown` false, or no such window), or has no size, as `Geyser.Mapper`'s `hide()`
   leaves it, nothing is sent: the UI hides what it drew from the `windows` message. A mapper opened before
@@ -305,8 +308,12 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
   `sysMapWindowMousePressEvent`. A left `doubleClick` on a room walks to it: Mudlet finds the path and calls
   `doSpeedWalk()`, or echoes that there is none. A `wheel` turn zooms about its point, as the GUI's wheel does. A
   drag and the right-click menu are the GUI's alone.
-- The map is drawn at the window's pixels, as the GUI draws it at a scale of 1. A mapper smaller than 10 pixels a
-  side or larger than 4096, or a map too large for a frame, gives none.
+- The map is laid out in the window's pixels, as the GUI draws it at a scale of 1, and drawn onto a PNG larger by the
+  scale `setMapScale` asked for, as the GUI draws it on a screen of that many device pixels to each, so `w`, `h` and
+  `mapPointer`'s points stay the window's. The UI asks for the scale it shows the window at, as its pixels are
+  Mudlet's main window's scaled to the screen, and a mapper that is a page fills its pane. A scale that would make
+  the PNG larger than 4096 pixels a side is lowered to fit. A mapper smaller than 10 pixels a side or larger than
+  4096, or a map too large for a frame, gives none.
 
 ### The app's map
 
@@ -494,7 +501,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 14, which added the text boxes (`setTextBoxText`, `textBox`); version 13 added the map
+As implemented in version 14, which added the text boxes (`setTextBoxText`, `textBox`), and later `setMapScale`,
+which needs no new version as a UI does without it: an engine without it refuses it as unknown, the UI ignores that, and
+the map stays at the window's pixels; version 13 added the map
 download (`downloadMap`, `cancelMapDownload`, `mapDownload`); version 12 added `window` to `getLink`, `followLink` and
 `link`, so that a script window's links can be asked about and followed; version 11 added the app's map
 (`setAppMapSize`, `appMapPointer`, `showRoom`, `appMap`) and the room search (`findRooms`, `rooms`); version 10 added

@@ -232,9 +232,10 @@ struct MapDownload
     bool operator==(const MapDownload&) const = default;
 };
 
-// The profile's 2D map as its mapper window shows it, drawn at that window's size in pixels, so that a point of it is a
-// point of the window; or the app's own map, whose size is in the map's pixels as IEngine::setAppMapSize() asked for
-// it, with the PNG at that size times the scale asked for
+// The profile's 2D map as its mapper window shows it, its size the window's in pixels, so that a point of it is a
+// point of the window, with the PNG at that size times IEngine::setMapScale()'s scale; or the app's own map, whose
+// size is in the map's pixels as IEngine::setAppMapSize() asked for it, with the PNG at that size times the scale
+// asked for
 struct MapFrame
 {
     QByteArray png;

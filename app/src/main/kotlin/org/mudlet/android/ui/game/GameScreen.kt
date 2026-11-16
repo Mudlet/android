@@ -31,6 +31,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -67,6 +68,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
     val notSent = stringResource(R.string.input_not_sent)
     val context = LocalContext.current
     val passwords = remember { PasswordStore(context) }
+    val resources = LocalResources.current
     val hidden = c.hiddenInput
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
@@ -164,7 +166,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
                 canReconnect = c.canReconnect,
                 onReconnect = {
                     c.reconnect(passwords::get) { error ->
-                        scope.launch { snackbars.showSnackbar(context.getString(R.string.connection_reconnect_refused, error), withDismissAction = true) }
+                        scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_reconnect_refused, error), withDismissAction = true) }
                     }
                 },
                 onDisconnect = { c.disconnect() },

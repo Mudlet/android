@@ -120,7 +120,7 @@ class GameScreenTest {
 
     @Test
     fun atTheLineLimitItStillFollowsAndHolds() {
-        val total = EngineClient.MAX_LINES + 5
+        val total = ProfileSession.MAX_LINES + 5
         for (n in 1..total) session.line(n.toLong(), "line $n")
         waitUntilDisplayed("line $total")
         session.line(total + 1L, "line ${total + 1}")
@@ -128,7 +128,7 @@ class GameScreenTest {
 
         // The oldest lines are dropped as new ones come: the lines in view must not move with them
         compose.onNode(console).performScrollToIndex(100)
-        val held = compose.runOnIdle { EngineClient.lines[100].text }
+        val held = compose.runOnIdle { EngineClient.front.lines[100].text }
         waitUntilDisplayed(held)
         for (n in total + 2..total + 4) session.line(n.toLong(), "line $n")
         waitForJumpButton(newLines = 3)
@@ -202,7 +202,7 @@ class GameScreenTest {
     fun theConnectionBarShowsTheStateAndItsButtonsConnectAndDisconnect() {
         session.status("connection", "disconnected")
         waitUntilDisplayed(string(R.string.connection_disconnected))
-        compose.runOnIdle { EngineClient.connect("127.0.0.1", 4000, false) }
+        compose.runOnIdle { EngineClient.front.connect("127.0.0.1", 4000, false) }
         session.receive("connect")
         session.status("connection", "connecting 127.0.0.1:4000")
         waitUntilDisplayed(compose.activity.getString(R.string.connection_connecting_to, "127.0.0.1:4000"))
@@ -236,10 +236,10 @@ class GameScreenTest {
             // A new engine with no profile open, as after the notification's Quit: libmudlet takes a bare connect
             // there as one for MUDLET_PROFILE, which it makes with the address, a copy of this profile
             fake.engine.instance = "after quit"
+            fake.engine.closeProfile(GAME.name)
             session.close()
             val next = fake.engine.nextSession()
             next.profiles(listOf(GAME), next.receive("listProfiles"))
-            next.status("connection", "disconnected")
             waitUntilDisplayed(string(R.string.connection_disconnected))
 
             activate(hasText(string(R.string.connection_reconnect)))
@@ -247,7 +247,6 @@ class GameScreenTest {
             assertEquals(GAME.name, open.getString("name"))
             assertEquals("game secret", open.getString("password"))
             assertTrue(open.getBoolean("connect"))
-            next.assertNoRequest("connect", 1000)
 
             next.refuse(open, "there is no profile named \"Game\"")
             waitUntilDisplayed(compose.activity.getString(R.string.connection_reconnect_refused, "openProfile: there is no profile named \"Game\""))

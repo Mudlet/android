@@ -113,7 +113,6 @@ import org.mudlet.android.protocol.ScriptWindow
 import org.mudlet.android.protocol.VAlign
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.ScriptWindowsClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
 import kotlin.math.max
 import kotlin.math.min
@@ -276,7 +275,7 @@ private fun labelReading(
     val rightClickLabel = stringResource(R.string.label_right_click)
     val linkActions = text.links.map { (linkText, href) ->
         CustomAccessibilityAction(stringResource(R.string.label_follow_link, linkText.ifEmpty { href })) {
-            ScriptWindowsClient.followLabelLink(context, href)
+            EngineClient.front.windows.followLabelLink(context, href)
             true
         }
     }
@@ -312,7 +311,7 @@ private fun labelReading(
 
     if (gauge != null) {
         if (gauge.back.key != window.key) return {}
-        val labels = ScriptWindowsClient.state.labels
+        val labels = EngineClient.front.windows.state.labels
         val textLabel = gauge.text?.let { labels[it.name] }
         val gaugeText = textLabel?.text?.let { RichText.parse(it, DEFAULT_FONT_PX).plain }
         val state = gaugeText?.ifBlank { null } ?: stringResource(R.string.gauge_percent, gauge.percent)
@@ -385,9 +384,9 @@ private fun Modifier.readAs(reading: (SemanticsPropertyReceiver.() -> Unit)?): M
 // A click of [button] on [label] at [at], in its pixels, as a tap or long press sends it
 private fun click(label: String, at: Pair<Double, Double>, button: Int) {
     val (x, y) = at
-    ScriptWindowsClient.pointer(label, PointerType.ENTER, x, y)
-    ScriptWindowsClient.pointer(label, PointerType.PRESS, x, y, button, button)
-    ScriptWindowsClient.pointer(label, PointerType.RELEASE, x, y, button, 0)
+    EngineClient.front.windows.pointer(label, PointerType.ENTER, x, y)
+    EngineClient.front.windows.pointer(label, PointerType.PRESS, x, y, button, button)
+    EngineClient.front.windows.pointer(label, PointerType.RELEASE, x, y, button, 0)
 }
 
 private enum class Touch { TAP, DRAG, LONG_PRESS, CANCELLED }
@@ -398,7 +397,7 @@ private enum class Touch { TAP, DRAG, LONG_PRESS, CANCELLED }
  * a drag the left button held as it moves. Nothing is consumed, so the label's links still see their taps.
  */
 private suspend fun PointerInputScope.labelGestures(name: String, mapping: () -> (Offset) -> Pair<Double, Double>, onLongPress: () -> Unit) {
-    val client = ScriptWindowsClient
+    val client = EngineClient.front.windows
     var lastTap = 0L
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
@@ -566,14 +565,16 @@ internal fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: D
 /** The engine's image for [request], asked for once of each engine instance; null until it comes, or for no request. */
 @Composable
 internal fun engineImage(request: ImageRequest?): ImageBitmap? {
+    val session = EngineClient.front
+    val client = session.windows
     // Kept while it is shown
-    DisposableEffect(request) {
-        request?.let(ScriptWindowsClient::imageShown)
-        onDispose { request?.let(ScriptWindowsClient::imageHidden) }
+    DisposableEffect(request, client) {
+        request?.let(client::imageShown)
+        onDispose { request?.let(client::imageHidden) }
     }
     // A new engine instance is asked again
-    LaunchedEffect(request, EngineClient.attachCount) { request?.let(ScriptWindowsClient::requestImage) }
-    return request?.let { ScriptWindowsClient.images[it] }
+    LaunchedEffect(request, client, session.attaches) { request?.let(client::requestImage) }
+    return request?.let { client.images[it] }
 }
 
 /** A label's background, its images and its border, as its style sheet sets them; a text box's too, with no images. */
@@ -685,7 +686,7 @@ private fun LabelTextView(text: LabelText, rich: RichText, style: LabelStyle, mo
                         if (href == null) {
                             withStyle(spanStyle(span.style, toSp)) { append(span.text) }
                         } else {
-                            val link = LinkAnnotation.Clickable(href, linkInteractionListener = { ScriptWindowsClient.followLabelLink(context, href) })
+                            val link = LinkAnnotation.Clickable(href, linkInteractionListener = { EngineClient.front.windows.followLabelLink(context, href) })
                             withLink(link) {
                                 withStyle(spanStyle(span.style, toSp, link = true)) { append(span.text) }
                             }

@@ -137,7 +137,7 @@ class ScriptTextBoxTest {
             compose.onNode(field).performTextReplacement("abc")
             // Frame by frame until the field has sent it, then a key before the next frame
             var frames = 0
-            while (compose.runOnUiThread { ScriptWindowsClient.state.textBoxes["notes"]?.text } != "abc" && frames++ < MAX_FRAMES) {
+            while (compose.runOnUiThread { EngineClient.front.windows.state.textBoxes["notes"]?.text } != "abc" && frames++ < MAX_FRAMES) {
                 compose.mainClock.advanceTimeByFrame()
             }
             compose.onNode(field).performTextInput("d")
@@ -241,7 +241,7 @@ class ScriptTextBoxTest {
             compose.mainClock.advanceTimeByFrame()
             // The same text, so only its turning read-only puts it back
             session.textBox("notes", text = "kept", readOnly = true)
-            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { ScriptWindowsClient.state.textBoxes["notes"]?.readOnly == true } }
+            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { EngineClient.front.windows.state.textBoxes["notes"]?.readOnly == true } }
             compose.mainClock.advanceTimeBy(SETTLED_MS)
         } finally {
             compose.mainClock.autoAdvance = true
@@ -263,7 +263,7 @@ class ScriptTextBoxTest {
             compose.onNode(field).performTextReplacement("draft")
             compose.mainClock.advanceTimeByFrame()
             session.windows(emptyList(), removed = listOf("notes" to "textBox"))
-            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { "notes" !in ScriptWindowsClient.state.textBoxes } }
+            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { "notes" !in EngineClient.front.windows.state.textBoxes } }
             compose.mainClock.advanceTimeBy(SETTLED_MS)
         } finally {
             compose.mainClock.autoAdvance = true

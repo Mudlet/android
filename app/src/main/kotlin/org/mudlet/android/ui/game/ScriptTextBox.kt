@@ -54,7 +54,6 @@ import org.mudlet.android.protocol.LabelStyle
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.TextBoxContent
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.ScriptWindowsClient
 import kotlin.math.min
 
 // What the player types is sent once they have stopped for this long, not at each key
@@ -102,20 +101,22 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit:
         shownEdit = edit
     }
 
-    // What the player typed that the engine has not been sent, which ScriptWindowsClient holds to send before a tap that
-    // may run a script; sent again to the same instance should the link drop
+    // What the player typed that the engine has not been sent, which the profile's ScriptWindowsClient holds to send
+    // before a tap that may run a script; sent again to the same instance should the link drop
+    val session = EngineClient.front
+    val client = session.windows
     val unsent = value.text.takeIf { scriptText != null && !readOnly && TextBoxContent.plain(it) != scriptText }
-    SideEffect { ScriptWindowsClient.typing(name, unsent) }
-    LaunchedEffect(unsent, EngineClient.attachCount) {
+    SideEffect { client.typing(name, unsent) }
+    LaunchedEffect(client, unsent, session.attaches) {
         if (unsent == null) return@LaunchedEffect
         delay(TYPING_SETTLES_MS)
-        ScriptWindowsClient.flushTyping(name)
+        client.flushTyping(name)
     }
     // Nor is it lost when the field goes, as on a turn of the screen, which would otherwise draw the engine's text again
-    DisposableEffect(name) {
+    DisposableEffect(client, name) {
         onDispose {
-            ScriptWindowsClient.flushTyping(name)
-            ScriptWindowsClient.typing(name, null)
+            client.flushTyping(name)
+            client.typing(name, null)
         }
     }
 
@@ -155,7 +156,7 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit:
         BasicTextField(
             value = value,
             onValueChange = { value = it },
-            modifier = Modifier.fillMaxSize().onFocusChanged { if (!it.isFocused) ScriptWindowsClient.flushTyping(name) }.onPreviewKeyEvent { event ->
+            modifier = Modifier.fillMaxSize().onFocusChanged { if (!it.isFocused) client.flushTyping(name) }.onPreviewKeyEvent { event ->
                 // Both halves of the key are taken, so the field types no tab
                 if (!tabMovesFocus || event.key != Key.Tab) return@onPreviewKeyEvent false
                 if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)

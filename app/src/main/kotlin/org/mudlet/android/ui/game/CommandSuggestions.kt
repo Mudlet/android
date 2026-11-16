@@ -20,6 +20,7 @@ import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.suggest.SuggesterRegistry
 import org.mudlet.android.suggest.SuggestionSession
 import org.mudlet.android.ui.EngineClient
+import org.mudlet.android.ui.ProfileSession
 import java.io.File
 
 /**
@@ -30,10 +31,6 @@ import java.io.File
  */
 object CommandSuggestions {
     private const val TAG = "MudletSuggest"
-    private const val LOADED = " loaded"
-
-    /** The profile libmudlet starts when none was opened (`MUDLET_PROFILE`), until the engine names one. */
-    const val DEFAULT_PROFILE = "Android"
 
     // Its one thread runs every suggestion's work, loading and saving included, off the main thread
     private val worker by lazy { ExecutorWorker("suggestions") { Log.e(TAG, "a suggestion task failed: ${it.javaClass.name}") } }
@@ -41,17 +38,8 @@ object CommandSuggestions {
     private val sessions = HashMap<String, SuggestionSession>()
     private val pins = HashMap<String, PinnedCommands>()
 
-    /** The profile whose suggestions the input line shows: the one the engine last said it loaded. */
-    var profile by mutableStateOf(DEFAULT_PROFILE)
-        private set
-
-    /** Takes the profile from the engine's status `profile` ("<name> loaded"); its other values change nothing. */
-    fun profileStatus(value: String?) {
-        if (value != null && value.endsWith(LOADED) && value.length > LOADED.length) profile = value.removeSuffix(LOADED)
-    }
-
-    // The number (EngineClient.linesAdded) after the last console line given to a session, so none is given twice
-    private var linesSeen = 0L
+    /** The profile whose suggestions the input line shows: the front profile's [ProfileSession.suggestionsProfile]. */
+    val profile: String get() = EngineClient.front.suggestionsProfile
 
     /** Where the profiles' suggestions and pinned commands are saved. */
     fun dir(context: Context) = File(context.filesDir, "suggest")
@@ -64,16 +52,15 @@ object CommandSuggestions {
         PinnedCommands(SuggestFile.pinsForProfile(dir(context), profile), worker, ::log).apply { open() }
     }
 
-    /** Gives [state] the game's lines that came since the last call, leaving out the app's markers. */
-    internal fun linesShown(state: SuggestionState) {
-        val c = EngineClient
-        val added = c.linesAdded
-        val first = added - c.lines.size
-        for (n in maxOf(linesSeen, first) until added) {
-            val line = c.lines[(n - first).toInt()]
+    /** Gives [state] the lines of [profile]'s console that came since the last call, leaving out the app's markers. */
+    internal fun linesShown(profile: ProfileSession, state: SuggestionState) {
+        val added = profile.linesAdded
+        val first = added - profile.lines.size
+        for (n in maxOf(profile.linesSuggested, first) until added) {
+            val line = profile.lines[(n - first).toInt()]
             if (!line.marker) state.lineShown(line.text)
         }
-        linesSeen = added
+        profile.linesSuggested = added
     }
 
     /** Saves what each profile learned since its last save, as the app leaves the front and may be killed. */
@@ -162,16 +149,14 @@ fun rememberSuggestionState(profile: String): SuggestionState {
 }
 
 /**
- * The suggestions for the profile the engine runs, kept up to date with [EngineClient]: whether input is hidden, and
- * the game's lines as they come. The caller tells it what the input line sends.
+ * The suggestions for the front profile, kept up to date with its [ProfileSession]: whether input is hidden, and the
+ * game's lines as they come. The caller tells it what the input line sends.
  */
 @Composable
 fun rememberEngineSuggestions(): SuggestionState {
-    val c = EngineClient
-    val profileStatus = c.status["profile"]
-    LaunchedEffect(profileStatus) { CommandSuggestions.profileStatus(profileStatus) }
-    val state = rememberSuggestionState(CommandSuggestions.profile)
-    LaunchedEffect(state) { snapshotFlow { c.hiddenInput }.collect(state::hiddenChanged) }
-    LaunchedEffect(state) { snapshotFlow { c.linesAdded }.collect { CommandSuggestions.linesShown(state) } }
+    val profile = EngineClient.front
+    val state = rememberSuggestionState(profile.suggestionsProfile)
+    LaunchedEffect(profile, state) { snapshotFlow { profile.hiddenInput }.collect(state::hiddenChanged) }
+    LaunchedEffect(profile, state) { snapshotFlow { profile.linesAdded }.collect { CommandSuggestions.linesShown(profile, state) } }
     return state
 }

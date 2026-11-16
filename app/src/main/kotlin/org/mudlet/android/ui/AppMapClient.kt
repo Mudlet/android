@@ -25,10 +25,11 @@ import kotlin.math.roundToInt
 /**
  * The app's own map (docs/architecture.md, "The map behind the text"), apart from any a script opens: the engine draws
  * it at the size the game screen shows it at, behind the console or full screen, while it shows it, and searches its
- * rooms, and downloads the map the game offers (docs/architecture.md, "Downloading the map"). Main thread only, as
- * EngineClient's state; ScriptWindowsClient hands it the engine's refusals and each attach.
+ * rooms, and downloads the map the game offers (docs/architecture.md, "Downloading the map"). Each [ProfileSession] has
+ * one, and only the front profile's is drawn. Main thread only, as the session's state; its [ScriptWindowsClient] hands
+ * it the engine's refusals and each attach.
  */
-internal object AppMapClient : MapSource {
+internal class AppMapClient internal constructor(private val session: ProfileSession) : MapSource {
     /** What shows the map: each asks for it at its own size, and the full-screen map's wins while it is open. */
     enum class Owner { BACKGROUND, FULL_SCREEN }
 
@@ -58,18 +59,6 @@ internal object AppMapClient : MapSource {
     /** What findRooms found for [text]: null [rooms] until the engine answers; [more] when it found more than it sent. */
     data class RoomSearch(val text: String, val rooms: List<RoomMatch>?, val more: Boolean = false)
 
-    /** What [download] holds until the engine says otherwise: no map offered and none downloading. */
-    val NO_DOWNLOAD = EngineMessage.MapDownload(
-        offered = false,
-        host = "",
-        state = MapDownloadState.NONE,
-        label = "",
-        value = 0,
-        maximum = 0,
-        cancelable = false,
-        error = "",
-    )
-
     /** The map as the engine last drew it, at the size asked; null while it draws none (no profile, or no rooms). */
     var map by mutableStateOf<ScriptWindowsClient.MapImage?>(null)
         private set
@@ -95,8 +84,6 @@ internal object AppMapClient : MapSource {
     var search by mutableStateOf<RoomSearch?>(null)
         private set
 
-    private val wanted = EnumMap<Owner, Size>(Owner::class.java)
-
     // The size the engine was last given since the UI attached; null when it could not be sent
     private var sent: Size? = Size.NONE
     private var pendingSearch: Long? = null
@@ -104,26 +91,13 @@ internal object AppMapClient : MapSource {
     // Whether the last setMapViewOnly was this map's, whose refusal it shows, or the mapper window's
     private var askedViewOnly = false
 
-    /** [owner] shows the map at [size] until [hide]. */
-    fun show(owner: Owner, size: Size) {
-        wanted[owner] = size
-        update()
-    }
-
-    fun hide(owner: Owner) {
-        wanted.remove(owner)
-        update()
-    }
-
-    // Asks for the map at the size of what shows it, the full-screen map before the background, or for none
-    private fun update() {
-        val size = wanted[Owner.FULL_SCREEN] ?: wanted[Owner.BACKGROUND] ?: Size.NONE
+    // Asks for the map at the size of what shows it, the full-screen map before the background; for none while the
+    // profile is not the front, as only the front's is drawn
+    internal fun update() {
+        val size = if (session !== EngineClient.front) Size.NONE else wanted[Owner.FULL_SCREEN] ?: wanted[Owner.BACKGROUND] ?: Size.NONE
         if (size == sent) return
-        sent = if (EngineClient.send(Requests.setAppMapSize(size.w, size.h, size.scale))) size else null
+        sent = if (session.send(Requests.setAppMapSize(size.w, size.h, size.scale))) size else null
     }
-
-    /** [message]'s PNG, decoded off the main thread; null for none, or one that does not decode. */
-    internal fun decode(message: EngineMessage.AppMap): ImageBitmap? = if (message.png.isEmpty()) null else BitmapFactory.decodeByteArray(message.png, 0, message.png.size)?.asImageBitmap()
 
     /** A new `appMap`, with what [decode] made of it. */
     internal fun onAppMap(message: EngineMessage.AppMap, bitmap: ImageBitmap?) {
@@ -177,48 +151,48 @@ internal object AppMapClient : MapSource {
         update()
     }
 
-    /** As ScriptWindowsClient.mapPointer, on this map. */
+    /** As [ScriptWindowsClient.mapPointer], on this map. */
     override fun pointer(type: MapPointerType, at: MapPoint, wheelY: Int): Boolean {
         refused = null
-        ScriptWindowsClient.flushTyping()
+        session.windows.flushTyping()
         val button = if (type == MapPointerType.WHEEL) 0 else POINTER_LEFT
-        return EngineClient.send(Requests.appMapPointer(type, at.x, at.y, button, 0, wheelY))
+        return session.send(Requests.appMapPointer(type, at.x, at.y, button, 0, wheelY))
     }
 
     /** The map viewed only, or edited, which is the mapper window's mode too; the next [map] says which it is. */
     override fun setViewOnly(viewOnly: Boolean): Boolean {
         refused = null
         askedViewOnly = true
-        return EngineClient.send(Requests.setMapViewOnly(viewOnly))
+        return session.send(Requests.setMapViewOnly(viewOnly))
     }
 
     override fun dismissRefusal() {
         refused = null
     }
 
-    /** The rooms whose name holds [text], or whose number it is, into [search]. False as for [EngineClient.send]. */
+    /** The rooms whose name holds [text], or whose number it is, into [search]. False as for [ProfileSession.send]. */
     fun findRooms(text: String): Boolean {
         refused = null
-        val id = EngineClient.newRequestId()
-        if (!EngineClient.send(Requests.findRooms(text, id))) return false
+        val id = session.newRequestId()
+        if (!session.send(Requests.findRooms(text, id))) return false
         pendingSearch = id
         search = RoomSearch(text, null)
         return true
     }
 
-    /** Centres the map on [room], selected, and closes the search's results. False as for [EngineClient.send]. */
+    /** Centres the map on [room], selected, and closes the search's results. False as for [ProfileSession.send]. */
     fun showRoom(room: Int): Boolean {
         refused = null
         search = null
-        return EngineClient.send(Requests.showRoom(room))
+        return session.send(Requests.showRoom(room))
     }
 
     /**
      * A new `mapDownload`. A download that ends is kept in [downloadEnd] and, as it ends, told to TalkBack in
-     * [resources]' words, its failure interrupting. The same end again, as to a UI that attaches, is not told again; a
-     * UI that had heard nothing yet, being new, shows how the last download ended without telling it.
+     * [resources]' words if [speak], its failure interrupting. The same end again, as to a UI that attaches, is not told
+     * again; a UI that had heard nothing yet, being new, shows how the last download ended without telling it.
      */
-    internal fun onMapDownload(message: EngineMessage.MapDownload, resources: Resources) {
+    internal fun onMapDownload(message: EngineMessage.MapDownload, resources: Resources, speak: Boolean) {
         val was = download
         download = message
         downloadAsked = false
@@ -228,7 +202,7 @@ internal object AppMapClient : MapSource {
 
             was.state == MapDownloadState.DOWNLOADING -> {
                 downloadEnd = message
-                Announcer.announce(text, assertive = message.state == MapDownloadState.FAILED)
+                if (speak) Announcer.announce(text, assertive = message.state == MapDownloadState.FAILED)
             }
 
             // Only NO_DOWNLOAD itself, as no frame the engine sent is that object
@@ -236,27 +210,19 @@ internal object AppMapClient : MapSource {
         }
     }
 
-    /** What [end] says to the player of how a download ended; null while none has ended. */
-    internal fun endText(end: EngineMessage.MapDownload, resources: Resources): String? = when (end.state) {
-        MapDownloadState.NONE, MapDownloadState.DOWNLOADING -> null
-        MapDownloadState.LOADED -> resources.getString(R.string.map_download_loaded, end.host)
-        MapDownloadState.CANCELLED -> resources.getString(R.string.map_download_cancelled)
-        MapDownloadState.FAILED -> resources.getString(R.string.map_download_failed, end.error)
-    }
-
-    /** Downloads the map the game offers, in place of the profile's. False as for [EngineClient.send]. */
+    /** Downloads the map the game offers, in place of the profile's. False as for [ProfileSession.send]. */
     fun downloadMap(): Boolean {
         if (downloadAsked) return true
         refused = null
         downloadEnd = null
-        downloadAsked = EngineClient.send(Requests.downloadMap())
+        downloadAsked = session.send(Requests.downloadMap())
         return downloadAsked
     }
 
-    /** Stops the download, while [download] says it can be. False as for [EngineClient.send]. */
+    /** Stops the download, while [download] says it can be. False as for [ProfileSession.send]. */
     fun cancelMapDownload(): Boolean {
         refused = null
-        return EngineClient.send(Requests.cancelMapDownload())
+        return session.send(Requests.cancelMapDownload())
     }
 
     /** The player read [downloadEnd]. */
@@ -270,9 +236,48 @@ internal object AppMapClient : MapSource {
         search = null
     }
 
-    /** As the engine takes `setAppMapSize`'s scale and sizes: IEngine::maxAppMapScale and PngImage::maxSide. */
-    const val MAX_SCALE = 4.0
-    const val MAX_SIDE = 4096
+    companion object {
+        /** What [download] holds until the engine says otherwise: no map offered and none downloading. */
+        val NO_DOWNLOAD = EngineMessage.MapDownload(
+            offered = false,
+            host = "",
+            state = MapDownloadState.NONE,
+            label = "",
+            value = 0,
+            maximum = 0,
+            cancelable = false,
+            error = "",
+        )
 
-    private const val TAG = "AppMap"
+        // What shows the map, whichever profile is the front: the game screen's, which the front's map follows
+        private val wanted = EnumMap<Owner, Size>(Owner::class.java)
+
+        /** [owner] shows the front profile's map at [size] until [hide]. */
+        fun show(owner: Owner, size: Size) {
+            wanted[owner] = size
+            EngineClient.front.appMap.update()
+        }
+
+        fun hide(owner: Owner) {
+            wanted.remove(owner)
+            EngineClient.front.appMap.update()
+        }
+
+        /** [message]'s PNG, decoded off the main thread; null for none, or one that does not decode. */
+        internal fun decode(message: EngineMessage.AppMap): ImageBitmap? = if (message.png.isEmpty()) null else BitmapFactory.decodeByteArray(message.png, 0, message.png.size)?.asImageBitmap()
+
+        /** What [end] says to the player of how a download ended; null while none has ended. */
+        internal fun endText(end: EngineMessage.MapDownload, resources: Resources): String? = when (end.state) {
+            MapDownloadState.NONE, MapDownloadState.DOWNLOADING -> null
+            MapDownloadState.LOADED -> resources.getString(R.string.map_download_loaded, end.host)
+            MapDownloadState.CANCELLED -> resources.getString(R.string.map_download_cancelled)
+            MapDownloadState.FAILED -> resources.getString(R.string.map_download_failed, end.error)
+        }
+
+        /** As the engine takes `setAppMapSize`'s scale and sizes: IEngine::maxAppMapScale and PngImage::maxSide. */
+        const val MAX_SCALE = 4.0
+        const val MAX_SIDE = 4096
+
+        private const val TAG = "AppMap"
+    }
 }

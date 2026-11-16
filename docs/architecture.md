@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt` and the app's own map in `ui/AppMapClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` and the app's own map in `ui/AppMapClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -41,7 +41,9 @@ UI process (org.mudlet.mudlet)              :engine process (org.mudlet.mudlet:e
 Kotlin + Compose, no Qt                     QtServiceBase + libengine.so (Qt Core/Gui/Network)
 
 :app       MainActivity -> EngineClient     :engine-service    EngineService : QtServiceBase
+             -> ProfileSession, per profile
 :protocol  EngineLink (reader thread)       native/enginehost  QLocalServer (Qt's main thread)
+             one per socket
               <======== LocalSocket ========>                  ControlBridge -> IEngineControl
               frames: u32 BE length + JSON                     SocketBridge : IFrontend -> IEngine, per profile
                                                                  (MudletEngine, or the stand-in)
@@ -68,7 +70,12 @@ Startup:
    the `ControlBridge`, and call `listen()` on `noBackupFilesDir/engine.sock`.
    Each profile that opens gets a `SocketBridge` on `engine-p<slot>.sock` beside it.
 7. The UI's `EngineLink` retries the connection every 50 ms for 2 s, then backs
-   off from 100 ms to 2 s, until the socket appears.
+   off from 100 ms to 2 s, until the socket appears. `EngineClient` holds the
+   link to the control socket, with the engine's own statuses and its profiles;
+   for each profile that `openProfiles` names it keeps a `ProfileSession`
+   (`ui/ProfileSession.kt`) with its own link to that profile's socket, its
+   console, statuses, input line state, script windows (`ScriptWindowsClient`)
+   and map (`AppMapClient`). The game screen shows `EngineClient.front`.
 
 Threads:
 - The engine is single-threaded on Qt's main thread: socket, telnet, Lua and
@@ -83,8 +90,8 @@ Crossing the boundary:
 - UI to engine: requests (below).
 - Engine to UI: pushed lines, statuses and notifies.
 - There are no calls in either direction. A reply is a `status` frame carrying
-  `re`, the request id. Every sender in the UI takes its ids from the one
-  `EngineLink.newRequestId()`, so no sender takes another's answer.
+  `re`, the request id. Every sender on a socket takes its ids from that
+  socket's `EngineLink.newRequestId()`, so no sender takes another's answer.
 - Inside `:engine`, the only JNI calls are:
   - Java to native: `nativeServiceReady`, once at startup.
   - Native to Java: `QJniObject::callStaticMethod` for `postTell`.
@@ -205,11 +212,11 @@ scales; text sizes are in sp, so the system font size scales them.
 The profile list (`ui/profiles/ProfileListScreen.kt`) shows the engine's `profiles`, which `EngineClient` asks for
 each time it attaches, and its editor (`ProfileEditor.kt`) sends `saveProfile` and `deleteProfile`. Each waits for its
 answer, and a refusal shows the engine's reason, which is in English. Connect sends `openProfile` with the profile's
-stored password and goes to the game screen once it is answered with `profiles`; the game screen's Reconnect then sends
-`connect` with its address while the engine runs it, and otherwise `openProfile` with its stored password, as on an
-engine started again after the notification's Quit, where a bare `connect` would have libmudlet make a profile named
-`MUDLET_PROFILE` with that address, a copy of the player's. A profile's name cannot change, as the engine keeps the
-name a profile was created with.
+stored password and goes to the game screen once it is answered with `openProfiles`; the game screen's Reconnect then
+sends `connect` with the front profile's address on its socket, and, while no profile is open, `openProfile` with the
+last one's stored password, as on an engine started again after the notification's Quit, where a bare `connect` would
+have libmudlet make a profile named `MUDLET_PROFILE` with that address, a copy of the player's. A profile's name cannot
+change, as the engine keeps the name a profile was created with.
 
 The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
 never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's
@@ -549,7 +556,9 @@ device shows, below the UI's debug hook:
   socket handshake; the engine notification's Quit, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
-- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`): the
+- `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`), which
+  serves the control socket and a socket for each profile it has open: two profiles' state kept apart
+  (`ProfileSessionsTest`); the
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
   host:port", adding, editing, deleting only once confirmed, the engine's refusals, and Connect sending
@@ -763,7 +772,8 @@ that attaches later is told too. The UI shows it as a marker line.
   - `onStop` stops the UI's link. Qt is in another process and does not notice
     anything except the socket closing. The game connection stays up (host test:
     "game connection survived the UI detaching").
-  - `onStart` restarts the **same** `EngineLink`. Because it sends its
+  - `onStart` restarts the **same** `EngineLink`s, the control link's and each
+    `ProfileSession`'s. Because each sends its
     `instance` and `lastSeq`, the engine replays only the lines the UI missed
     (JVM test: `synced.seq == seqBefore`).
   - A quick `stop()` followed by `start()` used to leave two reader threads

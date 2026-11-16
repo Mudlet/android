@@ -72,7 +72,9 @@ private const val PROFILE = "Self-test"
 @Composable
 fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
     val c = EngineClient
-    val s = c.status
+    // The front profile's session: the profile's console, statuses and requests
+    val p = c.front
+    val s = c.engineStatus + p.status
     var host by rememberSaveable { mutableStateOf("aardmud.org") }
     var port by rememberSaveable { mutableStateOf("23") }
     var tls by rememberSaveable { mutableStateOf(false) }
@@ -95,8 +97,8 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
             delay(2000)
         }
     }
-    val tail = c.tail
-    val itemCount = c.lines.size + if (tail != null) 1 else 0
+    val tail = p.tail
+    val itemCount = p.lines.size + if (tail != null) 1 else 0
     LaunchedEffect(itemCount, tail) {
         if (itemCount > 0) listState.scrollToItem(itemCount - 1)
     }
@@ -187,7 +189,7 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
                     }
                 }
                 if (c.pingResult.isNotEmpty()) Text(stringResource(R.string.selftest_ping, c.pingResult), style = small)
-                if (c.lastLuaResult.isNotEmpty()) Text(stringResource(R.string.selftest_lua, c.lastLuaResult), style = small)
+                if (p.lastLuaResult.isNotEmpty()) Text(stringResource(R.string.selftest_lua, p.lastLuaResult), style = small)
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -224,7 +226,7 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
                 }) {
                     Text(stringResource(R.string.selftest_connect))
                 }
-                Button({ c.disconnect() }) { Text(stringResource(R.string.selftest_disconnect)) }
+                Button({ p.disconnect() }) { Text(stringResource(R.string.selftest_disconnect)) }
                 OutlinedButton({ showDebug = !showDebug }) {
                     Text(stringResource(if (showDebug) R.string.selftest_hide_debug else R.string.selftest_show_debug))
                 }
@@ -257,7 +259,7 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
                 state = listState,
             ) {
                 items(itemCount) { i ->
-                    val line = if (i < c.lines.size) c.lines[i] else tail ?: return@items
+                    val line = if (i < p.lines.size) p.lines[i] else tail ?: return@items
                     Text(ansiText(line), color = CONSOLE_FOREGROUND, style = consoleStyle)
                 }
             }
@@ -265,9 +267,9 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
             val submit = {
                 val text = command
                 if (text.startsWith("lua ")) {
-                    c.send(Requests.runLua(text.removePrefix("lua "), c.newRequestId()))
+                    p.send(Requests.runLua(text.removePrefix("lua "), p.newRequestId()))
                 } else {
-                    c.send(Requests.send(text))
+                    p.send(Requests.send(text))
                 }
                 command = ""
             }

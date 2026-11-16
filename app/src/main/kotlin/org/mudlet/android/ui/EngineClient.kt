@@ -9,7 +9,6 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -28,14 +27,13 @@ import org.mudlet.android.engine.EngineSocket
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
+import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.Transport
-import org.mudlet.android.ui.game.Announcer
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
 
 class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false)
@@ -44,53 +42,28 @@ class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val mark
 data class GameAddress(val host: String, val port: Int, val tls: Boolean)
 
 /**
- * The UI process's view of the engine. Lives for the UI process; attaches while an
- * Activity is started, so a backgrounded (and later frozen) UI holds no connection.
- * State is Compose snapshot state, written only on the main thread.
+ * The UI process's view of the engine: the link to its control socket, with the engine's own statuses and its
+ * profiles, and a [ProfileSession] for each profile it has open (docs/multi-profile.md, "Per-profile UI state"), each
+ * on that profile's socket. Lives for the UI process; attaches while an Activity is started, so a backgrounded (and
+ * later frozen) UI holds no connection. State is Compose snapshot state, written only on the main thread.
  */
 // It holds only the application's Context (app), which leaks nothing
 @SuppressLint("StaticFieldLeak")
 object EngineClient {
-    const val MAX_LINES = 2000
-
-    private const val TAG = "EngineClient"
-
     // About 300 ms of failed connects at EngineLink's fast retry interval
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
-    private const val PREF_LAST_HOST = "lastHost"
-    private const val PREF_LAST_PORT = "lastPort"
-    private const val PREF_LAST_TLS = "lastTls"
     private const val PREF_LAST_PROFILE = "lastProfile"
 
-    // How long after a send the engine's emptying of its line (an empty commandLine) is taken as that send's
-    private const val SEND_CLEAR_WINDOW_MS = 3000L
+    /** The engine's own statuses, from its control socket; each profile's are its [ProfileSession.status]. */
+    val engineStatus = mutableStateMapOf<String, String>()
 
-    // How long after a send, sendHidden or dismissHidden a status sendError is taken as its answer
-    private const val SEND_ERROR_WINDOW_MS = 5000L
-
-    val lines = mutableStateListOf<UiLine>()
-
-    /**
-     * How many lines have been added to [lines] in this process, markers included: `lines[i]` is line number
-     * `linesAdded - lines.size + i`, a number that stays with the line while older ones are dropped.
-     */
-    var linesAdded by mutableLongStateOf(0L)
-        private set
-
-    /** The last address [connect] was given, kept across UI process restarts: what Reconnect connects to without [lastProfile]. */
-    var lastAddress by mutableStateOf<GameAddress?>(null)
-        private set
-
-    /** The profile last opened, kept across UI process restarts: what Reconnect opens again, until [connect] is given an address. */
+    /** The profile last opened, kept across UI process restarts: what Reconnect opens again while none is open. */
     var lastProfile by mutableStateOf<String?>(null)
         private set
 
-    val canReconnect: Boolean get() = lastProfile != null || lastAddress != null
-
-    // The engine's line still being written, such as a prompt, shown below the others
-    var tail by mutableStateOf<UiLine?>(null)
-    val status = mutableStateMapOf<String, String>()
+    /** Whether Reconnect has something to do: [front]'s address, or, while no profile is open, [lastProfile]. */
+    val canReconnect: Boolean get() = frontSession?.let { it.lastAddress != null } ?: (lastProfile != null)
     var linkState by mutableStateOf("not attached")
     var enginePid by mutableIntStateOf(0)
     var fgsState by mutableStateOf("?")
@@ -102,34 +75,30 @@ object EngineClient {
     var startToHelloMs by mutableLongStateOf(-1L)
     var lastLossToAttachMs by mutableLongStateOf(-1L)
     var pingResult by mutableStateOf("")
-    var lastLuaResult by mutableStateOf("")
-
-    /** The game hides what the player types, as for a password: the input line masks it and sends it with [sendHidden]. */
-    var hiddenInput by mutableStateOf(false)
-        private set
-
-    /** The input line's history, newest first: the engine's, with the commands [sendCommand] sent since it last said. */
-    var history by mutableStateOf<List<String>>(emptyList())
-        private set
-
-    /** What a script set the input line to, until the line shows it and calls [commandLineShown]. */
-    var commandLine by mutableStateOf<String?>(null)
-        private set
-
-    /**
-     * The engine took what the player typed ahead of the game hiding input: the input line is to move its text into the
-     * masked field that [EngineMessage.HiddenInput] opens next, empty itself and call [typedLineMoved].
-     */
-    var moveTypedLine by mutableStateOf(false)
-        private set
-
-    /** Why the engine could not send the last input request (status `sendError`), until the screen shows it and calls [sendErrorShown]. */
-    var sendError by mutableStateOf<String?>(null)
-        private set
 
     /** The engine's profiles, the last opened first; null until it has listed them. */
     var profiles by mutableStateOf<List<Profile>?>(null)
         private set
+
+    /** A session for each profile the engine has open, in the order they were opened. */
+    val sessions: List<ProfileSession> get() = openSessions
+
+    private val openSessions = mutableStateListOf<ProfileSession>()
+
+    /**
+     * The profile the player is looking at: the engine's front, or the one [setFront] asked for until the engine says
+     * so; while no profile is open, a session with no socket, which holds nothing.
+     */
+    val front: ProfileSession get() = frontSession ?: noProfile
+
+    private var frontSession by mutableStateOf<ProfileSession?>(null)
+    private val noProfile by lazy { ProfileSession("", null, app) }
+
+    // Set by setFront until an openProfiles names it the front, so one sent before the engine had it does not undo it
+    private var requestedFront: String? = null
+
+    // The app's own lines that came while no profile was open, for the first to open
+    private val heldMarkers = ArrayList<String>()
 
     // The profile requests waiting for their answer, by id; main thread only
     private val profileAnswers = HashMap<Long, (String?) -> Unit>()
@@ -139,13 +108,16 @@ object EngineClient {
     // The application's Context, which lives as long as the process
     private lateinit var app: Context
 
-    /** How the link reaches the engine: its local socket. The instrumented tests (src/androidTest) put a fake engine here. */
+    /**
+     * How a link reaches the socket at a path: the control socket's, [EngineSocket.path], or a profile's. The
+     * instrumented tests (src/androidTest) put a fake engine here.
+     */
     @VisibleForTesting
-    internal var connector: () -> Transport = ::connectLocal
+    internal var connector: (path: String) -> Transport = ::connectLocal
 
-    // One link for the UI process's life: it remembers the engine instance and last seq,
-    // so reattaching after onStop/onStart (or rotation) replays only the missed lines
-    private val link: EngineLink by lazy { EngineLink({ connector() }, listener) }
+    // One link for the UI process's life: it remembers the engine instance, so a reattach after onStop/onStart (or
+    // rotation) is to the same engine or to a new one
+    private val link: EngineLink by lazy { EngineLink({ connector(EngineSocket.path(app)) }, listener, profileSockets = true) }
 
     @Volatile private var attached = false
 
@@ -154,35 +126,11 @@ object EngineClient {
     var screenSize: Pair<Int, Int>? = null
         private set
 
-    // When an input request last went out; the engine keeps sendError in its status, which it sends again on attach
-    @Volatile private var inputSentAt = 0L
-
-    // Reader thread only: from hello to synced, the engine resends what it holds, which is not news
-    private var replaying = false
+    // Main thread only
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
     private var lostAt = 0L
     private var restartRequestedForThisOutage = false
-
-    // Main thread only
-    private val completions = HashMap<Long, (String) -> Unit>()
-    private val sendsAwaitingClear = ArrayDeque<Long>()
-
-    // The ids of the runLua requests that carry the app's Mudlet settings, whose luaResult is no script's
-    private val settingsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
-
-    // Reader-thread batches, drained on the main thread
-    private val pendingLock = Any()
-    private var pendingLines = ArrayList<UiLine>()
-
-    // The text of the new lines, not those replayed, for the Announcer
-    private var pendingNews = ArrayList<String>()
-    private var pendingTail: UiLine? = null
-    private var pendingTailSet = false
-    private var pendingClear = false
-    private var pendingStatus = HashMap<String, String>()
-    private var pendingStatusReset = false
-    private var flushPosted = false
 
     var engineWanted: Boolean
         get() = prefs().getBoolean("wanted", true)
@@ -193,10 +141,7 @@ object EngineClient {
     fun init(context: Context) {
         if (::app.isInitialized) return
         app = context.applicationContext
-        val p = prefs()
-        val host = p.getString(PREF_LAST_HOST, null)
-        if (host != null) lastAddress = GameAddress(host, p.getInt(PREF_LAST_PORT, 23), p.getBoolean(PREF_LAST_TLS, false))
-        lastProfile = p.getString(PREF_LAST_PROFILE, null)
+        lastProfile = prefs().getString(PREF_LAST_PROFILE, null)
     }
 
     fun startEngine() {
@@ -222,6 +167,7 @@ object EngineClient {
         attached = true
         detachStartedAt = SystemClock.elapsedRealtime()
         link.start()
+        sessions.forEach(ProfileSession::start)
         linkState = "connecting"
     }
 
@@ -229,127 +175,71 @@ object EngineClient {
         if (!attached) return
         attached = false
         link.stop()
+        sessions.forEach(ProfileSession::stop)
         linkState = "detached (UI stopped)"
     }
 
-    /** The `id` for a request to the engine, whoever sends it: see [EngineLink.newRequestId]. */
-    fun newRequestId(): Long = link.newRequestId()
+    /** The open profile named [name], ignoring case as the engine does; null when it is not open. */
+    fun session(name: String): ProfileSession? = sessions.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
-    /** False when the link is down and the command was dropped. */
-    fun send(message: org.json.JSONObject): Boolean = sendOn(message) != 0
-
-    /** As [send], returning the number of the link's connection the command went out on, or 0 when it was dropped. */
-    fun sendOn(message: org.json.JSONObject): Int {
-        val connection = link.sendOn(message)
-        if (connection == 0) linkState = "not attached: command dropped"
-        return connection
-    }
-
-    // A request the engine answers with status sendError when it cannot carry it out
-    private fun sendInput(message: org.json.JSONObject): Boolean {
-        if (!send(message)) return false
-        inputSentAt = SystemClock.elapsedRealtime()
+    /** Makes the open profile [name] the front, here and in the engine. False when it is not open or the link is down. */
+    fun setFront(name: String): Boolean {
+        val session = session(name) ?: return false
+        if (!send(Requests.setFront(session.name))) return false
+        requestedFront = session.name
+        moveFront(session)
         return true
-    }
-
-    /** A command typed on the input line: sent, and put first in [history]. False as for [send]. */
-    fun sendCommand(line: String): Boolean {
-        // A script the command runs reads what the player typed in the text boxes
-        ScriptWindowsClient.flushTyping()
-        if (!sendInput(Requests.send(line))) return false
-        val now = SystemClock.elapsedRealtime()
-        dropExpiredSends(now)
-        sendsAwaitingClear.addLast(now)
-        if (line.isNotBlank()) history = listOf(line) + history.filter { it != line }
-        return true
-    }
-
-    /** What the player typed while [hiddenInput] holds. False as for [send]. */
-    fun sendHidden(text: String): Boolean = sendInput(Requests.sendHidden(text))
-
-    fun dismissHidden(): Boolean = sendInput(Requests.dismissHidden())
-
-    /** Asks the engine to complete [text]; [onResult] gets the completed line, or empty for none. False as for [send]. */
-    fun complete(text: String, onResult: (String) -> Unit): Boolean {
-        val id = newRequestId()
-        if (!send(Requests.complete(text, false, id))) return false
-        completions[id] = onResult
-        return true
-    }
-
-    fun commandLineShown() {
-        commandLine = null
-    }
-
-    fun sendErrorShown() {
-        sendError = null
-    }
-
-    /** Connects the engine to a game and remembers the address for [reconnect]. False as for [send]. */
-    fun connect(host: String, port: Int, tls: Boolean): Boolean {
-        lastAddress = GameAddress(host, port, tls)
-        lastProfile = null
-        prefs().edit {
-            putString(PREF_LAST_HOST, host)
-            putInt(PREF_LAST_PORT, port)
-            putBoolean(PREF_LAST_TLS, tls)
-            remove(PREF_LAST_PROFILE)
-        }
-        return send(Requests.connect(host, port, tls))
     }
 
     /**
-     * Connects [lastProfile] again: the running profile to its address, or, on an engine not running it, by opening it
-     * with [passwordOf] its name. Without one, connects to [lastAddress]. Why it could not goes to [onRefused].
+     * Connects [front] to its address again, on its own socket. While no profile is open, as on an engine started again
+     * after the notification's Quit, opens [lastProfile] with [passwordOf] its name instead: a bare connect there would
+     * have libmudlet make a profile of MUDLET_PROFILE's name with the address, a copy of the player's. Why it could not
+     * goes to [onRefused].
      */
     fun reconnect(passwordOf: (profile: String) -> String?, onRefused: (error: String) -> Unit) {
-        val name = lastProfile
-        if (name == null) {
-            lastAddress?.let { connectAgain(it, onRefused) }
+        val session = frontSession
+        if (session != null) {
+            if (session.lastAddress != null && !session.reconnect()) onRefused(app.getString(R.string.profiles_error_not_attached))
             return
         }
-        // Its own connect for the running one, as openProfile leaves alone a profile that is connected or reconnecting
-        val running = profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }
-            ?.takeIf { status["profile"].let { s -> s.equals("$name loaded", true) || s.equals("$name starting", true) } }
-        if (running != null) {
-            connectAgain(GameAddress(running.host, running.port, running.tls), onRefused)
-        } else {
-            // Not a bare connect: on an engine that has opened no profile since it started, as after the notification's
-            // Quit, libmudlet would make a profile of MUDLET_PROFILE's name with this address, a copy of the player's
-            openProfile(name, passwordOf(name)) { error -> if (error != null) onRefused(error) }
+        val name = lastProfile ?: return
+        openProfile(name, passwordOf(name)) { error -> if (error != null) onRefused(error) }
+    }
+
+    private fun moveFront(session: ProfileSession?) {
+        val was = frontSession
+        if (session === was) return
+        frontSession = session
+        // Only the front profile draws the app's map
+        was?.appMap?.update()
+        session?.appMap?.update()
+        if (session != null && heldMarkers.isNotEmpty()) {
+            heldMarkers.forEach(session::addMarker)
+            heldMarkers.clear()
         }
     }
 
-    private fun connectAgain(address: GameAddress, onRefused: (error: String) -> Unit) {
-        if (!send(Requests.connect(address.host, address.port, address.tls))) onRefused(app.getString(R.string.profiles_error_not_attached))
+    // False when the link is down and the request was dropped
+    private fun send(message: JSONObject): Boolean {
+        val sent = link.send(message)
+        if (!sent) linkState = "not attached: command dropped"
+        return sent
     }
 
-    fun disconnect(): Boolean = send(Requests.disconnect())
-
-    fun typedLineMoved() {
-        moveTypedLine = false
-    }
-
-    /** Changes [setting] and, if it is one of [Settings.mudletSettings], gives the profile that is loaded the new value. */
+    /** Changes [setting] and, if it is one of [Settings.mudletSettings], gives each profile that is loaded the new value. */
     fun <T> setMudletSetting(setting: Settings.Setting<T>, value: T) {
         val old = setting.value
         setting.set(value)
-        if (setting.mudlet && setting.value != old) sendMudletSettings(listOf(setting))
+        if (setting.mudlet && setting.value != old) sessions.forEach { it.sendMudletSettings(listOf(setting)) }
     }
 
-    // Lost when no profile is loaded or the link is down: the next profile to load, or the next attach, gets them all
-    private fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
-        if (status["profile"]?.endsWith(" loaded") != true) return
-        val id = newRequestId()
-        settingsRequests.add(id)
-        if (!link.send(Requests.runLua(settings.joinToString("\n") { it.setConfigLua() }, id))) settingsRequests.remove(id)
-    }
-
+    /** The console's size, which every open profile is given: all of them would show on this screen. */
     fun setScreenSize(columns: Int, rows: Int) {
         val size = columns to rows
         if (size == screenSize) return
         screenSize = size
-        if (attached) link.send(Requests.setScreenSize(columns, rows))
+        if (attached) sessions.forEach { it.sendScreenSize(size) }
     }
 
     // Each answer comes to [onAnswer] on the main thread: null once the engine has done it, else why not
@@ -357,11 +247,12 @@ object EngineClient {
 
     fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.deleteProfile(name, it) }
 
-    /** Opens and connects the profile [name]; once the engine has, Reconnect opens it again. */
+    /** Opens and connects the profile [name], closing those open; Reconnect then goes to its address, or opens it again once none is. */
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) {
             lastProfile = name
             prefs().edit { putString(PREF_LAST_PROFILE, name) }
+            session(name)?.forgetAddress() ?: ProfileSession.forgetAddress(prefs(), name)
         }
         onAnswer(error)
     }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
@@ -372,7 +263,7 @@ object EngineClient {
     }
 
     private fun profileRequest(onAnswer: (String?) -> Unit, request: (Long) -> JSONObject) {
-        val id = newRequestId()
+        val id = link.newRequestId()
         profileAnswers[id] = onAnswer
         if (!send(request(id))) {
             profileAnswers.remove(id)
@@ -386,6 +277,32 @@ object EngineClient {
         val onAnswer = profileAnswers.remove(id) ?: return false
         onAnswer(error)
         return true
+    }
+
+    // A session for each profile in [open], kept for one that stays open, and the front as the engine has it
+    private fun onOpenProfiles(open: List<OpenProfile>) {
+        val kept = open.map { profile ->
+            sessions.firstOrNull { it.name == profile.name }?.also { it.moveTo(profile.socket, attached) }
+                ?: ProfileSession(profile.name, profile.socket, app).also { if (attached) it.start() }
+        }
+        openSessions.filter { it !in kept }.forEach(ProfileSession::stop)
+        openSessions.clear()
+        openSessions.addAll(kept)
+        val engineFront = open.indexOfFirst { it.front }.let { kept.getOrNull(it) }
+        val requested = requestedFront?.let { name -> kept.firstOrNull { it.name == name } }
+        if (requested == null || requested === engineFront) requestedFront = null
+        moveFront(requested ?: engineFront ?: kept.firstOrNull())
+    }
+
+    // The engine's status restore tells, in the front profile's console, how bringing the profiles back went
+    private fun onEngineStatus(key: String, value: String) {
+        if (key == EngineRestore.STATUS_KEY) {
+            EngineRestore.marker(engineStatus[key], value)?.let { marker ->
+                val session = frontSession
+                if (session != null) session.addMarker(marker) else heldMarkers.add(marker)
+            }
+        }
+        engineStatus[key] = value
     }
 
     fun runPings(count: Int = 300) {
@@ -415,10 +332,10 @@ object EngineClient {
         }
     }
 
-    private fun connectLocal(): Transport {
+    private fun connectLocal(path: String): Transport {
         val socket = LocalSocket()
         try {
-            socket.connect(LocalSocketAddress(EngineSocket.path(app), LocalSocketAddress.Namespace.FILESYSTEM))
+            socket.connect(LocalSocketAddress(path, LocalSocketAddress.Namespace.FILESYSTEM))
         } catch (e: IOException) {
             socket.close()
             throw e
@@ -438,16 +355,15 @@ object EngineClient {
 
     private val listener = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
-            replaying = true
-            // Read here, as the link has it now: what is sent before the post runs goes out on this connection
-            val connection = link.connection
-            // The engine forgets nothing across a reattach, but a new engine instance needs the size again
-            screenSize?.let { (columns, rows) -> link.send(Requests.setScreenSize(columns, rows)) }
             // Another UI or a restore may have changed them meanwhile
-            link.send(Requests.listProfiles(newRequestId()))
-            // The engine resends its whole status after hello, so the old instance's values must go first
-            if (!sameInstance) resetStatus()
-            post {
+            link.send(Requests.listProfiles(link.newRequestId()))
+            main.post {
+                // The engine resends its whole status after hello, so the old instance's values must go first
+                if (!sameInstance) engineStatus.clear()
+                // What it says is in front now stands: it had any setFront sent before
+                requestedFront = null
+                // A profile's socket that went with the engine may be back: no need to wait out the link's retry
+                sessions.forEach(ProfileSession::wake)
                 val now = SystemClock.elapsedRealtime()
                 enginePid = hello.pid
                 attachCount++
@@ -461,116 +377,30 @@ object EngineClient {
                     lostAt = 0
                 }
                 restartRequestedForThisOutage = false
-                // The engine's answers to sends on the old connection went with it
-                sendsAwaitingClear.clear()
                 if (!sameInstance) {
                     notifyCount = 0
-                    lastLuaResult = ""
                     pingResult = ""
-                    moveTypedLine = false
                 }
                 linkState = "attached to pid ${hello.pid} (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
-                if (!sameInstance) tail = null
-                if (!sameInstance && lines.isNotEmpty()) {
-                    addLines(listOf(UiLine(app.getString(R.string.marker_new_engine, hello.instance), IntArray(0), false, marker = true)))
-                }
-                ScriptWindowsClient.onAttached(sameInstance, connection)
             }
         }
 
         override fun onMessage(message: EngineMessage) {
             when (message) {
-                is EngineMessage.Line -> synchronized(pendingLock) {
-                    pendingLines.add(UiLine(message.text, message.runs, message.prompt))
-                    if (!message.replay) pendingNews.add(message.text)
-                    scheduleFlush()
-                }
+                is EngineMessage.Status -> main.post { onEngineStatus(message.key, message.value) }
 
-                is EngineMessage.Clear -> synchronized(pendingLock) {
-                    pendingLines.clear()
-                    pendingNews.clear()
-                    pendingClear = true
-                    pendingTail = null
-                    pendingTailSet = true
-                    scheduleFlush()
-                }
-
-                is EngineMessage.Tail -> synchronized(pendingLock) {
-                    pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt)
-                    pendingTailSet = true
-                    scheduleFlush()
-                }
-
-                is EngineMessage.Synced -> replaying = false
-
-                is EngineMessage.Status -> if (message.key == "completion") {
-                    val id = (message.replyTo as? Number)?.toLong()
-                    if (id != null) post { completions.remove(id)?.invoke(message.value) }
-                } else if (message.key == "luaResult" && (message.replyTo as? Number)?.toLong()?.let(settingsRequests::remove) == true) {
-                    // libmudlet answers "ran", the stand-in nothing, when the chunk ran
-                    if (message.value != "ran" && message.value.isNotEmpty()) Log.w(TAG, "Mudlet did not take the app's settings: ${message.value}")
-                } else {
-                    if (message.key == "sendError" && !replaying && inputSentAt > 0 && SystemClock.elapsedRealtime() - inputSentAt < SEND_ERROR_WINDOW_MS) {
-                        post { sendError = message.value }
-                    }
-                    synchronized(pendingLock) {
-                        pendingStatus[message.key] = message.value
-                        scheduleFlush()
-                    }
-                }
-
-                is EngineMessage.HiddenInput -> post { hiddenInput = message.wanted }
-
-                is EngineMessage.History -> post { history = message.lines }
-
-                is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
-
-                is EngineMessage.Announce -> post { Announcer.announce(message.text, message.assertive) }
-
-                is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
-                is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.Link,
-                -> post { ScriptWindowsClient.onMessage(message) }
-
-                is EngineMessage.Image -> {
-                    val bitmap = ScriptWindowsClient.decode(message)
-                    post { ScriptWindowsClient.onImage(message, bitmap) }
-                }
-
-                is EngineMessage.Map -> {
-                    val bitmap = ScriptWindowsClient.decode(message)
-                    post { ScriptWindowsClient.onMap(message, bitmap) }
-                }
-
-                is EngineMessage.AppMap -> {
-                    val bitmap = AppMapClient.decode(message)
-                    post { AppMapClient.onAppMap(message, bitmap) }
-                }
-
-                is EngineMessage.Rooms -> post { AppMapClient.onRooms(message) }
-
-                is EngineMessage.MapDownload -> post { AppMapClient.onMapDownload(message, app.resources) }
-
-                is EngineMessage.Notify -> post { notifyCount++ }
-
-                is EngineMessage.MoveTypedLine -> post { moveTypedLine = true }
-
-                is EngineMessage.Gap -> post {
-                    gapLines += message.skipped
-                    synchronized(pendingLock) {
-                        val skipped = message.skipped
-                        val text = app.resources.getQuantityString(R.plurals.marker_lines_skipped, skipped.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), skipped)
-                        pendingLines.add(UiLine(text, IntArray(0), false, true))
-                        scheduleFlush()
-                    }
-                }
-
-                is EngineMessage.Error -> post {
+                is EngineMessage.Error -> main.post {
                     if (!answerProfileRequest(message.replyTo, message.message)) linkState = "engine error: ${message.message}"
-                    ScriptWindowsClient.onError(message)
                 }
 
-                is EngineMessage.Profiles -> post {
+                is EngineMessage.Profiles -> main.post {
                     profiles = message.profiles
+                    answerProfileRequest(message.replyTo, null)
+                }
+
+                // The sessions first, so that an openProfile's answer finds the profile open
+                is EngineMessage.OpenProfiles -> main.post {
+                    onOpenProfiles(message.profiles)
                     answerProfileRequest(message.replyTo, null)
                 }
 
@@ -579,13 +409,12 @@ object EngineClient {
         }
 
         override fun onDetached(reason: String) {
-            resetStatus()
-            post {
+            main.post {
+                engineStatus.clear()
                 engineLosses++
                 lostAt = SystemClock.elapsedRealtime()
                 detachStartedAt = lostAt
                 enginePid = 0
-                completions.clear()
                 linkState = "engine connection lost ($reason); reconnecting"
                 // Their answers went with the connection
                 val unanswered = profileAnswers.values.toList()
@@ -595,7 +424,7 @@ object EngineClient {
         }
 
         override fun onConnectFailed(attempt: Int, error: IOException) {
-            post {
+            main.post {
                 linkState = "engine not reachable (attempt $attempt: ${error.message})"
                 // The engine is gone (stopped from its notification, crashed, or killed). While a
                 // UI is started we may start a foreground service again.
@@ -604,91 +433,6 @@ object EngineClient {
                     startEngine()
                 }
             }
-        }
-    }
-
-    private fun onCommandLine(text: String) {
-        // Lost while input is hidden, as Mudlet's GUI writes it into its password box
-        if (hiddenInput) return
-        // The engine empties its line after each send, which the input line did already: by the time that arrives,
-        // the player may be typing the next command
-        if (text.isEmpty()) {
-            dropExpiredSends(SystemClock.elapsedRealtime())
-            if (sendsAwaitingClear.removeFirstOrNull() != null) return
-        }
-        commandLine = text
-    }
-
-    // A profile that keeps the line after a send never empties it
-    private fun dropExpiredSends(now: Long) {
-        while (sendsAwaitingClear.isNotEmpty() && now - sendsAwaitingClear.first() > SEND_CLEAR_WINDOW_MS) sendsAwaitingClear.removeFirst()
-    }
-
-    // Runs on the reader thread, ahead of any status the next engine sends
-    private fun resetStatus() = synchronized(pendingLock) {
-        pendingStatus.clear()
-        pendingStatusReset = true
-        scheduleFlush()
-    }
-
-    private fun post(block: () -> Unit) {
-        main.post(block)
-    }
-
-    private fun scheduleFlush() {
-        if (flushPosted) return
-        flushPosted = true
-        main.postDelayed(::flush, 16)
-    }
-
-    private fun flush() {
-        val newLines: List<UiLine>
-        val news: List<String>
-        val newStatus: Map<String, String>
-        val statusReset: Boolean
-        val newTail: UiLine?
-        val tailSet: Boolean
-        val clear: Boolean
-        synchronized(pendingLock) {
-            clear = pendingClear
-            pendingClear = false
-            newTail = pendingTail
-            tailSet = pendingTailSet
-            pendingTail = null
-            pendingTailSet = false
-            newLines = pendingLines
-            news = pendingNews
-            pendingNews = ArrayList()
-            newStatus = pendingStatus
-            statusReset = pendingStatusReset
-            pendingLines = ArrayList()
-            pendingStatus = HashMap()
-            pendingStatusReset = false
-            flushPosted = false
-        }
-        if (statusReset) status.clear()
-        val restore = EngineRestore.marker(status[EngineRestore.STATUS_KEY], newStatus[EngineRestore.STATUS_KEY])
-        status.putAll(newStatus)
-        newStatus["luaResult"]?.let { lastLuaResult = it }
-        if (clear) lines.clear()
-        if (restore != null) addLines(listOf(UiLine(restore, IntArray(0), false, marker = true)))
-        addLines(newLines)
-        if (tailSet) tail = newTail
-        if (news.isNotEmpty()) Announcer.newLines(news)
-        // Also when an attach resends the profile status: a setting may have changed while the link was down
-        if (newStatus["profile"]?.endsWith(" loaded") == true) sendMudletSettings(Settings.mudletSettings)
-    }
-
-    private fun addLines(newLines: List<UiLine>) {
-        if (newLines.isEmpty()) return
-        linesAdded += newLines.size
-        if (newLines.size >= MAX_LINES) {
-            lines.clear()
-            lines.addAll(newLines.subList(newLines.size - MAX_LINES, newLines.size))
-        } else {
-            lines.addAll(newLines)
-            val excess = lines.size - MAX_LINES
-            if (excess > 0) lines.removeRange(0, excess)
         }
     }
 }

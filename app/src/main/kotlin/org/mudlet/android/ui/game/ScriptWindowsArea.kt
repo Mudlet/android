@@ -82,7 +82,6 @@ import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.ScriptWindowsClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
 import kotlin.math.roundToInt
@@ -126,7 +125,7 @@ fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @
 // [fitted] is the whole game area's, bars and all, so the windows are fitted when the bars are
 @Composable
 private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, content: @Composable (Modifier) -> Unit) {
-    val client = ScriptWindowsClient
+    val client = EngineClient.front.windows
     val windows = client.state
     val metrics = rememberConsoleMetrics(textSizeSp)
     val density = LocalDensity.current
@@ -148,7 +147,7 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
             }
         }
         // A new engine instance has none of what the last was told
-        val attaches = EngineClient.attachCount
+        val attaches = EngineClient.front.attaches
         LaunchedEffect(layout.mainWindowSize, attaches) { layout.mainWindowSize?.let(client::setMainWindowSize) }
         LaunchedEffect(layout.placements, attaches) {
             for ((name, placement) in layout.placements) client.placeUserWindow(name, placement)
@@ -331,8 +330,8 @@ private fun WindowConsole(
                         null
                     } else {
                         // Asked about again for each new text, which may have changed them
-                        LaunchedEffect(text, rowSpans) { for (span in rowSpans) ScriptWindowsClient.requestLink(window.name, span.link) }
-                        LineLinks(rowSpans, links::get) { link, item -> ScriptWindowsClient.followLink(window.name, link, item) }
+                        LaunchedEffect(text, rowSpans) { for (span in rowSpans) EngineClient.front.windows.requestLink(window.name, span.link) }
+                        LineLinks(rowSpans, links::get) { link, item -> EngineClient.front.windows.followLink(window.name, link, item) }
                     }
                     ConsoleLine(row, lines[i].text, style, Modifier.fillMaxWidth(), blankLines = blankLines, singleLine = true, links = rowLinks)
                 }
@@ -358,11 +357,11 @@ private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modif
         // Only the first text after a send can be Mudlet's emptying of the line
         if (!(scriptText.isEmpty() && awaitingClear)) text = TextFieldValue(scriptText, TextRange(scriptText.length))
         awaitingClear = false
-        ScriptWindowsClient.commandLineShown(name)
+        EngineClient.front.windows.commandLineShown(name)
     }
 
     fun submit() {
-        val sent = ScriptWindowsClient.sendWindowCommandLine(name, text.text)
+        val sent = EngineClient.front.windows.sendWindowCommandLine(name, text.text)
         notSent = !sent
         if (sent) {
             text = TextFieldValue()
@@ -423,7 +422,7 @@ private fun WindowHeader(window: ScriptWindow, onBack: (() -> Unit)?, modifier: 
         )
         if (window.kind == WindowKind.USER_WINDOW) {
             // Off, and read as such, while there is no engine to tell
-            IconButton({ ScriptWindowsClient.closeUserWindow(window.name) }, enabled = EngineClient.enginePid > 0) {
+            IconButton({ EngineClient.front.windows.closeUserWindow(window.name) }, enabled = EngineClient.enginePid > 0) {
                 Icon(painterResource(R.drawable.ic_close), stringResource(R.string.window_close, name))
             }
         }

@@ -416,8 +416,12 @@ class AppMapTest {
         val follow = hasContentDescription(string(R.string.map_follow)) and hasClickAction()
         waitFor("the button that centres the map shows") { compose.onAllNodes(follow).fetchSemanticsNodes().isNotEmpty() }
 
-        // A rotation keeps the map in front where the player moved it
+        // A rotation keeps the map in front where the player moved it: the UI attaches again, and the engine, which
+        // drew the move, sends the frame again
         compose.activityRule.scenario.recreate()
+        session = fake.engine.nextSession()
+        val again = lastRequest("setAppMapSize", "the map is asked for again after a rotation")
+        session.send(appMap(again.getInt("w"), again.getInt("h"), scale = again.getDouble("scale"), view = mapView(again.getInt("w"), again.getInt("h"), following = false, moved = move.getInt("seq"))))
         waitFor("the button shows again after a rotation") { compose.onAllNodes(follow).fetchSemanticsNodes().isNotEmpty() }
         noRequest("followPlayer")
 

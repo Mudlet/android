@@ -255,16 +255,20 @@ class ScriptMapTest {
         val drawn = bounds(map)
         val reach = with(compose.density) { 24.dp.toPx() } / shownScale(drawn)
         assertTrue("a finger reaches $reach of the frame's pixels", reach > 11)
-        // Off room 2's square of 15, but within a finger of it, and far from any room
+        // Off room 2's square of 15, but within a finger of it, and far from any room, clear of the buttons at the top end
         compose.onNode(map).performTouchInput {
             click(at(drawn, 236.5, 156.5))
             advanceEventTime(1_000)
-            click(at(drawn, 330.0, 40.0))
+            click(at(drawn, 60.0, 60.0))
         }
         assertPoint(230.0, 150.0, session.receive("mapPointer"))
-        assertPoint(330.0, 40.0, session.receive("mapPointer"))
+        assertPoint(60.0, 60.0, session.receive("mapPointer"))
 
-        compose.onNode(map).performTouchInput { doubleClick(at(drawn, 196.0, 155.0)) }
+        // Long enough after that tap that the double tap's first is not its second
+        compose.onNode(map).performTouchInput {
+            advanceEventTime(1_000)
+            doubleClick(at(drawn, 196.0, 155.0))
+        }
         val press = session.receive("mapPointer")
         val walk = session.receive("mapPointer")
         assertEquals(listOf("press", "doubleClick"), listOf(press.getString("type"), walk.getString("type")))
@@ -276,20 +280,26 @@ class ScriptMapTest {
         showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
         fun actions() = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+
+        // Found off the main thread, which may not wait for the screen to settle, and run on it
+        fun act(label: Int) {
+            val action = actions().single { it.label == string(label) }
+            compose.runOnIdle { action.action() }
+        }
         assertTrue("no centring while it follows", actions().none { it.label == string(R.string.map_follow) })
         // A third of the narrow side, 300: to show what is left of it, the map moves right
-        compose.runOnIdle { actions().single { it.label == string(R.string.map_pan_left) }.action() }
+        act(R.string.map_pan_left)
         val left = session.receive("moveMap")
         assertEquals(100.0, left.getDouble("dx"), 1e-6)
         assertEquals(0.0, left.getDouble("dy"), 1e-6)
-        compose.runOnIdle { actions().single { it.label == string(R.string.map_pan_up) }.action() }
+        act(R.string.map_pan_up)
         assertEquals(100.0, session.receive("moveMap").getDouble("dy"), 1e-6)
         compose.waitUntil(WAIT_MS) { actions().any { it.label == string(R.string.map_follow) } }
-        compose.runOnIdle { actions().single { it.label == string(R.string.map_follow) }.action() }
+        act(R.string.map_follow)
         assertEquals("mapper", session.receive("followPlayer").getString("map"))
 
         // The engine's refusal of a move is this map's, which then shows as the engine last drew it
-        compose.runOnIdle { actions().single { it.label == string(R.string.map_pan_right) }.action() }
+        act(R.string.map_pan_right)
         val right = session.receive("moveMap")
         assertEquals(-100.0, right.getDouble("dx"), 1e-6)
         session.refuse(right, "The map drawn last shows no area to move.")

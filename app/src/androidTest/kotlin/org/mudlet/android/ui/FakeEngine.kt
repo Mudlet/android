@@ -291,6 +291,9 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         /** A reply to the request whose "id" was [re]. */
         fun reply(key: String, value: String, re: Any) = send(JSONObject().put("t", "status").put("key", key).put("value", value).put("re", re))
 
+        /** The answer to a getSettings or setSettings whose "id" was [re]: the profile's [values] of the settings it named. */
+        fun settings(values: Map<String, Any>, re: Any) = send(JSONObject().put("t", "settings").put("values", JSONObject(values)).put("re", re))
+
         fun hiddenInput(wanted: Boolean) = send(JSONObject().put("t", "hiddenInput").put("wanted", wanted))
 
         /** [lines]: newest first. */

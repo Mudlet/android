@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.ui.EngineClient
 
 /** Something for TalkBack to say. [serial] numbers them, so the same words twice are said twice. */
 class Announcement(val text: String, val assertive: Boolean, val serial: Long)
@@ -92,7 +93,7 @@ object Announcer {
         main.postAtTime(readWaiting, minOf(now + QUIET_MS, waitingSince + MAX_WAIT_MS))
     }
 
-    private fun reading() = touchExploration && Settings.readNewText.value
+    private fun reading() = touchExploration && EngineClient.front.setting(Settings.readNewText)
 
     private val readWaiting = Runnable {
         val count = waitingCount

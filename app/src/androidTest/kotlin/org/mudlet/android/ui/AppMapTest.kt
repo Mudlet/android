@@ -74,9 +74,9 @@ import kotlin.math.min
 /**
  * The app's own map (docs/architecture.md, "The map behind the text"), against a fake engine: asked for at the
  * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; let go when the
- * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, where a
- * tap selects, a double tap walks, the buttons zoom and TalkBack's actions do the same, and Back sends it back; and the
- * room search, whose results centre the map on a room; and the download of the map the game offers.
+ * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, over the
+ * input line and the quick bar, where a tap selects, a double tap walks, the buttons zoom and TalkBack's actions do the
+ * same, and Back sends it back; and the room search, whose results centre the map on a room; and the download of the map the game offers.
  */
 @RunWith(AndroidJUnit4::class)
 class AppMapTest {
@@ -280,6 +280,38 @@ class AppMapTest {
     }
 
     @Test
+    fun theMapInFrontCoversTheInputLineAndQuickBarAndTheInputLineHasItsFocusBackAfter() {
+        val input = hasSetTextAction() and hasText(string(R.string.input_label))
+        val quickBar = hasText(string(R.string.history_open)) and hasClickAction()
+        val connectionBar = hasText(string(R.string.connection_disconnect)) and hasClickAction()
+        // Where they are with no keyboard up, as the map in front has none
+        val quickBarAt = bounds(quickBar)
+
+        // Without the focus, the input line does not take it when the map goes
+        activate(button)
+        waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
+        assertCovered(input, quickBar, quickBarAt, connectionBar)
+        checkAccessibility()
+        activate(button)
+        waitFor("the input line is back") { compose.onAllNodes(input).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(input).assertIsDisplayed()
+        compose.onNode(quickBar).assertIsDisplayed()
+        compose.waitForIdle()
+        assertTrue("the input line stays without the focus. ${screen()}", compose.onAllNodes(input and isFocused()).fetchSemanticsNodes().isEmpty())
+
+        // With it, the keyboard goes while the map is in front, and the focus is the input line's again after Back
+        withScreen { compose.onNode(input).performSemanticsAction(SemanticsActions.RequestFocus) }
+        keyboardUp()
+        activate(button)
+        waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the input line's keyboard goes") { !keyboardShown() }
+        assertCovered(input, quickBar, quickBarAt, connectionBar)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitFor("the input line is back, with the focus") { compose.onAllNodes(input and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(input).assertIsDisplayed()
+    }
+
+    @Test
     fun aBackGestureLetGoOfBeforeItEndsLeavesTheMapInFront() {
         openMap()
         val map = drawnMap()
@@ -407,16 +439,8 @@ class AppMapTest {
         session.send(rooms(request("findRooms", "the search is sent again"), "cellar", listOf(Triple(7, "Wine cellar", "Keep")), more = true))
         waitFor("the search says there were more") { compose.onAllNodes(hasText(string(R.string.app_map_more_rooms))).fetchSemanticsNodes().isNotEmpty() }
 
-        // Short of room, as with a keyboard up for the command line on a small screen, the results wait for it: cut
-        // off, their close button would be a target too small to touch
-        val height = bounds(mapShown()).height
-        withScreen { compose.onNode(hasSetTextAction() and hasText(string(R.string.input_label))).performSemanticsAction(SemanticsActions.RequestFocus) }
-        keyboardUp()
-        waitFor("the results are whole in the map, or wait for the room") { resultsFit() }
-        checkAccessibility()
-
         // A refused search is over: a late answer to it is not shown. While the search is edited, its last results go
-        searchAgain(field, height) {
+        searchAgain(field) {
             waitFor("the last results go while the search is edited") { compose.onAllNodes(resultsClose()).fetchSemanticsNodes().isEmpty() }
             checkAccessibility()
         }
@@ -603,13 +627,30 @@ class AppMapTest {
 
     // The offer in the map's middle, its card whole, covers no control but its own: over one it would take its touches and
     // cover it for TalkBack, which the accessibility check sees only on API 34 and up, and then only where the part left
-    // uncovered is the smaller. True with no offer in the middle
+    // uncovered is the smaller. Only controls in the merged tree count: the unmerged one keeps what the map in front clears
+    // from TalkBack, such as the input line under it. True with no offer in the middle
     private fun offerCoversNothing(): Boolean {
         val text = compose.onAllNodes(hasText(string(R.string.map_download_offered, HOST)), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
         val card = text?.parent ?: return true
         fun inCard(node: SemanticsNode): Boolean = generateSequence(node) { it.parent }.any { it.id == card.id }
+        val reachable = compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().map { it.id }.toSet()
         return compose.onAllNodes(hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
-            .none { !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
+            .none { it.id in reachable && !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
+    }
+
+    /**
+     * The map in front covers the [input] line and the [quickBar], which was at [quickBarAt]: neither is read, and the
+     * map reaches from above them down to the [connectionBar], which it leaves shown.
+     */
+    private fun assertCovered(input: SemanticsMatcher, quickBar: SemanticsMatcher, quickBarAt: Rect, connectionBar: SemanticsMatcher) {
+        for ((name, matcher) in listOf("the input line" to input, "the quick bar" to quickBar)) {
+            assertTrue("$name is not read. ${screen()}", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
+        }
+        compose.onNode(connectionBar).assertIsDisplayed()
+        val map = bounds(mapShown())
+        val connectionTop = bounds(connectionBar).top
+        assertTrue("the map, at $map, reaches past the quick bar's foot, ${quickBarAt.bottom}. ${screen()}", map.bottom >= quickBarAt.bottom - EDGE_PX)
+        assertTrue("the map, at $map, ends above the connection bar, at $connectionTop. ${screen()}", map.bottom <= connectionTop + EDGE_PX)
     }
 
     private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()
@@ -811,6 +852,10 @@ class AppMapTest {
 
         // How long the screen stays as a search leaves it before the test goes on: no keyboard comes back
         const val STEADY_MS = 1_000L
+
+        // How far apart two edges that meet may be found, in pixels
+        const val EDGE_PX = 1f
+
         const val TIMEOUT_MS = 240_000L
     }
 }

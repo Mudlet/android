@@ -43,7 +43,7 @@ import org.mudlet.android.ui.EngineMessages.button
  * The order TalkBack moves through the game screen in (docs/architecture.md, "On-device checklist"), against a fake
  * engine, over a screen with a mini console, a button bar and the map behind the text: the title bar, the console, the
  * input line and the screen's own buttons, then the script windows, then the button bars, and last the last
- * announcement. The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
+ * announcement; with the map in front, the title bar, the map and the connection bar, and nothing the map covers. The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
  */
 @RunWith(AndroidJUnit4::class)
 class TalkBackOrderTest {
@@ -84,11 +84,7 @@ class TalkBackOrderTest {
 
     @Test
     fun theConsoleInputAndButtonsThenTheWindowsThenTheBarsThenTheLastAnnouncement() {
-        // The chat is the top right quarter of Mudlet's 800 by 600 main window; a bar above the console
-        session.mainArea(800, 600, 100, 40, 0, 0, 800, 600)
-        session.windows(listOf(FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 50)), full = true)
-        session.windowText("chat", listOf(WINDOW_ROW))
-        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North"))))
+        showWindowAndBar()
         // Any size: the map behind the text fits whatever frame comes
         session.send(appMap(100, 100))
         session.announce(ANNOUNCEMENT, assertive = false)
@@ -98,10 +94,7 @@ class TalkBackOrderTest {
         compose.waitUntil(WAIT_MS) { AppMapClient.map != null }
         compose.onRoot().tryPerformAccessibilityChecks()
 
-        val nodes = compose.onAllNodes(SemanticsMatcher("any node") { true }, useUnmergedTree = true).fetchSemanticsNodes().associateBy { it.id }
-        val order = traversalOrder(nodes.values.filter { it.parent != null }.map { it.id })
-        val read = order.map { describe(nodes.getValue(it)) }
-
+        val reading = Reading()
         val window = hasContentDescription(string(R.string.window_description, "chat"))
         val expected = listOf(
             "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
@@ -114,24 +107,82 @@ class TalkBackOrderTest {
             "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
             "the last announcement" to hasContentDescription(ANNOUNCEMENT),
         )
-        val places = expected.map { (name, matcher) ->
-            val target = compose.onNode(matcher).fetchSemanticsNode().id
-            name to order.indexOfFirst { nodes.related(it, target) }
-        }
-        // Each in its own place, so no node they are all within stands in for them
-        val at = places.map { it.second }
-        assertTrue("each is read, in its own place: $places; TalkBack reads $read", at.all { it >= 0 } && at.distinct() == at)
-        assertEquals("TalkBack reads $read", places, places.sortedBy { it.second })
+        val places = reading.assertInOrder(expected)
 
         // The map behind the text adds nothing between the console's lines and the input line
         val console = compose.onNode(hasScrollToIndexAction() and !hasAnyAncestor(window)).fetchSemanticsNode().id
-        val beforeInput = order.subList(places[1].second, places[2].second)
-        assertTrue("only the console's lines before the input line: $read", beforeInput.all { console in nodes.getValue(it).ancestorIds() })
+        val beforeInput = reading.order.subList(places[1].second, places[2].second)
+        assertTrue("only the console's lines before the input line: ${reading.read}", beforeInput.all { console in reading.nodes.getValue(it).ancestorIds() })
+
+        reading.assertEveryControlRead()
+    }
+
+    @Test
+    fun withTheMapInFrontTheTitleBarThenTheMapThenTheConnectionBar() {
+        showWindowAndBar()
+        waitFor(hasText(WINDOW_ROW))
+        waitFor(hasText("North") and hasClickAction())
+        activate(hasContentDescription(string(R.string.app_map_show)))
+        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
+        waitFor(map)
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        val reading = Reading()
+        val expected = listOf(
+            "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
+            "the room search" to (hasSetTextAction() and hasText(string(R.string.app_map_search))),
+            "the map" to map,
+            "the connection bar" to (hasText(string(R.string.connection_disconnect)) and hasClickAction()),
+        )
+        reading.assertInOrder(expected)
+
+        // Nothing the map covers is read
+        val covered = listOf(
+            "the console" to hasText(CONSOLE_LINE),
+            "the input line" to (hasSetTextAction() and hasText(string(R.string.input_label))),
+            "the quick bar" to (hasText(string(R.string.history_open)) and hasClickAction()),
+            "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
+            "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
+        )
+        for ((name, matcher) in covered) {
+            assertTrue("$name is not read: TalkBack reads ${reading.read}", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
+        }
+        reading.assertEveryControlRead()
+    }
+
+    /** The screen's nodes as TalkBack moves through them now: see [traversalOrder]. */
+    private inner class Reading {
+        val nodes = compose.onAllNodes(SemanticsMatcher("any node") { true }, useUnmergedTree = true).fetchSemanticsNodes().associateBy { it.id }
+        val order = traversalOrder(nodes.values.filter { it.parent != null }.map { it.id })
+        val read = order.map { describe(nodes.getValue(it)) }
+
+        /** Where each of [expected] is first read, which is in that order, each in its own place. */
+        fun assertInOrder(expected: List<Pair<String, SemanticsMatcher>>): List<Pair<String, Int>> {
+            val places = expected.map { (name, matcher) ->
+                val target = compose.onNode(matcher).fetchSemanticsNode().id
+                name to order.indexOfFirst { nodes.related(it, target) }
+            }
+            // Each in its own place, so no node they are all within stands in for them
+            val at = places.map { it.second }
+            assertTrue("each is read, in its own place: $places; TalkBack reads $read", at.all { it >= 0 } && at.distinct() == at)
+            assertEquals("TalkBack reads $read", places, places.sortedBy { it.second })
+            return places
+        }
 
         // Every control is reached by swiping, none by touch alone
-        for (control in compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()) {
-            assertTrue("${describe(control)} is read: TalkBack reads $read", order.any { nodes.related(it, control.id) })
+        fun assertEveryControlRead() {
+            for (control in compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()) {
+                assertTrue("${describe(control)} is read: TalkBack reads $read", order.any { nodes.related(it, control.id) })
+            }
         }
+    }
+
+    // The chat is the top right quarter of Mudlet's 800 by 600 main window; a bar above the console
+    private fun showWindowAndBar() {
+        session.mainArea(800, 600, 100, 40, 0, 0, 800, 600)
+        session.windows(listOf(FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 50)), full = true)
+        session.windowText("chat", listOf(WINDOW_ROW))
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North"))))
     }
 
     /**

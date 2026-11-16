@@ -38,6 +38,8 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -102,6 +104,9 @@ private const val BUTTON_ORDER = 2f
  * its best suggestion only extends it, the rest shows greyed after the cursor (ghost text), and the accept button
  * at the start of the strip, or a hardware right arrow at the end of the line, puts it on the line. While input is
  * hidden there is neither strip nor ghost text.
+ *
+ * While [covered] (by the map in front), the line lets go of the focus, and so of the keyboard; uncovered, it takes the
+ * focus back if it had it.
  */
 @Composable
 fun InputLine(
@@ -118,6 +123,7 @@ fun InputLine(
     onInputChanged: (text: String, cursor: Int) -> Unit = { _, _ -> },
     picked: String? = null,
     onPickedShown: () -> Unit = {},
+    covered: Boolean = false,
 ) {
     // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
     // keyboard sends before the next frame, which a value and onValueChange field would apply to the old text
@@ -202,6 +208,23 @@ fun InputLine(
         if (!hiddenInput) secret.clearText()
         notice = null
         if (hadFocus) (if (hiddenInput) hiddenFocus else focus).requestFocus()
+    }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // Read as the line is covered, before the cover's focus properties take the focus away
+    val focusedAsCovered = remember(covered) { focused }
+    // Saved, as the map stays in front across a rotation
+    var refocus by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(covered) {
+        if (covered) {
+            if (!focusedAsCovered) return@LaunchedEffect
+            refocus = true
+            keyboard?.hide()
+            focusManager.clearFocus()
+        } else if (refocus) {
+            refocus = false
+            (if (hiddenInput) hiddenFocus else focus).requestFocus()
+        }
     }
     LaunchedEffect(commandLine) {
         if (commandLine == null) return@LaunchedEffect

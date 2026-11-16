@@ -195,7 +195,7 @@ come after #31, whose fake engine (`FakeEngine`) and emulator jobs run the app's
 | P5 | App state and save on background | P4 |
 | U8 | Background: notification with profile and connection state, Disconnect action, app state to the engine | U2, P5 |
 | S1 | Command suggestions' ranking core, `:suggest`: plain Kotlin, no UI | - |
-| S2 | Suggestions in the input line: a row of candidates above it and ghost text with an accept button, learned and saved per profile on the device, none while input is hidden | U4, S1 |
+| S2 | Suggestions in the input line: ghost text that a tap, the right arrow or TalkBack's action accepts, learned and saved per profile on the device, none while input is hidden | U4, S1 |
 | S3 | History search and pinned quick buttons: a sheet that searches the profile's history and sends, pins or forgets a command; pinned commands as buttons below the input line, saved per profile; neither while input is hidden | S2 |
 
 ```

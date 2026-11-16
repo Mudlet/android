@@ -149,14 +149,18 @@ order the UI asked for it:
 - It loads the file when the game screen first shows the profile; a command sent meanwhile is learned on top.
 - It records each send, and observes each game line but the echo of a send: one of the three lines after the send
   that ends with the command as a whole word.
-- It answers the input line once the typing has paused for 120 ms, with up to five suggestions. `SuggestionStrip`
-  shows them as buttons above the line, after an accept button for the ghost text. The ghost shows greyed through an
-  `OutputTransformation`, and only for the line as it is now; the field's state and semantics keep just the typed
-  text, so the keyboard does not see it and TalkBack does not read it. A hardware right arrow at the end of the line also accepts it.
+- It answers the input line once the typing has paused for 120 ms. The rest of the best suggestion shows greyed
+  after the cursor (ghost text, `ui/game/GhostText.kt`) through an `OutputTransformation`, and only for the line as
+  it is now; the field's state and its text for TalkBack keep just what was typed, so the keyboard does not see the
+  ghost. There is no row of suggestions: the keyboard shows its own. An empty line has no ghost (`Suggestions.ghost`),
+  so what usually comes next only ranks what is typed. A tap on the ghost while the line has the focus,
+  a hardware right arrow at the end of the line, or the line's TalkBack action ("Accept the suggestion: ...") puts it
+  on the line; TalkBack reads it as the line's state ("Suggestion: ..."). A tap on the ghost is told apart from one on
+  the typed text by where the field then puts the cursor, which it handles first: still at the end means the ghost.
 - It saves 5 s after a send and when the app leaves the front (`MainActivity.onStop`), to a temporary file that
   then replaces the old one. An I/O error is logged (tag `MudletSuggest`) without any command and the suggestions
   carry on in memory; after a failed load nothing is saved, so the file is not replaced with less.
-- While the game hides input there is neither strip nor ghost: nothing typed reaches the session, and the masked
+- While the game hides input there is no ghost: nothing typed reaches the session, and the masked
   send is recorded only as `recordSent("", hidden = true)`.
 
 The History button below the input line, or Ctrl+R on a hardware keyboard, opens `HistorySheet`, a
@@ -1049,11 +1053,11 @@ Item 13 of the on-device checklist covers this.
       action key: it should read Send, and suggestions, corrections or a capital first letter should not change what is
       typed. Type half a word, then the up button: the earlier command replaces it whole, and typing goes on from the
       end of it.
-    - The suggestions: send a few commands, then type the start of one. Up to five buttons above the line offer the
-      commands that match, and the rest of the best one shows greyed after the cursor. A button puts its command on
-      the line without sending it; the arrow button at the start of the row, or a hardware keyboard's right arrow at
-      the end of the line, takes the greyed text. After a send, the empty line's buttons offer what usually came next.
-      With nothing to offer the row is gone. Close the app from the recent apps and reopen it: they are still there.
+    - The suggestions: send a few commands, then type the start of one. The rest of the best match shows greyed
+      after the cursor, and nothing shows above the line. A tap on the greyed text, or a hardware keyboard's right
+      arrow at the end of the line, puts it on the line without sending it; a tap on the typed text only moves the
+      cursor, and a tap that gives the line the focus only opens the keyboard. Close the app from the recent apps and
+      reopen it: the suggestions are still there.
     - The history: "History" below the line opens a sheet with the commands sent, best first, and the keyboard on
       its search field; typing "od" keeps "open door". A row's text puts the command on the line without sending it
       and closes the sheet; its Send button sends it. Pin one: it shows as a button below the line, which sends it
@@ -1064,15 +1068,16 @@ Item 13 of the on-device checklist covers this.
       and again with a half-typed line: both stay. The same in split screen.
     - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
       the connection state is read out when it changes (connecting, connected, disconnected), without moving focus.
-      The line reads only what was typed, never the greyed text. Swiping goes from the console's lines to the input
-      line, then "Accept the suggestion: ..." and each "Suggestion: ...", then the up, down and Send buttons, then
+      The line reads what was typed, then "Suggestion: ..." for the greyed text, and its actions (three-finger tap, or
+      the reading controls) include "Accept the suggestion: ...", which puts it on the line. Swiping goes from the
+      console's lines to the input line, then "Complete the word", the up, down and Send buttons, then
       "History" and each "Pinned: ...", then the connection bar. History moves the focus into the sheet: its title,
       "Close the history", "Search the history", then each row's command ("double tap to put it on the command line")
       and its "Send ...", "Pin ..." or "Unpin ..." and "Forget ..." buttons. Back closes it and the focus goes back.
 16. The input line's engine features, connected to a game with the libmudlet APK.
     - At a password prompt (any game's login), the input line becomes a "Password" field with the keyboard's password
       layout, still open. TalkBack reads it as a password field and says "dot" or nothing for what is typed, never the
-      letters. There are no suggestions, no greyed text and no quick bar while it shows, and Ctrl+R opens nothing.
+      letters. There is no greyed text and no quick bar while it shows, and Ctrl+R opens nothing.
       Send logs in; the field goes back to the command line, with what was typed there before, and the password is
       not among the suggestions or in the history sheet afterwards. Its close button gives the command line back
       without sending.

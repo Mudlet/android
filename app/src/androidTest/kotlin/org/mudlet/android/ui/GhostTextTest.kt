@@ -3,9 +3,8 @@ package org.mudlet.android.ui
 import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
-import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -17,7 +16,6 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -28,8 +26,10 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -47,16 +47,15 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.suggest.SuggestionSession
 import org.mudlet.android.ui.game.CommandSuggestions
-import org.mudlet.android.ui.game.SUGGESTION_STRIP_TAG
 import java.io.File
 
 /**
- * The input line's suggestions against a fake engine: the strip of suggestions above the line, the ghost text and
- * its accept button, and neither while the game hides input. Each test has a profile of its own, so it starts with
- * nothing learned. Controls are found by the labels TalkBack reads and activated through their accessibility actions.
+ * The input line's ghost text against a fake engine: the rest of the best suggestion greyed after what is typed, no
+ * row of suggestions above the line, a tap on the ghost, the right arrow or TalkBack's action to take it, and no ghost
+ * while the game hides input. Each test has a profile of its own, so it starts with nothing learned.
  */
 @RunWith(AndroidJUnit4::class)
-class SuggestionStripTest {
+class GhostTextTest {
     private val fake = FakeEngineRule()
     private val compose = createAndroidComposeRule<MainActivity>()
 
@@ -72,7 +71,6 @@ class SuggestionStripTest {
 
     private val password = SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)
     private val input = hasSetTextAction() and !password
-    private val strip = hasTestTag(SUGGESTION_STRIP_TAG)
 
     @Before
     fun openTheGameScreenOnANewProfile() {
@@ -100,71 +98,109 @@ class SuggestionStripTest {
     }
 
     @Test
-    fun typingShowsSuggestionsAndOneFillsTheLineWithoutSending() {
+    fun theGhostShowsAfterWhatIsTypedWithNoRowOfSuggestionsAboveTheLine() {
         send("open door")
         send("north")
         compose.onNode(input).performTextInput("op")
-        waitFor(suggestion("open door"))
-        compose.onNode(strip).assertIsDisplayed()
+        waitFor(ghost("open door"))
+        // The ghost shows after the cursor but is not in the line: TalkBack reads what was typed, then the suggestion
+        compose.onNode(input).assert(editableText("op"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.input_suggestion, "open door")))
+        compose.onRoot().tryPerformAccessibilityChecks()
 
-        activate(suggestion("open door"))
+        // No button offers a suggestion: the keyboard has its own row of them
+        for (command in listOf("open door", "north")) {
+            assertNone(hasText(command) and hasClickAction())
+            assertNone(hasContentDescription(string(R.string.input_suggestion, command)))
+        }
+        assertNone(hasContentDescription(string(R.string.input_accept_suggestion, "open door")))
+    }
+
+    @Test
+    fun aTapOnTheGhostTakesItAndATapOnTheTypedTextDoesNot() {
+        send("open door")
+        compose.onNode(input).performTextInput("op")
+        waitFor(ghost("open door"))
+        compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }
         compose.onNode(input).assertIsFocused().assert(editableText("open door"))
-        // A request after the tap comes next: nothing was sent in between
-        activate(hasContentDescription(string(R.string.input_complete)))
-        assertEquals("open door", session.receive("complete").getString("text"))
-        assertEquals(2, session.received.count { it.optString("t") == "send" })
+        assertEquals("nothing sent but the command", 1, sends())
+
+        compose.onNode(input).performTextClearance()
+        compose.onNode(input).performTextInput("op")
+        waitFor(ghost("open door"))
+        compose.onNode(input).performTouchInput { click(Offset(textX(typedMiddle()), center.y)) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(ghost("open door")).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(input).assert(editableText("op"))
+    }
+
+    @Test
+    fun talkBacksActionOnTheLineTakesTheGhost() {
+        send("open door")
+        compose.onNode(input).performTextInput("op")
+        waitFor(ghost("open door"))
+        acceptGhost("open door")
+        compose.onNode(input).assertIsFocused().assert(editableText("open door"))
+        assertEquals("nothing sent but the command", 1, sends())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions)).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun theRightArrowAtTheEndOfTheLineTakesTheGhost() {
+        send("open door")
+        compose.onNode(input).performTextInput("op")
+        waitFor(ghost("open door"))
+        compose.onNode(input).performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNode(input).assert(editableText("open door"))
     }
 
     @Test
     fun wordsTheGameShowedCompleteTheWordBeingTyped() {
         session.line(1, "You see a lantern.")
         compose.onNode(input).performTextInput("get lan")
-        waitFor(suggestion("lantern"))
-        activate(suggestion("lantern"))
+        waitFor(ghost("get lantern"))
+        acceptGhost("get lantern")
         compose.onNode(input).assert(editableText("get lantern"))
     }
 
     @Test
-    fun anEmptyLineAfterASendOffersTheCommandThatUsuallyFollows() {
-        for (command in listOf("kill rat", "loot", "kill rat")) send(command)
-        compose.onNode(input).assert(editableText(""))
-        waitFor(suggestion("loot"))
-        activate(suggestion("loot"))
-        compose.onNode(input).assert(editableText("loot"))
-    }
-
-    @OptIn(ExperimentalTestApi::class)
-    @Test
-    fun theGhostTextIsAcceptedByItsButtonOrTheRightArrow() {
+    fun theLineIsReadBeforeItsButtons() {
         send("open door")
         compose.onNode(input).performTextInput("op")
-        val accept = hasContentDescription(compose.activity.getString(R.string.input_accept_suggestion, "open door"))
-        waitFor(accept)
-        // The ghost shows after the cursor but is not in the line: TalkBack reads only what was typed
-        compose.onNode(input).assert(editableText("op"))
-        activate(accept)
-        compose.onNode(input).assertIsFocused().assert(editableText("open door"))
+        waitFor(ghost("open door"))
+        compose.onRoot().tryPerformAccessibilityChecks()
 
-        compose.onNode(input).performTextClearance()
-        compose.onNode(input).performTextInput("op")
-        waitFor(accept)
-        compose.onNode(input).performKeyInput { pressKey(Key.DirectionRight) }
-        compose.onNode(input).assert(editableText("open door"))
+        val reading = TalkBackReading(compose)
+        reading.assertInOrder(
+            listOf(
+                "the input line" to input,
+                "its Complete button" to button(R.string.input_complete),
+                "its Previous button" to button(R.string.input_history_previous),
+                "its Next button" to button(R.string.input_history_next),
+                "its Send button" to button(R.string.input_send),
+            ),
+        )
+        reading.assertEveryControlRead()
     }
 
     @Test
-    fun whileTheGameHidesInputThereAreNoSuggestionsAndThePasswordIsKeptNowhere() {
+    fun whileTheGameHidesInputThereIsNoGhostAndThePasswordIsKeptNowhere() {
         send("north")
         compose.onNode(input).performTextInput("n")
-        waitFor(suggestion("north"))
+        waitFor(ghost("north"))
 
         session.hiddenInput(true)
         waitFor(password)
-        compose.onNode(strip).assertDoesNotExist()
-        compose.onNode(password).performTextInput("hunter2")
+        val offersAGhost = SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions) or SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription)
+        assertNone(password and offersAGhost)
+        // The start of a command the line would offer: nothing typed here reaches the suggestions
+        compose.onNode(password).performTextInput("no")
         // Long enough for an answer to the typing, were there one
         Thread.sleep(SuggestionSession.TYPING_DELAY_MS * 4)
-        compose.onNode(strip).assertDoesNotExist()
+        compose.waitForIdle()
+        assertNone(password and offersAGhost)
+        compose.onNode(password).performTextClearance()
+        compose.onNode(password).performTextInput("hunter2")
         compose.onNode(password).performImeAction()
         assertEquals("hunter2", session.receive("sendHidden").getString("text"))
 
@@ -180,34 +216,37 @@ class SuggestionStripTest {
         assertFalse("the password is not in the saved suggestions", "hunter" in text)
     }
 
-    @Test
-    fun theSuggestionsAreLabelledButtonsReadAfterTheLineAndBeforeItsButtons() {
-        send("open door")
-        compose.onNode(input).performTextInput("o")
-        waitFor(suggestion("open door"))
-        compose.onRoot().tryPerformAccessibilityChecks()
+    private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
-        val chip = compose.onNode(suggestion("open door") and hasClickAction()).fetchSemanticsNode()
-        assertEquals(Role.Button, chip.config.getOrNull(SemanticsProperties.Role))
-        val minimum = with(compose.density) { 48.dp.toPx() }
-        assertTrue("a ${chip.boundsInRoot.height} px tall button, at least 48 dp ($minimum px)", chip.boundsInRoot.height >= minimum)
+    private fun button(@StringRes id: Int) = hasContentDescription(string(id)) and hasClickAction()
 
-        // Directly above the line
-        val stripBounds = bounds(strip)
-        val inputBounds = bounds(input)
-        assertTrue("strip $stripBounds above the input line $inputBounds", stripBounds.bottom <= inputBounds.top)
-
-        // TalkBack's order: the line, then the strip as a group, then the line's buttons
-        val line = traversalIndex(input)
-        val suggestions = traversalIndex(strip)
-        val send = traversalIndex(hasContentDescription(string(R.string.input_send)) and hasClickAction())
-        assertTrue("line $line, strip $suggestions, send $send", line < suggestions && suggestions < send)
-        assertEquals(true, compose.onNode(strip).fetchSemanticsNode().config.getOrNull(SemanticsProperties.IsTraversalGroup))
+    /** The input line while it offers TalkBack the action that takes the ghost, which gives [line]. */
+    private fun ghost(line: String) = input and SemanticsMatcher("offers to accept '$line'") { node ->
+        node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label == string(R.string.input_accept_suggestion, line) }
     }
 
-    private fun string(@StringRes id: Int) = compose.activity.getString(id)
+    /** What TalkBack's action does: the line's custom action, after the checks on the whole screen. */
+    private fun acceptGhost(line: String) {
+        compose.onRoot().tryPerformAccessibilityChecks()
+        val actions = compose.onNode(input).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        compose.runOnIdle { assertTrue(actions.single { it.label == string(R.string.input_accept_suggestion, line) }.action()) }
+    }
 
-    private fun suggestion(text: String) = hasContentDescription(compose.activity.getString(R.string.input_suggestion, text))
+    private fun layout(): TextLayoutResult {
+        val results = mutableListOf<TextLayoutResult>()
+        compose.onNode(input).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+        return results.single()
+    }
+
+    // The middle of the ghost, and of the typed "op", in the text's own coordinates: the field lays out "op" + ghost
+    private fun ghostMiddle(): Float = layout().let { (it.getHorizontalPosition(2, true) + it.getLineRight(0)) / 2 }
+
+    private fun typedMiddle(): Float = layout().getBoundingBox(0).center.x
+
+    // The text starts after the field's content padding, Material's 16 dp
+    private fun textX(x: Float) = with(compose.density) { 16.dp.toPx() } + x
+
+    private fun sends() = session.received.count { it.optString("t") == "send" }
 
     private fun send(command: String) {
         compose.onNode(input).performTextInput(command)
@@ -220,9 +259,10 @@ class SuggestionStripTest {
         it.config.getOrNull(SemanticsProperties.EditableText)?.text == text
     }
 
-    private fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
-
-    private fun traversalIndex(matcher: SemanticsMatcher) = compose.onNode(matcher).fetchSemanticsNode().config.getOrNull(SemanticsProperties.TraversalIndex) ?: 0f
+    private fun assertNone(matcher: SemanticsMatcher) {
+        val found = compose.onAllNodes(matcher).fetchSemanticsNodes()
+        assertTrue("no ${matcher.description}: found ${found.map { it.config }}", found.isEmpty())
+    }
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 

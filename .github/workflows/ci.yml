@@ -7,7 +7,8 @@ name: CI
 # opens or updates an issue when they fail; a manual run runs everything.
 #
 # What runs for what changed (the filters in "changes" below say it exactly):
-#   docs, README and the like     nothing but this workflow's own small jobs (docs/protocol.md: the APKs, whose
+#   any file                      the conflict-marker check (scripts/lint.sh conflict-markers)
+#   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the APKs, whose
 #                                 ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
 #                                 ktlint, the APKs with Android lint, and the emulator suite (smoke test and the
@@ -127,6 +128,8 @@ jobs:
               - scripts/check-strings.py
               - *lint-tools
               - *everything
+            conflict-markers:
+              - "**"
             apks:
               - *kotlin
               - native/**
@@ -176,7 +179,7 @@ jobs:
             esac
           }
           checks=()
-          for check in clang-format shellcheck actionlint strings; do
+          for check in clang-format shellcheck actionlint strings conflict-markers; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {

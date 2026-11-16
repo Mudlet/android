@@ -154,7 +154,7 @@ class ScreenshotTest {
         activate(hasTestTag(GAME_PILL_TAG))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
         save("games-$mode")
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        activate(hasContentDescription(string(R.string.games_close)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isEmpty() }
 
         if (mode == "light") {

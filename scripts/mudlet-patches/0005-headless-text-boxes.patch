@@ -235,7 +235,7 @@ index 94596db..06005c0 100644
      std::optional<WindowsTold> mDeliveredWindows;
      // The label pointer() last had the pointer enter, until it left, and which label of that name it was
 diff --git a/src/headless/THeadlessSessionWindows.cpp b/src/headless/THeadlessSessionWindows.cpp
-index dac528e..5a0d949 100644
+index dac528e..90c7cfc 100644
 --- a/src/headless/THeadlessSessionWindows.cpp
 +++ b/src/headless/THeadlessSessionWindows.cpp
 @@ -274,11 +274,16 @@ void THeadlessSession::connectWindowRelays(Host* pHost, const unsigned int run)
@@ -326,7 +326,7 @@ index dac528e..5a0d949 100644
 +    // The app has what the player typed, so it is not told it back; what a script sets is told
 +    if (mDeliveredWindows) {
 +        if (const auto told = mDeliveredWindows->textBoxes.find(name); told != mDeliveredWindows->textBoxes.end()) {
-+            told->text = mpHost->windowRegistry().textBoxText(name).value_or(QString());
++            Q_UNUSED(told)
 +        }
 +    }
 +    return true;

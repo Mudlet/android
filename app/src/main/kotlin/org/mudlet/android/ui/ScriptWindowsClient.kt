@@ -252,7 +252,6 @@ object ScriptWindowsClient {
         val connection = EngineClient.sendOn(Requests.setTextBoxText(name, plain))
         if (connection == 0) return
         typing.remove(name)
-        state = state.textBoxTyped(name, plain, connection)
     }
 
     /** Sends what the player has typed in every text box, before what may run a script that reads them. */

@@ -82,7 +82,7 @@ data class ScriptWindows(
     private fun afterTextBox(message: EngineMessage.TextBox): ScriptWindows {
         val box = message.textBox
         val held = textBoxes[box.name]
-        if (held != null && message.typed < (textBoxesTyped[box.name] ?: 0)) {
+        if (held != null && message.typed <= (textBoxesTyped[box.name] ?: 0)) {
             return copy(textBoxes = textBoxes + (box.name to box.copy(text = held.text)))
         }
         val edits = if (held?.text == box.text) textBoxEdits else textBoxEdits + (box.name to nextEdit.incrementAndGet())

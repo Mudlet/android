@@ -1199,7 +1199,6 @@ void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<L
 void SocketBridge::setTextBoxText(const QJsonObject& message)
 {
     const QString name = message.value(QLatin1String("name")).toString();
-    ++mTextBoxTyped[name];
     const QJsonValue value = message.value(QLatin1String("text"));
     QString text = value.toString();
     // Not taken as empty, which would clear what the player typed

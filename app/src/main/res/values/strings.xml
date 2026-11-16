@@ -153,7 +153,68 @@
 
     <!-- The settings screen, reached from the title bar of the profile list and of the game screen -->
     <string name="settings_title">Settings</string>
-    <!-- The heading of the settings screen's section on the size of the game's text -->
+    <!-- Where the settings screen lists its pages: the heading of the app's own settings, which are the same for every
+         game, below those of each game -->
+    <string name="settings_app">App · all games</string>
+    <!-- Where a search of the settings finds one of the app's own settings (the same for every game): the first part
+         of "App › Appearance" -->
+    <string name="settings_app_place">App</string>
+    <!-- Where the settings screen lists its pages: the heading of the game settings that each game the player adds
+         from now on starts with, below those of the games open now. A game keeps its own settings once it has them. -->
+    <string name="settings_new_games">New games</string>
+    <!-- On a wide screen, where a settings page opens beside the list of pages: what that space shows until one is picked -->
+    <string name="settings_pick">Pick a page of settings.</string>
+    <!-- What tapping a page in the list of settings pages, or a setting search found, does: TalkBack says "Double-tap
+         to open" -->
+    <string name="settings_open">open</string>
+    <!-- The search field at the top of the settings screen, before anything is typed in it -->
+    <string name="settings_search">Search settings</string>
+    <!-- The button, read by a screen reader, that empties the settings' search field -->
+    <string name="settings_search_clear">Clear the search</string>
+    <!-- The first of the chips under the settings' search field, which narrow the search to one game, to the new
+         games' settings or to the app's own: this one shows what every one of them finds -->
+    <string name="settings_search_all">All</string>
+    <!-- %1$s is what the player searched the settings for -->
+    <string name="settings_search_none">No setting matches “%1$s”.</string>
+    <!-- Over a setting a search found, where it lives: %1$s is the game's name (or "App", or "New games"), %2$s the
+         page's title, as in "Aardwolf › Accessibility". The arrow points to the end of the line: mirror it in a
+         right-to-left language. -->
+    <string name="settings_breadcrumb">%1$s › %2$s</string>
+    <!-- Under a page's title, whose settings it changes: %1$s is the game's name. Other games keep their own. -->
+    <string name="settings_for_game">Only for %1$s. Each game keeps its own.</string>
+    <!-- Under a page's title, opened from "New games": the settings it changes are what each game the player adds
+         from now on starts with -->
+    <string name="settings_for_new_games">What each game you add from now on starts with. Each game then keeps its own.</string>
+    <!-- Under a page's title, opened from "App · all games": its settings are the app's, the same for every game -->
+    <string name="settings_for_app">For the app and every game.</string>
+    <!-- A page of each game's own settings: how the game's text is shown -->
+    <string name="settings_display">Display &amp; text</string>
+    <!-- Under "Display & text" in the list of settings pages, what that page holds -->
+    <string name="settings_display_summary">Blank lines from the game</string>
+    <!-- A page of each game's own settings: for players who use a screen reader such as TalkBack -->
+    <string name="settings_accessibility">Accessibility</string>
+    <!-- Under "Accessibility" in the list of settings pages, what that page holds -->
+    <string name="settings_accessibility_summary">Screen reader</string>
+    <!-- Words a player might search the settings for to find the text size setting, besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for, not a translation
+         word for word. -->
+    <string name="settings_text_size_keywords">font, zoom, bigger, smaller, scale, larger</string>
+    <!-- Words a player might search the settings for to find "Read new text aloud", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_read_new_text_keywords">speech, speak, announce, voice, blind, screen reader</string>
+    <!-- Words a player might search the settings for to find "Tell games I use a screen reader", besides the words of
+         its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_advertise_screen_reader_keywords">blind, accessibility, MTTS, TalkBack</string>
+    <!-- Words a player might search the settings for to find "Blank lines from the game", besides the words of its
+         name and choices, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_blank_lines_keywords">empty lines, spacing, gaps, screen reader</string>
+    <!-- Words a player might search the settings for to find "Colours from my wallpaper", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_wallpaper_colours_keywords">Material You, dynamic colour, color, theme</string>
+    <!-- Words a player might search the settings for to find "Map behind the text", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_map_behind_text_keywords">mapper, background, rooms, faint</string>
+    <!-- A setting on the Appearance page: the size of the game's text -->
     <string name="settings_text_size">Text size</string>
     <!-- Under the text size setting, what it does -->
     <string name="settings_text_size_hint">The size of the game\'s text. Pinching the text with two fingers changes it too, and the system\'s font size scales it.</string>
@@ -165,24 +226,21 @@
     <string name="settings_text_larger">Larger text</string>
     <!-- A line of the kind a game sends, to show the text size -->
     <string name="settings_text_size_sample">You see a brass lantern here.</string>
-    <!-- The heading of the settings screen's section for players who use a screen reader such as TalkBack -->
-    <string name="settings_screen_reader">Screen reader</string>
-    <!-- A switch in the Screen reader section: have the screen reader read new game text as it arrives -->
+    <!-- A switch on a game's Accessibility page: have the screen reader read new game text as it arrives -->
     <string name="settings_read_new_text">Read new text aloud</string>
     <!-- Under "Read new text aloud", what the switch does -->
     <string name="settings_read_new_text_hint">While TalkBack is on, the game\'s new text is read out as it arrives.</string>
-    <!-- A switch in the Screen reader section: tell the games the player connects to that they use a screen reader -->
+    <!-- A switch on a game's Accessibility page: tell the game that the player uses a screen reader -->
     <string name="settings_advertise_screen_reader">Tell games I use a screen reader</string>
     <!-- Under "Tell games I use a screen reader", what the switch does -->
     <string name="settings_advertise_screen_reader_hint">Games that ask are told, and some then send text laid out for screen readers.</string>
-    <!-- The settings screen's map section: whether the game's map is drawn faintly behind the game's text. The map
-         button above the game's text brings it to the front either way. -->
-    <string name="settings_map">Map</string>
-    <!-- The switch in the Map section: draw the game's map faintly behind the game's text -->
+    <!-- A switch on the Appearance page: draw the game's map faintly behind the game's text. The map button above
+         the game's text brings it to the front either way. -->
     <string name="settings_map_behind_text">Map behind the text</string>
     <!-- Under "Map behind the text", what the switch does -->
     <string name="settings_map_behind_text_hint">The game\'s map shows faintly behind the game\'s text, following you. The map button brings it to the front.</string>
-    <!-- The heading of three choices: what becomes of the empty lines a game sends -->
+    <!-- A setting on a game's Display & text page, the heading of three choices: what becomes of the empty lines the
+         game sends -->
     <string name="settings_blank_lines">Blank lines from the game</string>
     <!-- One of the choices for blank lines from the game: show them as they come -->
     <string name="settings_blank_lines_show">Show them</string>
@@ -190,10 +248,13 @@
     <string name="settings_blank_lines_hide">Hide them</string>
     <!-- One of the choices for blank lines from the game: show a line with a single space instead -->
     <string name="settings_blank_lines_space">Replace them with a space</string>
-    <!-- The settings screen's section on how the app looks. On Android 12 and later only, which can colour apps
-         from the wallpaper (Material You); the game's own colours never change with it. -->
+    <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
+         game's text, the map behind the text). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>
-    <!-- The switch in the Appearance section: on, the app's screens take their colours from the wallpaper -->
+    <!-- Under "Appearance" in the list of settings pages, what that page holds -->
+    <string name="settings_appearance_summary">Text size, colours and the map</string>
+    <!-- A switch on the Appearance page, on Android 12 and later only: on, the app's screens take their colours from
+         the wallpaper (Material You) -->
     <string name="settings_wallpaper_colours">Colours from my wallpaper</string>
     <!-- Under "Colours from my wallpaper", what the switch does -->
     <string name="settings_wallpaper_colours_hint">The app\'s screens take their colours from your wallpaper. Off, they use Mudlet\'s own. The game\'s text keeps the game\'s colours.</string>

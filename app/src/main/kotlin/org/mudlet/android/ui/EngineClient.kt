@@ -248,11 +248,10 @@ object EngineClient {
         return sent
     }
 
-    /** Changes [setting] and, if it is one of [Settings.mudletSettings], gives each profile that is loaded the new value. */
-    fun <T> setMudletSetting(setting: Settings.Setting<T>, value: T) {
-        val old = setting.value
+    /** Changes [setting], one of [Settings.mudletSettings], for the games to come and for each game open now. */
+    fun <T> setForEveryGame(setting: Settings.Setting<T>, value: T) {
         setting.set(value)
-        if (setting.mudlet && setting.value != old) sessions.forEach { it.sendMudletSettings(listOf(setting)) }
+        sessions.forEach { it.changeSetting(setting, value) }
     }
 
     /** The console's size, which every open profile is given: all of them would show on this screen. */
@@ -264,9 +263,19 @@ object EngineClient {
     }
 
     // Each answer comes to [onAnswer] on the main thread: null once the engine has done it, else why not
-    fun saveProfile(profile: Profile, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.saveProfile(profile, it) }
+    fun saveProfile(profile: Profile, onAnswer: (error: String?) -> Unit) {
+        val added = profiles?.none { it.name == profile.name } == true
+        profileRequest({ error ->
+            // A game added here starts with the app's values of the settings Mudlet keeps with it
+            if (error == null && added) Settings.setAwaitsDefaults(profile.name, true)
+            onAnswer(error)
+        }) { Requests.saveProfile(profile, it) }
+    }
 
-    fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.deleteProfile(name, it) }
+    fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
+        if (error == null) Settings.setAwaitsDefaults(name, false)
+        onAnswer(error)
+    }) { Requests.deleteProfile(name, it) }
 
     /** Opens and connects the profile [name], closing those open; Reconnect then goes to its address, or opens it again once none is. */
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->

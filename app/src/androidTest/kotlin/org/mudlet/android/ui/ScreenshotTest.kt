@@ -11,9 +11,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -31,11 +34,13 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.util.Base64
 
 /**
- * Screenshots of the profile list, the game screen with the map behind its text, the settings and the map in front, with
- * a downloaded map, light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
+ * Screenshots of the profile list, the game screen with the map behind its text, the settings (the hub, a search and a
+ * page, and in light mode the hub and a page side by side on a tablet) and the map in front, with a downloaded map, light
+ * and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */
@@ -58,7 +63,10 @@ class ScreenshotTest {
 
     private fun takeScreenshots(mode: String) {
         if (Build.VERSION.SDK_INT < 31) return
-        compose.runOnIdle { Settings.mapBehindText.reset() }
+        compose.runOnIdle {
+            Settings.mapBehindText.reset()
+            Settings.setAwaitsDefaults(PROFILES[0].name, false)
+        }
         // A new engine instance, so no map or lines of an earlier test are left
         val first = fake.engine.nextSession()
         fake.engine.instance = "fake-screenshots-${System.nanoTime()}"
@@ -79,9 +87,21 @@ class ScreenshotTest {
         session.send(appMap(session.receiveLast("setAppMapSize", readPast = true)))
         save("game-$mode")
 
+        // The game's settings show once its profile has loaded
+        session.status("profile", "${PROFILES[0].name} loaded")
+        val asked = session.receive("getSettings")
+        session.settings(mapOf("announceIncomingText" to true, "advertiseScreenReader" to false, "blankLinesBehaviour" to "show"), asked.getLong("id"))
         activate(hasContentDescription(string(R.string.settings_title)))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.settings_text_size))).fetchSemanticsNodes().isNotEmpty() }
+        waitFor(hasText(string(R.string.settings_accessibility)))
         save("settings-$mode")
+        compose.onNode(hasSetTextAction()).performTextInput("screen")
+        waitFor(hasText(string(R.string.settings_search_all)))
+        save("settings-search-$mode")
+        compose.onNode(hasSetTextAction()).performTextClearance()
+        activate(hasText(string(R.string.settings_appearance)))
+        waitFor(hasText(string(R.string.settings_text_size)))
+        save("settings-appearance-$mode")
+        activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
 
         activate(hasContentDescription(string(R.string.app_map_show)))
@@ -95,6 +115,37 @@ class ScreenshotTest {
         session.send(appMap(session.receiveLast("setAppMapSize"), roomName = ROOM_NAME))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_description))).fetchSemanticsNodes().isNotEmpty() }
         save("map-$mode")
+
+        if (mode == "light") {
+            onATablet {
+                activate(hasContentDescription(string(R.string.settings_title)))
+                activate(hasText(string(R.string.settings_appearance)))
+                waitFor(hasText(string(R.string.settings_text_size)))
+                save("settings-tablet-$mode")
+            }
+        }
+    }
+
+    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+
+    /** [block] on a screen the size of a 10-inch tablet's, on its side; the activity is recreated each way, as on a real resize. */
+    private fun onATablet(block: () -> Unit) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+        // The shell's output must be read for the command to finish
+        fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).use { pfd ->
+            FileInputStream(pfd.fileDescriptor).readBytes()
+        }
+        try {
+            shell("wm size 2560x1600")
+            shell("wm density 320")
+            compose.waitForIdle()
+            block()
+        } finally {
+            shell("wm density reset")
+            shell("wm size reset")
+            compose.waitForIdle()
+        }
     }
 
     /** The whole screen, system bars included, once the app has drawn what it last composed. */

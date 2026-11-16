@@ -306,7 +306,7 @@ private fun WindowConsole(
     val first = text?.first ?: 0
     val lines = remember(text) { text?.lines.orEmpty().map { UiLine(it.text, it.runs, it.prompt) } }
     val spans = remember(text) { lines.map { linkSpans(it.runs, it.text.length) } }
-    val blankLines = Settings.blankLines.value
+    val blankLines = EngineClient.front.setting(Settings.blankLines)
     val listState = rememberLazyListState()
     var following by remember { mutableStateOf(true) }
 

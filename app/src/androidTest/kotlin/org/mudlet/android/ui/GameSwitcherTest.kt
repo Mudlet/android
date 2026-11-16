@@ -2,9 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
-import android.os.SystemClock
 import androidx.annotation.StringRes
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -23,7 +21,6 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -33,6 +30,7 @@ import com.google.android.apps.common.testing.accessibility.framework.integratio
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
 import com.google.android.apps.common.testing.accessibility.framework.uielement.ViewHierarchyElement
 import org.hamcrest.BaseMatcher
+import org.hamcrest.CoreMatchers.anyOf
 import org.hamcrest.Description
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -46,6 +44,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import androidx.compose.ui.R as ComposeUiR
 
 /**
  * Two games open against a fake engine (docs/multi-profile.md, "The switcher"): the profile list's open games, the game
@@ -74,7 +73,7 @@ class GameSwitcherTest {
     fun attach() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
         if (Build.VERSION.SDK_INT >= 34) {
-            compose.enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(UnderTheAddButton))
+            compose.enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(UnderTheAddButton, ScrimBelowTheSheet(string(ComposeUiR.string.close_sheet)))))
         }
         // The one opened last is the front
         beta = fake.engine.nextSession()
@@ -303,21 +302,9 @@ class GameSwitcherTest {
         beta.send(fake.engine.openProfilesMessage(close.opt("id")))
     }
 
-    // Until the sheet's last row stops moving: the checks run before that saw it cut off at the screen's foot
     private fun openTheSheet() {
         activate(pill)
-        val openAnother = hasText(string(R.string.game_open_another), substring = true) and hasClickAction()
-        var last: Rect? = null
-        var since = 0L
-        compose.waitUntil(WAIT_MS) {
-            val now = compose.onAllNodes(openAnother).fetchSemanticsNodes().singleOrNull()?.boundsInWindow
-            val time = SystemClock.uptimeMillis()
-            if (now != last) {
-                last = now
-                since = time
-            }
-            now != null && time - since >= SETTLED_MS
-        }
+        waitFor(sheet)
     }
 
     private fun assertNoChip() {
@@ -373,8 +360,8 @@ class GameSwitcherTest {
             try {
                 roots[i].tryPerformAccessibilityChecks()
             } catch (e: AccessibilityViewCheckException) {
-                val elements = e.results.joinToString("\n") { "${it.element?.className} '${it.element?.contentDescription}' '${it.element?.text}'" }
-                throw AssertionError("${e.message}\n$elements\n${compose.onAllNodes(isRoot()).printToString()}", e)
+                val flagged = e.results.joinToString("\n") { "${it.element?.className} '${it.element?.contentDescription}' '${it.element?.text}'" }
+                throw AssertionError("${e.message}\n$flagged", e)
             }
         }
     }
@@ -396,9 +383,23 @@ class GameSwitcherTest {
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L
         const val WAIT_MS = 10_000L
-        const val SETTLED_MS = 500L
 
         // Long enough for a request that went astray to have arrived
         const val QUIET_MS = 500
+    }
+}
+
+/**
+ * TouchTargetSizeCheck on Material's scrim, whose tap target is labelled [closeSheet]: with no keyboard up, the strip of
+ * it left below a bottom sheet, over the navigation bar, is 24 dp tall. The sheet's close button and Back close it too.
+ */
+internal class ScrimBelowTheSheet(private val closeSheet: String) : BaseMatcher<Any>() {
+    override fun matches(item: Any?): Boolean {
+        val result = item as? AccessibilityViewCheckResult ?: return false
+        return result.sourceCheckClass == TouchTargetSizeCheck::class.java && result.element?.contentDescription?.toString() == closeSheet
+    }
+
+    override fun describeTo(description: Description) {
+        description.appendText("a small touch target on the scrim below a bottom sheet")
     }
 }

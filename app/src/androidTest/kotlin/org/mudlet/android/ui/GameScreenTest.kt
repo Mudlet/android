@@ -2,7 +2,6 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
-import android.os.SystemClock
 import android.view.inputmethod.EditorInfo
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Rect
@@ -32,11 +31,11 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,6 +51,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import androidx.compose.ui.R as ComposeUiR
 
 /**
  * The game screen against a fake engine: the console's lines and how it follows them, the input line, the game pill
@@ -76,7 +76,9 @@ class GameScreenTest {
     @Before
     fun openTheGameScreen() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        if (Build.VERSION.SDK_INT >= 34) {
+            compose.enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(ScrimBelowTheSheet(string(ComposeUiR.string.close_sheet))))
+        }
         session = fake.engine.nextSession()
         // EngineClient lives as long as the process, so an earlier test's lines would still be there
         session.clear()
@@ -216,7 +218,7 @@ class GameScreenTest {
         session.status("connection", "connected")
         waitForPill(string(R.string.connection_connected))
 
-        openTheSheet()
+        activate(hasTestTag(GAME_PILL_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_reconnect_to, GAME.name)))
         val connect = session.receive("connect")
         assertEquals("127.0.0.1", connect.getString("host"))
@@ -224,7 +226,7 @@ class GameScreenTest {
         assertEquals(false, connect.getBoolean("tls"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isEmpty() }
 
-        openTheSheet()
+        activate(hasTestTag(GAME_PILL_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
     }
@@ -355,28 +357,11 @@ class GameScreenTest {
             try {
                 roots[i].tryPerformAccessibilityChecks()
             } catch (e: AccessibilityViewCheckException) {
-                val elements = e.results.joinToString("\n") { "${it.element?.className} '${it.element?.contentDescription}' '${it.element?.text}'" }
-                throw AssertionError("${e.message}\n$elements\n${compose.onAllNodes(isRoot()).printToString()}", e)
+                val flagged = e.results.joinToString("\n") { "${it.element?.className} '${it.element?.contentDescription}' '${it.element?.text}'" }
+                throw AssertionError("${e.message}\n$flagged", e)
             }
         }
         compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
-    }
-
-    // Until the sheet's last row stops moving: the checks run before that saw it cut off at the screen's foot
-    private fun openTheSheet() {
-        activate(hasTestTag(GAME_PILL_TAG))
-        val openAnother = hasText(string(R.string.game_open_another), substring = true) and hasClickAction()
-        var last: Rect? = null
-        var since = 0L
-        compose.waitUntil(WAIT_MS) {
-            val now = compose.onAllNodes(openAnother).fetchSemanticsNodes().singleOrNull()?.boundsInWindow
-            val time = SystemClock.uptimeMillis()
-            if (now != last) {
-                last = now
-                since = time
-            }
-            now != null && time - since >= SETTLED_MS
-        }
     }
 
     private companion object {
@@ -385,7 +370,6 @@ class GameScreenTest {
         // More lines than any emulator screen shows
         const val MANY = 200
         const val WAIT_MS = 10_000L
-        const val SETTLED_MS = 500L
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

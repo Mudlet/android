@@ -313,15 +313,15 @@ private fun MapDownloadProgress(download: EngineMessage.MapDownload) {
     if (fraction != null) LinearProgressIndicator(progress = { fraction }, bar) else LinearProgressIndicator(bar)
 }
 
-// How the last download ended, read out as it comes, until dismissed
+// How the last download ended, until dismissed; AppMapClient tells TalkBack as it ends
 @Composable
 private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
-    val text = AppMapClient.endText(end, LocalContext.current.resources)
+    val text = AppMapClient.endText(end, LocalContext.current.resources) ?: return
     val failed = end.state == MapDownloadState.FAILED
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text,
-            Modifier.weight(1f).semantics { liveRegion = if (failed) LiveRegionMode.Assertive else LiveRegionMode.Polite },
+            Modifier.weight(1f),
             color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -334,7 +334,7 @@ private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
 // The button that downloads the map from [host], which the game offers
 @Composable
 private fun DownloadMapButton(host: String, modifier: Modifier = Modifier) {
-    Button(AppMapClient::downloadMap, modifier.heightIn(min = 48.dp), enabled = EngineClient.enginePid > 0) {
+    Button(AppMapClient::downloadMap, modifier.heightIn(min = 48.dp), enabled = EngineClient.enginePid > 0 && !AppMapClient.downloadAsked) {
         Text(stringResource(R.string.map_download, host))
     }
 }

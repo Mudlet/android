@@ -9,7 +9,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -440,9 +439,7 @@ class AppMapTest {
         activate(button)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
         val download = hasText(string(R.string.map_download, HOST)) and hasClickAction()
-        // No offer, no button: an engine that says none, as for a profile whose game offered none
-        session.send(mapDownload(offered = false, host = ""))
-        compose.waitForIdle()
+        // Where it starts, with no map offered: no button
         assertTrue("no download without a map offered", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
 
         // Offered, with no map drawn: the offer is in the map's middle, its button a touch target TalkBack can press
@@ -452,13 +449,21 @@ class AppMapTest {
         assertTouchTarget(download)
         activate(download)
         request("downloadMap", "the button downloads the map")
+        // Until the engine answers, a second tap sends no second downloadMap
+        compose.onNode(download).assertIsNotEnabled()
 
         // Mudlet's progress, the bar's a quarter of the way, and Cancel while it can be stopped; the offer waits
         val label = "Downloading map file for use in Game..."
         session.send(mapDownload("downloading", label = label, value = 1_000_000, maximum = 4_000_000, cancelable = true))
         waitFor("the download's progress shows") { compose.onAllNodes(hasText(label)).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasContentDescription(string(R.string.map_download_progress)))
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f)))
+        val bar = hasContentDescription(string(R.string.map_download_progress))
+        compose.onNode(bar).assert(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f)))
+        // Past Mudlet's guess at the size, how far is not known
+        session.send(mapDownload("downloading", label = label, value = 5_000_000, maximum = 4_000_000, cancelable = true))
+        waitFor("a download past the guessed size has no fraction") {
+            compose.onAllNodes(bar and SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         assertTrue("no second download while one runs", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
         val cancel = hasText(string(R.string.map_download_cancel)) and hasClickAction()
         assertTouchTarget(cancel)
@@ -475,16 +480,29 @@ class AppMapTest {
         request("downloadMap", "the button downloads the map again")
         session.send(mapDownload("downloading", label = label, cancelable = true))
         waitFor("the download's progress shows again") { compose.onAllNodes(hasText(label)).fetchSemanticsNodes().isNotEmpty() }
-        val reason = "Map download encountered an error: Error transferring http://$HOST/map.dat - server replied: Not Found"
+        val reason = "Map download encountered an error: Error transferring http://$HOST - server replied: Not Found"
         session.send(mapDownload("failed", error = reason))
         val failed = hasText(string(R.string.map_download_failed, reason))
         waitFor("the download says why it failed") { compose.onAllNodes(failed).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(failed).assert(SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, LiveRegionMode.Assertive))
-        compose.runOnIdle {
+        // Told once, by the Announcer, and not again by the text as a live region
+        compose.onNode(failed).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        val told = compose.runOnIdle {
             assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_download_failed, reason)))
             assertTrue("a failure interrupts TalkBack", Announcer.current!!.assertive)
+            Announcer.current!!.serial
         }
         checkAccessibility()
+
+        // The UI went and came back to the same engine, which says the same again: shown, but not told again. The
+        // refusal after it shows once the UI has read the frames before it.
+        session.close()
+        session = fake.engine.nextSession()
+        val again = lastRequest("setAppMapSize", "the same engine is asked again when the UI comes back")
+        session.send(mapDownload("failed", error = reason))
+        session.refuse(again, "read")
+        waitFor("the UI read what the engine said again") { compose.onAllNodes(hasText(string(R.string.map_refused, "read"))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(failed).assertIsDisplayed()
+        compose.runOnIdle { assertEquals("a UI that comes back is not told again", told, Announcer.current!!.serial) }
         activate(hasContentDescription(string(R.string.map_download_dismiss)))
         waitFor("the failure goes once dismissed") { compose.onAllNodes(failed).fetchSemanticsNodes().isEmpty() }
 

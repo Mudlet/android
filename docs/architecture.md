@@ -294,14 +294,17 @@ drawn by `ui/game/AppMap.kt`):
 - With no map drawn, the map in front says so in its middle, with a button "Download the map from <host>"; with a map,
   the same button is in a bar under the search field, as a game may offer a newer map. Neither shows while the game
   offers none, nor while a download runs.
-- The button sends `downloadMap`. While it runs, the bar shows Mudlet's progress label, or "Downloading the map from
-  <host>…", and a progress bar read as "Map download": how far, while the size is known, else indeterminate, as
-  Mudlet's guess of the size can be passed. Its Cancel button, a 48 dp target, sends `cancelMapDownload` while Mudlet
+- The button sends `downloadMap`, and waits for the engine's answer, so a second tap sends no second. While the
+  download runs, the bar shows Mudlet's progress label, or "Downloading the map from <host>…", and a progress bar read
+  as "Map download": how far of `maximum`, which is Mudlet's guess of 4 MB until the server sends the size, and
+  indeterminate once a download passes it. Its Cancel button, a 48 dp target, sends `cancelMapDownload` while Mudlet
   can still stop it.
-- How it ended stays in the bar until dismissed or the next download, and is read out as it comes: "Map downloaded
-  from <host>", "Map download cancelled", or "The map download failed: " with Mudlet's reason, in the error colour and
-  interrupting TalkBack. A refusal shows as the map's others do. The loaded map is the profile's, so the map behind
-  the text, the map in front and a script's mapper all show it.
+- How it ended stays in the bar until dismissed, the next download or the profile closes, and is read out once, as it
+  comes (`Announcer`): "Map downloaded from <host>", "Map download cancelled", or "The map download failed: " with
+  Mudlet's reason, in the error colour and interrupting TalkBack. A UI that attaches later shows how the last download
+  ended without reading it out. A refusal shows as the map's others do. The loaded map is the profile's, so the map
+  behind the text, the map in front and a script's mapper all show it; as on the desktop, Mudlet then shows its docked
+  mapper, where a script has made one (`showLoadedMap()`).
 - Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of
   a failure included: the rest can hold a user name, a password or a token. Lua's `gmcp` table holds the whole URL, as
   the game sent it, as on the desktop.
@@ -508,9 +511,11 @@ device shows, below the UI's debug hook:
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
   the title bar's toggle bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions
   reach it as `appMapPointer`, and Back sending it back, the room search with its results, no match, more matches
-  and a refusal, and the map download: no button with no offer, the offer with no map drawn sending `downloadMap`, its
-  progress and Cancel, how it ended (cancelled, failed, read out at once, until dismissed, and loaded, the map then
-  drawn and the offer above it), a refusal, and the offer gone with the profile; and the notification permission, explained and then asked on Android 13 and later, on a fresh install.
+  and a refusal, and the map download: no button with no offer, the offer with no map drawn sending one
+  `downloadMap` however often tapped, its progress, indeterminate past Mudlet's guess, and Cancel, how it ended
+  (cancelled, failed, read out at once and not again to a UI that comes back, until dismissed, and loaded, the map
+  then drawn and the offer above it), a refusal, and the offer gone with the profile; and the notification
+  permission, explained and then asked on Android 13 and later, on a fresh install.
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only.

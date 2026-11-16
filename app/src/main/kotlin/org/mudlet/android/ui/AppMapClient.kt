@@ -58,8 +58,17 @@ internal object AppMapClient : MapSource {
     /** What findRooms found for [text]: null [rooms] until the engine answers; [more] when it found more than it sent. */
     data class RoomSearch(val text: String, val rooms: List<RoomMatch>?, val more: Boolean = false)
 
-    /** No map offered and none downloading: what the engine says of a profile whose game offered none. Before [download], which starts at it. */
-    val NO_DOWNLOAD = EngineMessage.MapDownload(false, "", MapDownloadState.NONE, "", 0, 0, false, "")
+    /** What [download] holds until the engine says otherwise: no map offered and none downloading. */
+    val NO_DOWNLOAD = EngineMessage.MapDownload(
+        offered = false,
+        host = "",
+        state = MapDownloadState.NONE,
+        label = "",
+        value = 0,
+        maximum = 0,
+        cancelable = false,
+        error = "",
+    )
 
     /** The map as the engine last drew it, at the size asked; null while it draws none (no profile, or no rooms). */
     var map by mutableStateOf<ScriptWindowsClient.MapImage?>(null)
@@ -74,8 +83,12 @@ internal object AppMapClient : MapSource {
     var download by mutableStateOf(NO_DOWNLOAD)
         private set
 
-    /** How the last download ended (loaded, failed or cancelled), until the player dismisses it or downloads again. */
+    /** How the last download ended (loaded, failed or cancelled), until the player dismisses it, downloads again or the profile closes. */
     var downloadEnd by mutableStateOf<EngineMessage.MapDownload?>(null)
+        private set
+
+    /** downloadMap was sent and the engine has not answered it yet: the button waits, so a second tap sends no second. */
+    var downloadAsked by mutableStateOf(false)
         private set
 
     /** The last room search, until the player closes its results or picks one. */
@@ -133,7 +146,8 @@ internal object AppMapClient : MapSource {
     /** The engine refused [request] for [reason]: true when it was this map's, which shows it. */
     internal fun onRefused(request: String, reason: String): Boolean {
         when (request) {
-            "appMapPointer", "showRoom", "setAppMapSize", "downloadMap", "cancelMapDownload" -> {}
+            "appMapPointer", "showRoom", "setAppMapSize", "cancelMapDownload" -> {}
+            "downloadMap" -> downloadAsked = false
             "setMapViewOnly" -> if (!askedViewOnly) return false
             "findRooms" -> closeSearch()
             else -> return false
@@ -158,6 +172,7 @@ internal object AppMapClient : MapSource {
             download = NO_DOWNLOAD
             downloadEnd = null
         }
+        downloadAsked = false
         sent = Size.NONE
         if (pendingSearch != null) closeSearch()
         update()
@@ -199,34 +214,43 @@ internal object AppMapClient : MapSource {
     }
 
     /**
-     * A new `mapDownload`. A download that ends is kept in [downloadEnd] and told to TalkBack in [resources]' words, its
-     * failure interrupting; the same state again, as to a UI that attaches, is not told again.
+     * A new `mapDownload`. A download that ends is kept in [downloadEnd] and, as it ends, told to TalkBack in
+     * [resources]' words, its failure interrupting. The same end again, as to a UI that attaches, is not told again; a
+     * UI that had heard nothing yet, being new, shows how the last download ended without telling it.
      */
     internal fun onMapDownload(message: EngineMessage.MapDownload, resources: Resources) {
         val was = download
         download = message
-        when (message.state) {
-            MapDownloadState.NONE, MapDownloadState.DOWNLOADING -> downloadEnd = null
+        downloadAsked = false
+        val text = endText(message, resources)
+        when {
+            text == null -> downloadEnd = null
 
-            else -> if (was.state == MapDownloadState.DOWNLOADING) {
+            was.state == MapDownloadState.DOWNLOADING -> {
                 downloadEnd = message
-                Announcer.announce(endText(message, resources), assertive = message.state == MapDownloadState.FAILED)
+                Announcer.announce(text, assertive = message.state == MapDownloadState.FAILED)
             }
+
+            // Only NO_DOWNLOAD itself, as no frame the engine sent is that object
+            was === NO_DOWNLOAD -> downloadEnd = message
         }
     }
 
-    /** What [end], a download's end, says to the player. */
-    internal fun endText(end: EngineMessage.MapDownload, resources: Resources): String = when (end.state) {
+    /** What [end] says to the player of how a download ended; null while none has ended. */
+    internal fun endText(end: EngineMessage.MapDownload, resources: Resources): String? = when (end.state) {
+        MapDownloadState.NONE, MapDownloadState.DOWNLOADING -> null
         MapDownloadState.LOADED -> resources.getString(R.string.map_download_loaded, end.host)
         MapDownloadState.CANCELLED -> resources.getString(R.string.map_download_cancelled)
-        else -> resources.getString(R.string.map_download_failed, end.error)
+        MapDownloadState.FAILED -> resources.getString(R.string.map_download_failed, end.error)
     }
 
     /** Downloads the map the game offers, in place of the profile's. False as for [EngineClient.send]. */
     fun downloadMap(): Boolean {
+        if (downloadAsked) return true
         refused = null
         downloadEnd = null
-        return EngineClient.send(Requests.downloadMap())
+        downloadAsked = EngineClient.send(Requests.downloadMap())
+        return downloadAsked
     }
 
     /** Stops the download, while [download] says it can be. False as for [EngineClient.send]. */

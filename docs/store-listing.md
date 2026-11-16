@@ -231,7 +231,7 @@ functionality.
 **Network: only the player's game, and what it or their scripts ask for.**
 
 - The app's UI process opens no network connection. It talks to the engine over a filesystem `LocalSocket` in the
-  app's own files (`app/src/main/kotlin/org/mudlet/android/ui/EngineClient.kt:308-310`), and the engine drops any
+  app's own files (`app/src/main/kotlin/org/mudlet/android/ui/EngineClient.kt:335-338`), and the engine drops any
   peer that is not the app's own user id (`native/enginehost/SocketBridge.cpp:42-50`). `INTERNET` and
   `ACCESS_NETWORK_STATE` are declared only for the engine service (`engine-service/src/main/AndroidManifest.xml:4-5`).
 - The app's libraries are AndroidX, Compose, `org.json` and Qt (`gradle/libs.versions.toml:29-47`): no analytics,

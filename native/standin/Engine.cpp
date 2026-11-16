@@ -524,3 +524,20 @@ void Engine::flushCounters()
     mFrontend->status(QStringLiteral("luaOnLineCalls"), QString::number(mLuaCalls));
     mFrontend->status(QStringLiteral("notificationsPosted"), QString::number(mNotifications));
 }
+
+std::variant<QVariantMap, QString> Engine::settings(const QStringList& keys)
+{
+    QVariantMap values;
+    for (const QString& key : keys) {
+        if (mSettings.contains(key)) {
+            values.insert(key, mSettings.value(key));
+        }
+    }
+    return values;
+}
+
+QString Engine::setSettings(const QVariantMap& values, QMap<QString, QString>&)
+{
+    mSettings.insert(values);
+    return {};
+}

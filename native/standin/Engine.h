@@ -65,6 +65,9 @@ public:
     QString showRoom(int) override { return noMap(); }
     QString downloadMap() override { return noMap(); }
     QString cancelMapDownload() override { return noMap(); }
+    // Kept as given, with no meaning here: what a UI sets it reads back, and a key never set is left out
+    std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
+    QString setSettings(const QVariantMap& values, QMap<QString, QString>&) override;
 
     // Called from Lua's notify() and announce()
     void luaNotify(const QString& title, const QString& text);
@@ -94,6 +97,7 @@ private:
     QTimer mPromptTimer;
     QTimer mCounterTimer;
     lua_State* mLua = nullptr;
+    QVariantMap mSettings;
 
     // The game echoes for the player (telnet WILL ECHO), as it does to hide a password
     bool mHiddenInput = false;

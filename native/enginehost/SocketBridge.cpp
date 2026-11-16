@@ -499,6 +499,10 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, mEngine->downloadMap());
     } else if (type == QLatin1String("cancelMapDownload")) {
         refuse(type, mEngine->cancelMapDownload());
+    } else if (type == QLatin1String("getSettings")) {
+        getSettings(message);
+    } else if (type == QLatin1String("setSettings")) {
+        setSettings(message);
     } else {
         sendError(QStringLiteral("unknown type %1").arg(type));
     }
@@ -712,6 +716,67 @@ void SocketBridge::findRooms(const QJsonObject& message)
         rooms.append(QJsonObject{{QStringLiteral("id"), room.id}, {QStringLiteral("name"), room.name}, {QStringLiteral("area"), room.area}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("rooms")}, {QStringLiteral("text"), text}, {QStringLiteral("rooms"), rooms}, {QStringLiteral("more"), list.more}});
+}
+
+void SocketBridge::getSettings(const QJsonObject& message)
+{
+    const QJsonArray keysArray = message.value(QLatin1String("keys")).toArray();
+    QStringList keys;
+    for (const QJsonValue& key : keysArray) {
+        if (key.toString().isEmpty()) {
+            break;
+        }
+        keys.append(key.toString());
+    }
+    if (keys.isEmpty() || keys.size() != keysArray.size()) {
+        sendError(QStringLiteral("getSettings: keys must be a list of names"));
+        return;
+    }
+    sendSettings(QStringLiteral("getSettings"), keys, {});
+}
+
+void SocketBridge::setSettings(const QJsonObject& message)
+{
+    const QJsonObject values = message.value(QLatin1String("values")).toObject();
+    if (values.isEmpty()) {
+        sendError(QStringLiteral("setSettings: values must be an object of settings"));
+        return;
+    }
+    QVariantMap wanted;
+    QMap<QString, QString> refused;
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        if (it.value().isBool() || it.value().isDouble() || it.value().isString()) {
+            wanted.insert(it.key(), it.value().toVariant());
+        } else {
+            refused.insert(it.key(), QStringLiteral("a setting is true or false, a number or a string"));
+        }
+    }
+    if (!wanted.isEmpty()) {
+        const QString problem = mEngine->setSettings(wanted, refused);
+        if (!problem.isEmpty()) {
+            sendError(QStringLiteral("setSettings: %1").arg(problem));
+            return;
+        }
+    }
+    sendSettings(QStringLiteral("setSettings"), values.keys(), refused);
+}
+
+void SocketBridge::sendSettings(const QString& request, const QStringList& keys, const QMap<QString, QString>& refused)
+{
+    const std::variant<QVariantMap, QString> read = mEngine->settings(keys);
+    if (const QString* problem = std::get_if<QString>(&read)) {
+        sendError(QStringLiteral("%1: %2").arg(request, *problem));
+        return;
+    }
+    QJsonObject answer{{QStringLiteral("t"), QStringLiteral("settings")}, {QStringLiteral("values"), QJsonObject::fromVariantMap(std::get<QVariantMap>(read))}};
+    if (!refused.isEmpty()) {
+        QJsonObject why;
+        for (auto it = refused.constBegin(); it != refused.constEnd(); ++it) {
+            why.insert(it.key(), it.value());
+        }
+        answer.insert(QStringLiteral("refused"), why);
+    }
+    sendReply(answer);
 }
 
 void SocketBridge::getImage(const QJsonObject& message)

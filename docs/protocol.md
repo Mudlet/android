@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **16**.
+The current version is **18**.
 
 ## Transport
 
@@ -94,9 +94,11 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `markSeen` | `name`, `seq` | The player has seen that open profile's lines up to `seq`: its `attention` clears, and its `unread` counts from there. |
 | `downloadMap` | | Downloads the map the game offers, which `mapDownload` tells of, and loads it in place of the profile's, as the desktop mapper's "Download from game" does (`THeadlessSession::downloadOfferedMap()`, "Downloading the map" below). `mapDownload` follows how it goes. |
 | `cancelMapDownload` | | Stops that download, as the Abort of Mudlet's progress dialog does (`THeadlessSession::cancelMapOperation()`), while `mapDownload`'s `cancelable` holds: `mapDownload` with `state` `cancelled` follows. |
+| `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
+| `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `settings` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -141,6 +143,11 @@ while no profile is open; `downloadMap` while the game offers no map, and while 
 script's), import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being
 loaded. The stand-in has no map and refuses both.
 
+`getSettings` and `setSettings` are answered by `settings`, or by `error` whose `message` is the request's name, a colon
+and why: a `keys` or `values` that is not as above, and in libmudlet no profile loaded (`no profile running`). A value in
+`setSettings` that is not true or false, a number or a string is refused in `settings`, and the rest are set. The
+stand-in keeps the values it is given, with no meaning, so it reads back what a UI set and leaves out a key never set.
+
 ### Engine to UI
 
 | Message | Fields | Meaning |
@@ -175,6 +182,7 @@ loaded. The stand-in has no map and refuses both.
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 | `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
 | `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
+| `settings` | `values`, `refused`?, `re`? | The answer to `getSettings` or `setSettings`: `values` holds each key it asked for or set with the value the profile holds now, as `getConfig()` gives it with `true` for its second argument: true or false, a number, or a string, an option of several by its name (`showSentText` as `never`, `always` or `script`). A key the engine does not know is left out. `refused`, only after `setSettings`, holds each key not changed with why: `setConfig()`'s message, its Lua error for a value of the wrong type, or that the value was not true or false, a number or a string. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
@@ -540,7 +548,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
   commands, as on attach, then the lines the UI has not had (with `clear` and `gap` as on attach, but without `replay`),
   then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
-  `getWindowText`, `image`, `rooms`, and a `status` that carries `re`.
+  `getWindowText`, `image`, `rooms`, `settings`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
 nor is a `commandLine`, a `windowCommandLine`, an `announce`, an `attention` or a `moveTypedLine`.
@@ -549,8 +557,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 16, which added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and
-`tabCurrent` in `windows`); version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in
+As implemented in version 18, which added a profile's settings (`getSettings`, `setSettings`, `settings`); version 16
+added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and `tabCurrent` in `windows`); version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in
 `hello`, `alongside` in `openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
 the text boxes (`setTextBoxText`, `textBox`), and later `setMapScale`, which needs no new version as a UI does without
 it: an engine without it refuses it as unknown, the UI ignores that, and the map stays at the window's pixels; version

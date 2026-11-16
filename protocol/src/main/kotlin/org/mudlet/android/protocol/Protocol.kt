@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 16
+const val PROTOCOL_VERSION = 18
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -460,6 +460,17 @@ sealed interface EngineMessage {
     data class Rooms(val text: String, val rooms: List<RoomMatch>, val more: Boolean, val replyTo: Any?) : EngineMessage
 
     /**
+     * The answer to getSettings or setSettings: [values] by Lua's getConfig() keys, each a Boolean, a Double or a
+     * String, as the profile holds it now, a key the engine does not know left out; [refused] the keys setSettings did
+     * not change, with why.
+     */
+    data class SettingValues(
+        val values: kotlin.collections.Map<String, Any>,
+        val refused: kotlin.collections.Map<String, String>,
+        val replyTo: Any?,
+    ) : EngineMessage
+
+    /**
      * The map the game offers ([offered], from the [host] of its URL, never the rest of it) and how its download
      * (Requests.downloadMap) goes: while [MapDownloadState.DOWNLOADING], Mudlet's progress [label] and [value] of
      * [maximum] (0 until it starts, then Mudlet's guess of the size until the server says it, which [value] can pass),
@@ -630,6 +641,22 @@ object Requests {
     /** Stops that download while it is cancelable. Answered only by an Error, when refused. */
     fun cancelMapDownload(): JSONObject = JSONObject().put("t", "cancelMapDownload")
 
+    /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
+    fun getSettings(keys: List<String>, id: Long): JSONObject {
+        require(keys.isNotEmpty()) { "getSettings takes at least one key" }
+        return JSONObject().put("t", "getSettings").put("keys", JSONArray(keys)).put("id", id)
+    }
+
+    /**
+     * Sets each of [values], by getConfig()'s keys, as setConfig() does: each a Boolean, a number or a String. Answered by
+     * [EngineMessage.SettingValues] with [id] as its replyTo.
+     */
+    fun setSettings(values: Map<String, Any>, id: Long): JSONObject {
+        require(values.isNotEmpty()) { "setSettings takes at least one value" }
+        require(values.values.all { it is Boolean || it is Number || it is String }) { "a setting is a Boolean, a number or a String" }
+        return JSONObject().put("t", "setSettings").put("values", JSONObject(values)).put("id", id)
+    }
+
     /** Answered by [EngineMessage.Image] with [id] as its replyTo: the file at [path], scaled to [w] by [h], given both, or its [frame]. */
     fun getImage(path: String, w: Int?, h: Int?, frame: Int?, id: Long): JSONObject {
         require((w == null) == (h == null)) { "getImage takes w and h together" }
@@ -796,6 +823,14 @@ class FrameReader(input: InputStream) {
                 o.opt("re"),
             )
 
+            "settings" -> EngineMessage.SettingValues(
+                o.optJSONObject("values")?.let { values ->
+                    values.keys().asSequence().mapNotNull { key -> settingValue(values.opt(key))?.let { key to it } }.toMap()
+                }.orEmpty(),
+                o.optJSONObject("refused")?.let { refused -> refused.keys().asSequence().associateWith { refused.optString(it) } }.orEmpty(),
+                o.opt("re"),
+            )
+
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),
                 o.optString("host"),
@@ -839,6 +874,13 @@ class FrameReader(input: InputStream) {
         }
 
         private fun optInt(o: JSONObject, key: String): Int? = if (o.has(key)) o.getInt(key) else null
+
+        // A whole number as a Double too, so a setting reads the same however the engine wrote it
+        private fun settingValue(value: Any?): Any? = when (value) {
+            is Boolean, is String -> value
+            is Number -> value.toDouble()
+            else -> null
+        }
 
         private fun objects(array: JSONArray?): List<JSONObject> = if (array == null) emptyList() else List(array.length()) { array.optJSONObject(it) }.filterNotNull()
 

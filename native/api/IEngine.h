@@ -5,10 +5,12 @@
 
 #include <QByteArray>
 #include <QList>
+#include <QMap>
 #include <QPointF>
 #include <QRect>
 #include <QSize>
 #include <QString>
+#include <QVariant>
 
 #include <optional>
 #include <variant>
@@ -115,4 +117,10 @@ public:
     virtual QString downloadMap() = 0;
     // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be
     virtual QString cancelMapDownload() = 0;
+    // The profile's settings named in keys, by the keys Lua's getConfig() takes, each a bool, a double or a string; a
+    // key the engine does not know is left out. Else why none were read.
+    virtual std::variant<QVariantMap, QString> settings(const QStringList& keys) = 0;
+    // Changes them as Lua's setConfig() does, putting each key it does not take into refused with why; else why none
+    // were changed
+    virtual QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) = 0;
 };

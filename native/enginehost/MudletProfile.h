@@ -77,6 +77,8 @@ public:
     QString showRoom(int room) override;
     QString downloadMap() override;
     QString cancelMapDownload() override;
+    std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
+    QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) override;
 
     const QString& name() const { return mProfile; }
     // While it has not started: what a later connect or Lua starts

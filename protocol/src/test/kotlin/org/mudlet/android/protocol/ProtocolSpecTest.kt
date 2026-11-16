@@ -82,6 +82,8 @@ class ProtocolSpecTest {
                         Profile::class.java -> Profile("x", "x", 1, true, "x", true)
                         PointerType::class.java -> PointerType.PRESS
                         MapPointerType::class.java -> MapPointerType.PRESS
+                        List::class.java -> listOf("x")
+                        Map::class.java -> mapOf("x" to true)
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

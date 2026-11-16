@@ -104,7 +104,8 @@ def main():
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
-                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_download):
+                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_download,
+                       profile_settings):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -2601,6 +2602,49 @@ def map_download():
     for secret in (password, encoded, user, token):
         profile_checks.password_kept_out(check, secret, seen, LOG)
     server.shutdown()
+
+
+def profile_settings():
+    """A profile's settings by getConfig()'s keys: getSettings reading them as getConfig() gives them, an option by its
+    name, whatever a script has put in getConfig's place; setSettings changing them as setConfig() does and answering
+    with what the profile now holds and what it refused, with why; the change in the profile's save; and both refused
+    while no profile is open."""
+    profile = "Settings Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    for request in ({"t": "getSettings", "keys": ["blankLinesBehaviour"]}, {"t": "setSettings", "values": {"blankLinesBehaviour": "hide"}}):
+        m = c.ask(request, answers=("settings", "error"), collect=seen)
+        check(m == {"t": "error", "message": f"{request['t']}: no profile running", "re": m.get("re")},
+              f"{request['t']} with no profile open is refused: {m}")
+
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    c.send({"t": "runLua", "code": "getConfig = function() return 'a script' end setConfig = getConfig"})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    m = c.ask({"t": "getSettings", "keys": ["blankLinesBehaviour", "showSentText", "announceIncomingText", "noSuchSetting"]},
+              answers=("settings", "error"), collect=seen)
+    values = m.get("values", {})
+    check(values.get("blankLinesBehaviour") == "show" and values.get("showSentText") in ("never", "always", "script")
+          and isinstance(values.get("announceIncomingText"), bool) and "noSuchSetting" not in values and "refused" not in m,
+          f"getSettings reads them as Mudlet's own getConfig() gives them, an option by its name: {m}")
+
+    m = c.ask({"t": "setSettings", "values": {"blankLinesBehaviour": "hide", "announceIncomingText": "yes", "noSuchSetting": True}},
+              answers=("settings", "error"), collect=seen)
+    values, refused = m.get("values", {}), m.get("refused", {})
+    check(values.get("blankLinesBehaviour") == "hide" and isinstance(values.get("announceIncomingText"), bool)
+          and "noSuchSetting" not in values, f"setSettings answers with what the profile holds now: {m}")
+    check(sorted(refused) == ["announceIncomingText", "noSuchSetting"] and "noSuchSetting" in refused.get("noSuchSetting", "")
+          and refused.get("announceIncomingText"), f"and what it refused, with why: {refused}")
+    m = c.ask({"t": "getSettings", "keys": ["blankLinesBehaviour"]}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"blankLinesBehaviour": "hide"}, f"getSettings reads the change back: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    save = newest_save(profile)[0]
+    with open(save, errors="replace") if save else open(os.devnull) as f:
+        check('blankLineBehaviour="Hide"' in f.read(), f"the change is in the profile's save: {save}")
 
 
 if __name__ == "__main__":

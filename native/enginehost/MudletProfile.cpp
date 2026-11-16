@@ -1661,6 +1661,26 @@ QString MudletProfile::cancelMapDownload()
     return {};
 }
 
+std::variant<QVariantMap, QString> MudletProfile::settings(const QStringList& keys)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QVariantMap values;
+    if (!mSession->settings(keys, values)) {
+        return mSession->errorString();
+    }
+    return values;
+}
+
+QString MudletProfile::setSettings(const QVariantMap& values, QMap<QString, QString>& refused)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setSettings(values, refused) ? QString() : mSession->errorString();
+}
+
 void MudletProfile::takeOfferedMap(const QString& url)
 {
     mMapDownload.offered = !url.isEmpty();

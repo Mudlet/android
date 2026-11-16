@@ -65,9 +65,14 @@ class FakeGame : AutoCloseable {
         }
     }
 
+    /** Closes every connection the game has accepted, as a game that shuts down or drops its players does. */
+    fun dropConnections() {
+        synchronized(connections) { connections.forEach { it.close() } }
+    }
+
     override fun close() {
         server.close()
-        synchronized(connections) { connections.forEach { it.close() } }
+        dropConnections()
     }
 
     companion object {

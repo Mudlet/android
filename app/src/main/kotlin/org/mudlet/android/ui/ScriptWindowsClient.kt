@@ -145,7 +145,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (session.appMap.onRefused(request, reason)) return
         if (request == "moveMap" || request == "followPlayer") mapMover.clear()
         if (request in MapRooms.REQUESTS) mapRooms.onRefused(request)
-        if (request in setOf("mapPointer", "setMapViewOnly", "moveMap", "followPlayer") || request in MapRooms.REQUESTS) mapRefusal = reason
+        if (request in MAP_REQUESTS) mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
         // The box's own textBox follows, which puts back what it holds
         if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
@@ -405,6 +405,9 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         private fun decodePng(png: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
 
         private const val TAG = "ScriptWindows"
+
+        // The mapper window's requests whose refusal is shown on its map
+        private val MAP_REQUESTS = setOf("mapPointer", "setMapViewOnly", "moveMap", "followPlayer") + MapRooms.REQUESTS
 
         // The images kept beyond those shown: few enough that sized ones asked again as labels resize do not pile up
         private const val MAX_IMAGES = 64

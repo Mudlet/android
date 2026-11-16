@@ -473,7 +473,7 @@ class ScriptMapTest {
         activate(hasContentDescription(string(R.string.room_close)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(here).fetchSemanticsNodes().isEmpty() }
         // A tap on no room shows none
-        compose.onNode(map).performTouchInput { click(at(drawn, 330.0, 40.0)) }
+        compose.onNode(map).performTouchInput { click(at(drawn, 60.0, 60.0)) }
         session.receive("mapPointer")
         session.assertNoRequest("roomInfo", QUIET_MS)
     }
@@ -482,11 +482,14 @@ class ScriptMapTest {
     fun talkBackShowsTheLevelsAboveAndBelowAndARefusedRoomIsSaidWithTheMap() {
         showMap(mapView(MAP_W, MAP_H, level = 0, levels = listOf(-1, 0, 3)))
         val map = drawnMap()
-        fun action(label: Int) = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(label) }
-        compose.runOnIdle { action(R.string.map_level_up).action() }
+        fun act(label: Int) {
+            val action = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(label) }
+            compose.runOnIdle { action.action() }
+        }
+        act(R.string.map_level_up)
         val up = session.receive("showMapLevel")
         assertEquals("mapper" to 3, up.getString("map") to up.getInt("level"))
-        compose.runOnIdle { action(R.string.map_level_down).action() }
+        act(R.string.map_level_down)
         assertEquals(-1, session.receive("showMapLevel").getInt("level"))
         // On the top level, none above
         session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, following = false, level = 3, levels = listOf(-1, 0, 3))))

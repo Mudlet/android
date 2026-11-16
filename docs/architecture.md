@@ -309,7 +309,8 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   way), its exits, each a chip naming the way and the room it leads to, which shows that room, and "Walk here"
   (`walkToRoom`, with a tick), off where there is no way or the player is there. It is read out as it comes, takes at
   most half the map's height and scrolls past that, and closes with its button, a tap on no room, or Back on the map
-  in front; it is asked for again when the player moves, as its steps change. Each map's answers carry the `id` it
+  in front, and as that map closes, but not as a rotation remakes it; it is asked for again when the player moves, as
+  its steps change. Each map's answers carry the `id` it
   asked with, so the mapper window's and the app's map never show each other's room.
 - A bar at the map's bottom start (`MapPlaceBar`), where the map is at least 144 dp high, names the area shown, a
   button that lists the map's areas (`mapAreas`, asked each time it opens) to show another (`showMapArea`), and,

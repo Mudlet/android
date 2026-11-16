@@ -269,6 +269,8 @@ private fun ProfileGameScreen(
                     state,
                     index,
                     games.size,
+                    othersUnread = games.sumOf { if (it === c) 0L else it.unread },
+                    othersAttention = games.any { it !== c && it.attention },
                     onShowGames = { gamesOpen = true },
                     onReconnect = if (canReconnect) ::reconnect else null,
                     onDisconnect = if (c.name.isNotEmpty() && state.canDisconnect) ::disconnect else null,

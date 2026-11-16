@@ -20,6 +20,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.game.Announcer
 import java.io.IOException
@@ -46,6 +47,21 @@ class ProfileSession internal constructor(
      */
     var linesAdded by mutableLongStateOf(0L)
         private set
+
+    /** How many lines came after the player last saw this game, as the engine counts them (`openProfiles`). */
+    var unread by mutableLongStateOf(0L)
+        private set
+
+    /** The game asked for the player's attention, by a script's `alert()` or the bell, and has not been seen since. */
+    var attention by mutableStateOf(false)
+        private set
+
+    // The engine's last line of this profile, as the last `openProfiles` gave it: what a markSeen sees up to
+    internal var engineLastSeq = 0L
+        private set
+
+    // Whether "New activity in" has been said for the attention it wants now
+    private var attentionSaid = false
 
     /**
      * What Reconnect connects to: the last address [connect] was given, kept across UI process restarts, else the
@@ -380,6 +396,29 @@ class ProfileSession internal constructor(
 
     private fun front() = EngineClient.front === this
 
+    /**
+     * The engine's count of this profile's lines from [open]. A game in the background that wants attention has TalkBack
+     * say so, once until it is seen.
+     */
+    internal fun counted(open: OpenProfile) {
+        unread = open.unread
+        attention = open.attention
+        engineLastSeq = open.lastSeq
+        if (!attention) {
+            attentionSaid = false
+        } else if (!attentionSaid && !front()) {
+            attentionSaid = true
+            Announcer.announce(app.getString(R.string.game_attention_announce, name), assertive = false)
+        }
+    }
+
+    /** The player has seen this game's lines, which a markSeen up to [engineLastSeq] tells the engine. */
+    internal fun seen() {
+        unread = 0
+        attention = false
+        attentionSaid = false
+    }
+
     private fun listener() = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
             misdirected = hello.profile != null && hello.profile != name
@@ -460,8 +499,14 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
-                // Only the front profile speaks, as desktop Mudlet speaks only for the profile in front
-                is EngineMessage.Announce -> post { if (front()) Announcer.announce(message.text, message.assertive) }
+                // One in the background says whose it is, and does not interrupt what the front one is saying
+                is EngineMessage.Announce -> post {
+                    if (front()) {
+                        Announcer.announce(message.text, message.assertive)
+                    } else {
+                        Announcer.announce(app.getString(R.string.game_announce, name, message.text), assertive = false)
+                    }
+                }
 
                 is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
                 is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.Link,

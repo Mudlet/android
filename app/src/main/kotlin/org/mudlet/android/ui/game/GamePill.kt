@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,6 +23,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
@@ -42,13 +45,14 @@ const val GAME_PILL_TAG = "gamePill"
 
 /**
  * The game pill, at the left of the quick bar's row (docs/multi-profile.md, "The switcher"): the front game's
- * connection as an icon whose shape says the state, its [name], and how many games are open when more than one. A tap
- * calls [onShowGames], which opens the game sheet. TalkBack reads "<name>, <state>, game <index + 1> of <count>", and
- * offers Reconnect ([onReconnect]), Disconnect ([onDisconnect]) and the [previous] and [next] games ([onSwitch]) as
- * actions, so neither the sheet nor a gesture is ever needed; a null action is left out. A horizontal drag on it is
- * [swipe]'s: its label slides with the finger, the neighbour's name comes in from the side, and a release far enough,
- * or a fling, switches to that game with a tick; the next game is to the right, or to the left in right-to-left
- * layouts.
+ * connection as an icon whose shape says the state, its [name], and how many games are open when more than one, with a
+ * dot when the others have [othersUnread] lines or one wants attention ([othersAttention]). A tap calls [onShowGames],
+ * which opens the game sheet. TalkBack reads "<name>, <state>, game <index + 1> of <count>, <n> new lines in other
+ * games", and offers Reconnect ([onReconnect]), Disconnect ([onDisconnect]) and the [previous] and [next] games
+ * ([onSwitch]) as actions, so neither the sheet nor a gesture is ever needed; a null action is left out. A horizontal
+ * drag on it is [swipe]'s: its label slides with the finger, the neighbour's name comes in from the side, and a release
+ * far enough, or a fling, switches to that game with a tick; the next game is to the right, or to the left in
+ * right-to-left layouts.
  */
 @Composable
 fun GamePill(
@@ -56,6 +60,8 @@ fun GamePill(
     state: ConnectionState,
     index: Int,
     count: Int,
+    othersUnread: Long,
+    othersAttention: Boolean,
     onShowGames: () -> Unit,
     onReconnect: (() -> Unit)?,
     onDisconnect: (() -> Unit)?,
@@ -72,11 +78,15 @@ fun GamePill(
     val currentSwitch by rememberUpdatedState(onSwitch)
     val tick = rememberSwitchTick()
     val stateText = state.text()
-    val description = if (index in 0 until count) {
+    var description = if (index in 0 until count) {
         stringResource(R.string.game_pill_description, name, stateText, index + 1, count)
     } else {
         stringResource(R.string.game_state, name, stateText)
     }
+    if (othersUnread > 0) {
+        description = stringResource(R.string.game_description_more, description, pluralStringResource(R.plurals.game_others_unread, othersUnread.toPluralCount(), othersUnread))
+    }
+    if (othersAttention) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_others_attention))
     val showLabel = stringResource(R.string.game_pill_show)
     val actions = buildList {
         if (onReconnect != null) add(action(stringResource(R.string.connection_reconnect_to, name), onReconnect))
@@ -117,14 +127,16 @@ fun GamePill(
                 if (beside != null) PillLabel(beside, slide - sign(slide), Modifier.matchParentSize())
             }
             if (count > 1) {
-                Surface(shape = CircleShape, color = colors.primary, contentColor = colors.onPrimary) {
-                    Text(
-                        count.toString(),
-                        Modifier.sizeIn(minWidth = 20.dp).padding(horizontal = 6.dp, vertical = 1.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                    )
+                BadgedBox(badge = { if (othersUnread > 0 || othersAttention) Badge() }) {
+                    Surface(shape = CircleShape, color = colors.primary, contentColor = colors.onPrimary) {
+                        Text(
+                            count.toString(),
+                            Modifier.sizeIn(minWidth = 20.dp).padding(horizontal = 6.dp, vertical = 1.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }

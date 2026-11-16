@@ -5,9 +5,10 @@ protocol 15 and the stand-in engine runs several profiles. E1 has libmudlet run 
 of its own sharing the pool (UP1, carried as `0007-headless-shared-pool.patch`), restored together. U1 has the app
 attach to the control socket and to each open profile's socket, with a `ProfileSession` for each. U2 has the game
 pill and its sheet: several games open, switching, closing, "Open another game", the TalkBack actions and
-announcements, and the profile list's "Open games". U3 has the swipe on the pill and Ctrl+Tab; the badges (U4) are
-still to come. N1 has the engine notification list the open games, files each
-game's tells under it, opens the game a tell's tap is about, and leaves the foreground with no game open.
+announcements, and the profile list's "Open games". U3 has the swipe on the pill and Ctrl+Tab. U4 has the unread and
+attention badges, `markSeen` for the game in front, and what TalkBack says for a game in the background. N1 has the
+engine notification list the open games, files each game's tells under it, opens the game a tell's tap is about, and
+leaves the foreground with no game open.
 
 The aim: several profiles open at once, each with its own connection, and a profile button that lists them on a tap and
 moves to the next or the previous one on a horizontal swipe, as Firefox for Android does with its tabs.

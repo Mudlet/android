@@ -48,6 +48,8 @@ import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.SectionHeader
 import org.mudlet.android.ui.game.ConnectionIcon
 import org.mudlet.android.ui.game.ConnectionState
+import org.mudlet.android.ui.game.GameBadges
+import org.mudlet.android.ui.game.gameDescription
 import org.mudlet.android.ui.game.text
 
 /**
@@ -173,12 +175,12 @@ private fun ProfileItem(profile: Profile, index: Int, count: Int, selected: Bool
     }
 }
 
-/** An open game, its name and connection state, which a tap brings to the front. */
+/** An open game, its name, connection state and badges, which a tap brings to the front. */
 @Composable
 private fun OpenGameItem(game: ProfileSession, index: Int, count: Int, onShow: () -> Unit) {
     val state = ConnectionState.of(game)
     val stateText = state.text()
-    val description = stringResource(R.string.game_state, game.name, stateText)
+    val description = gameDescription(game.name, stateText, game.unread, game.attention)
     ListSegment(index, count) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -192,6 +194,7 @@ private fun OpenGameItem(game: ProfileSession, index: Int, count: Int, onShow: (
                 Text(game.name, style = MaterialTheme.typography.titleMedium)
                 Text(stateText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            GameBadges(game.unread, game.attention)
         }
     }
 }

@@ -237,14 +237,14 @@ class ProtocolTest {
                 """{"t":"label","name":"box","text":"<b>hi</b>","image":"/data/a.svg","svg":true,"svgTint":${RUN_RGB or 0xff0000},""" +
                     """"svgTintAlpha":128,"svgRotation":90.5,"svgShearX":0.25,"svgShearY":-0.5,"movie":"/data/b.gif","moviePaused":true,""" +
                     """"movieFrame":3,"movieSpeed":50,"movieW":64,"movieH":48,"toolTip":"tip","clickThrough":true,"accessibleName":"Box",""" +
-                    """"accessibleButton":true,"styleSheet":"QLabel { color: red; }"}""",
+                    """"accessibleButton":true,"liveRegion":"assertive","styleSheet":"QLabel { color: red; }"}""",
             ),
         )
         assertEquals(
             EngineMessage.Label(
                 LabelContent(
                     "box", "<b>hi</b>", "/data/a.svg", true, RUN_RGB or 0xff0000, 128, 90.5, 0.25, -0.5, "/data/b.gif", true, 3, 50, 64, 48,
-                    "tip", true, "Box", true, "QLabel { color: red; }",
+                    "tip", true, "Box", true, LiveRegion.ASSERTIVE, "QLabel { color: red; }",
                 ),
             ),
             full,
@@ -256,7 +256,20 @@ class ProtocolTest {
                     """"movieSpeed":100,"toolTip":"","clickThrough":false,"accessibleName":"","accessibleButton":false,"styleSheet":""}""",
             ),
         ) as EngineMessage.Label
-        assertEquals(LabelContent("box", "", "", false, -1, 255, 0.0, 0.0, 0.0, "", false, -1, 100, null, null, "", false, "", false, ""), plain.label)
+        assertEquals(
+            LabelContent("box", "", "", false, -1, 255, 0.0, 0.0, 0.0, "", false, -1, 100, null, null, "", false, "", false, LiveRegion.OFF, ""),
+            plain.label,
+        )
+    }
+
+    @Test
+    fun aLabelsLiveRegionParsesAndOneThisClientDoesNotKnowIsOff() {
+        fun liveRegion(wire: String) = (FrameReader.parse(JSONObject().put("t", "label").put("name", "box").put("liveRegion", wire)) as EngineMessage.Label).label.liveRegion
+        assertEquals(LiveRegion.POLITE, liveRegion("polite"))
+        assertEquals(LiveRegion.ASSERTIVE, liveRegion("assertive"))
+        assertEquals(LiveRegion.OFF, liveRegion("off"))
+        assertEquals(LiveRegion.OFF, liveRegion("loud"))
+        assertEquals(LiveRegion.OFF, liveRegion("Polite"))
     }
 
     @Test

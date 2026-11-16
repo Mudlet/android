@@ -899,6 +899,9 @@ QJsonObject SocketBridge::labelMessage(const LabelInfo& label)
         json.insert(QStringLiteral("movieW"), label.movieSize.width());
         json.insert(QStringLiteral("movieH"), label.movieSize.height());
     }
+    if (!label.liveRegion.isEmpty()) {
+        json.insert(QStringLiteral("liveRegion"), label.liveRegion);
+    }
     return json;
 }
 

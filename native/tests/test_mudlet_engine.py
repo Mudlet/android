@@ -1121,10 +1121,10 @@ def label_of(msgs, name):
 
 
 def script_labels():
-    """What labels show: a Geyser.Label's text, stylesheet, image and accessible name as label messages, the image as
-    a PNG from getImage, and its click callback run by pointer; a Geyser.Gauge as three labels whose geometry gives
-    its value, with its text label transparent; a deleted label removed; and every label again for a UI that
-    attaches."""
+    """What labels show: a Geyser.Label's text, stylesheet, image, accessible name and live region as label messages,
+    the image as a PNG from getImage, and its click callback run by pointer; a Geyser.Gauge as three labels whose
+    geometry gives its value, with its text label transparent; a deleted label removed; and every label again for a UI
+    that attaches."""
     picture = os.path.join(TMP, "dot.png")
     png_file(picture, 4, 3)
     vector = os.path.join(TMP, "square.svg")
@@ -1160,6 +1160,8 @@ def script_labels():
         f'ico:setBackgroundImage([==[{vector}]==])',
         'ico:setSvgTint(0, 128, 255)',
         'ico:setSvgRotation(90)',
+        'news = Geyser.Label:new({name = "news", x = 300, y = 80, width = 120, height = 20, liveRegion = "assertive"})',
+        'news:echo("all quiet")',
     ])})
     m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "box" and m["accessibleName"] == "Hit me", seen, since)
     check("hello label" in m["text"] and m["styleSheet"] == "QLabel { border: 2px solid red; }" and m["accessibleButton"]
@@ -1171,6 +1173,9 @@ def script_labels():
     box = window_of(seen, "box", "label")
     check(box is not None and (box["x"], box["y"], box["w"], box["h"]) == (20, 20, 120, 40) and box["shown"],
           f"and is a label window at its place: {box}")
+    check("liveRegion" not in m, f"a label whose live region is off has none: {m}")
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "news" and "all quiet" in m["text"], seen, since)
+    check(m.get("liveRegion") == "assertive", f"a Geyser.Label made with a live region has it: {m}")
     m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "pic" and m["image"], seen, since)
     check(m["image"] == picture and m["text"] == "" and not m["svg"], f"setBackgroundImage() shows the file in place of the text: {m}")
     m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "ico" and m.get("svgRotation"), seen, since)
@@ -1212,6 +1217,13 @@ def script_labels():
     m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "box" and "new words" in m["text"], seen, since)
     check(m["accessibleName"] == "Hit me" and not any(windows_with("box", "label")(w) for w in seen[since:]),
           f"a label whose content alone changed is sent again, with no windows message for it: {m}")
+    for code, region in (('box:setLiveRegion("polite")', "polite"), ('setLabelLiveRegion("box", "assertive")', "assertive"),
+                         ('box:setLiveRegion("off")', None)):
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        m = seen_or_next(c, lambda m, region=region: m["t"] == "label" and m["name"] == "box" and m.get("liveRegion") == region, seen, since)
+        check("new words" in m["text"] and not any(windows_with("box", "label")(w) for w in seen[since:]),
+              f"{code} alone sends the label again, with its live region: {m}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": "\n".join([
@@ -1248,6 +1260,8 @@ def script_labels():
           and all(i > full for i in names.values()), f"a UI that attaches gets every label after the windows: {sorted(names)}")
     box = label_of(msgs, "box")
     check(box is not None and box["accessibleName"] == "Hit me" and "new words" in box["text"], f"as it was: {box}")
+    news = label_of(msgs, "news")
+    check(news is not None and news.get("liveRegion") == "assertive", f"and with its live region: {news}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": 'deleteLabel("pic")'})

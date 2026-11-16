@@ -130,6 +130,8 @@ data class LabelContent(
     val accessibleName: String,
     /** It has a click or release callback, so a screen reader is told it is a button. */
     val accessibleButton: Boolean,
+    /** How a screen reader is told of its new text, as setLabelLiveRegion() gave it. */
+    val liveRegion: LiveRegion,
     /** As setLabelStyleSheet() gave it, which the engine does not interpret. */
     val styleSheet: String,
 )
@@ -166,6 +168,18 @@ enum class MapDownloadState(val wire: String) {
 
     companion object {
         fun fromWire(wire: String): MapDownloadState = entries.firstOrNull { it.wire == wire } ?: NONE
+    }
+}
+
+/** How a label's new text is announced, as ARIA's aria-live (docs/protocol.md, "Labels"); one this client does not know is [OFF]. */
+enum class LiveRegion(val wire: String) {
+    OFF("off"),
+    POLITE("polite"),
+    ASSERTIVE("assertive"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): LiveRegion = entries.firstOrNull { it.wire == wire } ?: OFF
     }
 }
 
@@ -729,6 +743,7 @@ class FrameReader(input: InputStream) {
             clickThrough = l.optBoolean("clickThrough"),
             accessibleName = l.optString("accessibleName"),
             accessibleButton = l.optBoolean("accessibleButton"),
+            liveRegion = LiveRegion.fromWire(l.optString("liveRegion")),
             styleSheet = l.optString("styleSheet"),
         )
 

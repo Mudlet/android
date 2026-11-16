@@ -1,0 +1,193 @@
+Headless: give a label's live region
+
+A frontend that draws labels itself needs a label's live region (setLabelLiveRegion(): off, polite or assertive) to
+announce the label's changes as the desktop's screen reader support does. THeadlessSession::LabelContent did not carry
+it, and setting it told no one: the model kept it for the widget to read as the label's text next changed.
+
+This adds liveRegion to LabelContent, filled where accessibleName is, and has TLabelModel::setLiveRegion() tell the
+view of a real change (AccessibilityChange::LiveRegion), so a change names the label in scriptWindowsChanged. TLabel
+ignores that change, as it did: it reads the live region as the text next changes. Tested in
+HeadlessSessionWindowsTest, and listed among labelContent()'s fields in docs/headless.md.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+
+diff --git a/docs/headless.md b/docs/headless.md
+index ce752c2..4cf61d8 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1208,6 +1208,9 @@ trimmed under the row it is scrolled back to.
+ - `clickThrough`, as `enableClickthrough()` sets it;
+ - `accessibleName` and `accessibleButton`, what a screen reader says for it and whether it is told it is
+   a button;
++- `liveRegion`, as `setLabelLiveRegion()` gave it: `off`, or `polite` or `assertive` for a label whose
++  new text a screen reader is to announce as ARIA's `aria-live` does. The GUI announces it itself; with no
++  widget, announcing is the app's to do;
+ - `styleSheet`, as `setLabelStyleSheet()` gave it. Mudlet does not interpret it for the app: drawing what
+   it says is the app's to do, or not.
+ 
+diff --git a/src/TLabel.cpp b/src/TLabel.cpp
+index b368c94..039039b 100644
+--- a/src/TLabel.cpp
++++ b/src/TLabel.cpp
+@@ -358,6 +358,10 @@ void TLabel::accessibilityChanged(TLabelModel::AccessibilityChange change)
+         }
+         return;
+     }
++    // Heard only as the text next changes (announceTextChange())
++    if (change == TLabelModel::AccessibilityChange::LiveRegion) {
++        return;
++    }
+     updateKeyboardAccess();
+     if (change == TLabelModel::AccessibilityChange::KeyboardAccess) {
+         return;
+diff --git a/src/TLabelModel.cpp b/src/TLabelModel.cpp
+index f9abdb2..75f972c 100644
+--- a/src/TLabelModel.cpp
++++ b/src/TLabelModel.cpp
+@@ -563,6 +563,15 @@ void TLabelModel::setAccessibleButton(std::optional<bool> button)
+     accessibilityChanged(AccessibilityChange::Role);
+ }
+ 
++void TLabelModel::setLiveRegion(TLabelLiveRegion liveRegion)
++{
++    if (mLiveRegion == liveRegion) {
++        return;
++    }
++    mLiveRegion = liveRegion;
++    accessibilityChanged(AccessibilityChange::LiveRegion);
++}
++
+ void TLabelModel::setClickThrough(bool clickThrough)
+ {
+     if (mClickThrough == clickThrough) {
+diff --git a/src/TLabelModel.h b/src/TLabelModel.h
+index ad98142..0a78863 100644
+--- a/src/TLabelModel.h
++++ b/src/TLabelModel.h
+@@ -67,14 +67,14 @@ struct TLabelModel
+     void setAccessibleName(const QString& name);
+     void setAccessibleButton(std::optional<bool> button);
+     void setClickThrough(bool clickThrough);
+-    // Nothing to tell the view: a live region is heard only when the text next changes
+-    void setLiveRegion(TLabelLiveRegion liveRegion) { mLiveRegion = liveRegion; }
++    void setLiveRegion(TLabelLiveRegion liveRegion);
+     // The view's copies of what the label shows, which name it unless a script named it
+     void setText(const QString& text);
+     void setToolTip(const QString& toolTip);
+ 
+-    // KeyboardAccess: the profile's accessibleLabels setting changed
+-    enum class AccessibilityChange { Name, Role, KeyboardAccess };
++    // KeyboardAccess: the profile's accessibleLabels setting changed. LiveRegion: how a change of its text is
++    // announced, which a widget needs only as the text next changes, and a frontend without one reads as content
++    enum class AccessibilityChange { Name, Role, KeyboardAccess, LiveRegion };
+     // Set by the widget, if there is one, to update its focus policy and tell assistive technology of a change
+     std::function<void(AccessibilityChange)> mAccessibilityChanged;
+     void accessibilityChanged(AccessibilityChange change) const;
+diff --git a/src/TNullConsoleFrontend.cpp b/src/TNullConsoleFrontend.cpp
+index 6d9d801..290e144 100644
+--- a/src/TNullConsoleFrontend.cpp
++++ b/src/TNullConsoleFrontend.cpp
+@@ -1364,7 +1364,7 @@ void TNullConsoleFrontend::createLabel(const QString& windowname, const QString&
+ {
+     mWindowNotifier.note();
+     auto pLabel = std::make_unique<TLabelModel>(mpHost, name);
+-    // A script names a label for screen readers through Host, which tells only the model
++    // A script names a label for screen readers, or gives it a live region, through Host, which tells only the model
+     pLabel->mAccessibilityChanged = [this](TLabelModel::AccessibilityChange) {
+         mWindowNotifier.note();
+     };
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 327d612..94596db 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -779,6 +779,10 @@ public:
+         // What a screen reader says for it, and whether it is told it is a button
+         QString accessibleName;
+         bool accessibleButton = false;
++        // How a screen reader is told of a change of its text, as setLabelLiveRegion() gave it: not at all, or
++        // politely or assertively, as ARIA's aria-live
++        enum class LiveRegion { off, polite, assertive };
++        LiveRegion liveRegion = LiveRegion::off;
+         // As setLabelStyleSheet() gave it, which Mudlet does not interpret: drawing it is the app's to do or not
+         QString styleSheet;
+ 
+diff --git a/src/headless/THeadlessSessionWindows.cpp b/src/headless/THeadlessSessionWindows.cpp
+index 5b557c1..dac528e 100644
+--- a/src/headless/THeadlessSessionWindows.cpp
++++ b/src/headless/THeadlessSessionWindows.cpp
+@@ -463,6 +463,17 @@ std::optional<THeadlessSession::LabelContent> THeadlessSession::labelContent(con
+     content.clickThrough = pModel->mClickThrough;
+     content.accessibleName = pModel->effectiveAccessibleName();
+     content.accessibleButton = pModel->actsAsButton();
++    switch (pModel->mLiveRegion) {
++    case TLabelLiveRegion::Off:
++        content.liveRegion = LabelContent::LiveRegion::off;
++        break;
++    case TLabelLiveRegion::Polite:
++        content.liveRegion = LabelContent::LiveRegion::polite;
++        break;
++    case TLabelLiveRegion::Assertive:
++        content.liveRegion = LabelContent::LiveRegion::assertive;
++        break;
++    }
+     content.styleSheet = pModel->mStyleSheet;
+     return content;
+ }
+diff --git a/test/functional_tests/HeadlessSessionWindowsTest.cpp b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+index 5ca2fe9..059f55f 100644
+--- a/test/functional_tests/HeadlessSessionWindowsTest.cpp
++++ b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+@@ -615,6 +615,53 @@ setLabelStyleSheet("lbl", "color: red;")
+         QVERIFY(!session.labelContent(qsl("lbl")));
+     }
+ 
++    void test_aLabelsLiveRegionIsItsContent()
++    {
++        using LiveRegion = THeadlessSession::LabelContent::LiveRegion;
++        const QString name = qsl("Headless Label Live Region");
++        QVERIFY(writeProfile(name));
++        THeadlessSession session;
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QVERIFY(session.setMainWindowSize(QSize(800, 600)));
++        QSignalSpy changes(&session, &THeadlessSession::scriptWindowsChanged);
++        QVERIFY(session.runLua(qsl(R"lua(
++createLabel("lbl", 0, 0, 100, 20, 1)
++echo("lbl", "HP 25")
++geyserLabel = Geyser.Label:new({name = "geyserLive", x = 0, y = 40, width = 100, height = 20, liveRegion = "assertive"})
++)lua")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        std::optional<THeadlessSession::LabelContent> content = session.labelContent(qsl("lbl"));
++        QVERIFY(content);
++        QCOMPARE(content->liveRegion, LiveRegion::off);
++        content = session.labelContent(qsl("geyserLive"));
++        QVERIFY(content);
++        QCOMPARE(content->liveRegion, LiveRegion::assertive);
++
++        // Nothing else about the label changes, so the live region alone names it
++        const auto toldAs = [&](const QString& mode, const LiveRegion expected) {
++            if (!session.runLua(qsl(R"(setLabelLiveRegion("lbl", "%1"))").arg(mode)) || !changes.wait(1000)) {
++                return false;
++            }
++            const bool named = changes.takeFirst().at(1).toStringList() == QStringList{qsl("lbl")};
++            changes.clear();
++            const std::optional<THeadlessSession::LabelContent> now = session.labelContent(qsl("lbl"));
++            return named && now && now->liveRegion == expected;
++        };
++        QVERIFY(toldAs(qsl("polite"), LiveRegion::polite));
++        QVERIFY(toldAs(qsl("assertive"), LiveRegion::assertive));
++        QVERIFY(toldAs(qsl("off"), LiveRegion::off));
++        // The one it has already is no change
++        QVERIFY(session.runLua(qsl(R"(setLabelLiveRegion("lbl", "off"))")));
++        QVERIFY(!changes.wait(200));
++        // A region a script cannot set leaves the label as it was
++        QVERIFY(session.runLua(qsl(R"(setLabelLiveRegion("lbl", "polite") setLabelLiveRegion("lbl", "loud"))")));
++        QVERIFY(changes.wait(1000));
++        QCOMPARE(session.labelContent(qsl("lbl"))->liveRegion, LiveRegion::polite);
++
++        QVERIFY(session.shutdown(false));
++    }
++
+     void test_userWindowsArePlacedAsTheGuisDocksAre()
+     {
+         const QString name = qsl("Headless User Window Place");

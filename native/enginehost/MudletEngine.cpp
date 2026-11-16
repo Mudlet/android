@@ -207,6 +207,19 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
     return info;
 }
 
+QString liveRegionName(THeadlessSession::LabelContent::LiveRegion liveRegion)
+{
+    switch (liveRegion) {
+    case THeadlessSession::LabelContent::LiveRegion::polite:
+        return QStringLiteral("polite");
+    case THeadlessSession::LabelContent::LiveRegion::assertive:
+        return QStringLiteral("assertive");
+    case THeadlessSession::LabelContent::LiveRegion::off:
+        break;
+    }
+    return {};
+}
+
 LabelInfo labelInfo(const QString& name, const THeadlessSession::LabelContent& content)
 {
     LabelInfo info;
@@ -230,6 +243,7 @@ LabelInfo labelInfo(const QString& name, const THeadlessSession::LabelContent& c
     info.clickThrough = content.clickThrough;
     info.accessibleName = content.accessibleName;
     info.accessibleButton = content.accessibleButton;
+    info.liveRegion = liveRegionName(content.liveRegion);
     info.styleSheet = content.styleSheet;
     return info;
 }

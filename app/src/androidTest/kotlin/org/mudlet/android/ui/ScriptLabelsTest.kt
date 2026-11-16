@@ -3,9 +3,11 @@ package org.mudlet.android.ui
 import android.Manifest
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -33,6 +35,8 @@ import androidx.test.rule.GrantPermissionRule
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -44,14 +48,15 @@ import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.POINTER_RIGHT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.Announcer
 import java.io.ByteArrayOutputStream
 import kotlin.math.abs
 
 /**
  * The labels a profile's scripts draw (docs/phase-f.md, "Labels" and "Gauges"), against a fake engine: a label's text
  * at its scaled place, a clickable label as a button whose tap reaches the engine as `pointer` events, its 48 dp touch
- * bounds, a long press as the right button with the tool tip, a drag, a gauge read as its progress, a link's command,
- * and the images the engine is asked for.
+ * bounds, a long press as the right button with the tool tip, a drag, a gauge read as its progress and its live text
+ * label's new text said, a live label as one live node, a link's command, and the images the engine is asked for.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -207,16 +212,96 @@ class ScriptLabelsTest {
         )
         session.label("hp_back", styleSheet = "background-color: #400000")
         session.label("hp_front", styleSheet = "background-color: red")
-        session.label("hp_text", text = "HP 25/100")
+        val before = compose.runOnIdle { Announcer.current }
+        session.label("hp_text", text = "HP 25/100", liveRegion = "assertive")
         val gauge = SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(25f, 0f..100f))
-        compose.waitUntil(WAIT_MS) {
-            compose.onAllNodes(gauge and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "HP 25/100"))
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(gauge and hasStateDescription("HP 25/100")).fetchSemanticsNodes().isNotEmpty() }
+        // The text it is first drawn with is not said, or a UI that attaches would read every live gauge
+        compose.runOnIdle { assertSame("the first text drawn is not said", before, Announcer.current) }
         compose.onNode(gauge).assert(hasContentDescription("hp"))
         // The text label is the gauge's state, not a node of its own
         assertTrue(compose.onAllNodes(hasText("HP 25/100")).fetchSemanticsNodes().isEmpty())
         compose.onRoot().tryPerformAccessibilityChecks()
+
+        // A live text label's new text is said, as on the desktop; the gauge's node is not live, as a live node is read
+        // again at each change of its value too
+        compose.onNode(gauge).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        session.label("hp_text", text = "HP 20/100", liveRegion = "assertive")
+        compose.waitUntil(WAIT_MS) { Announcer.current?.text == "HP 20/100" }
+        val said = compose.runOnIdle { Announcer.current!! }
+        assertTrue(said.assertive)
+        // A new value alone is not said
+        session.windows(listOf(label("hp_front", w = 100, h = 20)))
+        val half = SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(50f, 0f..100f))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(half and hasStateDescription("HP 20/100")).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertSame("TalkBack is told: ${Announcer.current?.text}", said, Announcer.current) }
+        // Nor the new text of a text label that is not live, though the back label is: it has no text to say
+        session.label("hp_back", styleSheet = "background-color: #400000", liveRegion = "polite")
+        session.label("hp_text", text = "HP 50/100")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(half and hasStateDescription("HP 50/100")).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertSame("TalkBack is told: ${Announcer.current?.text}", said, Announcer.current) }
+        // A polite one is said after what TalkBack is saying, not at once
+        SystemClock.sleep(APART_MS)
+        session.label("hp_text", text = "HP 10/100", liveRegion = "polite")
+        compose.waitUntil(WAIT_MS) { Announcer.current?.text == "HP 10/100" }
+        compose.runOnIdle { assertFalse("said politely", Announcer.current!!.assertive) }
+    }
+
+    @Test
+    fun aLiveLabelIsOneLiveNodeThatReadsItsText() {
+        session.windows(
+            listOf(
+                label("news", w = 300, h = 40),
+                label("go", y = 100, w = 200, h = 100),
+                label("status", y = 250, w = 300, h = 40),
+                label("calm", y = 350, w = 300, h = 40),
+            ),
+            full = true,
+        )
+        // Blank, as Geyser makes a label before its first echo()
+        session.label("news", liveRegion = "polite")
+        session.label("go", text = "North", accessibleName = "Go north", accessibleButton = true, liveRegion = "assertive")
+        session.label("status", text = "ok", accessibleName = "Status", liveRegion = "polite")
+        // A live region this client does not know is none
+        session.label("calm", text = "nothing new", liveRegion = "loud")
+        // Labels are drawn in the order they came, so the last one drawn has the others drawn
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("nothing new")).fetchSemanticsNodes().isNotEmpty() }
+
+        // A blank live label is a live node already, so its first text is a change of that node, which TalkBack says;
+        // with no text, it is not a stop where TalkBack would say nothing (not the named "status", nor the Announcer's)
+        val blank = compose.onNode(
+            isLive(LiveRegionMode.Polite) and SemanticsMatcher.keyNotDefined(SemanticsProperties.Text) and
+                SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription) and
+                SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1f),
+        )
+        blank.assertExists()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        val news = blank.fetchSemanticsNode().id
+        session.label("news", text = "a dragon!", liveRegion = "polite")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("a dragon!")).fetchSemanticsNodes().isNotEmpty() }
+        val dragon = compose.onNode(hasText("a dragon!")).assert(isLive(LiveRegionMode.Polite))
+        assertEquals("the node with the new text", news, dragon.fetchSemanticsNode().id)
+
+        // One read by its name, a button too, has its text as its state, so its new text is said with its name
+        compose.onNode(hasContentDescription("Status")).assert(isLive(LiveRegionMode.Polite)).assert(hasStateDescription("ok"))
+        compose.onNode(hasContentDescription("Go north")).assert(isLive(LiveRegionMode.Assertive)).assert(hasStateDescription("North"))
+        compose.onNode(hasText("nothing new")).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        session.label("status", text = "poisoned", accessibleName = "Status", liveRegion = "polite")
+        compose.waitUntil(WAIT_MS) {
+            compose.onAllNodes(hasContentDescription("Status") and hasStateDescription("poisoned")).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // setLabelLiveRegion("news", "off") leaves the field out: read as drawn again, and not live; a named one, by its
+        // name alone
+        session.label("news", text = "a dragon!")
+        session.label("status", text = "poisoned", accessibleName = "Status")
+        compose.waitUntil(WAIT_MS) {
+            compose.onAllNodes(hasContentDescription("Status") and SemanticsMatcher.keyNotDefined(SemanticsProperties.StateDescription))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNode(hasText("a dragon!")).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onNode(hasContentDescription("Status")).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
     }
 
     @Test
@@ -258,6 +343,10 @@ class ScriptLabelsTest {
         return events
     }
 
+    private fun isLive(mode: LiveRegionMode) = SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, mode)
+
+    private fun hasStateDescription(state: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, state)
+
     private fun label(name: String, x: Int = 0, y: Int = 0, w: Int, h: Int) = FakeEngine.window(name, kind = "label", x = x, y = y, w = w, h = h)
 
     private fun png(w: Int, h: Int): ByteArray {
@@ -290,6 +379,9 @@ class ScriptLabelsTest {
         // Rounding to whole pixels, and the text's own padding
         const val PIXELS = 3f
         const val WAIT_MS = 10_000L
+
+        // Longer than the Announcer's MERGE_MS, so two announcements are not merged into one
+        const val APART_MS = 300L
         const val TIMEOUT_MS = 240_000L
     }
 }

@@ -23,6 +23,7 @@ levels and areas on both maps, the area list, the search's ranking fields, and t
 unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 07707a4..84c2dcd 100644

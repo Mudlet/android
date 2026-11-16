@@ -135,11 +135,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         val request = message.message.substringBefore(':')
         val reason = message.message.substringAfter(':').trim()
         if (session.appMap.onRefused(request, reason)) return
-        if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
-        if (request == "moveMap" || request == "followPlayer") {
-            mapMover.clear()
-            mapRefusal = reason
-        }
+        if (request == "moveMap" || request == "followPlayer") mapMover.clear()
+        if (request in setOf("mapPointer", "setMapViewOnly", "moveMap", "followPlayer")) mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
         // The box's own textBox follows, which puts back what it holds
         if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")

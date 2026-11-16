@@ -292,18 +292,6 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
             if (frame != null) drawFrame(frame, fit, shift = mover.shift)
             roomDrag?.let { drawRoomGhost(it, fit, mover, ghost) }
         }
-        if (controls) {
-            // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge
-            Surface(
-                Modifier.align(Alignment.TopEnd).wrapContentSize(Alignment.TopEnd, unbounded = true).padding(CONTROLS_PADDING),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
-                // Not the surface's own colour, which contentColorFor() would not know as it
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                MapButtons(source, frame, fit, viewOnly, drawn)
-            }
-        }
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
         val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }
         val roomCardHeight = maxHeight * ROOM_CARD_FRACTION
@@ -322,6 +310,19 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
                 }
             }
             room?.let { RoomCard(it, source.rooms, editing = !viewOnly, Modifier.fillMaxWidth().heightIn(max = roomCardHeight)) }
+        }
+        if (controls) {
+            // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge. Over the room card, as
+            // TalkBack takes a button's touch area unclipped: one scrolled out of a card the keyboard shortens would take theirs
+            Surface(
+                Modifier.align(Alignment.TopEnd).wrapContentSize(Alignment.TopEnd, unbounded = true).padding(CONTROLS_PADDING),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
+                // Not the surface's own colour, which contentColorFor() would not know as it
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                MapButtons(source, frame, fit, viewOnly, drawn)
+            }
         }
     }
 }

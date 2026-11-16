@@ -27,7 +27,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.junit4.accessibility.disableAccessibilityChecks
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
@@ -40,8 +39,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONObject
@@ -699,52 +696,30 @@ class ScriptMapTest {
         val button = hasText(string(label)) and hasClickAction()
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(button).performScrollTo()
-        // Unchecked if the keyboard a dialog's field brought up does not go
-        runCatching { compose.waitUntil(WAIT_MS) { !keyboardShown() } }
         activate(button)
     }
 
-    // A text field of the dialog open, by its label; the dialog is checked before a field brings the keyboard up
+    // A text field of the dialog open, by its label
     private fun field(@StringRes label: Int): SemanticsNodeInteraction {
         val node = hasSetTextAction() and hasText(string(label)) and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
-        if (!keyboardShown()) compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+        compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
         return compose.onNode(node)
-    }
-
-    // The keyboard shrinks the screen behind a dialog too, until the map's buttons are too small for the checks
-    private fun keyboardShown(): Boolean = compose.runOnIdle {
-        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
     }
 
     /** As [activate], in the dialog open over the screen: the checks are of the dialog's window. */
     private fun activateInDialog(label: SemanticsMatcher) {
         val node = label and hasClickAction() and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
-        uncheckedWithKeyboard {
-            compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
-            // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
-            if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
-            compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
-        }
+        compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+        // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
+        if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
+        compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
     }
 
-    // [text] typed into the dialog's field [label]; Compose checks the screen as it focuses the field, as [activateInDialog]
+    // [text] typed into the dialog's field [label]; Compose checks the screen, keyboard and all, as it focuses the field
     private fun type(@StringRes label: Int, text: String) {
-        val node = field(label)
-        uncheckedWithKeyboard { node.performTextReplacement(text) }
-    }
-
-    // The keyboard a field leaves up squeezes the map's buttons behind the dialog, which the checks take for touch targets
-    // too small: [field] checked the screen before the keyboard came up
-    private fun uncheckedWithKeyboard(action: () -> Unit) {
-        val unchecked = Build.VERSION.SDK_INT >= 34 && keyboardShown()
-        if (unchecked) compose.disableAccessibilityChecks()
-        try {
-            action()
-        } finally {
-            if (unchecked) compose.enableAccessibilityChecks()
-        }
+        field(label).performTextReplacement(text)
     }
 
     /**
@@ -857,7 +832,7 @@ class ScriptMapTest {
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
     private fun activate(label: SemanticsMatcher) {
-        if (!keyboardShown()) compose.onRoot().tryPerformAccessibilityChecks()
+        compose.onRoot().tryPerformAccessibilityChecks()
         compose.onNode(label and hasClickAction()).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
     }
 

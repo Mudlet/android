@@ -100,7 +100,6 @@ internal object AppMapClient : MapSource {
     // The size the engine was last given since the UI attached; null when it could not be sent
     private var sent: Size? = Size.NONE
     private var pendingSearch: Long? = null
-    private var nextId = 1L
 
     // Whether the last setMapViewOnly was this map's, whose refusal it shows, or the mapper window's
     private var askedViewOnly = false
@@ -199,7 +198,7 @@ internal object AppMapClient : MapSource {
     /** The rooms whose name holds [text], or whose number it is, into [search]. False as for [EngineClient.send]. */
     fun findRooms(text: String): Boolean {
         refused = null
-        val id = nextId++
+        val id = EngineClient.newRequestId()
         if (!EngineClient.send(Requests.findRooms(text, id))) return false
         pendingSearch = id
         search = RoomSearch(text, null)

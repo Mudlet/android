@@ -4,12 +4,16 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /** What EngineClient holds for the UI from the engine's messages, read on the main thread as the UI reads it. */
 @RunWith(AndroidJUnit4::class)
@@ -52,6 +56,38 @@ class EngineClientTest {
         session.close()
         fake.engine.nextSession().synced(0)
         waitUntil("moveTypedLine dropped by the new engine") { !EngineClient.moveTypedLine }
+    }
+
+    @Test
+    fun theMapSearchsRefusalIsNoProfileRequestsAnswer() {
+        // The fake has answered the hello before the link has read it, and a request sent sooner is dropped
+        waitUntil("the link attached") { EngineClient.linkState.startsWith("attached to pid") }
+        val answers = LinkedBlockingQueue<String>()
+        fun askProfile(): JSONObject {
+            onMain { EngineClient.deleteProfile("Nobody") { answers.add(it ?: "done") } }
+            return session.receive("deleteProfile")
+        }
+        fun askSearch(): JSONObject {
+            assertTrue("the search was not sent", onMain { AppMapClient.findRooms("hall") })
+            return session.receive("findRooms")
+        }
+        // The request whose id is behind is asked again until its id reaches the other's, as ids from separate
+        // counters do, or passes it, as ids from one do
+        var profile = askProfile()
+        var search = askSearch()
+        while (search.getLong("id") < profile.getLong("id")) search = askSearch()
+        while (profile.getLong("id") < search.getLong("id")) {
+            session.refuse(profile, "no such profile")
+            assertEquals("deleteProfile: no such profile", answers.poll(10, TimeUnit.SECONDS))
+            profile = askProfile()
+        }
+        session.refuse(search, "no profile is open")
+        session.refuse(profile, "no such profile")
+        assertEquals("deleteProfile: no such profile", answers.poll(10, TimeUnit.SECONDS))
+        onMain {
+            AppMapClient.dismissRefusal()
+            AppMapClient.closeSearch()
+        }
     }
 
     private fun <T> onMain(block: () -> T): T {

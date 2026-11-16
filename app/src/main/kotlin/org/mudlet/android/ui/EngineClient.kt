@@ -36,7 +36,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false)
@@ -127,7 +126,6 @@ object EngineClient {
 
     // The profile requests waiting for their answer, by id; main thread only
     private val profileAnswers = HashMap<Long, (String?) -> Unit>()
-    private val nextRequestId = AtomicLong(1)
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -226,6 +224,9 @@ object EngineClient {
         linkState = "detached (UI stopped)"
     }
 
+    /** The `id` for a request to the engine, whoever sends it: see [EngineLink.newRequestId]. */
+    fun newRequestId(): Long = link.newRequestId()
+
     /** False when the link is down and the command was dropped. */
     fun send(message: org.json.JSONObject): Boolean {
         val sent = link.send(message)
@@ -257,7 +258,7 @@ object EngineClient {
 
     /** Asks the engine to complete [text]; [onResult] gets the completed line, or empty for none. False as for [send]. */
     fun complete(text: String, onResult: (String) -> Unit): Boolean {
-        val id = nextRequestId.getAndIncrement()
+        val id = newRequestId()
         if (!send(Requests.complete(text, false, id))) return false
         completions[id] = onResult
         return true
@@ -308,7 +309,7 @@ object EngineClient {
     // Lost when no profile is loaded or the link is down: the next profile to load, or the next attach, gets them all
     private fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
         if (status["profile"]?.endsWith(" loaded") != true) return
-        val id = nextRequestId.getAndIncrement()
+        val id = newRequestId()
         settingsRequests.add(id)
         if (!link.send(Requests.runLua(settings.joinToString("\n") { it.setConfigLua() }, id))) settingsRequests.remove(id)
     }
@@ -339,7 +340,7 @@ object EngineClient {
     }
 
     private fun profileRequest(onAnswer: (String?) -> Unit, request: (Long) -> JSONObject) {
-        val id = nextRequestId.getAndIncrement()
+        val id = newRequestId()
         profileAnswers[id] = onAnswer
         if (!send(request(id))) {
             profileAnswers.remove(id)
@@ -409,7 +410,7 @@ object EngineClient {
             // The engine forgets nothing across a reattach, but a new engine instance needs the size again
             screenSize?.let { (columns, rows) -> link.send(Requests.setScreenSize(columns, rows)) }
             // Another UI or a restore may have changed them meanwhile
-            link.send(Requests.listProfiles(nextRequestId.getAndIncrement()))
+            link.send(Requests.listProfiles(newRequestId()))
             // The engine resends its whole status after hello, so the old instance's values must go first
             if (!sameInstance) resetStatus()
             post {

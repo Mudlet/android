@@ -81,7 +81,8 @@ Crossing the boundary:
 - UI to engine: requests (below).
 - Engine to UI: pushed lines, statuses and notifies.
 - There are no calls in either direction. A reply is a `status` frame carrying
-  `re`, the request id.
+  `re`, the request id. Every sender in the UI takes its ids from the one
+  `EngineLink.newRequestId()`, so no sender takes another's answer.
 - Inside `:engine`, the only JNI calls are:
   - Java to native: `nativeServiceReady`, once at startup.
   - Native to Java: `QJniObject::callStaticMethod` for `postTell`.

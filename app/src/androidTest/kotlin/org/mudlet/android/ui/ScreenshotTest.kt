@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -35,7 +37,7 @@ import java.util.Base64
 
 /**
  * Screenshots of the profile list, the game screen with the map behind its text, the settings and the map in front, with
- * a downloaded map, light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
+ * a downloaded map and dragged off the player, light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */
@@ -92,9 +94,23 @@ class ScreenshotTest {
         )
         // In front, it shows the map behind the text's frame until the engine draws one at its own size, with the
         // room's name along its top as Mudlet draws it
-        session.send(appMap(session.receiveLast("setAppMapSize"), roomName = ROOM_NAME))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_description))).fetchSemanticsNodes().isNotEmpty() }
+        val size = session.receiveLast("setAppMapSize")
+        session.send(appMap(size, roomName = ROOM_NAME))
+        val map = hasContentDescription(string(R.string.map_description))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(map).fetchSemanticsNodes().isNotEmpty() }
         save("map-$mode")
+
+        // Dragged off the player, shown moved before the engine draws it, with the button that centres it on them
+        session.send(appMap(size, roomName = ROOM_NAME, view = EngineMessages.mapView(size.getInt("w"), size.getInt("h"))))
+        compose.waitForIdle()
+        compose.onNode(map).performTouchInput {
+            down(center)
+            repeat(10) { moveBy(Offset(width * 0.02f, height * 0.015f)) }
+            advanceEventTime(300)
+            up()
+        }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_follow))).fetchSemanticsNodes().isNotEmpty() }
+        save("map-moved-$mode")
     }
 
     /** The whole screen, system bars included, once the app has drawn what it last composed. */
@@ -107,12 +123,12 @@ class ScreenshotTest {
         File(dir, "$name.png").outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    private fun appMap(size: JSONObject, roomName: String? = null): JSONObject {
+    private fun appMap(size: JSONObject, roomName: String? = null, view: JSONObject? = null): JSONObject {
         val w = size.getInt("w")
         val h = size.getInt("h")
         val scale = size.getDouble("scale")
         return JSONObject().put("t", "appMap").put("png", Base64.getEncoder().encodeToString(mapPng((w * scale).toInt(), (h * scale).toInt(), roomName, scale.toFloat())))
-            .put("w", w).put("h", h).put("viewOnly", true)
+            .put("w", w).put("h", h).put("viewOnly", true).apply { if (view != null) put("view", view) }
     }
 
     // A grid of rooms joined by exits, in Mudlet's default room colours on its black map background, the player's in the

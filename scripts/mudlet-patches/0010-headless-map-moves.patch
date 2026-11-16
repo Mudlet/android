@@ -49,7 +49,7 @@ index 2d3259e..07707a4 100644
  `mapViewOnly()` reads which it is; a new profile's map is view-only, and the profile saves it. Scripts hear
  `mapModeChangeEvent` with `"viewing"` or `"editing"` before the call returns, then the session emits
 diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
-index 38a4aa2..af68c26 100644
+index 38a4aa2..20e55a2 100644
 --- a/src/TNullMapView.cpp
 +++ b/src/TNullMapView.cpp
 @@ -156,20 +156,136 @@ void TNullMapView::paint()
@@ -198,7 +198,17 @@ index 38a4aa2..af68c26 100644
  }
  
  void TNullMapView::raiseAreaChanged(const int areaId, const int lastViewedAreaId)
-@@ -224,6 +340,7 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
+@@ -190,6 +306,9 @@ void TNullMapView::raiseAreaChanged(const int areaId, const int lastViewedAreaId
+ // With the settings T2DMap::init() and dlgMapper take from the profile and the main window
+ void TNullMapView::render(QPainter& painter, const QSize& size)
+ {
++    // The repaint a player's move asks for can come before the paint() it schedules, and TMapPainter would then
++    // centre on the player itself, leaving paint() nothing to follow
++    paint();
+     TMap* pMap = mpHost->mpMap.data();
+     TMapPainter::View view = mView;
+     view.mpMap = pMap;
+@@ -224,6 +343,7 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
      });
      mView = result.view;
      mLaidOut = mView.mRoomWidth > 0.0f;
@@ -206,7 +216,7 @@ index 38a4aa2..af68c26 100644
      if (result.areaChanged) {
          raiseAreaChanged(result.areaChanged->first, result.areaChanged->second);
      }
-@@ -245,6 +362,7 @@ bool TNullMapView::showRoom(const int roomId)
+@@ -245,6 +365,7 @@ bool TNullMapView::showRoom(const int roomId)
          playerRoomId = pRoomDB->getRoomMap().constBegin().key();
      }
      mRecentre = false;
@@ -214,7 +224,7 @@ index 38a4aa2..af68c26 100644
      mPendingZoom.reset();
      mView.mAreaID = pRoom->getArea();
      mView.mMapCenterX = pRoom->x();
-@@ -343,6 +461,11 @@ bool TNullMapView::wheel(const QPointF& position, const QPoint& angleDelta, cons
+@@ -343,6 +464,11 @@ bool TNullMapView::wheel(const QPointF& position, const QPoint& angleDelta, cons
      }
      mView.mPick = false;
      if (*zoomed) {

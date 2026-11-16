@@ -394,13 +394,13 @@
          has it follow them as they walk -->
     <string name="map_follow">Centre the map on you</string>
     <!-- TalkBack's action on the map: it moves the map to show more of what is above (north of) what it shows -->
-    <string name="map_pan_up">Move the map up</string>
+    <string name="map_pan_up">Scroll the map up</string>
     <!-- TalkBack's action on the map: it moves the map to show more of what is below (south of) what it shows -->
-    <string name="map_pan_down">Move the map down</string>
+    <string name="map_pan_down">Scroll the map down</string>
     <!-- TalkBack's action on the map: it moves the map to show more of what is left of (west of) what it shows -->
-    <string name="map_pan_left">Move the map left</string>
+    <string name="map_pan_left">Scroll the map left</string>
     <!-- TalkBack's action on the map: it moves the map to show more of what is right of (east of) what it shows -->
-    <string name="map_pan_right">Move the map right</string>
+    <string name="map_pan_right">Scroll the map right</string>
     <!-- The map's button, read by a screen reader, that lets the player change the map -->
     <string name="map_edit">Edit the map</string>
     <!-- Shown over the map when the engine did not do what was asked; %1$s is the engine's reason, in English -->

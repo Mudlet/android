@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -232,8 +233,9 @@ private fun RoomSearchField(modifier: Modifier = Modifier) {
         modifier,
         enabled = attached,
         singleLine = true,
-        label = { Text(stringResource(R.string.app_map_search)) },
-        placeholder = { Text(stringResource(R.string.app_map_search_hint)) },
+        // One line each, or the field beside the map's buttons grows a line taller while it is empty, and the map shrinks
+        label = { Text(stringResource(R.string.app_map_search), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        placeholder = { Text(stringResource(R.string.app_map_search_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         trailingIcon = {
             IconButton(::find, enabled = attached && text.isNotBlank()) {
                 Icon(painterResource(R.drawable.ic_search), stringResource(R.string.app_map_search_go))

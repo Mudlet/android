@@ -325,8 +325,9 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are two: the app's own map and the room search (see "The map behind the text"), and downloading the map the game
-offers (see "Downloading the map").
+are three: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+offers (see "Downloading the map"), and `setGameScreenSize()`, which tells the game the app console's columns and
+rows without resizing the main window that `setMainWindowSize` gave.
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -363,6 +364,7 @@ keeps the profiles' passwords in the KeyStore.
 | `scriptWindows()`, read at `profileLoaded`, then at each `scriptWindowsChanged` | `windows`, only the windows that changed and those `removed`; all of them, with `full`, to a UI that attaches. A close sends an empty list |
 | `windowLines()`, the last 300 rows, at `profileLoaded` and at each `windowTextChanged` | `windowText`; any rows on request with `getWindowText` |
 | `setMainWindowSize()`, then `mainConsoleGrid()` and `mainConsoleTextRect()` at `profileLoaded` and at each `mainConsoleAreaChanged` | `setMainWindowSize`, kept and given again to each profile as it loads; `mainArea` |
+| `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()` (carried), at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given again to each profile as it loads |
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
@@ -428,6 +430,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
   `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
   history, and `printCmdLine()` as `commandLine`;
+- the screen size: `setScreenSize` as the game's NAWS, and as the main window's grid in `mainArea` until
+  `setMainWindowSize` gives a size; after it, while the profile runs, `getMainWindowSize()` and `mainArea` keep that
+  size and the game is told the console's columns and rows (below 40 as 40), not that size's grid, also after a new
+  main window's size; given both before the profile loads, the same for `getMainWindowSize()` and the game; and with
+  a main window's size the loading profile refuses, `setScreenSize` sizing the main window and reaching the game;
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
   colours; a Geyser `UserWindow` placed by `placeUserWindow`, which raises `sysUserWindowResizeEvent`; the size from
   `setMainWindowSize` before the profile loads, and `setBorderLeft()`, as `mainArea`; `enableCommandLine()` with

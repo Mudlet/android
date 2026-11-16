@@ -72,10 +72,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     var download by mutableStateOf(NO_DOWNLOAD)
         private set
 
-    /**
-     * How the last download ended (loaded, failed or cancelled), until the player dismisses it, downloads again or the
-     * profile closes; a load only for a moment once shown (MapDownloadEnd).
-     */
+    /** How the last download ended (loaded, failed or cancelled), until the player dismisses it, downloads again or the profile closes. */
     var downloadEnd by mutableStateOf<EngineMessage.MapDownload?>(null)
         private set
 
@@ -193,8 +190,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     /**
      * A new `mapDownload`. A download that ends is kept in [downloadEnd] and, as it ends, told to TalkBack in
      * [resources]' words if [speak], its failure interrupting. The same end again, as to a UI that attaches, is not told
-     * again; a UI that had heard nothing yet, being new, shows how the last download ended without telling it, unless
-     * the map loaded, which the map itself now shows.
+     * again; a UI that had heard nothing yet, being new, shows how the last download ended without telling it.
      */
     internal fun onMapDownload(message: EngineMessage.MapDownload, resources: Resources, speak: Boolean) {
         val was = download
@@ -210,7 +206,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             }
 
             // Only NO_DOWNLOAD itself, as no frame the engine sent is that object
-            was === NO_DOWNLOAD -> downloadEnd = message.takeIf { it.state != MapDownloadState.LOADED }
+            was === NO_DOWNLOAD -> downloadEnd = message
         }
     }
 
@@ -229,9 +225,9 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         return session.send(Requests.cancelMapDownload())
     }
 
-    /** The player read [end], or it was shown long enough; a later end stays. */
-    fun dismissDownloadEnd(end: EngineMessage.MapDownload) {
-        if (downloadEnd === end) downloadEnd = null
+    /** The player read [downloadEnd]. */
+    fun dismissDownloadEnd() {
+        downloadEnd = null
     }
 
     /** The player closed the search's results. */

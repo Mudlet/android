@@ -528,6 +528,8 @@ class ScriptMapTest {
 
         // Its details: what changed goes as one editRoom, the colour picked from the map's environments
         tapInCard(R.string.room_edit_properties)
+        // The dialog asks for them once composed, which the test's clock does only while the test waits on Compose
+        compose.waitForIdle()
         val envs = session.receive("mapEnvs")
         session.send(EngineMessages.envs(envs, 257 to "#ff0000", 200 to "#0a141e"))
         val swatch = hasContentDescription(string(R.string.room_edit_env_item, 200))
@@ -565,7 +567,8 @@ class ScriptMapTest {
         assertEquals(listOf(2, "n", true), listOf(lock.getInt("room"), lock.getString("direction"), lock.getBoolean("locked")))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
 
-        // Or to the room tapped next on the map, which picks no room and presses nothing
+        // Or to the room tapped next on the map, which picks no room and presses nothing: TalkBack's select of the room in
+        // the middle, as the banner, the place bar and the card can cover the middle of a map as short as the emulator's
         tapInCard(R.string.room_edit_exits)
         activateInDialog(hasText(string(R.string.exit_east)))
         activateInDialog(hasText(string(R.string.room_edit_exit_pick)))
@@ -573,7 +576,7 @@ class ScriptMapTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(prompt).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(prompt).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
         val read = session.received.size
-        compose.onNode(map).performTouchInput { click(at(drawn, 200.0, 150.0)) }
+        compose.onNode(map).performSemanticsAction(SemanticsActions.OnClick)
         val linked = session.receive("setRoomExit")
         assertEquals(listOf(2, "e", 1, true), listOf(linked.getInt("room"), linked.getString("direction"), linked.getInt("to"), linked.getBoolean("bothWays")))
         assertTrue("the tap pressed or asked: ${session.received.drop(read)}", session.received.drop(read).none { it.optString("t") in setOf("mapPointer", "roomInfo") })
@@ -586,7 +589,7 @@ class ScriptMapTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.room_edit_link_prompt, string(R.string.exit_up)))).fetchSemanticsNodes().isNotEmpty() }
         session.send(mapFrame(MAP_W, MAP_H, viewOnly = true, view = mapView(MAP_W, MAP_H, rooms = rooms)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.room_edit_exits))).fetchSemanticsNodes().isEmpty() }
-        compose.onNode(map).performTouchInput { click(at(drawn, 200.0, 150.0)) }
+        compose.onNode(map).performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, session.receive("roomInfo").getInt("room"))
         session.assertNoRequest("setRoomExit", QUIET_MS)
     }
@@ -685,7 +688,9 @@ class ScriptMapTest {
         val node = label and hasClickAction() and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
-        compose.onNode(node).performScrollTo().assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
+        if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
+        compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
     }
 
     // The mapper in the top right quarter of Mudlet's main window, and its map

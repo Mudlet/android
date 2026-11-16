@@ -252,8 +252,8 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
         repeat(10) { moveBy(Offset(-width * 0.09f, 0f)) }
     }
 
-    // Where the console's line of the profile [name] starts
-    private fun left(name: String) = compose.onNode(hasText("$name says hello")).fetchSemanticsNode().boundsInRoot.left
+    // Where the console's line of the profile [name] starts; boundsInRoot would stop at the screen's edge
+    private fun left(name: String) = compose.onNode(hasText("$name says hello")).fetchSemanticsNode().positionInRoot.x
 
     // On the input line of the game in front, as a keyboard's keys go to the focused field
     @OptIn(ExperimentalTestApi::class)

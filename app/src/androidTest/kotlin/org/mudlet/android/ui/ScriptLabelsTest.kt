@@ -56,7 +56,8 @@ import kotlin.math.abs
  * The labels a profile's scripts draw (docs/phase-f.md, "Labels" and "Gauges"), against a fake engine: a label's text
  * at its scaled place, a clickable label as a button whose tap reaches the engine as `pointer` events, its 48 dp touch
  * bounds, a long press as the right button with the tool tip, a drag, a gauge read as its progress and its live text
- * label's new text said, a live label as one live node, a link's command, and the images the engine is asked for.
+ * label's new text said, the accessible value of a gauge's back label or of a label as its progress, a live label with
+ * one as its new text said, a live label as one live node, a link's command, and the images the engine is asked for.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -248,6 +249,77 @@ class ScriptLabelsTest {
     }
 
     @Test
+    fun anAccessibleValueIsTheProgressOfAGaugeOrOfALabel() {
+        session.windows(
+            listOf(
+                label("mp_back", w = 200, h = 20),
+                label("mp_front", w = 50, h = 20),
+                label("xp", y = 100, w = 300, h = 40),
+                label("sp", y = 200, w = 300, h = 40),
+                label("go", y = 300, w = 200, h = 100),
+            ),
+            full = true,
+        )
+        // Geyser gives a gauge's back label its value out of the maximum it was given: 30 of 200, not the quarter its
+        // front label's width shows
+        session.label("mp_back", styleSheet = "background-color: #000040", value = 30.0, valueMin = 0.0, valueMax = 200.0)
+        session.label("mp_front", styleSheet = "background-color: blue")
+        // A label a script gave a value is a progress bar of its own, read by its name with its text and percentage as
+        // its state, or by its text with its percentage
+        session.label("xp", text = "Level 3", accessibleName = "Experience", value = 40.0)
+        session.label("sp", text = "Spirit", value = -5.0, valueMin = -10.0, valueMax = 10.0)
+        // A button stays a button, as on the desktop
+        session.label("go", text = "North", accessibleButton = true, value = 50.0)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription("North")).fetchSemanticsNodes().isNotEmpty() }
+
+        val gauge = progress(30f, 0f..200f)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(gauge).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(gauge).assert(hasContentDescription("mp")).assert(hasStateDescription(string(R.string.gauge_percent, 15)))
+        compose.onNode(hasContentDescription("Experience")).assert(progress(40f, 0f..100f)).assert(hasStateDescription(textAndPercent("Level 3", 40)))
+        compose.onNode(hasContentDescription("Spirit")).assert(progress(-5f, -10f..10f)).assert(hasStateDescription(string(R.string.gauge_percent, 25)))
+        assertTrue("its text is not a node of its own", compose.onAllNodes(hasText("Spirit")).fetchSemanticsNodes().isEmpty())
+        compose.onNode(hasContentDescription("North")).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ProgressBarRangeInfo))
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        // A new value is read as it comes
+        session.label("mp_back", styleSheet = "background-color: #000040", value = 150.0, valueMin = 0.0, valueMax = 200.0)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(progress(150f, 0f..200f)).fetchSemanticsNodes().isNotEmpty() }
+        // Cleared, the gauge is read by its front label's width again, and the label as before it had a value
+        session.label("mp_back", styleSheet = "background-color: #000040")
+        session.label("xp", text = "Level 3", accessibleName = "Experience")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(progress(25f, 0f..100f) and hasContentDescription("mp")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) {
+            compose.onAllNodes(hasContentDescription("Experience") and SemanticsMatcher.keyNotDefined(SemanticsProperties.ProgressBarRangeInfo))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun aLiveLabelWithAValueHasItsNewTextSaidAndIsNotALiveNode() {
+        session.windows(listOf(label("xp", w = 300, h = 40)), full = true)
+        val before = compose.runOnIdle { Announcer.current }
+        session.label("xp", text = "Level 3", accessibleName = "Experience", value = 40.0, liveRegion = "assertive")
+        val xp = hasContentDescription("Experience") and progress(40f, 0f..100f)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(xp and hasStateDescription(textAndPercent("Level 3", 40))).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertSame("the first text drawn is not said", before, Announcer.current) }
+        // Not live, as a live node is read again at each change of the value too: the Announcer says its new text
+        compose.onNode(xp).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        session.label("xp", text = "Level 4", accessibleName = "Experience", value = 40.0, liveRegion = "assertive")
+        compose.waitUntil(WAIT_MS) { Announcer.current?.text == "Level 4" }
+        val said = compose.runOnIdle { Announcer.current!! }
+        assertTrue("said at once", said.assertive)
+        compose.onNode(xp).assert(hasStateDescription(textAndPercent("Level 4", 40)))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        // A new value alone is not said
+        session.label("xp", text = "Level 4", accessibleName = "Experience", value = 50.0, liveRegion = "assertive")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(progress(50f, 0f..100f) and hasContentDescription("Experience")).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertSame("TalkBack is told: ${Announcer.current?.text}", said, Announcer.current) }
+    }
+
+    @Test
     fun aLiveLabelIsOneLiveNodeThatReadsItsText() {
         session.windows(
             listOf(
@@ -346,6 +418,11 @@ class ScriptLabelsTest {
     private fun isLive(mode: LiveRegionMode) = SemanticsMatcher.expectValue(SemanticsProperties.LiveRegion, mode)
 
     private fun hasStateDescription(state: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, state)
+
+    // A progress bar's state with the label's text before its percentage
+    private fun textAndPercent(text: String, percent: Int) = string(R.string.label_text_and_value, text, string(R.string.gauge_percent, percent))
+
+    private fun progress(current: Float, range: ClosedFloatingPointRange<Float>) = SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(current, range))
 
     private fun label(name: String, x: Int = 0, y: Int = 0, w: Int, h: Int) = FakeEngine.window(name, kind = "label", x = x, y = y, w = w, h = h)
 

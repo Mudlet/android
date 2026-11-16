@@ -96,6 +96,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
+import org.mudlet.android.protocol.AccessibleValue
 import org.mudlet.android.protocol.Edges
 import org.mudlet.android.protocol.Gauge
 import org.mudlet.android.protocol.HAlign
@@ -139,7 +140,8 @@ private const val MAX_TILES = 4096
  * A label (docs/phase-f.md, "Labels"): its [content] drawn at [placed]'s place, scaled from Mudlet's pixels as its
  * window is, and the player's touches sent back to it as `pointer` events. A clickable one is a button, read by its
  * accessible name, and touched within 48 dp around it; one with text is read as text; one with only an image and no
- * name is left out. Of a [gauge]'s three labels, its back is read as the gauge's progress, and the other two not at all.
+ * name is left out; one a script gave an accessible value is a progress bar. Of a [gauge]'s three labels, its back is
+ * read as the gauge's progress, and the other two not at all.
  * A label with a live region has TalkBack read it again each time what it reads changes.
  */
 @Composable
@@ -259,8 +261,10 @@ private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: F
 /**
  * What a screen reader is told of the label, as docs/phase-f.md's "Touch and TalkBack" says: a button its click and
  * right-click, which send the tap's and the long press's `pointer` events to the label's centre, and its links as
- * actions; a gauge its progress. A live label is one node, blank or not, live as its live region asks, which reads
- * its text, or its name with its text as its state; a live gauge's text label has the [Announcer] say its new text.
+ * actions; a gauge its progress, the value Geyser gave its back label or else its front label's width; a label with a
+ * value, as a progress bar. A live label is one node, blank or not, live as its live region asks, which reads its text,
+ * or its name with its text as its state; a live gauge's text label, or live progress bar, has the [Announcer] say its
+ * new text.
  * Null for a label read by its text, as drawn; nothing set for one left out.
  */
 @Composable
@@ -285,6 +289,7 @@ private fun labelReading(
     val button = content?.accessibleButton == true
     val name = window.name
     val live = content?.liveRegion?.takeIf { it != LiveRegion.OFF }
+    val value = content?.accessibleValue
 
     fun SemanticsPropertyReceiver.asButton() {
         role = Role.Button
@@ -302,12 +307,13 @@ private fun labelReading(
         traversalIndex = WINDOWS_TRAVERSAL_INDEX
     }
 
+    // The text, where the name it is read by does not already say it
+    fun textBesides(readAs: String) = plain.takeIf { it.isNotBlank() && !it.trim().equals(readAs.trim(), ignoreCase = true) }
+
     // A live label read by its name says its new text as its state, as the desktop says a live label's new text,
     // name or not; not where the name already says it
     fun SemanticsPropertyReceiver.liveText(readAs: String) {
-        if (live != null && plain.isNotBlank() && !plain.trim().equals(readAs.trim(), ignoreCase = true)) {
-            stateDescription = plain
-        }
+        if (live != null) textBesides(readAs)?.let { stateDescription = it }
     }
 
     if (gauge != null) {
@@ -315,25 +321,43 @@ private fun labelReading(
         val labels = ScriptWindowsClient.state.labels
         val textLabel = gauge.text?.let { labels[it.name] }
         val gaugeText = textLabel?.text?.let { RichText.parse(it, DEFAULT_FONT_PX).plain }
-        val state = gaugeText?.ifBlank { null } ?: stringResource(R.string.gauge_percent, gauge.percent)
+        // The value Geyser gave the back label, out of the gauge's maximum; else the one the front label's width shows
+        val progress = value ?: AccessibleValue(gauge.percent.toDouble(), 0.0, 100.0)
+        val state = gaugeText?.ifBlank { null } ?: stringResource(R.string.gauge_percent, progress.percent)
         // A live node would be read again at each change of the value too, so the text label's new text is announced
         // instead: on the desktop only it speaks, the back and front having no text
         if (textLabel != null && gaugeText != null) AnnounceChanges(gaugeText, textLabel.liveRegion)
         return {
             contentDescription = accessibleName.ifEmpty { gauge.name }
-            progressBarRangeInfo = ProgressBarRangeInfo(gauge.percent.toFloat(), 0f..100f)
+            progressBarRangeInfo = progress.rangeInfo()
             stateDescription = state
             if (button) asButton()
             inOrder()
         }
     }
+    // A button's name and a progress bar's: its name, else its text, else its tool tip
+    val readAs = accessibleName.ifEmpty { plain }.ifEmpty { tooltip }
+    // A label with a value, as the desktop reads one that is not a button, is a progress bar read by its name, with its
+    // percentage as its state, after its text where the name does not say it; not live, as a live node is read again
+    // at each change of the value, so its new text is said
+    if (value != null && !button) {
+        val percent = stringResource(R.string.gauge_percent, value.percent)
+        val state = textBesides(readAs)?.let { stringResource(R.string.label_text_and_value, it, percent) } ?: percent
+        if (live != null) AnnounceChanges(plain, live)
+        return {
+            contentDescription = readAs.ifEmpty { name }
+            progressBarRangeInfo = value.rangeInfo()
+            stateDescription = state
+            if (linkActions.isNotEmpty()) customActions = linkActions
+            inOrder()
+        }
+    }
     if (button) {
-        val label = accessibleName.ifEmpty { plain }.ifEmpty { tooltip }
-        if (label.isEmpty()) {
+        if (readAs.isEmpty()) {
             LaunchedEffect(name) { Log.w(TAG, "the clickable label $name has no accessible name, text or tool tip: setLabelAccessibleName() gives it one") }
         }
         return {
-            contentDescription = label.ifEmpty { name }
+            contentDescription = readAs.ifEmpty { name }
             if (accessibleName.isNotEmpty()) liveText(accessibleName)
             asButton()
             if (linkActions.isNotEmpty()) customActions = linkActions
@@ -371,6 +395,9 @@ private fun labelReading(
         }
     }
 }
+
+/** As a screen reader reads it: [AccessibleValue.value] from its minimum to its maximum. */
+private fun AccessibleValue.rangeInfo() = ProgressBarRangeInfo(value.toFloat(), min.toFloat()..max.toFloat())
 
 /** The label read as [reading] says, or by its own text, after the game screen's own controls. */
 private fun Modifier.readAs(reading: (SemanticsPropertyReceiver.() -> Unit)?): Modifier = if (reading == null) {

@@ -543,6 +543,24 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         roomInfo(message);
     } else if (type == QLatin1String("mapAreas")) {
         mapAreas();
+    } else if (type == QLatin1String("editRoom")) {
+        editRoom(message);
+    } else if (type == QLatin1String("setRoomExit")) {
+        setRoomExit(message);
+    } else if (type == QLatin1String("lockRoomExit")) {
+        lockRoomExit(message);
+    } else if (type == QLatin1String("addRoom")) {
+        addRoom(message);
+    } else if (type == QLatin1String("deleteRoom")) {
+        const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+        refuse(type, room ? mEngine->deleteRoom(*room) : QStringLiteral("room must be a whole number"));
+    } else if (type == QLatin1String("setPlayerRoom")) {
+        const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+        refuse(type, room ? mEngine->setPlayerRoom(*room) : QStringLiteral("room must be a whole number"));
+    } else if (type == QLatin1String("renameArea")) {
+        refuse(type, renameArea(message));
+    } else if (type == QLatin1String("mapEnvs")) {
+        mapEnvs();
     } else if (type == QLatin1String("downloadMap")) {
         refuse(type, mEngine->downloadMap());
     } else if (type == QLatin1String("cancelMapDownload")) {
@@ -862,9 +880,13 @@ void SocketBridge::roomInfo(const QJsonObject& message)
         sendError(QStringLiteral("roomInfo: room must be a whole number"));
         return;
     }
-    const std::variant<RoomDetails, QString> found = mEngine->roomInfo(*room);
+    sendRoom(QStringLiteral("roomInfo"), mEngine->roomInfo(*room));
+}
+
+void SocketBridge::sendRoom(const QString& request, const std::variant<RoomDetails, QString>& found)
+{
     if (const QString* problem = std::get_if<QString>(&found)) {
-        sendError(QStringLiteral("roomInfo: %1").arg(*problem));
+        sendError(QStringLiteral("%1: %2").arg(request, *problem));
         return;
     }
     const RoomDetails& details = std::get<RoomDetails>(found);
@@ -881,7 +903,12 @@ void SocketBridge::roomInfo(const QJsonObject& message)
                {QStringLiteral("y"), details.y},
                {QStringLiteral("z"), details.z},
                {QStringLiteral("steps"), details.steps},
-               {QStringLiteral("exits"), exits}});
+               {QStringLiteral("exits"), exits},
+               {QStringLiteral("symbol"), details.symbol},
+               {QStringLiteral("env"), details.env},
+               {QStringLiteral("color"), details.color},
+               {QStringLiteral("weight"), details.weight},
+               {QStringLiteral("locked"), details.locked}});
 }
 
 void SocketBridge::mapAreas()
@@ -896,6 +923,126 @@ void SocketBridge::mapAreas()
         areas.append(QJsonObject{{QStringLiteral("id"), area.id}, {QStringLiteral("name"), area.name}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("areas")}, {QStringLiteral("areas"), areas}});
+}
+
+void SocketBridge::editRoom(const QJsonObject& message)
+{
+    const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+    if (!room) {
+        sendError(QStringLiteral("editRoom: room must be a whole number"));
+        return;
+    }
+    IEngine::RoomEdit edit;
+    QString problem;
+    const auto text = [&problem](const QJsonValue& value, const QString& key, std::optional<QString>& into) {
+        if (value.isString()) {
+            into = value.toString();
+        } else if (!value.isUndefined()) {
+            problem = QStringLiteral("%1 must be a string").arg(key);
+        }
+    };
+    const auto number = [&problem](const QJsonValue& value, const QString& key, std::optional<int>& into) {
+        if (value.isUndefined()) {
+            return;
+        }
+        into = wholeNumber(value);
+        if (!into) {
+            problem = QStringLiteral("%1 must be a whole number").arg(key);
+        }
+    };
+    text(message.value(QLatin1String("name")), QStringLiteral("name"), edit.name);
+    text(message.value(QLatin1String("symbol")), QStringLiteral("symbol"), edit.symbol);
+    number(message.value(QLatin1String("env")), QStringLiteral("env"), edit.env);
+    number(message.value(QLatin1String("weight")), QStringLiteral("weight"), edit.weight);
+    if (const QJsonValue locked = message.value(QLatin1String("locked")); locked.isBool()) {
+        edit.locked = locked.toBool();
+    } else if (!locked.isUndefined()) {
+        problem = QStringLiteral("locked must be true or false");
+    }
+    std::optional<int> x;
+    std::optional<int> y;
+    std::optional<int> z;
+    number(message.value(QLatin1String("x")), QStringLiteral("x"), x);
+    number(message.value(QLatin1String("y")), QStringLiteral("y"), y);
+    number(message.value(QLatin1String("z")), QStringLiteral("z"), z);
+    if (x && y && z) {
+        edit.position = std::array<int, 3>{*x, *y, *z};
+    } else if (problem.isEmpty() && (x || y || z)) {
+        problem = QStringLiteral("x, y and z go together");
+    }
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("editRoom: %1").arg(problem));
+        return;
+    }
+    sendRoom(QStringLiteral("editRoom"), mEngine->editRoom(*room, edit));
+}
+
+void SocketBridge::setRoomExit(const QJsonObject& message)
+{
+    const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+    const std::optional<int> to = wholeNumber(message.value(QLatin1String("to")), 0);
+    const QJsonValue bothWays = message.value(QLatin1String("bothWays"));
+    QString problem;
+    if (!room) {
+        problem = QStringLiteral("room must be a whole number");
+    } else if (!to) {
+        problem = QStringLiteral("to must be a whole number from 0");
+    } else if (!bothWays.isBool() && !bothWays.isUndefined()) {
+        problem = QStringLiteral("bothWays must be true or false");
+    }
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("setRoomExit: %1").arg(problem));
+        return;
+    }
+    sendRoom(QStringLiteral("setRoomExit"), mEngine->setRoomExit(*room, message.value(QLatin1String("direction")).toString(), *to, bothWays.toBool()));
+}
+
+void SocketBridge::lockRoomExit(const QJsonObject& message)
+{
+    const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+    const QJsonValue locked = message.value(QLatin1String("locked"));
+    if (!room || !locked.isBool()) {
+        sendError(!room ? QStringLiteral("lockRoomExit: room must be a whole number") : QStringLiteral("lockRoomExit: locked must be true or false"));
+        return;
+    }
+    sendRoom(QStringLiteral("lockRoomExit"), mEngine->lockRoomExit(*room, message.value(QLatin1String("direction")).toString(), locked.toBool()));
+}
+
+void SocketBridge::addRoom(const QJsonObject& message)
+{
+    const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+    if (!room) {
+        sendError(QStringLiteral("addRoom: room must be a whole number"));
+        return;
+    }
+    sendRoom(QStringLiteral("addRoom"), mEngine->addRoom(*room, message.value(QLatin1String("direction")).toString()));
+}
+
+QString SocketBridge::renameArea(const QJsonObject& message)
+{
+    const std::optional<int> area = wholeNumber(message.value(QLatin1String("area")));
+    const QJsonValue name = message.value(QLatin1String("name"));
+    if (!area) {
+        return QStringLiteral("area must be a whole number");
+    }
+    if (!name.isString()) {
+        return QStringLiteral("name must be a string");
+    }
+    return mEngine->renameArea(*area, name.toString());
+}
+
+void SocketBridge::mapEnvs()
+{
+    const std::variant<QList<MapEnvInfo>, QString> found = mEngine->mapEnvs();
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("mapEnvs: %1").arg(*problem));
+        return;
+    }
+    QJsonArray envs;
+    for (const MapEnvInfo& env : std::get<QList<MapEnvInfo>>(found)) {
+        envs.append(QJsonObject{{QStringLiteral("env"), env.env}, {QStringLiteral("color"), env.color}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("envs")}, {QStringLiteral("envs"), envs}});
 }
 
 void SocketBridge::getImage(const QJsonObject& message)

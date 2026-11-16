@@ -94,6 +94,9 @@ internal class MapMover(private val target: MapTarget, private val send: (JSONOb
     /** As [MapMoves.roomAt]. */
     fun roomAt(at: MapPoint, reach: Double): MapRoomPlace? = moves.roomAt(at, reach)
 
+    /** As [MapMoves.roomsMoved]. */
+    fun roomsMoved(from: MapPoint, to: MapPoint): Pair<Int, Int>? = moves.roomsMoved(from, to)
+
     private fun sync() {
         shift = moves.shift
         view = moves.view

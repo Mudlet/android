@@ -53,10 +53,30 @@ object EngineMessages {
             .put("rooms", list).put("levels", JSONArray(levels))
     }
 
-    /** The engine's `room`, the answer to [request]: room [id] of Castle, [steps] from the player's, with [exits]. */
-    fun room(request: JSONObject, id: Int, name: String, steps: Int, exits: List<JSONObject> = emptyList()): JSONObject = JSONObject().put("t", "room")
-        .put("id", id).put("name", name).put("areaId", 1).put("area", "Castle").put("x", 0).put("y", 0).put("z", 0).put("steps", steps)
-        .put("exits", JSONArray(exits)).put("re", request.get("id"))
+    /**
+     * The engine's `room`, the answer to [request]: room [id] of Castle at [x], [y], [z], [steps] from the player's, with
+     * [exits], and what the map's editing sets of it.
+     */
+    fun room(
+        request: JSONObject,
+        id: Int,
+        name: String,
+        steps: Int,
+        exits: List<JSONObject> = emptyList(),
+        x: Int = 0,
+        y: Int = 0,
+        z: Int = 0,
+        env: Int = -1,
+        weight: Int = 1,
+        locked: Boolean = false,
+    ): JSONObject = JSONObject().put("t", "room")
+        .put("id", id).put("name", name).put("areaId", 1).put("area", "Castle").put("x", x).put("y", y).put("z", z).put("steps", steps)
+        .put("exits", JSONArray(exits)).put("symbol", "").put("env", env).put("color", "#808080").put("weight", weight).put("locked", locked)
+        .put("re", request.get("id"))
+
+    /** The engine's `envs`, the answer to [request]: each environment's number to its colour, `#rrggbb`. */
+    fun envs(request: JSONObject, vararg envs: Pair<Int, String>): JSONObject = JSONObject().put("t", "envs")
+        .put("envs", JSONArray(envs.map { (env, color) -> JSONObject().put("env", env).put("color", color) })).put("re", request.get("id"))
 
     /** An exit of a `room`: a direction ("n" to "out") or a special exit's command, to room [to]. */
     fun exit(direction: String, to: Int, toName: String, locked: Boolean = false): JSONObject = JSONObject().put("direction", direction).put("to", to)

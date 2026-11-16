@@ -82,6 +82,14 @@ public:
     std::variant<RoomDetails, QString> roomInfo(int room) const override;
     QString walkToRoom(int room) override;
     std::variant<QList<MapAreaInfo>, QString> mapAreas() const override;
+    std::variant<RoomDetails, QString> editRoom(int room, const RoomEdit& edit) override;
+    std::variant<RoomDetails, QString> setRoomExit(int room, const QString& direction, int to, bool bothWays) override;
+    std::variant<RoomDetails, QString> lockRoomExit(int room, const QString& direction, bool locked) override;
+    std::variant<RoomDetails, QString> addRoom(int beside, const QString& direction) override;
+    QString deleteRoom(int room) override;
+    QString setPlayerRoom(int room) override;
+    QString renameArea(int area, const QString& name) override;
+    std::variant<QList<MapEnvInfo>, QString> mapEnvs() const override;
     QString downloadMap() override;
     QString cancelMapDownload() override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;

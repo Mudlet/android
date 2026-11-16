@@ -51,9 +51,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -88,10 +91,12 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
+import org.mudlet.android.protocol.MapRoomPlace
 import org.mudlet.android.protocol.MapShift
 import org.mudlet.android.protocol.MapViewInfo
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
+import org.mudlet.android.protocol.RoomEdit
 import org.mudlet.android.protocol.RoomInfo
 import org.mudlet.android.protocol.ZoomNotches
 import org.mudlet.android.ui.AppMapClient
@@ -126,6 +131,9 @@ private val TAP_REACH = 24.dp
 // A double tap whose second touch drags this far down zooms in by e, and up as far out
 private val DRAG_ZOOM_DISTANCE = 100.dp
 
+// The outline of where a room dragged on an edited map goes
+private val GHOST_STROKE = 3.dp
+
 // A drag let go slower than this a second does not glide on
 private val MIN_FLING_SPEED = 50.dp
 
@@ -142,7 +150,10 @@ private const val ROOM_CARD_FRACTION = 0.5f
 // TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
 private const val MIN_FIT_SCALE = 0.01f
 
-private enum class Gesture { TAP, PAN, PINCH, DRAG_ZOOM }
+private enum class Gesture { TAP, PAN, PINCH, DRAG_ZOOM, MOVE_ROOM }
+
+// The room picked, [room], at [place] in the last frame, dragged on an edited map from [from] to [to], points of the map as shown
+private data class RoomDrag(val room: RoomInfo, val place: MapRoomPlace, val from: MapPoint, val to: MapPoint)
 
 /** Where a drawn map's touches and buttons go: the mapper window's map ([ScriptWindowsClient]) or the app's ([AppMapClient]). */
 internal interface MapSource {
@@ -227,6 +238,8 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
 internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier, controls: Boolean = true) {
     val touchable = frame != null && EngineClient.enginePid > 0
     val currentFit by rememberUpdatedState(fit.takeIf { touchable })
+    val editing by rememberUpdatedState(touchable && !viewOnly)
+    var roomDrag by remember { mutableStateOf<RoomDrag?>(null) }
     val mover = source.mover
     val movable = touchable && mover.view != null
     val followShown = movable && !mover.following
@@ -260,10 +273,14 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         CustomAccessibilityAction(stringResource(R.string.map_zoom_out)) { source.zoom(fit, -1) },
     ) + (if (movable) pans else emptyList()) + listOfNotNull(levelUp, levelDown, follow.takeIf { followShown })
     val room = source.rooms.room.takeIf { touchable }
+    val linking = source.rooms.linking.takeIf { touchable && !viewOnly }
+    val ghost = MaterialTheme.colorScheme.primary
+    // An exit waiting for its room is the edited map's: a tap on the map viewed only selects a room
+    LaunchedEffect(viewOnly) { if (viewOnly) source.rooms.pickExitRoom(null) }
 
     BoxWithConstraints(modifier) {
         Canvas(
-            Modifier.fillMaxSize().clipToBounds().pointerInput(source) { mapGestures(source, haptics, scope, decay) { currentFit } }.clearAndSetSemantics {
+            Modifier.fillMaxSize().clipToBounds().pointerInput(source) { mapGestures(source, haptics, scope, decay, { editing }, { roomDrag = it }) { currentFit } }.clearAndSetSemantics {
                 contentDescription = description
                 stateDescription = state
                 if (touchable) {
@@ -273,6 +290,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
             },
         ) {
             if (frame != null) drawFrame(frame, fit, shift = mover.shift)
+            roomDrag?.let { drawRoomGhost(it, fit, mover, ghost) }
         }
         if (controls) {
             // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge
@@ -291,6 +309,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         val roomCardHeight = maxHeight * ROOM_CARD_FRACTION
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(top = if (controls) CONTROLS_SPACE else 0.dp)) {
             source.refusal?.let { MapRefusal(it, source::dismissRefusal) }
+            linking?.let { ExitLinkBanner(it, { source.rooms.pickExitRoom(null) }) }
             Box(Modifier.fillMaxWidth()) {
                 placeBar?.let { MapPlaceBar(it, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp)) }
                 if (followShown) {
@@ -302,7 +321,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
                     }
                 }
             }
-            room?.let { RoomCard(it, source.rooms, Modifier.fillMaxWidth().heightIn(max = roomCardHeight)) }
+            room?.let { RoomCard(it, source.rooms, editing = !viewOnly, Modifier.fillMaxWidth().heightIn(max = roomCardHeight)) }
         }
     }
 }
@@ -366,10 +385,11 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
 
 /**
  * The room [info] the player picked on a map: its name, area and number, how far it is, its exits, each a button that
- * shows the room it leads to, and a button that walks there; read out as it comes. It scrolls where it has not the room.
+ * shows the room it leads to, and a button that walks there; read out as it comes. While the map is [editing], what can
+ * be done to the room too ([RoomEditActions]). It scrolls where it has not the room.
  */
 @Composable
-private fun RoomCard(info: RoomInfo, rooms: MapRooms, modifier: Modifier = Modifier) {
+private fun RoomCard(info: RoomInfo, rooms: MapRooms, editing: Boolean, modifier: Modifier = Modifier) {
     val attached = EngineClient.enginePid > 0
     val haptics = LocalHapticFeedback.current
     Surface(modifier.padding(4.dp), shape = MaterialTheme.shapes.medium, tonalElevation = 3.dp, shadowElevation = 3.dp) {
@@ -411,6 +431,7 @@ private fun RoomCard(info: RoomInfo, rooms: MapRooms, modifier: Modifier = Modif
                     Icon(painterResource(R.drawable.ic_directions_walk), null)
                     Text(stringResource(R.string.room_walk), Modifier.padding(start = 8.dp))
                 }
+                if (editing) RoomEditActions(info, rooms, Modifier.padding(bottom = 4.dp))
             }
         }
     }
@@ -426,7 +447,7 @@ internal fun roomDistance(steps: Int): String = when {
 
 // An exit's way in words: one of the twelve directions as the engine names them, or a special exit's own command
 @Composable
-private fun exitWay(direction: String): String {
+internal fun exitWay(direction: String): String {
     val word = when (direction) {
         "n" -> R.string.exit_north
         "ne" -> R.string.exit_northeast
@@ -465,9 +486,11 @@ private fun MapSource.zoom(fit: MapFit, direction: Int): Boolean {
 }
 
 // [type] at [at], a point of the map as shown: on the room nearest it within [reach] of the map's pixels, or else on
-// the point of the last frame under it, while that is on the frame. A press shows the room it is on, or none
+// the point of the last frame under it, while that is on the frame. A press shows the room it is on, or none; while an
+// exit waits for its room ([MapRooms.linking]), a press on a room leads it there instead
 private fun MapSource.touch(type: MapPointerType, fit: MapFit, at: MapPoint, reach: Double): Boolean {
     val room = mover.roomAt(at, reach)
+    if (type == MapPointerType.PRESS && rooms.linking != null) return room != null && rooms.link(room.id)
     val point = room?.let { MapPoint(it.x, it.y) } ?: mover.shift.invert(at)
     val onFrame = room != null || (point.x >= 0 && point.y >= 0 && point.x < fit.frameW && point.y < fit.frameH)
     val sent = onFrame && pointer(type, point)
@@ -481,10 +504,19 @@ private fun MapSource.touch(type: MapPointerType, fit: MapFit, at: MapPoint, rea
  * The player's touches on the map, as the frame [fit] gives, while it gives one: a tap is a press on the room nearest
  * it ([touch]), a second tap soon after and near it a double click there, with a tick; a drag pans the map ([MapMover])
  * and, let go quickly, glides on in [scope] as [decay] slows it; a pinch pans with the fingers and zooms about their
- * middle, and a double tap whose second touch drags zooms about it, in as it goes down. Drags are not sent as
- * Mudlet's mouse drags: `moveMap` moves its map instead.
+ * middle, and a double tap whose second touch drags zooms about it, in as it goes down. While the map is [editing], a
+ * drag that starts on the room picked moves that room by whole places instead, shown with [onDrag] as it goes. Drags are
+ * not sent as Mudlet's mouse drags: `moveMap` moves its map instead.
  */
-private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: HapticFeedback, scope: CoroutineScope, decay: DecayAnimationSpec<Offset>, fit: () -> MapFit?) {
+private suspend fun PointerInputScope.mapGestures(
+    source: MapSource,
+    haptics: HapticFeedback,
+    scope: CoroutineScope,
+    decay: DecayAnimationSpec<Offset>,
+    editing: () -> Boolean,
+    onDrag: (RoomDrag?) -> Unit,
+    fit: () -> MapFit?,
+) {
     val slop = DOUBLE_TAP_SLOP.toPx()
     val reach = TAP_REACH.toPx()
     val dragZoom = DRAG_ZOOM_DISTANCE.toPx()
@@ -497,7 +529,9 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
         val down = awaitFirstDown(requireUnconsumed = false)
         down.consume()
         glide?.cancel()
+        onDrag(null)
         val mover = source.mover
+        var drag: RoomDrag? = null
         val secondTap = lastTapUp != 0L && down.uptimeMillis - lastTapUp <= viewConfiguration.doubleTapTimeoutMillis && (down.position - lastTapAt).getDistance() <= slop
         var gesture = Gesture.TAP
         var last = down.position
@@ -520,6 +554,10 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
             val current = fit()
             if (pressed.size >= 2) {
                 gesture = Gesture.PINCH
+                if (drag != null) {
+                    drag = null
+                    onDrag(null)
+                }
                 if (current == null) continue
                 val centroid = event.calculateCentroid()
                 val about = current.toMap(centroid.x, centroid.y) ?: continue
@@ -536,7 +574,18 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
                 }
 
                 Gesture.TAP -> if ((pointer.position - down.position).getDistance() > viewConfiguration.touchSlop) {
-                    gesture = if (secondTap) Gesture.DRAG_ZOOM else Gesture.PAN
+                    drag = current?.takeIf { !secondTap && editing() }?.let { source.roomDragAt(it, down.position, reach) }
+                    gesture = when {
+                        secondTap -> Gesture.DRAG_ZOOM
+                        drag != null -> Gesture.MOVE_ROOM
+                        else -> Gesture.PAN
+                    }
+                    if (drag != null) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+
+                Gesture.MOVE_ROOM -> current?.toMap(pointer.position.x, pointer.position.y)?.let { to ->
+                    drag = drag?.copy(to = to)
+                    onDrag(drag)
                 }
 
                 Gesture.PAN -> if (current != null) {
@@ -554,6 +603,14 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
             last = pointer.position
         }
         val current = fit()
+        drag?.let { moved ->
+            onDrag(null)
+            lastTapUp = 0L
+            mover.roomsMoved(moved.from, moved.to)?.let { (east, north) ->
+                source.rooms.edit(moved.room.id, RoomEdit(place = Triple(moved.room.x + east, moved.room.y + north, moved.room.z)))
+            }
+            return@awaitEachGesture
+        }
         if (gesture != Gesture.TAP) {
             lastTapUp = 0L
             mover.flush()
@@ -578,6 +635,27 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
             lastTapAt = down.position
         }
     }
+}
+
+// The room picked, where a drag that went down at [at], in [fit]'s pixels, is on it within [reach] of them
+private fun MapSource.roomDragAt(fit: MapFit, at: Offset, reach: Float): RoomDrag? {
+    val room = rooms.room ?: return null
+    val point = fit.toMap(at.x, at.y) ?: return null
+    val place = mover.roomAt(point, (reach / fit.scale).toDouble())?.takeIf { it.id == room.id } ?: return null
+    return RoomDrag(room, place, point, point)
+}
+
+// Where [drag] would put its room: the room's cell, outlined in [color], moved by the whole places it was dragged
+private fun DrawScope.drawRoomGhost(drag: RoomDrag, fit: MapFit, mover: MapMover, color: Color) {
+    val view = mover.view ?: return
+    val cell = view.roomSize * mover.shift.scale
+    val (east, north) = mover.roomsMoved(drag.from, drag.to) ?: (0 to 0)
+    val shown = mover.shift.apply(MapPoint(drag.place.x, drag.place.y))
+    val side = (cell * fit.scale).toFloat()
+    val x = fit.drawn.x + ((shown.x + east * cell) * fit.scale).toFloat()
+    // The frame's y goes down, the map's north up
+    val y = fit.drawn.y + ((shown.y - north * cell) * fit.scale).toFloat()
+    drawRect(color, Offset(x - side / 2, y - side / 2), Size(side, side), style = Stroke(GHOST_STROKE.toPx()))
 }
 
 // The map flung at [velocity], in [fit]'s pixels a second, gliding on as [decay] slows it, until it stops or is cancelled

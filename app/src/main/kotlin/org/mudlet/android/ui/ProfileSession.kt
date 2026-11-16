@@ -536,6 +536,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Areas -> post { appMap.rooms.onAreas(message) || windows.mapRooms.onAreas(message) }
 
+                is EngineMessage.Envs -> post { appMap.rooms.onEnvs(message) || windows.mapRooms.onEnvs(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }

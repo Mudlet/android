@@ -1,6 +1,7 @@
 package org.mudlet.android.protocol
 
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 /**
  * How a map frame is shown moved, until a frame that draws the move comes: each point p of the frame at [scale] p plus
@@ -125,6 +126,20 @@ class MapMoves {
         val point = shift.invert(at)
         val within = maxOf(reach / shift.scale, view.roomSize / 2)
         return view.rooms.map { it to hypot(it.x - point.x, it.y - point.y) }.filter { it.second <= within }.minByOrNull { it.second }?.first
+    }
+
+    /**
+     * How many rooms east and north a drag from [from] to [to], points of the map as shown, moves a room, to the nearest
+     * whole room by the last frame's cell as shown; null with no view, or for a drag of less than half a room each way.
+     */
+    fun roomsMoved(from: MapPoint, to: MapPoint): Pair<Int, Int>? {
+        val view = view ?: return null
+        val cell = view.roomSize * shift.scale
+        if (!(cell > 0.0)) return null
+        val east = ((to.x - from.x) / cell).roundToInt()
+        // The frame's y goes down, the map's north up
+        val north = ((from.y - to.y) / cell).roundToInt()
+        return (east to north).takeIf { east != 0 || north != 0 }
     }
 
     /** Where [room], of the last frame, is on the map as shown. */

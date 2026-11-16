@@ -343,6 +343,20 @@ struct RoomDetails
     int z = 0;
     int steps = -1;
     QList<RoomExitInfo> exits;
+    // What the map's editing sets: the symbol drawn on it, its environment and the colour that draws, as #rrggbb, its
+    // weight for the speedwalk and whether the speedwalk avoids it
+    QString symbol;
+    int env = -1;
+    QString color;
+    int weight = 1;
+    bool locked = false;
+};
+
+// An environment a room of the map can be given, with the colour it draws rooms in, as #rrggbb
+struct MapEnvInfo
+{
+    int env = 0;
+    QString color;
 };
 
 // An area of the map that has rooms

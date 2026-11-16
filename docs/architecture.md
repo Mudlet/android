@@ -349,6 +349,16 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   in front, and as that map closes, but not as a rotation remakes it; it is asked for again when the player moves, as
   its steps change. Each map's answers carry the `id` it
   asked with, so the mapper window's and the app's map never show each other's room.
+- While the map is edited, the room shown also has chips (`RoomEditActions` in `MapEdit.kt`), each but one opening a
+  dialog: its details (name, symbol, a colour from the map's environments, `mapEnvs`, weight and lock, saved as one
+  `editRoom` of what changed), its exits (one per direction on a compass, led to a room by number or by tapping it on
+  the map next, both ways or not, locked, unlocked or removed: `setRoomExit`, `lockRoomExit`), a room beside it a way
+  no exit goes (`addRoom`, which then shows), moving it a place at a time (`editRoom`'s place), placing the player in
+  it (`setPlayerRoom`), renaming its area (`renameArea`) and deleting it after asking (`deleteRoom`). While an exit
+  waits for its room a banner over the map says which way it goes, with Cancel, and the next tap on a room leads it
+  there; viewing the map cancels it. A drag that starts on the room shown moves it by whole places, outlined where it
+  will go as the finger moves (`MapMoves.roomsMoved`), and sent as one `editRoom` as the finger lifts. Each edit
+  answers with the room as it now is, which the card shows.
 - A bar at the map's bottom start (`MapPlaceBar`), where the map is at least 144 dp high, names the area shown, a
   button that lists the map's areas (`mapAreas`, asked each time it opens) to show another (`showMapArea`), and,
   while the area has more than one level (`view.levels`), the level shown between buttons to the level above and below
@@ -367,7 +377,8 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   following the player; three wheel notches while a frame has no `view`), and a switch, on while the map is edited,
   sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason at the
   map's bottom, above the bar and the button that centres it, until dismissed or the next request; a refusal of
-  `roomInfo`, `walkToRoom`, `mapAreas`, `showMapLevel` or `showMapArea` is shown on the map that sent the last of them.
+  `roomInfo`, `walkToRoom`, `mapAreas`, `showMapLevel`, `showMapArea` or an edit of the map (`MapRooms.REQUESTS`) is
+  shown on the map that sent the last of them.
 - With TalkBack the map reads as "Map of the game", viewing or editing, and "not following you" while it does not
   follow the player, in the windows' group. A double tap selects the room in its middle and shows it, and its actions
   walk there, zoom, scroll the map up, down, left and right by a third of it, show the level above or below, and
@@ -473,7 +484,7 @@ checkout, skips one already in it and stops the build at one that no longer appl
 first, as a later patch may change the lines an earlier one is checked against. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are eleven: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are twelve: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
@@ -482,9 +493,11 @@ headless sessions sharing one pool of profiles, each with one profile (`0007-hea
 [`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
 (`frameTabs`), with the player's tap on a tab (`selectFrameTab()`), moving a map by touch with what each frame
 laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)), a profile's settings
-as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see "Settings"), and a map's rooms:
+as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see "Settings"), a map's rooms:
 a room's details, a walk to it, its area's levels, another area or level shown, and the room search ranked best first
-with each room's distance (`0012-headless-map-rooms.patch`).
+with each room's distance (`0012-headless-map-rooms.patch`), and editing the map: a room's details, exits and place,
+a room added beside another or deleted, the player placed, an area renamed and the environments' colours listed
+(`0013-headless-map-edits.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -535,6 +548,7 @@ keeps the profiles' passwords in the KeyStore.
 | `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
 | `moveMapView()`, `followPlayerOnMap()`, `mapView()` after each `renderMap()` and `renderAppMap()` (carried patch) | `moveMap`, `followPlayer`, answered only when refused; `view` in `map` and `appMap`, with the last `moveMap` drawn as `moved` |
 | `roomInfo()`, `mapAreas()`, `walkToRoom()`, `showMapLevel()`, `showMapArea()`, `findRooms()` ranked with steps, `MapView::levels` (carried patch) | `roomInfo` answered by `room`, `mapAreas` by `areas`; `walkToRoom`, `showMapLevel`, `showMapArea`, answered only when refused; `levels` in `view`; `areaId`, `match` and `steps` in `rooms` |
+| `editRoom()`, `setRoomExit()`, `lockRoomExit()`, `addRoomBeside()`, `deleteRoom()`, `setPlayerRoom()`, `renameArea()`, `mapEnvs()` (carried patch) | `editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom` answered by `room`; `deleteRoom`, `setPlayerRoom`, `renameArea` answered only when refused; `mapEnvs` by `envs`; `symbol`, `env`, `color`, `weight` and `locked` in `room` |
 | `offeredMapUrl()` at `profileLoaded` and at each `offeredMapChanged`; `downloadOfferedMap()`, `cancelMapOperation()`; `mapProgressStarted`, `mapProgressChanged`, `mapProgressCancelDisabled`, `mapDownloadFinished` (carried patch) | `mapDownload`, with the URL's host only, when it changed (progress at most once a percent), and to a UI that attaches; `downloadMap`, `cancelMapDownload`, answered only when refused |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
@@ -657,6 +671,10 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   prefix, then within the name, the player's area then the nearest first, and by id; `mapAreas` by name;
   `showMapLevel` and `showMapArea` with the `view` they draw, and refused for a level or area with no rooms;
   `walkToRoom` speedwalking the path, and saying when there is none;
+- editing a map (`map_edits`): `editRoom` setting a room's name, symbol, environment, weight, lock and place, and
+  refusing a weight under 1 or nothing to set; `setRoomExit` both ways and removing both; `lockRoomExit`, refused with
+  no exit that way; `addRoom` beside a room with exits both ways, refused where a room is already; `deleteRoom`;
+  `setPlayerRoom`; `renameArea`, refused for an empty or taken name; `mapEnvs` with the profile's sixteen colours and a script's;
 - the map download: a game's GMCP `Client.Map` offering a map from a local web server, as `mapDownload` with only the
   host; `downloadMap` downloading and loading it, a Mudlet binary map and an XML one, with `sysMapDownloadEvent`, no
   Cancel once the map has arrived, its rooms then found and the app's map drawn; `mapDownload` to a UI that attaches;

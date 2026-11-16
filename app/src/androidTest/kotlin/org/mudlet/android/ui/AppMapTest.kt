@@ -627,13 +627,15 @@ class AppMapTest {
 
     // The offer in the map's middle, its card whole, covers no control but its own: over one it would take its touches and
     // cover it for TalkBack, which the accessibility check sees only on API 34 and up, and then only where the part left
-    // uncovered is the smaller. True with no offer in the middle
+    // uncovered is the smaller. Only controls in the merged tree count: the unmerged one keeps what the map in front clears
+    // from TalkBack, such as the input line under it. True with no offer in the middle
     private fun offerCoversNothing(): Boolean {
         val text = compose.onAllNodes(hasText(string(R.string.map_download_offered, HOST)), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
         val card = text?.parent ?: return true
         fun inCard(node: SemanticsNode): Boolean = generateSequence(node) { it.parent }.any { it.id == card.id }
+        val reachable = compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().map { it.id }.toSet()
         return compose.onAllNodes(hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
-            .none { !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
+            .none { it.id in reachable && !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
     }
 
     /**

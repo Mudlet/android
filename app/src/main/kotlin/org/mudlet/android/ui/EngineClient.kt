@@ -246,6 +246,8 @@ object EngineClient {
 
     /** A command typed on the input line: sent, and put first in [history]. False as for [send]. */
     fun sendCommand(line: String): Boolean {
+        // A script the command runs reads what the player typed in the text boxes
+        ScriptWindowsClient.flushTyping()
         if (!sendInput(Requests.send(line))) return false
         val now = SystemClock.elapsedRealtime()
         dropExpiredSends(now)
@@ -410,6 +412,8 @@ object EngineClient {
     private val listener = object : EngineLink.Listener {
         override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
             replaying = true
+            // Read here, as the link has it now: what is sent before the post runs goes out on this connection
+            val connection = link.connection
             // The engine forgets nothing across a reattach, but a new engine instance needs the size again
             screenSize?.let { (columns, rows) -> link.send(Requests.setScreenSize(columns, rows)) }
             // Another UI or a restore may have changed them meanwhile
@@ -443,7 +447,7 @@ object EngineClient {
                 if (!sameInstance && lines.isNotEmpty()) {
                     addLines(listOf(UiLine(app.getString(R.string.marker_new_engine, hello.instance), IntArray(0), false, marker = true)))
                 }
-                ScriptWindowsClient.onAttached(sameInstance)
+                ScriptWindowsClient.onAttached(sameInstance, connection)
             }
         }
 

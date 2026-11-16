@@ -39,9 +39,11 @@ import org.mudlet.android.protocol.Profile
 
 /**
  * The text boxes a profile's scripts make with createTextEdit() (docs/phase-f.md, "Text boxes"), against a fake engine:
- * what the player types reaches the engine as `setTextBoxText`, once, and is not taken back; a script's new text
- * replaces the field's; a read-only box cannot be typed in; a refusal puts back what the engine holds; a small box is
- * touched within 48 dp; and each is read by its placeholder or its name.
+ * what the player types reaches the engine as `setTextBoxText`, once, and is not taken back, a key right after a send
+ * included, and before a tap on a label; a script's new text replaces the field's, even the text from before the
+ * player typed, and one the engine sent before it had the player's typing does not; a read-only box cannot be typed
+ * in, and drops what was not sent; a refusal puts back what the engine holds; a removed box sends nothing; a small box
+ * is touched within 48 dp; and each is read by its placeholder or its name.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptTextBoxTest {
@@ -109,6 +111,92 @@ class ScriptTextBoxTest {
     }
 
     @Test
+    fun aScriptSettingTheTextFromBeforeThePlayerTypedReplacesIt() {
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes", text = "first", placeholder = "Write here")
+        val field = field("Write here")
+        awaitNode(field and hasText("first"))
+
+        compose.onNode(field).performTextReplacement("the player's")
+        assertEquals("the player's", receiveTyping().getString("text"))
+        // The engine has the player's text, so the script's text, though the field had it before, is a change
+        session.textBox("notes", text = "first", placeholder = "Write here")
+        awaitNode(field and hasText("first"))
+        assertNoTypingSent()
+    }
+
+    @Test
+    fun aKeyRightAfterTheTypingIsSentIsKeptAndSentToo() {
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes")
+        val field = field("notes")
+        awaitNode(field)
+
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNode(field).performTextReplacement("abc")
+            // Frame by frame until the field has sent it, then a key before the next frame
+            var frames = 0
+            while (compose.runOnUiThread { ScriptWindowsClient.state.textBoxes["notes"]?.text } != "abc" && frames++ < MAX_FRAMES) {
+                compose.mainClock.advanceTimeByFrame()
+            }
+            compose.onNode(field).performTextInput("d")
+            compose.mainClock.advanceTimeBy(SETTLED_MS)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        assertEquals("abc", receiveTyping().getString("text"))
+        assertEquals("abcd", receiveTyping().getString("text"))
+        compose.onNode(field).assert(hasText("abcd"))
+        assertNoTypingSent()
+        compose.onNode(field).assert(hasText("abcd"))
+    }
+
+    @Test
+    fun aTextBoxSentBeforeTheEngineHadThePlayersTypingKeepsIt() {
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes", placeholder = "Write here")
+        awaitNode(field("Write here"))
+
+        compose.onNode(field("Write here")).performTextReplacement("abc")
+        assertEquals("abc", receiveTyping().getString("text"))
+        compose.onNode(field("Write here")).performTextInput("d")
+        assertEquals("abcd", receiveTyping().getString("text"))
+        // As the engine sends a script's change of the placeholder before it reads the second
+        session.textBox("notes", text = "abc", placeholder = "Other", typed = 1)
+        awaitNode(field("Other") and hasText("abcd"))
+        assertNoTypingSent()
+        compose.onNode(field("Other")).assert(hasText("abcd"))
+    }
+
+    @Test
+    fun typingATapOnALabelRunsAScriptForIsSentFirst() {
+        session.windows(listOf(textBox("notes", w = 400, h = 200), FakeEngine.window("go", kind = "label", y = 300, w = 200, h = 100)), full = true)
+        session.textBox("notes")
+        session.label("go", text = "North", accessibleName = "Go north", accessibleButton = true)
+        val field = field("notes")
+        val button = hasContentDescription("Go north") and hasClickAction()
+        awaitNode(field)
+        awaitNode(button)
+
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNode(field).performTextReplacement("ready")
+            // Drawn with it, but well before the typing settles
+            compose.mainClock.advanceTimeByFrame()
+            compose.onNode(button).performSemanticsAction(SemanticsActions.OnClick)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        session.receive("pointer")
+        val requests = session.received.map { it.optString("t") }
+        val typed = requests.indexOf("setTextBoxText")
+        assertTrue("setTextBoxText before the first pointer: $requests", typed in 0 until requests.indexOf("pointer"))
+        assertEquals("ready", session.received[typed].getString("text"))
+        assertNoTypingSent()
+    }
+
+    @Test
     fun aReadOnlyBoxCannotBeTypedInAndIsReadAsSuch() {
         session.windows(listOf(textBox("log", w = 400, h = 300)), full = true)
         session.textBox("log", text = "read me", readOnly = true)
@@ -137,6 +225,50 @@ class ScriptTextBoxTest {
         val readOnly = field(string(R.string.text_box_read_only, "notes"))
         awaitNode(readOnly and hasText("kept"))
         compose.onNode(readOnly).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.SetText))
+        assertNoTypingSent()
+    }
+
+    @Test
+    fun typingNotSentWhenTheBoxTurnsReadOnlyIsDropped() {
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes", text = "kept")
+        val field = field("notes")
+        awaitNode(field and hasText("kept"))
+
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNode(field).performTextReplacement("draft")
+            compose.mainClock.advanceTimeByFrame()
+            // The same text, so only its turning read-only puts it back
+            session.textBox("notes", text = "kept", readOnly = true)
+            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { ScriptWindowsClient.state.textBoxes["notes"]?.readOnly == true } }
+            compose.mainClock.advanceTimeBy(SETTLED_MS)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        val readOnly = field(string(R.string.text_box_read_only, "notes"))
+        awaitNode(readOnly and hasText("kept"))
+        assertNoTypingSent()
+    }
+
+    @Test
+    fun aRemovedBoxGoesAndSendsNothing() {
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes")
+        val field = field("notes")
+        awaitNode(field)
+
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNode(field).performTextReplacement("draft")
+            compose.mainClock.advanceTimeByFrame()
+            session.windows(emptyList(), removed = listOf("notes" to "textBox"))
+            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { "notes" !in ScriptWindowsClient.state.textBoxes } }
+            compose.mainClock.advanceTimeBy(SETTLED_MS)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(field).fetchSemanticsNodes().isEmpty() }
         assertNoTypingSent()
     }
 
@@ -193,6 +325,7 @@ class ScriptTextBoxTest {
 
         // Longer than the field waits, on the test's clock, for the player's typing to settle
         const val SETTLED_MS = 400L
+        const val MAX_FRAMES = 100
         const val TIMEOUT_MS = 240_000L
     }
 }

@@ -3,7 +3,6 @@ package org.mudlet.android.ui.game
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.absolutePadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -12,21 +11,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -75,12 +71,12 @@ private const val MIN_TEXT_BOX_SP = 9f
 /**
  * A text box from createTextEdit() (docs/phase-f.md, "Text boxes"): its [content]'s text in a text field at [placed]'s
  * place, styled by its style sheet as a label's is, scaled as its window is. The player types in it unless it is
- * read-only, and once they stop, all of what they typed goes to the engine with `setTextBoxText`; a script's new text
- * replaces the field's. It is touched within 48 dp around it, and read by its placeholder, or its name, and whether
- * it is read-only.
+ * read-only, and once they stop, or leave it, or tap what may run a script, all of what they typed goes to the engine
+ * with `setTextBoxText`; a script's new text, which [edit] (ScriptWindows.textBoxEdits) tells of, replaces the
+ * field's. It is touched within 48 dp around it, and read by its placeholder, or its name, and whether it is read-only.
  */
 @Composable
-internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, density: Density, modifier: Modifier = Modifier) {
+internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit: Long?, density: Density, modifier: Modifier = Modifier) {
     val window = placed.window
     val name = window.name
     val rect = placed.rect
@@ -94,29 +90,40 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, densi
     val scriptText = content?.text
 
     var value by rememberSaveable(name, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(scriptText.orEmpty())) }
-    LaunchedEffect(scriptText) {
-        if (scriptText != null && scriptText != value.text) value = TextFieldValue(scriptText, TextRange(scriptText.length))
+    // The script's text the field last took: the player's own, which the engine does not send back, never changes it, so
+    // what they typed after what was sent stays. Saved with the field, so that a script's text while it was away shows
+    var shownEdit by rememberSaveable(name) { mutableStateOf(edit) }
+    // Also when it turns read-only, which drops what the player typed that was not yet sent
+    LaunchedEffect(edit, readOnly) {
+        if (scriptText == null) return@LaunchedEffect
+        if ((edit != shownEdit || readOnly) && TextBoxContent.plain(value.text) != scriptText) {
+            value = TextFieldValue(scriptText, TextRange(scriptText.length))
+        }
+        shownEdit = edit
     }
 
-    // What the player typed that the engine has not been sent; sent again to the same instance should the link drop
-    val unsent = value.text.takeIf { scriptText != null && !readOnly && it != scriptText }
+    // What the player typed that the engine has not been sent, which ScriptWindowsClient holds to send before a tap that
+    // may run a script; sent again to the same instance should the link drop
+    val unsent = value.text.takeIf { scriptText != null && !readOnly && TextBoxContent.plain(it) != scriptText }
+    SideEffect { ScriptWindowsClient.typing(name, unsent) }
     LaunchedEffect(unsent, EngineClient.attachCount) {
         if (unsent == null) return@LaunchedEffect
         delay(TYPING_SETTLES_MS)
-        ScriptWindowsClient.setTextBoxText(name, unsent)
+        ScriptWindowsClient.flushTyping(name)
     }
     // Nor is it lost when the field goes, as on a turn of the screen, which would otherwise draw the engine's text again
-    val currentUnsent by rememberUpdatedState(unsent)
     DisposableEffect(name) {
-        onDispose { currentUnsent?.let { ScriptWindowsClient.setTextBoxText(name, it) } }
+        onDispose {
+            ScriptWindowsClient.flushTyping(name)
+            ScriptWindowsClient.typing(name, null)
+        }
     }
 
     val colours = MaterialTheme.colorScheme
     val textColour = style.color?.let { Color(it) } ?: colours.onSurface
-    val fontPx = style.fontSizePx ?: window.fontSize.takeIf { it > 0 }?.let { (it * LabelStyle.PX_PER_PT).toFloat() } ?: DEFAULT_FONT_PX
     val textStyle = TextStyle(
         color = textColour,
-        fontSize = with(density) { (fontPx * scale).toSp() }.value.coerceAtLeast(MIN_TEXT_BOX_SP).sp,
+        fontSize = with(density) { (fontPx(style, window) * scale).toSp() }.value.coerceAtLeast(MIN_TEXT_BOX_SP).sp,
         fontWeight = style.fontWeight?.let { FontWeight(it.coerceIn(1, 1000)) },
         fontStyle = if (style.italic == true) FontStyle.Italic else null,
         fontFamily = style.fontFamily?.let(::fontFamily),
@@ -129,9 +136,11 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, densi
     val focusManager = LocalFocusManager.current
     val tabMovesFocus = content?.tabMovesFocus == true
     val fill = style.background ?: LabelFill.Solid(colours.surface.toArgb())
-    val outline = if (focused) colours.primary else colours.outline
-    val outlineWidth = with(density) { (if (focused) 2.dp else 1.dp).toPx() }
-    val frame = if (style.drawnBorderWidth > 0f) style.drawnBorderWidth else FRAME_PX
+    val styledBorder = style.drawnBorderWidth > 0f
+    // A field is seen to be one, and focused, where its style sheet draws no border
+    val frameStyle = if (styledBorder) style else style.copy(borderColor = (if (focused) colours.primary else colours.outline).toArgb())
+    val frameWidth = if (styledBorder) style.drawnBorderWidth * scale else with(density) { (if (focused) 2.dp else 1.dp).toPx() }
+    val frame = if (styledBorder) style.drawnBorderWidth else FRAME_PX
     val inner = with(style.padding) {
         val extra = frame + DOCUMENT_MARGIN_PX
         Edges(top + extra, right + extra, bottom + extra, left + extra)
@@ -146,7 +155,7 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, densi
         BasicTextField(
             value = value,
             onValueChange = { value = it },
-            modifier = Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+            modifier = Modifier.fillMaxSize().onFocusChanged { if (!it.isFocused) ScriptWindowsClient.flushTyping(name) }.onPreviewKeyEvent { event ->
                 // Both halves of the key are taken, so the field types no tab
                 if (!tabMovesFocus || event.key != Key.Tab) return@onPreviewKeyEvent false
                 if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)
@@ -158,42 +167,21 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, densi
             interactionSource = interactions,
             cursorBrush = SolidColor(textColour),
             decorationBox = { field ->
-                with(density) {
-                    Box(
-                        Modifier
-                            // The field's name, which an editable field may not carry itself; the screen reader reads
-                            // it with the field, as part of it. Outside the padding, so the node is the field's size:
-                            // inside the frame and margins a small box leaves it none, and a node of no size is not read
-                            .semantics { contentDescription = label }
-                            // Drawn at its own place inside the touch bounds
-                            .absolutePadding(
-                                left = (rect.x - touch.x).coerceAtLeast(0f).toDp(),
-                                top = (rect.y - touch.y).coerceAtLeast(0f).toDp(),
-                                right = (touch.right - rect.right).coerceAtLeast(0f).toDp(),
-                                bottom = (touch.bottom - rect.bottom).coerceAtLeast(0f).toDp(),
-                            )
-                            .edgePadding(style.margin, scale, scale, density)
-                            .drawBehind {
-                                val radius = style.borderRadius * scale
-                                drawLabelFrame(fill, style, style.drawnBorderWidth * scale, radius, scale, null, null)
-                                // A field is seen to be one, and focused, where its style sheet draws no border
-                                if (style.drawnBorderWidth <= 0f) {
-                                    drawRoundRect(
-                                        outline,
-                                        topLeft = Offset(outlineWidth / 2, outlineWidth / 2),
-                                        size = Size((size.width - outlineWidth).coerceAtLeast(0f), (size.height - outlineWidth).coerceAtLeast(0f)),
-                                        cornerRadius = CornerRadius(radius),
-                                        style = Stroke(outlineWidth),
-                                    )
-                                }
-                            }
-                            .edgePadding(inner, scale, scale, density),
-                    ) {
-                        if (value.text.isEmpty() && placeholder.isNotEmpty()) {
-                            Text(placeholder, Modifier.clearAndSetSemantics {}, style = textStyle.copy(color = textColour.copy(alpha = 0.7f)))
-                        }
-                        field()
+                Box(
+                    Modifier
+                        // The field's name, which an editable field may not carry itself; the screen reader reads it
+                        // with the field, as part of it. Before placeIn, so the node is the field's size: inside the
+                        // frame and margins a small box leaves it none, and a node of no size is not read
+                        .semantics { contentDescription = label }
+                        .placeIn(rect.x - touch.x, rect.y - touch.y, rect.w, rect.h)
+                        .edgePadding(style.margin, scale, scale, density)
+                        .drawBehind { drawLabelFrame(fill, frameStyle, frameWidth, style.borderRadius * scale, scale, null, null) }
+                        .edgePadding(inner, scale, scale, density),
+                ) {
+                    if (value.text.isEmpty() && placeholder.isNotEmpty()) {
+                        Text(placeholder, Modifier.clearAndSetSemantics {}, style = textStyle.copy(color = textColour.copy(alpha = 0.7f)))
                     }
+                    field()
                 }
             },
         )

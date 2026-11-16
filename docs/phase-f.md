@@ -210,14 +210,22 @@ Click-through and the grab are upstream's to resolve: the app names the topmost 
 ### Text boxes
 
 A `textBox` is a text field at its window's geometry, scaled by `s`, with the label style sheet's subset where a
-`QPlainTextEdit` has it: bare declarations and `QPlainTextEdit`, `TTextBox` or `*` blocks give its background, border,
-padding, margin and font; one with no border has an outline, thicker while focused. Its text is never drawn under
-9 sp, and scrolls inside it. The player types in it unless `readOnly`, with the `placeholder` shown while it is
+`QPlainTextEdit` has it: bare declarations and `QPlainTextEdit`, `TTextBox` or `*` blocks give its background, text
+colour, border (with its radius), padding, margin and font; one with no border has an outline, thicker while focused.
+Where its style sheet sets no colours it has the theme's surface and text colours; the desktop's has the profile's
+command-line colours (dark grey on black unless changed), which the engine does not send. Its text is never drawn
+under 9 sp, and scrolls inside it. The player types in it unless `readOnly`, with the `placeholder` shown while it is
 empty, and Tab moves on to the next control when `tabMovesFocus` (a hardware keyboard's; otherwise it types a tab).
-Once the player has stopped typing for 300 ms, all of the box's text goes to the engine with `setTextBoxText`, and
-the app's copy of the box takes it, as the engine sends no `textBox` back; what is not yet sent goes when the field
-goes (a turn of the screen) and again after the link drops. A script's new text replaces the field's, the player's
-unsent typing with it; a refusal's `textBox` puts back what Mudlet holds.
+Once the player has stopped typing for 300 ms, all of the box's text goes to the engine with `setTextBoxText`, as
+plain text as Mudlet keeps it, and the app's copy of the box takes it, as the engine sends no `textBox` back. What is
+not yet sent also goes when the player leaves the field, before a tap on a label, button, command, link or the map and
+before a command, so that a script these run reads it, when the field goes (a turn of the screen), and again after the
+link drops. A script's new text replaces the field's, the player's unsent typing with it, as does making it read-only;
+the field tells one from the player's own text by `ScriptWindows.textBoxEdits`, which only the engine's change of the
+text moves, so a key typed as the last text went is kept. A `textBox` the engine sent before it had the player's
+latest text (its `typed` short of what the app sent) keeps the player's text. The app counts what it sent by the link's
+connection it went out on (`EngineLink.connection`), so typing sent on a new connection before the main thread sees
+the attach stays counted, as the engine counts it. A refusal's `textBox` puts back what Mudlet holds.
 
 ### Gauges
 

@@ -180,6 +180,7 @@ internal object AppMapClient : MapSource {
     /** As ScriptWindowsClient.mapPointer, on this map. */
     override fun pointer(type: MapPointerType, at: MapPoint, wheelY: Int): Boolean {
         refused = null
+        ScriptWindowsClient.flushTyping()
         val button = if (type == MapPointerType.WHEEL) 0 else POINTER_LEFT
         return EngineClient.send(Requests.appMapPointer(type, at.x, at.y, button, 0, wheelY))
     }

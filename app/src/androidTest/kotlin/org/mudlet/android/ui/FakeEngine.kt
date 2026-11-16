@@ -246,7 +246,10 @@ class FakeEngine : AutoCloseable {
                 .put("styleSheet", styleSheet).putOpt("liveRegion", liveRegion),
         )
 
-        /** What the text box [name] holds (docs/protocol.md, `textBox`). */
+        /**
+         * What the text box [name] holds (docs/protocol.md, `textBox`), [typed] after as many `setTextBoxText` for it, by
+         * default those [received] has, as the engine counts those it read.
+         */
         fun textBox(
             name: String,
             text: String = "",
@@ -254,9 +257,10 @@ class FakeEngine : AutoCloseable {
             placeholder: String = "",
             styleSheet: String = "",
             tabMovesFocus: Boolean = false,
+            typed: Int = received.count { it.optString("t") == "setTextBoxText" && it.optString("name") == name },
         ) = send(
             JSONObject().put("t", "textBox").put("name", name).put("text", text).put("readOnly", readOnly).put("placeholder", placeholder)
-                .put("styleSheet", styleSheet).put("tabMovesFocus", tabMovesFocus),
+                .put("styleSheet", styleSheet).put("tabMovesFocus", tabMovesFocus).put("typed", typed),
         )
 
         /** The answer to the `getImage` whose id was [re]: [png], a PNG of [w] by [h] pixels. */

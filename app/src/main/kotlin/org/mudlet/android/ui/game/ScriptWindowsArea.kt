@@ -250,7 +250,7 @@ private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metri
         WindowKind.MAPPER -> ScriptMap(placed, placedModifier)
 
         // A text box places itself too, as a small one's touch bounds are larger than it
-        WindowKind.TEXT_BOX -> ScriptTextBox(placed, windows.textBoxes[window.name], density, modifier)
+        WindowKind.TEXT_BOX -> ScriptTextBox(placed, windows.textBoxes[window.name], windows.textBoxEdits[window.name], density, modifier)
 
         // A scroll box only holds windows
         else -> {}

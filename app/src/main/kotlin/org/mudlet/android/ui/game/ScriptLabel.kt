@@ -124,8 +124,8 @@ private const val TAG = "ScriptLabel"
 // A clickable label's touch bounds, and a text box's, are never smaller than this, around it
 internal val MIN_TOUCH_SIZE = 48.dp
 
-// Qt's default font, where neither a label's or text box's style sheet nor its window sets one: 10 pt
-internal const val DEFAULT_FONT_PX = 10f * LabelStyle.PX_PER_PT
+// Qt's default font, where neither a label's style sheet nor its window sets one: 10 pt
+private const val DEFAULT_FONT_PX = 10f * LabelStyle.PX_PER_PT
 
 // The colour Qt draws a link in where the text sets none
 private val LINK_COLOUR = Color(0xFF4AA3FF)
@@ -232,7 +232,7 @@ internal fun PxRect.grownTo(min: Float): PxRect {
 }
 
 /** Lays its content out [w] by [h] pixels at [x], [y] in its parent, whatever the parent's size. */
-private fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier = layout { measurable, constraints ->
+internal fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(Constraints.fixed(w.roundToInt().coerceAtLeast(0), h.roundToInt().coerceAtLeast(0)))
     layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x.roundToInt(), y.roundToInt()) }
 }
@@ -241,11 +241,14 @@ private fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier =
 private fun rememberLabelText(content: LabelContent?, window: ScriptWindow, scale: Float): LabelText {
     val styleSheet = content?.styleSheet.orEmpty()
     val style = remember(styleSheet) { LabelStyle.parse(styleSheet) }
-    val basePx = style.fontSizePx ?: window.fontSize.takeIf { it > 0 }?.let { (it * LabelStyle.PX_PER_PT).toFloat() } ?: DEFAULT_FONT_PX
+    val basePx = fontPx(style, window)
     val text = content?.text.orEmpty()
     val rich = remember(text, basePx) { if (text.isBlank()) null else RichText.parse(text, basePx) }
     return remember(rich, style, scale) { LabelText(style, rich, scale) }
 }
+
+/** The size of a label's or text box's text in Mudlet's pixels: its style sheet's, else its window's font's, else Qt's. */
+internal fun fontPx(style: LabelStyle, window: ScriptWindow): Float = style.fontSizePx ?: window.fontSize.takeIf { it > 0 }?.let { (it * LabelStyle.PX_PER_PT).toFloat() } ?: DEFAULT_FONT_PX
 
 /** A label's style sheet, its text if it has any, and the scale it is drawn at. */
 private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: Float) {

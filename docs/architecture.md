@@ -200,7 +200,9 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
 - The game categories are Display (blank lines, joining split lines, undoing the game's own wrapping and the width it
   wraps at), Accessibility (with captions for sounds), Input (the commands the console shows, Unix line endings),
   Connection (offering a secure connection, and the protocols Mudlet negotiates with the game: GMCP, MSDP, MSSP, MSP,
-  MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON) and Advanced (desktop Mudlet's "Special options"); Mudlet reads the
+  MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors a secure connection lets past, and
+  whether the game may install its packages or play its media) and Advanced (desktop Mudlet's "Special options", and
+  a script's errors shown in the game's text, as the app has no error console); Mudlet reads the
   protocols' as it connects, so a change applies from the next connection. A number's slider changes it as the finger
   lifts, so a game's is sent once a slide. Mudlet's settings for how its own console draws text (control characters, East Asian
   characters of either width) are not among them, as the app draws the text itself.
@@ -681,7 +683,7 @@ device shows, below the UI's debug hook:
   announcement, `announce`, each console line as its plain text) and the settings: a game added in the app given
   the app's values the player changed (`setSettings`), none if none were, and any other keeping its own (`getSettings`), read again as a page opens and changed there
   alone, a search's switches
-  for the game and for new games, the Input, Connection and Advanced pages' changes, and a game's number sent once a slide; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
+  for the game and for new games, the Input, Connection, Security and Advanced pages' changes, and a game's number sent once a slide; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
   map in front the title bar, its search, the map and the game pill, and nothing it covers; the script
@@ -1464,7 +1466,9 @@ Item 13 of the on-device checklist covers this.
     - In a game's Settings, Connection: with GMCP turned off, after disconnecting and connecting again, the game sends
       no GMCP; on, it does again. Input: with "Show the commands sent" at None, what you send no longer shows in the
       game's text. Accessibility: with "Captions for sounds and music" on, a game's sounds (MSP or `playSoundFile`) are
-      named in its text as they play.
+      named in its text as they play. Advanced: with "Show script errors in the game's text" on, `lua error("x")`
+      shows its error in the game's text. Security: with "Let the game play sounds and music" off, a game that sends
+      GMCP `Client.Media` plays nothing.
     - On a tablet, Settings opens a page beside the list of pages, and a search's result opens its page there with the
       setting tinted for a moment.
     - With TalkBack on: the settings' section titles read as headings, and the editor beside the list has

@@ -71,6 +71,18 @@ object Settings {
     val forceMxpOn = BoolSetting("specialForceMXPProcessorOn", default = false, mudlet = true)
     val lazyTriggerVariables = BoolSetting("lazyCaptureGlobals", default = true, mudlet = true)
 
+    /** Whether a script's errors are also shown in the game's text, as the app has no error console. */
+    val showScriptErrors = BoolSetting("echoLuaErrors", default = false, mudlet = true)
+
+    // The certificate errors a secure connection lets past, under "TLS/SSL secure connection" in desktop Mudlet
+    val acceptExpiredCertificate = BoolSetting("sslIgnoreExpired", default = false, mudlet = true)
+    val acceptSelfSignedCertificate = BoolSetting("sslIgnoreSelfSigned", default = false, mudlet = true)
+    val acceptAnyCertificate = BoolSetting("sslIgnoreAll", default = false, mudlet = true)
+
+    // Whether the game may install its own packages (its interface) and play its own sounds and music over GMCP
+    val gameInstallsPackages = BoolSetting("acceptServerGUI", default = true, mudlet = true)
+    val gamePlaysMedia = BoolSetting("acceptServerMedia", default = true, mudlet = true)
+
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
 
@@ -107,6 +119,12 @@ object Settings {
         versionInTerminalType,
         forceMxpOn,
         lazyTriggerVariables,
+        showScriptErrors,
+        acceptExpiredCertificate,
+        acceptSelfSignedCertificate,
+        acceptAnyCertificate,
+        gameInstallsPackages,
+        gamePlaysMedia,
         screenReaderOffered,
         mapBehindText,
         wallpaperColours,

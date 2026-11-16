@@ -12,9 +12,14 @@ its own getConfig in the globals would answer for Mudlet.
   error for a value of the wrong type, or that the value was not a bool, a number or a string.
 - Both are false, reading or changing nothing, where runLua() is refused.
 - docs/headless.md describes them.
+- getConfig() and setConfig() gain six keys an app's settings screen needs, each a bool kept with the profile:
+  sslIgnoreExpired, sslIgnoreSelfSigned and sslIgnoreAll (the certificate errors a secure connection lets past),
+  acceptServerGUI and acceptServerMedia (whether the game may install its packages and play its media), and
+  echoLuaErrors (a script's errors also shown in the main console). The getConfig() table lists them too.
 
 Tested in HeadlessSessionTest (reading, a script's replacement getConfig, an unknown key, a change taken and three
-refused, and the refusals with no profile). The desktop is unchanged.
+refused, and the refusals with no profile), and the new keys in Other_spec.lua. The desktop's preferences
+are unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 Upstream: not opened yet
@@ -46,6 +51,72 @@ index 2d3259e..fcfb217 100644
  ## Embedding it: commands and buttons that scripts add
  
  `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index 61b99d0..6ca0743 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -10385,6 +10385,30 @@ int TLuaInterpreter::setConfig(lua_State* L)
+         host.mAskTlsAvailable = getVerifiedBool(L, __func__, 2, "value");
+         return success();
+     }
++    if (key == qsl("sslIgnoreExpired")) {
++        host.mSslIgnoreExpired = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
++    if (key == qsl("sslIgnoreSelfSigned")) {
++        host.mSslIgnoreSelfSigned = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
++    if (key == qsl("sslIgnoreAll")) {
++        host.mSslIgnoreAll = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
++    if (key == qsl("acceptServerGUI")) {
++        host.mAcceptServerGUI = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
++    if (key == qsl("acceptServerMedia")) {
++        host.mAcceptServerMedia = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
++    if (key == qsl("echoLuaErrors")) {
++        host.mEchoLuaErrors = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
+     if (key == qsl("promptForMXPProcessorOn")) {
+         host.mPromptedForMXPProcessorOn = getVerifiedBool(L, __func__, 2, "value");
+         return success();
+@@ -10956,6 +10980,30 @@ int TLuaInterpreter::getConfig(lua_State* L)
+              [&]() {
+                  lua_pushboolean(L, host.mAskTlsAvailable);
+              }},
++            {qsl("sslIgnoreExpired"),
++             [&]() {
++                 lua_pushboolean(L, host.mSslIgnoreExpired);
++             }},
++            {qsl("sslIgnoreSelfSigned"),
++             [&]() {
++                 lua_pushboolean(L, host.mSslIgnoreSelfSigned);
++             }},
++            {qsl("sslIgnoreAll"),
++             [&]() {
++                 lua_pushboolean(L, host.mSslIgnoreAll);
++             }},
++            {qsl("acceptServerGUI"),
++             [&]() {
++                 lua_pushboolean(L, host.mAcceptServerGUI);
++             }},
++            {qsl("acceptServerMedia"),
++             [&]() {
++                 lua_pushboolean(L, host.mAcceptServerMedia);
++             }},
++            {qsl("echoLuaErrors"),
++             [&]() {
++                 lua_pushboolean(L, host.mEchoLuaErrors);
++             }},
+             {qsl("promptForMXPProcessorOn"),
+              [&]() {
+                  lua_pushboolean(L, host.mPromptedForMXPProcessorOn);
 diff --git a/src/headless/CMakeLists.txt b/src/headless/CMakeLists.txt
 index 154ae13..14e0af6 100644
 --- a/src/headless/CMakeLists.txt
@@ -215,6 +286,58 @@ index 0000000..94d5408
 +    }
 +    return true;
 +}
+diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
+index a15c1c2..61bd052 100644
+--- a/src/mudlet-lua/lua/Other.lua
++++ b/src/mudlet-lua/lua/Other.lua
+@@ -1635,6 +1635,8 @@ local oldgetConfig = getConfig
+ -- Left out on purpose: "ircNickName" (with no nick stored it reads as a new random one, and writing it
+ -- back also replaces the app-wide nick) and "ircPassword" (it would show up in every dump of the table)
+ local configOptions = {
++  "acceptServerGUI",
++  "acceptServerMedia",
+   "accessibleLabels",
+   "advertiseScreenReader",
+   "ambiguousEAsianWidthCharacters",
+@@ -1646,6 +1648,7 @@ local configOptions = {
+   "commandLineHistorySaveSize",
+   "compactInputLine",
+   "controlCharacterHandling",
++  "echoLuaErrors",
+   "editorAutoComplete",
+   "editorFont",
+   "editorFontFollowsDisplay",
+@@ -1700,6 +1703,9 @@ local configOptions = {
+   "specialForceGAOff",
+   "specialForceMxpNegotiationOff",
+   "specialForceMXPProcessorOn",
++  "sslIgnoreAll",
++  "sslIgnoreExpired",
++  "sslIgnoreSelfSigned",
+   "undoServerWrap",
+   "undoServerWrapWidth",
+   "versionInTTYPE",
+diff --git a/src/mudlet-lua/tests/Other_spec.lua b/src/mudlet-lua/tests/Other_spec.lua
+index e864915..9f6d299 100644
+--- a/src/mudlet-lua/tests/Other_spec.lua
++++ b/src/mudlet-lua/tests/Other_spec.lua
+@@ -2216,6 +2216,16 @@ describe("Tests Other.lua functions", function()
+       restore("editorAutoComplete")
+     end)
+ 
++    it("round-trips the certificate, game permission and Lua error options", function()
++      for _, key in ipairs({ "sslIgnoreExpired", "sslIgnoreSelfSigned", "sslIgnoreAll", "acceptServerGUI", "acceptServerMedia", "echoLuaErrors" }) do
++        snapshot(key)
++        local target = not getConfig(key)
++        assert.is_true(setConfig(key, target))
++        assert.equals(target, getConfig(key))
++        restore(key)
++      end
++    end)
++
+     it("getConfig returns a keyed table when given a list of keys", function()
+       local result = getConfig({ "enableGMCP", "editorAutoComplete" })
+       assert.is_table(result)
 diff --git a/test/functional_tests/HeadlessSessionTest.cpp b/test/functional_tests/HeadlessSessionTest.cpp
 index 16baa1d..6d6a66e 100644
 --- a/test/functional_tests/HeadlessSessionTest.cpp

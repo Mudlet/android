@@ -2756,11 +2756,17 @@ def profile_settings():
           and refused.get("announceIncomingText"), f"and what it refused, with why: {refused}")
     m = c.ask({"t": "getSettings", "keys": ["blankLinesBehaviour"]}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == {"blankLinesBehaviour": "hide"}, f"getSettings reads the change back: {m}")
+    wanted = {"sslIgnoreExpired": True, "sslIgnoreSelfSigned": True, "sslIgnoreAll": True, "acceptServerGUI": False,
+              "acceptServerMedia": False, "echoLuaErrors": True}
+    m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == wanted and "refused" not in m, f"the security and script error settings change too: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
     with open(save, errors="replace") if save else open(os.devnull) as f:
-        check('blankLineBehaviour="Hide"' in f.read(), f"the change is in the profile's save: {save}")
+        saved = f.read()
+    check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved,
+          f"the changes are in the profile's save: {save}")
 
 
 if __name__ == "__main__":

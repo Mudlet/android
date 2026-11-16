@@ -270,7 +270,7 @@
     <string name="map_download_loaded">Map downloaded from %1$s</string>
     <string name="map_download_cancelled">Map download cancelled</string>
     <string name="map_download_failed">The map download failed: %1$s</string>
-    <string name="map_download_dismiss">Dismiss</string>
+    <string name="map_download_dismiss">Dismiss the map download</string>
 
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>

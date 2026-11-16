@@ -44,9 +44,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -309,14 +309,16 @@ private fun MapDownloadProgress(download: EngineMessage.MapDownload) {
     val description = stringResource(R.string.map_download_progress)
     // Mudlet guesses the size until the server says it, which the download can pass: then how far is not known
     val fraction = if (download.maximum > 0 && download.value <= download.maximum) download.value.toFloat() / download.maximum else null
-    val bar = Modifier.fillMaxWidth().padding(bottom = 8.dp).semantics { contentDescription = description }
+    // Clear of Cancel above it by the 10dp Material's indicator reaches out above and below itself for TalkBack, which
+    // would otherwise cover Cancel's touch target
+    val bar = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp).semantics { contentDescription = description }
     if (fraction != null) LinearProgressIndicator(progress = { fraction }, bar) else LinearProgressIndicator(bar)
 }
 
 // How the last download ended, until dismissed; AppMapClient tells TalkBack as it ends
 @Composable
 private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
-    val text = AppMapClient.endText(end, LocalContext.current.resources) ?: return
+    val text = AppMapClient.endText(end, LocalResources.current) ?: return
     val failed = end.state == MapDownloadState.FAILED
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(

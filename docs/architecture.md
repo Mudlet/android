@@ -297,11 +297,12 @@ drawn by `ui/game/AppMap.kt`):
 - The button sends `downloadMap`, and waits for the engine's answer, so a second tap sends no second. While the
   download runs, the bar shows Mudlet's progress label, or "Downloading the map from <host>…", and a progress bar read
   as "Map download": how far of `maximum`, which is Mudlet's guess of 4 MB until the server sends the size, and
-  indeterminate once a download passes it. Its Cancel button, a 48 dp target, sends `cancelMapDownload` while Mudlet
-  can still stop it.
+  indeterminate once a download passes it. Its Cancel button, a 48 dp target that the progress bar's 10 dp reach for
+  TalkBack is kept clear of, sends `cancelMapDownload` while Mudlet can still stop it.
 - How it ended stays in the bar until dismissed, the next download or the profile closes, and is read out once, as it
   comes (`Announcer`): "Map downloaded from <host>", "Map download cancelled", or "The map download failed: " with
-  Mudlet's reason, in the error colour and interrupting TalkBack. A UI that attaches later shows how the last download
+  Mudlet's reason, in the error colour and interrupting TalkBack. Its close button is "Dismiss the map download", not
+  the bare "Dismiss" of a refusal that may show at the same time. A UI that attaches later shows how the last download
   ended without reading it out. A refusal shows as the map's others do. The loaded map is the profile's, so the map
   behind the text, the map in front and a script's mapper all show it; as on the desktop, Mudlet then shows its docked
   mapper, where a script has made one (`showLoadedMap()`).
@@ -1141,8 +1142,8 @@ Item 13 of the on-device checklist covers this.
       The bar under the search field then offers the download again.
     - Cancel stops a download (on a slow connection, or a large map), and says so; the map is as it was. With the
       phone offline, the download fails with Mudlet's reason, shown in red; dismissing it takes it away.
-    - With TalkBack on: the button, the progress bar (as "Map download" and how far), Cancel and the dismiss button
-      read their names; the end of the download is read out as it comes, a failure at once.
+    - With TalkBack on: the button, the progress bar (as "Map download" and how far), Cancel and "Dismiss the map
+      download" read their names; the end of the download is read out as it comes, a failure at once.
     - Over https (as most games' map URLs are), the download works: OpenSSL is in the APK (see "TLS").
     - `adb logcat` shows the map's host but never more of its URL: no user name, password, path or query.
 

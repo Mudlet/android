@@ -1,8 +1,6 @@
 package org.mudlet.android.ui.game
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -32,29 +30,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import org.mudlet.android.R
-import org.mudlet.android.suggest.Suggestion
 import org.mudlet.android.suggest.SuggestionSession
 
 /**
@@ -83,10 +86,17 @@ data class HistoryPosition(val position: Int = -1, val draft: String = "") {
 
 private enum class Notice { NOT_SENT, NO_COMPLETION }
 
-// TalkBack's order within the input line: the field, the suggestion strip above it, then the buttons beside it
-private const val FIELD_ORDER = 0f
-private const val STRIP_ORDER = 1f
-private const val BUTTON_ORDER = 2f
+// Where the field and its completion button are, so that a tap on the button is left to the button
+private class Placed {
+    var field: LayoutCoordinates? = null
+    var button: LayoutCoordinates? = null
+
+    fun onButton(position: Offset): Boolean {
+        val field = field ?: return false
+        val button = button ?: return false
+        return field.isAttached && button.isAttached && field.localBoundingBoxOf(button).contains(position)
+    }
+}
 
 /**
  * The line the player types commands in. The keyboard's Send key or the Send button hands the line to [onSend] and
@@ -99,11 +109,11 @@ private const val BUTTON_ORDER = 2f
  * While [hiddenInput] holds, a masked password field takes the line's place and sends with [onSendHidden]; its close
  * button calls [onDismissHidden]. What is typed there is not saved across a rotation, to keep it out of saved state.
  *
- * Each change of the line or its cursor goes to [onInputChanged], whose [suggestions] show in a strip above the line;
- * a button there puts its suggestion on the line, without sending it. When the answer is for the line as it is and
- * its best suggestion only extends it, the rest shows greyed after the cursor (ghost text), and the accept button
- * at the start of the strip, or a hardware right arrow at the end of the line, puts it on the line. While input is
- * hidden there is neither strip nor ghost text.
+ * Each change of the line or its cursor goes to [onInputChanged], which answers with [suggestions]. When the answer is
+ * for the line as it is and its best suggestion only extends it, the rest shows greyed after the cursor (ghost text).
+ * A tap on it while the line has the focus, a hardware right arrow at the end of the line, or TalkBack's action on
+ * the line puts it on the line, without sending it; TalkBack reads it after the typed text. While input is hidden
+ * there is no ghost text.
  *
  * While [covered] (by the map in front), the line lets go of the focus, and so of the keyboard; uncovered, it takes the
  * focus back if it had it.
@@ -179,7 +189,6 @@ fun InputLine(
         notice = if (sent) null else Notice.NOT_SENT
     }
 
-    val items = if (hiddenInput) emptyList() else suggestions?.suggestions?.items.orEmpty()
     val line = text.text.toString()
     val cursor = text.selection
     // Only for the line as it is now: an answer for an older one would put the wrong text after the cursor
@@ -191,10 +200,7 @@ fun InputLine(
         focus.requestFocus()
     }
 
-    fun pick(suggestion: Suggestion) {
-        show(suggestion.text, suggestion.cursor)
-        focus.requestFocus()
-    }
+    val placed = remember { Placed() }
 
     val inputChanged by rememberUpdatedState(onInputChanged)
     LaunchedEffect(hiddenInput) {
@@ -248,97 +254,97 @@ fun InputLine(
         }
     }
     val trackFocus = Modifier.onFocusChanged { focused = it.isFocused }
-    val buttonOrder = Modifier.semantics { traversalIndex = BUTTON_ORDER }
+    val accepted = ghost?.let { line + it }
+    val acceptLabel = accepted?.let { stringResource(R.string.input_accept_suggestion, it) }
+    val suggestionState = accepted?.let { stringResource(R.string.input_suggestion, it) }
 
-    Column(modifier.semantics { isTraversalGroup = true }) {
-        if (items.isNotEmpty()) {
-            SuggestionStrip(
-                items,
-                accepted = ghost?.let { line + it },
-                onAccept = ::accept,
-                onPick = ::pick,
-                Modifier.fillMaxWidth().semantics {
-                    isTraversalGroup = true
-                    traversalIndex = STRIP_ORDER
-                },
+    Row(modifier.semantics { isTraversalGroup = true }, verticalAlignment = Alignment.CenterVertically) {
+        if (hiddenInput) {
+            // Password semantics: TalkBack says "password", not what is typed
+            OutlinedSecureTextField(
+                state = secret,
+                modifier = Modifier.weight(1f).focusRequester(hiddenFocus).then(trackFocus),
+                label = { Text(stringResource(R.string.input_password_label)) },
+                supportingText = supportingText,
+                isError = notice == Notice.NOT_SENT,
+                inputTransformation = clearsNotice,
+                textObfuscationMode = TextObfuscationMode.Hidden,
+                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.Send),
+                onKeyboardAction = { submitHidden() },
             )
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (hiddenInput) {
-                // Password semantics: TalkBack says "password", not what is typed
-                OutlinedSecureTextField(
-                    state = secret,
-                    modifier = Modifier.weight(1f).focusRequester(hiddenFocus).then(trackFocus).semantics { traversalIndex = FIELD_ORDER },
-                    label = { Text(stringResource(R.string.input_password_label)) },
-                    supportingText = supportingText,
-                    isError = notice == Notice.NOT_SENT,
-                    inputTransformation = clearsNotice,
-                    textObfuscationMode = TextObfuscationMode.Hidden,
-                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.Send),
-                    onKeyboardAction = { submitHidden() },
-                )
-                IconButton({ if (!onDismissHidden()) notice = Notice.NOT_SENT }, buttonOrder) {
-                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.input_password_close))
-                }
-                IconButton({
-                    submitHidden()
-                    hiddenFocus.requestFocus()
-                }, buttonOrder) {
-                    Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
-                }
-            } else {
-                OutlinedTextField(
-                    state = text,
-                    modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).semantics {
-                        traversalIndex = FIELD_ORDER
-                        // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
-                        if (ghost != null) editableText = AnnotatedString(line)
-                    }.onPreviewKeyEvent { event ->
-                        val tab = event.key == Key.Tab && !event.isShiftPressed
-                        // Both halves of Tab's press, so neither the field nor the focus acts on it
-                        if (tab && event.type == KeyEventType.KeyUp) return@onPreviewKeyEvent true
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        // Right takes the ghost, which is only there with the cursor at the end, where it does nothing else
-                        when {
-                            tab -> complete()
-                            event.key == Key.DirectionUp && at.canGoBack(history) -> move(at.back(history, text.text.toString()))
-                            event.key == Key.DirectionDown && at.canGoForward -> move(at.forward())
-                            event.key == Key.DirectionRight && ghost != null -> accept()
-                            else -> return@onPreviewKeyEvent false
-                        }
-                        true
-                    },
-                    label = { Text(stringResource(R.string.input_label)) },
-                    trailingIcon = {
-                        IconButton({ complete() }) {
-                            Icon(painterResource(R.drawable.ic_keyboard_tab), stringResource(R.string.input_complete))
-                        }
-                    },
-                    supportingText = supportingText,
-                    isError = notice == Notice.NOT_SENT,
-                    inputTransformation = clearsNotice,
-                    outputTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) },
-                    // Game commands are not prose: corrections, suggestions and capitals would change them ("n" to "In")
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        autoCorrectEnabled = false,
-                        imeAction = ImeAction.Send,
-                    ),
-                    onKeyboardAction = { submit() },
-                    lineLimits = TextFieldLineLimits.SingleLine,
-                )
-                IconButton({ move(at.back(history, text.text.toString())) }, buttonOrder, enabled = at.canGoBack(history)) {
-                    Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
-                }
-                IconButton({ move(at.forward()) }, buttonOrder, enabled = at.canGoForward) {
-                    Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.input_history_next))
-                }
-                IconButton({
-                    submit()
-                    focus.requestFocus()
-                }, buttonOrder) {
-                    Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
-                }
+            IconButton({ if (!onDismissHidden()) notice = Notice.NOT_SENT }) {
+                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.input_password_close))
+            }
+            IconButton({
+                submitHidden()
+                hiddenFocus.requestFocus()
+            }) {
+                Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
+            }
+        } else {
+            OutlinedTextField(
+                state = text,
+                modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).semantics {
+                    if (acceptLabel == null || suggestionState == null) return@semantics
+                    // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
+                    editableText = AnnotatedString(line)
+                    stateDescription = suggestionState
+                    customActions = listOf(
+                        CustomAccessibilityAction(acceptLabel) {
+                            accept()
+                            true
+                        },
+                    )
+                }.onPlaced { placed.field = it }.pointerInput(line, ghost) {
+                    if (ghost == null) return@pointerInput
+                    detectTapsAfterTheField(armed = { focused && !placed.onButton(it) }) {
+                        if (text.text.toString() == line && text.selection == TextRange(line.length)) accept()
+                    }
+                }.onPreviewKeyEvent { event ->
+                    val tab = event.key == Key.Tab && !event.isShiftPressed
+                    // Both halves of Tab's press, so neither the field nor the focus acts on it
+                    if (tab && event.type == KeyEventType.KeyUp) return@onPreviewKeyEvent true
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    // Right takes the ghost, which is only there with the cursor at the end, where it does nothing else
+                    when {
+                        tab -> complete()
+                        event.key == Key.DirectionUp && at.canGoBack(history) -> move(at.back(history, text.text.toString()))
+                        event.key == Key.DirectionDown && at.canGoForward -> move(at.forward())
+                        event.key == Key.DirectionRight && ghost != null -> accept()
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    true
+                },
+                label = { Text(stringResource(R.string.input_label)) },
+                trailingIcon = {
+                    IconButton({ complete() }, Modifier.onPlaced { placed.button = it }) {
+                        Icon(painterResource(R.drawable.ic_keyboard_tab), stringResource(R.string.input_complete))
+                    }
+                },
+                supportingText = supportingText,
+                isError = notice == Notice.NOT_SENT,
+                inputTransformation = clearsNotice,
+                outputTransformation = ghost?.let { GhostTransformation(it, MaterialTheme.colorScheme.onSurfaceVariant) },
+                // Game commands are not prose: corrections, suggestions and capitals would change them ("n" to "In")
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    imeAction = ImeAction.Send,
+                ),
+                onKeyboardAction = { submit() },
+                lineLimits = TextFieldLineLimits.SingleLine,
+            )
+            IconButton({ move(at.back(history, text.text.toString())) }, enabled = at.canGoBack(history)) {
+                Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
+            }
+            IconButton({ move(at.forward()) }, enabled = at.canGoForward) {
+                Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.input_history_next))
+            }
+            IconButton({
+                submit()
+                focus.requestFocus()
+            }) {
+                Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
             }
         }
     }

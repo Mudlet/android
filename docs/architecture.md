@@ -229,10 +229,11 @@ The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt`
 - The commands are in the menu of an Extensions button in the top app bar, shown while one is on the GUI's menu or
   toolbar, nested by their menu paths; a tap sends `activateCommand`. A checkable command has a tick while checked, a
   disabled one is greyed out, and one that pulses has a dot, as the button has then. Shortcuts and pinning are not used.
-- With TalkBack each bar is a group, "<name> button bar", read after the script windows. A button reads its name, or
-  "Button <n> of <bar>" with only an icon; a push-down one reads as a switch, on or off; a folder says a tap opens its
-  menu; a checkable command reads its state. The Extensions button is read with Back, before the console, as Material
-  makes the top app bar a group read first. The buttons and commands are off while no engine is attached.
+- With TalkBack each bar is a group, "<name> button bar", read after the script windows and before the last
+  announcement. A button reads its name, or "Button <n> of <bar>" with only an icon; a push-down one reads as a switch,
+  on or off; a folder says a tap opens its menu; a checkable command reads its state. The Extensions button is read with
+  Back, before the console, as Material makes the top app bar a group read first. The buttons and commands are off while
+  no engine is attached.
 
 ### The map
 The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted by `MapFit` in `:protocol`):

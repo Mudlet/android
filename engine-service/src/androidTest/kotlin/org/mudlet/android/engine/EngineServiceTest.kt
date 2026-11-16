@@ -22,7 +22,7 @@ import java.io.File
 /**
  * EngineService on a device, with the engine the APK was built with (libmudlet in CI's emulator job): it runs in its
  * own :engine process, Qt comes up there and answers the socket handshake, it is in the foreground only while a game is
- * open and files a game's tells under it, a stop is not undone at the next start while a killed engine brings its
+ * open, its notification says whether that game is connected, it files a game's tells under it, a stop is not undone at the next start while a killed engine brings its
  * profile and connection back (docs/architecture.md, "Restoring the session"), and the TLS backend's libraries load.
  * native/tests/android_instrumented.py runs it.
  */
@@ -79,15 +79,48 @@ class EngineServiceTest {
         }
 
         connectToGame(probe)
-        val shown = await("EngineService in the foreground again, with its notification", probe = probe) {
-            engineNotification()?.takeIf { engineService()?.foreground == true }
-        }
-        assertEquals(context.getString(R.string.engine_notification_title_profile, DEFAULT_PROFILE), shown.title())
+        awaitEngineTitle(context.getString(R.string.engine_notification_title_profile, DEFAULT_PROFILE), probe)
 
         probe.send(Requests.closeProfile(DEFAULT_PROFILE, 2))
         await("EngineService out of the foreground again once the game closes", probe = probe) {
             engineService()?.takeIf { !it.foreground && engineNotification() == null }
         }
+    }
+
+    @Test
+    fun theNotificationSaysSoOnceTheGameIsNotConnected_andStaysWhileItIsOpen() {
+        startEngine()
+        val probe = attach()
+        connectToGame(probe)
+        val connected = context.getString(R.string.engine_notification_title_profile, DEFAULT_PROFILE)
+        val notConnected = context.getString(R.string.engine_notification_title_not_connected, DEFAULT_PROFILE)
+        awaitEngineTitle(connected, probe)
+
+        // The game closes the connection
+        game.dropConnections()
+        probe.status("connection") { it == "disconnected" }
+        awaitEngineTitle(notConnected, probe)
+
+        probe.send(Requests.connect(FakeGame.HOST, game.port, false))
+        probe.status("connection") { it == "connected" }
+        awaitEngineTitle(connected, probe)
+
+        // Disconnect in the UI
+        probe.send(Requests.disconnect())
+        probe.status("connection") { it == "disconnected" }
+        awaitEngineTitle(notConnected, probe)
+
+        probe.send(Requests.connect(FakeGame.HOST, game.port, false))
+        awaitEngineTitle(connected, probe)
+
+        // A script's disconnect()
+        probe.send(Requests.runLua("disconnect()", 1))
+        probe.status("connection") { it == "disconnected" }
+        val shown = awaitEngineTitle(notConnected, probe)
+        assertEquals(
+            context.getString(R.string.engine_notification_text_not_connected),
+            shown.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
     }
 
     @Test
@@ -193,6 +226,15 @@ class EngineServiceTest {
     private fun activeNotifications(): List<StatusBarNotification> = context.getSystemService(NotificationManager::class.java).activeNotifications.toList()
 
     private fun engineNotification() = activeNotifications().firstOrNull { it.id == EngineNotifications.ENGINE_NOTIFICATION_ID }
+
+    // A game not connected stays open with its scripts, which the foreground keeps running
+    private fun awaitEngineTitle(title: String, probe: EngineProbe): StatusBarNotification = try {
+        await("the engine's notification titled \"$title\", in the foreground", probe = probe) {
+            engineNotification()?.takeIf { it.title() == title && engineService()?.foreground == true }
+        }
+    } catch (e: AssertionError) {
+        throw AssertionError("${e.message}; shown: \"${engineNotification()?.title()}\", foreground ${engineService()?.foreground}", e)
+    }
 
     private fun StatusBarNotification.title() = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
 

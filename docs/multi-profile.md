@@ -134,7 +134,8 @@ there gets `error`, as a control request sent on a profile socket does.
   three restores in 10 minutes stays engine-wide. As now, a restored profile has no password.
 - **Notifications.** A tell gets its profile as `setSubText` and `setGroup()`, with a summary per profile, and its
   tap makes that profile the front and shows the game screen. The foreground notification reads "Keeping 3 games
-  connected" with a line per game and its connection, and with one game looks as it did with one profile.
+  connected" with a line per game and its connection, and with one game looks as it did with one profile. With no game
+  connected it says so ("Achaea is not connected"), and stays until the last game closes.
   `ControlBridge` gives `AndroidNotifier::showProfiles` the open profiles as they change, for the stand-in and libmudlet
   alike.
 

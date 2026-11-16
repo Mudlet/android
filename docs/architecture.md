@@ -889,8 +889,15 @@ that attaches later is told too. The UI shows it as a marker line.
   - The foreground-service notification, which must come from the service
     calling `startForeground`. `ControlBridge` gives `AndroidNotifier::showProfiles`
     the open profiles and their connections whenever they change, and
-    `EngineNotifications.showProfiles` names the one game, or counts several and
-    lists each with its connection. With no game open the service leaves the
+    `EngineNotifications.showProfiles` names the one connected game, or counts
+    them, and with several open lists each with its connection. With no game
+    connected the title says so ("Achaea is not connected"), and the service
+    stays in the foreground, as a disconnected game stays open with its scripts
+    and timers, and Mudlet may reconnect it on its own, which Android 12 and
+    later would not let a background service take back into the foreground.
+    Its updates come at least a second apart, the last change always posted, as
+    Android drops an app's updates that come faster than five a second.
+    With no game open the service leaves the
     foreground and the notification goes; the next game to open brings both back,
     which Android allows because only the UI, while it is shown, opens one. Until
     the engine first says what it has open, as while a restore waits, the service
@@ -1109,6 +1116,8 @@ Item 13 of the on-device checklist covers this.
    and the two process ids should differ.
 4. Connect to `aardmud.org:23`. Expect coloured output, a prompt and rising line
    counters, `FGS: foreground=true`, and a "Keeping Self-test connected" notification.
+   - Disconnect: the notification reads "Self-test is not connected", and the line
+     still `FGS: foreground=true`. Connect again and it says "Keeping" once more.
    - Send `lua return lineCount` and check the result.
    - Have someone send you a tell, or use a MUD that echoes one. A "Tells"
      notification should appear.

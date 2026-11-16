@@ -81,7 +81,7 @@
     <!-- The button of the delete confirmation dialog that keeps the profile -->
     <string name="profile_delete_cancel">Cancel</string>
 
-    <!-- The game screen's title: the screen with the game's text, the command line and the connection bar -->
+    <!-- The game screen's title: the screen with the game's text, the command line and the game pill -->
     <string name="game_title">Game</string>
 
     <!-- The About screen, opened from the profile list's top bar: the app's version, its engine, where their source

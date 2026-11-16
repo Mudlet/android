@@ -23,6 +23,7 @@ the exits both ways, the new room's place, the player placed, the area renamed, 
 refusals). The desktop is unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 84c2dcd..28ac8f8 100644

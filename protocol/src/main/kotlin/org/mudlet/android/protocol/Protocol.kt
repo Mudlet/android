@@ -175,7 +175,7 @@ data class AccessibleValue(val value: Double, val min: Double, val max: Double) 
     }
 
     /** How far [value] is from [min] to [max], as a whole percentage, as a screen reader says it. */
-    val percent: Int get() = ((value - min) / (max - min) * 100).roundToInt()
+    val percent: Int get() = (value / (max - min) * 100).roundToInt()
 }
 
 /** What a pointer did, as upstream's WindowPointerEvent names it on the wire. */

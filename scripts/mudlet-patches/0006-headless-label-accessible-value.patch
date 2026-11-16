@@ -581,7 +581,7 @@ index dc04e0f..3d56cc1 100644
 +  -- Recalculate gauge positioning with the new stylesheet, from the value and maximum last given, if any
    if self.value then
 -    self:setValue(self.value)
-+    self:setValue(self.currentValue or self.value, self.maxValue)
++    self:setValue(self.value)
    end
  end
  

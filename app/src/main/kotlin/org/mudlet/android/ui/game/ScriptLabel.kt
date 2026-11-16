@@ -342,7 +342,7 @@ private fun labelReading(
     // at each change of the value, so its new text is said
     if (value != null && !button) {
         val percent = stringResource(R.string.gauge_percent, value.percent)
-        val state = textBesides(readAs)?.let { stringResource(R.string.label_text_and_value, it, percent) } ?: percent
+        val state = textBesides(readAs) ?: percent
         if (live != null) AnnounceChanges(plain, live)
         return {
             contentDescription = readAs.ifEmpty { name }

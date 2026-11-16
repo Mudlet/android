@@ -128,7 +128,7 @@ struct LabelInfo
         double value = 0;
         double min = 0;
         double max = 100;
-        bool operator==(const AccessibleValue&) const = default;
+        bool operator==(const AccessibleValue& other) const { return min == other.min && max == other.max; }
     };
     std::optional<AccessibleValue> accessibleValue;
     // The label's own, which Mudlet does not interpret

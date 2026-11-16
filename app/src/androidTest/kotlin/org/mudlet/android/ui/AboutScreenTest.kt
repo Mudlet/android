@@ -20,6 +20,11 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityViewCheckResult
+import com.google.android.apps.common.testing.accessibility.framework.checks.SpeakableTextPresentCheck
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
+import org.hamcrest.BaseMatcher
+import org.hamcrest.Description
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -46,7 +51,31 @@ class AboutScreenTest {
     @Before
     fun enableChecks() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        if (Build.VERSION.SDK_INT >= 34) {
+            compose.enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(CutByTheList))
+        }
+    }
+
+    /**
+     * SpeakableTextPresentCheck on a row the list's edge cuts. Compose leaves out of the accessibility tree the texts
+     * the list has scrolled out of view, so a row of which only a strip shows has nothing to read; TalkBack scrolls a
+     * row it reaches fully into view first (docs/architecture.md's on-device checklist, item 17).
+     */
+    private object CutByTheList : BaseMatcher<Any>() {
+        override fun matches(item: Any?): Boolean {
+            val result = item as? AccessibilityViewCheckResult ?: return false
+            if (result.sourceCheckClass != SpeakableTextPresentCheck::class.java) return false
+            val element = result.element ?: return false
+            val bounds = element.boundsInScreen
+            var parent = element.parentView
+            while (parent != null && parent.isScrollable != true) parent = parent.parentView
+            val list = parent?.boundsInScreen ?: return false
+            return bounds.top < list.top || bounds.bottom > list.bottom
+        }
+
+        override fun describeTo(description: Description) {
+            description.appendText("a missing label on a row the list's edge cuts")
+        }
     }
 
     @Test

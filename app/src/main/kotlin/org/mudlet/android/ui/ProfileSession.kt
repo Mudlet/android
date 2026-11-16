@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -239,13 +240,19 @@ class ProfileSession internal constructor(
         return send(Requests.connect(host, port, tls))
     }
 
-    internal fun rememberAddress(address: GameAddress) {
+    private fun rememberAddress(address: GameAddress) {
         rememberedAddress = address
         prefs().edit {
             putString(PREF_LAST_HOST + name, address.host)
             putInt(PREF_LAST_PORT + name, address.port)
             putBoolean(PREF_LAST_TLS + name, address.tls)
         }
+    }
+
+    /** Forgets the address [connect] was given, so that Reconnect goes to the profile's own. */
+    internal fun forgetAddress() {
+        rememberedAddress = null
+        forgetAddress(prefs(), name)
     }
 
     /** Connects to [lastAddress] again; false when there is none or the request was dropped. */
@@ -505,6 +512,13 @@ class ProfileSession internal constructor(
 
     companion object {
         const val MAX_LINES = 2000
+
+        /** As [ProfileSession.forgetAddress], for the profile [name] while it has no session. */
+        internal fun forgetAddress(prefs: SharedPreferences, name: String) = prefs.edit {
+            remove(PREF_LAST_HOST + name)
+            remove(PREF_LAST_PORT + name)
+            remove(PREF_LAST_TLS + name)
+        }
 
         private const val TAG = "ProfileSession"
 

@@ -252,8 +252,7 @@ object EngineClient {
         if (error == null) {
             lastProfile = name
             prefs().edit { putString(PREF_LAST_PROFILE, name) }
-            val profile = profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }
-            if (profile != null) session(name)?.rememberAddress(GameAddress(profile.host, profile.port, profile.tls))
+            session(name)?.forgetAddress() ?: ProfileSession.forgetAddress(prefs(), name)
         }
         onAnswer(error)
     }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }

@@ -17,8 +17,10 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -454,6 +456,8 @@ class ScriptMapTest {
 
         // An exit shows the room it leads to, which the player is in: no walk there
         val west = hasText(string(R.string.room_exit, string(R.string.exit_west), "Great Hall")) and hasClickAction()
+        // performScrollTo scrolls only the nearest scroller, here the row of exits: the card is scrolled to that row first
+        compose.onNode(hasScrollAction() and hasAnyChild(west)).performScrollTo()
         compose.onNode(west).performScrollTo()
         activate(west)
         val next = session.receive("roomInfo")

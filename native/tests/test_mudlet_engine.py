@@ -105,7 +105,7 @@ def main():
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_moves, map_rooms,
-                       map_download):
+                       map_edits, map_download):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -2591,6 +2591,130 @@ def map_rooms():
     c.send({"t": "walkToRoom", "room": 4})
     m = seen_or_next(c, lambda m: m["t"] in ("line", "tail", "error") and (m["t"] == "error" or "find a path" in m["text"]), seen, since)
     check("Cannot find a path from 1 to 4" in m.get("text", ""), f"a walk with no way there is told in the console, not refused: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def map_edits():
+    """Editing the map: editRoom's name, symbol, environment, weight, lock and place, with the colour that draws it;
+    setRoomExit both ways and removed both ways; lockRoomExit; addRoom beside a room with exits both ways; deleteRoom;
+    setPlayerRoom, which the app's map then follows; renameArea; mapEnvs with a script's environment; and the refusals."""
+    profile = "Map Edits Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    edits = ({"t": "editRoom", "room": 1, "name": "Hall"}, {"t": "setRoomExit", "room": 1, "direction": "e", "to": 2},
+             {"t": "lockRoomExit", "room": 1, "direction": "e", "locked": True}, {"t": "addRoom", "room": 1, "direction": "n"},
+             {"t": "deleteRoom", "room": 1}, {"t": "setPlayerRoom", "room": 1}, {"t": "renameArea", "area": 1, "name": "Keep"},
+             {"t": "mapEnvs"})
+    for request in edits:
+        m = c.ask(request, answers=("error", "room", "envs"), collect=seen)
+        check(m.get("message") == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the edits' profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    # The Keep: the player in 1, 2 two east of it with no exits between; the Garden: 3, far off
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 1})
+    c.send({"t": "runLua", "code": "\n".join([
+        'local keep, garden = addAreaName("Keep"), addAreaName("Garden")',
+        "for id, place in pairs({[1] = {keep, 0, 0, 0}, [2] = {keep, 2, 0, 0}, [3] = {garden, 10, 10, 0}}) do",
+        "  addRoom(id)",
+        "  setRoomArea(id, place[1])",
+        "  setRoomCoordinates(id, place[2], place[3], place[4])",
+        "end",
+        'setRoomName(1, "Hall") setRoomName(2, "Yard") setRoomName(3, "Pond")',
+        "setCustomEnvColor(200, 10, 20, 30, 255)",
+        "centerview(1)",
+        "updateMap()",
+    ])})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and "view" in m and m["view"]["player"] == 1, seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"the app's map comes with its view: {e}")
+        stop_engine(proc)
+        return
+    keep = m["view"]["area"]
+
+    def ask(request):
+        return c.ask(request, answers=("room", "envs", "areas", "error"), collect=seen)
+
+    def info(room):
+        return ask({"t": "roomInfo", "room": room})
+
+    m = ask({"t": "mapEnvs"})
+    envs = {e["env"]: e["color"] for e in m.get("envs", [])}
+    check([e["env"] for e in m.get("envs", [])] == [200] + list(range(257, 273)) and envs[200] == "#0a141e"
+          and all(re.fullmatch("#[0-9a-f]{6}", color) for color in envs.values()),
+          f"mapEnvs lists the custom environments, the profile's sixteen colours among them, by number: {m}")
+
+    m = ask({"t": "editRoom", "room": 1, "name": "Great Hall", "symbol": "H", "env": 200, "weight": 3, "locked": True})
+    check({k: m.get(k) for k in ("t", "id", "name", "symbol", "env", "color", "weight", "locked")} == {
+        "t": "room", "id": 1, "name": "Great Hall", "symbol": "H", "env": 200, "color": "#0a141e", "weight": 3, "locked": True},
+        f"editRoom sets the room's name, symbol, environment, weight and lock, answered by the room: {m}")
+    m = ask({"t": "editRoom", "room": 1, "locked": False, "x": 0, "y": 1, "z": 0})
+    check((m.get("x"), m.get("y"), m.get("z"), m.get("locked"), m.get("name")) == (0, 1, 0, False, "Great Hall"),
+          f"and its place, keeping what it does not set: {m}")
+    ask({"t": "editRoom", "room": 1, "x": 0, "y": 0, "z": 0})
+
+    m = ask({"t": "setRoomExit", "room": 1, "direction": "e", "to": 2, "bothWays": True})
+    check(m.get("exits") == [{"direction": "e", "to": 2, "toName": "Yard", "locked": False}], f"setRoomExit leads the exit there: {m}")
+    m = info(2)
+    check(m.get("exits") == [{"direction": "w", "to": 1, "toName": "Great Hall", "locked": False}], f"and the exit back, both ways: {m}")
+    m = ask({"t": "lockRoomExit", "room": 1, "direction": "e", "locked": True})
+    check(m.get("exits") == [{"direction": "e", "to": 2, "toName": "Yard", "locked": True}], f"lockRoomExit locks it: {m}")
+    m = ask({"t": "setRoomExit", "room": 1, "direction": "e", "to": 0, "bothWays": True})
+    check(m.get("exits") == [] and info(2).get("exits") == [], f"setRoomExit to 0 removes it, and the exit back: {m}")
+
+    m = ask({"t": "addRoom", "room": 1, "direction": "n"})
+    added = m.get("id")
+    check(m.get("t") == "room" and added not in (None, 1, 2, 3) and (m.get("areaId"), m.get("x"), m.get("y"), m.get("z")) == (keep, 0, 1, 0)
+          and m.get("exits") == [{"direction": "s", "to": 1, "toName": "Great Hall", "locked": False}],
+          f"addRoom makes a room a place north, in the same area, answered by it with its exit back: {m}")
+    check(info(1).get("exits") == [{"direction": "n", "to": added, "toName": "", "locked": False}], "and the exit to it")
+    c.send({"t": "deleteRoom", "room": added})
+    m = info(added)
+    check(m.get("message") == f"roomInfo: There is no room {added} in the map.", f"deleteRoom removes the room: {m}")
+    check(info(1).get("exits") == [], "and the exits to it")
+
+    since = len(seen)
+    c.send({"t": "setPlayerRoom", "room": 2})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "appMap" and "view" in m and m["view"]["player"] == 2), seen, since)
+        check(m["t"] == "appMap", f"setPlayerRoom places the player, and the app's map follows: {m}")
+    except TimeoutError as e:
+        check(False, f"setPlayerRoom places the player: {e}")
+    check(info(2).get("steps") == 0, "the room the player is in is 0 steps away")
+
+    c.send({"t": "renameArea", "area": keep, "name": "  Castle "})
+    m = ask({"t": "mapAreas"})
+    check([a["name"] for a in m.get("areas", [])] == ["Castle", "Garden"], f"renameArea renames the area, trimmed: {m}")
+
+    for request, message in (({"t": "editRoom", "room": 1, "weight": 0}, "A room's weight is from 1; 0 is not."),
+                             ({"t": "editRoom", "room": 1}, "The edit changes nothing of the room."),
+                             ({"t": "editRoom", "room": 99, "name": "Nowhere"}, "There is no room 99 in the map."),
+                             ({"t": "setRoomExit", "room": 1, "direction": "e", "to": 99}, "There is no room 99 in the map."),
+                             ({"t": "setRoomExit", "room": 1, "direction": "climb", "to": 2},
+                              "An exit goes one of n, ne, nw, e, w, s, se, sw, up, down, in and out; climb is not."),
+                             ({"t": "lockRoomExit", "room": 1, "direction": "n", "locked": True}, "Room 1 has no exit n."),
+                             ({"t": "addRoom", "room": 1, "direction": "in"},
+                              "A new room goes one of n, ne, nw, e, w, s, se, sw, up and down; in is not."),
+                             ({"t": "addRoom", "room": 1, "direction": "e"}, None),
+                             ({"t": "deleteRoom", "room": 99}, "There is no room 99 in the map."),
+                             ({"t": "setPlayerRoom", "room": 99}, "There is no room 99 in the map."),
+                             ({"t": "renameArea", "area": keep, "name": "Garden"}, "Another area is already named Garden."),
+                             ({"t": "renameArea", "area": keep, "name": "  "}, "An area's name is not empty, and spaces are trimmed from its ends."),
+                             ({"t": "renameArea", "area": 9999, "name": "Moor"}, "There is no area 9999 in the map that can be renamed.")):
+        if message is None:
+            # A place east is free, but two east is the Yard: a second room east of the first is refused
+            first = ask(request)
+            request = {**request, "room": first.get("id")}
+            message = "Room 2 is already in that place."
+        m = ask(request)
+        check(m.get("message") == f"{request['t']}: {message}", f"{request['t']} is refused with {message}: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

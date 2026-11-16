@@ -246,6 +246,24 @@ def no_map(c):
                              ({"t": "mapAreas"}, "the stand-in engine has no map")):
         m = c.ask(request, answers=("error", "room", "areas"))
         check(m["t"] == "error" and m["message"] == f"{request['t']}: {message}", f"{request} is refused: {m}")
+    no_map = "the stand-in engine has no map"
+    for request, message in (({"t": "editRoom", "room": 1, "name": "Hall"}, no_map),
+                             ({"t": "editRoom", "room": 1, "weight": "2"}, "weight must be a whole number"),
+                             ({"t": "editRoom", "room": 1, "x": 1, "y": 2}, "x, y and z go together"),
+                             ({"t": "editRoom", "room": 1, "locked": 1}, "locked must be true or false"),
+                             ({"t": "setRoomExit", "room": 1, "direction": "e", "to": 2, "bothWays": True}, no_map),
+                             ({"t": "setRoomExit", "room": 1, "direction": "e", "to": -1}, "to must be a whole number from 0"),
+                             ({"t": "lockRoomExit", "room": 1, "direction": "e", "locked": True}, no_map),
+                             ({"t": "lockRoomExit", "room": 1, "direction": "e"}, "locked must be true or false"),
+                             ({"t": "addRoom", "room": 1, "direction": "n"}, no_map),
+                             ({"t": "deleteRoom", "room": 1}, no_map),
+                             ({"t": "deleteRoom", "room": "1"}, "room must be a whole number"),
+                             ({"t": "setPlayerRoom", "room": 1}, no_map),
+                             ({"t": "renameArea", "area": 1, "name": "Keep"}, no_map),
+                             ({"t": "renameArea", "area": 1}, "name must be a string"),
+                             ({"t": "mapEnvs"}, no_map)):
+        m = c.ask(request, answers=("error", "room", "envs"))
+        check(m["t"] == "error" and m["message"] == f"{request['t']}: {message}", f"{request} is refused: {m}")
     # A UI that attaches replaces this one, and goes on in its place
     c.close()
     c = Client(SOCK)

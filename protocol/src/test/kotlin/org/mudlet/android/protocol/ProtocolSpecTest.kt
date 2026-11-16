@@ -83,6 +83,7 @@ class ProtocolSpecTest {
                         PointerType::class.java -> PointerType.PRESS
                         MapPointerType::class.java -> MapPointerType.PRESS
                         MapTarget::class.java -> MapTarget.APP
+                        RoomEdit::class.java -> RoomEdit("x", "x", 1, 1, true, Triple(1, 1, 1))
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

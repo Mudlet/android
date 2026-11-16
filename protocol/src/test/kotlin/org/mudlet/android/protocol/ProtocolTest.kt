@@ -578,6 +578,40 @@ class ProtocolTest {
     }
 
     @Test
+    fun whatTheMapsEditingSetsDecodes() {
+        val room = FrameReader.parse(
+            JSONObject("""{"t":"room","id":2,"symbol":"H","env":200,"color":"#0a141e","weight":3,"locked":true,"re":4}"""),
+        ) as EngineMessage.Room
+        assertEquals(listOf("H", 200, 0xFF0A141E.toInt(), 3, true), with(room.room) { listOf(symbol, env, color, weight, locked) })
+        val bare = (FrameReader.parse(JSONObject("""{"t":"room","id":2,"color":"red"}""")) as EngineMessage.Room).room
+        assertEquals(listOf("", -1, null, 1, false), listOf(bare.symbol, bare.env, bare.color, bare.weight, bare.locked))
+        val envs = FrameReader.parse(
+            JSONObject("""{"t":"envs","envs":[{"env":257,"color":"#ff0000"},"junk",{"env":3,"color":"#12345"},{"env":200,"color":"#0A141E"}],"re":5}"""),
+        ) as EngineMessage.Envs
+        assertEquals(listOf(MapEnv(257, 0xFFFF0000.toInt()), MapEnv(200, 0xFF0A141E.toInt())), envs.envs)
+        assertEquals(5, envs.replyTo)
+    }
+
+    @Test
+    fun theEditRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "editRoom", "room" to 2, "id" to 7L, "name" to "Hall", "locked" to false), Requests.editRoom(2, RoomEdit(name = "Hall", locked = false), 7).toMap())
+        assertEquals(
+            mapOf("t" to "editRoom", "room" to 2, "id" to 7L, "symbol" to "H", "env" to 200, "weight" to 3, "x" to 1, "y" to -2, "z" to 0),
+            Requests.editRoom(2, RoomEdit(symbol = "H", env = 200, weight = 3, place = Triple(1, -2, 0)), 7).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "setRoomExit", "room" to 2, "direction" to "ne", "to" to 0, "bothWays" to true, "id" to 8L),
+            Requests.setRoomExit(2, "ne", 0, true, 8).toMap(),
+        )
+        assertEquals(mapOf("t" to "lockRoomExit", "room" to 2, "direction" to "up", "locked" to true, "id" to 9L), Requests.lockRoomExit(2, "up", true, 9).toMap())
+        assertEquals(mapOf("t" to "addRoom", "room" to 2, "direction" to "s", "id" to 10L), Requests.addRoom(2, "s", 10).toMap())
+        assertEquals(mapOf("t" to "deleteRoom", "room" to 2), Requests.deleteRoom(2).toMap())
+        assertEquals(mapOf("t" to "setPlayerRoom", "room" to 2), Requests.setPlayerRoom(2).toMap())
+        assertEquals(mapOf("t" to "renameArea", "area" to 1, "name" to "Castle"), Requests.renameArea(1, "Castle").toMap())
+        assertEquals(mapOf("t" to "mapEnvs", "id" to 11L), Requests.mapEnvs(11).toMap())
+    }
+
+    @Test
     fun theRoomRequestsCarryWhatTheEngineReads() {
         assertEquals(mapOf("t" to "showMapLevel", "map" to "app", "level" to -1), Requests.showMapLevel(MapTarget.APP, -1).toMap())
         assertEquals(mapOf("t" to "showMapArea", "map" to "mapper", "area" to 2), Requests.showMapArea(MapTarget.MAPPER, 2).toMap())

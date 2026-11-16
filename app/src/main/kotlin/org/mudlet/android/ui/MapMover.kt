@@ -25,7 +25,7 @@ internal class MapMover(private val target: MapTarget, private val send: (JSONOb
     private val moves = MapMoves()
     private var lastSent = 0L
 
-    // The last moveMap sent, until a frame draws it, and whether a followPlayer was sent since the last frame: a
+    // The last moveMap sent, until a frame draws it, and a followPlayer sent, until a frame follows the player: a
     // refusal of either is this map's
     private var awaitedSeq: Int? = null
     private var awaitingFollow = false
@@ -42,14 +42,15 @@ internal class MapMover(private val target: MapTarget, private val send: (JSONOb
     var following by mutableStateOf(true)
         private set
 
-    /** Whether the last refusal of a moveMap or followPlayer was of this map's. */
+    /** Whether a refusal of a moveMap or followPlayer now would be this map's: one it sent is not yet drawn. */
     val awaiting: Boolean get() = awaitedSeq != null || awaitingFollow
 
     /** A new frame of this map, with its [view]. */
     fun onFrame(view: MapViewInfo?) {
         moves.onFrame(view)
         if (view == null || awaitedSeq?.let { it <= view.moved } == true) awaitedSeq = null
-        awaitingFollow = false
+        // A frame drawn before the engine had the followPlayer does not follow yet
+        if (view == null || view.following) awaitingFollow = false
         sync()
     }
 

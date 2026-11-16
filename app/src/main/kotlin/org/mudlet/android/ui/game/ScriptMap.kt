@@ -196,6 +196,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
     val currentFit by rememberUpdatedState(fit.takeIf { touchable })
     val mover = source.mover
     val movable = touchable && mover.view != null
+    val followShown = movable && !mover.following
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val decay = rememberSplineBasedDecay<Offset>()
@@ -219,7 +220,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         CustomAccessibilityAction(stringResource(R.string.map_walk_to_middle)) { source.touch(MapPointerType.DOUBLE_CLICK, fit, fit.centre, reach) },
         CustomAccessibilityAction(stringResource(R.string.map_zoom_in)) { source.zoom(fit, 1) },
         CustomAccessibilityAction(stringResource(R.string.map_zoom_out)) { source.zoom(fit, -1) },
-    ) + (if (movable) pans else emptyList()) + (if (movable && !mover.following) listOf(follow) else emptyList())
+    ) + (if (movable) pans else emptyList()) + listOfNotNull(follow.takeIf { followShown })
 
     Box(modifier) {
         Canvas(
@@ -246,7 +247,6 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
                 MapButtons(source, frame, fit, viewOnly, drawn)
             }
         }
-        val followShown = movable && !mover.following
         if (followShown) {
             SmallFloatingActionButton(
                 { mover.followPlayer() },
@@ -292,8 +292,8 @@ private fun MapSource.touch(type: MapPointerType, fit: MapFit, at: MapPoint, rea
  * The player's touches on the map, as the frame [fit] gives, while it gives one: a tap is a press on the room nearest
  * it ([touch]), a second tap soon after and near it a double click there, with a tick; a drag pans the map ([MapMover])
  * and, let go quickly, glides on in [scope] as [decay] slows it; a pinch pans with the fingers and zooms about their
- * middle, and a double tap whose second touch drags zooms about it, in as it goes down. The map's own drags in the
- * GUI are not sent: Mudlet's map moves by these.
+ * middle, and a double tap whose second touch drags zooms about it, in as it goes down. Drags are not sent as
+ * Mudlet's mouse drags: `moveMap` moves its map instead.
  */
 private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: HapticFeedback, scope: CoroutineScope, decay: DecayAnimationSpec<Offset>, fit: () -> MapFit?) {
     val slop = DOUBLE_TAP_SLOP.toPx()
@@ -320,14 +320,20 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
             event.changes.forEach { it.consume() }
             val pressed = event.changes.filter { it.pressed }
             if (pressed.isEmpty()) {
-                upAt = event.changes.firstOrNull()?.uptimeMillis ?: upAt
+                val lifted = event.changes.firstOrNull()
+                if (lifted != null) {
+                    upAt = lifted.uptimeMillis
+                    // A finger that stopped before it lifted does not fling
+                    if (gesture == Gesture.PAN) velocity.addPosition(lifted.uptimeMillis, lifted.position)
+                }
                 break
             }
             val current = fit()
             if (pressed.size >= 2) {
                 gesture = Gesture.PINCH
+                if (current == null) continue
                 val centroid = event.calculateCentroid()
-                val about = current?.toMap(centroid.x, centroid.y) ?: continue
+                val about = current.toMap(centroid.x, centroid.y) ?: continue
                 val pan = event.calculatePan()
                 mover.move(pan.x / current.scale.toDouble(), pan.y / current.scale.toDouble(), event.calculateZoom().toDouble(), about, current.centre)
                 continue
@@ -349,8 +355,10 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
                     mover.move(step.x / current.scale.toDouble(), step.y / current.scale.toDouble(), 1.0, current.centre, current.centre)
                 }
 
-                Gesture.DRAG_ZOOM -> current?.toMap(down.position.x, down.position.y)?.let { about ->
-                    mover.move(0.0, 0.0, exp((pointer.position.y - last.y) / dragZoom).toDouble(), about, current.centre)
+                Gesture.DRAG_ZOOM -> if (current != null) {
+                    current.toMap(down.position.x, down.position.y)?.let { about ->
+                        mover.move(0.0, 0.0, exp((pointer.position.y - last.y) / dragZoom).toDouble(), about, current.centre)
+                    }
                 }
             }
             if (gesture == Gesture.PAN) velocity.addPosition(pointer.uptimeMillis, pointer.position)
@@ -367,7 +375,7 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
             return@awaitEachGesture
         }
         val at = current?.toMap(down.position.x, down.position.y)
-        if (at == null) {
+        if (current == null || at == null) {
             lastTapUp = 0L
         } else if (secondTap) {
             if (source.touch(MapPointerType.DOUBLE_CLICK, current, at, (reach / current.scale).toDouble())) haptics.performHapticFeedback(HapticFeedbackType.Confirm)

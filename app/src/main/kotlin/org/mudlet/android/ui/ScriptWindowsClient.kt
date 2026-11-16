@@ -52,7 +52,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         private set
 
     /** The map's moves by touch. */
-    val mapMover = MapMover(MapTarget.MAPPER) {
+    internal val mapMover = MapMover(MapTarget.MAPPER) {
         mapRefusal = null
         session.send(it)
     }

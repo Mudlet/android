@@ -1415,14 +1415,17 @@ void SocketBridge::mapDownload(const MapDownload& download)
 QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
 {
     const QByteArray base64 = frame.png.toBase64();
-    if (base64.size() + 1024 > qsizetype(maxFrameBytes)) {
+    const QJsonObject view = frame.view ? mapViewMessage(*frame.view) : QJsonObject();
+    // The rooms' names can add tens of kilobytes to the PNG
+    const qsizetype viewBytes = view.isEmpty() ? 0 : QJsonDocument(view).toJson(QJsonDocument::Compact).size();
+    if (base64.size() + viewBytes + 1024 > qsizetype(maxFrameBytes)) {
         qWarning("SocketBridge: a map at %dx%d as a PNG is too large for a frame", frame.size.width(), frame.size.height());
         return {};
     }
     QJsonObject message{
             {QStringLiteral("png"), QString::fromLatin1(base64)}, {QStringLiteral("w"), frame.size.width()}, {QStringLiteral("h"), frame.size.height()}, {QStringLiteral("viewOnly"), frame.viewOnly}};
-    if (frame.view) {
-        message.insert(QStringLiteral("view"), mapViewMessage(*frame.view));
+    if (!view.isEmpty()) {
+        message.insert(QStringLiteral("view"), view);
     }
     return message;
 }

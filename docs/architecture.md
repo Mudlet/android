@@ -320,7 +320,7 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   the map's bottom, clear of the button that centres it, until dismissed or the next request.
 - With TalkBack the map reads as "Map of the game", viewing or editing, and "not following you" while it does not
   follow the player, in the windows' group. A double tap selects the room in its middle, and its actions walk there,
-  zoom, move the map up, down, left and right by a third of it, and centre it on the player while it does not follow
+  zoom, scroll the map up, down, left and right by a third of it, and centre it on the player while it does not follow
   them; the buttons and the switch read their names. Touches, buttons and actions are off while no engine is
   attached or no frame of the window's size has come.
 
@@ -405,17 +405,19 @@ public API, from Mudlet's `development`: it includes no Mudlet header but
 defines. What the app needs of that API and Mudlet does not have yet is carried in
 `scripts/mudlet-patches/`, each patch going upstream to Mudlet/Mudlet and dropped here once merged.
 `scripts/apply-mudlet-patches.sh`, which both libmudlet build scripts run first, applies them to the
-checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
+checkout, skips one already in it and stops the build at one that no longer applies; it takes an earlier run's off
+first, as a later patch may change the lines an earlier one is checked against. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are eight: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are nine: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
 a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, several
 headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
 [`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
-(`frameTabs`), with the player's tap on a tab (`selectFrameTab()`).
+(`frameTabs`), with the player's tap on a tab (`selectFrameTab()`), and moving a map by touch with what each frame
+laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

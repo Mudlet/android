@@ -447,7 +447,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `label`, its click callback run by a `pointer` press, and `pointer` refused off the window; a new `echo()` as
   `label` alone; `setBackgroundImage()` as the label's `image`, and that file as a PNG from `getImage`, scaled; an
   SVG one with `setSvgTint()` and `setSvgRotation()`; a Geyser `Gauge`'s three labels, whose front width is its value
-  and whose text label is transparent; every label to a UI that attaches; `deleteLabel()` as `removed`;
+  and whose text label is transparent; a label's live region, from Geyser's `liveRegion` and each
+  `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; every label to a UI that attaches; `deleteLabel()`
+  as `removed`;
 - button bars and commands: a package's bar, with its grid, a push-down button and a folder's menu, and
   `tempButtonToolbar()` bars at the left and floating, as `buttonBars`; `pressButton` sending a push-down button's
   command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and

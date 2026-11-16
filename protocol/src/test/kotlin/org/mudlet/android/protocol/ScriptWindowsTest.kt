@@ -60,6 +60,7 @@ fun label(name: String, text: String = "", styleSheet: String = "", accessibleBu
     clickThrough = false,
     accessibleName = "",
     accessibleButton = accessibleButton,
+    liveRegion = LiveRegion.OFF,
     styleSheet = styleSheet,
 )
 

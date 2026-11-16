@@ -152,7 +152,7 @@ loaded. The stand-in has no map and refuses both.
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
-| `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
+| `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `liveRegion`?, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 | `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
@@ -215,6 +215,9 @@ What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which
 - `toolTip` is the label's tool tip. With `clickThrough` true the pointer passes through it to what is under it.
 - `accessibleName` is what a screen reader says for it, and `accessibleButton` is true once it has a click or release
   callback, so a screen reader is told it is a button.
+- `liveRegion` is `polite` or `assertive` once `setLabelLiveRegion()` asked for its changes to be announced, as ARIA's
+  `aria-live` does: after what the screen reader is saying, or at once; absent for `off`. The UI takes a value it does
+  not know as `off`. libmudlet has it from `scripts/mudlet-patches/` until Mudlet does.
 - `styleSheet` is what `setLabelStyleSheet()` gave it, which the engine does not interpret; drawing it is the UI's.
 
 The files are the engine's: the UI asks for one with `getImage`. A label's cursor is not sent. The engine keeps each

@@ -119,6 +119,8 @@ struct LabelInfo
     bool clickThrough = false;
     QString accessibleName;
     bool accessibleButton = false;
+    // How a screen reader is told of new text, as setLabelLiveRegion() gave it: "polite" or "assertive", empty for off
+    QString liveRegion;
     // The label's own, which Mudlet does not interpret
     QString styleSheet;
     bool operator==(const LabelInfo&) const = default;

@@ -359,13 +359,14 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             accessibleButton: Boolean = false,
             styleSheet: String = "",
             liveRegion: String? = null,
+            clickThrough: Boolean = false,
             value: Double? = null,
             valueMin: Double? = null,
             valueMax: Double? = null,
         ) = send(
             JSONObject().put("t", "label").put("name", name).put("text", text).put("image", image).put("svg", false)
                 .put("movie", "").put("moviePaused", false).put("movieFrame", -1).put("movieSpeed", 100).put("toolTip", toolTip)
-                .put("clickThrough", false).put("accessibleName", accessibleName).put("accessibleButton", accessibleButton)
+                .put("clickThrough", clickThrough).put("accessibleName", accessibleName).put("accessibleButton", accessibleButton)
                 .put("styleSheet", styleSheet).putOpt("liveRegion", liveRegion)
                 .putOpt("value", value).putOpt("valueMin", valueMin).putOpt("valueMax", valueMax),
         )

@@ -780,8 +780,9 @@ device shows, below the UI's debug hook:
   stop) to text, a named one with its text as its state,
   a link sent for the engine to follow, by its action or a tap, with the name of the label tapped, of two with the same
   link, and the link as Qt reads it from the text, a `prompt:` link giving the input line the focus and a `send:` one
-  not, and neither sent again nor run by the app on a refusal, a web link opened with an intent and not sent, and a
-  label's image asked of the engine; the button bars: a bar's buttons
+  not, and neither sent again nor run by the app on a refusal, a web link opened with an intent and not sent, a
+  click-through label's links neither tapped nor actions, also once a label already drawn is made click-through, and
+  both again once it no longer is, and a label's image asked of the engine; the button bars: a bar's buttons
   as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper

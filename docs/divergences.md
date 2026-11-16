@@ -59,4 +59,5 @@ start without the player's choice.
 - A link Qt draws in a label's text is followed when tapped, also in a label where Mudlet's own check
   (`containsAnchorTag()`) finds no link, as when every link in it has a raw `<` in its quoted `href` or a space after
   the tag's `<`: the desktop draws those as links but does not make them clickable (`docs/protocol.md`, "Labels"). A
-  link the player sees and cannot follow is a fault, not a choice a script makes.
+  link the player sees and cannot follow is a fault, not a choice a script makes, unless the script made the label
+  click-through: its links are then not followed, as on the desktop (`docs/phase-f.md`, "Labels").

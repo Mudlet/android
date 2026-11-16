@@ -216,7 +216,10 @@ A `label` is a `Box` at its geometry, drawn in this order:
 Taps reach the label with `pointer`, in its own Mudlet pixels: a tap is `enter`, `press` and `release`, a double tap
 adds `doubleClick`, a long press is the right button's `press` and `release` (Geyser's right-click menus); `leave`
 follows when another window is touched. A drag sends `move` with the button held, so sliders built of labels work.
-Click-through and the grab are upstream's to resolve: the app names the topmost shown label under the finger.
+Click-through and the grab are upstream's to resolve: the app names the topmost shown label under the finger. A
+click-through label's links are drawn as links but not followed, by a tap or as actions: Mudlet's
+`TLabel::setClickThrough()` turns the label's text interaction off, so its links take neither the mouse nor the
+keyboard, by which the desktop's screen readers reach them.
 
 ### Text boxes
 
@@ -276,7 +279,8 @@ Phase E's requirements apply to every pull request here; in short, and what they
   window name, and a lint-style warning in the log. A label with a live region (gap 3) is one node with
   `liveRegion`, blank or not, so TalkBack says its new text as the desktop does, its first text too. An unnamed one
   reads its text, its links as actions as a named label's are; a named one, or a named button, has its text as its
-  `stateDescription` unless its name says the same, so its new text is said after its name. Unlike the desktop,
+  `stateDescription` unless its name says the same, so its new text is said after its name. A click-through label's
+  links are not actions, as the desktop's screen readers cannot reach them ("Labels"). Unlike the desktop,
   TalkBack also reads a live label when a script makes it live or changes its region, when its name changes, and
   (its name alone) when a named one's text goes blank; and the app does not wait for the profile's "Make script
   buttons reachable with the keyboard" setting (`accessibleLabels`), which the desktop needs too. A label that is not

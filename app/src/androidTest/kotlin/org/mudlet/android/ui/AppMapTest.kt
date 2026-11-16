@@ -523,9 +523,7 @@ class AppMapTest {
 
     @Test
     fun theMapTheGameOffersIsDownloadedWithItsProgressAndHowItEnded() {
-        activate(button)
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
-        val download = hasText(string(R.string.map_download, HOST)) and hasClickAction()
+        val download = openUndrawnMap()
         // Where it starts, with no map offered: no button
         assertTrue("no download without a map offered", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
 
@@ -540,13 +538,11 @@ class AppMapTest {
         compose.onNode(download).assertIsNotEnabled()
 
         // Mudlet's progress, the bar's a quarter of the way, and Cancel while it can be stopped; the offer waits
-        val label = "Downloading map file for use in Game..."
-        session.send(mapDownload("downloading", label = label, value = 1_000_000, maximum = 4_000_000, cancelable = true))
-        waitFor("the download's progress shows") { compose.onAllNodes(hasText(label)).fetchSemanticsNodes().isNotEmpty() }
+        showDownloadProgress()
         val bar = hasContentDescription(string(R.string.map_download_progress))
         compose.onNode(bar).assert(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f)))
         // Past Mudlet's guess at the size, how far is not known
-        session.send(mapDownload("downloading", label = label, value = 5_000_000, maximum = 4_000_000, cancelable = true))
+        session.send(mapDownload("downloading", label = LABEL, value = 5_000_000, maximum = 4_000_000, cancelable = true))
         waitFor("a download past the guessed size has no fraction") {
             compose.onAllNodes(bar and SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate))
                 .fetchSemanticsNodes().isNotEmpty()
@@ -565,8 +561,8 @@ class AppMapTest {
         // A failure says Mudlet's reason, read out at once, until dismissed
         activate(download)
         request("downloadMap", "the button downloads the map again")
-        session.send(mapDownload("downloading", label = label, cancelable = true))
-        waitFor("the download's progress shows again") { compose.onAllNodes(hasText(label)).fetchSemanticsNodes().isNotEmpty() }
+        session.send(mapDownload("downloading", label = LABEL, cancelable = true))
+        waitFor("the download's progress shows again") { compose.onAllNodes(hasText(LABEL)).fetchSemanticsNodes().isNotEmpty() }
         val reason = "Map download encountered an error: Error transferring http://$HOST - server replied: Not Found"
         session.send(mapDownload("failed", error = reason))
         val failed = hasText(string(R.string.map_download_failed, reason))
@@ -596,10 +592,10 @@ class AppMapTest {
         activate(hasContentDescription(string(R.string.map_download_dismiss)))
         waitFor("the failure goes once dismissed") { compose.onAllNodes(failed).fetchSemanticsNodes().isEmpty() }
 
-        // The engine's refusal is shown with the map
+        // The engine's refusal is shown with the map: as libmudlet's, should the game take its offer back as it is tapped
         activate(download)
-        session.refuse(request("downloadMap", "the button downloads the map once more"), "A map download, import or export is running; wait for it to end.")
-        val refused = hasText(string(R.string.map_refused, "A map download, import or export is running; wait for it to end."))
+        session.refuse(request("downloadMap", "the button downloads the map once more"), "The game has offered no map to download.")
+        val refused = hasText(string(R.string.map_refused, "The game has offered no map to download."))
         waitFor("the refusal shows") { compose.onAllNodes(refused).fetchSemanticsNodes().isNotEmpty() }
 
         // Loaded: the map is drawn, and says so for a moment; nothing offers the map any more
@@ -633,6 +629,62 @@ class AppMapTest {
         drawnMap()
         assertTrue("a new UI does not say the last load", compose.onAllNodes(loaded).fetchSemanticsNodes().isEmpty())
         assertTrue("nor offers the map over the loaded one", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aDownloadThatEndsWhileTheUiIsAwayIsToldAsItComesBackAndARestartedEngineForgetsIt() {
+        val download = openUndrawnMap()
+        session.send(mapDownload())
+        waitFor("the offer shows") { compose.onAllNodes(download).fetchSemanticsNodes().isNotEmpty() }
+        activate(download)
+        request("downloadMap", "the button downloads the map")
+        showDownloadProgress()
+        val before = compose.runOnIdle { Announcer.current }
+
+        // The UI went while the map downloaded, and the download failed meanwhile: the same engine, coming back, says
+        // so, which the player has not heard, so it is told, at once
+        session.close()
+        session = fake.engine.nextSession()
+        lastRequest("setAppMapSize", "the same engine is asked again when the UI comes back")
+        val reason = "Map download encountered an error: Error transferring http://$HOST - server replied: Gone"
+        session.send(mapDownload("failed", error = reason))
+        val failed = hasText(string(R.string.map_download_failed, reason))
+        waitFor("the failure shows as the UI comes back") { compose.onAllNodes(failed).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle {
+            val told = Announcer.current
+            assertTrue(
+                "an end the UI was away for is told: ${told?.text}",
+                told != null && told !== before && told.text.endsWith(string(R.string.map_download_failed, reason)),
+            )
+            assertTrue("and its failure interrupts TalkBack", told!!.assertive)
+        }
+
+        // Android restarted the engine: the new one downloaded nothing, nor has its game offered a map yet
+        fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
+        session.close()
+        session = fake.engine.nextSession()
+        lastRequest("setAppMapSize", "a restarted engine is asked")
+        waitFor("a restarted engine's UI shows neither the last engine's failure nor its offer") {
+            compose.onAllNodes(failed).fetchSemanticsNodes().isEmpty() && compose.onAllNodes(download).fetchSemanticsNodes().isEmpty()
+        }
+        // Its game offers the map: the offer shows, with no end of a download before it
+        session.send(mapDownload())
+        waitFor("the restarted engine's offer shows") { compose.onAllNodes(download).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("with no end of the last engine's download", compose.onAllNodes(failed).fetchSemanticsNodes().isEmpty())
+        checkAccessibility()
+    }
+
+    /** Brings the map to the front, with no map drawn yet; returns the button that downloads the map the game offers. */
+    private fun openUndrawnMap(): SemanticsMatcher {
+        activate(button)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
+        return hasText(string(R.string.map_download, HOST)) and hasClickAction()
+    }
+
+    /** Sends a download's progress, [LABEL] a quarter of the way, as Cancel can still stop it, and waits for it to show. */
+    private fun showDownloadProgress() {
+        session.send(mapDownload("downloading", label = LABEL, value = 1_000_000, maximum = 4_000_000, cancelable = true))
+        waitFor("the download's progress shows") { compose.onAllNodes(hasText(LABEL)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     /** Types [text] in the map's search field and sends it as [searchAgain] does; returns the field. */
@@ -911,6 +963,9 @@ class AppMapTest {
 
         // The host the game offers its map from
         const val HOST = "maps.example.org"
+
+        // Mudlet's progress label of a map download
+        const val LABEL = "Downloading map file for use in Game..."
 
         // A frame's pixels a touch may land from where it was aimed, rounding to the screen's
         const val POINTS = 1.5

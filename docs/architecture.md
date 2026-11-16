@@ -419,13 +419,22 @@ drawn by `ui/game/AppMap.kt`):
   comes (`Announcer`): "Map downloaded from <host>", "Map download cancelled", or "The map download failed: " with
   Mudlet's reason, in the error colour and interrupting TalkBack. Its close button is "Dismiss the map download", not
   the bare "Dismiss" of a refusal that may show at the same time. "Map downloaded" goes by itself 5 s after the map in
-  front shows it, as the map shows the load. A UI that attaches later shows how the last download ended without
-  reading it out, unless the map loaded. A refusal shows as the map's others do. The loaded map is the profile's, so the map
-  behind the text, the map in front and a script's mapper all show it; as on the desktop, Mudlet then shows its docked
-  mapper, where a script has made one (`showLoadedMap()`).
-- Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of
-  a failure included: the rest can hold a user name, a password or a token. Lua's `gmcp` table holds the whole URL, as
-  the game sent it, as on the desktop.
+  front shows it, as the map shows the load. A UI that saw a download run and went before it ended reads the end out
+  as it comes back; any other UI that attaches later shows how the last download ended without reading it out, unless
+  the map loaded. A restarted engine's UI forgets the last engine's offer and download. A refusal shows as the map's
+  others do. The loaded map is the profile's, so the map behind the text, the map in front and a script's mapper all
+  show it; as on the desktop, Mudlet then shows its docked mapper, where a script has made one (`showLoadedMap()`).
+- Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of a
+  failure included: the rest can hold a user name, a password or a token. The engine masks the password in that reason
+  wherever it shows and the query wherever it follows a `?`, decoded, and percent-encoded as the game wrote them and as
+  Qt shows and encodes them, with the hex digits in either case, and cuts any URL to its scheme and host, even in the
+  server's own words, where a user name can be an e-mail address: the host is what follows the last `@` before the path,
+  query or fragment, as a browser reads a URL, and the URL's own user name is taken whole, even with a space in it. What
+  the server repeats in another form can still show, such as a path it repeats on its own or decoded with a space in
+  it, without its query; the query, or a part of it, repeated without the `?` before it, and a part of it even right
+  after one; the password or the query percent-encoded otherwise than the game's URL and Qt write them, such as `%21`
+  for a `!` or `+` for a space; and a user name it repeats outside a URL. Lua's `gmcp` table holds the whole URL, as the game sent it, and Mudlet's console line the
+  server's words, as on the desktop.
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.
@@ -626,8 +635,15 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   Cancel once the map has arrived, its rooms then found and the app's map drawn; `mapDownload` to a UI that attaches;
   a 404 failing with Mudlet's reason, which names the host but not the path or query, and a file that is no map
   failing, and a slow download sending its progress at most once a percent and cancelled, each leaving the map as it
-  was; the refusals; another profile taking the offer away; and the URL's user name, password (percent-encoded in the
-  URL) and token in no frame and not the engine's log;
+  was; the refusals; a script's JSON map export and import sending no `mapDownload`, even the export's last progress
+  after a `downloadMap` read with it, whose download keeps its own label and Cancel; another profile taking the offer
+  away; the URL's user name, password (percent-encoded in the URL) and token in no frame and not the engine's log; and,
+  from a server whose 404 reason repeats them, the password decoded, as Qt shows and encodes it, and as the game wrote
+  it (in lower case, with an encoded `~`), as it is and with its hex digits in the other case, the user name (an e-mail
+  address) and the token in no frame but Mudlet's console text and not the engine's log, the password masked in each
+  form and the URL cut to its host, as is another URL whose user name is an e-mail address; a user name with a space
+  that the reason repeats in the URL cut with it, and the query it repeats after the path masked; and a password that
+  is a word of the reason in another case masked as it is, the word kept;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
@@ -714,8 +730,10 @@ device shows, below the UI's debug hook:
   and a refusal, and the map download: no button with no offer, the offer with no map drawn, covering no
   other control, sending one `downloadMap` however often tapped, its progress, indeterminate past Mudlet's guess, and
   Cancel, how it ended (cancelled, failed, read out at once and not again to a UI that comes back, until dismissed,
-  and loaded, the map then drawn and the offer above it), a refusal, and the offer gone with the profile; and the
-  notification permission, explained and then asked on Android 13 and later, on a fresh install.
+  and loaded, the map then drawn, saying so for a moment, with no download offered over it), a refusal, and a new UI
+  showing neither the last load nor the offer; a failure while the UI was away read out as it comes back, and a
+  restarted engine's UI showing neither it nor the offer; and the notification permission, explained and then asked on
+  Android 13 and later, on a fresh install.
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only.

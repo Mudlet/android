@@ -81,7 +81,9 @@ object EngineClient {
         private set
 
     /** A session for each profile the engine has open, in the order they were opened. */
-    val sessions = mutableStateListOf<ProfileSession>()
+    val sessions: List<ProfileSession> get() = openSessions
+
+    private val openSessions = mutableStateListOf<ProfileSession>()
 
     /**
      * The profile the player is looking at: the engine's front, or the one [setFront] asked for until the engine says
@@ -124,7 +126,7 @@ object EngineClient {
     var screenSize: Pair<Int, Int>? = null
         private set
 
-    // Reader thread only
+    // Main thread only
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
     private var lostAt = 0L
@@ -180,11 +182,11 @@ object EngineClient {
     /** The open profile named [name], ignoring case as the engine does; null when it is not open. */
     fun session(name: String): ProfileSession? = sessions.firstOrNull { it.name.equals(name, ignoreCase = true) }
 
-    /** Makes the open profile [name] the front, here and in the engine. False when it is not open. */
+    /** Makes the open profile [name] the front, here and in the engine. False when it is not open or the link is down. */
     fun setFront(name: String): Boolean {
         val session = session(name) ?: return false
+        if (!send(Requests.setFront(session.name))) return false
         requestedFront = session.name
-        link.send(Requests.setFront(session.name))
         moveFront(session)
         return true
     }
@@ -284,14 +286,13 @@ object EngineClient {
             sessions.firstOrNull { it.name == profile.name }?.also { it.moveTo(profile.socket, attached) }
                 ?: ProfileSession(profile.name, profile.socket, app).also { if (attached) it.start() }
         }
-        sessions.filter { it !in kept }.forEach(ProfileSession::stop)
-        sessions.clear()
-        sessions.addAll(kept)
+        openSessions.filter { it !in kept }.forEach(ProfileSession::stop)
+        openSessions.clear()
+        openSessions.addAll(kept)
         val engineFront = open.indexOfFirst { it.front }.let { kept.getOrNull(it) }
-        if (engineFront != null && engineFront.name == requestedFront) requestedFront = null
-        val front = requestedFront?.let { name -> kept.firstOrNull { it.name == name } } ?: engineFront ?: kept.firstOrNull()
-        if (front == null) requestedFront = null
-        moveFront(front)
+        val requested = requestedFront?.let { name -> kept.firstOrNull { it.name == name } }
+        if (requested == null || requested === engineFront) requestedFront = null
+        moveFront(requested ?: engineFront ?: kept.firstOrNull())
     }
 
     // The engine's status restore tells, in the front profile's console, how bringing the profiles back went

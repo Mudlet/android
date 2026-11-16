@@ -235,7 +235,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         ),
         SettingEntry.Switch(
             SettingsCategory.SECURITY,
-            Settings.gameInstallsPackages,
+            Settings.gamePlaysMedia,
             R.string.settings_game_installs_packages,
             R.string.settings_game_installs_packages_hint,
             R.string.settings_game_installs_packages_keywords,

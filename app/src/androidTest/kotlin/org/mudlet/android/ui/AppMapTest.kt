@@ -446,6 +446,7 @@ class AppMapTest {
         session.send(mapDownload())
         val offered = hasText(string(R.string.map_download_offered, HOST))
         waitFor("the offer shows where no map is drawn") { compose.onAllNodes(offered).fetchSemanticsNodes().isNotEmpty() }
+        assertOfferClearOfButtons()
         assertTouchTarget(download)
         activate(download)
         request("downloadMap", "the button downloads the map")
@@ -474,6 +475,8 @@ class AppMapTest {
         waitFor("the download says it was cancelled") { compose.onAllNodes(cancelled).fetchSemanticsNodes().isNotEmpty() }
         // Told last, though an announcement just before it may share its turn (Announcer's MERGE_MS)
         compose.runOnIdle { assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_download_cancelled))) }
+        // The offer is back in the map's middle, under its buttons with the bar above them
+        assertOfferClearOfButtons()
 
         // A failure says Mudlet's reason, read out at once, until dismissed
         activate(download)
@@ -597,6 +600,15 @@ class AppMapTest {
         val results = compose.onAllNodes(resultsClose()).fetchSemanticsNodes().singleOrNull()?.boundsInRoot ?: return true
         val buttons = bounds(hasContentDescription(string(R.string.map_edit)) and hasClickAction())
         return results.top >= buttons.bottom && results.bottom <= bounds(mapShown()).bottom
+    }
+
+    // The offer in the map's middle, its card whole, is under the map's buttons: over them it would take their touches and
+    // cover them for TalkBack, which the accessibility check sees only on API 34 and up, and then only where the part
+    // left uncovered is the smaller
+    private fun assertOfferClearOfButtons() {
+        val card = compose.onNode(hasText(string(R.string.map_download_offered, HOST)), useUnmergedTree = true).fetchSemanticsNode().parent!!.boundsInRoot
+        val buttons = bounds(hasContentDescription(string(R.string.map_edit)) and hasClickAction())
+        assertTrue("the offer is under the map's buttons: $card. ${screen()}", card.top >= buttons.bottom)
     }
 
     private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()

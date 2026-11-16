@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,7 +117,8 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
 /**
  * The app's map in front, where [modifier] puts it: a search for rooms by name or number, whose results centre the map
  * on a room, and the download of the map the game offers ([MapDownloadBar]), over the map as [MapView] draws it, which a
- * tap selects in and a double tap walks on; with no map drawn, the offer is in its middle ([MapOffer]). Back calls
+ * tap selects in and a double tap walks on; with no map drawn, the offer is in its middle ([MapOffer]), under the map's
+ * buttons, or in the bar while a search's results would be where it is. Back calls
  * [onClose], after the map shrinks with a predictive back gesture. It covers what is under it, touches and all.
  */
 @Composable
@@ -146,7 +149,9 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         Column(Modifier.matchParentSize()) {
             RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onFocusChanged { editing = it.hasFocus })
             val map = AppMapClient.map
-            MapDownloadBar(offerHere = map != null, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            // Results would sit over the offer in the map's middle, so it waits in the bar while there are any
+            val searched = AppMapClient.search != null && !editing
+            MapDownloadBar(offerHere = map != null || searched, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 var size by remember { mutableStateOf(IntSize.Zero) }
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
@@ -160,7 +165,12 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     drawn = map != null,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                 )
-                if (map == null) MapOffer(Modifier.align(Alignment.Center).padding(16.dp))
+                // Under the map's buttons, as the results are, whose touches and TalkBack it would take where it covered them
+                if (map == null && !searched) {
+                    Box(Modifier.matchParentSize().padding(top = MAP_CONTROLS_HEIGHT), contentAlignment = Alignment.Center) {
+                        MapOffer(Modifier.padding(16.dp))
+                    }
+                }
                 // Under the map's buttons, whose touches and TalkBack they would take where they covered them, even
                 // the strip of a short list that left the buttons' bottom edge out; half the map below them, but at
                 // least their head and a whole result. Where the map has not that room, as with a keyboard up for the
@@ -341,13 +351,16 @@ private fun DownloadMapButton(host: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** With no map drawn: that there is none, and the map the game offers, if it offers one and none is downloading. */
+/**
+ * With no map drawn: that there is none, and the map the game offers, if it offers one and none is downloading. It
+ * scrolls where the map has not the room for it, as with a keyboard up, rather than cut its button off.
+ */
 @Composable
 private fun MapOffer(modifier: Modifier = Modifier) {
     val download = AppMapClient.download
     if (!download.offered || download.state == MapDownloadState.DOWNLOADING) return
     Surface(modifier, shape = MaterialTheme.shapes.medium, tonalElevation = 3.dp) {
-        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 stringResource(R.string.map_download_offered, download.host),
                 Modifier.padding(bottom = 12.dp),

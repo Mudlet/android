@@ -847,6 +847,14 @@ def windows_with(name, kind, pred=lambda w: True):
     return lambda m: m["t"] == "windows" and any(w["name"] == name and w["kind"] == kind and pred(w) for w in m["windows"])
 
 
+def seen_or_none(c, pred, seen, since):
+    """As seen_or_next, but None on a timeout, for a check to fail and the test to go on."""
+    try:
+        return seen_or_next(c, pred, seen, since)
+    except TimeoutError:
+        return None
+
+
 def seen_or_next(c, pred, seen, since, timeout=5.0):
     """The first message from seen[since:] that pred takes, or else the next one to come. The session sends a turn's
     main console lines as it runs and its script windows, their text and command lines from the event loop after it,
@@ -1120,11 +1128,16 @@ def label_of(msgs, name):
     return next((m for m in reversed(msgs) if m["t"] == "label" and m["name"] == name), None)
 
 
+def accessible_value(m):
+    """A label message's value, valueMin and valueMax, each None when absent."""
+    return tuple(m.get(k) for k in ("value", "valueMin", "valueMax"))
+
+
 def script_labels():
-    """What labels show: a Geyser.Label's text, stylesheet, image, accessible name and live region as label messages,
-    the image as a PNG from getImage, and its click callback run by pointer; a Geyser.Gauge as three labels whose
-    geometry gives its value, with its text label transparent; a deleted label removed; and every label again for a UI
-    that attaches."""
+    """What labels show: a Geyser.Label's text, stylesheet, image, accessible name, live region and accessible value as
+    label messages, the image as a PNG from getImage, and its click callback run by pointer; a Geyser.Gauge as three
+    labels whose geometry gives its value, with its text label transparent and its back label carrying the value, as
+    a createGauge() gauge's does; a deleted label removed; and every label again for a UI that attaches."""
     picture = os.path.join(TMP, "dot.png")
     png_file(picture, 4, 3)
     vector = os.path.join(TMP, "square.svg")
@@ -1224,6 +1237,25 @@ def script_labels():
         m = seen_or_next(c, lambda m, region=region: m["t"] == "label" and m["name"] == "box" and m.get("liveRegion") == region, seen, since)
         check("new words" in m["text"] and not any(windows_with("box", "label")(w) for w in seen[since:]),
               f"{code} alone sends the label again, with its live region: {m}")
+    check(accessible_value(m) == (None, None, None), f"a label with no accessible value has none: {m}")
+    none = (None, None, None)
+    # A value past the end is at the end, as a progress bar shows it; one refused, with nil and a message, leaves the
+    # label as it was, so it is not sent again
+    for code, value in (('setLabelAccessibleValue("box", 5, 0, 10)', (5, 0, 10)), ('setLabelAccessibleValue("box", 15, 0, 10)', (10, 0, 10)),
+                        ('setLabelAccessibleValue("box", 40)', (40, 0, 100)), ("refused", None), ('clearLabelAccessibleValue("box")', none)):
+        since = len(seen)
+        if value is None:
+            c.send({"t": "runLua", "code": 'local ok, err = setLabelAccessibleValue("box", 0 / 0)\necho(string.format("refused %s: %s\\n", tostring(ok), err))'})
+            m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("refused"), seen, since)
+            c.send({"t": "runLua", "code": 'echo("after the refusal\\n")'})
+            seen_or_next(c, shown("after the refusal"), seen, since)
+            check(m["text"] == "refused nil: the value, minimum and maximum must be finite numbers" and label_of(seen[since:], "box") is None,
+                  f"a value that is not a finite number is refused, and the label not sent again: {m} {label_of(seen[since:], 'box')}")
+            continue
+        c.send({"t": "runLua", "code": code})
+        m = seen_or_none(c, lambda m, value=value: m["t"] == "label" and m["name"] == "box" and accessible_value(m) == value, seen, since)
+        check(m is not None and "new words" in m["text"] and not any(windows_with("box", "label")(w) for w in seen[since:]),
+              f"{code} alone sends the label again, with its accessible value: {m or label_of(seen[since:], 'box')}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": "\n".join([
@@ -1239,6 +1271,10 @@ def script_labels():
           f"its front label's width against the back's is the value: {front}")
     check(text is not None and (text["x"], text["w"]) == (10, 200) and text.get("bgAlpha") == 0
           and back["stack"] < front["stack"] < text["stack"], f"and its text label is transparent, on top: {text}")
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "hp_back" and "value" in m, seen, since)
+    check(accessible_value(m) == (30, 0, 60), f"its back label carries its value, out of the maximum given: {m}")
+    check(all("value" not in (label_of(seen[since:], f"hp_{part}") or {}) for part in ("front", "text")),
+          "and its front and text labels carry none")
     since = len(seen)
     c.send({"t": "runLua", "code": "hp:setValue(15, 60)"})
     seen_or_next(c, windows_with("hp_front", "label", lambda w: w["w"] == 50), seen, since)
@@ -1246,8 +1282,24 @@ def script_labels():
     seen_or_next(c, shown("gauge sent"), seen, since)
     front = window_of(seen, "hp_front", "label")
     resent = [m["name"] for m in seen[since:] if m["t"] == "label"]
-    check((front["x"], front["w"]) == (10, 50) and not resent,
-          f"a new value resizes the front label, and sends no label whose content stayed: {front} {resent}")
+    back = label_of(seen[since:], "hp_back")
+    check((front["x"], front["w"]) == (10, 50) and resent == ["hp_back"] and accessible_value(back) == (15, 0, 60),
+          f"a new value resizes the front label and sends the back label with it, and no label whose content stayed: {front} {resent}")
+    # A new style sheet lays the gauge out again from the value and maximum it was given, not its percentage; one past
+    # the end is at the end; a reading it cannot give, out of an infinite maximum, is none, so a UI reads the front
+    # label's width
+    for code, value in (('hp:setStyleSheet("background-color: red", "background-color: black")', (15, 0, 60)),
+                        ("hp:setValue(90, 60)", (60, 0, 60)), ("hp:setValue(5, math.huge)", none), ("hp:setValue(15, 60)", (15, 0, 60))):
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        m = seen_or_none(c, lambda m, value=value: m["t"] == "label" and m["name"] == "hp_back" and accessible_value(m) == value, seen, since)
+        check(m is not None, f"after {code}, the back label's value is {value}: {label_of(seen[since:], 'hp_back')}")
+    # createGauge()'s gauges have it too, out of their maximum, kept as they move
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'createGauge("old", 100, 10, 500, 600)\nsetGauge("old", 3, 12)\nmoveGauge("old", 500, 620)'})
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "old_back" and "value" in m, seen, since)
+    check(accessible_value(m) == (3, 0, 12) and accessible_value(label_of(seen[since:], "old_front") or {}) == none,
+          f"setGauge() gives a createGauge() gauge's back label its value, which moveGauge() keeps: {m}")
 
     c.close()
     c = Client(SOCK)
@@ -1262,6 +1314,8 @@ def script_labels():
     check(box is not None and box["accessibleName"] == "Hit me" and "new words" in box["text"], f"as it was: {box}")
     news = label_of(msgs, "news")
     check(news is not None and news.get("liveRegion") == "assertive", f"and with its live region: {news}")
+    back = label_of(msgs, "hp_back")
+    check(back is not None and accessible_value(back) == (15, 0, 60), f"and a gauge's back label with its value: {back}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": 'deleteLabel("pic")'})

@@ -476,9 +476,12 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `label`, its click callback run by a `pointer` press, and `pointer` refused off the window; a new `echo()` as
   `label` alone; `setBackgroundImage()` as the label's `image`, and that file as a PNG from `getImage`, scaled; an
   SVG one with `setSvgTint()` and `setSvgRotation()`; a Geyser `Gauge`'s three labels, whose front width is its value
-  and whose text label is transparent; a label's live region, from Geyser's `liveRegion` and each
-  `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; every label to a UI that attaches; `deleteLabel()`
-  as `removed`;
+  and whose text label is transparent, and whose back label carries its value and maximum, sent again with each new
+  value, kept through `setStyleSheet()`, stopped at the maximum, and cleared for an infinite one, and a
+  `createGauge()` gauge's back label carrying the value `setGauge()` gave it through `moveGauge()`; a label's live
+  region, from Geyser's `liveRegion` and each `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; its
+  accessible value, from each `setLabelAccessibleValue()` or `clearLabelAccessibleValue()` alone, as `label`, clamped
+  to its range, and a refused one sending nothing; every label to a UI that attaches; `deleteLabel()` as `removed`;
 - text boxes: `createTextEdit()` with `setTextEditText()`, `setTextEditPlaceholder()`, `setTextEditStyleSheet()` and
   `setTextEditTabMovesFocus()` as `textBox` after its `windows`, with its `typed`; `setTextBoxText` read back by
   `getTextEditText()` and not sent back, by a later `windows` either, and a script's text after it sent, the text from

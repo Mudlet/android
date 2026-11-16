@@ -926,6 +926,11 @@ QJsonObject SocketBridge::labelMessage(const LabelInfo& label)
     if (!label.liveRegion.isEmpty()) {
         json.insert(QStringLiteral("liveRegion"), label.liveRegion);
     }
+    if (const auto& value = label.accessibleValue) {
+        json.insert(QStringLiteral("value"), value->value);
+        json.insert(QStringLiteral("valueMin"), value->min);
+        json.insert(QStringLiteral("valueMax"), value->max);
+    }
     return json;
 }
 

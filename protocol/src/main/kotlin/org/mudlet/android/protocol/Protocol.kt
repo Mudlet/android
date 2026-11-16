@@ -7,6 +7,7 @@ import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.Base64
+import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
@@ -132,6 +133,8 @@ data class LabelContent(
     val accessibleButton: Boolean,
     /** How a screen reader is told of its new text, as setLabelLiveRegion() gave it. */
     val liveRegion: LiveRegion,
+    /** What a screen reader reads it as, as a progress bar's, as setLabelAccessibleValue() gave it; null for none. */
+    val accessibleValue: AccessibleValue?,
     /** As setLabelStyleSheet() gave it, which the engine does not interpret. */
     val styleSheet: String,
 )
@@ -160,6 +163,19 @@ data class TextBoxContent(
         // As QTextDocument::toPlainText() gives them; U+FDD0 and U+FDD1 are its frames' marks
         private val PLAIN = mapOf('\r' to '\n', '\u2028' to '\n', '\u2029' to '\n', '\uFDD0' to '\n', '\uFDD1' to '\n', '\u00A0' to ' ')
     }
+}
+
+/**
+ * A label's accessible value: [value], from [min] to [max], [min] less than [max] and [value] between them, the range
+ * no wider than a [Double] holds.
+ */
+data class AccessibleValue(val value: Double, val min: Double, val max: Double) {
+    init {
+        require(min < max && (max - min).isFinite() && value in min..max) { "$value is not in a range from $min to $max" }
+    }
+
+    /** How far [value] is from [min] to [max], as a whole percentage, as a screen reader says it. */
+    val percent: Int get() = ((value - min) / (max - min) * 100).roundToInt()
 }
 
 /** What a pointer did, as upstream's WindowPointerEvent names it on the wire. */
@@ -792,8 +808,25 @@ class FrameReader(input: InputStream) {
             accessibleName = l.optString("accessibleName"),
             accessibleButton = l.optBoolean("accessibleButton"),
             liveRegion = LiveRegion.fromWire(l.optString("liveRegion")),
+            accessibleValue = parseAccessibleValue(l),
             styleSheet = l.optString("styleSheet"),
         )
+
+        // None without a value, or for one with a field that is not a finite number (a string is not, though org.json
+        // would read a numeric one) or with an empty range, or one too wide for a double, whose percentage could not
+        // be worked out; a value past either end is that end
+        private fun parseAccessibleValue(l: JSONObject): AccessibleValue? {
+            fun number(key: String, absent: Double) = when (val field = l.opt(key)) {
+                null -> absent
+                is Number -> field.toDouble()
+                else -> Double.NaN
+            }
+            val value = number("value", Double.NaN)
+            val min = number("valueMin", 0.0)
+            val max = number("valueMax", 100.0)
+            if (!value.isFinite() || !min.isFinite() || !max.isFinite() || min >= max || !(max - min).isFinite()) return null
+            return AccessibleValue(value.coerceIn(min, max), min, max)
+        }
 
         // Null for a bar in a place this app does not know
         private fun parseButtonBar(b: JSONObject): ButtonBar? {

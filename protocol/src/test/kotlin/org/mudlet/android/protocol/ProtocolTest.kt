@@ -536,6 +536,54 @@ class ProtocolTest {
         val none = FrameReader.parse(JSONObject("""{"t":"rooms","text":"x"}""")) as EngineMessage.Rooms
         assertEquals(emptyList<RoomMatch>(), none.rooms)
         assertEquals(false, none.more)
+        val ranked = FrameReader.parse(
+            JSONObject(
+                """{"t":"rooms","text":"pond","rooms":[{"id":5,"name":"Pond","area":"Garden","areaId":2,"match":"exact","steps":2},""" +
+                    """{"id":9,"name":"Pondside","area":"Garden","areaId":2,"match":"prefix","steps":-1},{"id":1,"name":"x","area":"","match":"soundex"}]}""",
+            ),
+        ) as EngineMessage.Rooms
+        assertEquals(
+            listOf(
+                RoomMatch(5, "Pond", "Garden", 2, RoomMatchKind.EXACT, 2),
+                RoomMatch(9, "Pondside", "Garden", 2, RoomMatchKind.PREFIX, -1),
+                // A match this client does not know is a match within the name; no steps, no way there
+                RoomMatch(1, "x", "", 0, RoomMatchKind.CONTAINS, -1),
+            ),
+            ranked.rooms,
+        )
+        assertEquals(RoomMatchKind.ID, RoomMatchKind.fromWire("id"))
+    }
+
+    @Test
+    fun aRoomAndTheAreasDecode() {
+        val room = FrameReader.parse(
+            JSONObject(
+                """{"t":"room","id":2,"name":"Great Hall","areaId":1,"area":"Keep","x":1,"y":-2,"z":0,"steps":1,""" +
+                    """"exits":[{"direction":"n","to":3,"toName":"Hallway","locked":false},"junk",""" +
+                    """{"direction":"climb rope","to":6,"toName":"","locked":true}],"re":8}""",
+            ),
+        ) as EngineMessage.Room
+        assertEquals(
+            RoomInfo(2, "Great Hall", 1, "Keep", 1, -2, 0, 1, listOf(RoomExit("n", 3, "Hallway", false), RoomExit("climb rope", 6, "", true))),
+            room.room,
+        )
+        assertEquals(8, room.replyTo)
+        val bare = FrameReader.parse(JSONObject("""{"t":"room","id":4}""")) as EngineMessage.Room
+        assertEquals(-1, bare.room.steps)
+        assertEquals(emptyList<RoomExit>(), bare.room.exits)
+        val areas = FrameReader.parse(JSONObject("""{"t":"areas","areas":[{"id":2,"name":"Garden"},"junk",{"id":1,"name":"Keep"}],"re":9}""")) as EngineMessage.Areas
+        assertEquals(listOf(MapArea(2, "Garden"), MapArea(1, "Keep")), areas.areas)
+        assertEquals(9, areas.replyTo)
+        assertEquals(emptyList<MapArea>(), (FrameReader.parse(JSONObject("""{"t":"areas"}""")) as EngineMessage.Areas).areas)
+    }
+
+    @Test
+    fun theRoomRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "showMapLevel", "map" to "app", "level" to -1), Requests.showMapLevel(MapTarget.APP, -1).toMap())
+        assertEquals(mapOf("t" to "showMapArea", "map" to "mapper", "area" to 2), Requests.showMapArea(MapTarget.MAPPER, 2).toMap())
+        assertEquals(mapOf("t" to "roomInfo", "room" to 12, "id" to 7L), Requests.roomInfo(12, 7).toMap())
+        assertEquals(mapOf("t" to "walkToRoom", "room" to 12), Requests.walkToRoom(12).toMap())
+        assertEquals(mapOf("t" to "mapAreas", "id" to 3L), Requests.mapAreas(3).toMap())
     }
 
     @Test
@@ -544,13 +592,14 @@ class ProtocolTest {
             JSONObject(
                 """{"t":"map","png":"","w":400,"h":300,"viewOnly":true,"view":{"area":2,"areaName":"Castle","level":-1,"zoom":12.5,""" +
                     """"minZoom":3,"maxZoom":30,"following":false,"player":7,"roomSize":24,"moved":5,""" +
-                    """"rooms":[{"id":7,"x":200.5,"y":150,"name":"Great Hall"},"junk",{"id":8,"x":-3,"y":12}]}}""",
+                    """"rooms":[{"id":7,"x":200.5,"y":150,"name":"Great Hall"},"junk",{"id":8,"x":-3,"y":12}],"levels":[-1,0,2]}}""",
             ),
         ) as EngineMessage.Map
         assertEquals(
             MapViewInfo(
                 2, "Castle", -1, 12.5, 3.0, 30.0, false, 7, 24.0, 5,
                 listOf(MapRoomPlace(7, 200.5, 150.0, "Great Hall"), MapRoomPlace(8, -3.0, 12.0, "")),
+                listOf(-1, 0, 2),
             ),
             map.view,
         )

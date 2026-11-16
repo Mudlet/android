@@ -77,6 +77,11 @@ public:
     QString showRoom(int room) override;
     QString moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq) override;
     QString followPlayer(MapTarget map) override;
+    QString showMapLevel(MapTarget map, int level) override;
+    QString showMapArea(MapTarget map, int area) override;
+    std::variant<RoomDetails, QString> roomInfo(int room) const override;
+    QString walkToRoom(int room) override;
+    std::variant<QList<MapAreaInfo>, QString> mapAreas() const override;
     QString downloadMap() override;
     QString cancelMapDownload() override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;

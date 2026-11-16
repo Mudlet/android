@@ -65,7 +65,9 @@ import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineMessages.appMap
+import org.mudlet.android.ui.EngineMessages.areas
 import org.mudlet.android.ui.EngineMessages.mapView
+import org.mudlet.android.ui.EngineMessages.room
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import java.io.EOFException
@@ -80,7 +82,9 @@ import kotlin.math.min
  * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; let go when the
  * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, over the
  * input line and the quick bar, where a tap selects, a double tap walks, a drag moves it, the buttons zoom and TalkBack's
- * actions do the same, and Back sends it back, following the player again; and the room search, whose results centre the map on a room; and the download of the map the game offers.
+ * actions do the same, and Back sends it back, following the player again; the bar under it that shows another area or
+ * level; the room search, whose results say how many, filter by area, centre the map on a room and walk there; and the
+ * download of the map the game offers.
  */
 @RunWith(AndroidJUnit4::class)
 class AppMapTest {
@@ -445,9 +449,9 @@ class AppMapTest {
         waitFor("the search says it is searching") { compose.onAllNodes(hasText(string(R.string.app_map_searching))).fetchSemanticsNodes().isNotEmpty() }
 
         session.send(rooms(find, "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
-        val hallway = hasText(string(R.string.app_map_room, "hallway", "Castle", 3))
+        val hallway = result("hallway", "Castle", 3)
         waitFor("the rooms found are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText(string(R.string.app_map_room, "Great Hall", "Castle", 1))).assertIsDisplayed()
+        compose.onNode(result("Great Hall", "Castle", 1)).assertIsDisplayed()
         assertTouchTarget(hallway)
         assertResultsFit()
         checkAccessibility()
@@ -461,6 +465,98 @@ class AppMapTest {
         // And says why, when the room is gone
         session.refuse(show, "There is no room 3 in the map.")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "There is no room 3 in the map."))).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun theResultsSayHowManyMarkTheMatchFilterByAreaAndWalkThere() {
+        openMap(withView = true)
+        drawnMap()
+        val field = search("hall")
+        val found = listOf(
+            RankedRoom(3, "Hallway", "Keep", 1, 1),
+            RankedRoom(1, "Great Hall", "Keep", 1, 0),
+            RankedRoom(9, "Hall of Fame", "Town", 2, -1),
+            RankedRoom(5, "Hall pond", "Garden", 3, 2),
+        )
+        session.send(rankedRooms(request("findRooms", "the search is sent"), "hall", found))
+        val count = hasText(compose.activity.resources.getQuantityString(R.plurals.app_map_results_count, 4, 4))
+        waitFor("the results say how many") { compose.onAllNodes(count).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(count).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        val hallway = result("Hallway", "Keep", 3, 1)
+        compose.onNode(hallway).assertIsDisplayed()
+        // What was searched for is marked in each name, whatever its case
+        val great = compose.onNode(result("Great Hall", "Keep", 1, 0)).fetchSemanticsNode().config[SemanticsProperties.Text].single { it.text == "Great Hall" }
+        assertEquals(listOf(6 until 10), great.spanStyles.map { it.start until it.end })
+        assertTouchTarget(hallway)
+        assertResultsFit()
+        checkAccessibility()
+
+        // In three areas, they filter by each
+        activate(hasText("Town") and hasClickAction())
+        waitFor("only Town's rooms are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(result("Hall of Fame", "Town", 9, -1)).assertIsDisplayed()
+        activate(hasText(string(R.string.app_map_all_areas)) and hasClickAction())
+        waitFor("all are listed again") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+
+        // A walk from a result, where there is a known way and the player is not there already, which closes them
+        compose.onNode(walkTo("Great Hall")).assertIsNotEnabled()
+        compose.onNode(walkTo("Hall of Fame")).assertIsNotEnabled()
+        activate(walkTo("Hallway"))
+        assertEquals(3, request("walkToRoom", "a result walks there").getInt("room"))
+        waitFor("the results close once the walk is sent") { compose.onAllNodes(resultsClose()).fetchSemanticsNodes().isEmpty() }
+
+        // Back closes them, keeping what was searched for, and the map in front
+        searchAgain(field)
+        session.send(rankedRooms(request("findRooms", "the search is sent again"), "hall", found))
+        waitFor("the rooms found are listed again") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitFor("Back closes the results") { compose.onAllNodes(resultsClose()).fetchSemanticsNodes().isEmpty() }
+        drawnMap()
+        compose.onNode(field).assert(hasText("hall"))
+
+        // A result centres the map on its room and shows it, which Back closes before the map
+        searchAgain(field)
+        session.send(rankedRooms(request("findRooms", "the search is sent a third time"), "hall", found))
+        waitFor("the rooms found are listed a third time") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
+        activate(hallway)
+        assertEquals(3, request("showRoom", "a result is shown on the map").getInt("room"))
+        val ask = request("roomInfo", "the room shown is asked for")
+        assertEquals(3, ask.getInt("room"))
+        session.send(room(ask, 3, "Hallway", steps = 1))
+        val shown = hasText(string(R.string.room_place, "Castle", 3))
+        waitFor("the room is shown") { compose.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(field).assert(hasText("hall"))
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitFor("Back closes the room") { compose.onAllNodes(shown).fetchSemanticsNodes().isEmpty() }
+        drawnMap()
+    }
+
+    @Test
+    fun theBarUnderTheMapShowsAnotherAreaAndTheLevelsAboveAndBelow() {
+        val (w, h) = openMap()
+        session.send(appMap(w.toInt(), h.toInt(), view = mapView(w.toInt(), h.toInt(), levels = listOf(0, 2))))
+        val area = hasText(string(R.string.map_area, "Castle")) and hasClickAction()
+        waitFor("the bar names the area shown") { compose.onAllNodes(area).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText(string(R.string.map_level, 0))).assertIsDisplayed()
+        val down = hasContentDescription(string(R.string.map_level_down)) and hasClickAction()
+        val up = hasContentDescription(string(R.string.map_level_up)) and hasClickAction()
+        compose.onNode(down).assertIsNotEnabled()
+        assertTouchTarget(area)
+        assertTouchTarget(up)
+        activate(up)
+        val level = request("showMapLevel", "the level above is shown")
+        assertEquals("app" to 2, level.getString("map") to level.getInt("level"))
+
+        activate(area)
+        val asked = request("mapAreas", "the areas are asked for")
+        val garden = hasText("Garden") and hasClickAction()
+        session.send(areas(asked, 2 to "Garden", 1 to "Castle"))
+        waitFor("the areas are listed") { compose.onAllNodes(garden).fetchSemanticsNodes().isNotEmpty() }
+        // In a popup, which the screen's accessibility check does not reach as one root
+        compose.onNode(garden).performSemanticsAction(SemanticsActions.OnClick)
+        val shown = request("showMapArea", "another area is shown")
+        assertEquals("app" to 2, shown.getString("map") to shown.getInt("area"))
+        waitFor("the list closes") { compose.onAllNodes(garden).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
@@ -482,7 +578,7 @@ class AppMapTest {
 
         search("hall")
         session.send(rooms(request("findRooms", "the search is sent"), "hall", listOf(Triple(1, "Great Hall", "Castle"), Triple(3, "hallway", "Castle"))))
-        val hallway = hasText(string(R.string.app_map_room, "hallway", "Castle", 3))
+        val hallway = result("hallway", "Castle", 3)
         waitFor("the rooms found are listed") { compose.onAllNodes(hallway).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hallway and hasClickAction()).performTouchInput(jitter)
         assertEquals(3, request("showRoom", "a finger that moves a little still taps a room found").getInt("room"))
@@ -518,7 +614,7 @@ class AppMapTest {
         compose.waitForIdle()
         assertTrue(
             "a late answer to a refused search is not shown",
-            compose.onAllNodes(hasText(string(R.string.app_map_room, "Wine cellar", "Keep", 7))).fetchSemanticsNodes().isEmpty(),
+            compose.onAllNodes(result("Wine cellar", "Keep", 7)).fetchSemanticsNodes().isEmpty(),
         )
     }
 
@@ -897,6 +993,28 @@ class AppMapTest {
         val list = JSONArray(found.map { (id, name, area) -> JSONObject().put("id", id).put("name", name).put("area", area) })
         return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", more).put("re", request.get("id"))
     }
+
+    private class RankedRoom(val id: Int, val name: String, val area: String, val areaId: Int, val steps: Int)
+
+    private fun rankedRooms(request: JSONObject, text: String, found: List<RankedRoom>): JSONObject {
+        val list = JSONArray(
+            found.map { JSONObject().put("id", it.id).put("name", it.name).put("area", it.area).put("areaId", it.areaId).put("steps", it.steps) },
+        )
+        return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", false).put("re", request.get("id"))
+    }
+
+    // A result of the search: its room's name over its area, number and, but for -1, how far it is
+    private fun result(name: String, area: String, id: Int, steps: Int = -1): SemanticsMatcher {
+        val distance = when {
+            steps == 0 -> string(R.string.room_here)
+            steps > 0 -> compose.activity.resources.getQuantityString(R.plurals.room_steps, steps, steps)
+            else -> null
+        }
+        val place = if (distance == null) string(R.string.app_map_result_place, area, id) else string(R.string.app_map_result_place_steps, area, id, distance)
+        return hasText(name) and hasText(place) and hasClickAction()
+    }
+
+    private fun walkTo(name: String) = hasContentDescription(string(R.string.app_map_walk_to, name)) and hasClickAction()
 
     private fun mapDownload(
         state: String = "none",

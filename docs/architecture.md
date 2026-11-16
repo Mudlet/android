@@ -340,6 +340,17 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   middle of the room nearest it within 24 dp or its own cell (from the frame's `view.rooms`), so a room smaller than a
   finger at a low zoom is still hit, or else at the point itself; a second tap near it within the double-tap timeout
   then sends a double click there, which walks to it, with a confirming tick.
+- A tap on a room also asks for it (`roomInfo`), shown at the map's bottom once the engine answers (`RoomCard`, held
+  by `MapRooms`): its name in bold, its area and number, how far it is ("You are here", so many steps, or no known
+  way), its exits, each a chip naming the way and the room it leads to, which shows that room, and "Walk here"
+  (`walkToRoom`, with a tick), off where there is no way or the player is there. It is read out as it comes, takes at
+  most half the map's height and scrolls past that, and closes with its button, a tap on no room, or Back on the map
+  in front; it is asked for again when the player moves, as its steps change. Each map's answers carry the `id` it
+  asked with, so the mapper window's and the app's map never show each other's room.
+- A bar at the map's bottom start (`MapPlaceBar`), where the map is at least 144 dp high, names the area shown, a
+  button that lists the map's areas (`mapAreas`, asked each time it opens) to show another (`showMapArea`), and,
+  while the area has more than one level (`view.levels`), the level shown between buttons to the level above and below
+  (`showMapLevel`). Either stops the map following the player, as a pan does.
 - A drag pans the map and, let go quickly, glides on as a fling slows; a pinch pans with the fingers and zooms about
   their middle; a double tap whose second touch drags zooms about it, in as it goes down (`mapGestures`). Each is
   drawn at once by moving the frame shown (`MapMoves` in `:protocol`, held by `MapMover`), and sent as `moveMap`, at
@@ -352,12 +363,13 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   the map behind the text follows the player.
 - Buttons in its corner (`MapButtons`) zoom out and in by a quarter about the map's middle (`moveMap`, which keeps
   following the player; three wheel notches while a frame has no `view`), and a switch, on while the map is edited,
-  sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason over
-  the map's bottom, clear of the button that centres it, until dismissed or the next request.
+  sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason at the
+  map's bottom, above the bar and the button that centres it, until dismissed or the next request; a refusal of
+  `roomInfo`, `walkToRoom`, `mapAreas`, `showMapLevel` or `showMapArea` is shown on the map that sent the last of them.
 - With TalkBack the map reads as "Map of the game", viewing or editing, and "not following you" while it does not
-  follow the player, in the windows' group. A double tap selects the room in its middle, and its actions walk there,
-  zoom, scroll the map up, down, left and right by a third of it, and centre it on the player while it does not follow
-  them; the buttons and the switch read their names. Touches, buttons and actions are off while no engine is
+  follow the player, in the windows' group. A double tap selects the room in its middle and shows it, and its actions
+  walk there, zoom, scroll the map up, down, left and right by a third of it, show the level above or below, and
+  centre it on the player while it does not follow them; the buttons and the switch read their names. Touches, buttons and actions are off while no engine is
   attached or no frame of the window's size has come.
 
 ### The map behind the text
@@ -380,13 +392,18 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   the map is in front, and Ctrl+R opens no history. Back or the button again sends it back, and the input line has the
   focus again if it had it; with a predictive back gesture the map shrinks as the gesture goes, over the game screen
   under it. A switch to another open game keeps the map in front, with that game's map.
-- The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
-  result, read as "<room>, <area> (<number>)", is a 48 dp row, and a tap sends `showRoom`, which centres the map on
-  that room and selects it, until the player moves, so its actions then walk there. "Finding rooms…", no match and
-  more matches than shown are read out as they come. The results sit at the map's top, and show only where the map
-  has the room for their head and one whole row
-  (not in a short window) and while the search is not being edited, so that none of their touch
-  targets is ever cut off.
+- The search sends `findRooms`, from its button or the keyboard's Search key, and puts the keyboard away, as on a
+  small screen it leaves the results no room. The engine sends the best first: the name the text, then names that
+  begin with it, then those that hold it, and within each the rooms of the player's area, then the nearest. The
+  results sit right under the field, over the download bar and the map, at most three quarters of the room below it,
+  and show only where there is room for their head and one whole row (not in a short window) and while the search is
+  not being edited, so that none of their touch targets is ever cut off. Their head says how many ("12 rooms", "100+
+  rooms"), "Finding rooms…" or no match, read out as it comes. Each result is a button of two lines: the room's name in
+  bold, with the text found in it marked (`matchRange` in `:protocol`), over its area, number and how far it is; a tap
+  sends `showRoom`, which centres the map on that room and selects it, and shows it as a tap on it does, closing the
+  results but keeping the field's text. Its walk button, "Walk to <room>", sends `walkToRoom` and closes them, off
+  where there is no known way or the player is there. Where they are in three areas or more, chips filter them by
+  area (`roomAreas`). Back closes them, then the room shown, before it sends the map back.
 - The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
   shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
   0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms. It asks again at each attach,
@@ -454,7 +471,7 @@ checkout, skips one already in it and stops the build at one that no longer appl
 first, as a later patch may change the lines an earlier one is checked against. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are nine: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are eleven: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
@@ -462,8 +479,10 @@ a label's accessible value, which Geyser's gauges set and screen readers read as
 headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
 [`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
 (`frameTabs`), with the player's tap on a tab (`selectFrameTab()`), moving a map by touch with what each frame
-laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)), and a profile's settings
-as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see "Settings").
+laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)), a profile's settings
+as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see "Settings"), and a map's rooms:
+a room's details, a walk to it, its area's levels, another area or level shown, and the room search ranked best first
+with each room's distance (`0012-headless-map-rooms.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -513,6 +532,7 @@ keeps the profiles' passwords in the KeyStore.
 | `renderMap()` at the mapper window's size onto an image larger by `setMapScale`'s scale, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
 | `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
 | `moveMapView()`, `followPlayerOnMap()`, `mapView()` after each `renderMap()` and `renderAppMap()` (carried patch) | `moveMap`, `followPlayer`, answered only when refused; `view` in `map` and `appMap`, with the last `moveMap` drawn as `moved` |
+| `roomInfo()`, `mapAreas()`, `walkToRoom()`, `showMapLevel()`, `showMapArea()`, `findRooms()` ranked with steps, `MapView::levels` (carried patch) | `roomInfo` answered by `room`, `mapAreas` by `areas`; `walkToRoom`, `showMapLevel`, `showMapArea`, answered only when refused; `levels` in `view`; `areaId`, `match` and `steps` in `rooms` |
 | `offeredMapUrl()` at `profileLoaded` and at each `offeredMapChanged`; `downloadOfferedMap()`, `cancelMapOperation()`; `mapProgressStarted`, `mapProgressChanged`, `mapProgressCancelDisabled`, `mapDownloadFinished` (carried patch) | `mapDownload`, with the URL's host only, when it changed (progress at most once a percent), and to a UI that attaches; `downloadMap`, `cancelMapDownload`, answered only when refused |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
@@ -630,6 +650,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   and raising no `sysMapWindowMousePressEvent`; `findRooms` by name, ignoring case, and by number; `showRoom` centring
   the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; a UI that goes
   stopping it, and the next sent none until it asks; and 0 by 0 stopping it;
+- a map's rooms (`map_rooms`): `roomInfo` with a room's area, place, exits (locked ones marked, special exits by
+  command) and steps from the player's room over unlocked exits, -1 where there is no way; `findRooms` ranked exact,
+  prefix, then within the name, the player's area then the nearest first, and by id; `mapAreas` by name;
+  `showMapLevel` and `showMapArea` with the `view` they draw, and refused for a level or area with no rooms;
+  `walkToRoom` speedwalking the path, and saying when there is none;
 - the map download: a game's GMCP `Client.Map` offering a map from a local web server, as `mapDownload` with only the
   host; `downloadMap` downloading and loading it, a Mudlet binary map and an XML one, with `sysMapDownloadEvent`, no
   Cancel once the map has arrived, its rooms then found and the app's map drawn; `mapDownload` to a UI that attaches;
@@ -730,8 +755,9 @@ device shows, below the UI's debug hook:
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
   the title bar's toggle bringing it to the front, over the input line down to the row with the game pill, without History,
   with the input line's keyboard gone and its focus back after, where taps, the zoom buttons, the edit switch and
-  TalkBack's actions reach it as `appMapPointer`, and Back sending it back, the room search with its results, no match, more matches
-  and a refusal, and the map download: no button with no offer, the offer with no map drawn, covering no
+  TalkBack's actions reach it as `appMapPointer`, and Back sending it back, the bar showing another area or level,
+  the room search with its results, no match, more matches and a refusal, its count read out, the match marked, the
+  filter by area, a walk from a result, Back closing them and then the room shown, and the map download: no button with no offer, the offer with no map drawn, covering no
   other control, sending one `downloadMap` however often tapped, its progress, indeterminate past Mudlet's guess, and
   Cancel, how it ended (cancelled, failed, read out at once and not again to a UI that comes back, until dismissed,
   and loaded, the map then drawn, saying so for a moment, with no download offered over it), a refusal, and a new UI
@@ -1412,9 +1438,11 @@ Item 13 of the on-device checklist covers this.
       (`lua myMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})`) takes it away
       too, and closing it (`lua myMapper:hide()`) brings it back.
     - The title bar's map button brings it to the front: a tap selects, a double tap walks there, a pinch and the zoom
-      buttons zoom, and the edit switch edits it. "Find a room" with part of a room's name lists the rooms that match;
-      a tap on one centres the map on it. It covers the input line, and the keyboard goes with it; only the title bar
-      and the row with the game pill and the pinned commands stay, without History. Back and the button again send it back, and an input line that
+      buttons zoom, and the edit switch edits it. A tap on a room shows its name, area, distance and exits at the
+      bottom, with "Walk here"; the bar there lists the areas and moves between levels. "Find a room" with part of a
+      room's name lists the rooms that match, how many, the best first, with the text marked; a tap on one centres the
+      map on it and shows it, and its walk button walks there. It covers the input line, and the keyboard goes with it;
+      only the title bar and the row with the game pill and the pinned commands stay, without History. Back and the button again send it back, and an input line that
       had the focus has it again; a predictive back gesture shrinks the map as it goes, and a cancelled one leaves it
       as it was.
     - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,

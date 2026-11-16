@@ -122,6 +122,15 @@ public:
     virtual QString moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq) = 0;
     // That map centred on the player's room, following the player again
     virtual QString followPlayer(MapTarget map) = 0;
+    // That map showing another level of the area it drew, or another area, until the player moves
+    virtual QString showMapLevel(MapTarget map, int level) = 0;
+    virtual QString showMapArea(MapTarget map, int area) = 0;
+    // A room of the map: its area, place, exits and steps from the player
+    virtual std::variant<RoomDetails, QString> roomInfo(int room) const = 0;
+    // The player walked to that room, as a double-click on it does
+    virtual QString walkToRoom(int room) = 0;
+    // The map's areas that have rooms, by name
+    virtual std::variant<QList<MapAreaInfo>, QString> mapAreas() const = 0;
     // Downloads the map the game offered and loads it in place of the profile's, as IFrontend::mapDownload() follows
     virtual QString downloadMap() = 0;
     // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be

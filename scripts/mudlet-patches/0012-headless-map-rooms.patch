@@ -1,0 +1,514 @@
+Let a frontend with no window show a room's details, walk to it, and show the map's other levels and areas
+
+A phone shows the map with no T2DMap: no room properties dialog, no level buttons and no area box. A frontend with
+no window could find rooms by name and centre its own map on one, but it could not say what a room is (its area,
+its exits, how far the player is from it), walk there without a double-click on a room the map drew, or show a
+level or an area the player is not in. Nor could it rank a search's results by what is near the player.
+
+- TNullMapView::showLevel(level) shows another level of the area drawn about the same point, as the level buttons
+  do; showArea(areaId) shows an area as the area box does: following the player where they are in it, else about
+  the room nearest the middle of the level shown, or of the level with the most rooms. Both leave the view off the
+  player, as a pan does. drawnLevels() gives the area's levels.
+- THeadlessSession::showMapLevel() and showMapArea(), for the script's map or the app's own, refused with
+  errorString() as moveMapView() is and for a level or area with no rooms; mapView() carries the levels.
+- THeadlessSession::walkToRoom() walks as the double-click does, with no map drawn.
+- THeadlessSession::roomInfo() gives a room's name, area, coordinates and exits (directions, then special exits,
+  each with the room it leads to and whether it is locked) and its steps from the player's room, by a breadth-first
+  walk over exits and rooms that are not locked; findRooms() gives each room found its steps and whether it is in
+  the player's area. mapAreas() lists the areas that have rooms, by name.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_rooms: a room's details and steps, walking,
+levels and areas on both maps, the area list, the search's ranking fields, and the refusals). The desktop is
+unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 07707a4..84c2dcd 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1092,10 +1092,22 @@ does, or until `followPlayerOnMap()` centres it on the player again. `mapView()`
+ out, for an app to keep what it draws over the map, and a gesture still under way, in step with it: the area
+ and level, the zoom and its limits, whether it follows the player, the player's room, a room's cell in pixels
+ and the rooms of that area and level it drew, each at its middle, at most 500, those nearest the middle where
+-there were more. Both calls are false, with the reason in `errorString()`, where `mapPointer()` and
++there were more, and the levels of that area that have rooms. Both calls are false, with the reason in `errorString()`, where `mapPointer()` and
+ `appMapPointer()` are, and for a map whose last draw showed no area; `followPlayerOnMap()` also with no room
+ for the player.
+ 
++`showMapLevel()` and `showMapArea()` are the GUI's level buttons and area box for those maps. A level is one of
++the area's that has rooms, shown about the same point; an area is shown following the player where they are in
++it, else about the room nearest the middle of the level shown, or of its level with the most rooms where it has
++none on that one. Either leaves the map off the player as a pan does. They are false, with the reason in
++`errorString()`, where `moveMapView()` is (`showMapArea()` also when the last draw showed no area), and for a level
++or an area with no rooms. `walkToRoom()` walks to a room as a double-click on it does, with no map drawn: it is
++false for a room not in the map and with no room for the player. `roomInfo()` gives a room's name, area,
++coordinates and exits (the twelve directions, then the special exits, each with the room it leads to and whether it
++is locked), and `steps`, the fewest exits from the player's room by rooms and exits that are not locked, as the
++speedwalk goes, or -1 for none; `findRooms()` gives each room found its `steps` too, and whether it is in the
++player's area. `mapAreas()` lists the areas that have rooms, by name.
++
+ `setMapViewOnly()` switches the map between viewing and editing, as the item of the GUI map's menu does, and
+ `mapViewOnly()` reads which it is; a new profile's map is view-only, and the profile saves it. Scripts hear
+ `mapModeChangeEvent` with `"viewing"` or `"editing"` before the call returns, then the session emits
+diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
+index 20e55a2..3727044 100644
+--- a/src/TNullMapView.cpp
++++ b/src/TNullMapView.cpp
+@@ -37,6 +37,9 @@
+ #include <QSettings>
+ #include <QTimer>
+ 
++#include <algorithm>
++#include <cmath>
++
+ TNullMapView::TNullMapView(Host* pHost, QObject* parent, const bool raisesEvents)
+ : QObject(parent)
+ , mpHost(pHost)
+@@ -380,6 +383,86 @@ bool TNullMapView::showRoom(const int roomId)
+     return true;
+ }
+ 
++bool TNullMapView::showLevel(const int level)
++{
++    const TArea* pArea = mpHost->mpMap->mpRoomDB->getArea(mView.mAreaID);
++    if (!pArea || !mLaidOut || !pArea->zLevels.contains(level)) {
++        return false;
++    }
++    // As move(): in shift mode for the player's room, so the next frame keeps this level
++    mRecentre = false;
++    mFollowing = false;
++    mView.mMapCenterZ = level;
++    mView.mShiftMode = true;
++    mView.mPick = false;
++    mView.mRoomID = playerRoomId();
++    requestRepaint();
++    return true;
++}
++
++bool TNullMapView::showArea(const int areaId)
++{
++    TRoomDB* pRoomDB = mpHost->mpMap->mpRoomDB.get();
++    const TArea* pArea = pRoomDB->getArea(areaId);
++    if (!pArea || pArea->zLevels.isEmpty()) {
++        return false;
++    }
++    const TRoom* pPlayerRoom = pRoomDB->getRoom(playerRoomId());
++    if (pPlayerRoom && pPlayerRoom->getArea() == areaId) {
++        return follow();
++    }
++    int level = mView.mMapCenterZ;
++    if (!pArea->zLevels.contains(level)) {
++        // As T2DMap::switchArea(): the lowest of the levels with the most rooms
++        qsizetype most = 0;
++        for (const int z : pArea->zLevels) {
++            if (pArea->getRoomsForZ(z).size() > most) {
++                most = pArea->getRoomsForZ(z).size();
++                level = z;
++            }
++        }
++    }
++    const QSet<int>& roomIds = pArea->getRoomsForZ(level);
++    QList<const TRoom*> rooms;
++    double meanX = 0.0;
++    double meanY = 0.0;
++    for (const int roomId : roomIds) {
++        if (const TRoom* pRoom = pRoomDB->getRoom(roomId)) {
++            rooms.append(pRoom);
++            meanX += (pRoom->x() - meanX) / rooms.size();
++            meanY += (pRoom->y() - meanY) / rooms.size();
++        }
++    }
++    const auto nearest = std::min_element(rooms.cbegin(), rooms.cend(), [meanX, meanY](const TRoom* a, const TRoom* b) {
++        return std::hypot(a->x() - meanX, a->y() - meanY) < std::hypot(b->x() - meanX, b->y() - meanY);
++    });
++    if (nearest == rooms.cend()) {
++        return false;
++    }
++    if (mView.mAreaID != areaId) {
++        TMapPainter::pruneSelectionToArea(mpHost->mpMap.data(), mView.mMultiSelectionSet, mView.mMultiSelectionHighlightRoomId, areaId);
++    }
++    // As showRoom(), without selecting the room
++    mRecentre = false;
++    mFollowing = false;
++    mPendingZoom.reset();
++    mView.mAreaID = areaId;
++    mView.mMapCenterX = (*nearest)->x();
++    mView.mMapCenterY = -(*nearest)->y();
++    mView.mMapCenterZ = level;
++    mView.mShiftMode = true;
++    mView.mPick = false;
++    mView.mRoomID = playerRoomId();
++    requestRepaint();
++    return true;
++}
++
++QList<int> TNullMapView::drawnLevels() const
++{
++    const TArea* pArea = mpHost->mpMap->mpRoomDB->getArea(mView.mAreaID);
++    return pArea && mLaidOut ? pArea->zLevels : QList<int>();
++}
++
+ bool TNullMapView::showsArea() const
+ {
+     return mLaidOut && mpHost->mpMap->mpRoomDB->getArea(mView.mAreaID);
+diff --git a/src/TNullMapView.h b/src/TNullMapView.h
+index cc31cba..08b2b2c 100644
+--- a/src/TNullMapView.h
++++ b/src/TNullMapView.h
+@@ -66,8 +66,16 @@ public:
+     bool move(const QPointF& pan, qreal zoom, const QPointF& about);
+     // Centres the next render() on the player's room and follows the player again; false with no room to follow
+     bool follow();
+-    // Whether the view follows the player: not from a move() or showRoom() that left it off the player, until the
+-    // player moves to another room or follow()
++    // Shows that level of the area the last render() laid out, about the same point, as T2DMap's level buttons do,
++    // until the player moves to another room or follow(); false for a level the area has no rooms on, or while the
++    // last render() laid out no area
++    bool showLevel(int level);
++    // Shows that area, as picking it in dlgMapper's area box does: following the player where they are in it, else
++    // about the room nearest the middle of its current level, or of its level with the most rooms where it has no
++    // rooms on the current one; false for an area that is not in the map or has no rooms
++    bool showArea(int areaId);
++    // Whether the view follows the player: not from a move(), showRoom(), showLevel() or showArea() that left it off
++    // the player, until the player moves to another room or follow()
+     bool following() const { return mFollowing; }
+     // The most a move() zooms the area out to: half as much again as fits its widest side, and at least 30 rooms
+     // across, or the zoom the area is at where that is more already
+@@ -87,6 +95,8 @@ public:
+     // cell in the frame's pixels
+     int drawnAreaId() const { return mView.mAreaID; }
+     int drawnLevel() const { return mView.mMapCenterZ; }
++    // The levels of the area the last render() laid out that have rooms, lowest first
++    QList<int> drawnLevels() const;
+     qreal drawnZoom() const { return mView.xyzoom; }
+     qreal drawnRoomSize() const { return mView.mRoomWidth; }
+     // The room the map takes as the player's: paint() and TMapPainter take the first room where the player's is gone
+@@ -149,7 +159,8 @@ private:
+     int mFollowedRoomId = 0;
+     int mFollowedAreaId = 0;
+     bool mLaidOut = false;
+-    // Cleared by a move() or showRoom() that leaves the view off the player, set again as it follows the player
++    // Cleared by a move(), showRoom(), showLevel() or showArea() that leaves the view off the player, set again as it
++    // follows the player
+     bool mFollowing = true;
+     QList<DrawnRoom> mDrawnRooms;
+     // A wheel turn's zoom and centre, which only the next render() lays out, so the pointer acts on what was drawn
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 68e29a0..fe0d353 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -679,6 +679,19 @@ public:
+     // Centres that map on the player's room and has it follow the player again; mapRepaintRequested follows. False,
+     // with errorString() saying why, as moveMapView() is, and with no room the player is in.
+     bool followPlayerOnMap(MapTarget map);
++    // Shows that level of the area the map drew last, about the same point, as the GUI's level buttons do, until the
++    // player moves to another room or followPlayerOnMap(); mapRepaintRequested follows. False, with errorString()
++    // saying why, as moveMapView() is, and for a level the area has no rooms on.
++    bool showMapLevel(MapTarget map, int level);
++    // Shows that area on the map, as picking it in the GUI's area box does: following the player where they are in
++    // it, else about the room nearest the middle of its current level, or of its level with the most rooms where it
++    // has none on the current one; mapRepaintRequested follows. False, with errorString() saying why, where
++    // moveMapView() is but for a last draw that showed no area, and for an area not in the map or with no rooms.
++    bool showMapArea(MapTarget map, int areaId);
++    // Walks the player to the room, as a double-click on it on the GUI's map does, with the profile's doSpeedWalk()
++    // or else the shortest path by known exits. False, with errorString() saying why, for a room not in the map, with
++    // no room the player is in, and where submit() is refused.
++    bool walkToRoom(int roomId);
+     // A room a map's last render drew, at its middle in the frame's pixels
+     struct MapRoom
+     {
+@@ -688,8 +701,8 @@ public:
+     };
+     // What a map's last render laid out, for an app to place what it draws over the map and to keep a gesture in
+     // step with it: the area and level drawn, the zoom (rooms across the narrow side) and the most moveMapView()
+-    // zooms out to, whether it follows the player, the player's room, a room's cell in pixels, and the rooms of that
+-    // area and level it drew, at most 500, those nearest the middle where there were more
++    // zooms out to, whether it follows the player, the player's room, a room's cell in pixels, the rooms of that
++    // area and level it drew, at most 500, those nearest the middle where there were more, and the area's levels
+     struct MapView
+     {
+         int areaId = 0;
+@@ -702,6 +715,8 @@ public:
+         int playerRoomId = 0;
+         qreal roomSize = 0.0;
+         QList<MapRoom> rooms;
++        // The levels of the area that have rooms, lowest first
++        QList<int> levels;
+     };
+     // None before that map has drawn an area, or with no such map
+     std::optional<MapView> mapView(MapTarget map) const;
+@@ -712,11 +727,49 @@ public:
+         QString name;
+         int areaId = 0;
+         QString areaName;
++        // Whether it is in the area of the player's room
++        bool inPlayerArea = false;
++        // As RoomInfo::steps
++        int steps = -1;
+     };
+     // The rooms of the map whose name holds the text, ignoring case, as searchRoom() finds them, and the room whose
+     // id it is, in no order; none with no profile open or for empty text. A getter, so it may be called from any
+     // handler.
+     QList<RoomMatch> findRooms(const QString& text) const;
++    // A way out of a room: one of the twelve directions, as "n" to "out", or a special exit's command
++    struct RoomExit
++    {
++        QString direction;
++        int to = 0;
++        QString toName;
++        bool locked = false;
++    };
++    struct RoomInfo
++    {
++        int id = 0;
++        QString name;
++        int areaId = 0;
++        QString areaName;
++        int x = 0;
++        int y = 0;
++        int z = 0;
++        // The fewest exits from the player's room to it, by rooms and exits that are not locked, as the GUI's
++        // speedwalk goes: 0 for the player's room, -1 with no such way or no room the player is in
++        int steps = -1;
++        // The directions first, from north to out, then the special exits by command
++        QList<RoomExit> exits;
++    };
++    // A room of the map, as the GUI's room properties show it; none for a room not in the map or with no profile
++    // open. A getter, so it may be called from any handler.
++    std::optional<RoomInfo> roomInfo(int roomId) const;
++    struct MapArea
++    {
++        int id = 0;
++        QString name;
++    };
++    // The areas of the map that have rooms, by name ignoring case, then id; none with no profile open. A getter, so
++    // it may be called from any handler.
++    QList<MapArea> mapAreas() const;
+     // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
+     // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
+     // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
+diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
+index e0e468e..30f8566 100644
+--- a/src/headless/THeadlessSessionMap.cpp
++++ b/src/headless/THeadlessSessionMap.cpp
+@@ -20,6 +20,7 @@
+ #include "THeadlessSession.h"
+ 
+ #include "Host.h"
++#include "TArea.h"
+ #include "TMap.h"
+ #include "TMapViewsFrontend.h"
+ #include "TNullConsoleFrontend.h"
+@@ -28,10 +29,59 @@
+ #include "TRoomDB.h"
+ 
+ #include <QPainter>
++#include <QQueue>
+ #include <QStringMatcher>
+ 
+ #include <algorithm>
+ 
++namespace {
++
++// The room the map takes as the player's, as paint() and TMapPainter take it; 0 for none
++int playerRoomOf(const TMap* pMap)
++{
++    const int roomId = pMap->mRoomIdHash.value(pMap->mProfileName);
++    return pMap->mpRoomDB->getRoom(roomId) ? roomId : 0;
++}
++
++// The fewest exits from the room to each it reaches, as TMap::findPath() goes: by no locked exit and into no
++// locked room
++QHash<int, int> stepsFrom(TRoomDB* pRoomDB, const int fromId)
++{
++    QHash<int, int> steps;
++    if (!pRoomDB->getRoom(fromId)) {
++        return steps;
++    }
++    steps.insert(fromId, 0);
++    QQueue<int> queue;
++    queue.enqueue(fromId);
++    while (!queue.isEmpty()) {
++        const int roomId = queue.dequeue();
++        const TRoom* pRoom = pRoomDB->getRoom(roomId);
++        const int next = steps.value(roomId) + 1;
++        const auto reach = [&](const int toId) {
++            const TRoom* pTo = pRoomDB->getRoom(toId);
++            if (pTo && !pTo->isLocked && !steps.contains(toId)) {
++                steps.insert(toId, next);
++                queue.enqueue(toId);
++            }
++        };
++        for (int direction = DIR_NORTH; direction <= DIR_OUT; ++direction) {
++            if (!pRoom->hasExitLock(direction)) {
++                reach(pRoom->getExit(direction));
++            }
++        }
++        const QMap<QString, int>& specialExits = pRoom->getSpecialExits();
++        for (auto it = specialExits.cbegin(); it != specialExits.cend(); ++it) {
++            if (!pRoom->hasSpecialExitLock(it.key())) {
++                reach(it.value());
++            }
++        }
++    }
++    return steps;
++}
++
++} // namespace
++
+ bool THeadlessSession::renderMap(QPainter& painter, const QSize& size)
+ {
+     if (!usable()) {
+@@ -336,6 +386,66 @@ bool THeadlessSession::followPlayerOnMap(const MapTarget map)
+     return true;
+ }
+ 
++bool THeadlessSession::showMapLevel(const MapTarget map, const int level)
++{
++    if (!usable()) {
++        return false;
++    }
++    TNullMapView* pView = drawnMap(map);
++    if (!pView) {
++        return false;
++    }
++    if (!pView->showsArea()) {
++        //: Error from a frontend with no window that was asked to show another level of the 2D map while the map it last drew showed no area, as for a map with no rooms
++        mErrorString = tr("The map drawn last shows no area to move.");
++        return false;
++    }
++    if (!pView->showLevel(level)) {
++        //: Error from a frontend with no window that was asked to show a level of the 2D map's area that has no rooms; %1 is the level
++        mErrorString = tr("The area shown has no rooms on level %1.").arg(level);
++        return false;
++    }
++    return true;
++}
++
++bool THeadlessSession::showMapArea(const MapTarget map, const int areaId)
++{
++    if (!usable()) {
++        return false;
++    }
++    TNullMapView* pView = drawnMap(map);
++    if (!pView) {
++        return false;
++    }
++    if (!pView->showArea(areaId)) {
++        //: Error from a frontend with no window that was asked to show an area on the 2D map that is not in the map or has no rooms; %1 is the area's id
++        mErrorString = tr("There is no area %1 with rooms in the map.").arg(areaId);
++        return false;
++    }
++    return true;
++}
++
++bool THeadlessSession::walkToRoom(const int roomId)
++{
++    if (!usable()) {
++        return false;
++    }
++    TMap* pMap = mpHost->mpMap.data();
++    if (!pMap->mpRoomDB->getRoom(roomId)) {
++        //: Error from a frontend with no window that was asked to walk to a room that is not in the 2D map; %1 is the room's id
++        mErrorString = tr("There is no room %1 in the map.").arg(roomId);
++        return false;
++    }
++    const int playerRoomId = playerRoomOf(pMap);
++    if (!playerRoomId) {
++        //: Error from a frontend with no window that was asked to walk to a room while the 2D map has no room the player is in
++        mErrorString = tr("The map has no room the player is in.");
++        return false;
++    }
++    TMapPainter::startSpeedWalk(mpHost, pMap, playerRoomId, roomId);
++    return true;
++}
++
+ std::optional<THeadlessSession::MapView> THeadlessSession::mapView(const MapTarget map) const
+ {
+     if (!mpHost || !mpHost->mpMap || !mpHost->mpMap->mpRoomDB) {
+@@ -357,6 +467,7 @@ std::optional<THeadlessSession::MapView> THeadlessSession::mapView(const MapTarg
+     for (const TNullMapView::DrawnRoom& room : pView->drawnRooms()) {
+         view.rooms.append(MapRoom{.id = room.id, .position = room.position, .name = room.name});
+     }
++    view.levels = pView->drawnLevels();
+     return view;
+ }
+ 
+@@ -384,9 +495,75 @@ QList<THeadlessSession::RoomMatch> THeadlessSession::findRooms(const QString& te
+             found.append(RoomMatch{.id = pRoom->getId(), .name = pRoom->name, .areaId = pRoom->getArea(), .areaName = areaNames.value(pRoom->getArea())});
+         }
+     }
++    if (found.isEmpty()) {
++        return found;
++    }
++    TRoomDB* pRooms = mpHost->mpMap->mpRoomDB.get();
++    const int playerRoomId = playerRoomOf(mpHost->mpMap.data());
++    const TRoom* pPlayerRoom = pRooms->getRoom(playerRoomId);
++    const QHash<int, int> steps = stepsFrom(pRooms, playerRoomId);
++    for (RoomMatch& match : found) {
++        match.inPlayerArea = pPlayerRoom && match.areaId == pPlayerRoom->getArea();
++        match.steps = steps.value(match.id, -1);
++    }
+     return found;
+ }
+ 
++std::optional<THeadlessSession::RoomInfo> THeadlessSession::roomInfo(const int roomId) const
++{
++    if (!mpHost || !mpHost->mpMap || !mpHost->mpMap->mpRoomDB) {
++        return std::nullopt;
++    }
++    TRoomDB* pRoomDB = mpHost->mpMap->mpRoomDB.get();
++    const TRoom* pRoom = pRoomDB->getRoom(roomId);
++    if (!pRoom) {
++        return std::nullopt;
++    }
++    RoomInfo info{.id = roomId,
++                  .name = pRoom->name,
++                  .areaId = pRoom->getArea(),
++                  .areaName = pRoomDB->getAreaNamesMap().value(pRoom->getArea()),
++                  .x = pRoom->x(),
++                  .y = pRoom->y(),
++                  .z = pRoom->z(),
++                  .steps = stepsFrom(pRoomDB, playerRoomOf(mpHost->mpMap.data())).value(roomId, -1)};
++    const auto exit = [pRoomDB](const QString& direction, const int toId, const bool locked) {
++        const TRoom* pTo = pRoomDB->getRoom(toId);
++        return RoomExit{.direction = direction, .to = toId, .toName = pTo ? pTo->name : QString(), .locked = locked};
++    };
++    for (int direction = DIR_NORTH; direction <= DIR_OUT; ++direction) {
++        if (const int toId = pRoom->getExit(direction); toId > 0) {
++            info.exits.append(exit(TRoom::dirCodeToShortString(direction), toId, pRoom->hasExitLock(direction)));
++        }
++    }
++    const QMap<QString, int>& specialExits = pRoom->getSpecialExits();
++    for (auto it = specialExits.cbegin(); it != specialExits.cend(); ++it) {
++        info.exits.append(exit(it.key(), it.value(), pRoom->hasSpecialExitLock(it.key())));
++    }
++    return info;
++}
++
++QList<THeadlessSession::MapArea> THeadlessSession::mapAreas() const
++{
++    QList<MapArea> areas;
++    if (!mpHost || !mpHost->mpMap || !mpHost->mpMap->mpRoomDB) {
++        return areas;
++    }
++    TRoomDB* pRoomDB = mpHost->mpMap->mpRoomDB.get();
++    const QMap<int, QString>& names = pRoomDB->getAreaNamesMap();
++    for (auto it = names.cbegin(); it != names.cend(); ++it) {
++        const TArea* pArea = pRoomDB->getArea(it.key());
++        if (pArea && !pArea->getAreaRooms().isEmpty()) {
++            areas.append(MapArea{.id = it.key(), .name = it.value()});
++        }
++    }
++    std::sort(areas.begin(), areas.end(), [](const MapArea& a, const MapArea& b) {
++        const int byName = a.name.compare(b.name, Qt::CaseInsensitive);
++        return byName != 0 ? byName < 0 : a.id < b.id;
++    });
++    return areas;
++}
++
+ // Gathered into one a turn, as the GUI's update() calls are into one repaint
+ void THeadlessSession::relayMapRepaints(Host* pHost, const unsigned int run)
+ {

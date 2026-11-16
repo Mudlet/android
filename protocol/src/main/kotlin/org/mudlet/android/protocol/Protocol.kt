@@ -885,7 +885,7 @@ class FrameReader(input: InputStream) {
                 val name = names.optString(i)
                 ScriptWindow.FrameTabs.Page(name, titles?.optString(i).orEmpty().ifEmpty { name })
             }
-            val current = w.optInt("tabCurrent", -1)
+            val current = w.optInt("tabCurrent", 0)
             return if (pages.isNotEmpty() && current in pages.indices) ScriptWindow.FrameTabs(pages, current) else null
         }
 

@@ -189,7 +189,7 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
         ScriptWindowInfo::FrameTabs tabs;
         for (const ScriptWindow::FrameTabs::Page& page : window.frameTabs->pages) {
             tabs.pages.append(page.name);
-            tabs.titles.append(page.title);
+            tabs.titles.append(page.name);
         }
         tabs.current = window.frameTabs->current;
         info.frameTabs = tabs;

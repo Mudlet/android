@@ -237,7 +237,7 @@ data class WindowLayout(
 
             // The page now in front of the tabs that [key] is a page of, should another of them have come in front of it
             fun frontPageOfTabsHolding(key: WindowKey): ScriptWindow? {
-                if (key.kind != WindowKind.MXP_FRAME) return null
+                if (key.kind != WindowKind.MINI_CONSOLE) return null
                 val tabs = tabHeaders.firstOrNull { (_, t) -> t.pages.any { it.name == key.name } }?.second ?: return null
                 return pages.firstOrNull { it.key == WindowKey(tabs.front.name, WindowKind.MXP_FRAME) }
             }

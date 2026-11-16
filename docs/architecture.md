@@ -293,9 +293,9 @@ which the desktop's mapper turns into a "Download from game" button. The app's m
 drawn by `ui/game/AppMap.kt`):
 - With no map drawn, the map in front says so in its middle, with a button "Download the map from <host>". It sits
   under the map's buttons, which it would otherwise cover for touches and TalkBack, and scrolls where the map has no
-  room for it. With a map, or while a search's results would sit over the middle, the same button is in a bar under
-  the search field, as a game may offer a newer map. Neither shows while the game offers none, nor while a download
-  runs.
+  room for it. With a map, or while a search's results or a refusal at the map's bottom would share the map with it,
+  the same button is in a bar under the search field, as a game may offer a newer map. Neither shows while the game
+  offers none, nor while a download runs.
 - The button sends `downloadMap`, and waits for the engine's answer, so a second tap sends no second. While the
   download runs, the bar shows Mudlet's progress label, or "Downloading the map from <host>…", and a progress bar read
   as "Map download": how far of `maximum`, which is Mudlet's guess of 4 MB until the server sends the size, and
@@ -514,8 +514,8 @@ device shows, below the UI's debug hook:
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
   the title bar's toggle bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions
   reach it as `appMapPointer`, and Back sending it back, the room search with its results, no match, more matches
-  and a refusal, and the map download: no button with no offer, the offer with no map drawn, under the map's
-  buttons, sending one `downloadMap` however often tapped, its progress, indeterminate past Mudlet's guess, and
+  and a refusal, and the map download: no button with no offer, the offer with no map drawn, covering no
+  other control, sending one `downloadMap` however often tapped, its progress, indeterminate past Mudlet's guess, and
   Cancel, how it ended (cancelled, failed, read out at once and not again to a UI that comes back, until dismissed,
   and loaded, the map then drawn and the offer above it), a refusal, and the offer gone with the profile; and the
   notification permission, explained and then asked on Android 13 and later, on a fresh install.

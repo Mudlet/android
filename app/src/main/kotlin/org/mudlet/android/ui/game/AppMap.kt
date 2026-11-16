@@ -118,7 +118,7 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
  * The app's map in front, where [modifier] puts it: a search for rooms by name or number, whose results centre the map
  * on a room, and the download of the map the game offers ([MapDownloadBar]), over the map as [MapView] draws it, which a
  * tap selects in and a double tap walks on; with no map drawn, the offer is in its middle ([MapOffer]), under the map's
- * buttons, or in the bar while a search's results would be where it is. Back calls
+ * buttons, or in the bar while a search's results or a refusal would be where it is. Back calls
  * [onClose], after the map shrinks with a predictive back gesture. It covers what is under it, touches and all.
  */
 @Composable
@@ -149,9 +149,10 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         Column(Modifier.matchParentSize()) {
             RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onFocusChanged { editing = it.hasFocus })
             val map = AppMapClient.map
-            // Results would sit over the offer in the map's middle, so it waits in the bar while there are any
-            val searched = AppMapClient.search != null && !editing
-            MapDownloadBar(offerHere = map != null || searched, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            // In the map's middle with no map drawn, but not where it would share the map with the search's results or a
+            // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack
+            val offerInMap = map == null && (AppMapClient.search == null || editing) && AppMapClient.refusal == null
+            MapDownloadBar(offerHere = !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 var size by remember { mutableStateOf(IntSize.Zero) }
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
@@ -166,7 +167,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                 )
                 // Under the map's buttons, as the results are, whose touches and TalkBack it would take where it covered them
-                if (map == null && !searched) {
+                if (offerInMap) {
                     Box(Modifier.matchParentSize().padding(top = MAP_CONTROLS_HEIGHT), contentAlignment = Alignment.Center) {
                         MapOffer(Modifier.padding(16.dp))
                     }

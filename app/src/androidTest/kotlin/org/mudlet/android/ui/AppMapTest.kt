@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
@@ -446,7 +447,6 @@ class AppMapTest {
         session.send(mapDownload())
         val offered = hasText(string(R.string.map_download_offered, HOST))
         waitFor("the offer shows where no map is drawn") { compose.onAllNodes(offered).fetchSemanticsNodes().isNotEmpty() }
-        assertOfferClearOfButtons()
         assertTouchTarget(download)
         activate(download)
         request("downloadMap", "the button downloads the map")
@@ -475,8 +475,6 @@ class AppMapTest {
         waitFor("the download says it was cancelled") { compose.onAllNodes(cancelled).fetchSemanticsNodes().isNotEmpty() }
         // Told last, though an announcement just before it may share its turn (Announcer's MERGE_MS)
         compose.runOnIdle { assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_download_cancelled))) }
-        // The offer is back in the map's middle, under its buttons with the bar above them
-        assertOfferClearOfButtons()
 
         // A failure says Mudlet's reason, read out at once, until dismissed
         activate(download)
@@ -506,6 +504,9 @@ class AppMapTest {
         waitFor("the UI read what the engine said again") { compose.onAllNodes(hasText(string(R.string.map_refused, "read"))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(failed).assertIsDisplayed()
         compose.runOnIdle { assertEquals("a UI that comes back is not told again", told, Announcer.current!!.serial) }
+        // The refusal is at the map's bottom, which the offer in its middle could reach: the offer waits in the bar
+        assertTrue("with a refusal shown the offer is not in the map's middle", compose.onAllNodes(offered).fetchSemanticsNodes().isEmpty())
+        compose.onNode(download).assertIsDisplayed()
         activate(hasContentDescription(string(R.string.map_download_dismiss)))
         waitFor("the failure goes once dismissed") { compose.onAllNodes(failed).fetchSemanticsNodes().isEmpty() }
 
@@ -602,13 +603,15 @@ class AppMapTest {
         return results.top >= buttons.bottom && results.bottom <= bounds(mapShown()).bottom
     }
 
-    // The offer in the map's middle, its card whole, is under the map's buttons: over them it would take their touches and
-    // cover them for TalkBack, which the accessibility check sees only on API 34 and up, and then only where the part
-    // left uncovered is the smaller
-    private fun assertOfferClearOfButtons() {
-        val card = compose.onNode(hasText(string(R.string.map_download_offered, HOST)), useUnmergedTree = true).fetchSemanticsNode().parent!!.boundsInRoot
-        val buttons = bounds(hasContentDescription(string(R.string.map_edit)) and hasClickAction())
-        assertTrue("the offer is under the map's buttons: $card. ${screen()}", card.top >= buttons.bottom)
+    // The offer in the map's middle, its card whole, covers no control but its own: over one it would take its touches and
+    // cover it for TalkBack, which the accessibility check sees only on API 34 and up, and then only where the part left
+    // uncovered is the smaller. True with no offer in the middle
+    private fun offerCoversNothing(): Boolean {
+        val text = compose.onAllNodes(hasText(string(R.string.map_download_offered, HOST)), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
+        val card = text?.parent ?: return true
+        fun inCard(node: SemanticsNode): Boolean = generateSequence(node) { it.parent }.any { it.id == card.id }
+        return compose.onAllNodes(hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+            .none { !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
     }
 
     private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()
@@ -675,7 +678,10 @@ class AppMapTest {
         throw AssertionError("${e.message}\n${screen()}", e)
     }
 
-    private fun checkAccessibility() = withScreen { compose.onRoot().tryPerformAccessibilityChecks() }
+    private fun checkAccessibility() = withScreen {
+        assertTrue("the offer covers no other control", offerCoversNothing())
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
 
     /** What is on the screen, for a failure to say: the window and its keyboard, the map's bounds, what has the focus, and every node. */
     private fun screen(): String {

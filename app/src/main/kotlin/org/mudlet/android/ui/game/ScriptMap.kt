@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -121,7 +120,6 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
     // In this node's pixels: the window as a whole, of which [rect] may show only a part
     val fit = remember(window.w, window.h, rect, full) { MapFit(window.w, window.h, PxRect(full.x - rect.x, full.y - rect.y, full.w, full.h)) }
     // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred
-    LaunchedEffect(fit.renderScale) { ScriptWindowsClient.setMapScale(fit.renderScale) }
     MapView(
         MapperWindow,
         frame,

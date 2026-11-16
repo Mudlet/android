@@ -1219,7 +1219,7 @@ std::optional<MapFrame> MudletEngine::drawMap(const QSize& size)
         return std::nullopt;
     }
     // Drawn in the window's pixels onto an image of the device's, so the lines and names are as sharp as the screen
-    const double scale = std::max(1.0, std::min({mMapScale, double(PngImage::maxSide) / size.width(), double(PngImage::maxSide) / size.height()}));
+    const double scale = std::max(1.0, std::min({1.0, double(PngImage::maxSide) / size.width(), double(PngImage::maxSide) / size.height()}));
     QImage image(size * scale, QImage::Format_ARGB32_Premultiplied);
     if (image.isNull()) {
         qWarning("MudletEngine: no memory for the map at %dx%d by %g", size.width(), size.height(), scale);

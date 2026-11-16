@@ -23,7 +23,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -57,7 +56,7 @@ import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.MudletTopBar
+import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.ansiText
 
 private val consoleStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -102,7 +101,7 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
         if (itemCount > 0) listState.scrollToItem(itemCount - 1)
     }
 
-    Scaffold(topBar = { MudletTopBar(stringResource(R.string.selftest_title), onBack) }) { padding ->
+    MudletScaffold(stringResource(R.string.selftest_title), onBack = onBack) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().padding(6.dp)) {
             val small = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
             if (showDebug) {

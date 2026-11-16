@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt` and the app's own map in `ui/AppMapClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt` and the app's own map in `ui/AppMapClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -170,6 +170,29 @@ one sends its command. Up to 12 per profile, in the order pinned, saved whole on
 I/O error. They are unpinned from the sheet's Pinned section. While the game hides input there is no quick bar,
 the sheet closes and Ctrl+R does nothing; nothing reaches the search, and a pin can only come from the history,
 which a hidden send never enters.
+
+### How the app looks
+The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
+scales; text sizes are in sp, so the system font size scales them.
+- Colours: the wallpaper's (Material You) on Android 12 and later while the setting "Colours from my wallpaper"
+  (`Settings.wallpaperColours`, on by default, offered on those releases only) is on, else Mudlet's own: the tonal
+  spot schemes seeded with the sandstone of the launcher icon's arch, `#D39F41` (`ui/theme/Color.kt`, generated with
+  Material's colour utilities; regenerate them rather than edit a role by hand). Only the app's chrome takes them: the
+  console's colours, ANSI ones included, the map behind the text and what the scripts draw (windows, labels, gauges,
+  button bars, their own map) keep theirs.
+- Every screen but the game's is a `MudletScaffold`: the same top bar, tinted while the content under it is scrolled.
+  Lists are groups of `ListSegment`s, Material 3 Expressive's look: each item on a container of its own, 2 dp apart,
+  the group's ends rounder, under a `SectionHeader` that TalkBack reads as a heading. The settings are at most 640 dp
+  wide.
+- Motion is Material 3 Expressive's springs (`MudletMotion`): screens slide a little and fade, forward from the end,
+  Back the other way, and a predictive back gesture (`android:enableOnBackInvokedCallback`) seeks it as it goes.
+- On an expanded screen (840 dp wide and more, Material's window size classes, measured from the space the app has), a
+  profile's editor and a component's licence open beside their list (`ListDetail`), the list's item tinted; Back,
+  predictive too, closes them there, and the detail's top bar has Close in place of Back. Narrower, they are screens of
+  their own, and one open beside the list moves to its own screen when the window narrows (a foldable folding, say).
+- Material 3 Expressive's own components (`MaterialExpressiveTheme`, the shape morphs, button groups, the flexible top
+  bars, `LoadingIndicator`) are experimental in the material3 the Compose BOM brings, so the app has none of them, only
+  Expressive's springs and segmented lists, built with stable components.
 
 ### Profiles in the app
 The profile list (`ui/profiles/ProfileListScreen.kt`) shows the engine's `profiles`, which `EngineClient` asks for
@@ -1160,6 +1183,17 @@ Item 13 of the on-device checklist covers this.
       download" read their names; the end of the download is read out as it comes, a failure at once.
     - Over https (as most games' map URLs are), the download works: OpenSSL is in the APK (see "TLS").
     - `adb logcat` shows the map's host but never more of its URL: no user name, password, path or query.
+
+25. How the app looks, on Android 12 or later, in light and in dark mode.
+    - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives
+      Mudlet's own (sandstone) at once, and on again the wallpaper's. The game's text keeps its colours either way.
+    - Back from any screen, with the predictive gesture, shows the screen it goes back to as the finger moves; let go
+      of early, it stays.
+    - On a tablet or an unfolded foldable in landscape, Edit opens the editor beside the profile list, and About's
+      components their licence beside the list; Back closes it, and folding the device moves an open editor to its own
+      screen.
+    - With TalkBack on: the settings' sections read as headings, and the editor beside the list has "Close <name>" at
+      its top.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

@@ -1,0 +1,153 @@
+package org.mudlet.android.ui
+
+import android.Manifest
+import android.os.Build
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.setContent
+import androidx.annotation.StringRes
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.Density
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.rule.GrantPermissionRule
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.RuleChain
+import org.junit.runner.RunWith
+import org.mudlet.android.R
+import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.theme.MudletTheme
+
+/**
+ * On an expanded screen, a profile's editor opens beside the profile list, and Back closes it there, a back gesture
+ * that is let go of keeping it open; when the screen narrows, the open editor becomes a screen of its own. The phone
+ * the tests run on is made expanded by laying the app out at a smaller density, so these do not run the accessibility
+ * checks: at that density, the touch targets are smaller in pixels than the checks allow.
+ */
+@RunWith(AndroidJUnit4::class)
+class ListDetailTest {
+    private val fake = FakeEngineRule()
+    private val compose = createAndroidComposeRule<MainActivity>()
+
+    @get:Rule
+    val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
+        .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
+        .around(compose)
+
+    private var scale by mutableFloatStateOf(1f)
+    private lateinit var session: FakeEngine.Session
+
+    @Before
+    fun expand() {
+        val metrics = compose.activity.resources.displayMetrics
+        // Wide enough to be expanded, from 840 dp, with room to spare
+        scale = minOf(1f, metrics.widthPixels / metrics.density / EXPANDED_DP)
+        compose.runOnUiThread {
+            compose.activity.setContent {
+                val density = LocalDensity.current
+                CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+                    MudletTheme { AppNavigation(onKillUi = {}) }
+                }
+            }
+        }
+        session = fake.engine.nextSession()
+        session.profiles(PROFILES, session.receive("listProfiles"))
+        compose.waitUntil(WAIT_MS) { EngineClient.profiles == PROFILES }
+    }
+
+    @Test
+    fun theEditorOpensBesideTheListAndBackClosesIt() {
+        displayed(hasText(string(R.string.profiles_pick)))
+        activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        editorShown()
+        // Beside the list, still there
+        displayed(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
+
+        // A back gesture let go of before it is done leaves the editor open
+        compose.runOnUiThread {
+            val back = compose.activity.onBackPressedDispatcher
+            back.dispatchOnBackStarted(BackEventCompat(0f, 0f, 0f, BackEventCompat.EDGE_LEFT))
+            back.dispatchOnBackProgressed(BackEventCompat(100f, 0f, 0.5f, BackEventCompat.EDGE_LEFT))
+            back.dispatchOnBackCancelled()
+        }
+        editorShown()
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        displayed(hasText(string(R.string.profiles_pick)))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_host))).assertDoesNotExist()
+        displayed(hasText(string(R.string.profiles_title)))
+    }
+
+    @Test
+    fun anEditorOpenBesideTheListBecomesAScreenOfItsOwnWhenTheScreenNarrows() {
+        activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        editorShown()
+
+        compose.runOnUiThread { scale = 1f }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.navigate_back))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_host))).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profiles_title))).assertDoesNotExist()
+
+        // Back from the editor's own screen is the profile list, with no editor beside it
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        displayed(hasText(string(R.string.profiles_title)))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_host))).assertDoesNotExist()
+    }
+
+    @Test
+    fun theAnswerToASaveClosesOnlyTheEditorThatSaved() {
+        activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        editorShown()
+        activate(hasText(string(R.string.profile_save)))
+        val save = session.receive("saveProfile")
+        // The player moves on to another profile's editor before the engine answers
+        activate(hasContentDescription(string(R.string.profile_edit, OTHER.name)))
+        displayed(hasContentDescription(string(R.string.detail_close, OTHER.name)) and hasClickAction())
+
+        session.profiles(PROFILES, save)
+        compose.waitForIdle()
+        displayed(hasContentDescription(string(R.string.detail_close, OTHER.name)) and hasClickAction())
+        compose.onNode(hasText(string(R.string.profiles_pick))).assertDoesNotExist()
+    }
+
+    /** The editor of [GAME], beside the list, with a Close button at its top in place of Back. */
+    private fun editorShown() {
+        displayed(hasSetTextAction() and hasText(string(R.string.profile_host)))
+        displayed(hasContentDescription(compose.activity.getString(R.string.detail_close, GAME.name)) and hasClickAction())
+        displayed(hasText(string(R.string.profiles_title)))
+    }
+
+    private fun displayed(node: SemanticsMatcher) {
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(node).assertIsDisplayed()
+    }
+
+    private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
+
+    private fun activate(label: SemanticsMatcher) {
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(label and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(label and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    private companion object {
+        val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+        val OTHER = Profile("Other", "127.0.0.2", 4000, false, "", false)
+        val PROFILES = listOf(GAME, OTHER)
+        const val EXPANDED_DP = 960f
+        const val WAIT_MS = 10_000L
+        const val TIMEOUT_MS = 120_000L
+    }
+}

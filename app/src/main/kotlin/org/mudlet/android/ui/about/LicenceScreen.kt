@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -20,7 +19,7 @@ import kotlinx.coroutines.withContext
 import org.mudlet.android.R
 import org.mudlet.android.about.Component
 import org.mudlet.android.about.Licences
-import org.mudlet.android.ui.MudletTopBar
+import org.mudlet.android.ui.MudletScaffold
 
 /**
  * One component of the About screen's list: its version, copyright, links, and the full text of each licence its
@@ -39,7 +38,7 @@ fun LicenceScreen(componentId: String, onBack: () -> Unit) {
             }
         }
     }
-    Scaffold(topBar = { MudletTopBar(component?.name ?: stringResource(R.string.about_title), onBack) }) { padding ->
+    MudletScaffold(component?.name ?: stringResource(R.string.about_title), onBack = onBack) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
             when {
                 licences == null -> item { Paragraph(stringResource(R.string.about_loading)) }

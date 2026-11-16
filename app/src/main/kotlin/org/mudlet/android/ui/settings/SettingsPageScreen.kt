@@ -173,7 +173,8 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
         entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton({ owner.change(setting, size - 1) }, enabled = size > range.first) {
+            // Clamped: a disabled button still has its click action, which a test or an accessibility service can call
+            IconButton({ owner.change(setting, (size - 1).coerceIn(range)) }, enabled = size > range.first) {
                 Icon(painterResource(R.drawable.ic_remove), stringResource(entry.less))
             }
             Slider(
@@ -191,7 +192,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
                 // A mark a step on a short range; a long one's would run together
                 steps = if (range.last - range.first <= MAX_MARKED_STEPS) range.last - range.first - 1 else 0,
             )
-            IconButton({ owner.change(setting, size + 1) }, enabled = size < range.last) {
+            IconButton({ owner.change(setting, (size + 1).coerceIn(range)) }, enabled = size < range.last) {
                 Icon(painterResource(R.drawable.ic_add), stringResource(entry.more))
             }
         }

@@ -43,7 +43,7 @@ import org.mudlet.android.ui.EngineMessages.button
  * The order TalkBack moves through the game screen in (docs/architecture.md, "On-device checklist"), against a fake
  * engine, over a screen with a mini console, a button bar and the map behind the text: the title bar, the console, the
  * input line and the screen's own buttons, then the script windows, then the button bars, and last the last
- * announcement. The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
+ * announcement; with the map in front, the title bar, the map and the connection bar, and nothing the map covers. The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
  */
 @RunWith(AndroidJUnit4::class)
 class TalkBackOrderTest {
@@ -129,6 +129,54 @@ class TalkBackOrderTest {
         assertTrue("only the console's lines before the input line: $read", beforeInput.all { console in nodes.getValue(it).ancestorIds() })
 
         // Every control is reached by swiping, none by touch alone
+        for (control in compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()) {
+            assertTrue("${describe(control)} is read: TalkBack reads $read", order.any { nodes.related(it, control.id) })
+        }
+    }
+
+    @Test
+    fun withTheMapInFrontTheTitleBarThenTheMapThenTheConnectionBar() {
+        session.mainArea(800, 600, 100, 40, 0, 0, 800, 600)
+        session.windows(listOf(FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 50)), full = true)
+        session.windowText("chat", listOf(WINDOW_ROW))
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North"))))
+        waitFor(hasText(WINDOW_ROW))
+        waitFor(hasText("North") and hasClickAction())
+        activate(hasContentDescription(string(R.string.app_map_show)))
+        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
+        waitFor(map)
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        val nodes = compose.onAllNodes(SemanticsMatcher("any node") { true }, useUnmergedTree = true).fetchSemanticsNodes().associateBy { it.id }
+        val order = traversalOrder(nodes.values.filter { it.parent != null }.map { it.id })
+        val read = order.map { describe(nodes.getValue(it)) }
+
+        val expected = listOf(
+            "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
+            "the room search" to (hasSetTextAction() and hasText(string(R.string.app_map_search))),
+            "the map" to map,
+            "the connection bar" to (hasText(string(R.string.connection_disconnect)) and hasClickAction()),
+        )
+        val places = expected.map { (name, matcher) ->
+            val target = compose.onNode(matcher).fetchSemanticsNode().id
+            name to order.indexOfFirst { nodes.related(it, target) }
+        }
+        val at = places.map { it.second }
+        assertTrue("each is read, in its own place: $places; TalkBack reads $read", at.all { it >= 0 } && at.distinct() == at)
+        assertEquals("TalkBack reads $read", places, places.sortedBy { it.second })
+
+        // Nothing the map covers is read
+        val covered = listOf(
+            "the console" to hasText(CONSOLE_LINE),
+            "the input line" to (hasSetTextAction() and hasText(string(R.string.input_label))),
+            "the quick bar" to (hasText(string(R.string.history_open)) and hasClickAction()),
+            "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
+            "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
+        )
+        for ((name, matcher) in covered) {
+            assertTrue("$name is not read: TalkBack reads $read", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
+        }
+
         for (control in compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()) {
             assertTrue("${describe(control)} is read: TalkBack reads $read", order.any { nodes.related(it, control.id) })
         }

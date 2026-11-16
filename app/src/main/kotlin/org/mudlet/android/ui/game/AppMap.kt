@@ -174,8 +174,8 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 // Under the map's buttons, whose touches and TalkBack they would take where they covered them, even
                 // the strip of a short list that left the buttons' bottom edge out; half the map below them, but at
-                // least their head and a whole result. Where the map has not that room, as with a keyboard up for the
-                // command line, they wait for it: squeezed, their close button and rows would be cut off
+                // least their head and a whole result. Where the map has not that room, as in a short window, they
+                // wait for it: squeezed, their close button and rows would be cut off
                 val below = maxHeight - MAP_CONTROLS_HEIGHT
                 val search = AppMapClient.search
                 if (search != null && !editing && below >= RESULTS_HEAD + RESULT_ROW) {

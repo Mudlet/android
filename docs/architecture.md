@@ -264,16 +264,19 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   background, none for text already below 4.5:1. The console's colours, ANSI ones included, are not changed; text the
   game colours is not weighed, so a dim colour of the game's reads less well over the map. It takes no touches, which
   reach the text as before, and TalkBack does not read it.
-- In front: the title bar's map button, a toggle read as "Map" with its state, covers the game area (not the input line)
-  with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, pinch, the zoom
+- In front: the title bar's map button, a toggle read as "Map" with its state, covers all of the game screen between the
+  title bar and the connection bar, the input line and the quick bar too, with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, pinch, the zoom
   buttons, the edit switch, refusals and TalkBack's actions), under a search field. TalkBack does not read what it
-  covers. Back or the button again sends it back; with a predictive back gesture it shrinks as the gesture goes.
+  covers, and a hardware keyboard's focus does not reach it. The input line lets go of the focus and the keyboard while
+  the map is in front, and Ctrl+R opens no history. Back or the button again sends it back, and the input line has the
+  focus again if it had it; with a predictive back gesture the map shrinks as the gesture goes, over the game screen
+  under it.
 - The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
   result, read as "<room>, <area> (<number>)", is a 48 dp row, and a tap sends `showRoom`, which centres the map on
   that room and selects it, until the player moves, so its actions then walk there. "Finding rooms…", no match and
   more matches than shown are read out as they come. The results sit under the map's buttons, which they would
   otherwise hide from touch and TalkBack, and show only where the map has the room for their head and one whole row
-  (not with a keyboard up on a small screen) and while the search is not being edited, so that none of their touch
+  (not in a short window) and while the search is not being edited, so that none of their touch
   targets is ever cut off.
 - The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
   shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
@@ -509,7 +512,8 @@ device shows, below the UI's debug hook:
   announcement, `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings
   send; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
-  windows, then the bars, then the last announcement, with every control in it and nothing of the map; the script
+  windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
+  map in front the title bar, its search, the map and the connection bar, and nothing it covers; the script
   windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
   screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
   button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
@@ -523,8 +527,9 @@ device shows, below the UI's debug hook:
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
   docked map as a page; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
-  the title bar's toggle bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions
-  reach it as `appMapPointer`, and Back sending it back, the room search with its results, no match, more matches
+  the title bar's toggle bringing it to the front, over the input line and the quick bar down to the connection bar,
+  with the input line's keyboard gone and its focus back after, where taps, the zoom buttons, the edit switch and
+  TalkBack's actions reach it as `appMapPointer`, and Back sending it back, the room search with its results, no match, more matches
   and a refusal, and the map download: no button with no offer, the offer with no map drawn, covering no
   other control, sending one `downloadMap` however often tapped, its progress, indeterminate past Mudlet's guess, and
   Cancel, how it ended (cancelled, failed, read out at once and not again to a UI that comes back, until dismissed,
@@ -1132,8 +1137,10 @@ Item 13 of the on-device checklist covers this.
       too, and closing it (`lua myMapper:hide()`) brings it back.
     - The title bar's map button brings it to the front: a tap selects, a double tap walks there, a pinch and the zoom
       buttons zoom, and the edit switch edits it. "Find a room" with part of a room's name lists the rooms that match;
-      a tap on one centres the map on it. Back and the button again send it back; a predictive back gesture shrinks
-      the map as it goes, and a cancelled one leaves it as it was.
+      a tap on one centres the map on it. It covers the input line and the quick bar, and the keyboard goes with them;
+      only the title bar and the connection bar stay. Back and the button again send it back, and an input line that
+      had the focus has it again; a predictive back gesture shrinks the map as it goes, and a cancelled one leaves it
+      as it was.
     - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,
       the field, its results and the map read as the mapper window's does, and the console under it is not read.
     - With the system font at its largest, the search field and its results still fit and read whole.

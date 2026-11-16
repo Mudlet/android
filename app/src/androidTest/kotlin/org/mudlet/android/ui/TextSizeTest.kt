@@ -92,7 +92,7 @@ class TextSizeTest {
         compose.onNode(slider).performSemanticsAction(SemanticsActions.SetProgress) { it(28f) }
         activate(hasContentDescription(string(R.string.settings_text_smaller)))
         compose.runOnIdle { assertEquals(27, Settings.textSize.value) }
-        compose.onNode(slider).assert(stateDescription(compose.activity.getString(R.string.settings_text_size_value, 27)))
+        compose.onNode(slider).assert(stateDescription(compose.activity.resources.getQuantityString(R.plurals.settings_text_size_value, 27, 27)))
         // The page, then the settings
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))

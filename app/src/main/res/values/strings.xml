@@ -227,7 +227,10 @@
     <!-- Under the text size setting, what it does -->
     <string name="settings_text_size_hint">The size of the game\'s text. Pinching the text with two fingers changes it too, and the system\'s font size scales it.</string>
     <!-- %1$d is the text size, a whole number (in sp, which players need not know) -->
-    <string name="settings_text_size_value">Size %1$d</string>
+    <plurals name="settings_text_size_value">
+        <item quantity="one">Size %1$d</item>
+        <item quantity="other">Size %1$d</item>
+    </plurals>
     <!-- The button, read by a screen reader, that makes the game's text smaller -->
     <string name="settings_text_smaller">Smaller text</string>
     <!-- The button, read by a screen reader, that makes the game's text larger -->
@@ -292,7 +295,10 @@
     <!-- Under "The game wraps at", what the setting is for -->
     <string name="settings_undo_wrap_width_hint">The longest line the game sends, in characters. Lines that would have fitted are joined.</string>
     <!-- %1$d is the column a game wraps its lines at, a whole number of characters such as 80 -->
-    <string name="settings_undo_wrap_width_value">%1$d characters</string>
+    <plurals name="settings_undo_wrap_width_value">
+        <item quantity="one">%1$d character</item>
+        <item quantity="other">%1$d characters</item>
+    </plurals>
     <!-- The button, read by a screen reader, that lowers the column the game wraps at by one -->
     <string name="settings_undo_wrap_width_less">Fewer characters</string>
     <!-- The button, read by a screen reader, that raises the column the game wraps at by one -->

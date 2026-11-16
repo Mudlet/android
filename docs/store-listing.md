@@ -74,7 +74,7 @@ Each claim, and what on `main` makes it true. "Not yet" claims are left out of a
 | Colours, ANSI to 24-bit | Yes | `app/src/main/kotlin/org/mudlet/android/ui/AnsiText.kt:30-34`; [`protocol.md`](protocol.md), "Runs" |
 | History and completion, keyboard stays open | Yes | `InputLine.kt:68-72`, `:188-224`; `GameScreenTest.aSendReachesTheEngineAndLeavesFocusOnTheInputLine` |
 | Masked password field | Yes | `InputLine.kt:154-180` |
-| Background running, tells as notifications | Yes | `engine-service/src/main/AndroidManifest.xml:13-24`; `EngineNotifications.kt:91-110` |
+| Background running, tells as notifications | Yes | `engine-service/src/main/AndroidManifest.xml:13-24`; `EngineNotifications.kt:147-181` |
 | Engine restarted and reconnected after a kill | Yes, with libmudlet | [`architecture.md`](architecture.md), "Restoring the session" |
 | Triggers, aliases, timers, Lua, packages, GMCP and the rest | Yes, in the engine | libmudlet's `THeadlessSession` runs Mudlet's own core ([`architecture.md`](architecture.md), "libmudlet as the engine"); editing scripts in the app is Phase F, so a player brings them in a package or through the game |
 | TalkBack labels, announced connection state, no gesture-only actions | Yes | "Accessibility" below |
@@ -231,7 +231,7 @@ functionality.
 **Network: only the player's game, and what it or their scripts ask for.**
 
 - The app's UI process opens no network connection. It talks to the engine over a filesystem `LocalSocket` in the
-  app's own files (`app/src/main/kotlin/org/mudlet/android/ui/EngineClient.kt:335-338`), and the engine drops any
+  app's own files (`app/src/main/kotlin/org/mudlet/android/ui/EngineClient.kt:361-364`), and the engine drops any
   peer that is not the app's own user id (`native/enginehost/SocketBridge.cpp:42-50`). `INTERNET` and
   `ACCESS_NETWORK_STATE` are declared only for the engine service (`engine-service/src/main/AndroidManifest.xml:4-5`).
 - The app's libraries are AndroidX, Compose, `org.json` and Qt (`gradle/libs.versions.toml:29-47`): no analytics,
@@ -287,7 +287,7 @@ device ([`roadmap.md`](roadmap.md), U3).
 
 **Crash reports and logs.** The app sends no crash report and no log. It writes to logcat, on the device: the engine's
 state changes and errors (`native/enginehost/MudletEngine.cpp`, `SocketBridge.cpp`), Mudlet's error console lines
-(`MudletEngine.cpp:222`), and the title of a tell it could not post (`EngineNotifications.kt:99`), never a password.
+(`MudletEngine.cpp:222`), and the title of a tell it could not post (`EngineNotifications.kt:155`), never a password.
 Google Play's Android vitals gathers crashes and ANRs through Android itself, from users who allow it; that is
 Google's, not the app's, and is not declared here. The release AAB carries the symbol tables those reports need
 (`app/build.gradle.kts:68-69`).
@@ -295,7 +295,7 @@ Google's, not the app's, and is not declared here. The release AAB carries the s
 **What is kept on the device.** Profiles, Mudlet's settings, scripts, packages, maps and logs a player turns on, in
 the app's private files (`native/enginehost/MudletEngine.cpp:95-106`); the engine's restore file
 (`engine-service/src/main/kotlin/org/mudlet/android/engine/EngineSession.kt:15-17`); whether the app has asked for
-notifications (`app/src/main/kotlin/org/mudlet/android/ui/MainActivity.kt:79-84`). Other apps cannot read them.
+notifications (`app/src/main/kotlin/org/mudlet/android/ui/MainActivity.kt:100-105`). Other apps cannot read them.
 
 **Backups.** None: `android:allowBackup="false"` and `android:fullBackupContent="false"`
 (`app/src/main/AndroidManifest.xml:10-11`), and on Android 12 and later the data extraction rules exclude every
@@ -311,7 +311,7 @@ kept. As no copy leaves the device and there is no account, there is nothing for
 | `INTERNET` | The engine's connection to the game |
 | `ACCESS_NETWORK_STATE` | Qt's networking checks the connection |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE` | The engine's foreground service keeps the connection and scripts running in the background (`:13-24`, with the reason Play reads at `:18-20`) |
-| `POST_NOTIFICATIONS` | The engine's notification, and tells; on Android 13 and later asked after a screen that says why, and not again after "Not now" (`MainActivity.kt:44-53`, `:69-77`) |
+| `POST_NOTIFICATIONS` | The engine's notification, and tells; on Android 13 and later asked after a screen that says why, and not again after "Not now" (`MainActivity.kt:57-66`, `:97-105`) |
 
 Libraries can add permissions in the merged manifest. Before each first submission, check the release APK's list
 matches this one (AndroidX adds only its own signature permission, `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`):
@@ -325,5 +325,5 @@ matches this one (AndroidX adds only its own signature permission, `DYNAMIC_RECE
 Play asks apps that declare a foreground service type to say why: `specialUse`, with the reason in
 `engine-service/src/main/AndroidManifest.xml:18-20` (keeping the player's connection to a text game open and running
 their scripts while the app is in the background). The user sees it as the engine's notification, which names the open
-profile and has a Quit action (`EngineNotifications.kt:54-76`). If Play asks for a video, record the game screen, then Home, then the
+game (or counts the open games) and has a Quit action (`EngineNotifications.kt:70-104`). If Play asks for a video, record the game screen, then Home, then the
 notification, then a tell arriving while another app is in front: `adb shell screenrecord /sdcard/fgs.mp4`.

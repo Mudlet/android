@@ -17,6 +17,21 @@
     <!-- The title of the ongoing notification while the game is kept connected; %1$s is the open profile's name (a
          game's name, say) -->
     <string name="engine_notification_title_profile">Keeping %1$s connected</string>
+    <!-- The title of the ongoing notification while several games are open at once; %d is how many (2 or more) -->
+    <plurals name="engine_notification_title_games">
+        <item quantity="one">Keeping %d game connected</item>
+        <item quantity="other">Keeping %d games connected</item>
+    </plurals>
+    <!-- A line of the ongoing notification, one for each open game when several are: %1$s is the profile's name (a
+         game's name, say), %2$s its connection, one of the three strings that follow -->
+    <string name="engine_notification_game">%1$s: %2$s</string>
+    <!-- A game's connection in the ongoing notification's list of open games: the game is connected -->
+    <string name="engine_notification_connected">connected</string>
+    <!-- A game's connection in the ongoing notification's list of open games: Mudlet is connecting to the game -->
+    <string name="engine_notification_connecting">connecting</string>
+    <!-- A game's connection in the ongoing notification's list of open games: the profile is open but not connected,
+         as after a disconnect or a failed connection -->
+    <string name="engine_notification_not_connected">not connected</string>
     <!-- The text of the ongoing notification while the game is kept connected -->
     <string name="engine_notification_text">Your connection and scripts keep running while you use other apps.</string>
     <!-- The button on the ongoing notification: it stops the background connection and closes the game's connection -->

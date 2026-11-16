@@ -2,6 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -14,12 +15,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.edit
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.engine.EngineNotifications
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.theme.MudletTheme
@@ -34,6 +37,9 @@ class MainActivity : ComponentActivity() {
 
     private var explainNotifications by mutableStateOf(false)
 
+    // How many notification taps have brought their game to the front, each a request to show the game screen
+    private var gamesShown by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -43,9 +49,11 @@ class MainActivity : ComponentActivity() {
         explainNotifications = shouldAskForNotifications()
         EngineClient.refreshServiceState()
         if (EngineClient.engineWanted && EngineClient.fgsState == "not running") EngineClient.startEngine()
+        // A recreated Activity has shown its intent's game already
+        if (savedInstanceState == null) showProfileOf(intent)
         setContent {
             MudletTheme {
-                AppNavigation(onKillUi = { finish() })
+                AppNavigation(onKillUi = { finish() }, gamesShown = gamesShown)
                 if (explainNotifications) {
                     NotificationsExplanation(
                         onContinue = {
@@ -64,6 +72,19 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         EngineClient.attach()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        showProfileOf(intent)
+    }
+
+    // A tap on a notification of the engine's names the profile it is about (EngineNotifications.EXTRA_PROFILE). Recents
+    // starts the Activity again with the intent it last had, which is no tap
+    private fun showProfileOf(intent: Intent) {
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val profile = intent.getStringExtra(EngineNotifications.EXTRA_PROFILE) ?: return
+        EngineClient.showProfile(profile) { gamesShown++ }
     }
 
     override fun onStop() {

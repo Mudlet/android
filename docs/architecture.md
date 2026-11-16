@@ -47,7 +47,7 @@ Kotlin + Compose, no Qt                     QtServiceBase + libengine.so (Qt Cor
               <======== LocalSocket ========>                  ControlBridge -> IEngineControl
               frames: u32 BE length + JSON                     SocketBridge : IFrontend -> IEngine, per profile
                                                                  (MudletEngine, or the stand-in)
-                                                               AndroidNotifier -> EngineNotifications.postTell (JNI)
+                                                               AndroidNotifier -> EngineNotifications (JNI)
 ```
 
 Startup:
@@ -537,11 +537,13 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
 (CI's emulator jobs) or a device, from the host through adb. It drives the UI through a debug-only hook,
 `SmokeTestReceiver` (`app/src/debug`, which only the shell and the system may send to), and checks:
-- that the UI starts the engine service, which runs in the foreground in `:engine` with Qt up, and attaches to it;
+- that the UI starts the engine service, which runs in `:engine` with Qt up, out of the foreground while no profile
+  is open, and attaches to it;
 - that connecting to `fake_telnet.py` on the host (`10.0.2.2` from the emulator), as the profile list does, saves a
   profile with a character name, stores a password in `PasswordStore` and opens the profile with it read back: the
-  profile starts, so Mudlet's Lua (`luaL_openlibs` and Mudlet's Lua files) is up, the engine lists it first, the
-  banner's coloured lines reach the UI, and Mudlet's auto-login sends the game the login and then the password;
+  profile starts, so Mudlet's Lua (`luaL_openlibs` and Mudlet's Lua files) is up, the engine lists it first and goes
+  into the foreground, the banner's coloured lines reach the UI, and Mudlet's auto-login sends the game the login and
+  then the password;
 - that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
 - that `am send-trim-memory` has the engine save the profile;
 - that a Geyser `MiniConsole` and the line a script `cecho()`s on it reach the UI;
@@ -553,13 +555,14 @@ If the engine crashes, it stops with the crash from logcat, symbolised with `ndk
 The instrumented tests, run on the same emulator boot by `native/tests/android_instrumented.py`, check what only a
 device shows, below the UI's debug hook:
 - `engine-service/src/androidTest` runs `EngineService` from its own test APK, against a small game server in the
-  test's process: the service in its own `:engine` process in the foreground, Qt's `serviceReadyWait` and QPA, the
-  socket handshake; the engine notification's Quit, after which the next start restores nothing; a killed engine,
+  test's process: the service in its own `:engine` process, Qt's `serviceReadyWait` and QPA, the socket handshake;
+  the foreground and its notification only while a game is open; a tell filed under its game; the engine
+  notification's Quit, after which the next start restores nothing; a killed engine,
   after which the next one reconnects to the game (see "Restoring the session" below); and a TLS connect whose first
   bytes are a ClientHello, so Qt's backend loaded OpenSSL.
 - `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`), which
   serves the control socket and a socket for each profile it has open: two profiles' state kept apart
-  (`ProfileSessionsTest`); the
+  (`ProfileSessionsTest`); a tap on a game's notification showing that game (`NotificationTapTest`); the
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
   host:port", adding, editing, deleting only once confirmed, the engine's refusals, and Connect sending
@@ -813,8 +816,8 @@ that attaches later is told too. The UI shows it as a marker line.
     reached Lua `onLine`.
 - **Screen off for a long time.**
   - *Expected; check the heartbeat on the phone.*
-  - `:engine` is a foreground service, so it is not cached or frozen and keeps
-    network access. Doze may still delay its timers, and the heartbeat's
+  - While a game is open `:engine` is a foreground service, so it is not cached
+    or frozen and keeps network access. Doze may still delay its timers, and the heartbeat's
     "largest gap" will show it.
   - The UI process is backgrounded and may be frozen. That is harmless, because
     it detached in `onStop` and the engine never waits for it.
@@ -822,17 +825,31 @@ that attaches later is told too. The UI shows it as a marker line.
 ### Which notification work is in which process
 - **`:engine`:**
   - The foreground-service notification, which must come from the service
-    calling `startForeground`.
+    calling `startForeground`. `ControlBridge` gives `AndroidNotifier::showProfiles`
+    the open profiles and their connections whenever they change, and
+    `EngineNotifications.showProfiles` names the one game, or counts several and
+    lists each with its connection. With no game open the service leaves the
+    foreground and the notification goes; the next game to open brings both back,
+    which Android allows because only the UI, while it is shown, opens one. Until
+    the engine first says what it has open, as while a restore waits, the service
+    stays in the foreground. A start request with no game open is still answered
+    with `startForeground`, with a deferred notification that Android 12 and later
+    never show, and then left. Out of the foreground, Android stops the service
+    about a minute after the UI leaves; the UI starts it again when it is shown.
   - All "Tells" notifications: Lua `notify()` goes through `SocketBridge::notify`
     and `AndroidNotifier` (JNI) to `EngineNotifications.postTell`. They work
-    while the UI is dead or frozen.
+    while the UI is dead or frozen. A profile's tells carry its name as their sub
+    text and are grouped under it, with a summary per profile.
   - The Quit action is a service `PendingIntent` handled in `onStartCommand`.
   - The counters are sent to the UI as statuses.
 - **UI process:**
   - The `POST_NOTIFICATIONS` runtime request, which needs an Activity. A dialog says what the notifications are for
     first. The engine's notification posted before the user allows is dropped, so on Allow the UI sends the service
     another start, whose `startForeground` posts it.
-  - The tap target: the notification's content intent opens `MainActivity`.
+  - The tap target: the notification's content intent opens `MainActivity`. A tell's
+    names its profile (`EngineNotifications.EXTRA_PROFILE`): `EngineClient.showProfile`
+    makes that profile the front, once the engine has listed it as open if the tap
+    started the UI, and the game screen shows.
   - The UI only counts the `notify` frames it sees; it never posts.
 - **Both:** `Application.onCreate` runs in both processes, and channel creation
   is idempotent.
@@ -1011,11 +1028,11 @@ Item 13 of the on-device checklist covers this.
      `adb logcat | grep -iE "qt|Mudlet|engine"`.
    - Then press "QPA next start: offscreen", "Stop engine" and "Start engine",
      and see whether the engine comes up with `offscreen`.
-3. Check the foreground service. The line should read
-   `FGS: foreground=true process=org.mudlet.mudlet:engine`, the "Keeping your game connected"
-   notification should be visible, and the two process ids should differ.
+3. Check the service. With no profile open the line should read
+   `FGS: foreground=false process=org.mudlet.mudlet:engine`, with no engine notification,
+   and the two process ids should differ.
 4. Connect to `aardmud.org:23`. Expect coloured output, a prompt and rising line
-   counters.
+   counters, `FGS: foreground=true`, and a "Keeping Self-test connected" notification.
    - Send `lua return lineCount` and check the result.
    - Have someone send you a tell, or use a MUD that echoes one. A "Tells"
      notification should appear.

@@ -51,6 +51,7 @@ public:
     QString openProfile(const QString& name, const QString& password, bool connect, bool alongside) override;
     QString closeProfile(const QString& name) override;
     IEngine* defaultSession() override { return this; }
+    bool restorePending() const override { return mRestoreTimer.isActive(); }
     QString setMainWindowSize(int width, int height) override;
     std::optional<WindowText> windowText(const QString& window, int first, int count) const override;
     QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) override;

@@ -30,4 +30,6 @@ public:
     virtual QString closeProfile(const QString& name) = 0;
     // What takes a version 13 UI's profile requests while no profile is open: a connect or Lua there may open one
     virtual IEngine* defaultSession() = 0;
+    // Whether a restore is yet to reopen a profile the engine before this one had open
+    virtual bool restorePending() const = 0;
 };

@@ -219,6 +219,18 @@ class ProfilesTest {
         compose.onNodeWithText(string(R.string.profile_save)).assertIsDisplayed()
     }
 
+    @Test
+    fun gamesTheEngineTellsOfOnceTheProfilesShowAreAtTheTopOfTheList() {
+        // More than the screen holds, so the list can scroll the games out of view
+        val many = (1..10).map { Profile("Profile $it", "p$it.example", 23, false, "", false) }
+        listed(*many.toTypedArray())
+        waitFor(hasContentDescription("Profile 1, p1.example:23"))
+        fake.engine.openAlongside(many[0].name)
+        engine.openProfiles()
+        compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
+        compose.onNodeWithText(string(R.string.games_title)).assertIsDisplayed()
+    }
+
     /** The engine answers the UI's listProfiles, sent when it attached, with [profiles]. */
     private fun listed(vararg profiles: Profile) {
         engine.profiles(profiles.toList(), engine.receive("listProfiles"))

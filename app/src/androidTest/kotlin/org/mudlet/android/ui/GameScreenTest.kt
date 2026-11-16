@@ -19,7 +19,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -33,6 +35,8 @@ import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -45,10 +49,13 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
+import org.mudlet.android.ui.game.GAME_PILL_TAG
+import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import androidx.compose.ui.R as ComposeUiR
 
 /**
- * The game screen against a fake engine: the console's lines and how it follows them, the input line, the connection
- * bar, what a rotation keeps, and the order TalkBack meets them in. Controls are found by the labels TalkBack reads
+ * The game screen against a fake engine: the console's lines and how it follows them, the input line, the game pill
+ * and its connection chip, what a rotation keeps, and the order TalkBack meets them in. Controls are found by the labels TalkBack reads
  * and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
@@ -69,7 +76,9 @@ class GameScreenTest {
     @Before
     fun openTheGameScreen() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        if (Build.VERSION.SDK_INT >= 34) {
+            compose.enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(ScrimBelowTheSheet(string(ComposeUiR.string.close_sheet))))
+        }
         session = fake.engine.nextSession()
         // EngineClient lives as long as the process, so an earlier test's lines would still be there
         session.clear()
@@ -199,23 +208,26 @@ class GameScreenTest {
     }
 
     @Test
-    fun theConnectionBarShowsTheStateAndItsButtonsConnectAndDisconnect() {
+    fun theGamePillShowsTheStateAndItsSheetReconnectsAndDisconnects() {
         session.status("connection", "disconnected")
-        waitUntilDisplayed(string(R.string.connection_disconnected))
+        waitForPill(R.string.connection_disconnected)
         compose.runOnIdle { EngineClient.front.connect("127.0.0.1", 4000, false) }
         session.receive("connect")
         session.status("connection", "connecting 127.0.0.1:4000")
-        waitUntilDisplayed(compose.activity.getString(R.string.connection_connecting_to, "127.0.0.1:4000"))
+        waitForPill(compose.activity.getString(R.string.connection_connecting_to, "127.0.0.1:4000"))
         session.status("connection", "connected")
-        waitUntilDisplayed(string(R.string.connection_connected))
+        waitForPill(string(R.string.connection_connected))
 
-        activate(hasText(string(R.string.connection_reconnect)))
+        activate(hasTestTag(GAME_PILL_TAG))
+        activate(hasContentDescription(compose.activity.getString(R.string.connection_reconnect_to, GAME.name)))
         val connect = session.receive("connect")
         assertEquals("127.0.0.1", connect.getString("host"))
         assertEquals(4000, connect.getInt("port"))
         assertEquals(false, connect.getBoolean("tls"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isEmpty() }
 
-        activate(hasText(string(R.string.connection_disconnect)))
+        activate(hasTestTag(GAME_PILL_TAG))
+        activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
     }
 
@@ -226,9 +238,9 @@ class GameScreenTest {
         try {
             // The running profile gets a connect of its own, as an openProfile would leave it connected
             session.status("profile", "Game loaded")
-            session.status("connection", "connected")
-            waitUntilDisplayed(string(R.string.connection_connected))
-            activate(hasText(string(R.string.connection_reconnect)))
+            session.status("connection", "disconnected")
+            waitForPill(R.string.connection_disconnected)
+            activate(hasContentDescription(compose.activity.getString(R.string.connection_connect_to, GAME.name)))
             val connect = session.receive("connect")
             assertEquals(GAME.host, connect.getString("host"))
             assertEquals(GAME.port, connect.getInt("port"))
@@ -240,9 +252,11 @@ class GameScreenTest {
             session.close()
             val next = fake.engine.nextSession()
             next.profiles(listOf(GAME), next.receive("listProfiles"))
-            waitUntilDisplayed(string(R.string.connection_disconnected))
+            val none = compose.activity.getString(R.string.game_state, string(R.string.game_none), string(R.string.connection_disconnected))
+            compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_PILL_TAG) and hasContentDescription(none)).fetchSemanticsNodes().isNotEmpty() }
 
-            activate(hasText(string(R.string.connection_reconnect)))
+            // The chip names the profile it opens again
+            activate(hasContentDescription(compose.activity.getString(R.string.connection_connect_to, GAME.name)))
             val open = next.receive("openProfile")
             assertEquals(GAME.name, open.getString("name"))
             assertEquals("game secret", open.getString("password"))
@@ -263,7 +277,7 @@ class GameScreenTest {
         val inputBounds = bounds(input)
         val buttons = listOf(R.string.input_history_previous, R.string.input_history_next, R.string.input_send)
             .map { bounds(hasContentDescription(string(it))) }
-        val reconnect = bounds(hasText(string(R.string.connection_reconnect)))
+        val pill = bounds(hasTestTag(GAME_PILL_TAG))
 
         // TalkBack goes by position: top to bottom, then left to right within a row
         assertTrue("console $consoleBounds above the input line $inputBounds", consoleBounds.bottom <= inputBounds.top)
@@ -275,7 +289,7 @@ class GameScreenTest {
             )
             left = button.right
         }
-        assertTrue("connection bar $reconnect below the input line $inputBounds", reconnect.top >= inputBounds.bottom)
+        assertTrue("game pill $pill below the input line $inputBounds", pill.top >= inputBounds.bottom)
         compose.onRoot().tryPerformAccessibilityChecks()
     }
 
@@ -298,6 +312,13 @@ class GameScreenTest {
     }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
+
+    private fun waitForPill(@StringRes state: Int) = waitForPill(string(state))
+
+    private fun waitForPill(state: String) {
+        val reading = compose.activity.getString(R.string.game_pill_description, GAME.name, state, 1, 1)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_PILL_TAG) and hasContentDescription(reading)).fetchSemanticsNodes().isNotEmpty() }
+    }
 
     // As plain text: the field's EditableText can carry spans, so comparing AnnotatedStrings fails on equal text
     private fun editableText(text: String) = SemanticsMatcher("EditableText = '$text'") {
@@ -327,9 +348,19 @@ class GameScreenTest {
         assertTrue("no jump button", compose.onAllNodesWithText(label, substring = true).fetchSemanticsNodes().isEmpty())
     }
 
-    /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
+    /** What a double tap does under TalkBack: the node's accessibility click, after the checks on every window. */
     private fun activate(label: SemanticsMatcher) {
-        compose.onRoot().tryPerformAccessibilityChecks()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(label and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        // Each window's: the game sheet is a window of its own over the activity's
+        val roots = compose.onAllNodes(isRoot())
+        for (i in roots.fetchSemanticsNodes().indices) {
+            try {
+                roots[i].tryPerformAccessibilityChecks()
+            } catch (e: AccessibilityViewCheckException) {
+                val flagged = e.results.joinToString("\n") { "${it.element?.className} '${it.element?.contentDescription}' '${it.element?.text}'" }
+                throw AssertionError("${e.message}\n$flagged", e)
+            }
+        }
         compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
     }
 

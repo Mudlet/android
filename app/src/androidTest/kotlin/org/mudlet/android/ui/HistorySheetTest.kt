@@ -52,6 +52,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.suggest.PinnedCommands
 import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.ui.game.CommandSuggestions
+import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.HISTORY_SHEET_TAG
 import org.mudlet.android.ui.game.QUICK_BAR_TAG
 import java.io.File
@@ -103,6 +104,9 @@ class HistorySheetTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
         session.status("profile", "$profile loaded")
+        // Connected, so no chip beside the game pill: on the CI emulator's 320 px wide screen, the chip leaves the quick bar no room for a pinned command
+        session.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { CommandSuggestions.profile } == profile }
         compose.waitForIdle()
     }
@@ -269,7 +273,7 @@ class HistorySheetTest {
     }
 
     @Test
-    fun theQuickBarIsBelowTheInputLineAndAboveTheConnectionBar() {
+    fun theQuickBarIsBelowTheInputLineAfterTheGamePill() {
         send("open door")
         activate(historyButton)
         activate(labelled(R.string.history_pin, "open door"))
@@ -278,15 +282,16 @@ class HistorySheetTest {
         waitFor(labelled(R.string.pinned_command, "open door"))
         checkAccessibility()
 
-        // TalkBack goes by position, so the quick bar is read after the input line's buttons and before the bar below
+        // TalkBack goes by position, so the quick bar is read after the input line's buttons and the game pill
         val line = bounds(input)
         val send = bounds(hasContentDescription(string(R.string.input_send)) and hasClickAction())
         val history = bounds(historyButton)
         val pinned = bounds(labelled(R.string.pinned_command, "open door"))
-        val reconnect = bounds(hasText(string(R.string.connection_reconnect)))
+        val pill = bounds(hasTestTag(GAME_PILL_TAG))
         assertTrue("history $history below the input line $line and its Send $send", history.top >= line.bottom && history.top >= send.bottom)
         assertTrue("pinned $pinned beside history $history", pinned.left >= history.right && pinned.top < history.bottom)
-        assertTrue("connection bar $reconnect below the quick bar $history", reconnect.top >= history.bottom)
+        assertTrue("game pill $pill below the input line $line", pill.top >= line.bottom)
+        assertTrue("history $history after the game pill $pill in its row", history.left >= pill.right && history.top < pill.bottom && history.bottom > pill.top)
         val minimum = with(compose.density) { 48.dp.toPx() }
         assertTrue("a ${history.height} px tall History button, at least 48 dp ($minimum px)", history.height >= minimum)
     }

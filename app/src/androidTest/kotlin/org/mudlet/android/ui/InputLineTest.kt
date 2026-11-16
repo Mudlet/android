@@ -186,7 +186,7 @@ class InputLineTest {
         session.status("sendError", "an old reason")
         session.synced(0)
         session.status("connection", "connected")
-        compose.waitUntil(WAIT_MS) { compose.onAllNodesWithText(string(R.string.connection_connected)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         val old = compose.activity.getString(R.string.send_error, "an old reason")
         assertTrue("a resent sendError is not shown", compose.onAllNodesWithText(old, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }

@@ -81,7 +81,7 @@
     <!-- The button of the delete confirmation dialog that keeps the profile -->
     <string name="profile_delete_cancel">Cancel</string>
 
-    <!-- The game screen's title: the screen with the game's text, the command line and the connection bar -->
+    <!-- The game screen's title: the screen with the game's text, the command line and the game pill -->
     <string name="game_title">Game</string>
 
     <!-- The About screen, opened from the profile list's top bar: the app's version, its engine, where their source
@@ -452,24 +452,102 @@
     <!-- The button, read by a screen reader, that hides the map download's message -->
     <string name="map_download_dismiss">Dismiss the map download</string>
 
-    <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
+    <!-- The state of the connection to the game, on the game pill (read by TalkBack) and in the game sheet: while the app
+         is not attached to Mudlet's engine -->
     <string name="connection_no_engine">Waiting for the engine…</string>
-    <!-- The connection bar while the app is not connected to the game -->
+    <!-- The connection's state while the app is not connected to the game, by the player's Disconnect or as it has not
+         connected yet -->
     <string name="connection_disconnected">Disconnected</string>
-    <!-- The connection bar while the app connects to the game, when the game's address is not known -->
+    <!-- The connection's state while the app connects to the game, when the game's address is not known -->
     <string name="connection_connecting">Connecting…</string>
-    <!-- %1$s is the game's address, as host:port -->
+    <!-- The connection's state while the app connects to the game; %1$s is the game's address, as host:port -->
     <string name="connection_connecting_to">Connecting to %1$s…</string>
-    <!-- The connection bar while the app is connected to the game -->
+    <!-- The connection's state while the app is connected to the game -->
     <string name="connection_connected">Connected</string>
-    <!-- %1$s is the engine's reason, in English -->
+    <!-- The connection's state after the connection dropped, while Mudlet dials the game again on its own (the
+         profile's "Reconnect automatically") -->
+    <string name="connection_reconnecting">Connection lost, reconnecting automatically</string>
+    <!-- The connection's state after the connection dropped without the player's Disconnect, and nothing dials again -->
+    <string name="connection_lost">Connection lost</string>
+    <!-- The connection's state when connecting failed; %1$s is the engine's reason, in English -->
     <string name="connection_error">Connection error: %1$s</string>
-    <!-- The connection bar's button that connects to the same game again -->
+    <!-- The chip beside the game pill while the game has not connected yet, or the player disconnected: connects to
+         it. Keep it short. -->
+    <string name="connection_connect">Connect</string>
+    <!-- What TalkBack reads for the Connect chip; %1$s is the game's (profile's) name -->
+    <string name="connection_connect_to">Connect to %1$s</string>
+    <!-- The chip beside the game pill after the connection dropped, and the game sheet's button: connects to the same
+         game again. Keep it short. -->
     <string name="connection_reconnect">Reconnect</string>
+    <!-- What TalkBack reads for Reconnect, and the game pill's TalkBack action; %1$s is the game's (profile's) name -->
+    <string name="connection_reconnect_to">Reconnect to %1$s</string>
+    <!-- The chip beside the game pill while Mudlet dials a dropped game again on its own: dials at once instead of
+         waiting. Keep it short. -->
+    <string name="connection_reconnect_now">Reconnect now</string>
+    <!-- What TalkBack reads for the Reconnect now chip; %1$s is the game's (profile's) name -->
+    <string name="connection_reconnect_now_to">Reconnect to %1$s now</string>
+    <!-- The chip beside the game pill after connecting failed: tries to connect again. Keep it short. -->
+    <string name="connection_try_again">Try again</string>
+    <!-- What TalkBack reads for the Try again chip; %1$s is the game's (profile's) name -->
+    <string name="connection_try_again_to">Try connecting to %1$s again</string>
+    <!-- The chip beside the game pill while the app connects to the game: stops connecting. Keep it short. -->
+    <string name="connection_stop">Stop</string>
+    <!-- What TalkBack reads for the Stop chip; %1$s is the game's (profile's) name -->
+    <string name="connection_stop_to">Stop connecting to %1$s</string>
     <!-- Shown when Reconnect could not open the profile last played again; %1$s is the reason, from the engine in English -->
     <string name="connection_reconnect_refused">Not reconnected: %1$s</string>
-    <!-- The connection bar's button that closes the connection to the game -->
+    <!-- Shown when Disconnect could not reach the engine; %1$s is why -->
+    <string name="connection_disconnect_refused">Not disconnected: %1$s</string>
+    <!-- The game sheet's button that closes the connection to the game in front -->
     <string name="connection_disconnect">Disconnect</string>
+    <!-- What TalkBack reads for Disconnect, and the game pill's TalkBack action; %1$s is the game's (profile's) name -->
+    <string name="connection_disconnect_from">Disconnect from %1$s</string>
+    <!-- What TalkBack says when the front game's connection changes; %1$s is the game's (profile's) name, %2$s its new
+         state, such as "Connection lost" -->
+    <string name="connection_announce">%1$s: %2$s</string>
+
+    <!-- The game pill, at the left of the row below the input line, while no game is open -->
+    <string name="game_none">No game open</string>
+    <!-- What TalkBack reads for the game pill; %1$s is the game's (profile's) name, %2$s its connection state, such as
+         "Connected", %3$d which of the open games it is, %4$d how many are open -->
+    <string name="game_pill_description">%1$s, %2$s, game %3$d of %4$d</string>
+    <!-- What TalkBack reads for an open game, and says when one comes to the front; %1$s is the game's (profile's) name,
+         %2$s its connection state, such as "Connected" -->
+    <string name="game_state">%1$s, %2$s</string>
+    <!-- What TalkBack says the game pill's tap does: it opens the game sheet -->
+    <string name="game_pill_show">Show open games</string>
+    <!-- The game pill's TalkBack action that brings the next open game to the front; %1$s is that game's (profile's) name -->
+    <string name="game_next">Next game: %1$s</string>
+    <!-- The game pill's TalkBack action that brings the previous open game to the front; %1$s is that game's (profile's)
+         name -->
+    <string name="game_previous">Previous game: %1$s</string>
+    <!-- The game sheet's title, and the heading above the open games in the profile list -->
+    <string name="games_title">Open games</string>
+    <!-- The heading above every profile in the profile list, below the open games, shown while a game is open -->
+    <string name="profiles_all">All profiles</string>
+    <!-- The game sheet's close button, read by TalkBack -->
+    <string name="games_close">Close the game sheet</string>
+    <!-- What TalkBack says a tap on an open game does: brings it to the front -->
+    <string name="game_show">Show this game</string>
+    <!-- The close button of an open game in the game sheet, read by TalkBack; %1$s is the game's (profile's) name -->
+    <string name="game_close">Close %1$s</string>
+    <!-- The game sheet's last row, and the title of the profile list it opens: plays one more game at the same time -->
+    <string name="game_open_another">Open another game</string>
+    <!-- Under "Open another game" while as many games as the app allows are open; %1$d is that number -->
+    <plurals name="game_open_another_full">
+        <item quantity="one">Close a game to open another (at most %1$d)</item>
+        <item quantity="other">Close a game to open another (at most %1$d)</item>
+    </plurals>
+    <!-- The title of the question before a connected game closes; %1$s is the game's (profile's) name -->
+    <string name="game_close_title">Close %1$s?</string>
+    <!-- The question before a connected game closes -->
+    <string name="game_close_text">This disconnects from the game and saves the profile.</string>
+    <!-- The question's button that closes the game -->
+    <string name="game_close_confirm">Close game</string>
+    <!-- The question's button that keeps the game open -->
+    <string name="game_close_cancel">Cancel</string>
+    <!-- Shown when the engine could not close a game; %1$s is the reason, from the engine in English -->
+    <string name="game_close_refused">Not closed: %1$s</string>
 
     <!-- Lines the app adds to the console between the game's own. The dashes set them apart from the game's text. -->
     <string name="marker_new_engine" tools:ignore="TypographyDashes">--- new engine instance %1$s ---</string>

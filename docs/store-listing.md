@@ -125,12 +125,12 @@ needed. The demo server's lines come from a test script (its docstring lists the
 
 | # | Screen | Phone | 7" tablet | 10" tablet | Notes |
 |---|---|---|---|---|---|
-| 1 | Game screen, connected to the demo server: `flood 40`'s coloured lines, the prompt at the bottom, the input line and the connection bar | light, dark | dark | light, dark | The first screenshot is what most people see: make the text readable at thumbnail size |
+| 1 | Game screen, connected to the demo server: `flood 40`'s coloured lines, the prompt at the bottom, the input line and the game pill | light, dark | dark | light, dark | The first screenshot is what most people see: make the text readable at thumbnail size |
 | 2 | Game screen scrolled up, with "Jump to the bottom: 12 new lines" | dark | | dark | Shows the scrollback holds still |
 | 3 | The masked password field as a game asks for the password | light | | light | `password` on the demo server below |
 | 4 | A tell as an Android notification, over the game screen, and the engine's notification in the shade | dark | dark | | Pull the shade down; `tell` on the demo server |
 | 5 | TalkBack on, its focus on the input line's Send button, with TalkBack's "Display speech output" captions | light | | light | Shows the labels; TalkBack, Settings, Advanced settings, Developer settings |
-| 6 | The game screen at the largest font size, the connection bar's buttons wrapped below the state | light | | | Shows the layout holds at 200% |
+| 6 | The game screen at the largest font size, the game pill and the quick bar in one row below the input line | light | | | Shows the layout holds at 200% |
 | 7 | The profile list, once it lists games (U3), with the demo server's profile only | light, dark | light | light | Not before the profile list exists; the placeholder is not worth a slot |
 
 Light and dark follow the system setting (`app/src/main/kotlin/org/mudlet/android/ui/theme/Theme.kt`); the console
@@ -178,15 +178,15 @@ requirement") is listed as not yet done.
 **Works with TalkBack now:**
 
 - Every button has a label TalkBack reads: Back, Send, Previous command, Next command, Complete the word, Close the
-  password field, Reconnect, Disconnect, and the jump-to-the-bottom button with its count of new lines
-  (`app/src/main/res/values/strings.xml`; `MudletTopBar.kt:18-24`, `InputLine.kt:172-224`, `ConnectionBar.kt:77-84`,
-  `Console.kt:101-111`).
-- The connection state ("Connecting to host:port…", "Connected", "Disconnected", "Connection error: …") is a polite
-  live region, so TalkBack reads it out when it changes (`ConnectionBar.kt:72-76`). So are "Not sent" and "No
-  completion" under the input line (`InputLine.kt:146-151`).
+  password field, the game pill with its connection chip, Reconnect, Disconnect, and the jump-to-the-bottom button with
+  its count of new lines (`app/src/main/res/values/strings.xml`; `MudletTopBar.kt:18-24`, `InputLine.kt:172-224`,
+  `GamePill.kt`, `GameSheet.kt`, `Console.kt:101-111`).
+- The game pill reads the game's name and connection state ("Connecting to host:port…", "Connected", "Disconnected",
+  "Connection lost", "Connection error: …"), and TalkBack is told each change once (`GameScreen.kt`). "Not sent" and
+  "No completion" under the input line are polite live regions (`InputLine.kt:146-151`).
 - The password field has password semantics: TalkBack says "password", not what is typed, and it never goes out as a
   command (`InputLine.kt:167-169`; `InputLineTest.kt:76-90`).
-- The order TalkBack moves in is the console, then the input line, then the connection bar (`GameScreen.kt:19`;
+- The order TalkBack moves in is the console, then the input line, then the game pill's row (`GameScreen.kt`;
   `GameScreenTest.theConsoleThenTheInputLineThenTheButtonsTopToBottom`), and after a send the focus stays on the input
   line (`InputLine.kt:220-223`).
 - The console's lines are text TalkBack can read one by one by swiping through the list.
@@ -199,8 +199,8 @@ hardware keyboard's arrow keys, completion has a button as well as Tab (`InputLi
 the newest text after scrolling is a button. The app has no swipe, long press or pinch of its own.
 
 **Text size.** All text is in sp, so it follows Android's font size setting (`Theme.kt:10`); the console is 14 sp
-monospace (`Console.kt:96`). At large sizes the connection bar's buttons move below its state rather than squeezing
-it (`ConnectionBar.kt:70-71`). The keyboard pushes the screen up and the console keeps its bottom line in view.
+monospace (`Console.kt:96`). The row below the input line scrolls sideways after the game pill when its buttons do not
+fit (`QuickBar.kt`). The keyboard pushes the screen up and the console keeps its bottom line in view.
 
 **Not yet** (on the roadmap): new game text read out as it arrives, and Lua's `announce()` spoken; the console as a
 list with links as TalkBack actions; a text size setting of the app's own and pinch-to-zoom with it as the

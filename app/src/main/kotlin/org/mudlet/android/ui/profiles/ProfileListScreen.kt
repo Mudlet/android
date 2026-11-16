@@ -1,12 +1,17 @@
 package org.mudlet.android.ui.profiles
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -15,9 +20,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -36,11 +44,18 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.ProfileSession
+import org.mudlet.android.ui.SectionHeader
+import org.mudlet.android.ui.game.ConnectionIcon
+import org.mudlet.android.ui.game.ConnectionState
+import org.mudlet.android.ui.game.text
 
 /**
- * The start screen: the engine's profiles, the last used first, each with Connect and Edit, and Add. Connect opens the
- * profile with its stored password and goes to the game screen once the engine has begun to open it. Its top bar opens
- * the settings and the About screen. [selected] is the profile whose editor is open beside the list, if one is.
+ * The start screen: the games open, if any, then the engine's profiles, the last used first, each with Connect and
+ * Edit, and Add. Connect opens the profile with its stored password and goes to the game screen once the engine has
+ * begun to open it; while games are open, it opens one beside them, and one already open just comes to the front, as
+ * a tap on an open game does (docs/multi-profile.md, "The switcher"). Its top bar opens the settings and the About
+ * screen. [selected] is the profile whose editor is open beside the list, if one is.
  */
 @Composable
 fun ProfileListScreen(
@@ -55,6 +70,16 @@ fun ProfileListScreen(
     val passwords = remember { PasswordStore(context) }
     val profiles = EngineClient.profiles
     var error by remember { mutableStateOf<String?>(null) }
+    val games = EngineClient.sessions
+    val list = rememberLazyListState()
+    // The list keeps its first row where it is when rows come above it, as the games do when the engine tells of them
+    // after its profiles are shown: bring them into view
+    val hasGames = games.isNotEmpty()
+    var hadGames by rememberSaveable { mutableStateOf(hasGames) }
+    LaunchedEffect(hasGames) {
+        if (hasGames && !hadGames) list.scrollToItem(0)
+        hadGames = hasGames
+    }
     MudletScaffold(
         stringResource(R.string.profiles_title),
         actions = {
@@ -73,6 +98,7 @@ fun ProfileListScreen(
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
+            list,
             // Room below the last item for the Add button, which floats over the list
             contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
         ) {
@@ -85,12 +111,22 @@ fun ProfileListScreen(
                     )
                 }
             }
+            if (hasGames) {
+                item { SectionHeader(stringResource(R.string.games_title)) }
+                itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
+                    OpenGameItem(game, i, games.size) {
+                        EngineClient.setFront(game.name)
+                        onOpenGame()
+                    }
+                }
+                item { SectionHeader(stringResource(R.string.profiles_all)) }
+            }
             when {
                 profiles == null -> item { Text(stringResource(R.string.profiles_waiting), style = MaterialTheme.typography.bodyLarge) }
 
                 profiles.isEmpty() -> item { Text(stringResource(R.string.profiles_empty), style = MaterialTheme.typography.bodyLarge) }
 
-                else -> itemsIndexed(profiles, key = { _, profile -> profile.name }) { i, profile ->
+                else -> itemsIndexed(profiles, key = { _, profile -> "profile:" + profile.name }) { i, profile ->
                     ProfileItem(
                         profile,
                         i,
@@ -98,7 +134,9 @@ fun ProfileListScreen(
                         selected = profile.name == selected,
                         onConnect = {
                             error = null
-                            EngineClient.openProfile(profile.name, passwords.get(profile.name)) { refused ->
+                            // Without alongside, the engine would close the games open
+                            val open = if (games.isEmpty()) EngineClient::openProfile else EngineClient::openProfileAlongside
+                            open(profile.name, passwords.get(profile.name)) { refused ->
                                 if (refused == null) onOpenGame() else error = refused
                             }
                         },
@@ -131,6 +169,29 @@ private fun ProfileItem(profile: Profile, index: Int, count: Int, selected: Bool
                 Icon(painterResource(R.drawable.ic_edit), contentDescription = stringResource(R.string.profile_edit, profile.name))
             }
             Button(onConnect, Modifier.semantics { contentDescription = connectLabel }) { Text(stringResource(R.string.profile_connect)) }
+        }
+    }
+}
+
+/** An open game, its name and connection state, which a tap brings to the front. */
+@Composable
+private fun OpenGameItem(game: ProfileSession, index: Int, count: Int, onShow: () -> Unit) {
+    val state = ConnectionState.of(game)
+    val stateText = state.text()
+    val description = stringResource(R.string.game_state, game.name, stateText)
+    ListSegment(index, count) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                .clickable(onClickLabel = stringResource(R.string.game_show), role = Role.Button, onClick = onShow)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ConnectionIcon(state, size = 20.dp)
+            Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = description }) {
+                Text(game.name, style = MaterialTheme.typography.titleMedium)
+                Text(stateText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

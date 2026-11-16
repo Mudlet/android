@@ -123,10 +123,14 @@ object Announcer {
     }
 }
 
+// After all of the game screen, the button bars too: TalkBack's order has the region beside the bars, the script
+// windows and the console, not after a group of them, so only a larger index puts it last
+internal const val ANNOUNCEMENT_TRAVERSAL_INDEX = BARS_TRAVERSAL_INDEX + 1f
+
 /**
  * Has TalkBack say [Announcer.current], through two live regions, each a node 1 dp square that shows nothing: an
  * announcement goes to the one the last did not use, so a repeat is a change TalkBack reads. Placed last in TalkBack's
- * order, where swiping to it reads the last announcement again.
+ * order ([ANNOUNCEMENT_TRAVERSAL_INDEX]), where swiping to it reads the last announcement again.
  */
 @Composable
 fun AnnouncementRegion(modifier: Modifier = Modifier) {
@@ -137,7 +141,7 @@ fun AnnouncementRegion(modifier: Modifier = Modifier) {
             val mine = announcement?.takeIf { it.serial % 2 == slot.toLong() }
             Box(
                 Modifier.size(1.dp).semantics {
-                    traversalIndex = 1f
+                    traversalIndex = ANNOUNCEMENT_TRAVERSAL_INDEX
                     liveRegion = if (mine?.assertive == true) LiveRegionMode.Assertive else LiveRegionMode.Polite
                     if (mine != null) contentDescription = mine.text
                 },

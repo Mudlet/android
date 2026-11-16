@@ -61,8 +61,9 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ScriptWindowsClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
 
-// Button bars are read after the script windows, whose index is 1 (docs/architecture.md, "Button bars and commands")
-internal const val BARS_TRAVERSAL_INDEX = 2f
+// Button bars are read after the script windows and before the last announcement (docs/architecture.md, "Button bars
+// and commands")
+internal const val BARS_TRAVERSAL_INDEX = WINDOWS_TRAVERSAL_INDEX + 1f
 
 // A button, and an empty place of a bar's grid, is never smaller than this
 private val MIN_BUTTON_SIZE = 48.dp

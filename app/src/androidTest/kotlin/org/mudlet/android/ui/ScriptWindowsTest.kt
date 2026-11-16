@@ -406,8 +406,12 @@ class ScriptWindowsTest {
 
     private fun assertNear(what: String, expected: Float, actual: Float, within: Float = PIXELS) = assertTrue("$what: $actual, not $expected", abs(expected - actual) <= within)
 
-    // The main console's character: 14 sp of Android's monospace font, 0.6 em wide, and Material's 0.5 sp between
-    private fun appCharWidth(): Float = with(Density(compose.activity)) { (14 * 0.6f + 0.5f).sp.toPx() }
+    // The main console's character: Android's monospace font at the console's text size, 0.6 em wide, and Material's
+    // 0.5 sp between
+    private fun appCharWidth(): Float {
+        val textSizeSp = compose.runOnIdle { Settings.textSize.value }
+        return with(Density(compose.activity)) { (textSizeSp * 0.6f + 0.5f).sp.toPx() }
+    }
 
     // What the app makes of MUDLET_COLUMNS in MUDLET_TEXT_WIDTH: the middle of (800/101, 800/100]
     private fun mudletCharWidth(): Float = (MUDLET_TEXT_WIDTH.toFloat() / (MUDLET_COLUMNS + 1) + MUDLET_TEXT_WIDTH.toFloat() / MUDLET_COLUMNS) / 2

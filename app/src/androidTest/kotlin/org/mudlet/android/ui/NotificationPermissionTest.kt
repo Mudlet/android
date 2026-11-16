@@ -56,7 +56,14 @@ class NotificationPermissionTest {
             continuePastExplanation()
             click("permission_deny_button")
             assertFalse(granted())
-            assertNotNull("the start screen after a denial", device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS))
+            if (device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS) == null) {
+                val tree = java.io.ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }.toString()
+                val windows = device.executeShellCommand("dumpsys window windows").lines()
+                    .filter { "mCurrentFocus" in it || "mFocusedApp" in it || "Window #" in it }.joinToString("\n")
+                val acts = device.executeShellCommand("dumpsys activity activities").lines()
+                    .filter { "Resumed" in it || "* ActivityRecord" in it || "Hist #" in it }.take(40).joinToString("\n")
+                throw AssertionError("DIAG no start screen\nWINDOWS\n$windows\nACTIVITIES\n$acts\nTREE\n" + tree.replace("><", ">\n<").take(12000))
+            }
         }
         EngineNotifications.postTell(context, TELL, "denied")
         Thread.sleep(QUIET_MS)

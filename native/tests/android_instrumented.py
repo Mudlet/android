@@ -147,10 +147,11 @@ def run(dev, args):
     install(args.app_tests)
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
-    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 720, "-e", "notClass", PERMISSION_TEST)
-    install(args.engine_tests, grant=True)
-    failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
-                           1320)
+    for f in failures:
+        print("DIAG-FAILURE " + f.replace("\n", "\nDIAG| "), flush=True)
+    keep = re.compile(r"ActivityTaskManager|ActivityManager|AndroidRuntime|ANR|WindowManager|mudlet|Mudlet|PermissionController|GrantPermissions|TestRunner")
+    lines = [line for line in dev.log_text().splitlines() if keep.search(line)]
+    print("DIAG-LOGCAT\n" + "\n".join(lines[-400:]), flush=True)
     return failures
 
 

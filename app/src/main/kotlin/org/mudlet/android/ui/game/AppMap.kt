@@ -151,6 +151,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         var editing by remember { mutableStateOf(false) }
         Column(Modifier.matchParentSize()) {
             val map = appMap.map
+            val drawn = map != null
             val viewOnly = map?.viewOnly ?: true
             var size by remember { mutableStateOf(IntSize.Zero) }
             // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
@@ -159,13 +160,13 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
             // draws along its top
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
-                MapButtons(appMap, map?.bitmap, fit, viewOnly, drawn = map != null)
+                MapButtons(appMap, map?.bitmap, fit, viewOnly, drawn)
             }
             // In the map's middle with no map drawn, but not where it would share the map with the search's results or a
             // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack. With a map
             // drawn, none: the map is there
-            val offerInMap = map == null && (appMap.search == null || editing) && appMap.refusal == null
-            MapDownloadBar(offerHere = map == null && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            val offerInMap = !drawn && (appMap.search == null || editing) && appMap.refusal == null
+            MapDownloadBar(offerHere = !drawn && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
                 MapView(
@@ -173,7 +174,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     map?.bitmap,
                     fit,
                     viewOnly,
-                    drawn = map != null,
+                    drawn,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                     controls = false,
                 )

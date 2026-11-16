@@ -19,15 +19,22 @@ import org.mudlet.android.R
 
 /**
  * Every screen's title bar, with a Back button when [onBack] is given (a Close button on a detail beside its list), and
- * the screen's own buttons in [actions]. With a [scrollBehavior], it takes a tint while the content under it is scrolled.
+ * the screen's own buttons in [actions].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MudletTopBar(
+fun MudletTopBar(title: String, onBack: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
+    MudletTopBar(title, onBack, null, actions)
+}
+
+// Private, as TopAppBarScrollBehavior is experimental and would make every caller opt in
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MudletTopBar(
     title: String,
-    onBack: (() -> Unit)? = null,
-    scrollBehavior: TopAppBarScrollBehavior? = null,
-    actions: @Composable RowScope.() -> Unit = {},
+    onBack: (() -> Unit)?,
+    scrollBehavior: TopAppBarScrollBehavior?,
+    actions: @Composable RowScope.() -> Unit,
 ) {
     TopAppBar(
         title = { Text(title) },

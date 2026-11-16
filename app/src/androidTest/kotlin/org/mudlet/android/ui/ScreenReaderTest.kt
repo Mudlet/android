@@ -284,6 +284,20 @@ class ScreenReaderTest {
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_lazy_trigger_variables)), scroll = true)
         assertEquals(mapOf("lazyCaptureGlobals" to false), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_show_script_errors)), scroll = true)
+        assertEquals(mapOf("echoLuaErrors" to true), values(session.receive("setSettings")))
+    }
+
+    @Test
+    fun theSecurityPageChangesTheGamesOwnSettings() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_security)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_game_installs_packages)), scroll = true)
+        assertEquals(mapOf("acceptServerGUI" to false), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_accept_any_certificate)), scroll = true)
+        assertEquals(mapOf("sslIgnoreAll" to true), values(session.receive("setSettings")))
     }
 
     @Test

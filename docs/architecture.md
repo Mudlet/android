@@ -375,13 +375,14 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are seven: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are eight: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
-a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, and several
+a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, several
 headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
-[`multi-profile.md`](multi-profile.md)).
+[`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
+(`frameTabs`), with the player's tap on a tab (`selectFrameTab()`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

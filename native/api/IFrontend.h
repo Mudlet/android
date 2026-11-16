@@ -192,13 +192,30 @@ struct MainArea
 };
 
 // The profile's 2D map as its mapper window shows it, drawn at that window's size in pixels, so that a point of it is a
-// point of the window
+// point of the window; or the app's own map, whose size is in the map's pixels as IEngine::setAppMapSize() asked for
+// it, with the PNG at that size times the scale asked for
 struct MapFrame
 {
     QByteArray png;
     QSize size;
     // Whether the map is only viewed, not edited
     bool viewOnly = true;
+};
+
+// A room of the map that IEngine::findRooms() found: its id, its name and its area's name
+struct RoomMatch
+{
+    int id = 0;
+    QString name;
+    QString area;
+};
+
+// What IEngine::findRooms() found, by name then id; more when there were more than maxRooms
+struct RoomList
+{
+    static constexpr int maxRooms = 100;
+    QList<RoomMatch> rooms;
+    bool more = false;
 };
 
 // Everything the engine tells its host. Every method must be implementable
@@ -244,4 +261,8 @@ public:
     virtual void commands(const QList<AddonCommandInfo>& commands) = 0;
     // The map drawn again while the mapper window shows; none once it hides or goes, or the map could not be drawn
     virtual void map(const std::optional<MapFrame>& frame) = 0;
+    // The app's own map (IEngine::setAppMapSize()) drawn again, as it was asked for or as it changed; none while
+    // there is nothing to draw, as with no profile open or a map with no rooms, and once as an empty size stops it,
+    // with nothing more until a size is asked for again
+    virtual void appMap(const std::optional<MapFrame>& frame) = 0;
 };

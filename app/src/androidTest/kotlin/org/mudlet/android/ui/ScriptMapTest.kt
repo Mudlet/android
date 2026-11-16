@@ -202,6 +202,13 @@ class ScriptMapTest {
         }
         compose.onNode(map).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.map_editing)))
         compose.onRoot().tryPerformAccessibilityChecks()
+
+        // Its refusal is shown with this map, not the app's
+        activate(edit)
+        val back = session.receive("setMapViewOnly")
+        assertTrue(back.getBoolean("viewOnly"))
+        session.refuse(back, "no profile running")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "no profile running"))).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

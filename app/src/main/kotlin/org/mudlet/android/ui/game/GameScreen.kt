@@ -31,6 +31,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
@@ -46,13 +47,16 @@ import org.mudlet.android.ui.MudletTopBar
  * and the quick bar's pinned commands come from the profile the engine runs ([rememberEngineSuggestions]), which learns
  * from what is sent. The quick bar's History button, or Ctrl+R on a hardware keyboard, opens the command history
  * ([HistorySheet]). While the game hides input there is neither quick bar nor history. Why the engine could not send
- * something shows over the console's foot, where the keyboard does not hide it.
+ * something shows over the console's foot, where the keyboard does not hide it. The map is behind the console's text
+ * while the setting has it there ([BackgroundMap]), and the title bar's map button brings it to the front over the game
+ * area ([FullScreenMap]), until Back or the button again.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
     val c = EngineClient
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
+    var mapOpen by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -80,6 +84,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
         topBar = {
             MudletTopBar(stringResource(R.string.game_title), onBack) {
                 ScriptCommandsButton()
+                MapButton(mapOpen) { mapOpen = it }
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }
@@ -96,18 +101,24 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
         ) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 val textSizeSp = Settings.textSize.value
-                ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize()) { consoleModifier ->
+                val colors = ConsoleColors.of(c.status["consoleColors"])
+                // One map on the screen: none behind the text while a script's mapper window shows it
+                val mapBehind = Settings.mapBehindText.value && !mapperShown()
+                // The map in front covers it all, so TalkBack does not read what is under it
+                val covered = if (mapOpen) Modifier.clearAndSetSemantics {} else Modifier
+                ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered)) { consoleModifier ->
                     Console(
                         c.lines,
                         c.tail,
                         c.linesAdded,
                         textSizeSp = textSizeSp,
-                        colors = ConsoleColors.of(c.status["consoleColors"]),
+                        colors = colors,
                         onTextSize = Settings.textSize::set,
                         onScreenSize = c::setScreenSize,
                         consoleModifier,
-                    )
+                    ) { if (mapBehind) BackgroundMap(colors) }
                 }
+                if (mapOpen) FullScreenMap(onClose = { mapOpen = false }, Modifier.fillMaxSize())
                 SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
             }
             InputLine(

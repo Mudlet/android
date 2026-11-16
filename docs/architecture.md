@@ -26,9 +26,9 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the quick bar with the history sheet and pinned commands, the connection bar and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`), the model of the engine (`ui/EngineClient.kt`, with the script windows' part in `ui/ScriptWindowsClient.kt` and the app's own map in `ui/AppMapClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml` |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications, `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
-| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn and a pinch as wheel notches (`MapFit`, `ZoomNotches`). Its tests run on the JVM, against the desktop engine too |
+| `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
@@ -230,12 +230,55 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   room in its middle, and its actions walk there and zoom; the buttons and the switch read their names. Touches,
   buttons and actions are off while no engine is attached or no frame of the window's size has come.
 
+### The map behind the text
+The game screen also has a map of its own, which needs no script: `appMap`, the engine's second map view
+(docs/protocol.md, "The app's map"; `ui/AppMapClient.kt`, drawn by `ui/game/AppMap.kt`).
+- Behind the text, while the setting "Map behind the text" (`Settings.mapBehindText`, on by default) has it there: it
+  fills the main console, between the console's background and its text (Console's `behindText`), and follows the player
+  as the desktop's mapper does: asked for, it opens the map for scripts as opening the desktop's mapper does, so a
+  mapper script's `centerview()` moves the player on it with no script mapper. Its alpha is the most, up to 30%, at
+  which the console's default text colour (`consoleColors`) keeps WCAG's 4.5:1 over the map's lightest and darkest
+  colours alike (`MapBehindText` in `:protocol`): 30% for the default grey on black, less for dimmer text or a light
+  background, none for text already below 4.5:1. The console's colours, ANSI ones included, are not changed; text the
+  game colours is not weighed, so a dim colour of the game's reads less well over the map. It takes no touches, which
+  reach the text as before, and TalkBack does not read it.
+- In front: the title bar's map button, a toggle read as "Map" with its state, covers the game area (not the input line)
+  with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, pinch, the zoom
+  buttons, the edit switch, refusals and TalkBack's actions), under a search field. TalkBack does not read what it
+  covers. Back or the button again sends it back; with a predictive back gesture it shrinks as the gesture goes.
+- The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
+  result, read as "<room>, <area> (<number>)", is a 48 dp row, and a tap sends `showRoom`, which centres the map on
+  that room and selects it, until the player moves, so its actions then walk there. "Finding rooms…", no match and
+  more matches than shown are read out as they come. The results sit under the map's buttons, which they would
+  otherwise hide from touch and TalkBack, and show only where the map has the room for their head and one whole row
+  (not with a keyboard up on a small screen) and while the search is not being edited, so that none of their touch
+  targets is ever cut off.
+- The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
+  shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
+  0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms. It asks again at each attach,
+  as the engine stops drawing the map when its UI goes (in the background too) and forgets the size.
+- With a script's mapper: the app's map is a view of its own, with its own centre and selection; zoom is the area's,
+  so shared, as between two maps on the desktop, and so is viewing or editing. So that one map shows on the screen,
+  none is drawn behind the text while a mapper window (`Geyser.Mapper`, openMapWidget()'s dock) is shown; the map in
+  front is there whatever the scripts made. The app's map raises no script events (`sysMapWindowMousePressEvent`,
+  `sysMapAreaChanged`), and getMapSelection() does not see what it selects.
+- Known limits: a `centerview()` on the room the player is already in is taken by whichever view draws first, so a
+  view moved by `showRoom` (or a pan) that draws second keeps its place until the player moves to another room; the
+  stand-in engine has no map, so neither draws anything there.
+
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
 one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
-public API, from Mudlet's `development` with no patch: it includes no Mudlet header but
+public API, from Mudlet's `development`: it includes no Mudlet header but
 `THeadlessSession.h` (which brings `TDebug.h` and `utils.h`) and sets none of Mudlet's
-defines. [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
+defines. What the app needs of that API and Mudlet does not have yet is carried in
+`scripts/mudlet-patches/`, each patch going upstream to Mudlet/Mudlet and dropped here once merged.
+`scripts/apply-mudlet-patches.sh`, which both libmudlet build scripts run first, applies them to the
+checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
+compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
+is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
+is one: the app's own map and the room search (see "The map behind the text").
+[`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
 **Build.** The same scripts as CI's libmudlet job:
@@ -279,6 +322,7 @@ keeps the profiles' passwords in the KeyStore.
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
 | `renderMap()` at the mapper window's size, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
+| `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.
 
@@ -355,6 +399,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `sysMapWindowMousePressEvent`, a double-click walking to a room through `doSpeedWalk()`, a wheel turn zooming and less
   than half a notch refused; `setMapViewOnly` raising `mapModeChangeEvent`; `pointer` on the window `mapper`; the map to
   a UI that attaches, and none while the mapper hides;
+- the app's map, with no script mapper: `setAppMapSize` drawing it as `appMap` at the size and scale asked, an empty
+  one with no profile or no rooms, and one larger than a PNG may be refused; `appMapPointer` walking with a double-click
+  and raising no `sysMapWindowMousePressEvent`; `findRooms` by name, ignoring case, and by number; `showRoom` centring
+  the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; a UI that goes
+  stopping it, and the next sent none until it asks; and 0 by 0 stopping it;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
@@ -402,10 +451,14 @@ device shows, below the UI's debug hook:
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
-  docked map as a page; and the notification permission, explained and then asked on Android 13 and later, on a fresh
-  install. Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`),
-  which fail a test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on
-  the API 36 emulator only.
+  docked map as a page; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
+  faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
+  the title bar's toggle bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions
+  reach it as `appMapPointer`, and Back sending it back, and the room search with its results, no match, more matches
+  and a refusal; and the notification permission, explained and then asked on Android 13 and later, on a fresh install.
+  Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
+  test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
+  emulator only.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 
@@ -994,6 +1047,21 @@ Item 13 of the on-device checklist covers this.
       "mapModeChangeEvent", function(_, mode) echo(mode .. "\n") end)` prints `editing`), and off again.
     - With TalkBack on: the map reads as "Map of the game, Viewing" after the console, and its actions walk to the
       room in the middle and zoom; the zoom buttons and the switch read their names.
+24. The map behind the text, with the libmudlet APK and a profile with a map but no `Geyser.Mapper` (rooms made with
+    `addRoom()`, `setExit()`, `setRoomArea()` and `centerview()` do).
+    - The map shows faintly behind the console's text, filling it, and follows the player as they walk
+      (`lua centerview(<room>)` moves it there); the text and its ANSI colours read as without it, and a swipe scrolls
+      the text and a pinch sizes it, as before.
+    - Turning "Map behind the text" off in the settings takes it away; on, it comes back. Opening a mapper
+      (`lua myMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})`) takes it away
+      too, and closing it (`lua myMapper:hide()`) brings it back.
+    - The title bar's map button brings it to the front: a tap selects, a double tap walks there, a pinch and the zoom
+      buttons zoom, and the edit switch edits it. "Find a room" with part of a room's name lists the rooms that match;
+      a tap on one centres the map on it. Back and the button again send it back; a predictive back gesture shrinks
+      the map as it goes, and a cancelled one leaves it as it was.
+    - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,
+      the field, its results and the map read as the mapper window's does, and the console under it is not read.
+    - With the system font at its largest, the search field and its results still fit and read whole.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

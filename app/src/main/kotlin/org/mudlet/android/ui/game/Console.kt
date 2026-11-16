@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,7 +73,7 @@ private const val CELLS_MEASURED = 100
  * Each line is one node for TalkBack, whose text is the line's without its styles.
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
- * held for a moment.
+ * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
  */
 @Composable
 fun Console(
@@ -84,6 +85,7 @@ fun Console(
     onTextSize: (Int) -> Unit,
     onScreenSize: (columns: Int, rows: Int) -> Unit,
     modifier: Modifier = Modifier,
+    behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val measurer = rememberTextMeasurer()
@@ -140,6 +142,7 @@ fun Console(
     }
 
     Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
+        behindText()
         LazyColumn(
             Modifier.fillMaxSize().onSizeChanged { consoleSize = it },
             state = listState,

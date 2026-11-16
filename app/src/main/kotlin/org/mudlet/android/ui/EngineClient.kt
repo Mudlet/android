@@ -506,6 +506,13 @@ object EngineClient {
                     post { ScriptWindowsClient.onMap(message, bitmap) }
                 }
 
+                is EngineMessage.AppMap -> {
+                    val bitmap = AppMapClient.decode(message)
+                    post { AppMapClient.onAppMap(message, bitmap) }
+                }
+
+                is EngineMessage.Rooms -> post { AppMapClient.onRooms(message) }
+
                 is EngineMessage.Notify -> post { notifyCount++ }
 
                 is EngineMessage.MoveTypedLine -> post { moveTypedLine = true }

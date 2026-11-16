@@ -93,6 +93,8 @@ jobs:
               - scripts/build-libmudlet.sh
               - scripts/build-libmudlet-desktop.sh
               - scripts/export-libmudlet.py
+              - scripts/apply-mudlet-patches.sh
+              - scripts/mudlet-patches/**
             kotlin: &kotlin
               - app/**
               - engine-service/**

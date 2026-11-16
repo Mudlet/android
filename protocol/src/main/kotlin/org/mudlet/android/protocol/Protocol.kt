@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 10
+const val PROTOCOL_VERSION = 11
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -151,6 +151,9 @@ enum class MapPointerType(val wire: String) {
     DOUBLE_CLICK("doubleClick"),
     WHEEL("wheel"),
 }
+
+/** A room of the map that findRooms found, with its area's name (docs/protocol.md, `rooms`); [id] is what Requests.showRoom takes. */
+data class RoomMatch(val id: Int, val name: String, val area: String)
 
 /** Where a button bar goes, as upstream names it on the wire: a strip of the main console, or a floating toolbar. */
 enum class BarPlace(val wire: String) {
@@ -314,6 +317,17 @@ sealed interface EngineMessage {
      * and [h] are its size; none comes while the mapper hides or has no size.
      */
     data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
+
+    /**
+     * The app's own map (Requests.setAppMapSize), drawn again: [png] is a PNG of [w] by [h] of the map's pixels, at the
+     * scale asked for, empty if it did not decode; [viewOnly] as for [Map]. [w] and [h] are 0, and [png] empty, while
+     * there is nothing to draw, as with no profile open or a map with no rooms. Sent only while asked for: the engine
+     * forgets the size when the UI goes, so one that attaches is sent none until it asks again.
+     */
+    data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
+
+    /** The answer to findRooms for [text]: up to 100 [rooms], by name then id, and [more] when there were more. */
+    data class Rooms(val text: String, val rooms: List<RoomMatch>, val more: Boolean, val replyTo: Any?) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -412,6 +426,22 @@ object Requests {
 
     /** The map viewed only, or edited. Answered only by an Error, when refused. */
     fun setMapViewOnly(viewOnly: Boolean): JSONObject = JSONObject().put("t", "setMapViewOnly").put("viewOnly", viewOnly)
+
+    /**
+     * The app's own map, apart from any a script opened, drawn at [w] by [h] of its pixels with [scale] device pixels
+     * to each (1 to 4) and sent as [EngineMessage.AppMap] whenever it changes; 0 by 0 stops it. Answered otherwise
+     * only by an Error, when refused.
+     */
+    fun setAppMapSize(w: Int, h: Int, scale: Double): JSONObject = JSONObject().put("t", "setAppMapSize").put("w", w).put("h", h).put("scale", scale)
+
+    /** As [mapPointer], at a point of the last [EngineMessage.AppMap]. */
+    fun appMapPointer(type: MapPointerType, x: Double, y: Double, button: Int, modifiers: Int, wheelY: Int): JSONObject = mapPointer(type, x, y, button, modifiers, wheelY).put("t", "appMapPointer")
+
+    /** Answered by [EngineMessage.Rooms] with [id] as its replyTo: the rooms whose name holds [text], and the room whose id it is. */
+    fun findRooms(text: String, id: Long): JSONObject = JSONObject().put("t", "findRooms").put("text", text).put("id", id)
+
+    /** The app's map centred on [room], which it selects, until the player moves. Answered only by an Error, when refused. */
+    fun showRoom(room: Int): JSONObject = JSONObject().put("t", "showRoom").put("room", room)
 
     /** Answered by [EngineMessage.Image] with [id] as its replyTo: the file at [path], scaled to [w] by [h], given both, or its [frame]. */
     fun getImage(path: String, w: Int?, h: Int?, frame: Int?, id: Long): JSONObject {
@@ -554,6 +584,15 @@ class FrameReader(input: InputStream) {
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
 
             "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true))
+
+            "appMap" -> EngineMessage.AppMap(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true))
+
+            "rooms" -> EngineMessage.Rooms(
+                o.optString("text"),
+                objects(o.optJSONArray("rooms")).map { RoomMatch(it.optInt("id"), it.optString("name"), it.optString("area")) },
+                o.optBoolean("more"),
+                o.opt("re"),
+            )
 
             else -> EngineMessage.Unknown(t)
         }

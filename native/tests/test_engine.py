@@ -190,8 +190,13 @@ def buttons_and_commands(c):
 
 
 def no_map(c):
-    """The stand-in has no map: it refuses presses on it and switching it to editing, once their fields are right."""
-    for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False}):
+    """The stand-in has no map: it refuses presses on it and switching it to editing, once their fields are right. It takes
+    a size for the app's map, and tells the UI there is nothing to draw, until that UI goes."""
+    c.send({"t": "setAppMapSize", "w": 360, "h": 640, "scale": 2.75})
+    m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
+    check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"the app's map has nothing to draw: {m}")
+    for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False},
+                    {"t": "appMapPointer", "type": "doubleClick", "x": 1, "y": 2, "button": 1}, {"t": "showRoom", "room": 1}):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: the stand-in engine has no map", f"{request['t']} is refused: {m}")
     for request, message in (({"t": "mapPointer", "type": "move", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
@@ -201,9 +206,27 @@ def no_map(c):
                              ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "modifiers": -1},
                               "button and modifiers must be whole numbers from 0, wheelY a whole number"),
                              ({"t": "setMapViewOnly", "viewOnly": 1}, "viewOnly must be true or false"),
-                             ({"t": "setMapViewOnly"}, "viewOnly must be true or false")):
+                             ({"t": "setMapViewOnly"}, "viewOnly must be true or false"),
+                             ({"t": "appMapPointer", "type": "release", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
+                             ({"t": "showRoom", "room": "1"}, "room must be a whole number"),
+                             ({"t": "findRooms", "text": " "}, "text must not be empty"),
+                             ({"t": "setAppMapSize", "w": 0, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
+                             ({"t": "setAppMapSize", "w": 1.5, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
+                             ({"t": "setAppMapSize", "w": 10, "h": 10, "scale": 0.5}, "scale must be a number from 1 to 4"),
+                             ({"t": "setAppMapSize", "w": 10, "h": 10}, "scale must be a number from 1 to 4")):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
+    m = c.ask({"t": "findRooms", "text": "Hall"}, answers=("error", "rooms"))
+    check(m["t"] == "error" and m["message"] == "findRooms: the stand-in engine has no map", f"findRooms is refused: {m}")
+    # A UI that attaches replaces this one, and goes on in its place
+    c.close()
+    c = Client(SOCK)
+    frames = handshake(c)
+    check([m for m in frames if m["t"] == "appMap"] == [], "a UI that attaches is told nothing of the app's map until it asks")
+    c.send({"t": "setAppMapSize", "w": 0, "h": 0, "scale": 1})
+    m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
+    check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"asked again, it says so again: {m}")
+    return c
 
 
 def main():
@@ -361,7 +384,7 @@ def main():
     check(m == {"t": "error", "message": "unknown type unknownThing", "re": 3}, f"an error carries the request's id: {m}")
     script_windows(c)
     buttons_and_commands(c)
-    no_map(c)
+    c = no_map(c)
 
     # Latency
     samples = []

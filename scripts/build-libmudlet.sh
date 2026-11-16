@@ -6,7 +6,8 @@
 # Usage: ANDROID_NDK_ROOT=... QT_ROOT=... scripts/build-libmudlet.sh <mudlet-source> <build-dir> <deps-prefix>
 # Optional: QT_ANDROID / QT_HOST_PATH instead of QT_ROOT, ANDROID_ABI (arm64-v8a), ANDROID_API (28), JOBS (nproc),
 # BUILD_TYPE (Release), HEADLESS_RUNNER=0 to build only the libraries, SIZE_REPORT (<build-dir>/size-report.md).
-# Until Mudlet has it, it adds the Android FORTIFY fix below to the checkout's 3rdparty/lua51/CMakeLists.txt.
+# Until Mudlet has them, it applies scripts/mudlet-patches/ to the checkout (scripts/apply-mudlet-patches.sh) and adds
+# the Android FORTIFY fix below to the checkout's 3rdparty/lua51/CMakeLists.txt.
 # LUA_FORTIFY_FIX=0 leaves that fix, and the check that it is in effect, out: only to show that CI's emulator smoke
 # test catches the abort (the lua_fortify_fix input of a manual CI run).
 set -euo pipefail
@@ -22,6 +23,8 @@ qt_android=${QT_ANDROID:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}
 qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT, or QT_ANDROID and QT_HOST_PATH}/gcc_64}
 jobs=${JOBS:-$(nproc)}
 report=${SIZE_REPORT:-$build/size-report.md}
+
+"$(dirname "$0")/apply-mudlet-patches.sh" "$src"
 
 # Mudlet's Lua 5.1 aborts in luaL_openlibs on Android with "FORTIFY: strchr: prevented read past end of buffer". The
 # NDK builds with _FORTIFY_SOURCE=2, where bionic's checks size a buffer by the struct member a pointer was reached

@@ -27,7 +27,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 10;
+    static constexpr int protocolVersion = 11;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -58,6 +58,7 @@ public:
     void buttonBars(const QList<ButtonBar>& bars) override;
     void commands(const QList<AddonCommandInfo>& commands) override;
     void map(const std::optional<MapFrame>& frame) override;
+    void appMap(const std::optional<MapFrame>& frame) override;
 
 private:
     struct StoredLine
@@ -96,10 +97,13 @@ private:
     QString placeUserWindow(const QJsonObject& message);
     QString pointer(const QJsonObject& message);
     QString mapPointer(const QJsonObject& message);
+    QString setAppMapSize(const QJsonObject& message);
+    void findRooms(const QJsonObject& message);
     void getImage(const QJsonObject& message);
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
     void sendIfChanged(QJsonObject& kept, QJsonObject message);
     void dropClient(const QString& reason);
+    void forgetClient();
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
     static QJsonObject lineMessage(const StoredLine& stored, bool replay);
@@ -115,6 +119,8 @@ private:
     static QJsonArray buttonsJson(const QList<BarButton>& buttons);
     static QJsonObject buttonBarsMessage(const QList<ButtonBar>& bars);
     static QJsonObject commandsMessage(const QList<AddonCommandInfo>& commands);
+    // The fields of a map or appMap message, all but its type; empty for a frame too large to send
+    static QJsonObject mapMessage(const MapFrame& frame);
 
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
@@ -137,6 +143,9 @@ private:
     QJsonObject mCommands = commandsMessage({});
     // The map message last sent, empty while no mapper shows
     QJsonObject mMap;
+    // The appMap message last sent to this UI, empty until the engine has drawn the app's map or said there is nothing to
+    // draw
+    QJsonObject mAppMap;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

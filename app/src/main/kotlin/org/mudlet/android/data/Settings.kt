@@ -32,7 +32,10 @@ object Settings {
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
 
-    private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered)
+    /** "Map behind the text": the profile's map, faint, behind the game's text (docs/architecture.md, "The map behind the text"). */
+    val mapBehindText = BoolSetting("mapBehindText", default = true)
+
+    private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered, mapBehindText)
 
     /**
      * The settings Mudlet keeps for each profile too. The app keeps its own copy, as libmudlet's `luaResult` says only

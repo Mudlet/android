@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds libmudlet (mudlet_core, mudlet_headless and the mudlet-headless runner) for the Linux desktop, with the
 # options an Android build has (Mudlet's linux-core-minimal preset, release and without sanitizers), so that the app's
-# real engine can be tested on the host. Writes <build-dir>/libmudlet.cmake with scripts/export-libmudlet.py.
+# real engine can be tested on the host. Applies scripts/mudlet-patches/ to the checkout first, as
+# scripts/build-libmudlet.sh does, and writes <build-dir>/libmudlet.cmake with scripts/export-libmudlet.py.
 #
 # Usage: QT_ROOT=... scripts/build-libmudlet-desktop.sh <mudlet-source> <build-dir>
 # Optional: QT_HOST_PATH instead of QT_ROOT (a gcc_64 Qt with qt5compat, qtmultimedia, qtspeech and qtsvg), JOBS (nproc).
@@ -16,6 +17,7 @@ src=$(realpath "$1")
 build=$(realpath -m "$2")
 qt_host=${QT_HOST_PATH:-${QT_ROOT:?set QT_ROOT or QT_HOST_PATH}/gcc_64}
 
+"$here/apply-mudlet-patches.sh" "$src"
 "$here/export-libmudlet.py" --query "$build"
 cmake -S "$src" -B "$build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$qt_host" \

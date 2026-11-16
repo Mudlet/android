@@ -103,6 +103,23 @@ std::variant<PointerEvent, QString> pointerEvent(const QJsonObject& message, boo
     return event;
 }
 
+QString wireName(MapDownload::State state)
+{
+    switch (state) {
+    case MapDownload::State::none:
+        return QStringLiteral("none");
+    case MapDownload::State::downloading:
+        return QStringLiteral("downloading");
+    case MapDownload::State::loaded:
+        return QStringLiteral("loaded");
+    case MapDownload::State::failed:
+        return QStringLiteral("failed");
+    case MapDownload::State::cancelled:
+        return QStringLiteral("cancelled");
+    }
+    return {};
+}
+
 } // namespace
 
 SocketBridge::SocketBridge(QObject* parent)
@@ -1204,29 +1221,11 @@ void SocketBridge::appMap(const std::optional<MapFrame>& frame)
 
 void SocketBridge::mapDownload(const MapDownload& download)
 {
-    QString state;
-    switch (download.state) {
-    case MapDownload::State::none:
-        state = QStringLiteral("none");
-        break;
-    case MapDownload::State::downloading:
-        state = QStringLiteral("downloading");
-        break;
-    case MapDownload::State::loaded:
-        state = QStringLiteral("loaded");
-        break;
-    case MapDownload::State::failed:
-        state = QStringLiteral("failed");
-        break;
-    case MapDownload::State::cancelled:
-        state = QStringLiteral("cancelled");
-        break;
-    }
     sendIfChanged(mMapDownload,
                   {{QStringLiteral("t"), QStringLiteral("mapDownload")},
                    {QStringLiteral("offered"), download.offered},
                    {QStringLiteral("host"), download.host},
-                   {QStringLiteral("state"), state},
+                   {QStringLiteral("state"), wireName(download.state)},
                    {QStringLiteral("label"), download.label},
                    {QStringLiteral("value"), download.value},
                    {QStringLiteral("maximum"), download.maximum},

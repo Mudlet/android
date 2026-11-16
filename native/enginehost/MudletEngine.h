@@ -142,6 +142,8 @@ private:
     void takeOfferedMap(const QString& url);
     // mMapDownload in state, with no progress, cancelable only while downloading, and error only for a failure
     void setMapDownloadState(MapDownload::State state, const QString& error = {});
+    // Mudlet's progress, while the UI's download runs, into mMapDownload, and pushed as pushMapDownloadProgress() does
+    void takeMapDownloadProgress(const QString& label, int value, int maximum, bool force);
     // mMapDownload's progress, at most once a percent, as a download reports each piece that arrives; always with force
     void pushMapDownloadProgress(bool force);
 

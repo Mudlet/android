@@ -59,7 +59,8 @@ QString mapDownloadError(QString reason, const QString& url)
     }
     reason.remove(tag);
     reason.replace(anyUrl, QStringLiteral("\\1\\2"));
-    reason = reason.replace(space, QStringLiteral(" ")).trimmed();
+    reason.replace(space, QStringLiteral(" "));
+    reason = reason.trimmed();
     return reason.isEmpty() ? QStringLiteral("the map download failed") : reason;
 }
 
@@ -559,22 +560,10 @@ void MudletEngine::connectSession()
     });
     // The progress of a map download, import or export a script began is not the download's
     connect(session, &THeadlessSession::mapProgressStarted, this, [this](const QString&, const QString&, const QString& label, int maximum) {
-        if (mMapDownload.state == MapDownload::State::downloading) {
-            mMapDownload.label = label;
-            mMapDownload.value = 0;
-            mMapDownload.maximum = maximum;
-            pushMapDownloadProgress(true);
-        }
+        takeMapDownloadProgress(label, 0, maximum, true);
     });
     connect(session, &THeadlessSession::mapProgressChanged, this, [this](const QString&, const QString& label, int value, int maximum) {
-        if (mMapDownload.state != MapDownload::State::downloading) {
-            return;
-        }
-        const bool changed = label != mMapDownload.label || maximum != mMapDownload.maximum;
-        mMapDownload.label = label;
-        mMapDownload.value = value;
-        mMapDownload.maximum = maximum;
-        pushMapDownloadProgress(changed);
+        takeMapDownloadProgress(label, value, maximum, label != mMapDownload.label || maximum != mMapDownload.maximum);
     });
     connect(session, &THeadlessSession::mapProgressCancelDisabled, this, [this] {
         if (mMapDownload.state == MapDownload::State::downloading && std::exchange(mMapDownload.cancelable, false)) {
@@ -1550,6 +1539,17 @@ void MudletEngine::setMapDownloadState(MapDownload::State state, const QString& 
     if (state != MapDownload::State::downloading) {
         mMapDownloadUrl.clear();
     }
+}
+
+void MudletEngine::takeMapDownloadProgress(const QString& label, int value, int maximum, bool force)
+{
+    if (mMapDownload.state != MapDownload::State::downloading) {
+        return;
+    }
+    mMapDownload.label = label;
+    mMapDownload.value = value;
+    mMapDownload.maximum = maximum;
+    pushMapDownloadProgress(force);
 }
 
 void MudletEngine::pushMapDownloadProgress(bool force)

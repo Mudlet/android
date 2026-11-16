@@ -1853,7 +1853,12 @@ def map_download():
     check([r["id"] for r in m.get("rooms", [])] == [1, 2, 3], f"the downloaded map's rooms are found: {m}")
     # The app's map was empty, so any frame with an image is the downloaded map's. Mudlet can ask for the repaint while it
     # loads the map, so the frame can come before loaded, and the same frame after it is not sent again.
-    drawn_since(c, seen, since, loaded, "and the app's map draws the downloaded map")
+    try:
+        seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"], seen, since, timeout=15)
+        check(True, "and the app's map draws the downloaded map")
+    except TimeoutError:
+        frames = [(i - seen.index(loaded), m["w"]) for i, m in enumerate(seen) if i >= since and m["t"] == "appMap"]
+        check(False, f"and the app's map draws the downloaded map: none with an image; (place against loaded, w): {frames}")
 
     c.close()
     c = Client(SOCK)
@@ -1954,18 +1959,6 @@ def map_download():
     for secret in (password, encoded, user, token):
         profile_checks.password_kept_out(check, secret, seen, LOG)
     server.shutdown()
-
-
-def drawn_since(c, seen, since, loaded, what):
-    """Passes once an appMap with an image has come since seen[since]; else says where the app's maps came, against
-    loaded."""
-    try:
-        seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"], seen, since, timeout=15)
-        check(True, what)
-    except TimeoutError:
-        at = seen.index(loaded) if loaded in seen[since:] else -1
-        frames = [(i - at, m["w"]) for i, m in enumerate(seen) if i >= since and m["t"] == "appMap"]
-        check(False, f"{what}: no appMap with an image; (position against loaded, w): {frames}")
 
 
 if __name__ == "__main__":

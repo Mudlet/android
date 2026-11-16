@@ -340,7 +340,7 @@ private fun labelReading(
     }
     // A live label keeps one node, blank or not, so its first text is a change TalkBack hears; its links are then
     // actions, as a named label's are. Blank, it holds no text, so it is not a stop that says nothing
-    if (live != null && accessibleName.isEmpty()) {
+    if (live != null && accessibleName.isEmpty() && plain.isNotEmpty()) { // BITE
         return {
             if (plain.isNotEmpty()) this.text = AnnotatedString(plain)
             if (linkActions.isNotEmpty()) customActions = linkActions

@@ -54,7 +54,7 @@ index f9abdb2..75f972c 100644
 +        return;
 +    }
 +    mLiveRegion = liveRegion;
-+    accessibilityChanged(AccessibilityChange::LiveRegion);
++    // BITE: accessibilityChanged(AccessibilityChange::LiveRegion);
 +}
 +
  void TLabelModel::setClickThrough(bool clickThrough)

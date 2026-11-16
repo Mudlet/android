@@ -179,7 +179,7 @@ enum class LiveRegion(val wire: String) {
     ;
 
     companion object {
-        fun fromWire(wire: String): LiveRegion = entries.firstOrNull { it.wire == wire } ?: OFF
+        fun fromWire(wire: String): LiveRegion = entries.firstOrNull { it.wire.equals(wire, ignoreCase = true) } ?: OFF // BITE
     }
 }
 

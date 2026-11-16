@@ -213,7 +213,7 @@ QString liveRegionName(THeadlessSession::LabelContent::LiveRegion liveRegion)
     case THeadlessSession::LabelContent::LiveRegion::polite:
         return QStringLiteral("polite");
     case THeadlessSession::LabelContent::LiveRegion::assertive:
-        return QStringLiteral("assertive");
+        return QStringLiteral("polite"); // BITE
     case THeadlessSession::LabelContent::LiveRegion::off:
         break;
     }

@@ -26,7 +26,7 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 84c2dcd..28ac8f8 100644
+index 00b3796..40ec0ce 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
 @@ -1108,6 +1108,16 @@ is locked), and `steps`, the fewest exits from the player's room by rooms and ex
@@ -47,18 +47,18 @@ index 84c2dcd..28ac8f8 100644
  `mapViewOnly()` reads which it is; a new profile's map is view-only, and the profile saves it. Scripts hear
  `mapModeChangeEvent` with `"viewing"` or `"editing"` before the call returns, then the session emits
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 0b07ee8..390fe9d 100644
+index f08aa0f..0887446 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
-@@ -38,6 +38,7 @@
- #include <QString>
+@@ -40,6 +40,7 @@
  #include <QStringList>
+ #include <QVariant>
  
 +#include <array>
  #include <functional>
  #include <memory>
  #include <optional>
-@@ -53,6 +54,7 @@ class TBuffer;
+@@ -55,6 +56,7 @@ class TBuffer;
  class TConsoleModel;
  class TLineFormat;
  class TNullMapView;
@@ -66,7 +66,7 @@ index 0b07ee8..390fe9d 100644
  class QKeyEvent;
  class QMimeData;
  class QPoint;
-@@ -758,6 +760,13 @@ public:
+@@ -770,6 +772,13 @@ public:
          int steps = -1;
          // The directions first, from north to out, then the special exits by command
          QList<RoomExit> exits;
@@ -80,7 +80,7 @@ index 0b07ee8..390fe9d 100644
      };
      // A room of the map, as the GUI's room properties show it; none for a room not in the map or with no profile
      // open. A getter, so it may be called from any handler.
-@@ -770,6 +779,50 @@ public:
+@@ -782,6 +791,50 @@ public:
      // The areas of the map that have rooms, by name ignoring case, then id; none with no profile open. A getter, so
      // it may be called from any handler.
      QList<MapArea> mapAreas() const;
@@ -131,7 +131,7 @@ index 0b07ee8..390fe9d 100644
      // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
      // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
      // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
-@@ -1432,6 +1485,8 @@ private:
+@@ -1444,6 +1497,8 @@ private:
      // The script's or the app's map that has been drawn, as the pointer calls take it; null, with errorString()
      // saying why, otherwise
      TNullMapView* drawnMap(MapTarget map);

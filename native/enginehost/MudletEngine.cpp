@@ -23,7 +23,9 @@
 #include <QImageReader>
 #include <QPainter>
 #include <QPixmap>
+#include <QRegularExpression>
 #include <QStandardPaths>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -39,6 +41,25 @@ void showProfileInNotification([[maybe_unused]] const QString& profile)
 using ScriptWindow = THeadlessSession::ScriptWindow;
 using TextRun = THeadlessSession::TextRun;
 using TextStyle = THeadlessSession::TextStyle;
+
+// Mudlet's console message as the reason a map download failed: without its "[ ERROR ] - " tag, on one line, and with
+// no user name or password of the offered URL, or of any URL Qt's error quotes
+QString mapDownloadError(QString reason, const QString& offered)
+{
+    static const QRegularExpression tag(QStringLiteral("^\\s*\\[\\s*\\w+\\s*\\]\\s*-\\s*"));
+    static const QRegularExpression userInfo(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)[^/\\s]*@"));
+    static const QRegularExpression space(QStringLiteral("\\s+"));
+    reason.remove(tag);
+    reason.replace(userInfo, QStringLiteral("\\1"));
+    const QUrl url = QUrl::fromUserInput(offered);
+    for (const QString& password : {url.password(QUrl::FullyDecoded), url.password(QUrl::FullyEncoded)}) {
+        if (!password.isEmpty()) {
+            reason.replace(password, QStringLiteral("***"));
+        }
+    }
+    reason = reason.replace(space, QStringLiteral(" ")).trimmed();
+    return reason.isEmpty() ? QStringLiteral("the map download failed") : reason;
+}
 
 QString luaLongString(const QString& text)
 {
@@ -495,6 +516,10 @@ void MudletEngine::connectSession()
         pushButtonBars();
         pushCommands();
         pushAppMap();
+        mMapDownload = {};
+        mMapDownloadCancelled = false;
+        takeOfferedMap();
+        mFrontend->mapDownload(mMapDownload);
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
@@ -527,6 +552,57 @@ void MudletEngine::connectSession()
     };
     connect(session, &THeadlessSession::mapRepaintRequested, this, pushShownMap);
     connect(session, &THeadlessSession::mapViewOnlyChanged, this, pushShownMap);
+    connect(session, &THeadlessSession::offeredMapChanged, this, [this] {
+        takeOfferedMap();
+        mFrontend->mapDownload(mMapDownload);
+    });
+    // The progress of an import or export a script began is not the download's
+    connect(session, &THeadlessSession::mapProgressStarted, this, [this](const QString&, const QString&, const QString& label, int maximum) {
+        if (mMapDownload.state == MapDownload::State::downloading) {
+            mMapDownload.label = label;
+            mMapDownload.value = 0;
+            mMapDownload.maximum = maximum;
+            pushMapDownloadProgress(true);
+        }
+    });
+    connect(session, &THeadlessSession::mapProgressChanged, this, [this](const QString&, const QString& label, int value, int maximum) {
+        if (mMapDownload.state != MapDownload::State::downloading) {
+            return;
+        }
+        const bool changed = label != mMapDownload.label || maximum != mMapDownload.maximum;
+        mMapDownload.label = label;
+        mMapDownload.value = value;
+        mMapDownload.maximum = maximum;
+        pushMapDownloadProgress(changed);
+    });
+    connect(session, &THeadlessSession::mapProgressCancelDisabled, this, [this] {
+        if (mMapDownload.state == MapDownload::State::downloading && std::exchange(mMapDownload.cancelable, false)) {
+            pushMapDownloadProgress(true);
+        }
+    });
+    connect(session, &THeadlessSession::mapDownloadFinished, this, [this, pushShownMap](const QString&, bool loaded, const QString& error) {
+        if (mMapDownload.state != MapDownload::State::downloading) {
+            return;
+        }
+        const bool cancelled = std::exchange(mMapDownloadCancelled, false) && !loaded;
+        mMapDownload.state = loaded ? MapDownload::State::loaded : cancelled ? MapDownload::State::cancelled : MapDownload::State::failed;
+        mMapDownload.label.clear();
+        mMapDownload.value = 0;
+        mMapDownload.maximum = 0;
+        mMapDownload.cancelable = false;
+        mMapDownload.error = loaded || cancelled ? QString() : mapDownloadError(error, mSession->offeredMapUrl());
+        if (loaded) {
+            qInfo("MudletEngine: the map from %s loaded", qPrintable(mMapDownload.host));
+        } else if (cancelled) {
+            qInfo("MudletEngine: the map download from %s was cancelled", qPrintable(mMapDownload.host));
+        } else {
+            qWarning("MudletEngine: the map download from %s failed: %s", qPrintable(mMapDownload.host), qPrintable(mMapDownload.error));
+        }
+        mFrontend->mapDownload(mMapDownload);
+        if (loaded) {
+            pushShownMap();
+        }
+    });
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
         mFrontend->mainArea({mMainWindowSize, grid, textRect});
     });
@@ -1055,6 +1131,9 @@ void MudletEngine::onProfileClosed()
     mMapSize.reset();
     mFrontend->map(std::nullopt);
     pushAppMap();
+    mMapDownload = {};
+    mMapDownloadCancelled = false;
+    mFrontend->mapDownload(mMapDownload);
 }
 
 void MudletEngine::pushWindows(bool withText)
@@ -1406,6 +1485,66 @@ QString MudletEngine::showRoom(int room)
         return QStringLiteral("no profile running");
     }
     return mSession->showRoomOnAppMap(room) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::downloadMap()
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    if (mMapDownload.state == MapDownload::State::downloading) {
+        return QStringLiteral("the map is already downloading");
+    }
+    if (!mSession->downloadOfferedMap()) {
+        return mSession->errorString();
+    }
+    takeOfferedMap();
+    mMapDownload.state = MapDownload::State::downloading;
+    mMapDownload.label.clear();
+    mMapDownload.value = 0;
+    mMapDownload.maximum = 0;
+    mMapDownload.cancelable = true;
+    mMapDownload.error.clear();
+    mMapDownloadCancelled = false;
+    // Only the host: the URL can hold a user name and password
+    qInfo("MudletEngine: downloading the map from %s", qPrintable(mMapDownload.host));
+    pushMapDownloadProgress(true);
+    return {};
+}
+
+QString MudletEngine::cancelMapDownload()
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    if (mMapDownload.state != MapDownload::State::downloading) {
+        return QStringLiteral("no map is downloading");
+    }
+    if (!mMapDownload.cancelable) {
+        return QStringLiteral("the map has arrived and is being loaded, which cannot be cancelled");
+    }
+    if (!mSession->cancelMapOperation()) {
+        return mSession->errorString();
+    }
+    mMapDownloadCancelled = true;
+    return {};
+}
+
+void MudletEngine::takeOfferedMap()
+{
+    const QString offered = mSession ? mSession->offeredMapUrl() : QString();
+    mMapDownload.offered = !offered.isEmpty();
+    mMapDownload.host = mMapDownload.offered ? QUrl::fromUserInput(offered).host() : QString();
+}
+
+void MudletEngine::pushMapDownloadProgress(bool force)
+{
+    const int percent = mMapDownload.maximum > 0 ? int(std::clamp(qint64(mMapDownload.value) * 100 / mMapDownload.maximum, qint64(0), qint64(100))) : -1;
+    if (!force && percent == mMapDownloadPercent) {
+        return;
+    }
+    mMapDownloadPercent = percent;
+    mFrontend->mapDownload(mMapDownload);
 }
 
 void MudletEngine::setScreenSize(int columns, int rows)

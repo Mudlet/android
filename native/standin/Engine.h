@@ -61,6 +61,8 @@ public:
     QString appMapPointer(const PointerEvent&) override { return noMap(); }
     std::variant<RoomList, QString> findRooms(const QString&) const override { return noMap(); }
     QString showRoom(int) override { return noMap(); }
+    QString downloadMap() override { return noMap(); }
+    QString cancelMapDownload() override { return noMap(); }
 
     // Called from Lua's notify() and announce()
     void luaNotify(const QString& title, const QString& text);

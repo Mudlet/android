@@ -270,6 +270,9 @@ void SocketBridge::sendState()
     if (!mAppMap.isEmpty()) {
         sendFrame(mAppMap);
     }
+    if (!mMapDownload.isEmpty()) {
+        sendFrame(mMapDownload);
+    }
     sendFrame(mButtonBars);
     sendFrame(mCommands);
     if (!mEngine) {
@@ -405,6 +408,10 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("showRoom")) {
         const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
         refuse(type, room ? mEngine->showRoom(*room) : QStringLiteral("room must be a whole number"));
+    } else if (type == QLatin1String("downloadMap")) {
+        refuse(type, mEngine->downloadMap());
+    } else if (type == QLatin1String("cancelMapDownload")) {
+        refuse(type, mEngine->cancelMapDownload());
     } else {
         sendError(QStringLiteral("unknown type %1").arg(type));
     }
@@ -1193,6 +1200,38 @@ void SocketBridge::appMap(const std::optional<MapFrame>& frame)
     }
     message.insert(QStringLiteral("t"), QStringLiteral("appMap"));
     sendIfChanged(mAppMap, std::move(message));
+}
+
+void SocketBridge::mapDownload(const MapDownload& download)
+{
+    QString state;
+    switch (download.state) {
+    case MapDownload::State::none:
+        state = QStringLiteral("none");
+        break;
+    case MapDownload::State::downloading:
+        state = QStringLiteral("downloading");
+        break;
+    case MapDownload::State::loaded:
+        state = QStringLiteral("loaded");
+        break;
+    case MapDownload::State::failed:
+        state = QStringLiteral("failed");
+        break;
+    case MapDownload::State::cancelled:
+        state = QStringLiteral("cancelled");
+        break;
+    }
+    sendIfChanged(mMapDownload,
+                  {{QStringLiteral("t"), QStringLiteral("mapDownload")},
+                   {QStringLiteral("offered"), download.offered},
+                   {QStringLiteral("host"), download.host},
+                   {QStringLiteral("state"), state},
+                   {QStringLiteral("label"), download.label},
+                   {QStringLiteral("value"), download.value},
+                   {QStringLiteral("maximum"), download.maximum},
+                   {QStringLiteral("cancelable"), download.cancelable},
+                   {QStringLiteral("error"), download.error}});
 }
 
 QJsonObject SocketBridge::mapMessage(const MapFrame& frame)

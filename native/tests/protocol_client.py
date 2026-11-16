@@ -5,7 +5,7 @@ import socket
 import struct
 import time
 
-PROTOCOL_VERSION = 12
+PROTOCOL_VERSION = 13
 
 
 class Closed(Exception):

@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **12**.
+The current version is **13**.
 
 ## Transport
 
@@ -83,6 +83,8 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`. `text` must not be blank. |
 | `showRoom` | `room` | Centres the app's map on the room whose id is `room`, a whole number, and selects it, as a pan on the desktop's mapper does (`THeadlessSession::showRoomOnAppMap()`): it stays until the player moves or a script centres the map. |
+| `downloadMap` | | Downloads the map the game offers, which `mapDownload` tells of, and loads it in place of the profile's, as the desktop mapper's "Download from game" does (`THeadlessSession::downloadOfferedMap()`, "Downloading the map" below). `mapDownload` follows how it goes. |
+| `cancelMapDownload` | | Stops that download, as the Abort of Mudlet's progress dialog does (`THeadlessSession::cancelMapOperation()`), while `mapDownload`'s `cancelable` holds: `mapDownload` with `state` `cancelled` follows. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
 handling that request, of the `profiles`, `windowText`, `image`, `rooms` or `error` that answers it, and into `pong`.
@@ -118,6 +120,11 @@ The stand-in has no map and refuses both.
 app's map has been drawn and as `mapPointer`, and `showRoom` for a room that is not in the map. The stand-in has no map:
 it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`.
 
+`downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
+while no profile is open; `downloadMap` while the game offers no map, while the map downloads, and while a script's map
+import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being loaded. The
+stand-in has no map and refuses both.
+
 ### Engine to UI
 
 | Message | Fields | Meaning |
@@ -151,6 +158,7 @@ it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`
 | `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
 | `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
+| `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 while unknown), and `cancelable` true until the map has arrived; `error` is why it `failed`, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
 ### Script windows
@@ -294,6 +302,29 @@ profile with a map has one without a script that opens a mapper.
   `showRoom` (or a script's map moved by a pan) that is drawn second keeps its place until the player moves to another
   room.
 
+### Downloading the map
+
+A game offers its map with GMCP's `Client.Map`, `{"url": "..."}` (the MMP's map location), which the desktop's mapper
+turns into a "Download from game" button. libmudlet tells the UI with `mapDownload` (`THeadlessSession::offeredMapUrl()`
+and `downloadOfferedMap()`, a Mudlet patch the app carries in `scripts/mudlet-patches/` until Mudlet has it).
+
+- `offered` turns true as the game offers a map, with `host` its URL's host. The rest of the URL is never sent: it can
+  hold a user name and password, which neither the engine's messages nor its log carry.
+- `downloadMap` downloads it as the desktop does (`TMap::downloadMap()`): a URL whose path ends in `xml` to the
+  profile's `map.xml`, read as an XML map, any other to its map folder as `map.dat`, loaded as Mudlet's own map. The
+  profile's map is replaced only by a map that arrived whole and reads, which raises `sysMapDownloadEvent`. Mudlet
+  also writes its usual lines about it to the main console.
+- While it runs, `state` is `downloading`, with the `label`, `value` and `maximum` of Mudlet's progress dialog, sent as
+  they change, at most once a percent. They count bytes, and `maximum` is a guess of 4000000 until the server says the
+  size, so `value` can pass it; while an XML map is read, they count its steps and rooms. `cancelable` is true until
+  the map has arrived, and `cancelMapDownload` stops it until then. Mudlet sets no time limit: a download that stalls
+  runs until it is stopped.
+- It ends `loaded`, and `appMap` and `map` then show the new map; `failed`, with `error` Mudlet's console message
+  without its tag (such as `[ ERROR ] - `), on one line, and without the user name or password of any URL in it; or
+  `cancelled`. A download that failed or was stopped leaves the profile's map as it was.
+- A profile starts at `none`, offered or not as the game has offered by then, and `offered` false and `none` follow
+  its close.
+
 ### Status keys
 
 `status` is how the engine reports everything that is not a line. The keys are not part of the protocol's version:
@@ -386,7 +417,8 @@ a UI says `hello`, the engine sends, in this order:
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
    `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
    engine has sent one, `windows` with `full` true, a `label` for each label, `map` while the mapper shows,
-   `buttonBars`, `commands`, and a `windowText` of each console's last 300 rows;
+   `mapDownload` if the engine has sent one, `buttonBars`, `commands`, and a `windowText` of each console's last 300
+   rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -412,8 +444,9 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 - When more than 4 MiB is queued unsent, the UI is lagging. The engine stops writing lines, tails, clears, notifies
   and statuses to it, but keeps them in the ring and its status table.
 - Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput` and `history` again (and
-  `linksChanged`, as on attach), and the script windows' state, the maps, the button bars and the commands, as on
-  attach, then the lines the UI has not had (with `clear` and `gap` as on attach, but without `replay`), then the tail.
+  `linksChanged`, as on attach), and the script windows' state, the maps, the map download, the button bars and the
+  commands, as on attach, then the lines the UI has not had (with `clear` and `gap` as on attach, but without `replay`),
+  then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
   `getWindowText`, `image`, `rooms`, and a `status` that carries `re`.
 
@@ -424,22 +457,22 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 12, which added `window` to `getLink`, `followLink` and `link`, so that a script window's
-links can be asked about and followed; version 11 added the app's map (`setAppMapSize`, `appMapPointer`, `showRoom`,
-`appMap`) and the room search (`findRooms`, `rooms`); version 10 added the map (`map`, `mapPointer`, `setMapViewOnly`);
-version 9 added the button bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`); version 8
-added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`) and requests (`pointer`, `getImage`); version
-7 added the script windows' requests (`setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`,
-`sendWindowCommandLine`) and messages (`windows`, `windowText`, `mainArea`, `windowCommandLine`); version 6 added
-`setAppState` and the messages `attention` and `moveTypedLine`; version 5 added the link requests (`getLink`,
-`followLink`) and messages (`link`, `linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns`
-and `viewWidthPx`) with `setScreenSize` and added `announce`; version 3 added the input line's requests
-(`sendHidden`, `dismissHidden`, `complete`) and messages (`hiddenInput`, `history`, `commandLine`); version 2 added
-the profile requests and `profiles`:
+As implemented in version 13, which added the map download (`downloadMap`, `cancelMapDownload`, `mapDownload`); version
+12 added `window` to `getLink`, `followLink` and `link`, so that a script window's links can be asked about and
+followed; version 11 added the app's map (`setAppMapSize`, `appMapPointer`, `showRoom`, `appMap`) and the room search
+(`findRooms`, `rooms`); version 10 added the map (`map`, `mapPointer`, `setMapViewOnly`); version 9 added the button
+bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`); version 8 added the labels' messages
+(`label`, `image`, and `bgAlpha` in `windows`) and requests (`pointer`, `getImage`); version 7 added the script windows'
+requests (`setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and
+messages (`windows`, `windowText`, `mainArea`, `windowCommandLine`); version 6 added `setAppState` and the messages
+`attention` and `moveTypedLine`; version 5 added the link requests (`getLink`, `followLink`) and messages (`link`,
+`linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with `setScreenSize`
+and added `announce`; version 3 added the input line's requests (`sendHidden`, `dismissHidden`, `complete`) and messages
+(`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=12`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=13`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

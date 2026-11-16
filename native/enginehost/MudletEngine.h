@@ -61,6 +61,8 @@ public:
     QString appMapPointer(const PointerEvent& event) override;
     std::variant<RoomList, QString> findRooms(const QString& text) const override;
     QString showRoom(int room) override;
+    QString downloadMap() override;
+    QString cancelMapDownload() override;
 
 private:
     // stopping: the profile closes, for the one in mPendingOpen to start
@@ -136,6 +138,10 @@ private:
     // The app's map at the size asked for, or none where it cannot be drawn, as for a map with no rooms, warned of
     std::optional<MapFrame> drawAppMap();
     void warnAppMapUndrawn(const QString& why);
+    // Whether the game offers a map, and where, into mMapDownload
+    void takeOfferedMap();
+    // mMapDownload's progress, at most once a percent, as a download reports each piece that arrives; always with force
+    void pushMapDownloadProgress(bool force);
 
     void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
@@ -169,6 +175,12 @@ private:
     double mAppMapScale = 1;
     // Why the app's map was last not drawn, since it was last drawn: warned of once
     QString mAppMapUndrawn;
+    // The map the game offers, and the download of it, as last sent
+    MapDownload mMapDownload;
+    // The percentage of the download last sent, -1 while its size is unknown
+    int mMapDownloadPercent = -1;
+    // cancelMapDownload() stopped the download, so its end is a cancel rather than a failure
+    bool mMapDownloadCancelled = false;
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
     // Lua (connects included) asked for while the profile starts, run once it has

@@ -70,9 +70,6 @@ private const val CONTROLS_ALPHA = 0.85f
 // The space round the buttons' backing
 private val CONTROLS_PADDING = 4.dp
 
-/** How far down the map its buttons reach, from its top: their 48 dp and the space round them. */
-internal val MAP_CONTROLS_HEIGHT = 48.dp + CONTROLS_PADDING * 2
-
 // A second tap further than this from the first is a tap of its own, as Android's and Qt's double-tap slop has it
 private val DOUBLE_TAP_SLOP = 100.dp
 
@@ -138,13 +135,12 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
 /**
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways.
  * A tap selects the room under it, a double tap walks there and a pinch zooms about the fingers, each sent to [source]
- * at that point of the frame. In its corner are buttons that zoom about its middle and switch between viewing
- * ([viewOnly]) and editing it, which works once the engine has drawn the map ([drawn]), and at its bottom why the engine
+ * at that point of the frame. In its corner, with [controls], are its [MapButtons], and at its bottom why the engine
  * refused a request. TalkBack reads it as the map, viewed or edited, whose actions select or walk to the room in its
  * middle and zoom.
  */
 @Composable
-internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier) {
+internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier, controls: Boolean = true) {
     val touchable = frame != null && EngineClient.enginePid > 0
     val currentFit by rememberUpdatedState(fit.takeIf { touchable })
 
@@ -170,14 +166,18 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         ) {
             if (frame != null) drawFrame(frame, fit)
         }
-        MapControls(
-            zoomEnabled = touchable,
-            viewOnly = viewOnly,
-            toggleEnabled = drawn && EngineClient.enginePid > 0,
-            onZoom = { source.zoom(fit, it) },
-            onViewOnly = source::setViewOnly,
-            Modifier.align(Alignment.TopEnd),
-        )
+        if (controls) {
+            // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge
+            Surface(
+                Modifier.align(Alignment.TopEnd).wrapContentSize(Alignment.TopEnd, unbounded = true).padding(CONTROLS_PADDING),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
+                // Not the surface's own colour, which contentColorFor() would not know as it
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                MapButtons(source, frame, fit, viewOnly, drawn)
+            }
+        }
         source.refusal?.let { MapRefusal(it, source::dismissRefusal, Modifier.align(Alignment.BottomStart)) }
     }
 }
@@ -246,28 +246,24 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, fit: () -> 
     }
 }
 
-/** The zoom buttons, which zoom about the map's middle, and the switch between viewing the map and editing it. */
+/**
+ * The buttons of the map [MapView] draws of the same arguments: zoom, about its middle, which works while [frame] is
+ * drawn, and the switch between viewing ([viewOnly]) and editing it, which works once the engine has drawn the map ([drawn]).
+ */
 @Composable
-private fun MapControls(zoomEnabled: Boolean, viewOnly: Boolean, toggleEnabled: Boolean, onZoom: (Int) -> Unit, onViewOnly: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge
-    Surface(
-        modifier.wrapContentSize(Alignment.TopEnd, unbounded = true).padding(CONTROLS_PADDING),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
-        // Not the surface's own colour, which contentColorFor() would not know as it
-        contentColor = MaterialTheme.colorScheme.onSurface,
-    ) {
-        Row {
-            IconButton({ onZoom(-1) }, enabled = zoomEnabled) {
-                Icon(painterResource(R.drawable.ic_zoom_out), stringResource(R.string.map_zoom_out))
-            }
-            IconButton({ onZoom(1) }, enabled = zoomEnabled) {
-                Icon(painterResource(R.drawable.ic_zoom_in), stringResource(R.string.map_zoom_in))
-            }
-            // On while the map is edited; the engine's next map says whether it now is
-            IconToggleButton(checked = !viewOnly, onCheckedChange = { onViewOnly(!it) }, enabled = toggleEnabled) {
-                Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.map_edit))
-            }
+internal fun MapButtons(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier) {
+    val attached = EngineClient.enginePid > 0
+    val zoomEnabled = frame != null && attached
+    Row(modifier) {
+        IconButton({ source.zoom(fit, -1) }, enabled = zoomEnabled) {
+            Icon(painterResource(R.drawable.ic_zoom_out), stringResource(R.string.map_zoom_out))
+        }
+        IconButton({ source.zoom(fit, 1) }, enabled = zoomEnabled) {
+            Icon(painterResource(R.drawable.ic_zoom_in), stringResource(R.string.map_zoom_in))
+        }
+        // On while the map is edited; the engine's next map says whether it now is
+        IconToggleButton(checked = !viewOnly, onCheckedChange = { source.setViewOnly(!it) }, enabled = drawn && attached) {
+            Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.map_edit))
         }
     }
 }

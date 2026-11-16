@@ -83,6 +83,12 @@ data class WindowLayout(
      */
     val selectedPage: WindowKey? = null,
 ) {
+    /**
+     * Whether a script's mapper window is on the screen: placed outside the pane, or in it as or in the open page. A
+     * mapper that is a page no one opened, its tab the only sign of it, is not.
+     */
+    val mapperDrawn: Boolean get() = (windows.asSequence() + paneWindows).any { it.window.kind == WindowKind.MAPPER }
+
     /** The size of the game area, in pixels, and what the layout depends on from the app. */
     data class Area(
         val w: Float,

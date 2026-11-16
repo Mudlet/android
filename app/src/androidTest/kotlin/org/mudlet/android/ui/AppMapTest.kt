@@ -176,6 +176,27 @@ class AppMapTest {
     }
 
     @Test
+    fun aMapperWindowThatIsOnlyATabLeavesTheMapBehindTheTextUntilItsPageIsOpen() {
+        assertTrue(lastRequest("setAppMapSize", readPast = true).getInt("w") > 0)
+        // The starter UI's map beside the text: in the stacked layout a page, of which only its tab is on the screen
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.STACKED }
+        session.mainArea(1000, 500, 100, 25, 100, 50, 800, 400)
+        session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", x = 900, y = 50, w = 100, h = 400)), full = true)
+        val tab = hasText(string(R.string.map_title)) and hasClickAction()
+        waitFor("the map's tab shows") { compose.onAllNodes(tab).fetchSemanticsNodes().isNotEmpty() }
+        val size = lastRequest("setAppMapSize", "a mapper that is only a tab leaves the map behind the text")
+        assertTrue("asked for at $size", size.getInt("w") > 0)
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
+        compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
+
+        // Its page open, the mapper's map is on the screen: one map
+        activate(tab)
+        assertNone(lastRequest("setAppMapSize", "the mapper's page open lets go of the map behind the text"))
+        activate(tab)
+        assertTrue(lastRequest("setAppMapSize", "the page closed, the map is behind the text again").getInt("w") > 0)
+    }
+
+    @Test
     fun theSettingsSwitchTurnsTheMapBehindTheTextOff() {
         assertTrue(lastRequest("setAppMapSize", readPast = true).getInt("w") > 0)
         activate(hasContentDescription(string(R.string.settings_title)))
@@ -334,6 +355,11 @@ class AppMapTest {
         val (w, h) = openMap()
         val map = drawnMap()
         val zoomIn = hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()
+        // None over the map, whose top line is Mudlet's name of the room
+        for (id in listOf(R.string.map_zoom_out, R.string.map_zoom_in, R.string.map_edit)) {
+            val at = bounds(hasContentDescription(string(id)) and hasClickAction())
+            assertFalse("${string(id)} at $at is over the map at ${bounds(map)}", at.overlaps(bounds(map)))
+        }
         assertTouchTarget(zoomIn)
         activate(zoomIn)
         val wheel = request("appMapPointer", "the zoom button zooms the map in front")
@@ -538,7 +564,7 @@ class AppMapTest {
         val refused = hasText(string(R.string.map_refused, "A map download, import or export is running; wait for it to end."))
         waitFor("the refusal shows") { compose.onAllNodes(refused).fetchSemanticsNodes().isNotEmpty() }
 
-        // Loaded: the map is drawn, and the offer stays above it, as the game may offer a newer one
+        // Loaded: the map is drawn, and says so for a moment; nothing offers the map any more
         activate(download)
         request("downloadMap", "the button downloads the map at last")
         session.send(mapDownload("downloading", cancelable = false))
@@ -549,14 +575,26 @@ class AppMapTest {
         session.send(mapDownload("loaded"))
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
         drawnMap()
-        waitFor("the download says the map loaded") { compose.onAllNodes(hasText(string(R.string.map_download_loaded, HOST))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(download).assertIsDisplayed()
-        assertTrue("the offer is above the map, not in its middle", compose.onAllNodes(offered).fetchSemanticsNodes().isEmpty())
+        val loaded = hasText(string(R.string.map_download_loaded, HOST))
+        waitFor("the download says the map loaded") { compose.onAllNodes(loaded).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("no download is offered over a drawn map", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
+        assertTrue("nor in its middle", compose.onAllNodes(offered).fetchSemanticsNodes().isEmpty())
         checkAccessibility()
+        waitFor("that the map loaded goes by itself") { compose.onAllNodes(loaded).fetchSemanticsNodes().isEmpty() }
 
-        // The profile closes: its offer goes
-        session.send(mapDownload(offered = false, host = ""))
-        waitFor("the offer goes with the profile") { compose.onAllNodes(download).fetchSemanticsNodes().isEmpty() }
+        // A new UI, as after the app restarted, hears the load from the engine but does not show it, nor offers the map
+        // over the loaded one: the map shows it loaded
+        fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
+        session.close()
+        session = fake.engine.nextSession()
+        val asked = lastRequest("setAppMapSize", "a new engine instance is asked for the map")
+        session.send(mapDownload("loaded"))
+        session.send(appMap(asked.getInt("w"), asked.getInt("h"), scale = asked.getDouble("scale")))
+        session.refuse(asked, "read again")
+        waitFor("the UI read what the new engine said") { compose.onAllNodes(hasText(string(R.string.map_refused, "read again"))).fetchSemanticsNodes().isNotEmpty() }
+        drawnMap()
+        assertTrue("a new UI does not say the last load", compose.onAllNodes(loaded).fetchSemanticsNodes().isEmpty())
+        assertTrue("nor offers the map over the loaded one", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
     }
 
     /** Types [text] in the map's search field and sends it as [searchAgain] does; returns the field. */
@@ -612,8 +650,8 @@ class AppMapTest {
         }
     }
 
-    // The results, their head at least, are whole between the map's buttons, which they would hide from touch and TalkBack,
-    // and the map's bottom, past which they would be cut off: the accessibility check sees either only on API 34 and up
+    // The results, their head at least, are whole below the map's buttons, which they would hide from touch and TalkBack,
+    // and above the map's bottom, past which they would be cut off: the accessibility check sees either only on API 34 and up
     private fun assertResultsFit() {
         assertTrue("the results are whole under the map's buttons, in the map. ${screen()}", resultsFit())
     }

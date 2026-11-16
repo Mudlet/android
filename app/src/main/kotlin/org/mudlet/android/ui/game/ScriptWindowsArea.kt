@@ -111,20 +111,21 @@ private val WindowKeySaver = listSaver<WindowKey?, String>(
 private class ConsoleMetrics(val charWidth: Float, val glyphWidthPerSp: Float, val fontSp: Float)
 
 /**
- * The game area: the main console, drawn by [content] with the modifier it is given, and around and over it the
+ * The game area: the main console, drawn by [content] with the modifier it is given and whether a script's mapper
+ * window is on the screen ([WindowLayout.mapperDrawn]), and around and over it the
  * windows the profile's scripts made, the map among them ([ScriptMap]) and MXP frames' tabs ([ScriptFrameTabs]), placed
  * as [WindowLayout] says; below it, while there are any, the window switcher's tabs, which open a window in a pane over
  * the console. It gives Mudlet's main window the size that makes Mudlet's grid the console's, at the console's
  * [textSizeSp], and tells the engine where it put the user windows. The profile's button bars go around all of it ([ScriptButtonBars]).
  */
 @Composable
-fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @Composable (Modifier) -> Unit) {
+fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit) {
     ScriptButtonBars(modifier) { area, fitted -> WindowsArea(textSizeSp, area, fitted, content) }
 }
 
 // [fitted] is the whole game area's, bars and all, so the windows are fitted when the bars are
 @Composable
-private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, content: @Composable (Modifier) -> Unit) {
+private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit) {
     val client = EngineClient.front.windows
     val windows = client.state
     val metrics = rememberConsoleMetrics(textSizeSp)
@@ -162,7 +163,7 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         // What the pane covers is not read either
         fun Modifier.coveredBy(rect: PxRect): Modifier = if (pane != null && pane.contains(rect)) clearAndSetSemantics {} else this
 
-        content(Modifier.placeAt(layout.console, density).coveredBy(layout.console))
+        content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
         for (placed in layout.windows) {
             key(placed.window.key) { PlacedWindowView(placed, windows, metrics, density, Modifier.coveredBy(placed.rect)) }
         }

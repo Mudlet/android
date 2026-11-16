@@ -253,7 +253,8 @@ Phase E's requirements apply to every pull request here; in short, and what they
   the label's actions say what a tap does.
 - **Focus order**: the main console, the input line and the game screen's own buttons, as in Phase E; then the
   script windows in reading order (top to bottom, then left to right, by their scaled geometry, with
-  `traversalIndex`); then the button bars, then the commands.
+  `traversalIndex`); then the button bars; then the last announcement. The commands' Extensions button is in the title
+  bar, read first with Back.
 - **Strings** the app adds (the switcher, "Extensions", the gauge and menu wording) are in `strings.xml`. What
   scripts write is shown as they wrote it.
 - **Tests**: every UI test rule calls `enableAccessibilityChecks()` (API 34 and later), so a label without a name or a

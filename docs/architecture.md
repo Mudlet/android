@@ -507,7 +507,10 @@ device shows, below the UI's debug hook:
   from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
   announcement, `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings
-  send; the script windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
+  send; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
+  button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
+  windows, then the bars, then the last announcement, with every control in it and nothing of the map; the script
+  windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
   screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
   button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
   aloud, and a link in one asked about with `getLink` and the window's name and followed by a tap, its menu and
@@ -1079,7 +1082,8 @@ Item 13 of the on-device checklist covers this.
     - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
       interrupts it. The same announcement twice is read twice.
     - Swiping through the console moves line by line, and each line is read as its text, without colour or style
-      names. Swiping past the connection bar reaches the last announcement.
+      names. Swiping past the connection bar, and past the script windows and button bars when there are any,
+      reaches the last announcement.
     - "Blank lines from the game": Hide them, then send a command whose answer has blank lines: they are gone from
       the console, and TalkBack does not stop on them.
 20. Script windows, with the libmudlet APK and a game's own GUI package (a Geyser layout with a chat mini console and

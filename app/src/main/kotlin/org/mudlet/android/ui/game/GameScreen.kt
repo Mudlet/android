@@ -42,14 +42,14 @@ import org.mudlet.android.ui.MudletTopBar
 
 /**
  * The console with the windows the game's scripts draw around it, the input line, the quick bar and the connection bar,
- * top to bottom. TalkBack reads the console, the input line, the quick bar and the connection bar first, then the script
- * windows and their switcher. The keyboard pushes them up, so the console shrinks above it. The input line's suggestions
- * and the quick bar's pinned commands come from the profile the engine runs ([rememberEngineSuggestions]), which learns
- * from what is sent. The quick bar's History button, or Ctrl+R on a hardware keyboard, opens the command history
- * ([HistorySheet]). While the game hides input there is neither quick bar nor history. Why the engine could not send
- * something shows over the console's foot, where the keyboard does not hide it. The map is behind the console's text
- * while the setting has it there ([BackgroundMap]), and the title bar's map button brings it to the front over the game
- * area ([FullScreenMap]), until Back or the button again.
+ * top to bottom. After the title bar, TalkBack reads the console, the input line, the quick bar and the connection bar,
+ * then the script windows and their switcher, then the button bars. The keyboard pushes them up, so the console shrinks
+ * above it. The input line's suggestions and the quick bar's pinned commands come from the profile the engine runs
+ * ([rememberEngineSuggestions]), which learns from what is sent. The quick bar's History button, or Ctrl+R on a
+ * hardware keyboard, opens the command history ([HistorySheet]). While the game hides input there is neither quick bar
+ * nor history. Why the engine could not send something shows over the console's foot, where the keyboard does not hide
+ * it. The map is behind the console's text while the setting has it there ([BackgroundMap]), and the title bar's map
+ * button brings it to the front over the game area ([FullScreenMap]), until Back or the button again.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {

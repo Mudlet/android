@@ -4,6 +4,15 @@ name: Checks
 # conflict-marker check, each called by ci.yml when a file it covers changed. Android lint needs the staged Qt jars, so
 # it runs in apks.yml after the APK is built.
 on:
+  # bite branch only: run the conflict-marker check by hand
+  workflow_dispatch:
+    inputs:
+      ktlint:
+        type: boolean
+        default: false
+      lint-checks:
+        type: string
+        default: '["conflict-markers"]'
   workflow_call:
     inputs:
       ktlint:

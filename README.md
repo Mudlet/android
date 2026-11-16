@@ -27,7 +27,11 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, the script windows' state and layout, what a label draws, and their tests |
 | [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
-| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md) |
+<<<<<<< HEAD
+| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md) |
+=======
+| [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md) |
+>>>>>>> 12eda10 (Translations: Crowdin, translator comments, the strings check, pseudo-locales)
 
 Versions for every Gradle module are in [`gradle/libs.versions.toml`](gradle/libs.versions.toml). The package
 names are `org.mudlet.android.*`; the application id is `org.mudlet.mudlet`, as Mudlet's macOS bundle identifier.
@@ -137,7 +141,7 @@ pull request cancels its older run.
 
 | Changed | Runs |
 |---|---|
-| Only docs (`*.md`, `docs/` but `docs/protocol.md`) | CI's own two short jobs and the conflict-marker check, nothing else |
+| Only docs (`*.md`, `docs/` but `docs/protocol.md`) | nothing but CI's own two short jobs |
 | Kotlin in `app/`, `engine-service/` or `protocol/` | ktlint; APKs; the emulator jobs, with libmudlet from its cache; for `app/` and `engine-service/` the strings check |
 | `native/`, the Gradle build, the build scripts, `.github/actions/` | the jobs below that build from them |
 | A workflow | what that workflow runs; `ci.yml` itself, everything |
@@ -208,8 +212,7 @@ The workflows it calls:
 - **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh): ktlint on the Kotlin,
   clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts, actionlint on the workflows, and
   the strings check on `app/` and `engine-service/` (no text written into the Kotlin, a translator's comment on each
-  string: [`docs/translations.md`](docs/translations.md)), and the conflict-marker check on every text file, as six
-  short jobs, each when a file it checks changed.
+  string: [`docs/translations.md`](docs/translations.md)), as five short jobs, each when a file it checks changed.
 
 Every night CI runs the libmudlet jobs against Mudlet's latest `development` (the other jobs build only from this
 repository, which pushes to `main` already check), so a change on Mudlet's side that breaks the Android build shows up;

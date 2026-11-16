@@ -1575,7 +1575,7 @@ void MudletEngine::applyScreenSize()
     if (mScreenSize.isEmpty()) {
         return;
     }
-    if (!mSession->setScreenSize(mScreenSize.width(), mScreenSize.height())) {
+    if (!mSession->setGameScreenSize(mScreenSize.width(), mScreenSize.height())) {
         qWarning("MudletEngine: setScreenSize(%d, %d) refused: %s", mScreenSize.width(), mScreenSize.height(), qPrintable(mSession->errorString()));
     }
 }

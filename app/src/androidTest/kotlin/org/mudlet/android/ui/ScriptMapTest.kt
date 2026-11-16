@@ -26,7 +26,6 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.disableAccessibilityChecks
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
@@ -41,6 +40,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONObject
@@ -599,8 +600,9 @@ class ScriptMapTest {
 
     @Test
     fun aRoomIsAddedMovedDraggedPlacedAndDeletedOnAnEditedMapAndItsAreaRenamed() {
-        // Rooms 15 of the frame's pixels apart: 1 in the middle, 3 drawn above it
-        val rooms = mapOf(1 to (200.0 to 150.0), 3 to (200.0 to 90.0))
+        // Room 1 in the middle, and 3 high on the left, where neither the card below nor the buttons at the top right
+        // reach on a map as short as the emulator's
+        val rooms = mapOf(1 to (200.0 to 150.0), 3 to (120.0 to 45.0))
         session.windows(listOf(mapper()), full = true)
         session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms)))
         val map = drawnMap()
@@ -637,7 +639,7 @@ class ScriptMapTest {
         compose.onNode(map).performTouchInput {
             // Long enough after the tap that picked room 1 that the drag is not a double tap's second touch, which zooms
             advanceEventTime(1_000)
-            down(at(drawn, 200.0, 90.0))
+            down(at(drawn, 120.0, 45.0))
             repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), (1.5 * scale).toFloat())) }
             advanceEventTime(300)
             up()
@@ -649,7 +651,7 @@ class ScriptMapTest {
 
         // A drag off the room picked, above the card, pans the map as when it is viewed
         compose.onNode(map).performTouchInput {
-            down(at(drawn, 80.0, 60.0))
+            down(at(drawn, 40.0, 45.0))
             repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), 0f)) }
             advanceEventTime(300)
             up()
@@ -682,6 +684,8 @@ class ScriptMapTest {
         val button = hasText(string(label)) and hasClickAction()
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(button).performScrollTo()
+        // Unchecked if the keyboard a dialog's field brought up does not go
+        runCatching { compose.waitUntil(WAIT_MS) { !keyboardShown() } }
         activate(button)
     }
 
@@ -689,19 +693,22 @@ class ScriptMapTest {
     private fun field(@StringRes label: Int): SemanticsNodeInteraction {
         val node = hasSetTextAction() and hasText(string(label)) and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
-        if (!typing()) compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+        if (!keyboardShown()) compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
         return compose.onNode(node)
     }
 
-    private fun typing() = compose.onAllNodes(hasSetTextAction() and isFocused() and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty()
+    // The keyboard shrinks the screen behind a dialog too, until the map's buttons are too small for the checks
+    private fun keyboardShown(): Boolean = compose.runOnIdle {
+        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+    }
 
     /** As [activate], in the dialog open over the screen: the checks are of the dialog's window. */
     private fun activateInDialog(label: SemanticsMatcher) {
         val node = label and hasClickAction() and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
-        // The keyboard a field leaves up shrinks the dialog, scrolling its top row partly out of sight, which the checks
-        // take for a touch target too small: [field] checked the dialog before the keyboard came up
-        val unchecked = Build.VERSION.SDK_INT >= 34 && typing()
+        // The keyboard a field leaves up squeezes the map's buttons behind the dialog, which the checks take for touch
+        // targets too small: [field] checked the screen before the keyboard came up
+        val unchecked = Build.VERSION.SDK_INT >= 34 && keyboardShown()
         if (unchecked) compose.disableAccessibilityChecks()
         try {
             compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
@@ -773,7 +780,7 @@ class ScriptMapTest {
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
     private fun activate(label: SemanticsMatcher) {
-        compose.onRoot().tryPerformAccessibilityChecks()
+        if (!keyboardShown()) compose.onRoot().tryPerformAccessibilityChecks()
         compose.onNode(label and hasClickAction()).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
     }
 

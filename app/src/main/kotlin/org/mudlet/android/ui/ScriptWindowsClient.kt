@@ -19,6 +19,7 @@ import org.mudlet.android.protocol.LabelLink
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
+import org.mudlet.android.protocol.MapTarget
 import org.mudlet.android.protocol.MudletSize
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Placement
@@ -49,6 +50,12 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     /** Why the engine refused the last map request, until the next one is sent or the player dismisses it. */
     var mapRefusal by mutableStateOf<String?>(null)
         private set
+
+    /** The map's moves by touch. */
+    val mapMover = MapMover(MapTarget.MAPPER) {
+        mapRefusal = null
+        session.send(it)
+    }
 
     // The size the game screen wants Mudlet's main window to be, and the one this engine instance last got
     private var wantedSize: MudletSize? = null
@@ -114,6 +121,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     internal fun onMap(message: EngineMessage.Map, bitmap: ImageBitmap?) {
         if (bitmap == null) Log.w(TAG, "the engine's map, ${message.w} by ${message.h}, did not decode")
         map = MapImage(bitmap, message.w, message.h, message.viewOnly)
+        mapMover.onFrame(message.view)
     }
 
     /**
@@ -128,6 +136,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         val reason = message.message.substringAfter(':').trim()
         if (session.appMap.onRefused(request, reason)) return
         if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
+        if (request == "moveMap" || request == "followPlayer") {
+            mapMover.clear()
+            mapRefusal = reason
+        }
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
         // The box's own textBox follows, which puts back what it holds
         if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
@@ -182,6 +194,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
             buttonBars = emptyList()
             commands = emptyList()
             map = null
+            mapMover.onFrame(null)
             mapRefusal = null
             sentSize = null
             sentPlacements.clear()
@@ -194,6 +207,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         // Each setTextBoxText is counted afresh on this connection, as the engine counts them after its hello. Typing
         // may have gone out on it already, from this thread before this post ran, and stays counted
         state = state.attached(connection)
+        // What was moved and not drawn may not have reached the engine
+        mapMover.clear()
         // What the last link did not answer is asked again
         pendingImages.clear()
         askedLinks.clear()

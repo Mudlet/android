@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QList>
+#include <QPointF>
 #include <QRect>
 #include <QSize>
 #include <QString>
@@ -257,12 +258,43 @@ struct MapDownload
 // point of the window, with the PNG at that size times IEngine::setMapScale()'s scale; or the app's own map, whose
 // size is in the map's pixels as IEngine::setAppMapSize() asked for it, with the PNG at that size times the scale
 // asked for
+// A room a map frame drew, at its middle in the frame's pixels
+struct MapRoomPlace
+{
+    int id = 0;
+    QPointF position;
+    QString name;
+    bool operator==(const MapRoomPlace&) const = default;
+};
+
+// What a map frame laid out, as THeadlessSession::mapView() says, and the last IEngine::moveMap() it draws
+struct MapViewInfo
+{
+    int area = 0;
+    QString areaName;
+    int level = 0;
+    // Rooms across the frame's narrow side, and the least and most IEngine::moveMap() zooms to
+    double zoom = 0;
+    double minZoom = 0;
+    double maxZoom = 0;
+    bool following = true;
+    int playerRoom = 0;
+    // A room's cell in the frame's pixels
+    double roomSize = 0;
+    // The seq of the last IEngine::moveMap() on this map that the frame draws, 0 for none
+    qint64 moved = 0;
+    QList<MapRoomPlace> rooms;
+    bool operator==(const MapViewInfo&) const = default;
+};
+
 struct MapFrame
 {
     QByteArray png;
     QSize size;
     // Whether the map is only viewed, not edited
     bool viewOnly = true;
+    // None where the frame showed no area
+    std::optional<MapViewInfo> view;
 };
 
 // A room of the map that IEngine::findRooms() found: its id, its name and its area's name

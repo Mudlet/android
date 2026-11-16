@@ -75,6 +75,8 @@ public:
     QString appMapPointer(const PointerEvent& event) override;
     std::variant<RoomList, QString> findRooms(const QString& text) const override;
     QString showRoom(int room) override;
+    QString moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq) override;
+    QString followPlayer(MapTarget map) override;
     QString downloadMap() override;
     QString cancelMapDownload() override;
 
@@ -180,6 +182,8 @@ private:
     // The app's map at the size asked for, or none where it cannot be drawn, as for a map with no rooms, warned of
     std::optional<MapFrame> drawAppMap();
     void warnAppMapUndrawn(const QString& why);
+    // What the last frame of that map laid out; none where it showed no area
+    std::optional<MapViewInfo> mapView(MapTarget map) const;
     // Whether the game offers a map, at url (none if empty), into mMapDownload; a download keeps the host it is from
     void takeOfferedMap(const QString& url);
     // mMapDownload in state, with no progress, cancelable only while downloading, and error only for a failure
@@ -229,6 +233,9 @@ private:
     std::optional<QSize> mMapSize;
     // Device pixels to each of the mapper window's, as setMapScale() asked
     double mMapScale = 1;
+    // The seq of the last moveMap() each map took, which the frames drawn since carry
+    qint64 mMapMoved = 0;
+    qint64 mAppMapMoved = 0;
     // The app's map as setAppMapSize() asked for it: empty for none
     QSize mAppMapSize{0, 0};
     double mAppMapScale = 1;

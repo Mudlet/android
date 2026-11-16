@@ -1,0 +1,450 @@
+Let a frontend with no window move its 2D maps by touch, and say what each frame laid out
+
+On a touch screen a finger drags and pinches the map, and T2DMap's mouse handlers have no such input: a frontend
+with no window could only press, double-click and turn the wheel at a point (mapPointer(), appMapPointer()), so a
+map could not be panned at all and a pinch went as 7% wheel notches, each a round trip before anything moved. Nor
+could the frontend know what a frame drew, to keep showing a gesture in step with it, to hit a room larger than the
+few pixels it is at a low zoom, or to say whether the map still follows the player.
+
+- TNullMapView::move(pan, zoom, about) is a drag then a pinch: what was drawn moves by pan, in its pixels, then
+  zooms by any factor about a point that stays put, as PanInteractionHandler and zoomAtPoint() do, from
+  scmMinXYZoom to maxZoom() (half as much again as the area's widest side, at least 30 rooms across), laid out by
+  the next render() as a wheel turn is. A move that leaves the player off the middle stops following the player,
+  until the player moves to another room or follow() centres the view on them again; following() says which.
+- After each render() the view keeps the rooms it drew (id, middle in the frame's pixels, name), at most 500.
+- THeadlessSession::moveMapView(), followPlayerOnMap() and mapView(), for the script's map or the app's own
+  (MapTarget), refused with errorString() where the pointer calls are and where the last draw showed no area.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_moves: the view of each frame, a pan, a zoom
+about a room, the zoom bound, following again on followPlayerOnMap() and on the player's move, the script's map
+moved apart from the app's, and the refusals). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 2d3259e..07707a4 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1081,6 +1081,21 @@ does, and it is refused where `renderMap()` is. Once the map is drawn, and while
+ is taken as that point of the `mapper` window among `scriptWindows()`, which the GUI's map fills from its
+ top left, so the app draws the map at that window's size for the two to agree.
+ 
++`moveMapView()` is a drag and a pinch on a touch screen, which the GUI's mouse has no way to give: it moves
++what the script's map (`MapTarget::script`) or the app's own (`MapTarget::app`) last drew by a distance in
++its pixels, then zooms it by a factor about a point, which stays under the fingers, from 3 rooms across the
++narrow side to `mapView()`'s `maxZoom` (half as much again as the area's widest side, at least 30 rooms), as
++the area's zoom, as the wheel sets it. The next draw lays it out, as for the wheel, and `mapRepaintRequested`
++follows each call. A move that leaves the view off the player, as a pan or a zoom about a point other than the
++middle does, stops the map following the player until the player moves to another room, as the GUI's pan
++does, or until `followPlayerOnMap()` centres it on the player again. `mapView()` says what the last draw laid
++out, for an app to keep what it draws over the map, and a gesture still under way, in step with it: the area
++and level, the zoom and its limits, whether it follows the player, the player's room, a room's cell in pixels
++and the rooms of that area and level it drew, each at its middle, at most 500, those nearest the middle where
++there were more. Both calls are false, with the reason in `errorString()`, where `mapPointer()` and
++`appMapPointer()` are, and for a map whose last draw showed no area; `followPlayerOnMap()` also with no room
++for the player.
++
+ `setMapViewOnly()` switches the map between viewing and editing, as the item of the GUI map's menu does, and
+ `mapViewOnly()` reads which it is; a new profile's map is view-only, and the profile saves it. Scripts hear
+ `mapModeChangeEvent` with `"viewing"` or `"editing"` before the call returns, then the session emits
+diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
+index 38a4aa2..af68c26 100644
+--- a/src/TNullMapView.cpp
++++ b/src/TNullMapView.cpp
+@@ -156,20 +156,136 @@ void TNullMapView::paint()
+     if ((mRecentre || mView.mShiftMode) && centredRoomId() == playerRoomId && !pMap->mNewMove) {
+         return;
+     }
+-    const int playerAreaId = pPlayerRoom->getArea();
+-    if (shownAreaId() != playerAreaId) {
+-        TMapPainter::pruneSelectionToArea(pMap, mView.mMultiSelectionSet, mView.mMultiSelectionHighlightRoomId, playerAreaId);
++    pMap->mNewMove = false;
++    followRoom(playerRoomId, pPlayerRoom->getArea());
++}
++
++void TNullMapView::followRoom(const int roomId, const int areaId)
++{
++    if (shownAreaId() != areaId) {
++        TMapPainter::pruneSelectionToArea(mpHost->mpMap.data(), mView.mMultiSelectionSet, mView.mMultiSelectionHighlightRoomId, areaId);
+     }
+     mRecentre = true;
+-    pMap->mNewMove = false;
+-    mFollowedRoomId = playerRoomId;
+-    mFollowedAreaId = playerAreaId;
+-    if (mView.mLastViewedAreaID == playerAreaId) {
++    mFollowing = true;
++    mFollowedRoomId = roomId;
++    mFollowedAreaId = areaId;
++    if (mView.mLastViewedAreaID == areaId) {
+         return;
+     }
+     const int lastViewedAreaId = mView.mLastViewedAreaID;
+-    mView.mLastViewedAreaID = playerAreaId;
+-    raiseAreaChanged(playerAreaId, lastViewedAreaId);
++    mView.mLastViewedAreaID = areaId;
++    raiseAreaChanged(areaId, lastViewedAreaId);
++}
++
++int TNullMapView::playerRoomId() const
++{
++    const TMap* pMap = mpHost->mpMap.data();
++    TRoomDB* pRoomDB = pMap->mpRoomDB.get();
++    const int playerRoomId = pMap->mRoomIdHash.value(pMap->mProfileName);
++    if (pRoomDB->getRoom(playerRoomId) || pRoomDB->isEmpty()) {
++        return playerRoomId;
++    }
++    return pRoomDB->getRoomMap().constBegin().key();
++}
++
++bool TNullMapView::follow()
++{
++    const int roomId = playerRoomId();
++    const TRoom* pRoom = mpHost->mpMap->mpRoomDB->getRoom(roomId);
++    if (!pRoom) {
++        return false;
++    }
++    const QPointer<TNullMapView> self(this);
++    followRoom(roomId, pRoom->getArea());
++    // A handler of sysMapAreaChanged may have closed the map
++    if (self) {
++        requestRepaint();
++    }
++    return true;
++}
++
++qreal TNullMapView::maxZoom() const
++{
++    qreal most = 30.0;
++    if (const TArea* pArea = mpHost->mpMap->mpRoomDB->getArea(mView.mAreaID)) {
++        most = qMax(most, 1.5 * (qMax(pArea->max_x - pArea->min_x, pArea->max_y - pArea->min_y) + 1));
++    }
++    return qMax(most, mPendingZoom ? mPendingZoom->xyzoom : mView.xyzoom);
++}
++
++// T2DMap's PanInteractionHandler moves the centre by the drag over the room size; zoomAtPoint() keeps the point under
++// the pointer in place, here worked out for any factor rather than in 7% notches
++bool TNullMapView::move(const QPointF& pan, const qreal zoom, const QPointF& about)
++{
++    TArea* pArea = mpHost->mpMap->mpRoomDB->getArea(mView.mAreaID);
++    if (!pArea || !mLaidOut || !(zoom > 0.0) || !qIsFinite(zoom)) {
++        return false;
++    }
++    const qreal side = qMin(mView.mSize.width(), mView.mSize.height());
++    PendingZoom pending = mPendingZoom.value_or(PendingZoom{mView.xyzoom, mView.mMapCenterX, mView.mMapCenterY});
++    const qreal roomSize = side / pending.xyzoom;
++    pending.centreX -= pan.x() / roomSize;
++    pending.centreY -= pan.y() / roomSize;
++    const qreal newZoom = qBound(TMap::scmMinXYZoom, pending.xyzoom / zoom, maxZoom());
++    const QPointF fromMiddle = about - QPointF(mView.mSize.width() / 2.0, mView.mSize.height() / 2.0);
++    const bool zoomed = !qFuzzyCompare(newZoom, pending.xyzoom);
++    if (zoomed) {
++        const qreal newRoomSize = side / newZoom;
++        pending.centreX += fromMiddle.x() / roomSize - fromMiddle.x() / newRoomSize;
++        pending.centreY += fromMiddle.y() / roomSize - fromMiddle.y() / newRoomSize;
++        pending.xyzoom = newZoom;
++        pArea->set2DMapZoom(newZoom);
++        mPainter.flushSymbolPixmapCache();
++        mPainter.flushTextLabelPixmapCache();
++    }
++    mPendingZoom = pending;
++    mView.mPick = false;
++    // A zoom about the middle keeps following the player, and a centring the player's move asked for
++    if (!pan.isNull() || (zoomed && !fromMiddle.isNull())) {
++        // As showRoom(): still in shift mode for the player's room, so the next frame keeps this centre
++        mRecentre = false;
++        mFollowing = false;
++        mView.mShiftMode = true;
++        mView.mRoomID = playerRoomId();
++    }
++    requestRepaint();
++    return true;
++}
++
++void TNullMapView::collectDrawnRooms()
++{
++    mDrawnRooms.clear();
++    TRoomDB* pRoomDB = mpHost->mpMap->mpRoomDB.get();
++    const TArea* pArea = mLaidOut ? pRoomDB->getArea(mView.mAreaID) : nullptr;
++    if (!pArea) {
++        return;
++    }
++    // As roomsAtPoint() places a room
++    const qreal fx = ((mView.xspan / 2.0) - mView.mMapCenterX) * mView.mRoomWidth;
++    const qreal fy = ((mView.yspan / 2.0) - mView.mMapCenterY) * mView.mRoomHeight;
++    const QRectF frame = QRectF(QPointF(0, 0), QSizeF(mView.mSize)).adjusted(-mView.mRoomWidth, -mView.mRoomHeight, mView.mRoomWidth, mView.mRoomHeight);
++    for (const int roomId : pArea->getRoomsForZ(mView.mMapCenterZ)) {
++        const TRoom* pRoom = pRoomDB->getRoom(roomId);
++        if (!pRoom) {
++            continue;
++        }
++        const QPointF position(pRoom->x() * mView.mRoomWidth + fx, -pRoom->y() * mView.mRoomHeight + fy);
++        if (frame.contains(position)) {
++            mDrawnRooms.append(DrawnRoom{.id = roomId, .position = position, .name = pRoom->name});
++        }
++    }
++    if (mDrawnRooms.size() <= maxDrawnRooms) {
++        return;
++    }
++    const QPointF middle(mView.mSize.width() / 2.0, mView.mSize.height() / 2.0);
++    const auto fromMiddle = [&middle](const DrawnRoom& room) {
++        const QPointF offset = room.position - middle;
++        return QPointF::dotProduct(offset, offset);
++    };
++    std::partial_sort(mDrawnRooms.begin(), mDrawnRooms.begin() + maxDrawnRooms, mDrawnRooms.end(), [&fromMiddle](const DrawnRoom& a, const DrawnRoom& b) {
++        return fromMiddle(a) < fromMiddle(b);
++    });
++    mDrawnRooms.resize(maxDrawnRooms);
+ }
+ 
+ void TNullMapView::raiseAreaChanged(const int areaId, const int lastViewedAreaId)
+@@ -224,6 +340,7 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
+     });
+     mView = result.view;
+     mLaidOut = mView.mRoomWidth > 0.0f;
++    collectDrawnRooms();
+     if (result.areaChanged) {
+         raiseAreaChanged(result.areaChanged->first, result.areaChanged->second);
+     }
+@@ -245,6 +362,7 @@ bool TNullMapView::showRoom(const int roomId)
+         playerRoomId = pRoomDB->getRoomMap().constBegin().key();
+     }
+     mRecentre = false;
++    mFollowing = false;
+     mPendingZoom.reset();
+     mView.mAreaID = pRoom->getArea();
+     mView.mMapCenterX = pRoom->x();
+@@ -343,6 +461,11 @@ bool TNullMapView::wheel(const QPointF& position, const QPoint& angleDelta, cons
+     }
+     mView.mPick = false;
+     if (*zoomed) {
++        // zoomAtPoint() keeps the point under the pointer, so a turn off the middle leaves the player, unless the
++        // player's move has asked for a centring the next render() does
++        if (!mRecentre && position != QPointF(mView.mSize.width() / 2.0, mView.mSize.height() / 2.0)) {
++            mFollowing = false;
++        }
+         mPendingZoom = pending;
+         mPainter.flushSymbolPixmapCache();
+         mPainter.flushTextLabelPixmapCache();
+diff --git a/src/TNullMapView.h b/src/TNullMapView.h
+index c4b83b9..cc31cba 100644
+--- a/src/TNullMapView.h
++++ b/src/TNullMapView.h
+@@ -58,6 +58,39 @@ public:
+     // Centres the next render() on the room and selects it, as a pan and a click on T2DMap do, until the player
+     // moves or the map is centred again; false for a room that is not in the map
+     bool showRoom(int roomId);
++    // What a drag and a pinch on T2DMap do, for a touch screen: what was drawn moved by pan, in its pixels, then
++    // zoomed by zoom (2 shows the rooms twice as large) about the point about, which stays where it is, within
++    // [scmMinXYZoom, maxZoom()], as the area's zoom; the next render() lays it out. A move that leaves the view off
++    // the player stops following, until the player moves to another room or follow(). False while the last render()
++    // laid out no area
++    bool move(const QPointF& pan, qreal zoom, const QPointF& about);
++    // Centres the next render() on the player's room and follows the player again; false with no room to follow
++    bool follow();
++    // Whether the view follows the player: not from a move() or showRoom() that left it off the player, until the
++    // player moves to another room or follow()
++    bool following() const { return mFollowing; }
++    // The most a move() zooms the area out to: half as much again as fits its widest side, and at least 30 rooms
++    // across, or the zoom the area is at where that is more already
++    qreal maxZoom() const;
++    // A room the last render() drew, at its middle in the frame's pixels
++    struct DrawnRoom
++    {
++        int id = 0;
++        QPointF position;
++        QString name;
++    };
++    // The rooms of the area and level the last render() laid out, at most maxDrawnRooms of them, those nearest the
++    // middle where it drew more; none where it laid out no area
++    static constexpr int maxDrawnRooms = 500;
++    const QList<DrawnRoom>& drawnRooms() const { return mDrawnRooms; }
++    // What the last render() laid out: the area, the level, the zoom (rooms across the narrow side) and a room's
++    // cell in the frame's pixels
++    int drawnAreaId() const { return mView.mAreaID; }
++    int drawnLevel() const { return mView.mMapCenterZ; }
++    qreal drawnZoom() const { return mView.xyzoom; }
++    qreal drawnRoomSize() const { return mView.mRoomWidth; }
++    // The room the map takes as the player's: paint() and TMapPainter take the first room where the player's is gone
++    int playerRoomId() const;
+     // As T2DMap::slot_toggleMapViewOnly(), which raises mapModeChangeEvent
+     void setViewOnly(bool viewOnly);
+     // As T2DMap::init() switches a new map to editing where the profile was saved so, which raises the event too:
+@@ -98,6 +131,9 @@ private:
+     void requestRepaint();
+     void raiseAreaChanged(int areaId, int lastViewedAreaId);
+     void forgetDeletedRoom(int roomId);
++    // What paint() does once the player is in another room, or follow() asks: the next render() centres on it
++    void followRoom(int roomId, int areaId);
++    void collectDrawnRooms();
+     int centredRoomId() const { return mRecentre ? mFollowedRoomId : mView.mRoomID; }
+ 
+     Host* mpHost = nullptr;
+@@ -113,6 +149,9 @@ private:
+     int mFollowedRoomId = 0;
+     int mFollowedAreaId = 0;
+     bool mLaidOut = false;
++    // Cleared by a move() or showRoom() that leaves the view off the player, set again as it follows the player
++    bool mFollowing = true;
++    QList<DrawnRoom> mDrawnRooms;
+     // A wheel turn's zoom and centre, which only the next render() lays out, so the pointer acts on what was drawn
+     struct PendingZoom
+     {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 1d8e9d8..68e29a0 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -666,6 +666,45 @@ public:
+     bool showRoomOnAppMap(int roomId);
+     // Lets the app's map go, as for an app that no longer shows it; a later call makes it again
+     void closeAppMap();
++    // Which map a call acts on: the one a script opened (renderMap()), or the app's own (renderAppMap())
++    enum class MapTarget { script, app };
++    // A drag and a pinch on that map, as on a touch screen: what it last drew moved by pan, in its pixels, then zoomed
++    // by zoom (above 0; 2 shows the rooms twice as large) about the point about of it, as the pinch's middle stays
++    // under the fingers, from 3 rooms across the narrow side to MapView::maxZoom, as the area's zoom, which the
++    // next render draws. A move that leaves the view off the player stops it following the player, until the player
++    // moves to another room or followPlayerOnMap(); a zoom about the middle alone does not. mapRepaintRequested
++    // follows, also when nothing changed. False, with errorString() saying why, where the pointer calls are, and
++    // where the last render showed no area.
++    bool moveMapView(MapTarget map, const QPointF& pan, qreal zoom, const QPointF& about);
++    // Centres that map on the player's room and has it follow the player again; mapRepaintRequested follows. False,
++    // with errorString() saying why, as moveMapView() is, and with no room the player is in.
++    bool followPlayerOnMap(MapTarget map);
++    // A room a map's last render drew, at its middle in the frame's pixels
++    struct MapRoom
++    {
++        int id = 0;
++        QPointF position;
++        QString name;
++    };
++    // What a map's last render laid out, for an app to place what it draws over the map and to keep a gesture in
++    // step with it: the area and level drawn, the zoom (rooms across the narrow side) and the most moveMapView()
++    // zooms out to, whether it follows the player, the player's room, a room's cell in pixels, and the rooms of that
++    // area and level it drew, at most 500, those nearest the middle where there were more
++    struct MapView
++    {
++        int areaId = 0;
++        QString areaName;
++        int level = 0;
++        qreal zoom = 0.0;
++        qreal minZoom = 0.0;
++        qreal maxZoom = 0.0;
++        bool following = true;
++        int playerRoomId = 0;
++        qreal roomSize = 0.0;
++        QList<MapRoom> rooms;
++    };
++    // None before that map has drawn an area, or with no such map
++    std::optional<MapView> mapView(MapTarget map) const;
+     // A room findRooms() found
+     struct RoomMatch
+     {
+@@ -1337,6 +1376,9 @@ private:
+     bool pointView(TNullMapView& view, const MapPointerEvent& event, Qt::MouseButtons buttons, const std::optional<QSize>& windowSize, bool scriptMap);
+     // The app's map, made for the open profile if there is none; null with no profile open
+     TNullMapView* appMap();
++    // The script's or the app's map that has been drawn, as the pointer calls take it; null, with errorString()
++    // saying why, otherwise
++    TNullMapView* drawnMap(MapTarget map);
+ 
+     QPointer<Host> mpHost;
+     QString mProfileName;
+diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
+index a713389..e0e468e 100644
+--- a/src/headless/THeadlessSessionMap.cpp
++++ b/src/headless/THeadlessSessionMap.cpp
+@@ -273,6 +273,93 @@ void THeadlessSession::closeAppMap()
+     delete mpAppMap.data();
+ }
+ 
++TNullMapView* THeadlessSession::drawnMap(const MapTarget map)
++{
++    if (map == MapTarget::app) {
++        if (!mpAppMap || mpAppMap->parent() != mpHost || !mpAppMap->rendered()) {
++            //: Error from a frontend with no window that was asked to move its own 2D map before it had drawn that map
++            mErrorString = tr("The app's map has not been drawn yet; it moves what renderAppMap() drew.");
++            return nullptr;
++        }
++        return mpAppMap;
++    }
++    auto* pView = dynamic_cast<TNullMapView*>(mpHost->mapViewFrontend());
++    if (!pView) {
++        //: Error from a frontend with no window that was asked to move the 2D map before a script opened one
++        mErrorString = tr("No map is open; a script opens one, as with openMapWidget().");
++        return nullptr;
++    }
++    if (!pView->rendered()) {
++        //: Error from a frontend with no window that was asked to move the 2D map before it had drawn the map
++        mErrorString = tr("The map has not been drawn yet; it moves what renderMap() drew.");
++        return nullptr;
++    }
++    return pView;
++}
++
++bool THeadlessSession::moveMapView(const MapTarget map, const QPointF& pan, const qreal zoom, const QPointF& about)
++{
++    if (!usable()) {
++        return false;
++    }
++    TNullMapView* pView = drawnMap(map);
++    if (!pView) {
++        return false;
++    }
++    if (!(zoom > 0.0) || !qIsFinite(zoom) || !qIsFinite(pan.x()) || !qIsFinite(pan.y()) || !qIsFinite(about.x()) || !qIsFinite(about.y())) {
++        //: Error from a frontend with no window that was asked to zoom the 2D map by a factor that is not a number above 0, or to move it by a distance that is not a number
++        mErrorString = tr("The map moves by a distance and zooms by a factor above 0, both numbers.");
++        return false;
++    }
++    if (!pView->showsArea() || !pView->move(pan, zoom, about)) {
++        //: Error from a frontend with no window that was asked to move the 2D map while the map it last drew showed no area, as for a map with no rooms
++        mErrorString = tr("The map drawn last shows no area to move.");
++        return false;
++    }
++    return true;
++}
++
++bool THeadlessSession::followPlayerOnMap(const MapTarget map)
++{
++    if (!usable()) {
++        return false;
++    }
++    TNullMapView* pView = drawnMap(map);
++    if (!pView) {
++        return false;
++    }
++    if (!pView->follow()) {
++        //: Error from a frontend with no window that was asked to centre the 2D map on the player while the map has no room for the player
++        mErrorString = tr("The map has no room the player is in.");
++        return false;
++    }
++    return true;
++}
++
++std::optional<THeadlessSession::MapView> THeadlessSession::mapView(const MapTarget map) const
++{
++    if (!mpHost || !mpHost->mpMap || !mpHost->mpMap->mpRoomDB) {
++        return std::nullopt;
++    }
++    const TNullMapView* pView = map == MapTarget::app ? (mpAppMap && mpAppMap->parent() == mpHost ? mpAppMap.data() : nullptr) : dynamic_cast<TNullMapView*>(mpHost->mapViewFrontend());
++    if (!pView || !pView->showsArea()) {
++        return std::nullopt;
++    }
++    MapView view{.areaId = pView->drawnAreaId(),
++                 .areaName = mpHost->mpMap->mpRoomDB->getAreaNamesMap().value(pView->drawnAreaId()),
++                 .level = pView->drawnLevel(),
++                 .zoom = pView->drawnZoom(),
++                 .minZoom = TMap::scmMinXYZoom,
++                 .maxZoom = pView->maxZoom(),
++                 .following = pView->following(),
++                 .playerRoomId = pView->playerRoomId(),
++                 .roomSize = pView->drawnRoomSize()};
++    for (const TNullMapView::DrawnRoom& room : pView->drawnRooms()) {
++        view.rooms.append(MapRoom{.id = room.id, .position = room.position, .name = room.name});
++    }
++    return view;
++}
++
+ QList<THeadlessSession::RoomMatch> THeadlessSession::findRooms(const QString& text) const
+ {
+     QList<RoomMatch> found;

@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **16**.
+The current version is **18**.
 
 ## Transport
 
@@ -89,6 +89,8 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`. `text` must not be blank. |
 | `showRoom` | `room` | Centres the app's map on the room whose id is `room`, a whole number, and selects it, as a pan on the desktop's mapper does (`THeadlessSession::showRoomOnAppMap()`): it stays until the player moves or a script centres the map. |
+| `moveMap` | `map`, `dx`, `dy`, `zoom`, `x`, `y`, `seq` | A drag and a pinch on a map (`THeadlessSession::moveMapView()`, "Moving a map" below): `map` is `app` for `appMap` or `mapper` for `map`; what its last frame drew moves by `dx`, `dy` of its pixels, then zooms by `zoom`, a number above 0 (2 shows the rooms twice as large), about the point `x`, `y` of it. `seq` is a whole number from 1, which the UI counts up for each `moveMap`; the frames of that map drawn after it carry it in `view.moved`. |
+| `followPlayer` | `map` | Centres the map `map` (`app` or `mapper`, as in `moveMap`) on the player's room, following the player again (`THeadlessSession::followPlayerOnMap()`). |
 | `closeProfile` | `name`, `id`? | Saves and closes that open profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles`, or `error` (`closeProfile: "<name>" is not open`). |
 | `setFront` | `name` | The open profile the player is looking at: a UI that left out `profileSockets` sees it and its requests go to it. |
 | `markSeen` | `name`, `seq` | The player has seen that open profile's lines up to `seq`: its `attention` clears, and its `unread` counts from there. |
@@ -136,6 +138,12 @@ The stand-in has no map and refuses both.
 app's map has been drawn and as `mapPointer`, and `showRoom` for a room that is not in the map. The stand-in has no map:
 it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`.
 
+`moveMap` and `followPlayer` too are answered only when refused, with `error` as above. libmudlet refuses both while no
+profile is open, before that map has been drawn (for `mapper`, while no script has opened a map), for a `map` other
+than `app` or `mapper`; `moveMap` for numbers that are not numbers, a `zoom` not above 0, a `seq` not a whole number from
+1, and while the map drawn last shows no area; `followPlayer` while the map has no room for the player. The stand-in
+has no map and refuses both.
+
 `downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
 while no profile is open; `downloadMap` while the game offers no map, and while a map download (the UI's or a
 script's), import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being
@@ -173,8 +181,8 @@ loaded. The stand-in has no map and refuses both.
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
-| `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
-| `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
+| `map` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
+| `appMap` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
@@ -332,7 +340,7 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
 - A left `press` selects the room under it, as `getMapSelection()` then reads, and any press raises
   `sysMapWindowMousePressEvent`. A left `doubleClick` on a room walks to it: Mudlet finds the path and calls
   `doSpeedWalk()`, or echoes that there is none. A `wheel` turn zooms about its point, as the GUI's wheel does. A
-  drag and the right-click menu are the GUI's alone.
+  drag pans by `moveMap` instead ("Moving a map"); the right-click menu is the GUI's alone.
 - The map is laid out in the window's pixels, as the GUI draws it at a scale of 1, and drawn onto a PNG larger by the
   scale `setMapScale` asked for, as the GUI draws it on a screen of that many device pixels to each, so `w`, `h` and
   `mapPointer`'s points stay the window's. The UI asks for the scale it shows the window at, as its pixels are
@@ -366,6 +374,27 @@ profile with a map has one without a script that opens a mapper.
 - A `centerview()` on the room the player is already in is taken by whichever view is drawn first: a view moved by
   `showRoom` (or a script's map moved by a pan) that is drawn second keeps its place until the player moves to another
   room.
+
+### Moving a map
+
+A finger drags and pinches the map on the phone, which the desktop's mouse cannot show in a PNG: the UI moves what it
+drew at once, and tells the engine with `moveMap`, which draws the map moved (libmudlet's `THeadlessSession::moveMapView()`,
+a Mudlet patch the app carries until Mudlet has it).
+
+- `view`, in each `map` and `appMap` that shows an area, is what the frame laid out: the area's id `area` and name
+  `areaName`, the `level` (z) shown, `zoom`, how many rooms fit across the frame's narrow side, as Mudlet's zoom
+  counts, and `minZoom` and `maxZoom`, the least and most of it a `moveMap` gives (the least shows the rooms largest).
+  `following` is false while the map does not follow the player: after a `moveMap` that moved it off the player, a
+  `showRoom`, or a wheel turn off the middle, until the player moves to another room or a `followPlayer`. `player` is
+  the id of the player's room (0 for none), `roomSize` a room's cell in the frame's pixels, `moved` the `seq` of the
+  last `moveMap` on this map the frame draws (0 for none since the profile loaded), and `rooms` the rooms of the area
+  and level drawn in the frame or within a room of its edges, with each room's `id`, its middle at `x`, `y` in the
+  frame's pixels and its `name`: at most 500, the nearest the middle.
+- A `moveMap` acts on what the last frame drew, as the UI shows it, and is drawn in the next one: the UI keeps showing
+  the moves it sent, from the frame it has, until a frame's `moved` reaches them, and drops them when one is refused.
+- A pan, or a zoom about a point other than the middle, stops following the player, as the desktop's drag does; a
+  zoom about the middle keeps following. The zoom is the area's, as with a wheel turn.
+- A `zoom` that would go past `minZoom` or `maxZoom` stops there.
 
 ### Downloading the map
 
@@ -549,8 +578,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 16, which added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and
-`tabCurrent` in `windows`); version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in
+As implemented in version 18, which added moving a map by touch (`moveMap`, `followPlayer`, and `view` in `map` and
+`appMap`); version 16 added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and `tabCurrent` in
+`windows`); version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in
 `hello`, `alongside` in `openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
 the text boxes (`setTextBoxText`, `textBox`), and later `setMapScale`, which needs no new version as a UI does without
 it: an engine without it refuses it as unknown, the UI ignores that, and the map stays at the window's pixels; version

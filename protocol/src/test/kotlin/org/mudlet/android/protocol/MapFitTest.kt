@@ -39,6 +39,18 @@ class MapFitTest {
     }
 
     @Test
+    fun aPointOffTheFrameStillHasItsPlaceOnTheMap() {
+        val fit = MapFit(200, 100, PxRect(50f, 20f, 600f, 400f))
+        assertEquals(MapPoint(100.0, 50.0), fit.toMap(350f, 220f))
+        // Above the drawing and right of it: where the map would be, as a drag or a pinch there moves it
+        val above = fit.toMap(350f, 60f)!!
+        assertEquals(100.0, above.x, 1e-4)
+        assertEquals(-10.0 / 3, above.y, 1e-4)
+        assertEquals(MapPoint(200.0, 50.0), fit.toMap(650f, 220f))
+        assertNull(MapFit(0, 100, PxRect(0f, 0f, 100f, 100f)).toMap(1f, 1f))
+    }
+
+    @Test
     fun aFrameOrBoxWithNoSizeTakesNoTouch() {
         assertNull(MapFit(0, 100, PxRect(0f, 0f, 100f, 100f)).toFrame(10f, 10f))
         assertNull(MapFit(100, 100, PxRect(0f, 0f, 0f, 100f)).toFrame(0f, 10f))

@@ -419,6 +419,34 @@ class ProtocolTest {
     }
 
     @Test
+    fun theMapDownloadDecodesAndAnUnknownStateIsNone() {
+        val going = FrameReader.parse(
+            JSONObject(
+                """{"t":"mapDownload","offered":true,"host":"example.org","state":"downloading","label":"Downloading map file for use in game...","value":5,"maximum":10,"cancelable":true,"error":""}""",
+            ),
+        ) as EngineMessage.MapDownload
+        assertEquals(
+            EngineMessage.MapDownload(true, "example.org", MapDownloadState.DOWNLOADING, "Downloading map file for use in game...", 5, 10, true, ""),
+            going,
+        )
+        val failed = FrameReader.parse(
+            JSONObject("""{"t":"mapDownload","offered":true,"host":"example.org","state":"failed","error":"Host not found"}"""),
+        ) as EngineMessage.MapDownload
+        assertEquals(MapDownloadState.FAILED to "Host not found", failed.state to failed.error)
+        assertEquals(0 to false, failed.maximum to failed.cancelable)
+        val later = FrameReader.parse(JSONObject("""{"t":"mapDownload","offered":false,"state":"verifying"}""")) as EngineMessage.MapDownload
+        assertEquals(MapDownloadState.NONE, later.state)
+        assertEquals("" to false, later.host to later.offered)
+        assertEquals(listOf("none", "downloading", "loaded", "failed", "cancelled"), MapDownloadState.entries.map { it.wire })
+    }
+
+    @Test
+    fun theMapDownloadRequestsCarryNothingElse() {
+        assertEquals(mapOf("t" to "downloadMap"), Requests.downloadMap().toMap())
+        assertEquals(mapOf("t" to "cancelMapDownload"), Requests.cancelMapDownload().toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

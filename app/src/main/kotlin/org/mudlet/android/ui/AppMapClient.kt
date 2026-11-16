@@ -1,5 +1,6 @@
 package org.mudlet.android.ui
 
+import android.content.res.Resources
 import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -7,12 +8,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.RoomMatch
+import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.MapSource
 import java.util.EnumMap
 import kotlin.math.floor
@@ -21,7 +25,8 @@ import kotlin.math.roundToInt
 /**
  * The app's own map (docs/architecture.md, "The map behind the text"), apart from any a script opens: the engine draws
  * it at the size the game screen shows it at, behind the console or full screen, while it shows it, and searches its
- * rooms. Main thread only, as EngineClient's state; ScriptWindowsClient hands it the engine's refusals and each attach.
+ * rooms, and downloads the map the game offers (docs/architecture.md, "Downloading the map"). Main thread only, as
+ * EngineClient's state; ScriptWindowsClient hands it the engine's refusals and each attach.
  */
 internal object AppMapClient : MapSource {
     /** What shows the map: each asks for it at its own size, and the full-screen map's wins while it is open. */
@@ -53,6 +58,18 @@ internal object AppMapClient : MapSource {
     /** What findRooms found for [text]: null [rooms] until the engine answers; [more] when it found more than it sent. */
     data class RoomSearch(val text: String, val rooms: List<RoomMatch>?, val more: Boolean = false)
 
+    /** What [download] holds until the engine says otherwise: no map offered and none downloading. */
+    val NO_DOWNLOAD = EngineMessage.MapDownload(
+        offered = false,
+        host = "",
+        state = MapDownloadState.NONE,
+        label = "",
+        value = 0,
+        maximum = 0,
+        cancelable = false,
+        error = "",
+    )
+
     /** The map as the engine last drew it, at the size asked; null while it draws none (no profile, or no rooms). */
     var map by mutableStateOf<ScriptWindowsClient.MapImage?>(null)
         private set
@@ -61,6 +78,18 @@ internal object AppMapClient : MapSource {
     override val refusal: String? get() = refused
 
     private var refused by mutableStateOf<String?>(null)
+
+    /** The map the game offers and how its download goes, as the engine last said: [NO_DOWNLOAD] until it says. */
+    var download by mutableStateOf(NO_DOWNLOAD)
+        private set
+
+    /** How the last download ended (loaded, failed or cancelled), until the player dismisses it, downloads again or the profile closes. */
+    var downloadEnd by mutableStateOf<EngineMessage.MapDownload?>(null)
+        private set
+
+    /** downloadMap was sent and the engine has not answered it yet: the button waits, so a second tap sends no second. */
+    var downloadAsked by mutableStateOf(false)
+        private set
 
     /** The last room search, until the player closes its results or picks one. */
     var search by mutableStateOf<RoomSearch?>(null)
@@ -117,7 +146,8 @@ internal object AppMapClient : MapSource {
     /** The engine refused [request] for [reason]: true when it was this map's, which shows it. */
     internal fun onRefused(request: String, reason: String): Boolean {
         when (request) {
-            "appMapPointer", "showRoom", "setAppMapSize" -> {}
+            "appMapPointer", "showRoom", "setAppMapSize", "cancelMapDownload" -> {}
+            "downloadMap" -> downloadAsked = false
             "setMapViewOnly" -> if (!askedViewOnly) return false
             "findRooms" -> closeSearch()
             else -> return false
@@ -139,7 +169,10 @@ internal object AppMapClient : MapSource {
         if (!sameInstance) {
             map = null
             refused = null
+            download = NO_DOWNLOAD
+            downloadEnd = null
         }
+        downloadAsked = false
         sent = Size.NONE
         if (pendingSearch != null) closeSearch()
         update()
@@ -178,6 +211,57 @@ internal object AppMapClient : MapSource {
         refused = null
         search = null
         return EngineClient.send(Requests.showRoom(room))
+    }
+
+    /**
+     * A new `mapDownload`. A download that ends is kept in [downloadEnd] and, as it ends, told to TalkBack in
+     * [resources]' words, its failure interrupting. The same end again, as to a UI that attaches, is not told again; a
+     * UI that had heard nothing yet, being new, shows how the last download ended without telling it.
+     */
+    internal fun onMapDownload(message: EngineMessage.MapDownload, resources: Resources) {
+        val was = download
+        download = message
+        downloadAsked = false
+        val text = endText(message, resources)
+        when {
+            text == null -> downloadEnd = null
+
+            was.state == MapDownloadState.DOWNLOADING -> {
+                downloadEnd = message
+                Announcer.announce(text, assertive = message.state == MapDownloadState.FAILED)
+            }
+
+            // Only NO_DOWNLOAD itself, as no frame the engine sent is that object
+            was === NO_DOWNLOAD -> downloadEnd = message
+        }
+    }
+
+    /** What [end] says to the player of how a download ended; null while none has ended. */
+    internal fun endText(end: EngineMessage.MapDownload, resources: Resources): String? = when (end.state) {
+        MapDownloadState.NONE, MapDownloadState.DOWNLOADING -> null
+        MapDownloadState.LOADED -> resources.getString(R.string.map_download_loaded, end.host)
+        MapDownloadState.CANCELLED -> resources.getString(R.string.map_download_cancelled)
+        MapDownloadState.FAILED -> resources.getString(R.string.map_download_failed, end.error)
+    }
+
+    /** Downloads the map the game offers, in place of the profile's. False as for [EngineClient.send]. */
+    fun downloadMap(): Boolean {
+        if (downloadAsked) return true
+        refused = null
+        downloadEnd = null
+        downloadAsked = EngineClient.send(Requests.downloadMap())
+        return downloadAsked
+    }
+
+    /** Stops the download, while [download] says it can be. False as for [EngineClient.send]. */
+    fun cancelMapDownload(): Boolean {
+        refused = null
+        return EngineClient.send(Requests.cancelMapDownload())
+    }
+
+    /** The player read [downloadEnd]. */
+    fun dismissDownloadEnd() {
+        downloadEnd = null
     }
 
     /** The player closed the search's results. */

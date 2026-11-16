@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 12
+const val PROTOCOL_VERSION = 13
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -154,6 +154,20 @@ enum class MapPointerType(val wire: String) {
 
 /** A room of the map that findRooms found, with its area's name (docs/protocol.md, `rooms`); [id] is what Requests.showRoom takes. */
 data class RoomMatch(val id: Int, val name: String, val area: String)
+
+/** How the download of the map the game offers goes (docs/protocol.md, `mapDownload`); a state this client does not know is [NONE]. */
+enum class MapDownloadState(val wire: String) {
+    NONE("none"),
+    DOWNLOADING("downloading"),
+    LOADED("loaded"),
+    FAILED("failed"),
+    CANCELLED("cancelled"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): MapDownloadState = entries.firstOrNull { it.wire == wire } ?: NONE
+    }
+}
 
 /** Where a button bar goes, as upstream names it on the wire: a strip of the main console, or a floating toolbar. */
 enum class BarPlace(val wire: String) {
@@ -329,6 +343,24 @@ sealed interface EngineMessage {
 
     /** The answer to findRooms for [text]: up to 100 [rooms], by name then id, and [more] when there were more. */
     data class Rooms(val text: String, val rooms: List<RoomMatch>, val more: Boolean, val replyTo: Any?) : EngineMessage
+
+    /**
+     * The map the game offers ([offered], from the [host] of its URL, never the rest of it) and how its download
+     * (Requests.downloadMap) goes: while [MapDownloadState.DOWNLOADING], Mudlet's progress [label] and [value] of
+     * [maximum] (0 until it starts, then Mudlet's guess of the size until the server says it, which [value] can pass),
+     * and [cancelable] until the map has arrived; [error] is why it failed, naming no more of a URL than its scheme
+     * and host. Only libmudlet sends it, on each change and to each UI that attaches.
+     */
+    data class MapDownload(
+        val offered: Boolean,
+        val host: String,
+        val state: MapDownloadState,
+        val label: String,
+        val value: Int,
+        val maximum: Int,
+        val cancelable: Boolean,
+        val error: String,
+    ) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -450,6 +482,12 @@ object Requests {
 
     /** The app's map centred on [room], which it selects, until the player moves. Answered only by an Error, when refused. */
     fun showRoom(room: Int): JSONObject = JSONObject().put("t", "showRoom").put("room", room)
+
+    /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
+    fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
+
+    /** Stops that download while it is cancelable. Answered only by an Error, when refused. */
+    fun cancelMapDownload(): JSONObject = JSONObject().put("t", "cancelMapDownload")
 
     /** Answered by [EngineMessage.Image] with [id] as its replyTo: the file at [path], scaled to [w] by [h], given both, or its [frame]. */
     fun getImage(path: String, w: Int?, h: Int?, frame: Int?, id: Long): JSONObject {
@@ -601,6 +639,17 @@ class FrameReader(input: InputStream) {
                 objects(o.optJSONArray("rooms")).map { RoomMatch(it.optInt("id"), it.optString("name"), it.optString("area")) },
                 o.optBoolean("more"),
                 o.opt("re"),
+            )
+
+            "mapDownload" -> EngineMessage.MapDownload(
+                o.optBoolean("offered"),
+                o.optString("host"),
+                MapDownloadState.fromWire(o.optString("state")),
+                o.optString("label"),
+                o.optInt("value"),
+                o.optInt("maximum"),
+                o.optBoolean("cancelable"),
+                o.optString("error"),
             )
 
             else -> EngineMessage.Unknown(t)

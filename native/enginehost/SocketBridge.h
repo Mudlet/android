@@ -27,7 +27,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 12;
+    static constexpr int protocolVersion = 13;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -59,6 +59,7 @@ public:
     void commands(const QList<AddonCommandInfo>& commands) override;
     void map(const std::optional<MapFrame>& frame) override;
     void appMap(const std::optional<MapFrame>& frame) override;
+    void mapDownload(const MapDownload& download) override;
 
 private:
     struct StoredLine
@@ -146,6 +147,8 @@ private:
     // The appMap message last sent to this UI, empty until the engine has drawn the app's map or said there is nothing to
     // draw
     QJsonObject mAppMap;
+    // The mapDownload message last sent, empty until the engine has sent one
+    QJsonObject mMapDownload;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

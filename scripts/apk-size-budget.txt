@@ -6,12 +6,12 @@ lower-below-percent 10
 
 # name                               total        libraries    dex
 # the debug APKs with the stand-in engine (apks.yml)
-standin-arm64-v8a                    55901070     27028808     28115296
-standin-arm64-v8a-extracted-libs     40069658     11369234     28115296
+standin-arm64-v8a                    55901070     27028808     29549432
+standin-arm64-v8a-extracted-libs     41791118     11413929     29549432
 # the debug APKs with libmudlet, built from Mudlet's development (libmudlet.yml)
-libmudlet-arm64-v8a                  104401670    75313920     28199880
-libmudlet-x86_64                     107710577    78610904     28199880
+libmudlet-arm64-v8a                  106298978    75545608     29634016
+libmudlet-x86_64                     109624265    78850424     29634016
 # the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
-ptb-arm64-v8a                        78725774     75318288     2767584
-ptb-x86_64                           82018405     78613384     2767584
-ptb-aab                              110223265    71485572     1348047
+ptb-arm64-v8a                        79533337     75548512     3156544
+ptb-x86_64                           82842352     78853768     3156544
+ptb-aab                              111288473    71669219     1541376

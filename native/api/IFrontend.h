@@ -191,6 +191,28 @@ struct MainArea
     bool operator==(const MainArea&) const = default;
 };
 
+// The map the game offers for download (GMCP's Client.Map), and how the download IEngine::downloadMap() began goes
+struct MapDownload
+{
+    enum class State { none, downloading, loaded, failed, cancelled };
+    bool offered = false;
+    // The offered URL's host alone: never its user name, password, path or query
+    QString host;
+    // none until a download is asked for since the profile loaded; cancelled once IEngine::cancelMapDownload() stopped it
+    State state = State::none;
+    // While downloading, what Mudlet's progress dialog says, and how far it has got of maximum: 0 until its progress
+    // starts, then Mudlet's guess of 4000000 bytes until the server says the size, so value can pass it
+    QString label;
+    int value = 0;
+    int maximum = 0;
+    // While downloading, until it has arrived and is being loaded
+    bool cancelable = false;
+    // Why it failed, as Mudlet said in the console, with no more of any URL than its scheme and host
+    QString error;
+
+    bool operator==(const MapDownload&) const = default;
+};
+
 // The profile's 2D map as its mapper window shows it, drawn at that window's size in pixels, so that a point of it is a
 // point of the window; or the app's own map, whose size is in the map's pixels as IEngine::setAppMapSize() asked for
 // it, with the PNG at that size times the scale asked for
@@ -265,4 +287,6 @@ public:
     // there is nothing to draw, as with no profile open or a map with no rooms, and once as an empty size stops it,
     // with nothing more until a size is asked for again
     virtual void appMap(const std::optional<MapFrame>& frame) = 0;
+    // The map the game offers and the download of it, on each change; as none offered once a profile closes
+    virtual void mapDownload(const MapDownload& download) = 0;
 };

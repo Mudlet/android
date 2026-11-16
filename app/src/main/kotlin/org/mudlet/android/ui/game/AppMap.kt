@@ -16,15 +16,20 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,20 +48,25 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
+import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.MapBehindText
+import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.WindowKind
@@ -106,7 +116,9 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
 
 /**
  * The app's map in front, where [modifier] puts it: a search for rooms by name or number, whose results centre the map
- * on a room, over the map as [MapView] draws it, which a tap selects in and a double tap walks on. Back calls
+ * on a room, and the download of the map the game offers ([MapDownloadBar]), over the map as [MapView] draws it, which a
+ * tap selects in and a double tap walks on; with no map drawn, the offer is in its middle ([MapOffer]), under the map's
+ * buttons, or in the bar while a search's results or a refusal would be where it is. Back calls
  * [onClose], after the map shrinks with a predictive back gesture. It covers what is under it, touches and all.
  */
 @Composable
@@ -136,10 +148,14 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         var editing by remember { mutableStateOf(false) }
         Column(Modifier.matchParentSize()) {
             RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onFocusChanged { editing = it.hasFocus })
+            val map = AppMapClient.map
+            // In the map's middle with no map drawn, but not where it would share the map with the search's results or a
+            // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack
+            val offerInMap = map == null && (AppMapClient.search == null || editing) && AppMapClient.refusal == null
+            MapDownloadBar(offerHere = !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 var size by remember { mutableStateOf(IntSize.Zero) }
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
-                val map = AppMapClient.map
                 // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
                 val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
                 MapView(
@@ -150,6 +166,12 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                     drawn = map != null,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                 )
+                // Under the map's buttons, as the results are, whose touches and TalkBack it would take where it covered them
+                if (offerInMap) {
+                    Box(Modifier.matchParentSize().padding(top = MAP_CONTROLS_HEIGHT), contentAlignment = Alignment.Center) {
+                        MapOffer(Modifier.padding(16.dp))
+                    }
+                }
                 // Under the map's buttons, whose touches and TalkBack they would take where they covered them, even
                 // the strip of a short list that left the buttons' bottom edge out; half the map below them, but at
                 // least their head and a whole result. Where the map has not that room, as with a keyboard up for the
@@ -252,6 +274,101 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The download of the map the game offers (docs/architecture.md, "Downloading the map"): while it runs, Mudlet's
+ * progress and a Cancel button while it can be stopped; once it ended, how, until dismissed; and, where [offerHere],
+ * the button that downloads the map, while the game offers one. Nothing while there is none of these.
+ */
+@Composable
+private fun MapDownloadBar(offerHere: Boolean, modifier: Modifier = Modifier) {
+    val download = AppMapClient.download
+    val end = AppMapClient.downloadEnd
+    val downloading = download.state == MapDownloadState.DOWNLOADING
+    val offer = offerHere && download.offered && !downloading
+    if (!downloading && end == null && !offer) return
+    Surface(modifier, shape = MaterialTheme.shapes.small, tonalElevation = 3.dp) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            if (downloading) {
+                MapDownloadProgress(download)
+            } else if (end != null) {
+                MapDownloadEnd(end)
+            }
+            if (offer) {
+                DownloadMapButton(download.host, Modifier.align(Alignment.End))
+            }
+        }
+    }
+}
+
+// How far the download has got, in Mudlet's words, with Cancel while it can be stopped
+@Composable
+private fun MapDownloadProgress(download: EngineMessage.MapDownload) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            download.label.ifEmpty { stringResource(R.string.map_download_running, download.host) },
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(AppMapClient::cancelMapDownload, Modifier.heightIn(min = 48.dp), enabled = download.cancelable && EngineClient.enginePid > 0) {
+            Text(stringResource(R.string.map_download_cancel))
+        }
+    }
+    val description = stringResource(R.string.map_download_progress)
+    // Mudlet guesses the size until the server says it, which the download can pass: then how far is not known
+    val fraction = if (download.maximum > 0 && download.value <= download.maximum) download.value.toFloat() / download.maximum else null
+    // Clear of Cancel above it by the 10dp Material's indicator reaches out above and below itself for TalkBack, which
+    // would otherwise cover Cancel's touch target
+    val bar = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp).semantics { contentDescription = description }
+    if (fraction != null) LinearProgressIndicator(progress = { fraction }, bar) else LinearProgressIndicator(bar)
+}
+
+// How the last download ended, until dismissed; AppMapClient tells TalkBack as it ends
+@Composable
+private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
+    val text = AppMapClient.endText(end, LocalResources.current) ?: return
+    val failed = end.state == MapDownloadState.FAILED
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text,
+            Modifier.weight(1f),
+            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        IconButton(AppMapClient::dismissDownloadEnd) {
+            Icon(painterResource(R.drawable.ic_close), stringResource(R.string.map_download_dismiss))
+        }
+    }
+}
+
+// The button that downloads the map from [host], which the game offers
+@Composable
+private fun DownloadMapButton(host: String, modifier: Modifier = Modifier) {
+    Button(AppMapClient::downloadMap, modifier.heightIn(min = 48.dp), enabled = EngineClient.enginePid > 0 && !AppMapClient.downloadAsked) {
+        Text(stringResource(R.string.map_download, host))
+    }
+}
+
+/**
+ * With no map drawn: that there is none, and the map the game offers, if it offers one and none is downloading. It
+ * scrolls where the map has not the room for it, as with a keyboard up, rather than cut its button off.
+ */
+@Composable
+private fun MapOffer(modifier: Modifier = Modifier) {
+    val download = AppMapClient.download
+    if (!download.offered || download.state == MapDownloadState.DOWNLOADING) return
+    Surface(modifier, shape = MaterialTheme.shapes.medium, tonalElevation = 3.dp) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                stringResource(R.string.map_download_offered, download.host),
+                Modifier.padding(bottom = 12.dp),
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+            DownloadMapButton(download.host)
         }
     }
 }

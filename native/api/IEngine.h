@@ -114,4 +114,8 @@ public:
     virtual std::variant<RoomList, QString> findRooms(const QString& text) const = 0;
     // The app's map centred on that room, which it selects, until the player moves
     virtual QString showRoom(int room) = 0;
+    // Downloads the map the game offered and loads it in place of the profile's, as IFrontend::mapDownload() follows
+    virtual QString downloadMap() = 0;
+    // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be
+    virtual QString cancelMapDownload() = 0;
 };

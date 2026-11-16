@@ -9,7 +9,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
@@ -19,6 +21,7 @@ import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -60,6 +63,7 @@ import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.Announcer
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.IOException
@@ -74,7 +78,7 @@ import kotlin.math.min
  * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; let go when the
  * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, where a
  * tap selects, a double tap walks, the buttons zoom and TalkBack's actions do the same, and Back sends it back; and the
- * room search, whose results centre the map on a room.
+ * room search, whose results centre the map on a room; and the download of the map the game offers.
  */
 @RunWith(AndroidJUnit4::class)
 class AppMapTest {
@@ -431,6 +435,108 @@ class AppMapTest {
         )
     }
 
+    @Test
+    fun theMapTheGameOffersIsDownloadedWithItsProgressAndHowItEnded() {
+        activate(button)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
+        val download = hasText(string(R.string.map_download, HOST)) and hasClickAction()
+        // Where it starts, with no map offered: no button
+        assertTrue("no download without a map offered", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
+
+        // Offered, with no map drawn: the offer is in the map's middle, its button a touch target TalkBack can press
+        session.send(mapDownload())
+        val offered = hasText(string(R.string.map_download_offered, HOST))
+        waitFor("the offer shows where no map is drawn") { compose.onAllNodes(offered).fetchSemanticsNodes().isNotEmpty() }
+        assertTouchTarget(download)
+        activate(download)
+        request("downloadMap", "the button downloads the map")
+        // Until the engine answers, a second tap sends no second downloadMap
+        compose.onNode(download).assertIsNotEnabled()
+
+        // Mudlet's progress, the bar's a quarter of the way, and Cancel while it can be stopped; the offer waits
+        val label = "Downloading map file for use in Game..."
+        session.send(mapDownload("downloading", label = label, value = 1_000_000, maximum = 4_000_000, cancelable = true))
+        waitFor("the download's progress shows") { compose.onAllNodes(hasText(label)).fetchSemanticsNodes().isNotEmpty() }
+        val bar = hasContentDescription(string(R.string.map_download_progress))
+        compose.onNode(bar).assert(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f)))
+        // Past Mudlet's guess at the size, how far is not known
+        session.send(mapDownload("downloading", label = label, value = 5_000_000, maximum = 4_000_000, cancelable = true))
+        waitFor("a download past the guessed size has no fraction") {
+            compose.onAllNodes(bar and SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo.Indeterminate))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue("no second download while one runs", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
+        val cancel = hasText(string(R.string.map_download_cancel)) and hasClickAction()
+        assertTouchTarget(cancel)
+        activate(cancel)
+        request("cancelMapDownload", "Cancel stops the download")
+        session.send(mapDownload("cancelled"))
+        val cancelled = hasText(string(R.string.map_download_cancelled))
+        waitFor("the download says it was cancelled") { compose.onAllNodes(cancelled).fetchSemanticsNodes().isNotEmpty() }
+        // Told last, though an announcement just before it may share its turn (Announcer's MERGE_MS)
+        compose.runOnIdle { assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_download_cancelled))) }
+
+        // A failure says Mudlet's reason, read out at once, until dismissed
+        activate(download)
+        request("downloadMap", "the button downloads the map again")
+        session.send(mapDownload("downloading", label = label, cancelable = true))
+        waitFor("the download's progress shows again") { compose.onAllNodes(hasText(label)).fetchSemanticsNodes().isNotEmpty() }
+        val reason = "Map download encountered an error: Error transferring http://$HOST - server replied: Not Found"
+        session.send(mapDownload("failed", error = reason))
+        val failed = hasText(string(R.string.map_download_failed, reason))
+        waitFor("the download says why it failed") { compose.onAllNodes(failed).fetchSemanticsNodes().isNotEmpty() }
+        // Told once, by the Announcer, and not again by the text as a live region
+        compose.onNode(failed).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        val told = compose.runOnIdle {
+            assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_download_failed, reason)))
+            assertTrue("a failure interrupts TalkBack", Announcer.current!!.assertive)
+            Announcer.current!!.serial
+        }
+        checkAccessibility()
+
+        // The UI went and came back to the same engine, which says the same again: shown, but not told again. The
+        // refusal after it shows once the UI has read the frames before it.
+        session.close()
+        session = fake.engine.nextSession()
+        val again = lastRequest("setAppMapSize", "the same engine is asked again when the UI comes back")
+        session.send(mapDownload("failed", error = reason))
+        session.refuse(again, "read")
+        waitFor("the UI read what the engine said again") { compose.onAllNodes(hasText(string(R.string.map_refused, "read"))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(failed).assertIsDisplayed()
+        compose.runOnIdle { assertEquals("a UI that comes back is not told again", told, Announcer.current!!.serial) }
+        // The refusal is at the map's bottom, which the offer in its middle could reach: the offer waits in the bar
+        assertTrue("with a refusal shown the offer is not in the map's middle", compose.onAllNodes(offered).fetchSemanticsNodes().isEmpty())
+        compose.onNode(download).assertIsDisplayed()
+        activate(hasContentDescription(string(R.string.map_download_dismiss)))
+        waitFor("the failure goes once dismissed") { compose.onAllNodes(failed).fetchSemanticsNodes().isEmpty() }
+
+        // The engine's refusal is shown with the map
+        activate(download)
+        session.refuse(request("downloadMap", "the button downloads the map once more"), "A map download, import or export is running; wait for it to end.")
+        val refused = hasText(string(R.string.map_refused, "A map download, import or export is running; wait for it to end."))
+        waitFor("the refusal shows") { compose.onAllNodes(refused).fetchSemanticsNodes().isNotEmpty() }
+
+        // Loaded: the map is drawn, and the offer stays above it, as the game may offer a newer one
+        activate(download)
+        request("downloadMap", "the button downloads the map at last")
+        session.send(mapDownload("downloading", cancelable = false))
+        val running = hasText(string(R.string.map_download_running, HOST))
+        waitFor("the progress shows, with no label nor size known") { compose.onAllNodes(running).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(cancel).assertIsNotEnabled()
+        val size = lastRequest("setAppMapSize", readPast = true)
+        session.send(mapDownload("loaded"))
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
+        drawnMap()
+        waitFor("the download says the map loaded") { compose.onAllNodes(hasText(string(R.string.map_download_loaded, HOST))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(download).assertIsDisplayed()
+        assertTrue("the offer is above the map, not in its middle", compose.onAllNodes(offered).fetchSemanticsNodes().isEmpty())
+        checkAccessibility()
+
+        // The profile closes: its offer goes
+        session.send(mapDownload(offered = false, host = ""))
+        waitFor("the offer goes with the profile") { compose.onAllNodes(download).fetchSemanticsNodes().isEmpty() }
+    }
+
     /** Types [text] in the map's search field and sends it as [searchAgain] does; returns the field. */
     private fun search(text: String): SemanticsMatcher {
         val field = hasSetTextAction() and hasText(string(R.string.app_map_search))
@@ -497,6 +603,17 @@ class AppMapTest {
         return results.top >= buttons.bottom && results.bottom <= bounds(mapShown()).bottom
     }
 
+    // The offer in the map's middle, its card whole, covers no control but its own: over one it would take its touches and
+    // cover it for TalkBack, which the accessibility check sees only on API 34 and up, and then only where the part left
+    // uncovered is the smaller. True with no offer in the middle
+    private fun offerCoversNothing(): Boolean {
+        val text = compose.onAllNodes(hasText(string(R.string.map_download_offered, HOST)), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()
+        val card = text?.parent ?: return true
+        fun inCard(node: SemanticsNode): Boolean = generateSequence(node) { it.parent }.any { it.id == card.id }
+        return compose.onAllNodes(hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+            .none { !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
+    }
+
     private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()
 
     private fun mapShown() = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
@@ -561,7 +678,10 @@ class AppMapTest {
         throw AssertionError("${e.message}\n${screen()}", e)
     }
 
-    private fun checkAccessibility() = withScreen { compose.onRoot().tryPerformAccessibilityChecks() }
+    private fun checkAccessibility() = withScreen {
+        assertTrue("the offer covers no other control", offerCoversNothing())
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
 
     /** What is on the screen, for a failure to say: the window and its keyboard, the map's bounds, what has the focus, and every node. */
     private fun screen(): String {
@@ -607,6 +727,18 @@ class AppMapTest {
         val list = JSONArray(found.map { (id, name, area) -> JSONObject().put("id", id).put("name", name).put("area", area) })
         return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", more).put("re", request.get("id"))
     }
+
+    private fun mapDownload(
+        state: String = "none",
+        offered: Boolean = true,
+        host: String = HOST,
+        label: String = "",
+        value: Int = 0,
+        maximum: Int = 0,
+        cancelable: Boolean = false,
+        error: String = "",
+    ): JSONObject = JSONObject().put("t", "mapDownload").put("offered", offered).put("host", host).put("state", state).put("label", label)
+        .put("value", value).put("maximum", maximum).put("cancelable", cancelable).put("error", error)
 
     private fun assertNone(size: JSONObject) {
         assertEquals("$size", 0, size.getInt("w"))
@@ -670,6 +802,9 @@ class AppMapTest {
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
 
         const val INSTANCE = "fake-app-map"
+
+        // The host the game offers its map from
+        const val HOST = "maps.example.org"
 
         // A frame's pixels a touch may land from where it was aimed, rounding to the screen's
         const val POINTS = 1.5

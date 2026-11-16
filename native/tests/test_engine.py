@@ -190,13 +190,14 @@ def buttons_and_commands(c):
 
 
 def no_map(c):
-    """The stand-in has no map: it refuses presses on it and switching it to editing, once their fields are right. It takes
-    a size for the app's map, and tells the UI there is nothing to draw, until that UI goes."""
+    """The stand-in has no map: it refuses presses on it, switching it to editing and downloading it, once their fields are
+    right. It takes a size for the app's map, and tells the UI there is nothing to draw, until that UI goes."""
     c.send({"t": "setAppMapSize", "w": 360, "h": 640, "scale": 2.75})
     m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
     check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"the app's map has nothing to draw: {m}")
     for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False},
-                    {"t": "appMapPointer", "type": "doubleClick", "x": 1, "y": 2, "button": 1}, {"t": "showRoom", "room": 1}):
+                    {"t": "appMapPointer", "type": "doubleClick", "x": 1, "y": 2, "button": 1}, {"t": "showRoom", "room": 1},
+                    {"t": "downloadMap"}, {"t": "cancelMapDownload"}):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: the stand-in engine has no map", f"{request['t']} is refused: {m}")
     for request, message in (({"t": "mapPointer", "type": "move", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
@@ -223,6 +224,7 @@ def no_map(c):
     c = Client(SOCK)
     frames = handshake(c)
     check([m for m in frames if m["t"] == "appMap"] == [], "a UI that attaches is told nothing of the app's map until it asks")
+    check([m for m in frames if m["t"] == "mapDownload"] == [], "nor of a map to download: the stand-in's game offers none")
     c.send({"t": "setAppMapSize", "w": 0, "h": 0, "scale": 1})
     m = c.wait_for(lambda m: m["t"] in ("appMap", "error"))
     check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"asked again, it says so again: {m}")

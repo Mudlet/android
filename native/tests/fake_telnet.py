@@ -15,12 +15,15 @@ Commands a client may send (one per line):
   size            -> "SIZE: <columns>x<rows>" of the client's last NAWS, or "SIZE: none"
   mxp             -> IAC WILL MXP, then "Food: stew" in MXP's secure line mode, "stew" a <SEND> link whose menu is
                      "Look" (sends "look stew") and "Eat" (sends "eat stew"), with the tooltip "the stew"
+  map <path>      -> GMCP Client.Map offering MAP_URL_BASE + "/" + <path> as the game's map, then "Map offered", so the
+                     URL, which can hold a user name and password, is never a line the client sent
   quit            -> close
 Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
 Given an ssl.SSLContext, it speaks TLS on its port: each connection's handshake comes first, and its outcome is
 appended to TLS_HANDSHAKES.
 """
+import json
 import socket
 import ssl
 import sys
@@ -41,6 +44,8 @@ TLS_HANDSHAKES = []
 RECEIVED = []
 # (columns, rows) of every NAWS any client sent, in order
 NAWS_SIZES = []
+# Where "map <path>" offers maps from, as a test sets it
+MAP_URL_BASE = "http://127.0.0.1:1"
 
 BANNER = (
     bytes([IAC, DO, TTYPE, IAC, WILL, ECHO, IAC, WILL, GMCP])
@@ -187,6 +192,9 @@ class Session(threading.Thread):
         elif line == "mxp":
             conn.sendall(bytes([IAC, WILL, MXP])
                          + b'\x1b[1zFood: <SEND href="look stew|eat stew" hint="the stew|Look|Eat">stew</SEND>\r\n')
+        elif line.startswith("map "):
+            offer = json.dumps({"url": f"{MAP_URL_BASE}/{line[4:]}"}).encode()
+            conn.sendall(bytes([IAC, SB, GMCP]) + b"Client.Map " + offer + bytes([IAC, SE]) + b"Map offered\r\n")
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False

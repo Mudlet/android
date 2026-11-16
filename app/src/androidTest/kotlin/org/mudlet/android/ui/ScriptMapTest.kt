@@ -8,7 +8,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -64,6 +63,7 @@ import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.EngineMessages.room
 import java.io.ByteArrayOutputStream
 import java.util.Base64
+import kotlin.math.abs
 import kotlin.math.min
 
 /**
@@ -601,8 +601,6 @@ class ScriptMapTest {
 
     @Test
     fun aRoomIsAddedMovedDraggedPlacedAndDeletedOnAnEditedMapAndItsAreaRenamed() {
-        // Room 1 in the middle, and 3 high on the left, where neither the card below nor the buttons at the top right
-        // reach on a map as short as the emulator's
         val rooms = mapOf(1 to (200.0 to 150.0), 3 to (120.0 to 45.0))
         session.windows(listOf(mapper()), full = true)
         session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms)))
@@ -635,9 +633,14 @@ class ScriptMapTest {
         activateInDialog(hasText(string(R.string.room_edit_done)))
 
         // A drag of the room picked moves it by the whole rooms it went: two east and one south, and the map stays.
-        // Picked by a tap where the drag starts, so a drag that misses it says whether a touch there reaches the room
+        // The room drawn anew where the buttons, the place bar and the card leave the map free, which on a map as short
+        // as the emulator's is a corner; picked by a tap there, so a drag that misses says whether a touch reaches it
         val scale = shownScale(drawn)
-        val start = at(drawn, 120.0, 45.0)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        val start = clearPoint(map)
+        val place = (start.x - at(drawn, 0.0, 0.0).x) / scale to (start.y - at(drawn, 0.0, 0.0).y) / scale
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms + (3 to place))))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.mapMover.view?.rooms?.any { it.id == 3 && abs(it.x - place.first) < 0.01 } == true } }
         val tapped = session.received.size
         compose.onNode(map).performTouchInput {
             // Each long enough after the touch before that it is not a double tap's second touch, which walks or zooms
@@ -660,9 +663,10 @@ class ScriptMapTest {
         assertTrue("the drag moved the map: ${session.received.drop(read)}", session.received.drop(read).none { it.optString("t") == "moveMap" })
         session.send(room(dragged, 3, "", steps = 1, x = 3))
 
-        // A drag off the room picked, above the card, pans the map as when it is viewed
+        // A drag off the room picked pans the map as when it is viewed
+        val off = clearPoint(map, away = start)
         compose.onNode(map).performTouchInput {
-            down(at(drawn, 40.0, 45.0))
+            down(off)
             repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), 0f)) }
             advanceEventTime(300)
             up()
@@ -743,6 +747,37 @@ class ScriptMapTest {
         }
     }
 
+    /**
+     * A point of the map's node, in its own pixels, on the frame and clear of all drawn over the map by at least
+     * [CLEAR_MARGIN], and, with [away], further from it than a finger's reach of a room.
+     */
+    private fun clearPoint(map: SemanticsMatcher, away: Offset? = null): Offset {
+        val bounds = bounds(map)
+        val over = overMap(bounds)
+        val first = at(bounds, 0.0, 0.0)
+        val last = at(bounds, MAP_W.toDouble(), MAP_H.toDouble())
+        // As ScriptMap's TAP_REACH
+        val reach = with(compose.density) { 24.dp.toPx() }
+        var y = first.y + CLEAR_MARGIN
+        while (y < last.y - CLEAR_MARGIN) {
+            var x = first.x + CLEAR_MARGIN
+            while (x < last.x - CLEAR_MARGIN) {
+                val point = Offset(x, y)
+                val root = bounds.topLeft + point
+                val clear = over.none { it.inflate(CLEAR_MARGIN).contains(root) }
+                if (clear && (away == null || (point - away).getDistance() > reach + CLEAR_MARGIN)) return point
+                x += CLEAR_STEP
+            }
+            y += CLEAR_STEP
+        }
+        throw AssertionError("no point of the map at $bounds clear of $over")
+    }
+
+    // The bounds, in the root, of each node over the map at [bounds] but its own and those it lies within
+    private fun overMap(bounds: Rect): List<Rect> = compose.onAllNodes(SemanticsMatcher("any node") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+        .map { it.boundsInRoot }
+        .filter { it.overlaps(bounds) && !(it.contains(bounds.topLeft) && it.contains(bounds.bottomRight - Offset(1f, 1f))) }
+
     // What the UI sent next of [type], or else what it sent since [read] and what the map had for the touch at [at]
     private fun receiveTouched(type: String, read: Int, map: SemanticsMatcher, at: Offset): JSONObject = try {
         session.receive(type)
@@ -754,9 +789,7 @@ class ScriptMapTest {
     private fun mapState(map: SemanticsMatcher, at: Offset): String {
         val bounds = bounds(map)
         val point = bounds.topLeft + at
-        val over = compose.onAllNodes(SemanticsMatcher("any node") { true }, useUnmergedTree = true).fetchSemanticsNodes()
-            .filter { it.boundsInRoot.contains(point) && !(it.boundsInRoot.contains(bounds.topLeft) && it.boundsInRoot.contains(bounds.bottomRight - Offset(1f, 1f))) }
-            .map { "${it.boundsInRoot} ${it.config.getOrNull(SemanticsProperties.ContentDescription) ?: it.config.getOrNull(SemanticsProperties.Text)}" }
+        val over = overMap(bounds).filter { it.contains(point) }
         val shown = compose.runOnIdle {
             val windows = EngineClient.front.windows
             "picked ${windows.mapRooms.room?.id}, frame rooms ${windows.mapMover.view?.rooms}, shift ${windows.mapMover.shift}"
@@ -851,6 +884,11 @@ class ScriptMapTest {
         // A drag of 10 steps of 10 of the frame's pixels
         const val DRAG_STEPS = 10
         const val DRAG_STEP = 10.0
+
+        // How far a point is kept from what is drawn over the map, and the steps it is looked for in, in pixels
+        const val CLEAR_MARGIN = 4f
+        const val CLEAR_STEP = 2f
+
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L
 

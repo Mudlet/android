@@ -6,19 +6,28 @@ name: PTB
 # pre-release. A night on which neither Mudlet's
 # development nor this repository changed since the last PTB (as the `ptb` pre-release's notes record it) builds
 # nothing. Without the signing secrets it signs with a throwaway key and publishes nothing; on any branch but main it
-# publishes nothing either (a dry run), as on a pull request that changes how the release is built.
+# publishes nothing either (a dry run), as on a pull request that changes the app's code or how the release is built:
+# only the minified build shows what R8 keeps, so its size budgets and the smoke test run on those too.
 on:
   pull_request:
     paths:
       - .github/workflows/ptb.yml
+      - app/**
+      - protocol/**
+      - engine-service/**
+      - suggest/**
+      - native/**
+      - gradle/**
+      - gradlew
+      - "**/*.gradle.kts"
+      - gradle.properties
+      - scripts/build-apk.sh
       - scripts/build-release.sh
       - scripts/build-source-bundle.sh
       - scripts/merge-qtdeploy.py
+      - scripts/check-apk.sh
       - scripts/check-apk-size.sh
       - scripts/apk-size-budget.txt
-      - engine-service/consumer-rules.pro
-      - app/build.gradle.kts
-      - engine-service/build.gradle.kts
   schedule:
     # after the libmudlet nightly (03:17), whose ccache this takes up
     - cron: "23 5 * * *"

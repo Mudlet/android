@@ -8,7 +8,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Keeps docs/protocol.md, the engine (native/enginehost/SocketBridge.*), this client and the Python test client in
+ * Keeps docs/protocol.md, the engine (native/enginehost/SocketBridge.* and ControlBridge.*), this client and the Python test client in
  * step: the same messages in each direction, the same fields, the same protocol version, and the same phases of
  * libmudlet's restore status (native/enginehost/MudletEngine.cpp).
  */
@@ -17,7 +17,7 @@ class ProtocolSpecTest {
     private fun read(path: String) = root.resolve(path).readText()
 
     private val spec = read("docs/protocol.md")
-    private val bridge = read("native/enginehost/SocketBridge.cpp")
+    private val bridge = read("native/enginehost/SocketBridge.cpp") + read("native/enginehost/ControlBridge.cpp")
 
     private val backquoted = Regex("`(\\w+)`")
 
@@ -51,19 +51,19 @@ class ProtocolSpecTest {
     fun theEngineHandlesTheRequestsTheSpecLists() {
         // The hello check, then the dispatch on the message type
         val handled = Regex("type [!=]= QLatin1String\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals("requests SocketBridge.cpp handles", toEngine.keys, handled)
+        assertEquals("requests SocketBridge.cpp and ControlBridge.cpp handle", toEngine.keys, handled)
         val read = Regex("\\.value\\(QLatin1String\\(\"(\\w+)\"\\)\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
         // client is the one field the engine ignores
-        assertEquals("request fields SocketBridge.cpp reads", toEngine.values.flatten().toSet() - "client" + "t", read)
+        assertEquals("request fields SocketBridge.cpp and ControlBridge.cpp read", toEngine.values.flatten().toSet() - "client" + "t", read)
     }
 
     @Test
     fun theEngineSendsTheMessagesTheSpecLists() {
         val sent = Regex("QStringLiteral\\(\"t\"\\), QStringLiteral\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals("messages SocketBridge.cpp sends", toUi.keys, sent)
+        assertEquals("messages SocketBridge.cpp and ControlBridge.cpp send", toUi.keys, sent)
         // Keys of the JSON objects the engine writes: {QStringLiteral("key"), value} and insert(QStringLiteral("key"), ...)
         val keys = Regex("(?:\\{|insert\\()QStringLiteral\\(\"(\\w+)\"\\),").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals("fields SocketBridge.cpp writes", toUi.values.flatten().toSet() + "t", keys)
+        assertEquals("fields SocketBridge.cpp and ControlBridge.cpp write", toUi.values.flatten().toSet() + "t", keys)
     }
 
     @Test

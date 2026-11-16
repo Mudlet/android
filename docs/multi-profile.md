@@ -1,8 +1,8 @@
 # Several games at once
 
-Status: planned, November 2026; the pull request plan at the end says what lands in which order. Today the app runs one
-profile at a time: `openProfile` closes the running one (`MudletEngine`, `shutdownAsync(true)` then `startAsync()`), and
-`EngineClient` holds one `EngineLink`.
+Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 has landed
+protocol 14 and the stand-in engine runs several profiles; libmudlet still runs one at a time, refusing `alongside`, and
+the app still holds one `EngineLink` (`EngineClient`) and talks version 13 style.
 
 The aim: several profiles open at once, each with its own connection, and a profile button that lists them on a tap and
 moves to the next or the previous one on a horizontal swipe, as Firefox for Android does with its tabs.

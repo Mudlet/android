@@ -331,7 +331,7 @@ object EngineClient {
             profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { rememberAddress(GameAddress(it.host, it.port, it.tls)) }
         }
         onAnswer(error)
-    }) { Requests.openProfile(name, password, true, it) }
+    }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
 
     /** Saves [profile], then opens it if the engine took it. */
     fun saveAndOpenProfile(profile: Profile, password: String?, onAnswer: (error: String?) -> Unit) = saveProfile(profile) { error ->

@@ -5,7 +5,7 @@ import socket
 import struct
 import time
 
-PROTOCOL_VERSION = 13
+PROTOCOL_VERSION = 14
 
 
 class Closed(Exception):
@@ -13,14 +13,19 @@ class Closed(Exception):
 
 
 class Client:
-    def __init__(self, path, hello=True, version=PROTOCOL_VERSION):
+    def __init__(self, path, hello=True, version=PROTOCOL_VERSION, profile_sockets=False):
+        """With profile_sockets, a control socket's client gets only the control traffic, as docs/multi-profile.md
+        says; without, version 13's, the front profile's too."""
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.connect(path)
         self.buf = bytearray()
         self.bytes_read = 0
         self.next_id = 0
         if hello:
-            self.send({"t": "hello", "v": version, "client": "python-test"})
+            msg = {"t": "hello", "v": version, "client": "python-test"}
+            if profile_sockets:
+                msg["profileSockets"] = True
+            self.send(msg)
 
     def send(self, msg):
         payload = json.dumps(msg, separators=(",", ":")).encode()

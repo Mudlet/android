@@ -52,10 +52,10 @@ class EngineLinkJvmTest {
             .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
     }
 
-    private fun connectUnix(): Transport {
+    private fun connectUnix(path: Path = socketPath): Transport {
         val ch = SocketChannel.open(StandardProtocolFamily.UNIX)
         try {
-            ch.connect(UnixDomainSocketAddress.of(socketPath))
+            ch.connect(UnixDomainSocketAddress.of(path))
         } catch (e: IOException) {
             ch.close()
             throw e
@@ -85,30 +85,39 @@ class EngineLinkJvmTest {
         }
     }
 
-    private fun newLink(): EngineLink = EngineLink(
-        ::connectUnix,
+    private fun newLink(
+        path: Path = socketPath,
+        profileSockets: Boolean = false,
+        queue: LinkedBlockingQueue<Any> = events,
+    ): EngineLink = EngineLink(
+        { connectUnix(path) },
         object : EngineLink.Listener {
             override fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean) {
-                events.put(Attached(hello, sameInstance))
+                queue.put(Attached(hello, sameInstance))
             }
             override fun onMessage(message: EngineMessage) {
-                events.put(message)
+                queue.put(message)
             }
             override fun onDetached(reason: String) {
-                events.put(Detached(reason))
+                queue.put(Detached(reason))
             }
         },
+        profileSockets = profileSockets,
     )
 
     private data class Attached(val hello: EngineMessage.Hello, val same: Boolean)
     private data class Detached(val reason: String)
 
-    private inline fun <reified T> next(timeoutMs: Long = 5000, pred: (T) -> Boolean = { true }): T {
+    private inline fun <reified T> next(
+        timeoutMs: Long = 5000,
+        queue: LinkedBlockingQueue<Any> = events,
+        pred: (T) -> Boolean = { true },
+    ): T {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
         while (true) {
             val left = deadline - System.nanoTime()
             check(left > 0) { "timed out waiting for ${T::class.simpleName}" }
-            val e = events.poll(left, TimeUnit.NANOSECONDS) ?: continue
+            val e = queue.poll(left, TimeUnit.NANOSECONDS) ?: continue
             if (e is T && pred(e)) return e
         }
     }
@@ -163,6 +172,46 @@ class EngineLinkJvmTest {
         link.send(Requests.setMapViewOnly(false))
         assertEquals("setMapViewOnly: the stand-in engine has no map", next<EngineMessage.Error>().message)
         link.stop()
+    }
+
+    @Test
+    fun severalProfilesEachOnTheirOwnSocket() {
+        val control = newLink(profileSockets = true)
+        control.start()
+        assertEquals(null, next<Attached>().hello.profile)
+        for (name in listOf("North", "South")) {
+            control.send(Requests.saveProfile(Profile(name, "127.0.0.1", fakePort, false, "", false), 1))
+            next<EngineMessage.Profiles>()
+        }
+        control.send(Requests.openProfile("North", null, connect = true, alongside = true, id = 2))
+        next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 2 }
+        control.send(Requests.openProfile("South", null, connect = true, alongside = true, id = 3))
+        val open = next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 3 }.profiles
+        assertEquals(listOf("North" to false, "South" to true), open.map { it.name to it.front })
+        assertEquals(listOf(1, 2), open.map { it.slot })
+
+        val queues = open.associate { it.name to LinkedBlockingQueue<Any>() }
+        val links = open.associate { it.name to newLink(Path.of(it.socket), queue = queues.getValue(it.name)) }
+        links.values.forEach(EngineLink::start)
+        for ((name, queue) in queues) {
+            assertEquals(name, next<Attached>(queue = queue).hello.profile)
+            next<EngineMessage.Status>(queue = queue) { it.key == "connection" && it.value == "connected" }
+        }
+        links.getValue("North").send(Requests.send("echo north only"))
+        val said = next<EngineMessage.Line>(queue = queues.getValue("North")) { it.text.contains("north only") }
+        next<EngineMessage.OpenProfiles> { list -> list.profiles.any { it.name == "North" && it.lastSeq >= said.seq } }
+        val south = queues.getValue("South")
+        while (true) {
+            val e = south.poll(300, TimeUnit.MILLISECONDS) ?: break
+            assertTrue("North's line reached South's socket: $e", e !is EngineMessage.Line || !e.text.contains("north only"))
+        }
+
+        control.send(Requests.closeProfile("South", 4))
+        val left = next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 4 }.profiles
+        assertEquals(listOf("North" to true), left.map { it.name to it.front })
+        next<Detached>(queue = south)
+        links.values.forEach(EngineLink::stop)
+        control.stop()
     }
 
     @Test

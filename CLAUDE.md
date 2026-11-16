@@ -34,7 +34,7 @@ in CONTRIBUTING.md's "Test". CI (`ci.yml`) runs only what the changed files need
   and dependency scripts, which otherwise use every core.
 - Before a commit: `scripts/lint.sh`, and the tests for what changed. Formatting-only changes go in a commit of
   their own.
-- A protocol change updates `docs/protocol.md`, `SocketBridge`, `Protocol.kt` and `native/tests/protocol_client.py`
+- A protocol change updates `docs/protocol.md`, `SocketBridge` or `ControlBridge`, `Protocol.kt` and `native/tests/protocol_client.py`
   together; `ProtocolSpecTest` checks them.
 - Docs change with the code they describe. Keep a doc's facts true: run what it tells others to run.
 - Do not bump Qt, the NDK, SDK levels, AGP, Kotlin or Gradle on their own; see "Pinned versions" in CONTRIBUTING.md.

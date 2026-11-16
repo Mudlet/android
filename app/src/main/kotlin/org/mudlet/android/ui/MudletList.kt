@@ -1,14 +1,18 @@
 package org.mudlet.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -32,11 +36,15 @@ fun ListSegment(index: Int, count: Int, modifier: Modifier = Modifier, selected:
         bottomEnd = if (index == count - 1) outer else inner,
     )
     val colors = MaterialTheme.colorScheme
-    Surface(
-        modifier.padding(bottom = if (index < count - 1) SEGMENT_GAP else 0.dp).fillMaxWidth(),
-        shape = shape,
-        color = if (selected) colors.secondaryContainer else colors.surfaceContainer,
-    ) { Column(content = content) }
+    val container = if (selected) colors.secondaryContainer else colors.surfaceContainer
+    // Not a Surface: its semantics node would be the list's item for the accessibility checks, with no label of its
+    // own, in place of the clickable row inside
+    CompositionLocalProvider(LocalContentColor provides colors.contentColorFor(container)) {
+        Column(
+            modifier.padding(bottom = if (index < count - 1) SEGMENT_GAP else 0.dp).fillMaxWidth().clip(shape).background(container),
+            content = content,
+        )
+    }
 }
 
 /** A section's title above its group, read by TalkBack as a heading. */

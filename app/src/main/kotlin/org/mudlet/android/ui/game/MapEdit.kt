@@ -197,7 +197,11 @@ private fun RoomPropertiesDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () 
                 )
                 CheckRow(locked, stringResource(R.string.room_edit_locked)) { locked = it }
                 Text(stringResource(R.string.room_edit_env), style = MaterialTheme.typography.labelLarge)
-                val envs = rooms.envs
+                // The room's own environment leads where the list lacks it, as one of the profile's first sixteen does
+                val envs = rooms.envs?.let { listed ->
+                    val own = info.color?.takeIf { listed.none { it.env == info.env } }?.let { MapEnv(info.env, it) }
+                    listOfNotNull(own) + listed
+                }
                 if (envs == null) Text(stringResource(R.string.room_edit_envs_loading)) else EnvPalette(envs, env) { env = it }
             }
         },
@@ -287,8 +291,9 @@ private fun exitText(exit: RoomExit): String {
 
 /**
  * The room's exits by way: one picked leads to a room given by its number, or tapped on the map next, either with the
- * exit back too, and an exit there is locked, unlocked or removed.
+ * exit back too, and an exit there is locked, unlocked or removed. Each closes it, so a refusal shows on the map.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Unit) {
     val exits = info.exits.associateBy { it.direction }
@@ -298,7 +303,8 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
     val toRoom = to.toIntOrNull()?.takeIf { it > 0 }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onDismiss) { Text(stringResource(R.string.room_edit_done)) } },
+        confirmButton = {},
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.room_edit_cancel)) } },
         title = { Text(stringResource(R.string.room_edit_exits_title, roomName(info))) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -326,8 +332,8 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
                         singleLine = true,
                     )
                     CheckRow(bothWays, stringResource(R.string.room_edit_both_ways)) { bothWays = it }
-                    FlowRowButtons {
-                        TextButton({ toRoom?.let { rooms.setExit(info.id, picked, it, bothWays) } }, enabled = toRoom != null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton({ if (toRoom != null && rooms.setExit(info.id, picked, toRoom, bothWays)) onDismiss() }, enabled = toRoom != null) {
                             Text(stringResource(R.string.room_edit_exit_set))
                         }
                         TextButton({
@@ -335,22 +341,16 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
                             onDismiss()
                         }) { Text(stringResource(R.string.room_edit_exit_pick)) }
                         if (exit != null) {
-                            TextButton({ rooms.lockExit(info.id, picked, !exit.locked) }) {
+                            TextButton({ if (rooms.lockExit(info.id, picked, !exit.locked)) onDismiss() }) {
                                 Text(stringResource(if (exit.locked) R.string.room_edit_exit_unlock else R.string.room_edit_exit_lock))
                             }
-                            TextButton({ rooms.setExit(info.id, picked, 0, bothWays) }) { Text(stringResource(R.string.room_edit_exit_remove)) }
+                            TextButton({ if (rooms.setExit(info.id, picked, 0, bothWays)) onDismiss() }) { Text(stringResource(R.string.room_edit_exit_remove)) }
                         }
                     }
                 }
             }
         },
     )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FlowRowButtons(content: @Composable () -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) { content() }
 }
 
 /** A new room beside this one, a way no exit goes yet; the new room shows once the engine makes it. */
@@ -368,7 +368,7 @@ private fun AddRoomDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Unit
     )
 }
 
-/** The room moved one place at a time, as each button shows where it then is; a drag of the room on the map does as much at once. */
+/** The room moved one place at a time, where it then is read out after each; a drag of the room on the map moves it at once. */
 @Composable
 private fun MoveRoomDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Unit) {
     AlertDialog(

@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
@@ -531,6 +532,8 @@ class ScriptMapTest {
         session.send(EngineMessages.envs(envs, 257 to "#ff0000", 200 to "#0a141e"))
         val swatch = hasContentDescription(string(R.string.room_edit_env_item, 200))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(swatch).fetchSemanticsNodes().isNotEmpty() }
+        // The room's own environment, not among the map's, leads the list, picked
+        compose.onNode(hasContentDescription(string(R.string.room_edit_env_item, -1))).assertIsSelected()
         activateInDialog(swatch)
         field(R.string.room_edit_name).performTextReplacement("Great Kitchen")
         field(R.string.room_edit_weight).performTextReplacement("3")
@@ -544,21 +547,26 @@ class ScriptMapTest {
         session.send(room(edit, 2, "Great Kitchen", steps = 1, exits = listOf(exit("w", 1, "Great Hall")), env = 200, weight = 3, locked = true))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Great Kitchen")).fetchSemanticsNodes().isNotEmpty() }
 
-        // Its exits: one led to a room by number both ways, then locked
+        // Its exits: one led to a room by number both ways, which closes the dialog for the room shown anew, then locked
         tapInCard(R.string.room_edit_exits)
         activateInDialog(hasText(string(R.string.exit_north)))
         field(R.string.room_edit_exit_to).performTextReplacement("5")
         activateInDialog(hasText(string(R.string.room_edit_exit_set)))
         val led = session.receive("setRoomExit")
         assertEquals(listOf(2, "n", 5, true), listOf(led.getInt("room"), led.getString("direction"), led.getInt("to"), led.getBoolean("bothWays")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
         session.send(room(led, 2, "Great Kitchen", steps = 1, exits = listOf(exit("n", 5, "Tower"), exit("w", 1, "Great Hall"))))
+        tapInCard(R.string.room_edit_exits)
         val tower = hasText(string(R.string.room_exit, string(R.string.exit_north), "Tower"))
+        activateInDialog(hasText(string(R.string.exit_north)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(tower and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
         activateInDialog(hasText(string(R.string.room_edit_exit_lock)))
         val lock = session.receive("lockRoomExit")
         assertEquals(listOf(2, "n", true), listOf(lock.getInt("room"), lock.getString("direction"), lock.getBoolean("locked")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
 
         // Or to the room tapped next on the map, which picks no room and presses nothing
+        tapInCard(R.string.room_edit_exits)
         activateInDialog(hasText(string(R.string.exit_east)))
         activateInDialog(hasText(string(R.string.room_edit_exit_pick)))
         val prompt = hasText(string(R.string.room_edit_link_prompt, string(R.string.exit_east)))
@@ -630,6 +638,16 @@ class ScriptMapTest {
         assertEquals(listOf(3, 3, 0, 0), listOf("room", "x", "y", "z").map { dragged.getInt(it) })
         assertTrue("the drag moved the map: ${session.received.drop(read)}", session.received.drop(read).none { it.optString("t") == "moveMap" })
         session.send(room(dragged, 3, "", steps = 1, x = 3))
+
+        // A drag off the room picked, above the card, pans the map as when it is viewed
+        compose.onNode(map).performTouchInput {
+            down(at(drawn, 80.0, 60.0))
+            repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), 0f)) }
+            advanceEventTime(300)
+            up()
+        }
+        session.receive("moveMap")
+        session.assertNoRequest("editRoom", QUIET_MS)
 
         tapInCard(R.string.room_edit_player_here)
         assertEquals(3, session.receive("setPlayerRoom").getInt("room"))

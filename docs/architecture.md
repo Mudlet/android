@@ -352,13 +352,13 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 - While the map is edited, the room shown also has chips (`RoomEditActions` in `MapEdit.kt`), each but one opening a
   dialog: its details (name, symbol, a colour from the map's environments, `mapEnvs`, weight and lock, saved as one
   `editRoom` of what changed), its exits (one per direction on a compass, led to a room by number or by tapping it on
-  the map next, both ways or not, locked, unlocked or removed: `setRoomExit`, `lockRoomExit`), a room beside it a way
-  no exit goes (`addRoom`, which then shows), moving it a place at a time (`editRoom`'s place), placing the player in
-  it (`setPlayerRoom`), renaming its area (`renameArea`) and deleting it after asking (`deleteRoom`). While an exit
-  waits for its room a banner over the map says which way it goes, with Cancel, and the next tap on a room leads it
-  there; viewing the map cancels it. A drag that starts on the room shown moves it by whole places, outlined where it
-  will go as the finger moves (`MapMoves.roomsMoved`), and sent as one `editRoom` as the finger lifts. Each edit
-  answers with the room as it now is, which the card shows.
+  the map next, both ways or not, locked, unlocked or removed: `setRoomExit`, `lockRoomExit`, each closing the dialog so
+  a refusal shows on the map), a room beside it a way no exit goes (`addRoom`, which then shows), moving it a place at a
+  time (`editRoom`'s place), placing the player in it (`setPlayerRoom`), renaming its area (`renameArea`) and deleting
+  it after asking (`deleteRoom`). While an exit waits for its room a banner over the map says which way it goes, with
+  Cancel, and the next tap on a room leads it there; viewing the map cancels it. A drag that starts on the room shown
+  moves it by whole places, outlined where it will go as the finger moves (`MapMoves.roomsMoved`), and sent as one
+  `editRoom` as the finger lifts. Each edit answers with the room as it now is, which the card shows.
 - A bar at the map's bottom start (`MapPlaceBar`), where the map is at least 144 dp high, names the area shown, a
   button that lists the map's areas (`mapAreas`, asked each time it opens) to show another (`showMapArea`), and,
   while the area has more than one level (`view.levels`), the level shown between buttons to the level above and below

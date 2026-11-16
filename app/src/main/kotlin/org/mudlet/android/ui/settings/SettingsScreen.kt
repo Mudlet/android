@@ -3,12 +3,14 @@ package org.mudlet.android.ui.settings
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -18,7 +20,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,40 +40,59 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.MudletTopBar
+import org.mudlet.android.ui.ListSegment
+import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.SectionHeader
+import org.mudlet.android.ui.theme.wallpaperColoursAvailable
 import kotlin.math.roundToInt
 
-/** The app's settings, one section each, in a column that scrolls at large font sizes. */
+/**
+ * The app's settings, a section each, in a column that scrolls at large font sizes and is no wider than reads well
+ * on a large screen.
+ */
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
-    Scaffold(topBar = { MudletTopBar(stringResource(R.string.settings_title), onBack) }) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            TextSize(Settings.textSize)
-            ScreenReader()
-            MapSettings()
+    MudletScaffold(stringResource(R.string.settings_title), onBack = onBack) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
+            Column(Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                TextSize(Settings.textSize)
+                ScreenReader()
+                MapSettings()
+                if (wallpaperColoursAvailable) Appearance()
+            }
         }
+    }
+}
+
+private val MAX_WIDTH = 640.dp
+
+/** The app's own colours, or the wallpaper's: offered on Android 12 and later, which have them. */
+@Composable
+private fun Appearance() {
+    SectionHeader(stringResource(R.string.settings_appearance))
+    ListSegment(0, 1) {
+        SwitchRow(Settings.wallpaperColours, R.string.settings_wallpaper_colours, R.string.settings_wallpaper_colours_hint)
     }
 }
 
 /** The screen reader settings, which are Mudlet's own: each profile that loads is given the app's values. */
 @Composable
 private fun ScreenReader() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.settings_screen_reader), style = MaterialTheme.typography.titleMedium)
+    SectionHeader(stringResource(R.string.settings_screen_reader))
+    ListSegment(0, 3) {
         SwitchRow(Settings.readNewText, R.string.settings_read_new_text, R.string.settings_read_new_text_hint)
-        SwitchRow(Settings.advertiseScreenReader, R.string.settings_advertise_screen_reader, R.string.settings_advertise_screen_reader_hint)
-        BlankLines(Settings.blankLines)
     }
+    ListSegment(1, 3) {
+        SwitchRow(Settings.advertiseScreenReader, R.string.settings_advertise_screen_reader, R.string.settings_advertise_screen_reader_hint)
+    }
+    ListSegment(2, 3) { BlankLines(Settings.blankLines) }
 }
 
 /** The map's settings, the app's own. */
 @Composable
 private fun MapSettings() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.settings_map), style = MaterialTheme.typography.titleMedium)
+    SectionHeader(stringResource(R.string.settings_map))
+    ListSegment(0, 1) {
         SwitchRow(Settings.mapBehindText, R.string.settings_map_behind_text, R.string.settings_map_behind_text_hint)
     }
 }
@@ -81,12 +101,13 @@ private fun MapSettings() {
 @Composable
 private fun SwitchRow(setting: Settings.BoolSetting, @StringRes label: Int, @StringRes hint: Int) {
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(setting.value, role = Role.Switch) { EngineClient.setMudletSetting(setting, it) },
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(setting.value, role = Role.Switch) { EngineClient.setMudletSetting(setting, it) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
-            Text(stringResource(hint), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(setting.value, onCheckedChange = null)
     }
@@ -95,12 +116,13 @@ private fun SwitchRow(setting: Settings.BoolSetting, @StringRes label: Int, @Str
 /** Show, hide or replace with a space the blank lines a game sends: one radio button each, in a group. */
 @Composable
 private fun BlankLines(setting: Settings.EnumSetting<Settings.BlankLines>) {
-    Text(stringResource(R.string.settings_blank_lines), style = MaterialTheme.typography.bodyLarge)
-    Column(Modifier.selectableGroup()) {
+    Text(stringResource(R.string.settings_blank_lines), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), style = MaterialTheme.typography.bodyLarge)
+    Column(Modifier.selectableGroup().padding(bottom = 4.dp)) {
         for (choice in setting.entries) {
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .selectable(choice == setting.value, role = Role.RadioButton) { EngineClient.setMudletSetting(setting, choice) },
+                    .selectable(choice == setting.value, role = Role.RadioButton) { EngineClient.setMudletSetting(setting, choice) }
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(choice == setting.value, onClick = null)
@@ -124,34 +146,36 @@ private fun TextSize(setting: Settings.IntSetting) {
     val range = setting.range
     val label = stringResource(R.string.settings_text_size)
     val value = stringResource(R.string.settings_text_size_value, size)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.titleMedium)
-        Text(stringResource(R.string.settings_text_size_hint), style = MaterialTheme.typography.bodyMedium)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton({ setting.set(size - 1) }, enabled = size > range.first) {
-                Icon(painterResource(R.drawable.ic_remove), stringResource(R.string.settings_text_smaller))
+    SectionHeader(label)
+    ListSegment(0, 1) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.settings_text_size_hint), style = MaterialTheme.typography.bodyMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ setting.set(size - 1) }, enabled = size > range.first) {
+                    Icon(painterResource(R.drawable.ic_remove), stringResource(R.string.settings_text_smaller))
+                }
+                Slider(
+                    value = size.toFloat(),
+                    onValueChange = { setting.set(it.roundToInt()) },
+                    modifier = Modifier.weight(1f).semantics {
+                        contentDescription = label
+                        stateDescription = value
+                    },
+                    valueRange = range.first.toFloat()..range.last.toFloat(),
+                    steps = range.last - range.first - 1,
+                )
+                IconButton({ setting.set(size + 1) }, enabled = size < range.last) {
+                    Icon(painterResource(R.drawable.ic_add), stringResource(R.string.settings_text_larger))
+                }
             }
-            Slider(
-                value = size.toFloat(),
-                onValueChange = { setting.set(it.roundToInt()) },
-                modifier = Modifier.weight(1f).semantics {
-                    contentDescription = label
-                    stateDescription = value
-                },
-                valueRange = range.first.toFloat()..range.last.toFloat(),
-                steps = range.last - range.first - 1,
+            Text(value, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(R.string.settings_text_size_sample),
+                Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(8.dp),
+                color = CONSOLE_FOREGROUND,
+                fontFamily = FontFamily.Monospace,
+                fontSize = size.sp,
             )
-            IconButton({ setting.set(size + 1) }, enabled = size < range.last) {
-                Icon(painterResource(R.drawable.ic_add), stringResource(R.string.settings_text_larger))
-            }
         }
-        Text(value, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            stringResource(R.string.settings_text_size_sample),
-            Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(8.dp),
-            color = CONSOLE_FOREGROUND,
-            fontFamily = FontFamily.Monospace,
-            fontSize = size.sp,
-        )
     }
 }

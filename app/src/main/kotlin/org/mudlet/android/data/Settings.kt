@@ -35,7 +35,10 @@ object Settings {
     /** "Map behind the text": the profile's map, faint, behind the game's text (docs/architecture.md, "The map behind the text"). */
     val mapBehindText = BoolSetting("mapBehindText", default = true)
 
-    private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered, mapBehindText)
+    /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
+    val wallpaperColours = BoolSetting("wallpaperColours", default = true)
+
+    private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered, mapBehindText, wallpaperColours)
 
     /**
      * The settings Mudlet keeps for each profile too. The app keeps its own copy, as libmudlet's `luaResult` says only

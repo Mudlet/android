@@ -45,8 +45,8 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
 Steps 6 and 7 run only on `main`, only after the smoke test passed and the source bundle was built, and only with
 the secrets below; the GitHub
 pre-release only after Play took the AAB, or when no Play credentials are set. On any other branch, and on a pull
-request that changes the release build (the workflow, `scripts/build-release.sh`, `scripts/merge-qtdeploy.py`, the
-R8 rules or the Gradle files), the run is a dry run: it builds, signs with a throwaway key, runs the smoke test and
+request that changes the app's code (`app/`, `engine-service/`, `protocol/`, `suggest/`, `native/`) or the release
+build (the workflow, the Gradle files, the size budgets or the scripts it runs), the run is a dry run: it builds, signs with a throwaway key, runs the smoke test and
 publishes nothing. A failed nightly opens or updates the issue "Nightly PTB fails".
 
 ### The source bundle

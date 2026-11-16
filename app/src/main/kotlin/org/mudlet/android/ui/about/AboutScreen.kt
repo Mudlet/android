@@ -6,14 +6,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
@@ -25,7 +26,9 @@ import org.mudlet.android.BuildConfig
 import org.mudlet.android.R
 import org.mudlet.android.about.Component
 import org.mudlet.android.about.LicenceGroup
-import org.mudlet.android.ui.MudletTopBar
+import org.mudlet.android.ui.ListSegment
+import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.SectionHeader
 
 private val GROUP_TITLES = mapOf(
     LicenceGroup.APP to R.string.about_group_app,
@@ -36,16 +39,17 @@ private val GROUP_TITLES = mapOf(
 
 /**
  * The app's version and engine, where the source of both is, how Qt's LGPL is met, and the licence of everything
- * the APK bundles (docs/licences.md); a component opens its licence texts through [onOpenComponent].
+ * the APK bundles (docs/licences.md); a component opens its licence texts through [onOpenComponent]. [selected] is the
+ * component whose licence is open beside the list, if one is.
  */
 @Composable
-fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit) {
+fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selected: String? = null) {
     val engine = engineInfo()
     val licences = rememberLicences(engine)
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val open = { url: String -> openLink(uriHandler, context, url) }
-    Scaffold(topBar = { MudletTopBar(stringResource(R.string.about_title), onBack) }) { padding ->
+    MudletScaffold(stringResource(R.string.about_title), onBack = onBack) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
             item {
                 Heading(stringResource(R.string.app_name), MaterialTheme.typography.headlineSmall)
@@ -77,30 +81,34 @@ fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit) {
             when (licences) {
                 null -> item { Paragraph(stringResource(R.string.about_loading)) }
                 is LicenceList.Failed -> item { Paragraph(stringResource(R.string.about_load_failed, licences.reason)) }
-                is LicenceList.Loaded -> componentList(licences.components, onOpenComponent)
+                is LicenceList.Loaded -> componentList(licences.components, selected, onOpenComponent)
             }
         }
     }
 }
 
-private fun LazyListScope.componentList(components: List<Component>, onOpenComponent: (String) -> Unit) {
+private fun LazyListScope.componentList(components: List<Component>, selected: String?, onOpenComponent: (String) -> Unit) {
     components.groupBy { it.group }.forEach { (group, inGroup) ->
-        item(key = "group-$group") { Heading(stringResource(GROUP_TITLES.getValue(group)), MaterialTheme.typography.titleSmall) }
-        items(inGroup, key = { it.id }) { component ->
+        item(key = "group-$group") { SectionHeader(stringResource(GROUP_TITLES.getValue(group))) }
+        itemsIndexed(inGroup, key = { _, component -> component.id }) { i, component ->
             val openLabel = stringResource(R.string.about_open_licence)
-            ListItem(
-                headlineContent = { Text(component.name) },
-                supportingContent = {
-                    Text(
-                        if (component.version.isEmpty()) {
-                            component.licence
-                        } else {
-                            stringResource(R.string.about_component_version_licence, component.version, component.licence)
-                        },
-                    )
-                },
-                modifier = Modifier.clickable(onClickLabel = openLabel) { onOpenComponent(component.id) },
-            )
+            ListSegment(i, inGroup.size, Modifier.padding(horizontal = 16.dp), selected = component.id == selected) {
+                ListItem(
+                    headlineContent = { Text(component.name) },
+                    supportingContent = {
+                        Text(
+                            if (component.version.isEmpty()) {
+                                component.licence
+                            } else {
+                                stringResource(R.string.about_component_version_licence, component.version, component.licence)
+                            },
+                        )
+                    },
+                    modifier = Modifier.clickable(onClickLabel = openLabel) { onOpenComponent(component.id) },
+                    // The segment under it is the container, tinted when selected
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
         }
     }
 }

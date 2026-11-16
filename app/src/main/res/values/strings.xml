@@ -813,8 +813,8 @@
     <string name="room_edit_add_title">Add a room beside %1$s</string>
     <!-- The title of the dialog that moves a room, a place at each direction picked: %1$s is the room's name -->
     <string name="room_edit_move_title">Move %1$s</string>
-    <!-- Where the room is in its area: %1$d is its place east, %2$d north and %3$d its level -->
-    <string name="room_edit_position">At %1$d east, %2$d north, level %3$d</string>
+    <!-- Where the room is in its area, each number after its label so no plural is needed: %1$d its place east, %2$d north, %3$d its level -->
+    <string name="room_edit_position">Place: east %1$d, north %2$d, level %3$d</string>
     <!-- Under the buttons that move a room: the other way to move it -->
     <string name="room_edit_move_hint">Or drag the room on the map, while it is picked</string>
     <!-- The title of the dialog that renames the room's area -->

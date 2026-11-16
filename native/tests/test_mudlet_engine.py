@@ -2543,7 +2543,8 @@ def map_rooms():
     check({k: v for k, v in m.items() if k != "re"} == {
         "t": "room", "id": 1, "name": "Great Hall", "areaId": keep, "area": "Keep", "x": 0, "y": 0, "z": 0, "steps": 0,
         "exits": [{"direction": "e", "to": 2, "toName": "Kitchen", "locked": False},
-                  {"direction": "up", "to": 3, "toName": "Tower", "locked": False}]}, f"roomInfo gives the player's room: {m}")
+                  {"direction": "up", "to": 3, "toName": "Tower", "locked": False}],
+        "symbol": "", "env": -1, "color": "#800000", "weight": 1, "locked": False}, f"roomInfo gives the player's room: {m}")
     m = info(2)
     check(m.get("steps") == 1 and m.get("exits") == [
         {"direction": "w", "to": 1, "toName": "Great Hall", "locked": False},
@@ -2687,7 +2688,7 @@ def map_edits():
     check(info(1).get("exits") == [{"direction": "n", "to": added, "toName": "", "locked": False}], "and the exit to it")
     c.send({"t": "deleteRoom", "room": added})
     m = info(added)
-    check(m.get("message") == f"roomInfo: There is no room {added} in the map.", f"deleteRoom removes the room: {m}")
+    check(m.get("message") == f"roomInfo: there is no room {added} in the map", f"deleteRoom removes the room: {m}")
     check(info(1).get("exits") == [], "and the exits to it")
 
     since = len(seen)

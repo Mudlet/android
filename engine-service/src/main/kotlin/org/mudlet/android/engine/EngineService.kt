@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.system.Os
 import android.util.Log
@@ -21,6 +23,12 @@ class EngineService : QtServiceBase() {
     // The games the engine has open, as it last said; null until it has, as a restore may be opening one. Main thread
     private var games: List<EngineNotifications.Game>? = null
     private var destroyed = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastRefresh = 0L
+    private val refresh = Runnable {
+        lastRefresh = SystemClock.uptimeMillis()
+        EngineNotifications.refresh(this)
+    }
 
     override fun onCreate() {
         // Native main() reads these; Os.setenv is visible to getenv() in this process
@@ -74,13 +82,22 @@ class EngineService : QtServiceBase() {
         this.games = games
         when {
             games.isEmpty() -> leaveForeground()
-            EngineNotifications.engineShown -> EngineNotifications.refresh(this)
+            EngineNotifications.engineShown -> refreshSoon()
             else -> goForeground()
         }
     }
 
+    // Android drops an update that comes too soon after the app's last ones (NotificationManagerService's enqueue rate
+    // limit, 5 a second), as a connecting followed at once by connected would be, and nothing would then put the last
+    // one right: each change waits until REFRESH_GAP_MS after the post before it, and only the latest is posted
+    private fun refreshSoon() {
+        handler.removeCallbacks(refresh)
+        handler.postAtTime(refresh, maxOf(SystemClock.uptimeMillis(), lastRefresh + REFRESH_GAP_MS))
+    }
+
     override fun onDestroy() {
         destroyed = true
+        handler.removeCallbacks(refresh)
         EngineNotifications.engineShown = false
         // Only a stop gets here (stopService, the notification's Quit, or Android stopping it in the background with no
         // game open), never a kill: the next engine restores nothing
@@ -104,6 +121,7 @@ class EngineService : QtServiceBase() {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
             )
             EngineNotifications.engineShown = true
+            lastRefresh = SystemClock.uptimeMillis()
         } catch (e: Exception) {
             if (Build.VERSION.SDK_INT >= 31 && e is ForegroundServiceStartNotAllowedException) {
                 Log.w(TAG, "not allowed to start in the foreground from here", e)
@@ -115,6 +133,7 @@ class EngineService : QtServiceBase() {
     }
 
     private fun leaveForeground() {
+        handler.removeCallbacks(refresh)
         if (!EngineNotifications.engineShown) return
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         EngineNotifications.engineShown = false
@@ -125,5 +144,6 @@ class EngineService : QtServiceBase() {
         const val ACTION_STOP = "org.mudlet.android.engine.STOP_ENGINE"
         const val PREFS = "engine"
         const val PREF_PLATFORM = "qpaPlatform"
+        private const val REFRESH_GAP_MS = 1_000L
     }
 }

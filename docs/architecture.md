@@ -895,6 +895,8 @@ that attaches later is told too. The UI shows it as a marker line.
     stays in the foreground, as a disconnected game stays open with its scripts
     and timers, and Mudlet may reconnect it on its own, which Android 12 and
     later would not let a background service take back into the foreground.
+    Its updates come at least a second apart, the last change always posted, as
+    Android drops an app's updates that come faster than five a second.
     With no game open the service leaves the
     foreground and the notification goes; the next game to open brings both back,
     which Android allows because only the UI, while it is shown, opens one. Until

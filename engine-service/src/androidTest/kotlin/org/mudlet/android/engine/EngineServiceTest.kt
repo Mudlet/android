@@ -231,8 +231,12 @@ class EngineServiceTest {
     private fun engineNotification() = activeNotifications().firstOrNull { it.id == EngineNotifications.ENGINE_NOTIFICATION_ID }
 
     // A game not connected stays open with its scripts, which the foreground keeps running
-    private fun awaitEngineTitle(title: String, probe: EngineProbe) = await("the engine's notification titled \"$title\", in the foreground", probe = probe) {
-        engineNotification()?.takeIf { it.title() == title && engineService()?.foreground == true }
+    private fun awaitEngineTitle(title: String, probe: EngineProbe): StatusBarNotification = try {
+        await("the engine's notification titled \"$title\", in the foreground", probe = probe) {
+            engineNotification()?.takeIf { it.title() == title && engineService()?.foreground == true }
+        }
+    } catch (e: AssertionError) {
+        throw AssertionError("${e.message}; shown: \"${engineNotification()?.title()}\", foreground ${engineService()?.foreground}", e)
     }
 
     private fun StatusBarNotification.title() = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()

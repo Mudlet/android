@@ -1419,7 +1419,7 @@ QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
     // The rooms' names can add tens of kilobytes to the PNG
     const qsizetype viewBytes = view.isEmpty() ? 0 : QJsonDocument(view).toJson(QJsonDocument::Compact).size();
     if (base64.size() + viewBytes + 1024 > qsizetype(maxFrameBytes)) {
-        qWarning("SocketBridge: a map at %dx%d as a PNG is too large for a frame", frame.size.width(), frame.size.height());
+        qWarning("SocketBridge: a map at %dx%d as a PNG, with its view, is too large for a frame", frame.size.width(), frame.size.height());
         return {};
     }
     QJsonObject message{

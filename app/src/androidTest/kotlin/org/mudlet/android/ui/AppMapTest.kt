@@ -413,9 +413,13 @@ class AppMapTest {
         assertEquals("app", move.getString("map"))
         assertTrue("moved by ${move.getDouble("dy")}", move.getDouble("dy") > 0)
         noRequest("appMapPointer")
-        waitFor("the button that centres the map shows") {
-            compose.onAllNodes(hasContentDescription(string(R.string.map_follow)) and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
-        }
+        val follow = hasContentDescription(string(R.string.map_follow)) and hasClickAction()
+        waitFor("the button that centres the map shows") { compose.onAllNodes(follow).fetchSemanticsNodes().isNotEmpty() }
+
+        // A rotation keeps the map in front where the player moved it
+        compose.activityRule.scenario.recreate()
+        waitFor("the button shows again after a rotation") { compose.onAllNodes(follow).fetchSemanticsNodes().isNotEmpty() }
+        noRequest("followPlayer")
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(map).fetchSemanticsNodes().isEmpty() }

@@ -112,7 +112,7 @@ private val MIN_FLING_SPEED = 50.dp
 private val FOLLOW_PADDING = 8.dp
 private val FOLLOW_SPACE = 48.dp + FOLLOW_PADDING * 2
 
-// A fit this small has nothing drawn to touch: what is near is worked out against it rather than against none
+// TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
 private const val MIN_FIT_SCALE = 0.01f
 
 private enum class Gesture { TAP, PAN, PINCH, DRAG_ZOOM }
@@ -377,11 +377,14 @@ private suspend fun PointerInputScope.mapGestures(source: MapSource, haptics: Ha
         val at = current?.toMap(down.position.x, down.position.y)
         if (current == null || at == null) {
             lastTapUp = 0L
-        } else if (secondTap) {
-            if (source.touch(MapPointerType.DOUBLE_CLICK, current, at, (reach / current.scale).toDouble())) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+            return@awaitEachGesture
+        }
+        val within = (reach / current.scale).toDouble()
+        if (secondTap) {
+            if (source.touch(MapPointerType.DOUBLE_CLICK, current, at, within)) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
             lastTapUp = 0L
         } else {
-            source.touch(MapPointerType.PRESS, current, at, (reach / current.scale).toDouble())
+            source.touch(MapPointerType.PRESS, current, at, within)
             lastTapUp = upAt
             lastTapAt = down.position
         }

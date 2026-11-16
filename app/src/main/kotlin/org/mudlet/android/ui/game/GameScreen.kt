@@ -91,6 +91,9 @@ private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSetti
     val hidden = c.hiddenInput
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
+    // The map behind the text is not there to be moved: once the map in front closes, not as a rotation remakes it, it
+    // follows the player again
+    LaunchedEffect(mapOpen) { if (!mapOpen && !c.appMap.mover.following) c.appMap.mover.followPlayer() }
     val sendError = c.sendError
     if (sendError != null) {
         val message = stringResource(R.string.send_error, sendError)

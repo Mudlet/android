@@ -348,7 +348,7 @@ class ProfileSession internal constructor(
     // The app's values the player changed, which then are the game's own; for the rest the game keeps Mudlet's, some of
     // which Mudlet picks for the game
     private fun giveDefaults() {
-        val changed = Settings.mudletSettings.filter { it.changed }
+        val changed = Settings.mudletSettings
         if (changed.isEmpty()) return Settings.setAwaitsDefaults(name, false)
         val id = newRequestId()
         defaultsRequests.add(id)

@@ -135,7 +135,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_offer_secure_hint,
             R.string.settings_offer_secure_keywords,
         ),
-        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.gmcp, R.string.settings_gmcp, R.string.settings_gmcp_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.msdp, R.string.settings_gmcp, R.string.settings_gmcp_hint, R.string.settings_protocol_keywords),
         SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.msdp, R.string.settings_msdp, R.string.settings_msdp_hint, R.string.settings_protocol_keywords),
         SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mssp, R.string.settings_mssp, R.string.settings_mssp_hint, R.string.settings_protocol_keywords),
         SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.msp, R.string.settings_msp, R.string.settings_msp_hint, R.string.settings_protocol_keywords),

@@ -149,7 +149,8 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         // where the keyboard leaves the map no room
         var editing by remember { mutableStateOf(false) }
         Column(Modifier.matchParentSize()) {
-            val map = EngineClient.front.appMap.map
+            val map = appMap.map
+            val viewOnly = map?.viewOnly ?: true
             var size by remember { mutableStateOf(IntSize.Zero) }
             // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
             val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
@@ -157,20 +158,20 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
             // draws along its top
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
-                MapButtons(EngineClient.front.appMap, map?.bitmap, fit, viewOnly = map?.viewOnly ?: true, drawn = map != null)
+                MapButtons(appMap, map?.bitmap, fit, viewOnly, drawn = map != null)
             }
             // In the map's middle with no map drawn, but not where it would share the map with the search's results or a
             // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack. With a map
             // drawn, none: the map is there
-            val offerInMap = map == null && (EngineClient.front.appMap.search == null || editing) && EngineClient.front.appMap.refusal == null
+            val offerInMap = map == null && (appMap.search == null || editing) && appMap.refusal == null
             MapDownloadBar(offerHere = map == null && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
                 MapView(
-                    EngineClient.front.appMap,
+                    appMap,
                     map?.bitmap,
                     fit,
-                    viewOnly = map?.viewOnly ?: true,
+                    viewOnly,
                     drawn = map != null,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                     controls = false,
@@ -182,7 +183,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 // Half the map, but at least their head and a whole result. Where the map has not that room, as in a
                 // short window, they wait for it: squeezed, their close button and rows would be cut off
-                val search = EngineClient.front.appMap.search
+                val search = appMap.search
                 if (search != null && !editing && maxHeight >= RESULTS_HEAD + RESULT_ROW) {
                     val results = maxOf(maxHeight / 2, RESULTS_HEAD + RESULT_ROW)
                     RoomResults(search, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = results))

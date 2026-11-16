@@ -165,7 +165,7 @@ enum class MapDownloadState(val wire: String) {
     ;
 
     companion object {
-        fun fromWire(wire: String): MapDownloadState = entries.firstOrNull { it.wire == wire } ?: NONE
+        fun fromWire(wire: String): MapDownloadState = entries.firstOrNull { it.wire == wire } ?: FAILED
     }
 }
 

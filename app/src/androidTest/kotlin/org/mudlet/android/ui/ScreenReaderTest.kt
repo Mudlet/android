@@ -272,6 +272,8 @@ class ScreenReaderTest {
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
         if (scroll) node.performScrollTo()
         node.assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+        // The test's clock drives the composition: until it runs, a page it opened has not asked for the game's values
+        compose.waitForIdle()
     }
 
     private companion object {

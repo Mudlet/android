@@ -1,8 +1,8 @@
 # Several games at once
 
-Status: planned, November 2026; the pull request plan at the end says what lands in which order. Today the app runs one
-profile at a time: `openProfile` closes the running one (`MudletEngine`, `shutdownAsync(true)` then `startAsync()`), and
-`EngineClient` holds one `EngineLink`.
+Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 has landed
+protocol 15 and the stand-in engine runs several profiles; libmudlet still runs one at a time, refusing `alongside`, and
+the app still holds one `EngineLink` (`EngineClient`) and talks version 14 style.
 
 The aim: several profiles open at once, each with its own connection, and a profile button that lists them on a tap and
 moves to the next or the previous one on a horizontal swipe, as Firefox for Android does with its tabs.
@@ -54,9 +54,9 @@ With a socket per profile (below), the UI does not depend on which layout serves
 pinned Mudlet revision, libmudlet keeps one profile at a time and the stand-in engine runs several, so the protocol and
 the UI can land and be tested first.
 
-## Protocol (version 14)
+## Protocol (version 15)
 
-Version 14, after the map download's 13. **A socket per profile, not profile ids on frames:** flow control is per
+Version 15, after the text boxes' 14. **A socket per profile, not profile ids on frames:** flow control is per
 connection (4 MiB high water), so on one connection a flooding background game would put the front game into lag.
 A socket per profile keeps the ring, the replay on attach, the lag handling and `EngineLink` as they are, per profile.
 
@@ -73,7 +73,7 @@ New on the control socket:
 
 | Message | Dir | Fields | Meaning |
 |---|---|---|---|
-| `openProfile` | UI→E | `name`, `password`?, `connect`?, `alongside`?, `id`? | With `alongside`, starts the profile beside the others; one already open stays as it is. Answered by `openProfiles`, or `error` `openProfile: at most 4 open`, or from libmudlet before the upstream change `openProfile: one profile at a time`. Without it, the others close first, as in version 13. |
+| `openProfile` | UI→E | `name`, `password`?, `connect`?, `alongside`?, `id`? | With `alongside`, starts the profile beside the others; one already open stays as it is. Answered by `openProfiles`, or `error` `openProfile: at most 4 open`, or from libmudlet before the upstream change `openProfile: one profile at a time`. Without it, the others close first, as in version 14. |
 | `closeProfile` | UI→E | `name`, `id`? | Saves and closes that profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles` or `error`. |
 | `setFront` | UI→E | `name` | The profile the player is looking at: raises `sysProfileFocusChangeEvent`, as a desktop tab change does. |
 | `markSeen` | UI→E | `name`, `seq` | The player has seen that profile's lines up to `seq`: clears `attention`, and `unread` counts from there. |
@@ -83,7 +83,7 @@ The profile opened last becomes the front; when the front closes, the next one t
 the left. `unread` lives in the engine because the engine sees every line while the UI is detached.
 
 **Compatibility.** The app keeps working unchanged until U1. `hello` gains `profileSockets`. A UI that leaves it out
-gets version 13's behaviour on the control socket: the front profile's lines, statuses and windows, and its profile
+gets version 14's behaviour on the control socket: the front profile's lines, statuses and windows, and its profile
 requests go to the front profile. With `profileSockets` true, the control socket carries only the control traffic, and a profile request sent
 there gets `error`, as a control request sent on a profile socket does.
 
@@ -141,7 +141,7 @@ and `protocol_client.py`, with `ProtocolSpecTest` green.
 |---|---|---|---|
 | M0 | android | This document | - |
 | UP1 | Mudlet | Several `THeadlessSession`s share one pool: items 1-6 above, with `headless.md` and tests | - |
-| P1 | android | Protocol 14: the control and profile sockets and the messages above; the bridge split into a control bridge and a bridge per profile; the stand-in runs several profiles, libmudlet refuses a second | M0 |
+| P1 | android | Protocol 15: the control and profile sockets and the messages above; the bridge split into a control bridge and a bridge per profile; the stand-in runs several profiles, libmudlet refuses a second | M0 |
 | U1 | android | `EngineClient` becomes a registry of `ProfileSession`s; `FakeEngine` serves several sockets. With one game nothing visible changes | P1 |
 | U2 | android | The profile button and its sheet, "Open another game", closing, TalkBack, "Open games", predictive back | U1 |
 | U3 | android | The swipe, its slide, rubber band and haptic, right-to-left, Ctrl+Tab | U2 |

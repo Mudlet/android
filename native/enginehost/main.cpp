@@ -1,9 +1,9 @@
+#include "ControlBridge.h"
 #ifdef ENGINE_LIBMUDLET
 #include "MudletEngine.h"
 #else
-#include "Engine.h"
+#include "StandIn.h"
 #endif
-#include "SocketBridge.h"
 #ifdef Q_OS_ANDROID
 #include "AndroidServiceSetup.h"
 #endif
@@ -90,13 +90,13 @@ int main(int argc, char* argv[])
     const int heartbeatMs =
             parser.value(QStringLiteral("heartbeat-ms")).isEmpty() ? envOr("MUDLET_HEARTBEAT_MS", QStringLiteral("30000")).toInt() : parser.value(QStringLiteral("heartbeat-ms")).toInt();
 
-    SocketBridge bridge;
+    ControlBridge bridge;
 #ifdef ENGINE_LIBMUDLET
     MudletEngine engine(&bridge, heartbeatMs);
 #else
-    Engine engine(&bridge, heartbeatMs, QFileInfo(socketPath).absoluteDir().filePath(QStringLiteral("profiles.json")));
+    StandIn engine(&bridge, heartbeatMs, QFileInfo(socketPath).absoluteDir().filePath(QStringLiteral("profiles.json")));
 #endif
-    bridge.setEngine(&engine);
+    bridge.setEngineControl(&engine);
 #ifdef Q_OS_ANDROID
     // EngineService.onTrimMemory(): short of memory, the system may kill the engine next, with no save
     AndroidServiceSetup::setSaveHandler(&engine, [&engine] {
@@ -107,20 +107,20 @@ int main(int argc, char* argv[])
     });
 #endif
 
-    bridge.status(QStringLiteral("enginePid"), QString::number(QCoreApplication::applicationPid()));
-    bridge.status(QStringLiteral("socketPath"), socketPath);
+    bridge.engineStatus(QStringLiteral("enginePid"), QString::number(QCoreApplication::applicationPid()));
+    bridge.engineStatus(QStringLiteral("socketPath"), socketPath);
 #ifdef Q_OS_ANDROID
-    bridge.status(QStringLiteral("serviceReadyWait"), serviceReady ? QStringLiteral("ok") : QStringLiteral("timeout"));
+    bridge.engineStatus(QStringLiteral("serviceReadyWait"), serviceReady ? QStringLiteral("ok") : QStringLiteral("timeout"));
 #endif
     auto reportState = [&bridge](Qt::ApplicationState state) {
-        bridge.status(QStringLiteral("appState"), QString::number(int(state)));
+        bridge.engineStatus(QStringLiteral("appState"), QString::number(int(state)));
     };
     QObject::connect(&app, &QGuiApplication::applicationStateChanged, &app, reportState);
     reportState(QGuiApplication::applicationState());
     for (const auto& [env, key] : {std::pair{"MUDLET_APP_ONCREATE_MS", "qtStartMsAfterAppOnCreate"}, std::pair{"MUDLET_SERVICE_ONCREATE_MS", "qtStartMsAfterServiceOnCreate"}}) {
         const qint64 start = qgetenv(env).toLongLong();
         if (start > 0) {
-            bridge.status(QString::fromLatin1(key), QString::number(guiReadyMs - start));
+            bridge.engineStatus(QString::fromLatin1(key), QString::number(guiReadyMs - start));
         }
     }
 

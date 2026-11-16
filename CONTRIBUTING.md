@@ -162,7 +162,7 @@ for translators ([`docs/translations.md`](docs/translations.md)).
 
 - **The UI process loads no Qt.** Everything between the UI and the engine is an asynchronous message over the
   socket: no calls, no shared objects, no synchronous getters ([`docs/architecture.md`](docs/architecture.md)).
-- **The protocol changes in one commit everywhere:** [`docs/protocol.md`](docs/protocol.md), `SocketBridge` (C++),
+- **The protocol changes in one commit everywhere:** [`docs/protocol.md`](docs/protocol.md), `SocketBridge` or `ControlBridge` (C++),
   `Protocol.kt` and `native/tests/protocol_client.py`, with the version raised as `protocol.md`'s "Versioning and
   compatibility" says. `ProtocolSpecTest` fails when they disagree.
 - **The engine never waits for the UI**: it stops writing to a lagging UI and catches it up from its ring later

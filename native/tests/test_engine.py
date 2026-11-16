@@ -239,6 +239,133 @@ def no_map(c):
     return c
 
 
+def open_profiles(m):
+    return {p["name"]: p for p in m["profiles"]}
+
+
+def multi_profile(c, port):
+    """Several profiles at once (docs/multi-profile.md): with profileSockets the control socket carries only the
+    control traffic, and each open profile is served on a socket of its own. Leaves "Beta" alone open and connected,
+    and a version 14 style client in c's place."""
+    c.close()
+    ctl = Client(SOCK, profile_sockets=True)
+    msgs = handshake(ctl)
+    st = status_map(msgs)
+    listed = [m for m in msgs if m["t"] == "openProfiles"]
+    check("profile" not in msgs[0] and not [m for m in msgs if m["t"] in ("line", "tail", "windows")]
+          and "connection" not in st and "heartbeatTicks" in st,
+          f"a UI that takes profileSockets gets only the engine's statuses on the control socket: {sorted(st)}")
+    check(listed and [(p["name"], p["front"], p["state"]) for p in listed[-1]["profiles"]] == [("Beta", True, "loaded")],
+          f"and the open profiles: {listed}")
+    beta = listed[-1]["profiles"][0]
+    # "Alpha" still held slot 1 as "Beta" opened, which closed it
+    beta_slot = beta["slot"]
+    m = ctl.ask({"t": "send", "text": "look"}, answers=("error",))
+    check(m["message"] == "send: send it on the profile's socket", f"a profile's request on the control socket is refused: {m}")
+
+    def ask(msg):
+        return ctl.ask(msg, answers=("openProfiles", "profiles", "error"))
+
+    for name in ("Gamma", "Delta", "Epsilon", "Zeta"):
+        ask({"t": "saveProfile", **profile_checks.profile(name, port)})
+    m = ask({"t": "openProfile", "name": "Gamma", "alongside": True})
+    opened = open_profiles(m) if m["t"] == "openProfiles" else {}
+    check(list(opened) == ["Beta", "Gamma"] and opened["Gamma"]["slot"] == 1 and opened["Gamma"]["front"] and not opened["Beta"]["front"],
+          f"openProfile alongside opens beside the others, in front, in the lowest free slot: {m}")
+    gamma = opened.get("Gamma", {})
+    check(gamma.get("socket") == os.path.join(TMP, "engine-p1.sock") and beta["socket"] == os.path.join(TMP, f"engine-p{beta_slot}.sock"),
+          f"each on engine-p<slot>.sock beside the control socket: {gamma.get('socket')}, {beta['socket']}")
+
+    p1 = Client(beta["socket"])
+    frames = handshake(p1)
+    beta_instance = frames[0]["instance"]
+    check(frames[0].get("profile") == "Beta" and beta_instance.endswith(f"-{beta_slot}"), f"a profile's socket names its profile: {frames[0]}")
+    p2 = Client(gamma["socket"])
+    frames = handshake(p2)
+    check(frames[0].get("profile") == "Gamma" and frames[0]["instance"].endswith("-1") and frames[0]["instance"] != beta_instance,
+          f"and has an instance of its own: {frames[0]}")
+    if status_map(frames).get("connection") != "connected":
+        p2.wait_for(lambda m: m["t"] == "status" and m["key"] == "connection" and m["value"] == "connected")
+    p2.send({"t": "send", "text": "echo gamma only"})
+    m = p2.wait_for(lambda m: m["t"] == "line" and "gamma only" in m["text"])
+    gamma_seq = m["seq"]
+    leaked = []
+    try:
+        while True:
+            m = p1.recv(0.3)
+            if m is None:
+                break
+            leaked.append(m)
+    except Closed:
+        pass
+    check(not [m for m in leaked if m["t"] == "line"], f"a profile's lines go to its own socket only: {leaked[:3]}")
+    m = p1.ask({"t": "listProfiles"})
+    check(m["t"] == "error" and m["message"] == "listProfiles: send it on the control socket", f"a control request on a profile's socket is refused: {m}")
+
+    m = ctl.wait_for(lambda m: m["t"] == "openProfiles" and open_profiles(m)["Gamma"]["lastSeq"] >= gamma_seq, timeout=3)
+    check(open_profiles(m)["Gamma"]["unread"] == open_profiles(m)["Gamma"]["lastSeq"] > 0, f"the control socket counts each profile's unread lines: {m}")
+    ctl.send({"t": "markSeen", "name": "Gamma", "seq": gamma_seq})
+    m = ctl.wait_for(lambda m: m["t"] == "openProfiles")
+    gamma = open_profiles(m)["Gamma"]
+    check(gamma["unread"] == gamma["lastSeq"] - gamma_seq, f"markSeen counts them from there: {gamma}")
+    for name in ("Delta", "Epsilon"):
+        ask({"t": "openProfile", "name": name, "alongside": True, "connect": False})
+    ctl.send({"t": "setFront", "name": "beta"})
+    m = ctl.wait_for(lambda m: m["t"] == "openProfiles")
+    check([p["name"] for p in m["profiles"] if p["front"]] == ["Beta"], f"setFront moves the front: {m}")
+    m = ask({"t": "openProfile", "name": "Zeta", "alongside": True})
+    check(m == {"t": "error", "message": "openProfile: at most 4 open", "re": m.get("re")}, f"no more than 4 open at once: {m}")
+    m = ask({"t": "setFront", "name": "Zeta"})
+    check(m["t"] == "error" and m["message"] == 'setFront: "Zeta" is not open', f"setFront of a profile not open: {m}")
+    m = ask({"t": "closeProfile", "name": "Nope"})
+    check(m["t"] == "error" and m["message"] == 'closeProfile: "Nope" is not open', f"closeProfile of a profile not open: {m}")
+    m = ask({"t": "deleteProfile", "name": "Delta"})
+    check(m["t"] == "error" and m["message"] == 'deleteProfile: "Delta" is open: open another profile before deleting it',
+          f"deleteProfile of any open profile is refused: {m}")
+    m = ask({"t": "closeProfile", "name": "Beta"})
+    check(m["t"] == "openProfiles" and [(p["name"], p["front"]) for p in m["profiles"]] == [("Gamma", True), ("Delta", False), ("Epsilon", False)],
+          f"closeProfile closes it, and the front goes to the next: {m}")
+    try:
+        p1.wait_for(lambda m: False, timeout=2)
+        closed = False
+    except (Closed, TimeoutError) as e:
+        closed = isinstance(e, Closed)
+    check(closed, "the closed profile's socket closes")
+    m = ask({"t": "openProfile", "name": "Beta", "alongside": True})
+    beta = open_profiles(m).get("Beta", {}) if m["t"] == "openProfiles" else {}
+    check(beta.get("slot") == beta_slot and beta.get("front"), f"a profile opened again takes the lowest free slot: {m}")
+    p1 = Client(beta["socket"])
+    frames = handshake(p1)
+    check(frames[0]["instance"] not in (beta_instance, None) and not [m for m in frames if m["t"] == "line" and "gamma" in m["text"]],
+          f"with a new instance, replaying only its own lines: {frames[0]}")
+    p1.close()
+    m = ask({"t": "closeProfile", "name": "Beta"})
+    check(m["t"] == "openProfiles" and [(p["name"], p["front"]) for p in m["profiles"]] == [("Gamma", False), ("Delta", False), ("Epsilon", True)],
+          f"with none to the right of the front closed, the front goes to the left: {m}")
+    m = ask({"t": "markSeen", "name": "Gamma", "seq": -1})
+    check(m["t"] == "error" and m["message"] == "markSeen: seq must be a whole number from 0", f"markSeen of a seq below 0: {m}")
+    ctl.send({"t": "setFront", "name": "Gamma"})
+    ctl.wait_for(lambda m: m["t"] == "openProfiles" and open_profiles(m)["Gamma"]["front"])
+    p2.close()
+    ctl.close()
+
+    c = Client(SOCK)
+    frames = handshake(c)
+    check(not [m for m in frames if m["t"] == "openProfiles"], "a UI that leaves out profileSockets is not told of the open profiles")
+    if status_map(frames).get("connection") != "connected":
+        c.wait_for(lambda m: m["t"] == "status" and m["key"] == "connection" and m["value"] == "connected")
+    c.send({"t": "send", "text": "echo to the front"})
+    m = c.wait_for(lambda m: m["t"] == "line" and "to the front" in m["text"])
+    check(True, "and talks to the front profile, as in version 14")
+    check([m for m in frames if m["t"] == "hello"][0].get("profile") is None, "on the control socket, whose hello names no profile")
+    m = c.ask({"t": "openProfile", "name": "Beta"})
+    check(m["t"] == "profiles", f"openProfile without alongside closes the others: {m}")
+    for name in ("Gamma", "Delta", "Epsilon", "Zeta"):
+        m = c.ask({"t": "deleteProfile", "name": name})
+    check(profile_checks.names(m) == ["Beta"], f"which can then be deleted: {profile_checks.names(m)}")
+    return c
+
+
 def main():
     faulthandler.register(signal.SIGUSR1)
     port = fake_telnet.start_in_thread()
@@ -400,6 +527,7 @@ def main():
     script_windows(c)
     buttons_and_commands(c)
     c = no_map(c)
+    c = multi_profile(c, port)
 
     # Latency
     samples = []

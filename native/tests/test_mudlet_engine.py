@@ -103,8 +103,8 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (input_line, console, links, app_state, script_windows, window_links, script_labels, button_bars,
-                       map_view, app_map, map_download):
+        for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
+                       script_labels, button_bars, map_view, app_map, map_download):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -524,6 +524,111 @@ def console():
     colours = [m["value"] for m in msgs if m["t"] == "status" and m["key"] == "consoleColors"]
     check(len(colours) == 1 and colours[0].endswith(" #0a141e"), f"a UI that attaches is told the colours: {colours}")
     check(not any(m["t"] == "announce" for m in msgs), "but not the announcements it missed")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def main_window_size(c, msgs, tag):
+    """What getMainWindowSize() gives the profile's scripts now, as "<w>x<h>"; tag tells this read's line apart."""
+    c.send({"t": "runLua", "code": f'local w, h = getMainWindowSize() echo(string.format("main window {tag} %dx%d\\n", w, h))'})
+    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith(f"main window {tag} "), collect=msgs)
+    return m["text"].split()[-1]
+
+
+def naws_stays(size, told):
+    """Whether the game, last told size, is told nothing after its first told NAWS once Mudlet's 0.3 s settling time
+    has passed."""
+    time.sleep(1)
+    return fake_telnet.NAWS_SIZES[told:] == [] and fake_telnet.NAWS_SIZES[-1:] == [size]
+
+
+def connect_and_ask_naws(c, game, msgs):
+    """Connects to the fake game and, once its login prompt is shown, has it ask for NAWS."""
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    # Else the game's answer would continue the open "Login: " line
+    c.wait_for(shown("Login: "), timeout=10, collect=msgs)
+    c.send({"t": "send", "text": "naws"})
+    c.wait_for(shown("NAWS asked"), collect=msgs)
+
+
+def area_grid(m):
+    """A mainArea's main window width (0 for none) and grid."""
+    return m["w"], m["columns"], m["rows"]
+
+
+def screen_and_main_window():
+    """setScreenSize and setMainWindowSize, which the game screen sends in either order, before the profile loads and
+    while it runs: the game is told the console's columns and rows, not the grid Mudlet's font fits in the main
+    window, and scripts read the main window's size the windows UI gave, also after a later setScreenSize. Until a
+    profile has that size, setScreenSize sizes the main window, also when the profile refuses the size kept for it."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    profile = "Screen Size Test"
+    proc, c = start_engine(profile)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "setScreenSize", "columns": 80, "rows": 30})
+    connect_and_ask_naws(c, game, msgs)
+    check(wait_naws((80, 30)), f"the game is told the console's size: {fake_telnet.NAWS_SIZES}")
+    areas = [m for m in msgs if m["t"] == "mainArea"]
+    check(areas and area_grid(areas[-1]) == (0, 80, 30),
+          f"with no main window's size given, the console's size is the main window's: {areas[-1:]}")
+
+    # As the windows UI gives it once the first mainArea has told it Mudlet's font
+    told = len(fake_telnet.NAWS_SIZES)
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    m = c.wait_for(lambda m: m["t"] == "mainArea" and m["w"] == 1000, collect=msgs)
+    check((m["textW"], m["textH"]) == (1000, 800), f"the profile takes the main window's size while it runs: {m}")
+    check(naws_stays((80, 30), told), f"and the game is still told the console's size, not that window's grid: {fake_telnet.NAWS_SIZES}")
+    # A keyboard that shows takes rows from the console, and setScreenSize may come after setMainWindowSize
+    c.send({"t": "setScreenSize", "columns": 72, "rows": 20})
+    check(wait_naws((72, 20)), f"a later setScreenSize reaches the game: {fake_telnet.NAWS_SIZES}")
+    size = main_window_size(c, msgs, "after")
+    check(size == "1000x800", f"and leaves scripts the main window's size the windows UI gave: {size}")
+    areas = [m for m in msgs if m["t"] == "mainArea"]
+    check((areas[-1]["w"], areas[-1]["textW"], areas[-1]["textH"]) == (1000, 1000, 800),
+          f"and the main window's area, which the borders and windows take from: {areas[-1]}")
+    # A large font on a portrait phone
+    c.send({"t": "setScreenSize", "columns": 30, "rows": 20})
+    check(wait_naws((40, 20)), f"a width below 40 is told as 40 then too: {fake_telnet.NAWS_SIZES}")
+    size = main_window_size(c, msgs, "narrow")
+    check(size == "1000x800", f"and the main window keeps its size: {size}")
+    told = len(fake_telnet.NAWS_SIZES)
+    c.send({"t": "setMainWindowSize", "w": 1200, "h": 800})
+    c.wait_for(lambda m: m["t"] == "mainArea" and m["w"] == 1200, collect=msgs)
+    check(naws_stays((40, 20), told), f"a new main window size leaves the game told the console's size: {fake_telnet.NAWS_SIZES}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    # Both given before the profile loads, as to an engine the app attaches to again: the start, which finishes after
+    # the load, keeps them apart too. The game was last told 40 by 20, so 80 by 30 is told anew
+    proc, c = start_engine(profile)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "setScreenSize", "columns": 80, "rows": 30})
+    connect_and_ask_naws(c, game, msgs)
+    check(wait_naws((80, 30)), f"the game is told the console's size given before the load: {fake_telnet.NAWS_SIZES}")
+    size = main_window_size(c, msgs, "loaded")
+    check(size == "1000x800", f"and scripts read the main window's size given before it, once the start finished: {size}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    # A main window's size the profile refuses as it loads, as one that holds no character of its font: the console's
+    # size sizes the main window, and the game is told each new one
+    proc, c = start_engine(profile)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    c.send({"t": "setMainWindowSize", "w": 1, "h": 1})
+    c.send({"t": "setScreenSize", "columns": 60, "rows": 24})
+    connect_and_ask_naws(c, game, msgs)
+    check(wait_naws((60, 24)), f"the game is told the console's size with a refused main window's size: {fake_telnet.NAWS_SIZES}")
+    areas = [m for m in msgs if m["t"] == "mainArea"]
+    check(areas and area_grid(areas[-1]) == (0, 60, 24), f"which is the main window's, as with none: {areas[-1:]}")
+    c.send({"t": "setScreenSize", "columns": 72, "rows": 20})
+    m = c.wait_for(lambda m: m["t"] == "mainArea" and m["columns"] == 72, collect=msgs)
+    check(area_grid(m) == (0, 72, 20), f"a later setScreenSize sizes the main window: {m}")
+    check(wait_naws((72, 20)), f"and reaches the game: {fake_telnet.NAWS_SIZES}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

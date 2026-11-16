@@ -170,7 +170,8 @@ private:
     State mState = State::idle;
     // The profile has loaded, since its start
     bool mLoaded = false;
-    // The main window's size the UI gave, which each profile takes as it loads; empty for none, or once a profile refused it
+    // The main window's size the UI gave, which each profile takes as it loads; empty for none, or once a profile refused it.
+    // While it is set, applyScreenSize() tells the game the UI's console without resizing the main window
     QSize mMainWindowSize{0, 0};
     // The size of the mapper window as pushMap() last had it: none while it did not show
     std::optional<QSize> mMapSize;

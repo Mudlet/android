@@ -506,14 +506,14 @@ void MudletEngine::connectSession()
         mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
         mFrontend->history(mSession->commandHistory());
         reportConsoleColors(mSession->consoleForeground(), mSession->consoleBackground());
-        // As early as the profile takes it, so a game that asks as it connects is not first told 90 by 25
-        applyScreenSize();
         mLoaded = true;
         if (!mMainWindowSize.isEmpty() && !mSession->setMainWindowSize(mMainWindowSize)) {
             qWarning("MudletEngine: the main window's size %dx%d was refused: %s", mMainWindowSize.width(), mMainWindowSize.height(), qPrintable(mSession->errorString()));
-            // So mainArea does not give it as the profile's
+            // So mainArea does not give it as the profile's, and the screen size sizes the main window
             mMainWindowSize = {0, 0};
         }
+        // As early as the profile takes it, so a game that asks as it connects is not first told 90 by 25
+        applyScreenSize();
         pushMainArea();
         pushWindows(true);
         pushButtonBars();
@@ -792,7 +792,7 @@ void MudletEngine::onStartFinished(int result, const QString& error)
         return;
     }
     mState = State::started;
-    // Again, for a setScreenSize that came between profileLoaded and now; the same size changes nothing
+    // Again, for a setScreenSize or setMainWindowSize that came between profileLoaded and now; the same size changes nothing
     applyScreenSize();
     // Refused while the profile loaded
     applyAppActive();
@@ -1281,6 +1281,10 @@ QString MudletEngine::setMainWindowSize(int width, int height)
         mMainWindowSize = before;
         return mSession->errorString();
     }
+    // So the game is told the UI's console, not this size's grid; before the start finishes, onStartFinished() does
+    if (mState == State::started) {
+        applyScreenSize();
+    }
     pushMainArea();
     return {};
 }
@@ -1570,13 +1574,18 @@ void MudletEngine::setScreenSize(int columns, int rows)
     }
 }
 
+// What the game is told. Once the profile has the main window's size the UI gave, which scripts read and place their
+// windows by, the UI's console only tells the game its own columns and rows; until then it sizes the main window too.
 void MudletEngine::applyScreenSize()
 {
     if (mScreenSize.isEmpty()) {
         return;
     }
-    if (!mSession->setScreenSize(mScreenSize.width(), mScreenSize.height())) {
-        qWarning("MudletEngine: setScreenSize(%d, %d) refused: %s", mScreenSize.width(), mScreenSize.height(), qPrintable(mSession->errorString()));
+    const int columns = mScreenSize.width();
+    const int rows = mScreenSize.height();
+    const bool taken = mMainWindowSize.isEmpty() ? mSession->setScreenSize(columns, rows) : mSession->setGameScreenSize(columns, rows);
+    if (!taken) {
+        qWarning("MudletEngine: the screen size %dx%d was refused: %s", columns, rows, qPrintable(mSession->errorString()));
     }
 }
 

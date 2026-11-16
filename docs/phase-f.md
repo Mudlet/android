@@ -35,7 +35,7 @@ these calls' signals.
 | `bool pointer(const QString& window, const WindowPointerEvent& event)` | 809 | The app's pointer on a window, in its pixels: label callbacks with the GUI's event table, click-through, `sysWindowMousePressEvent`/`ReleaseEvent`, the wheel scrolling a console, Qt's implicit grab |
 | `struct WindowPointerEvent` | 772 | `type` (`press`, `release`, `doubleClick`, `move`, `enter`, `leave`, `wheel`), `position` (`QPointF`), `button`, `buttons`, `modifiers`, `angleDelta` |
 | `windowCommandLineText()`, `setWindowCommandLineText()`, `submitWindowCommandLine()`; signal `windowCommandLineTextChanged(profile, commandLines)` | 374-382, 1005 | Command lines from `createCommandLine()` and a console's `enableCommandLine()` |
-| `bool setMainWindowSize(const QSize& pixels)`, `QSize mainConsoleGrid() const`, `QRect mainConsoleTextRect() const`; signal `mainConsoleAreaChanged(profile, grid, textRect)` | 547-551, 1034 | The main window's area in pixels, which the borders (`setBorderTop()` and the rest) take from; the console's grid and where its text goes. `setScreenSize()` (columns, rows) is the other way to size it; the later of the two holds |
+| `bool setMainWindowSize(const QSize& pixels)`, `QSize mainConsoleGrid() const`, `QRect mainConsoleTextRect() const`; signal `mainConsoleAreaChanged(profile, grid, textRect)` | 547-551, 1034 | The main window's area in pixels, which the borders (`setBorderTop()` and the rest) take from; the console's grid and where its text goes. `setScreenSize()` (columns, rows) is the other way to size it; the later of the two holds. Once the profile has the main window's size, the engine gives the console's columns and rows to the carried `setGameScreenSize()` instead, which tells the game them and resizes nothing |
 
 A Geyser gauge, button or container is not a window: a gauge is its `<name>_back`, `<name>_front` and `<name>_text`
 labels (`GeyserGauge.lua`), a button its labels.
@@ -129,9 +129,13 @@ Links in windows extend version 5's `getLink` and `followLink` with a `window` f
 engine would follow the main console's link of that id, that change raised the version, to 12 (after F1P shipped
 without it).
 
-`setMainWindowSize` and version 4's `setScreenSize` both size the main window, and upstream keeps the later. Once
-F1P is in, the app sends only `setMainWindowSize`; Mudlet's grid from it is what NAWS tells the game, so the size is
-chosen to make that grid the app console's (see "Layout").
+`setMainWindowSize` and version 4's `setScreenSize` both size the main window in upstream's API, which keeps the
+later. The app sends both, and the engine keeps them apart: once a profile has the size `setMainWindowSize` gave, the
+console's columns and rows go to `setGameScreenSize()`, carried in `scripts/mudlet-patches/` until Mudlet has it,
+which tells the game (NAWS) that size and leaves the main window's alone. So, in whichever order the two messages
+came, scripts read the main window's size the windows UI measured (`getMainWindowSize()`, and the borders and windows
+placed by it), and the game is told the console the player sees, which in the stacked layout is not Mudlet's grid
+(see "Layout").
 
 The stand-in engine has no windows: it sends empty `windows`, `buttonBars` and `commands` on attach and answers the
 window requests with `error`, so `test_engine.py` and the JVM test cover the framing. `FakeEngine` feeds the app's UI
@@ -147,7 +151,7 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
 - `s` is the app console's character width over Mudlet's, which `mainArea` gives (`textW / columns`, from one whose
   grid is above Mudlet's 40-column floor, as the ratio depends only on the two fonts). The app sends
   `setMainWindowSize(areaPx / s)`, where `areaPx` is the game screen's area above the input line. Mudlet's grid is
-  then the columns and rows the app's console shows, NAWS stays right, and a border a script sets takes the same
+  then the columns and rows the app's console shows, and a border a script sets takes the same
   share of the screen as of Mudlet's window. A font size change or rotation sends the size again.
 - **Fitted**, when the game area is at least 600 dp wide (landscape, tablets, an unfolded phone): the main window's
   area is drawn as on the desktop, scaled by `s`: the console in `mainArea`'s text rectangle, the windows of the main
@@ -158,9 +162,10 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
   windows over its text rectangle still over it; what lies in the top and bottom borders is drawn above and below
   it, scaled to the width; the left and right borders' windows
   and the docks become pages of a window switcher, a row of tabs above the input line that opens a pane over the
-  console, or a bottom sheet when the keyboard is up. The game is told the landscape grid, so its lines rewrap in the
-  narrower console: a setting picks fitted or stacked for the player who prefers the true width. (Mudlet never makes
-  the grid narrower than 40 columns, so a fitted portrait phone with a wide border would have its console cut off.)
+  console, or a bottom sheet when the keyboard is up. The game is told the console's own columns and rows
+  (`setScreenSize`), not the landscape grid, so it wraps its lines for the narrower console: a setting picks fitted or
+  stacked for the player who prefers the true layout. (Mudlet never makes the grid narrower than 40 columns, so a
+  fitted portrait phone with a wide border would have its console cut off.)
 - A floating user window is a page of the switcher on a phone; on a free-form window (Chromebook, desktop mode) it may
   float, later.
 - Script geometry is never trusted to fit: a window that falls outside the area is clipped to it, and a pane whose

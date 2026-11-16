@@ -311,7 +311,7 @@ class GameSwitcherTest {
         false
     }
 
-    private fun string(@StringRes id: Int) = compose.activity.getString(id)
+    private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 

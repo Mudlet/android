@@ -148,7 +148,13 @@ class GhostTextTest {
         // A view of the test's own: in touch mode no button of the app's takes the focus, and the line keeps it
         compose.runOnUiThread {
             val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
-            View(compose.activity).apply { isFocusableInTouchMode = true }.also { content.addView(it, ViewGroup.LayoutParams(1, 1)) }.requestFocus()
+            // Labelled, as the screen's accessibility checks ask of anything focusable
+            val view = View(compose.activity).apply {
+                isFocusableInTouchMode = true
+                contentDescription = "elsewhere"
+            }
+            content.addView(view, ViewGroup.LayoutParams(1, 1))
+            view.requestFocus()
         }
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isEmpty() }
         waitFor(ghost("open door"))

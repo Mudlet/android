@@ -104,6 +104,9 @@ class HistorySheetTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
         session.status("profile", "$profile loaded")
+        // Connected, so no chip beside the game pill: on the CI emulator's 320 px wide screen, the chip leaves the quick bar no room for a pinned command
+        session.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { CommandSuggestions.profile } == profile }
         compose.waitForIdle()
     }

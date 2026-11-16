@@ -114,8 +114,8 @@ def main():
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
-                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_moves, map_rooms,
-                       map_edits, map_download, profile_settings):
+                       script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
+                       map_moves, map_rooms, map_edits, map_download, profile_settings):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -1073,10 +1073,11 @@ def seen_or_none(c, pred, seen, since, timeout=5.0):
         return None
 
 
-def seen_or_next(c, pred, seen, since, timeout=5.0):
+def seen_or_next(c, pred, seen, since, timeout=5.0, what=None):
     """The first message from seen[since:] that pred takes, or else the next one to come. The session sends a turn's
     main console lines as it runs and its script windows, their text and command lines from the event loop after it,
-    so a wait for one of those has already collected a line the same turn wrote. On a timeout, says what came."""
+    so a wait for one of those has already collected a line the same turn wrote. On a timeout, says what it waited
+    for, where what is given, and what came."""
     found = next((m for m in seen[since:] if pred(m)), None)
     if found is not None:
         return found
@@ -1084,7 +1085,8 @@ def seen_or_next(c, pred, seen, since, timeout=5.0):
         return c.wait_for(pred, timeout=timeout, collect=seen)
     except TimeoutError:
         came = [masked(str(m))[:200] for m in seen[since:]]
-        raise TimeoutError(f"message not received; since the request: {came}") from None
+        waited = f" ({what})" if what else ""
+        raise TimeoutError(f"message not received{waited}; since the request: {came}") from None
 
 
 def script_windows():
@@ -1547,6 +1549,149 @@ def script_labels():
 def text_box_of(msgs, name):
     """The last textBox message for a text box, or None."""
     return next((m for m in reversed(msgs) if m["t"] == "textBox" and m["name"] == name), None)
+
+
+# A label's links as Qt reads them: a quoted value whole, a quote or a ">" in it kept, and entities decoded but in
+# single quotes. RichTextTest.linksKeepTheirTargetsAsQtReadsThem gives the app's reading of this same text, which must
+# be QUOTED_LINK_TARGETS, the hrefs the engine follows below.
+QUOTED_LINKS = ("""<a href="send:echo 'hi'">hi</a> <a href="send:echo hp > 50">hp</a> """
+                """<a href="labelSaid = 'caf&eacute; &#233;'">cafe</a> <a href='labelSingle = "&amp;"'>single</a>""")
+QUOTED_LINK_TARGETS = ("send:echo 'hi'", "send:echo hp > 50", "labelSaid = 'caf\u00e9 \u00e9'", 'labelSingle = "&amp;"')
+# Links Qt reads though Mudlet's containsAnchorTag() misses them, with no other link in the label that it finds: a raw
+# "<" in a quoted href, and a space after the tag's "<". RichTextTest.linksKeepTheirTargetsAsQtReadsThem reads them too.
+RAW_LT_LINKS = '<a href="labelLt = 1 < 2">lt</a> < a href="labelSpaced = true">spaced</a>'
+RAW_LT_LINK_TARGETS = ("labelLt = 1 < 2", "labelSpaced = true")
+
+
+def label_links():
+    """A label's links followed as the GUI's click follows them (patch 0014): followLabelLink sending a send: link's
+    command through the aliases, putting a prompt: link's text on the input line and running anything else as Lua,
+    without an answer; the hrefs the app reads from quoted values and entities, and from links with a raw "<",
+    followed; a web link left to the UI, and a link the label does not have, a Lua error and a scheme Mudlet does not
+    handle refused, each running nothing; a prompt: link refused while the game hides input, as the desktop would put
+    its text in its hidden-input box, which the app is not sent; and a followed link sent again in the label, in the
+    visited colour setLinkStyle gives, and a web link not. The game sends WILL ECHO only for that one step, asked for
+    with its password command: while it hides input, Mudlet puts printCmdLine()'s text on no line the app shows."""
+    game = fake_telnet.start_in_thread(banner=b"Label links game\r\n")
+    proc, c = start_engine("Label Links Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    m = c.ask({"t": "followLabelLink", "label": "links", "href": "send:n"}, answers=("error",), collect=seen)
+    check(m["message"] == "followLabelLink: no profile running", f"followLabelLink with no profile open is refused: {m}")
+
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'tempAlias("^n$", [[send("echo north", false)]])',
+        'createLabel("links", 0, 0, 400, 40, 1)',
+        'echo("links", [[<a href="send:n">go</a> <a href="prompt:tell Bob ">tell</a> <a href="https://example.org/">site</a> '
+        '<a href="labelRan = (labelRan or 0) + 1">count</a> <a href="error(\'label link error\')">bad</a> '
+        '<a href="mailto:bob@example.org">mail</a>]])',
+        'createLabel("plain", 0, 50, 100, 20, 1)',
+        'echo("plain", "no links here")',
+        'createLabel("quoted", 0, 80, 400, 20, 1)',
+        f'echo("quoted", [[{QUOTED_LINKS}]])',
+        'createLabel("rawlt", 0, 110, 400, 20, 1)',
+        f'echo("rawlt", [[{RAW_LT_LINKS}]])',
+    ])})
+    seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "links" and "mail" in m["text"], seen, since)
+    for name in ("plain", "quoted", "rawlt"):
+        seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == name, seen, since)
+    followed = 0
+    # The latest follow, as a timeout names it
+    following = ""
+
+    def follow(href, label="links"):
+        """The error that answers followLabelLink, or None where there was none before the echo sent after it."""
+        nonlocal followed, following
+        followed += 1
+        request_id = f"follow{followed}"
+        following = f"{request_id}, {href!r} in {label!r}"
+        since = len(seen)
+        c.send({"t": "followLabelLink", "label": label, "href": href, "id": request_id})
+        c.send({"t": "runLua", "code": f'echo("after {request_id}\\n")'})
+        seen_or_next(c, shown(f"after {request_id}"), seen, since, what=f"the echo after {following}")
+        return next((m for m in seen[since:] if m["t"] == "error" and m.get("re") == request_id), None)
+
+    since = len(seen)
+    m = follow("send:n")
+    seen_or_next(c, shown("You said: north"), seen, since, what=f"the game's answer to {following}")
+    check(m is None, f"a send: link sends its command through the aliases, unanswered: {m}")
+    since = len(seen)
+    m = follow("prompt:tell Bob ")
+    line = seen_or_next(c, lambda m: m["t"] == "commandLine" and m["text"], seen, since, what=f"the commandLine from {following}")
+    check(m is None and line["text"] == "tell Bob ", f"a prompt: link puts its text on the input line, its space kept: {line} {m}")
+    since = len(seen)
+    c.send({"t": "send", "text": "password"})
+    seen_or_next(c, lambda m: m["t"] == "hiddenInput" and m["wanted"], seen, since, what="hiddenInput from the game's password prompt")
+    # The prompt's line, "Password: ", ends here, so the echo after the follow is a line of its own
+    c.send({"t": "runLua", "code": 'echo("\\n")'})
+    m = follow("prompt:tell Bob ")
+    put = [x for x in seen[since:] if x["t"] == "commandLine" and x["text"]]
+    check(m is not None and m["message"].startswith("followLabelLink: ") and "hiding input" in m["message"] and not put,
+          f"while the game hides input, a prompt: link is refused, with nothing put on the input line: {m} {put}")
+    since = len(seen)
+    # Any line ends the game's password prompt, with WONT ECHO
+    c.send({"t": "sendHidden", "text": "label links"})
+    seen_or_next(c, lambda m: m["t"] == "hiddenInput" and not m["wanted"], seen, since, what="the game's WONT ECHO after the password")
+    m = follow("labelRan = (labelRan or 0) + 1")
+    check(m is None, f"and any other link runs as Lua: {m}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'echo("ran " .. tostring(labelRan) .. "\\n")'})
+    seen_or_next(c, shown("ran 1"), seen, since)
+
+    since = len(seen)
+    answers = [follow(href, "quoted") for href in QUOTED_LINK_TARGETS]
+    check(answers == [None] * len(QUOTED_LINK_TARGETS), f"the hrefs the app reads from quoted values and entities are the label's: {answers}")
+    c.send({"t": "runLua", "code": 'echo("quoted " .. tostring(labelSaid) .. " " .. tostring(labelSingle) .. "\\n")'})
+    for text in ("You said: 'hi'", "You said: hp > 50", "quoted caf\u00e9 \u00e9 &amp;"):
+        seen_or_next(c, shown(text), seen, since, what=f"{text!r} from the quoted links")
+    since = len(seen)
+    answers = [follow(href, "rawlt") for href in RAW_LT_LINK_TARGETS]
+    check(answers == [None] * len(RAW_LT_LINK_TARGETS), f"and so are links with a raw '<', as Qt reads them: {answers}")
+    c.send({"t": "runLua", "code": 'echo("rawlt " .. tostring(labelLt) .. " " .. tostring(labelSpaced) .. "\\n")'})
+    seen_or_next(c, shown("rawlt true true"), seen, since, what="what the raw '<' links ran")
+
+    for href in ("https://example.org/", " HTTP://example.org/ "):
+        m = follow(href)
+        check(m is not None and m["message"] == "followLabelLink: the UI opens web links", f"a web link, {href!r}, is the UI's to open, and refused: {m}")
+    m = follow("error('label link error')")
+    check(m is not None and m["message"].startswith("followLabelLink: ") and "label link error" in m["message"],
+          f"a link whose Lua fails is refused with its error: {m}")
+    m = follow("mailto:bob@example.org")
+    check(m is not None and m["message"].startswith("followLabelLink: ") and "mailto: is not a scheme Mudlet handles" in m["message"],
+          f"a scheme Mudlet does not handle, that is no Lua, is refused: {m}")
+    for label, href in (("links", "send:south"), ("links", "send:n "), ("nonesuch", "send:n"), ("plain", "send:n"), ("main", "send:n")):
+        m = follow(href, label)
+        check(m is not None and m["message"].startswith("followLabelLink: ") and f'"{label}"' in m["message"],
+              f"a link {label!r} does not have, {href!r}, is refused: {m}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'echo("ran " .. tostring(labelRan) .. " again\\n")'})
+    seen_or_next(c, shown("ran 1 again"), seen, since)
+    norths = [m for m in lines_of(seen) if m["text"] == "You said: north"]
+    stray = [m for m in seen if m["t"] == "commandLine" and m["text"] not in ("", "tell Bob ")]
+    check(len(norths) == 1 and not stray, f"and none of those ran anything: {norths} {stray}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'setLinkStyle("links", "#00ff00", "#ff00ff")'})
+    m = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "links" and "#00ff00" in m["text"], seen, since)
+    check("#ff00ff" not in m["text"], f"setLinkStyle sends the label again, in the link colour: {m['text'][:300]}")
+    since = len(seen)
+    web = follow("https://example.org/")
+    m = follow("send:n")
+    # Every restyle that shows send:n visited comes after the web link's refusal, so it would show that one visited too
+    restyled = seen_or_next(c, lambda m: m["t"] == "label" and m["name"] == "links" and '<a href="send:n" style="color: #ff00ff;' in m["text"],
+                            seen, since, what=f"the label restyled by {following}")
+    check(web is not None and m is None and not any(windows_with("links", "label")(w) for w in seen[since:]),
+          f"a link followed is sent again in the visited colour, with no windows message: {restyled['text'][:300]} {web} {m}")
+    check(restyled["text"].count("#ff00ff") == 1 and '<a href="https://example.org/" style="color: #00ff00;' in restyled["text"],
+          f"and only that link, not the web link refused before it: {restyled['text'][:600]}")
+    seen_or_next(c, shown("You said: north"), seen, since, what=f"the game's answer to {following}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def script_text_boxes():

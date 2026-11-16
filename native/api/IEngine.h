@@ -84,6 +84,9 @@ public:
     virtual QString setTextBoxText(const QString& name, QString& text) = 0;
     // The player's tap on a tab of an MXP frame's tab header, which brings that page, the MXP frame name, forward
     virtual QString selectFrameTab(const QString& name) = 0;
+    // The player's tap on a link in a label's text, href as the label's text holds it, followed as Mudlet's GUI follows
+    // a click on it
+    virtual QString followLabelLink(const QString& label, const QString& href) = 0;
     // What the UI's pointer did on a window
     virtual QString pointer(const QString& window, const PointerEvent& event) = 0;
     // The image file, or icon, at path as PNG, scaled to size unless it is empty, or that frame of an animated one;

@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 21
+const val PROTOCOL_VERSION = 22
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -687,6 +687,14 @@ object Requests {
 
     /** The player's tap on the tab of the MXP frame page [name] (ScriptWindow.FrameTabs), which brings it forward. */
     fun selectFrameTab(name: String): JSONObject = JSONObject().put("t", "selectFrameTab").put("name", name)
+
+    /**
+     * The player's tap on the link [href] in the text of the label [label]: the engine follows it as Mudlet's click
+     * does. Answered, with [id] as its replyTo, only by an Error, when refused; a web link is always refused, as the UI
+     * opens it.
+     */
+    fun followLabelLink(label: String, href: String, id: Long): JSONObject = JSONObject()
+        .put("t", "followLabelLink").put("label", label).put("href", href).put("id", id)
 
     /**
      * What the pointer did at [x], [y] in [window]'s pixels ("main" for the main console's area): [button] that

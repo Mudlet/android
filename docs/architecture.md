@@ -547,6 +547,7 @@ keeps the profiles' passwords in the KeyStore.
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
+| `followLabelLink()` (carried patch); a web link is the UI's | `followLabelLink`, answered only when refused, and always for a web link |
 | `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
 | `frameTabs` of each MXP frame's script window, read with `scriptWindows()`; `selectFrameTab()` (carried patch) | `tabs`, `tabTitles` and `tabCurrent` in the header frame's `windows` entry; `selectFrameTab`, answered only when refused |
@@ -647,6 +648,12 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   region, from Geyser's `liveRegion` and each `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; its
   accessible value, from each `setLabelAccessibleValue()` or `clearLabelAccessibleValue()` alone, as `label`, clamped
   to its range, and a refused one sending nothing; every label to a UI that attaches; `deleteLabel()` as `removed`;
+- label links: `followLabelLink` sending a `send:` link's command through the aliases, a `prompt:` link's text as
+  `commandLine`, its space kept, and running any other link as Lua, none of them answered; the hrefs the app reads
+  from quoted values and entities, and from links with a raw `<` (the same as `RichTextTest`'s), followed; refused
+  before a profile is open, for a web link, Lua that fails, a `mailto:` link, a `prompt:` link while the game hides
+  input, and a link, or a label, there is not, none of them running anything; a link followed sent again in the
+  visited colour of `setLinkStyle()`, and only that one, not a web link;
 - text boxes: `createTextEdit()` with `setTextEditText()`, `setTextEditPlaceholder()`, `setTextEditStyleSheet()` and
   `setTextEditTabMovesFocus()` as `textBox` after its `windows`, with its `typed`; `setTextBoxText` read back by
   `getTextEditText()` and not sent back, by a later `windows` either, and a script's text after it sent, the text from

@@ -152,6 +152,7 @@ def script_windows(c):
     for request in ({"t": "setMainWindowSize", "w": 800, "h": 600}, dict(side, t="placeUserWindow"),
                     {"t": "closeUserWindow", "name": "side"}, {"t": "sendWindowCommandLine", "name": "chat", "text": "hi"},
                     {"t": "setTextBoxText", "name": "notes", "text": "hi"}, {"t": "selectFrameTab", "name": "chat"},
+                    {"t": "followLabelLink", "label": "bar", "href": "send:look"},
                     {"t": "pointer", "window": "box", "type": "press", "x": 1.5, "y": 2, "button": 1, "buttons": 1},
                     {"t": "getImage", "path": "/no/such.png", "w": 16, "h": 16, "frame": 0}):
         m = c.ask(request, answers=("error",))

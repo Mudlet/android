@@ -122,6 +122,7 @@ image by path and size while the profile runs.
 | `sendWindowCommandLine` | `name`, `text` | `setWindowCommandLineText()`, then `submitWindowCommandLine()` |
 | `setTextBoxText` | `name`, `text` | `setTextBoxText()` (gap 4, carried): what the player typed; a refusal is `error`, then the box's `textBox` |
 | `selectFrameTab` | `name` | `selectFrameTab()` (gap 5, carried): the player's tap on an MXP frame's tab, by the page's frame name; a refusal is `error` |
+| `followLabelLink` | `label`, `href`, `id`? | `followLabelLink()` (gap 1, carried): the player's tap on a link in a label's text, followed as Mudlet's click does; a web link the app opens itself, and the engine refuses; a refusal is `error` |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | Reads the file, or `QIcon(path)` at that size, or that frame of a movie (`QMovie`), answered by `image` |
 | `pressButton` | `id` | `pressButton()`; a refusal is `error` |
 | `activateCommand` | `id` | `activateAddonCommand()`; a refusal is `error` |

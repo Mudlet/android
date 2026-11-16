@@ -44,9 +44,9 @@ import java.util.Base64
 
 /**
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
- * settings (the hub, a search and a page, and in light mode the hub and a page side by side on a tablet), the map in
- * front with a downloaded map and dragged off the player, and the game sheet with two games open, light and dark,
- * against a fake engine, for a pull request that changes how they look. Each is saved in the app's
+ * settings (the hub, a search and two pages, and in light mode the hub and a page side by side on a tablet), the
+ * map in front with a downloaded map and dragged off the player, and the game sheet with two games open, light and
+ * dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */
@@ -113,6 +113,10 @@ class ScreenshotTest {
         activate(hasText(string(R.string.settings_appearance)))
         waitFor(hasText(string(R.string.settings_text_size)))
         save("settings-appearance-$mode")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText(string(R.string.settings_connection)))
+        waitFor(hasText(string(R.string.settings_gmcp)))
+        save("settings-connection-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
 

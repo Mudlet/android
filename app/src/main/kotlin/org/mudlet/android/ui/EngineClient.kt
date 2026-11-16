@@ -198,6 +198,7 @@ object EngineClient {
         if (!send(Requests.setFront(session.name))) return false
         requestedFront = session.name
         moveFront(session)
+        markFrontSeen()
         return true
     }
 
@@ -242,6 +243,13 @@ object EngineClient {
             heldMarkers.forEach(session::addMarker)
             heldMarkers.clear()
         }
+    }
+
+    // The player sees the front game's lines as they come, so the engine counts its unread lines from the last
+    private fun markFrontSeen() {
+        val session = frontSession ?: return
+        if (!attached || (session.unread == 0L && !session.attention)) return
+        if (send(Requests.markSeen(session.name, session.engineLastSeq))) session.seen()
     }
 
     // False when the link is down and the request was dropped
@@ -335,6 +343,9 @@ object EngineClient {
         val requested = requestedFront?.let { name -> kept.firstOrNull { it.name == name } }
         if (requested == null || requested === engineFront) requestedFront = null
         moveFront(requested ?: engineFront ?: kept.firstOrNull())
+        // After the front has moved: a game in the background that wants attention is said to
+        for ((session, profile) in kept.zip(open)) session.counted(profile)
+        markFrontSeen()
         wantedFront?.let { (name, onShown) ->
             wantedFront = null
             if (setFront(name)) onShown()

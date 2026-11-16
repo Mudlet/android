@@ -37,9 +37,19 @@ LOG = os.path.join(TMP, "engine.log")
 BOLD = 1
 failures = []
 engines = []
+# Secrets a check and the engine log's dump show as <label>, never as they are: label to secret
+masked_secrets = {}
+
+
+def masked(text):
+    """text with each of masked_secrets as its label, the longest first."""
+    for label, secret in sorted(masked_secrets.items(), key=lambda item: -len(item[1])):
+        text = text.replace(secret, f"<{label}>")
+    return text
 
 
 def check(cond, what):
+    what = masked(what)
     print(("PASS " if cond else "FAIL ") + what, flush=True)
     if not cond:
         failures.append(what)
@@ -115,7 +125,7 @@ def main():
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
-            print(f.read()[-4000:])
+            print(masked(f.read())[-4000:])
         sys.exit(1)
     print("\nall passed")
 
@@ -1054,10 +1064,10 @@ def windows_with(name, kind, pred=lambda w: True):
     return lambda m: m["t"] == "windows" and any(w["name"] == name and w["kind"] == kind and pred(w) for w in m["windows"])
 
 
-def seen_or_none(c, pred, seen, since):
+def seen_or_none(c, pred, seen, since, timeout=5.0):
     """As seen_or_next, but None on a timeout, for a check to fail and the test to go on."""
     try:
-        return seen_or_next(c, pred, seen, since)
+        return seen_or_next(c, pred, seen, since, timeout=timeout)
     except TimeoutError:
         return None
 
@@ -1072,7 +1082,7 @@ def seen_or_next(c, pred, seen, since, timeout=5.0):
     try:
         return c.wait_for(pred, timeout=timeout, collect=seen)
     except TimeoutError:
-        came = [str(m)[:200] for m in seen[since:]]
+        came = [masked(str(m))[:200] for m in seen[since:]]
         raise TimeoutError(f"message not received; since the request: {came}") from None
 
 
@@ -2351,9 +2361,10 @@ def app_map():
 
 class MapServer(http.server.BaseHTTPRequestHandler):
     """The game's web server for map_download(): FILES by path, /slow.dat trickling 400000 bytes over 20 seconds, so a
-    download of it can be cancelled, and 404 for any other path."""
+    download of it can be cancelled, and 404 for any other path, with its reason from REASONS if there is one."""
     FILES = {}
     PATHS = []
+    REASONS = {}
 
     def log_message(self, *args):
         pass
@@ -2374,7 +2385,7 @@ class MapServer(http.server.BaseHTTPRequestHandler):
             return
         body = MapServer.FILES.get(self.path)
         if body is None:
-            self.send_error(404, "Not Found")
+            self.send_error(404, MapServer.REASONS.get(self.path, "Not Found"))
             return
         self.send_response(200)
         self.send_header("Content-Length", str(len(body)))
@@ -2391,16 +2402,22 @@ def map_download():
     a user name, a password and a token; downloadMap loading it, a Mudlet binary map or an XML one, in place of the
     profile's, with progress at most once a percent, no cancel once the map has arrived, sysMapDownloadEvent, the rooms
     then found and the app's map drawn; a UI that attaches told of it; a download that fails, with Mudlet's reason, or is
-    cancelled, leaving the map as it was; the refusals; and the user name, password and token in no frame or log."""
+    cancelled, leaving the map as it was; the refusals; a script's map export and import, whose progress is not the
+    download's, even an export's read with downloadMap; and the user name, password and token in no frame or log, nor in
+    the reason a failure gives when the server's own words repeat them, however the password is encoded, and with a
+    space in the user name."""
     # A password that reads differently percent-encoded, as the URL holds it
     user, password, encoded = "mapuser", "p@ss:w/rd%never", "p%40ss%3Aw%2Frd%25never"
     token = "sekrit-token"
+    masked_secrets.update({"the URL's user name": user, "the URL's password": password,
+                           "the URL's password encoded": encoded, "the URL's token": token})
     served = os.path.join(TMP, "served")
     os.makedirs(served, exist_ok=True)
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), MapServer)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    fake_telnet.MAP_URL_BASE = f"http://{user}:{encoded}@127.0.0.1:{server.server_address[1]}"
+    http_port = server.server_address[1]
+    fake_telnet.MAP_URL_BASE = f"http://{user}:{encoded}@127.0.0.1:{http_port}"
     # A version far past any Mudlet's: refused before the profile's map is touched
     MapServer.FILES["/garbage.dat"] = b"\x7f\xff\xff\xff" + b"not a map " * 100
     MapServer.FILES["/map.xml"] = (b'<?xml version="1.0" encoding="UTF-8"?>\n<map><areas><area id="5" name="Xml Area"/></areas>'
@@ -2523,6 +2540,77 @@ def map_download():
               f"naming the URL by its host only, without its path or query: {m}")
     except TimeoutError as e:
         check(False, f"a map the server does not have fails: {e}")
+
+    # A server whose reason repeats the URL's user name, password and token, which Mudlet's console shows as the server's
+    # words: the engine's reason still names the host only, the password masked. The game writes the password's
+    # percent-encoding in lower case, and encodes a '~' that need not be, which Qt normalises to upper case and '~'; the
+    # server repeats it decoded, as Qt shows it (PrettyDecoded: '@', '/' and '~' decoded) and encodes it, and as the
+    # game wrote it, as it is and with each hex digit in the other case. The user name is an e-mail address, whose '@',
+    # repeated decoded, is not where the host begins, nor is another address's '@' in another URL the reason gives.
+    echo_user, echo_password, echo_token = "echouser@mail.example", "Ec7q@Zt4k:Wm9v/Rb2d%Hn6j~", "echo-token-5Kw"
+    echo_encoded, echo_written = "Ec7q%40Zt4k%3AWm9v%2FRb2d%25Hn6j~", "Ec7q%40Zt4k%3aWm9v%2fRb2d%25Hn6j%7E"
+    echo_shown = "Ec7q@Zt4k%3AWm9v/Rb2d%25Hn6j~"
+    echo_other_case = re.sub(r"%[0-9A-Fa-f]{2}", lambda m: m[0].swapcase(), echo_written)
+    # A user name with a space, which would end a URL in text, that the server repeats decoded in the URL; and the URL's
+    # query, which it repeats after the path alone
+    spaced_user, spaced_password, spaced_token = "john doe", "ws-pass-8Qd", "ws-token-3Rt"
+    echo_secrets = {"the password": echo_password, "the password encoded": echo_encoded,
+                    "the password as written": echo_written, "the password as Qt shows it": echo_shown,
+                    "the password in the other hex case": echo_other_case, "the user name": echo_user,
+                    "the token": echo_token,
+                    "the user name with a space": spaced_user, "its URL's password": spaced_password,
+                    "its URL's token": spaced_token}
+    # The decoded password's '/' and '@' would end a URL early, leaving pieces of it should it go unmasked
+    echo_pieces = {f"the password's piece {i}": piece for i, piece in enumerate(re.findall(r"[A-Za-z0-9]{4,}", echo_password))}
+    masked_secrets.update({**echo_secrets, **echo_pieces})
+    base = fake_telnet.MAP_URL_BASE
+
+    def failed_from(url_base, path, what):
+        """The failed mapDownload of path, offered from url_base; None, with what as a FAIL, should it not come."""
+        since = len(seen)
+        fake_telnet.MAP_URL_BASE = url_base
+        try:
+            c.send({"t": "send", "text": f"map {path}"})
+            seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
+        finally:
+            fake_telnet.MAP_URL_BASE = base
+        c.send({"t": "downloadMap"})
+        try:
+            return seen_or_next(c, download(state="failed"), seen, since, timeout=30)
+        except TimeoutError as e:
+            check(False, f"{what}: {e}")
+            return None
+
+    MapServer.REASONS["/echo.dat?token=" + echo_token] = (
+        f"No map for http://{echo_user}:{echo_password}@127.0.0.1:{http_port}/echo.dat?token={echo_token} whose password "
+        f"is {echo_encoded}, {echo_shown}, {echo_written} or {echo_other_case} - try "
+        f"http://guest@mail.example:guest@127.0.0.1:{http_port}/echo.dat")
+    echo_masked = "whose password is ***, ***, *** or ***"
+    echo = len(seen)
+    m = failed_from(f"http://{echo_user.replace('@', '%40')}:{echo_written}@127.0.0.1:{http_port}",
+                    f"echo.dat?token={echo_token}", "a map the server repeats the URL for fails")
+    if m is not None:
+        check(f"No map for http://127.0.0.1:{http_port} {echo_masked}" in m["error"],
+              f"a server's reason that repeats the URL names its host only, the password masked in each form: {m['error']}")
+        urls = set(re.findall(r"[A-Za-z][A-Za-z0-9+.-]*://\S*", m["error"]))
+        check(urls == {f"http://127.0.0.1:{http_port}"}, f"and a user name's '@' does not stand for the host: {urls}")
+    MapServer.REASONS["/spaced.dat?token=" + spaced_token] = (
+        f"No map for http://{spaced_user}:{spaced_password}@127.0.0.1:{http_port}/spaced.dat - ask again at "
+        f"/spaced.dat?token={spaced_token}")
+    m = failed_from(f"http://{spaced_user.replace(' ', '%20')}:{spaced_password}@127.0.0.1:{http_port}",
+                    f"spaced.dat?token={spaced_token}", "a map whose user name has a space fails")
+    if m is not None:
+        check(f"No map for http://127.0.0.1:{http_port} - ask again at " in m["error"],
+              f"a URL the server repeats with a user name with a space in it names its host only: {m['error']}")
+        check(m["error"].endswith(" /spaced.dat?***"), f"and the query after the path is masked: {m['error']}")
+    # A password that is a word of the server's reason in another case: masked as it is, the word kept
+    MapServer.REASONS["/gone.dat"] = "Gone: no map here, it is gone"
+    masked_secrets["the password that is a word"] = "Gone"
+    m = failed_from(f"http://caseuser:Gone@127.0.0.1:{http_port}", "gone.dat",
+                    "a map whose password is a word of the reason fails")
+    if m is not None:
+        check(m["error"].endswith(" ***: no map here, it is gone"),
+              f"a password that is a word of the reason in another case is masked as it is, the word kept: {m['error']}")
     since = len(seen)
     c.send({"t": "send", "text": "map garbage.dat"})
     seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
@@ -2587,6 +2675,54 @@ def map_download():
     m = c.ask({"t": "findRooms", "text": "Downloaded"}, answers=("rooms", "error"), collect=seen)
     check(m.get("rooms") == [], f"in place of the map before it: {m}")
 
+    # A script's map export and import, which Mudlet shows the progress of as it does the download's: not the download's.
+    # Headless, a script's map functions work once the app's map has been opened, by the setAppMapSize above.
+    json_map = os.path.join(TMP, "script-map.json")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        f"local saved = saveJsonMap({json.dumps(json_map)})",
+        f"local loaded = loadJsonMap({json.dumps(json_map)})",
+        'echo("json " .. tostring(saved) .. " " .. tostring(loaded) .. "\\n")',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("json "), seen, since, timeout=15)
+    check(m["text"] == "json true true", f"a script exports the map as JSON and imports it again: {m}")
+    # Its progress is relayed from the event loop: a marker after it has come after any
+    c.send({"t": "runLua", "code": 'echo("json marker\\n")'})
+    seen_or_next(c, shown("json marker"), seen, since)
+    script_frames = [m for m in seen[since:] if m["t"] == "mapDownload"]
+    check(not script_frames, f"its progress is not the download's: {script_frames}")
+    m = c.ask({"t": "findRooms", "text": "Xml"}, answers=("rooms", "error"), collect=seen)
+    check([r["id"] for r in m.get("rooms", [])] == [7], f"and the map is the one it exported: {m}")
+
+    # A script's export and a downloadMap the engine reads in the same pass: the export's last progress, relayed from the
+    # event loop once the download has begun, is not the download's either, which can be cancelled until it arrives
+    since = len(seen)
+    c.send({"t": "send", "text": "map slow.dat"})
+    seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
+    since = len(seen)
+    send_together(c, {"t": "runLua", "code": f'echo("d1 " .. tostring(saveJsonMap({json.dumps(json_map)})) .. "\\n")'},
+                  {"t": "downloadMap"})
+    try:
+        seen_or_next(c, lambda m: m["t"] == "mapDownload" and m["state"] == "downloading" and m["value"] > 0, seen, since,
+                     timeout=15)
+    except TimeoutError as e:
+        check(False, f"a download read with a script's export sends its progress: {e}")
+    cancel = len(seen)
+    c.send({"t": "cancelMapDownload"})
+    m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "mapDownload" and m["state"] != "downloading"), seen, cancel,
+                     timeout=15)
+    # The export ran, before the download began: else the checks below would hold with nothing to keep off it
+    exported = seen_or_none(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("d1 "), seen, since)
+    check(exported is not None and exported["text"] == "d1 true", f"the script's export read with downloadMap succeeds: {exported}")
+    downloading = [m for m in seen[since:] if m["t"] == "mapDownload" and m["state"] == "downloading"]
+    check(downloading and not any("JSON" in m["label"] for m in downloading),
+          f"a download read with a script's export shows none of the export's progress: {[m['label'] for m in downloading]}")
+    check(all(m["cancelable"] for m in downloading), f"and can be cancelled until the map arrives: {downloading}")
+    check(m == dict(nothing, offered=True, host="127.0.0.1", state="cancelled"), f"and cancelMapDownload cancels it: {m}")
+    if m["t"] == "error":
+        # The slow map's 20 seconds, for the next profile not to close this one mid-download
+        seen_or_none(c, lambda m: m["t"] == "mapDownload" and m["state"] != "downloading", seen, cancel, timeout=30)
+
     # Another profile: the first one's offer goes with it
     other = "Map Download Other"
     c.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
@@ -2594,12 +2730,24 @@ def map_download():
     since = len(seen)
     c.send({"t": "openProfile", "name": other, "connect": False})
     wait_status(c, "profile", lambda v: v == f"{other} loaded", seen)
-    check([m for m in seen[since:] if m["t"] == "mapDownload"] == [nothing], f"a profile that closes takes its offer with it: "
-          f"{[m for m in seen[since:] if m['t'] == 'mapDownload']}")
+    closing_frames = [m for m in seen[since:] if m["t"] == "mapDownload"]
+    check(closing_frames == [nothing], f"a profile that closes takes its offer with it: {closing_frames}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     for secret in (password, encoded, user, token):
         profile_checks.password_kept_out(check, secret, seen, LOG)
+    # Mudlet's console has the server's words, the echoed ones too; no other frame, nor the engine's log, has any of them.
+    # The pieces only in mapDownload, as an image's base64 can hold any four characters.
+    since_echo = [m for m in seen[echo:] if m["t"] not in ("line", "tail")]
+    with open(LOG, errors="replace") as f:
+        log = f.read()
+    logged = [line for line in log.splitlines() if "MudletEngine: the map download from" in line]
+    check(any(echo_masked in line for line in logged), f"the engine logs the failure: {logged[-3:]}")
+    echo_downloads = [m for m in since_echo if m["t"] == "mapDownload"]
+    for secrets, frames in ((echo_secrets, since_echo), (echo_pieces, echo_downloads)):
+        for label, secret in secrets.items():
+            check(not any(secret in repr(m) for m in frames), f"no frame but the console's carries {label} the server's reason repeats")
+            check(secret not in log, f"the engine's log does not have {label} the server's reason repeats")
     server.shutdown()
 
 

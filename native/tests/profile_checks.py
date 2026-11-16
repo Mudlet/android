@@ -115,7 +115,7 @@ def round_trips(c, check, port, password, game_connections, logged_in=lambda: No
 
 def password_kept_out(check, password, seen, log_path):
     """Neither a frame the UI got nor the engine's log has the password in it."""
-    in_frames = [m for m in seen if password in repr(m)]
+    in_frames = [repr(m).replace(password, "<the password>") for m in seen if password in repr(m)]
     check(not in_frames, f"no frame carries the password: {in_frames[:3]}")
     with open(log_path, errors="replace") as f:
         log = f.read()

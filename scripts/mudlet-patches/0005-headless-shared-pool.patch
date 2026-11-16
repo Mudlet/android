@@ -15,6 +15,7 @@ still refuses it. The pool is shared among the sessions holding it:
   the app's state, shared across the pool.
 - A joining start() is refused where the pool's other sessions' calls are: while a profile loads, and from a handler
   of a signal sent mid-write.
+- A start() for a profile the pool has open already is refused, before its connection details are stored.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 
@@ -75,7 +76,7 @@ index 4cf61d8..85db218 100644
  does. `soundsMuted()` reads it, and is false with no profile open. `soundsMutedChanged` follows every
  change from the event loop, whoever made it, a script's `setConfig()` in any of the profiles included,
 diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
-index 3f7f93e..5907ab2 100644
+index 3f7f93e..eb405f6 100644
 --- a/src/headless/THeadlessSession.cpp
 +++ b/src/headless/THeadlessSession.cpp
 @@ -117,7 +117,7 @@ bool resetPending(const HostManager& pool)
@@ -248,7 +249,21 @@ index 3f7f93e..5907ab2 100644
      mProfileName = MudletApp::getCanonicalProfileName(options.profile);
      if (mProfileName.isEmpty() && options.host.isEmpty()) {
          mpPool.reset();
-@@ -2085,11 +2157,95 @@ void THeadlessSession::beginShutdown(const bool save, const std::shared_ptr<bool
+@@ -591,6 +663,13 @@ std::optional<THeadlessSession::StartResult> THeadlessSession::prepareStart(Opti
+         }
+         mProfileName = name;
+     }
++    // Before the details or passwords are stored, which would change those of the profile running
++    if (mpPool->getHost(mProfileName)) {
++        mpPool.reset();
++        //: Error from a frontend with no window asked to open a profile that another of its sessions, or a script, has open already. %1 is the profile name
++        mErrorString = tr("The profile \"%1\" is open already.").arg(mProfileName);
++        return StartResult::notOpened;
++    }
+     const bool newProfile = !QDir(MudletApp::getMudletPath(enums::profileHomePath, mProfileName)).exists();
+     tls = options.tls;
+     const bool detailsGiven = !options.host.isEmpty() || options.port || tls.has_value();
+@@ -2085,11 +2164,95 @@ void THeadlessSession::beginShutdown(const bool save, const std::shared_ptr<bool
          return;
      }
      mShuttingDown = true;
@@ -344,7 +359,7 @@ index 3f7f93e..5907ab2 100644
  // As for TNullAppFrontend's close, a reset asked for first ends first: run in the middle of the close, it would
  // rebuild the Lua state the exit handlers and the save are using
  void THeadlessSession::shutdownOnceResetsEnd(const bool save, const std::shared_ptr<bool>& saved, std::function<void(bool)> done)
-@@ -2150,17 +2306,9 @@ void THeadlessSession::shutdownOnceReleased(const std::shared_ptr<bool>& saved,
+@@ -2150,17 +2313,9 @@ void THeadlessSession::shutdownOnceReleased(const std::shared_ptr<bool>& saved,
      if (!self) {
          return;
      }
@@ -364,7 +379,7 @@ index 3f7f93e..5907ab2 100644
      done(true);
  }
  
-@@ -2215,6 +2363,15 @@ void THeadlessSession::beginSave(std::function<void(bool)> done)
+@@ -2215,6 +2370,15 @@ void THeadlessSession::beginSave(std::function<void(bool)> done)
          done(false);
          return;
      }
@@ -380,7 +395,7 @@ index 3f7f93e..5907ab2 100644
      QList<QPointer<Host>> profiles;
      for (const auto& pHost : mpPool->hostList()) {
          if (pHost->mLoadedOk) {
-@@ -2224,6 +2381,17 @@ void THeadlessSession::beginSave(std::function<void(bool)> done)
+@@ -2224,6 +2388,17 @@ void THeadlessSession::beginSave(std::function<void(bool)> done)
      mSaving = true;
      saveEach(profiles, mUnsavedProfiles.size(), {}, [this, done](const bool answer) {
          mSaving = false;
@@ -524,6 +539,55 @@ index 0274074..2bd21a4 100644
      if (!mpPool) {
          return true;
      }
+diff --git a/test/functional_tests/HeadlessSessionInputTest.cpp b/test/functional_tests/HeadlessSessionInputTest.cpp
+index e4b2a3a..66a671e 100644
+--- a/test/functional_tests/HeadlessSessionInputTest.cpp
++++ b/test/functional_tests/HeadlessSessionInputTest.cpp
+@@ -553,6 +553,7 @@ end
+         using SoundSource = THeadlessSession::SoundSource;
+         const QString name = qsl("Headless Mute");
+         const QString other = qsl("Headless Mute Other");
++        const QString joined = qsl("Headless Mute Joined");
+         const QString script = qsl(R"lua(
+ headlessSettings = ""
+ registerAnonymousEventHandler("sysSettingChanged", function(_, setting, value)
+@@ -563,6 +564,7 @@ end)
+ )lua");
+         QVERIFY(writeProfile(name, script));
+         QVERIFY(writeProfile(other, script));
++        QVERIFY(writeProfile(joined, script));
+         THeadlessSession session;
+         QStringList heard;
+         connect(&session, &THeadlessSession::soundsMutedChanged, this, [&heard](const SoundSource source, const bool muted) {
+@@ -613,11 +615,25 @@ end)
+         QTRY_COMPARE(heard, (QStringList{qsl("game unmuted")}));
+         QCOMPARE(settings(), qsl("muteMediaGame=false "));
+ 
+-        // Only one session's profiles to tell, as there is only one pool a process
+         THeadlessSession second;
+-        QCOMPARE(second.start({.profile = name, .connect = false}), THeadlessSession::StartResult::notOpened);
+-        QCOMPARE(second.errorString(), qsl("A profile pool already exists in this process."));
++        const QString url = MudletApp::readProfileData(name, qsl("url"));
++        QCOMPARE(second.start({.profile = name, .connect = false, .host = qsl("elsewhere.example.org"), .port = 4000}), THeadlessSession::StartResult::notOpened);
++        QCOMPARE(second.errorString(), qsl("The profile \"%1\" is open already.").arg(name));
++        QCOMPARE(MudletApp::readProfileData(name, qsl("url")), url);
+         QVERIFY(!second.setSoundsMuted(SoundSource::scripts, false));
++        // A session sharing the pool presses the same buttons
++        QCOMPARE(second.start({.profile = joined, .connect = false}), THeadlessSession::StartResult::started);
++        heard.clear();
++        QVERIFY(second.setSoundsMuted(SoundSource::game, true));
++        QVERIFY(session.soundsMuted(SoundSource::game));
++        QTRY_COMPARE(heard, (QStringList{qsl("game muted")}));
++        QCOMPARE(settings(), qsl("muteMediaGame=true "));
++        QCOMPARE(luaGlobalString(second.host(), "headlessSettings"), qsl("muteMediaGame=true "));
++        QVERIFY(second.shutdown(false));
++        heard.clear();
++        QVERIFY(session.setSoundsMuted(SoundSource::game, false));
++        QTRY_COMPARE(heard, (QStringList{qsl("game unmuted")}));
++        QCOMPARE(settings(), qsl("muteMediaGame=false "));
+ 
+         QVERIFY(session.runLua(qsl("loadProfile([[%1]], true)").arg(other)));
+         Host* pOther = HostManager::self()->getHost(other);
 diff --git a/test/functional_tests/HeadlessSessionTest.cpp b/test/functional_tests/HeadlessSessionTest.cpp
 index 8d7b4e5..16baa1d 100644
 --- a/test/functional_tests/HeadlessSessionTest.cpp

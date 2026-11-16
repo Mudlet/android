@@ -193,9 +193,15 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
 - A game's categories hold Mudlet's own settings of that game (`Settings.mudletSettings`), which Mudlet keeps in the
   profile, where desktop Mudlet does, so a profile copied between the two keeps them. `ProfileSession` asks for them
   with `getSettings` as the profile loads and as a page opens (a script may have changed them), and a change sends
-  `setSettings` ([`protocol.md`](protocol.md)). The app's values of them are what a game added in the app is given as
-  it first loads ("New games" changes them); after that it keeps its own, as a game copied in or there before does from
-  the start.
+  `setSettings` ([`protocol.md`](protocol.md)). A game added in the app is given, as it first loads, those of the
+  app's values the player changed ("New games"): Mudlet picks some for the game it knows, such as joining split lines
+  for IRE's, which unchanged values would undo. After that it keeps its own, as a game copied in or there before does
+  from the start.
+- The game categories are Display (blank lines, joining split lines), Accessibility, Input (the commands the console
+  shows, Unix line endings) and Connection (offering a secure connection, and the protocols Mudlet negotiates with the
+  game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS); Mudlet reads the protocols' as it connects, so a change applies
+  from the next connection. Mudlet's settings for how its own console draws text (control characters, East Asian
+  characters of either width) are not among them, as the app draws the text itself.
 - The search matches each word of the query against a setting's label, description, choices, category and translated
   keywords, whatever the case and accents (`searchMatches()`). A result says where it lives ("Aardwolf ›
   Accessibility"), chips narrow it to one game, the new games or the app, a switch turns where it is found and any
@@ -669,9 +675,9 @@ device shows, below the UI's debug hook:
   from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
   announcement, `announce`, each console line as its plain text) and the settings: a game added in the app given
-  the app's (`setSettings`) and any other keeping its own (`getSettings`), read again as a page opens and changed there
-  alone, and a search's switches
-  for the game and for new games; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
+  the app's values the player changed (`setSettings`), none if none were, and any other keeping its own (`getSettings`), read again as a page opens and changed there
+  alone, a search's switches
+  for the game and for new games, and the Input and Connection pages' changes; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
   map in front the title bar, its search, the map and the game pill, and nothing it covers; the script
@@ -1446,6 +1452,9 @@ Item 13 of the on-device checklist covers this.
     - On a tablet or an unfolded foldable in landscape, Edit opens the editor beside the profile list, and About's
       components their licence beside the list; Back closes it, and folding the device moves an open editor to its own
       screen.
+    - In a game's Settings, Connection: with GMCP turned off, after disconnecting and connecting again, the game sends
+      no GMCP; on, it does again. Input: with "Show the commands sent" at None, what you send no longer shows in the
+      game's text.
     - On a tablet, Settings opens a page beside the list of pages, and a search's result opens its page there with the
       setting tinted for a moment.
     - With TalkBack on: the settings' section titles read as headings, and the editor beside the list has

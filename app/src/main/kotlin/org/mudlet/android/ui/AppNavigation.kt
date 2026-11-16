@@ -108,7 +108,7 @@ fun AppNavigation(onKillUi: () -> Unit) {
                     },
                     detailContent = { key ->
                         // The engine's answer can come once another profile's editor has taken this one's place
-                        ProfileEditor(key.ifEmpty { null }, onClose = { if (editing == key) editing = null })
+                        ProfileEditor(key.ifEmpty { null }, onClose = { editing = null })
                     },
                     empty = { DetailPlaceholder(stringResource(R.string.profiles_pick)) },
                 )

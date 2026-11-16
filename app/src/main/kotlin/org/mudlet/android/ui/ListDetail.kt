@@ -66,7 +66,7 @@ fun <K : Any> ListDetail(
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
-        if (maxWidth < EXPANDED_WIDTH) {
+        if (maxWidth < EXPANDED_WIDTH || true) {
             if (detail != null) LaunchedEffect(detail) { onNarrowed(detail) }
             list(false)
         } else {

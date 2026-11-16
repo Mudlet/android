@@ -32,7 +32,7 @@ fun MudletTheme(
 
 /** The wallpaper's colours where the system has them (Android 12 and later) and [wallpaper] asks for them, else Mudlet's. */
 fun mudletColorScheme(context: Context, dark: Boolean, wallpaper: Boolean): ColorScheme = when {
-    wallpaper && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     dark -> MudletDarkColors
     else -> MudletLightColors
 }

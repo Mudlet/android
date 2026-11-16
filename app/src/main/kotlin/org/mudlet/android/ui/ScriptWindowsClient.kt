@@ -64,6 +64,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         session.send(it)
     }
 
+    /** A `prompt:` link in a label was sent to the engine to follow: the input line is to take the focus and call [inputFocusTaken]. */
+    var focusInput by mutableStateOf(false)
+        private set
+
     // The size the game screen wants Mudlet's main window to be, and the one this engine instance last got
     private var wantedSize: MudletSize? = null
     private var sentSize: MudletSize? = null
@@ -137,7 +141,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
      * [AppMapClient]'s; that of [setMapScale] is only logged. A link's is only logged too, as a link a script let go of
      * or disabled, or one the player tapped as it went, is no fault of theirs; so is a text box's, which a script made
      * read-only or hid as the player typed, and an MXP frame tab's, whose page the game closed or whose frame it hid as
-     * the player tapped.
+     * the player tapped, and a label link's, which the engine tried, which the label no longer has, or which is a
+     * `prompt:` link while the game hides input.
      */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
@@ -153,6 +158,9 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (request == "setMapScale") Log.w(TAG, "the map's scale: ${message.message}")
         // The tabs follow the engine's windows, so they still show the page in front
         if (request == "selectFrameTab") Log.w(TAG, "an MXP frame's tab: ${message.message}")
+        // The engine tried the link, the label no longer has it, or it is a prompt: link while the game hides input:
+        // following it here would run it twice, or do what the engine refused
+        if (request == "followLabelLink") Log.w(TAG, "a label's link: ${message.message}")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -268,6 +276,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         state = state.commandLineShown(name)
     }
 
+    fun inputFocusTaken() {
+        focusInput = false
+    }
+
     /** The text box [name] has [text] typed in it that the engine has not been sent, or nothing for null, which [flushTyping] sends. */
     fun typing(name: String, text: String?) {
         if (text == null) typing.remove(name) else typing[name] = text
@@ -374,8 +386,12 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         session.send(Requests.pointer(label, type, x, y, button, buttons, 0, 0))
     }
 
-    /** Follows a link the player tapped in a label's text, as [LabelLink] says. */
-    fun followLabelLink(context: Context, href: String) {
+    /**
+     * Follows the link [href] the player tapped in the text of the label [label], as [LabelLink] says: the engine does,
+     * but for a web link. A `prompt:` link gives the input line the focus, as Mudlet's label gives its command line the
+     * focus, for the player to finish the text the engine puts there.
+     */
+    fun followLabelLink(context: Context, label: String, href: String) {
         when (val link = LabelLink.of(href)) {
             is LabelLink.Web -> try {
                 context.startActivity(Intent(Intent.ACTION_VIEW, link.url.toUri()))
@@ -383,11 +399,9 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
                 Log.w(TAG, "no app opens the label link ${link.url}", e)
             }
 
-            is LabelLink.NotRun -> Log.w(TAG, "the label link \"$href\" was not run: ${link.scheme}: is not a scheme Mudlet handles, and the link is not a Lua command")
-
-            else -> link.request(session.newRequestId())?.let {
+            is LabelLink.Engine -> {
                 flushTyping()
-                session.send(it)
+                if (session.send(Requests.followLabelLink(label, link.href, session.newRequestId())) && link.prompts) focusInput = true
             }
         }
     }

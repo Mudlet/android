@@ -279,7 +279,7 @@ private fun labelReading(
     val rightClickLabel = stringResource(R.string.label_right_click)
     val linkActions = text.links.map { (linkText, href) ->
         CustomAccessibilityAction(stringResource(R.string.label_follow_link, linkText.ifEmpty { href })) {
-            EngineClient.front.windows.followLabelLink(context, href)
+            EngineClient.front.windows.followLabelLink(context, window.name, href)
             true
         }
     }
@@ -563,7 +563,7 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
                 }
             }
         } else if (text.rich != null) {
-            LabelTextView(text, text.rich, style, Modifier.fillMaxWidth().align(alignment))
+            LabelTextView(window.name, text, text.rich, style, Modifier.fillMaxWidth().align(alignment))
         }
     }
 }
@@ -699,12 +699,12 @@ private fun LabelSvg(content: LabelContent) {
 
 /** The label's rich text, unwrapped as QLabel draws it, with its links followed when tapped. */
 @Composable
-private fun LabelTextView(text: LabelText, rich: RichText, style: LabelStyle, modifier: Modifier = Modifier) {
+private fun LabelTextView(label: String, text: LabelText, rich: RichText, style: LabelStyle, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val scale = text.scale
     val toSp: (Float) -> TextUnit = { px -> with(density) { (px * scale).toSp() } }
-    val annotated = remember(rich, style, scale, density) {
+    val annotated = remember(label, rich, style, scale, density) {
         buildAnnotatedString {
             for (block in rich.blocks) {
                 withStyle(ParagraphStyle(textAlign = textAlign(block.align ?: style.hAlign))) {
@@ -713,7 +713,7 @@ private fun LabelTextView(text: LabelText, rich: RichText, style: LabelStyle, mo
                         if (href == null) {
                             withStyle(spanStyle(span.style, toSp)) { append(span.text) }
                         } else {
-                            val link = LinkAnnotation.Clickable(href, linkInteractionListener = { EngineClient.front.windows.followLabelLink(context, href) })
+                            val link = LinkAnnotation.Clickable(href, linkInteractionListener = { EngineClient.front.windows.followLabelLink(context, label, href) })
                             withLink(link) {
                                 withStyle(spanStyle(span.style, toSp, link = true)) { append(span.text) }
                             }

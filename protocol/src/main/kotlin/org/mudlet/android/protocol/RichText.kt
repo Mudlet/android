@@ -61,40 +61,72 @@ data class RichText(val blocks: List<Block>) {
         )
         private val VOID_TAGS = setOf("br", "hr", "img", "meta", "link", "input", "col", "area", "base", "wbr")
         private val HIDDEN_TAGS = setOf("head", "style", "script", "title")
-        private val ATTRIBUTE = Regex("([^\\s=/]+)(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+))?")
-        private val WHITESPACE = Regex("[ \\t\\r\\n\\u000C]+")
-        private val ENTITIES = mapOf(
-            "amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to "\u00A0", "copy" to "\u00A9",
-            "reg" to "\u00AE", "deg" to "\u00B0", "middot" to "\u00B7", "bull" to "\u2022", "hellip" to "\u2026",
-            "mdash" to "\u2014", "ndash" to "\u2013", "laquo" to "\u00AB", "raquo" to "\u00BB", "times" to "\u00D7",
-        )
 
-        /** [text] with its character references, `&amp;`, `&#65;` and `&#x41;`, as the characters. */
-        fun decodeEntities(text: String): String {
+        // A value in double quotes, in single quotes or unquoted, as Qt's QTextHtmlParser::parseWord() reads it
+        private val ATTRIBUTE = Regex("([^\\s=/]+)(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s<>=]+))?")
+        private val WHITESPACE = Regex("[ \\t\\r\\n\\u000C]+")
+
+        // Qt reads &#128; to &#159; as Windows-1252's characters
+        private const val WINDOWS_1252 =
+            "\u20AC\u0081\u201A\u0192\u201E\u2026\u2020\u2021\u02C6\u2030\u0160\u2039\u0152\u008D\u017D\u008F" +
+                "\u0090\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\u009D\u017E\u0178"
+
+        // The longest name between & and ; that Qt reads
+        private const val MAX_ENTITY = 8
+
+        // What tagEnd() gives for a tag with a quoted value that has no closing quote
+        private const val UNCLOSED = -2
+
+        /**
+         * [text] with its character references, `&amp;`, `&#65;` and `&#x41;`, as the characters, as Qt's
+         * `QTextHtmlParser::parseEntity()` reads them: the names in [HTML_ENTITIES], in their case, and numbers; one
+         * without its `;` only at [atEnd], the end of the whole text; anything else as it is.
+         */
+        fun decodeEntities(text: String, atEnd: Boolean = false): String {
             if ('&' !in text) return text
             val out = StringBuilder()
             var i = 0
             while (i < text.length) {
-                val c = text[i]
-                val end = if (c == '&') text.indexOf(';', i + 1).takeIf { it in (i + 2)..(i + 10) } else null
-                val decoded = end?.let { entity(text.substring(i + 1, it)) }
-                if (end != null && decoded != null) {
-                    out.append(decoded)
-                    i = end + 1
-                } else {
+                val c = text[i++]
+                if (c != '&') {
                     out.append(c)
-                    i++
+                    continue
+                }
+                var end = i
+                while (end < text.length && end - i < MAX_ENTITY && text[end] != ';' && !text[end].isWhitespace()) end++
+                val closed = end < text.length && text[end] == ';'
+                val decoded = if (closed || (atEnd && end == text.length)) entity(text.substring(i, end)) else null
+                if (decoded == null) {
+                    out.append(c)
+                } else {
+                    out.append(decoded)
+                    i = if (closed) end + 1 else end
                 }
             }
             return out.toString()
         }
 
         private fun entity(name: String): String? {
-            if (name.startsWith("#")) {
-                val code = if (name.startsWith("#x") || name.startsWith("#X")) name.substring(2).toIntOrNull(16) else name.substring(1).toIntOrNull()
-                return code?.takeIf { Character.isValidCodePoint(it) && it != 0 }?.let { String(Character.toChars(it)) }
+            HTML_ENTITIES[name]?.let { return it.toString() }
+            if (name.length < 2 || name[0] != '#') return null
+            val hex = name[1] == 'x' || name[1] == 'X'
+            val code = number(name.substring(if (hex) 2 else 1), hex) ?: return null
+            return when {
+                code in 0x80..0x9F -> WINDOWS_1252[code - 0x80].toString()
+
+                // As QChar::highSurrogate() and lowSurrogate() make them, even past U+10FFFF
+                code >= 0x10000 -> charArrayOf(((code shr 10) + 0xD7C0).toChar(), ((code and 0x3FF) + 0xDC00).toChar()).concatToString()
+
+                else -> code.toChar().toString()
             }
-            return ENTITIES[name]
+        }
+
+        // QString::toUInt(): a + before the digits, and for hex a 0x
+        private fun number(text: String, hex: Boolean): Int? {
+            var digits = text.removePrefix("+")
+            if (hex && digits.startsWith("0x", ignoreCase = true)) digits = digits.substring(2)
+            if (digits.isEmpty() || digits.startsWith("+")) return null
+            return digits.toIntOrNull(if (hex) 16 else 10)?.takeIf { it >= 0 }
         }
     }
 
@@ -115,7 +147,7 @@ data class RichText(val blocks: List<Block>) {
             while (i < html.length) {
                 val lt = html.indexOf('<', i)
                 if (lt < 0) {
-                    text(html.substring(i))
+                    text(html.substring(i), atEnd = true)
                     break
                 }
                 text(html.substring(i, lt))
@@ -128,7 +160,9 @@ data class RichText(val blocks: List<Block>) {
         // The tag at [lt]; returns where the text after it starts
         private fun tag(lt: Int): Int {
             if (html.startsWith("<!--", lt)) return html.indexOf("-->", lt + 4).let { if (it < 0) html.length else it + 3 }
-            val gt = html.indexOf('>', lt + 1)
+            val gt = tagEnd(lt)
+            // A quoted value Qt reads to the end of the text, and the rest with it
+            if (gt == UNCLOSED) return html.length
             if (gt < 0) {
                 // Not a tag: its text as it is
                 text(html.substring(lt))
@@ -147,8 +181,38 @@ data class RichText(val blocks: List<Block>) {
             return gt + 1
         }
 
+        // The > that ends the tag at [lt], -1 for none, or UNCLOSED: a > in a quoted value is the value's, as Qt reads it
+        private fun tagEnd(lt: Int): Int {
+            var afterEquals = false
+            var i = lt + 1
+            while (i < html.length) {
+                val c = html[i]
+                when {
+                    c == '>' -> return i
+
+                    afterEquals && (c == '"' || c == '\'') -> {
+                        i = html.indexOf(c, i + 1)
+                        if (i < 0) return UNCLOSED
+                        afterEquals = false
+                    }
+
+                    c == '=' -> afterEquals = true
+
+                    !c.isWhitespace() -> afterEquals = false
+                }
+                i++
+            }
+            return -1
+        }
+
+        // A value in double quotes or unquoted has its entities decoded; one in single quotes Qt keeps as written
         private fun attributes(text: String): Map<String, String> = ATTRIBUTE.findAll(text).associate { match ->
-            match.groupValues[1].lowercase() to decodeEntities(match.groupValues[2].trim('"', '\''))
+            val value = match.groupValues[2]
+            match.groupValues[1].lowercase() to when (value.firstOrNull()) {
+                '"' -> decodeEntities(value.substring(1, value.length - 1))
+                '\'' -> value.substring(1, value.length - 1)
+                else -> decodeEntities(value)
+            }
         }
 
         private fun open(name: String, attributes: Map<String, String>, selfClosing: Boolean) {
@@ -176,7 +240,8 @@ data class RichText(val blocks: List<Block>) {
 
                 "s", "strike", "del" -> style = style.copy(strike = true)
 
-                "a" -> attributes["href"]?.let { style = style.copy(href = it) }
+                // An empty href is no link, as in Qt
+                "a" -> attributes["href"]?.takeIf { it.isNotEmpty() }?.let { style = style.copy(href = it) }
 
                 "center" -> align = HAlign.CENTER
 
@@ -210,12 +275,12 @@ data class RichText(val blocks: List<Block>) {
 
         private fun current() = open.last()
 
-        private fun text(raw: String) {
+        private fun text(raw: String, atEnd: Boolean = false) {
             if (raw.isEmpty() || hidden > 0) return
             var text = WHITESPACE.replace(raw, " ")
             if (atSpace) text = text.trimStart(' ')
             if (text.isEmpty()) return
-            text = decodeEntities(text)
+            text = decodeEntities(text, atEnd)
             append(text, current().style)
             atSpace = text.endsWith(' ')
         }

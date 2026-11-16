@@ -778,7 +778,10 @@ device shows, below the UI's debug hook:
   progress, and of a label as a progress bar's with its text and percentage as its state, a button's not, a live
   label with a value not live, its new text said but not a new value, a live label as one live node from blank (no
   stop) to text, a named one with its text as its state,
-  a link's command, and a label's image asked of the engine; the button bars: a bar's buttons
+  a link sent for the engine to follow, by its action or a tap, with the name of the label tapped, of two with the same
+  link, and the link as Qt reads it from the text, a `prompt:` link giving the input line the focus and a `send:` one
+  not, and neither sent again nor run by the app on a refusal, a web link opened with an intent and not sent, and a
+  label's image asked of the engine; the button bars: a bar's buttons
   as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
@@ -1434,7 +1437,7 @@ Item 13 of the on-device checklist covers this.
       scaled with their windows. A gauge's front follows its value.
     - A tap on a clickable label does what a click does on the desktop, a double tap what a double click does, and a
       long press opens a Geyser right-click menu and shows the label's tool tip. A slider made of labels follows a
-      drag. A link in a label's text runs its command.
+      drag. A link in a label's text runs its command (item 30).
     - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
       its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
       `lua news = Geyser.Label:new({name = "news", x = 0, y = 0, width = 200, height = 30, liveRegion = "polite"})`
@@ -1539,6 +1542,15 @@ Item 13 of the on-device checklist covers this.
       `lua win:setFontSize(12)` holds.
     - With TalkBack on: the window's actions offer "Larger text" and "Smaller text", which change it a size at a time,
       and once changed "Reset text size".
+30. Label links, with the libmudlet APK: `lua createLabel("nav", 0, 0, 400, 40, 1) setLinkStyle("nav", "#00ff00",
+    "#ff00ff") echo("nav", [[<a href="send:look">look</a> <a href="prompt:say ">say</a> <a
+    href="https://www.mudlet.org/">site</a> <a href="echo('ran\n')">run</a>]])`, on one line.
+    - A tap on "look" sends `look` to the game, through the aliases; on "say", the input line reads "say ", its space
+      kept, and has the focus, with the keyboard open, as Mudlet's command line does; on "run", "ran" shows in the
+      console. Each turns magenta once tapped, and green again after `lua clearVisitedLinks("nav")`.
+    - A tap on "site" opens the page in the browser, and the link stays green.
+    - With TalkBack on: the label's actions offer "Follow link: look" and the others, which do the same as the taps;
+      after "Follow link: say", TalkBack is on the input line.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

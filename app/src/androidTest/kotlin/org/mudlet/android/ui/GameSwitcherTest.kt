@@ -390,8 +390,8 @@ class GameSwitcherTest {
 }
 
 /**
- * TouchTargetSizeCheck on Material's scrim, whose tap target is labelled [closeSheet]: with no keyboard up, the strip of
- * it left below a bottom sheet, over the navigation bar, is 24 dp tall. The sheet's close button and Back close it too.
+ * TouchTargetSizeCheck on Material's scrim, whose tap target is labelled [closeSheet]: the strip of it left below a
+ * bottom sheet, over the navigation bar, is 24 dp tall. The sheet's close button and Back close it too.
  */
 internal class ScrimBelowTheSheet(private val closeSheet: String) : BaseMatcher<Any>() {
     override fun matches(item: Any?): Boolean {

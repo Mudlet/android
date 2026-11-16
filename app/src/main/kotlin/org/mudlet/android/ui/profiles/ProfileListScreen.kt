@@ -74,10 +74,11 @@ fun ProfileListScreen(
     val list = rememberLazyListState()
     // The list keeps its first row where it is when rows come above it, as the games do when the engine tells of them
     // after its profiles are shown: bring them into view
-    var hadGames by rememberSaveable { mutableStateOf(games.isNotEmpty()) }
-    LaunchedEffect(games.isNotEmpty()) {
-        if (games.isNotEmpty() && !hadGames) list.scrollToItem(0)
-        hadGames = games.isNotEmpty()
+    val hasGames = games.isNotEmpty()
+    var hadGames by rememberSaveable { mutableStateOf(hasGames) }
+    LaunchedEffect(hasGames) {
+        if (hasGames && !hadGames) list.scrollToItem(0)
+        hadGames = hasGames
     }
     MudletScaffold(
         stringResource(R.string.profiles_title),
@@ -110,7 +111,7 @@ fun ProfileListScreen(
                     )
                 }
             }
-            if (games.isNotEmpty()) {
+            if (hasGames) {
                 item { SectionHeader(stringResource(R.string.games_title)) }
                 itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
                     OpenGameItem(game, i, games.size) {

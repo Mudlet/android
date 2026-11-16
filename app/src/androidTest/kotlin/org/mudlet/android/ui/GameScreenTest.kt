@@ -2,6 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.os.SystemClock
 import android.view.inputmethod.EditorInfo
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Rect
@@ -31,10 +32,12 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -213,7 +216,7 @@ class GameScreenTest {
         session.status("connection", "connected")
         waitForPill(string(R.string.connection_connected))
 
-        activate(hasTestTag(GAME_PILL_TAG))
+        openTheSheet()
         activate(hasContentDescription(compose.activity.getString(R.string.connection_reconnect_to, GAME.name)))
         val connect = session.receive("connect")
         assertEquals("127.0.0.1", connect.getString("host"))
@@ -221,7 +224,7 @@ class GameScreenTest {
         assertEquals(false, connect.getBoolean("tls"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isEmpty() }
 
-        activate(hasTestTag(GAME_PILL_TAG))
+        openTheSheet()
         activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
     }
@@ -348,8 +351,31 @@ class GameScreenTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(label and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
         // Each window's: the game sheet is a window of its own over the activity's
         val roots = compose.onAllNodes(isRoot())
-        for (i in roots.fetchSemanticsNodes().indices) roots[i].tryPerformAccessibilityChecks()
+        for (i in roots.fetchSemanticsNodes().indices) {
+            try {
+                roots[i].tryPerformAccessibilityChecks()
+            } catch (e: AccessibilityViewCheckException) {
+                throw AssertionError("${e.message}\n${roots[i].printToString()}", e)
+            }
+        }
         compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    // The screen is idle before the sheet has slid up and the keyboard the line had has gone down, so this waits for both
+    private fun openTheSheet() {
+        activate(hasTestTag(GAME_PILL_TAG))
+        val openAnother = hasText(string(R.string.game_open_another), substring = true) and hasClickAction()
+        var last: Rect? = null
+        var since = 0L
+        compose.waitUntil(WAIT_MS) {
+            val now = compose.onAllNodes(openAnother).fetchSemanticsNodes().singleOrNull()?.boundsInWindow
+            val time = SystemClock.uptimeMillis()
+            if (now != last) {
+                last = now
+                since = time
+            }
+            now != null && time - since >= SETTLED_MS
+        }
     }
 
     private companion object {
@@ -358,6 +384,7 @@ class GameScreenTest {
         // More lines than any emulator screen shows
         const val MANY = 200
         const val WAIT_MS = 10_000L
+        const val SETTLED_MS = 500L
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

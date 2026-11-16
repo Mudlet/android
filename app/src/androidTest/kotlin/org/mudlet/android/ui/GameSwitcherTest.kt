@@ -2,7 +2,9 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.StringRes
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -21,9 +23,17 @@ import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityViewCheckResult
+import com.google.android.apps.common.testing.accessibility.framework.checks.TouchTargetSizeCheck
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
+import com.google.android.apps.common.testing.accessibility.framework.uielement.ViewHierarchyElement
+import org.hamcrest.BaseMatcher
+import org.hamcrest.Description
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -63,7 +73,9 @@ class GameSwitcherTest {
     @Before
     fun attach() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        if (Build.VERSION.SDK_INT >= 34) {
+            compose.enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(UnderTheAddButton))
+        }
         // The one opened last is the front
         beta = fake.engine.nextSession()
         beta.profiles(PROFILES, beta.receive("listProfiles"))
@@ -75,6 +87,31 @@ class GameSwitcherTest {
             session.status("connection", "connected")
         }
         compose.waitUntil(WAIT_MS) { EngineClient.sessions.all { it.status["connection"] == "connected" } }
+    }
+
+    /**
+     * TouchTargetSizeCheck on a profile's button the Add button floats over: TalkBack is given only the part left
+     * uncovered, and the list scrolls the row out from under it. With games open above the profiles, the CI emulator's
+     * 640 px screen puts one there.
+     */
+    private object UnderTheAddButton : BaseMatcher<Any>() {
+        override fun matches(item: Any?): Boolean {
+            val result = item as? AccessibilityViewCheckResult ?: return false
+            if (result.sourceCheckClass != TouchTargetSizeCheck::class.java) return false
+            val element = result.element ?: return false
+            val list = ancestors(element).firstOrNull { it.isScrollable == true } ?: return false
+            val bounds = element.boundsInScreen
+            return element.window.allViews.any { view ->
+                val over = view.boundsInScreen
+                view.isClickable && list !in ancestors(view) && over.top == bounds.bottom && over.left < bounds.right && over.right > bounds.left
+            }
+        }
+
+        private fun ancestors(element: ViewHierarchyElement) = generateSequence(element.parentView) { it.parentView }
+
+        override fun describeTo(description: Description) {
+            description.appendText("a small touch target where the Add button covers a profile's button")
+        }
     }
 
     @Test
@@ -266,9 +303,21 @@ class GameSwitcherTest {
         beta.send(fake.engine.openProfilesMessage(close.opt("id")))
     }
 
+    // The screen is idle before the sheet has slid up and the keyboard the line had has gone down, so this waits for both
     private fun openTheSheet() {
         activate(pill)
-        waitFor(sheet)
+        val openAnother = hasText(string(R.string.game_open_another), substring = true) and hasClickAction()
+        var last: Rect? = null
+        var since = 0L
+        compose.waitUntil(WAIT_MS) {
+            val now = compose.onAllNodes(openAnother).fetchSemanticsNodes().singleOrNull()?.boundsInWindow
+            val time = SystemClock.uptimeMillis()
+            if (now != last) {
+                last = now
+                since = time
+            }
+            now != null && time - since >= SETTLED_MS
+        }
     }
 
     private fun assertNoChip() {
@@ -320,7 +369,13 @@ class GameSwitcherTest {
     // Each window's: the sheet and its question are windows of their own over the activity's
     private fun checkAccessibility() {
         val roots = compose.onAllNodes(isRoot())
-        for (i in roots.fetchSemanticsNodes().indices) roots[i].tryPerformAccessibilityChecks()
+        for (i in roots.fetchSemanticsNodes().indices) {
+            try {
+                roots[i].tryPerformAccessibilityChecks()
+            } catch (e: AccessibilityViewCheckException) {
+                throw AssertionError("${e.message}\n${roots[i].printToString()}", e)
+            }
+        }
     }
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on every window. */
@@ -340,6 +395,7 @@ class GameSwitcherTest {
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L
         const val WAIT_MS = 10_000L
+        const val SETTLED_MS = 500L
 
         // Long enough for a request that went astray to have arrived
         const val QUIET_MS = 500

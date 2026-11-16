@@ -60,6 +60,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -69,7 +70,6 @@ import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.PxRect
-import org.mudlet.android.protocol.WindowKind
 import org.mudlet.android.ui.AppMapClient
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.ConsoleColors
@@ -84,6 +84,9 @@ private val RESULTS_HEAD = 48.dp
 
 // The keyboard and the window resize the map in many small steps: only where it comes to rest is drawn anew
 private const val MAP_SIZE_SETTLE_MS = 200L
+
+// How long the full-screen map says the map loaded, once it is shown
+private const val LOADED_SHOWN_MS = 5_000L
 
 /**
  * The app's map behind the main console's text (docs/architecture.md, "The map behind the text"), filling the console
@@ -115,10 +118,10 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
 
 /**
  * The app's map in front, where [modifier] puts it: a search for rooms by name or number, whose results centre the map
- * on a room, and the download of the map the game offers ([MapDownloadBar]), over the map as [MapView] draws it, which a
- * tap selects in and a double tap walks on; with no map drawn, the offer is in its middle ([MapOffer]), under the map's
- * buttons, or in the bar while a search's results or a refusal would be where it is. Back calls
- * [onClose], after the map shrinks with a predictive back gesture. It covers what is under it, touches and all.
+ * on a room, beside the map's buttons, and the download of the map the game offers ([MapDownloadBar]), over the map as
+ * [MapView] draws it, which a tap selects in and a double tap walks on; with no map drawn, the offer is in its middle
+ * ([MapOffer]), or in the bar while a search's results or a refusal would be where it is. Back calls [onClose], after
+ * the map shrinks with a predictive back gesture. It covers what is under it, touches and all.
  */
 @Composable
 internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -147,40 +150,45 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         // where the keyboard leaves the map no room
         var editing by remember { mutableStateOf(false) }
         Column(Modifier.matchParentSize()) {
-            RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onFocusChanged { editing = it.hasFocus })
-            val map = EngineClient.front.appMap.map
+            val map = appMap.map
+            val drawn = map != null
+            val viewOnly = map?.viewOnly ?: true
+            var size by remember { mutableStateOf(IntSize.Zero) }
+            // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
+            val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
+            // The buttons are beside the search, not over the map, where they would hide the room's name the engine
+            // draws along its top
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
+                MapButtons(appMap, map?.bitmap, fit, viewOnly, drawn)
+            }
             // In the map's middle with no map drawn, but not where it would share the map with the search's results or a
-            // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack
-            val offerInMap = map == null && (EngineClient.front.appMap.search == null || editing) && EngineClient.front.appMap.refusal == null
-            MapDownloadBar(offerHere = !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+            // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack. With a map
+            // drawn, none: the map is there
+            val offerInMap = !drawn && (appMap.search == null || editing) && appMap.refusal == null
+            MapDownloadBar(offerHere = !drawn && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                var size by remember { mutableStateOf(IntSize.Zero) }
                 AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
-                // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
-                val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
                 MapView(
-                    EngineClient.front.appMap,
+                    appMap,
                     map?.bitmap,
                     fit,
-                    viewOnly = map?.viewOnly ?: true,
-                    drawn = map != null,
+                    viewOnly,
+                    drawn,
                     modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
+                    controls = false,
                 )
-                // Under the map's buttons, as the results are, whose touches and TalkBack it would take where it covered them
                 if (offerInMap) {
-                    Box(Modifier.matchParentSize().padding(top = MAP_CONTROLS_HEIGHT), contentAlignment = Alignment.Center) {
+                    Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
                         MapOffer(Modifier.padding(16.dp))
                     }
                 }
-                // Under the map's buttons, whose touches and TalkBack they would take where they covered them, even
-                // the strip of a short list that left the buttons' bottom edge out; half the map below them, but at
-                // least their head and a whole result. Where the map has not that room, as in a short window, they
-                // wait for it: squeezed, their close button and rows would be cut off
-                val below = maxHeight - MAP_CONTROLS_HEIGHT
-                val search = EngineClient.front.appMap.search
-                if (search != null && !editing && below >= RESULTS_HEAD + RESULT_ROW) {
-                    val results = maxOf(below / 2, RESULTS_HEAD + RESULT_ROW)
-                    RoomResults(search, Modifier.align(Alignment.TopStart).padding(top = MAP_CONTROLS_HEIGHT).fillMaxWidth().heightIn(max = results))
+                // Half the map, but at least their head and a whole result. Where the map has not that room, as in a
+                // short window, they wait for it: squeezed, their close button and rows would be cut off
+                val search = appMap.search
+                if (search != null && !editing && maxHeight >= RESULTS_HEAD + RESULT_ROW) {
+                    val results = maxOf(maxHeight / 2, RESULTS_HEAD + RESULT_ROW)
+                    RoomResults(search, Modifier.align(Alignment.TopStart).fillMaxWidth().heightIn(max = results))
                 }
             }
         }
@@ -226,8 +234,9 @@ private fun RoomSearchField(modifier: Modifier = Modifier) {
         modifier,
         enabled = attached,
         singleLine = true,
-        label = { Text(stringResource(R.string.app_map_search)) },
-        placeholder = { Text(stringResource(R.string.app_map_search_hint)) },
+        // One line each, or the field beside the map's buttons grows a line taller while it is empty, and the map shrinks
+        label = { Text(stringResource(R.string.app_map_search), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        placeholder = { Text(stringResource(R.string.app_map_search_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         trailingIcon = {
             IconButton(::find, enabled = attached && text.isNotBlank()) {
                 Icon(painterResource(R.drawable.ic_search), stringResource(R.string.app_map_search_go))
@@ -280,7 +289,7 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
 
 /**
  * The download of the map the game offers (docs/architecture.md, "Downloading the map"): while it runs, Mudlet's
- * progress and a Cancel button while it can be stopped; once it ended, how, until dismissed; and, where [offerHere],
+ * progress and a Cancel button while it can be stopped; once it ended, how ([MapDownloadEnd]); and, where [offerHere],
  * the button that downloads the map, while the game offers one. Nothing while there is none of these.
  */
 @Composable
@@ -326,10 +335,18 @@ private fun MapDownloadProgress(download: EngineMessage.MapDownload) {
     if (fraction != null) LinearProgressIndicator(progress = { fraction }, bar) else LinearProgressIndicator(bar)
 }
 
-// How the last download ended, until dismissed; AppMapClient tells TalkBack as it ends
+// How the last download ended, until dismissed, or a load for a moment once shown, as the map shows it too;
+// AppMapClient tells TalkBack as it ends
 @Composable
 private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
     val text = AppMapClient.endText(end, LocalResources.current) ?: return
+    val appMap = EngineClient.front.appMap
+    if (end.state == MapDownloadState.LOADED) {
+        LaunchedEffect(end) {
+            delay(LOADED_SHOWN_MS)
+            appMap.dismissDownloadEnd(end)
+        }
+    }
     val failed = end.state == MapDownloadState.FAILED
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -338,7 +355,7 @@ private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
             color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.bodyMedium,
         )
-        IconButton(EngineClient.front.appMap::dismissDownloadEnd) {
+        IconButton({ appMap.dismissDownloadEnd(end) }) {
             Icon(painterResource(R.drawable.ic_close), stringResource(R.string.map_download_dismiss))
         }
     }
@@ -372,6 +389,3 @@ private fun MapOffer(modifier: Modifier = Modifier) {
         }
     }
 }
-
-/** Whether a window a script opened shows the map already, so it is not drawn behind the text as well. */
-internal fun mapperShown(): Boolean = EngineClient.front.windows.state.windows.any { it.kind == WindowKind.MAPPER && it.shown }

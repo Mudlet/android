@@ -134,9 +134,8 @@ private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSetti
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         val textSizeSp = Settings.textSize.value
                         val colors = ConsoleColors.of(c.status["consoleColors"])
-                        // One map on the screen: none behind the text while a script's mapper window shows it
-                        val mapBehind = Settings.mapBehindText.value && !mapperShown()
-                        ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize()) { consoleModifier ->
+                        // One map on the screen: none behind the text while a script's mapper window is drawn
+                        ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize()) { consoleModifier, mapperDrawn ->
                             Console(
                                 c.lines,
                                 c.tail,
@@ -146,7 +145,7 @@ private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSetti
                                 onTextSize = Settings.textSize::set,
                                 onScreenSize = EngineClient::setScreenSize,
                                 consoleModifier,
-                            ) { if (mapBehind) BackgroundMap(colors) }
+                            ) { if (Settings.mapBehindText.value && !mapperDrawn) BackgroundMap(colors) }
                         }
                         if (!mapOpen) SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
                     }

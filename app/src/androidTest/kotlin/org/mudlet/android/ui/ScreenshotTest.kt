@@ -34,8 +34,8 @@ import java.io.File
 import java.util.Base64
 
 /**
- * Screenshots of the profile list, the game screen with the map behind its text, the settings and the map in front,
- * light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
+ * Screenshots of the profile list, the game screen with the map behind its text, the settings and the map in front, with
+ * a downloaded map, light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */
@@ -85,8 +85,14 @@ class ScreenshotTest {
         activate(hasContentDescription(string(R.string.navigate_back)))
 
         activate(hasContentDescription(string(R.string.app_map_show)))
-        // In front, it shows the map behind the text's frame until the engine draws one at its own size
-        session.send(appMap(session.receiveLast("setAppMapSize")))
+        // The game's map, downloaded before this UI came, as after the app restarted
+        session.send(
+            JSONObject().put("t", "mapDownload").put("offered", true).put("host", "www.achaea.com").put("state", "loaded").put("label", "")
+                .put("value", 0).put("maximum", 0).put("cancelable", false).put("error", ""),
+        )
+        // In front, it shows the map behind the text's frame until the engine draws one at its own size, with the
+        // room's name along its top as Mudlet draws it
+        session.send(appMap(session.receiveLast("setAppMapSize"), roomName = ROOM_NAME))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_description))).fetchSemanticsNodes().isNotEmpty() }
         save("map-$mode")
     }
@@ -101,16 +107,17 @@ class ScreenshotTest {
         File(dir, "$name.png").outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    private fun appMap(size: JSONObject): JSONObject {
+    private fun appMap(size: JSONObject, roomName: String? = null): JSONObject {
         val w = size.getInt("w")
         val h = size.getInt("h")
         val scale = size.getDouble("scale")
-        return JSONObject().put("t", "appMap").put("png", Base64.getEncoder().encodeToString(mapPng((w * scale).toInt(), (h * scale).toInt())))
+        return JSONObject().put("t", "appMap").put("png", Base64.getEncoder().encodeToString(mapPng((w * scale).toInt(), (h * scale).toInt(), roomName, scale.toFloat())))
             .put("w", w).put("h", h).put("viewOnly", true)
     }
 
-    // A grid of rooms joined by exits, in Mudlet's default room colours on its black map background, the player's in the middle
-    private fun mapPng(w: Int, h: Int): ByteArray {
+    // A grid of rooms joined by exits, in Mudlet's default room colours on its black map background, the player's in the
+    // middle; [roomName] on a grey band along the top, at [scale] device pixels to the map's, as Mudlet's info text is
+    private fun mapPng(w: Int, h: Int, roomName: String? = null, scale: Float = 1f): ByteArray {
         val bitmap = Bitmap.createBitmap(w.coerceAtLeast(1), h.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(android.graphics.Color.BLACK)
@@ -137,6 +144,16 @@ class ScreenshotTest {
                     canvas.drawCircle(x, y, room / 3, fill)
                 }
             }
+        }
+        if (roomName != null) {
+            val text = Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 14 * scale
+                typeface = android.graphics.Typeface.MONOSPACE
+                isAntiAlias = true
+            }
+            canvas.drawRect(0f, 0f, w.toFloat(), text.textSize * 2, Paint().apply { color = android.graphics.Color.rgb(80, 80, 80) })
+            canvas.drawText(roomName, text.textSize / 2, text.textSize * 1.4f, text)
         }
         val out = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
@@ -189,6 +206,8 @@ class ScreenshotTest {
 
         // A line in one colour of the ANSI palette, as a run (docs/protocol.md, "Runs"): start, length, fg, bg, attributes
         fun coloured(text: String, fg: Int, bold: Boolean = false): Pair<String, List<List<Int>>> = text to listOf(listOf(0, text.length, fg, -1, if (bold) RUN_BOLD else 0))
+
+        const val ROOM_NAME = "A weapons vault / 56721 (Nu Second Circle of)"
 
         const val WAIT_MS = 10_000L
 

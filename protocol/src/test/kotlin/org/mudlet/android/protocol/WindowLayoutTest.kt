@@ -185,6 +185,31 @@ class WindowLayoutTest {
         assertTrue(layout.windows.isEmpty())
     }
 
+    @Test
+    fun aMapperIsDrawnOnlyWhereItIsPlacedOrItsPageIsOpenNotWhileItIsATabAlone() {
+        val main = mainArea(1000, 500, 100, 25, 100, 50, 800, 400)
+        // Beside the text, as the starter UI's map is: in the stacked layout a page, drawn only while it is open
+        val beside = window("mapper", WindowKind.MAPPER, x = 900, y = 50, w = 100, h = 400)
+        assertFalse(WindowLayout.of(state(main, beside), area(800f, 1600f, fitted = false)).mapperDrawn)
+        assertTrue(WindowLayout.of(state(main, beside), area(800f, 1600f, fitted = false, selectedPage = beside.key)).mapperDrawn)
+        // Fitted, it is placed beside the text
+        assertTrue(WindowLayout.of(state(main, beside), area(1600f, 1000f, fitted = true)).mapperDrawn)
+        // openMapWidget()'s, a page in either layout
+        val docked = window("mapper", WindowKind.MAPPER, w = 1000, h = 500).copy(inDock = true)
+        for (isFitted in listOf(true, false)) {
+            assertFalse(WindowLayout.of(state(main, docked), area(1600f, 1000f, isFitted)).mapperDrawn)
+            assertTrue(WindowLayout.of(state(main, docked), area(1600f, 1000f, isFitted, selectedPage = docked.key)).mapperDrawn)
+        }
+        // Inside a page that is open, as in a docked user window's
+        val dock = window("panel", WindowKind.USER_WINDOW, w = 300, h = 500).copy(inDock = true)
+        val inDock = window("mapper", WindowKind.MAPPER, w = 300, h = 250, parent = "panel", parentKind = WindowKind.USER_WINDOW)
+        assertFalse(WindowLayout.of(state(main, dock, inDock), area(800f, 1600f, fitted = false)).mapperDrawn)
+        assertTrue(WindowLayout.of(state(main, dock, inDock), area(800f, 1600f, fitted = false, selectedPage = dock.key)).mapperDrawn)
+        // Hidden, or cut away entirely, it is not drawn
+        assertFalse(WindowLayout.of(state(main, beside.copy(shown = false)), area(1600f, 1000f, fitted = true)).mapperDrawn)
+        assertFalse(WindowLayout.of(state(main, beside.copy(x = 2000)), area(1600f, 1000f, fitted = true)).mapperDrawn)
+    }
+
     // A titled MXP frame at [y] in the main area, 200 by 270 below its tab header, its pages "tabs" (its own console),
     // "chat" and "log", with the one at [current] in front
     private fun frameWithTabs(current: Int, x: Int = 0, y: Int = 30): List<ScriptWindow> {

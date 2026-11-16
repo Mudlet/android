@@ -288,8 +288,8 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   pinch selects nothing; a second tap near it within the double-tap timeout then sends a double click, which walks
   there. A pinch turns the wheel a notch for each 7% it scales, as Mudlet's map zooms by notch, about the fingers'
   middle. A drag does nothing.
-- Buttons in its corner zoom out and in by three notches about the map's middle, and a switch, on while the map is
-  edited, sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason
+- Buttons in its corner (`MapButtons`) zoom out and in by three notches about the map's middle, and a switch, on while
+  the map is edited, sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason
   over the map's bottom, until dismissed or the next request.
 - With TalkBack the map reads as "Map of the game", viewing or editing, in the windows' group. A double tap selects the
   room in its middle, and its actions walk there and zoom; the buttons and the switch read their names. Touches,
@@ -309,7 +309,8 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   reach the text as before, and TalkBack does not read it.
 - In front: the title bar's map button, a toggle read as "Map" with its state, covers all of the game screen between the
   title bar and the connection bar, the input line and the quick bar too, with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, pinch, the zoom
-  buttons, the edit switch, refusals and TalkBack's actions), under a search field. TalkBack does not read what it
+  buttons, the edit switch, refusals and TalkBack's actions), under a search field. The buttons are beside the field,
+  not over the map, whose top line is Mudlet's name of the room, which they would hide. TalkBack does not read what it
   covers, and a hardware keyboard's focus does not reach it. The input line lets go of the focus and the keyboard while
   the map is in front, and Ctrl+R opens no history. Back or the button again sends it back, and the input line has the
   focus again if it had it; with a predictive back gesture the map shrinks as the gesture goes, over the game screen
@@ -317,8 +318,8 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
 - The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
   result, read as "<room>, <area> (<number>)", is a 48 dp row, and a tap sends `showRoom`, which centres the map on
   that room and selects it, until the player moves, so its actions then walk there. "Finding rooms…", no match and
-  more matches than shown are read out as they come. The results sit under the map's buttons, which they would
-  otherwise hide from touch and TalkBack, and show only where the map has the room for their head and one whole row
+  more matches than shown are read out as they come. The results sit at the map's top, and show only where the map
+  has the room for their head and one whole row
   (not in a short window) and while the search is not being edited, so that none of their touch
   targets is ever cut off.
 - The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
@@ -327,8 +328,10 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   as the engine stops drawing the map when its UI goes (in the background too) and forgets the size.
 - With a script's mapper: the app's map is a view of its own, with its own centre and selection; zoom is the area's,
   so shared, as between two maps on the desktop, and so is viewing or editing. So that one map shows on the screen,
-  none is drawn behind the text while a mapper window (`Geyser.Mapper`, openMapWidget()'s dock) is shown; the map in
-  front is there whatever the scripts made. The app's map raises no script events (`sysMapWindowMousePressEvent`,
+  none is drawn behind the text while a mapper window (`Geyser.Mapper`, openMapWidget()'s dock) is on the screen:
+  placed, or its page open (`WindowLayout.mapperDrawn`). A mapper that is a page no one opened, only its tab on the
+  screen, as the starter UI's is in the stacked layout, leaves the map behind the text. The map in front is there
+  whatever the scripts made. The app's map raises no script events (`sysMapWindowMousePressEvent`,
   `sysMapAreaChanged`), and getMapSelection() does not see what it selects.
 - Known limits: a `centerview()` on the room the player is already in is taken by whichever view draws first, so a
   view moved by `showRoom` (or a pan) that draws second keeps its place until the player moves to another room; the
@@ -338,11 +341,10 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
 A game can offer its map, as GMCP's `Client.Map` (docs/protocol.md, "Downloading the map"; a carried Mudlet patch),
 which the desktop's mapper turns into a "Download from game" button. The app's map has it (`AppMapClient.download`,
 drawn by `ui/game/AppMap.kt`):
-- With no map drawn, the map in front says so in its middle, with a button "Download the map from <host>". It sits
-  under the map's buttons, which it would otherwise cover for touches and TalkBack, and scrolls where the map has no
-  room for it. With a map, or while a search's results or a refusal at the map's bottom would share the map with it,
-  the same button is in a bar under the search field, as a game may offer a newer map. Neither shows while the game
-  offers none, nor while a download runs.
+- With no map drawn, the map in front says so in its middle, with a button "Download the map from <host>". It scrolls
+  where the map has no room for it. While a search's results or a refusal at the map's bottom would share the map with
+  it, the same button is in a bar under the search field. Neither shows while a map is drawn, while the game offers
+  none, nor while a download runs.
 - The button sends `downloadMap`, and waits for the engine's answer, so a second tap sends no second. While the
   download runs, the bar shows Mudlet's progress label, or "Downloading the map from <host>…", and a progress bar read
   as "Map download": how far of `maximum`, which is Mudlet's guess of 4 MB until the server sends the size, and
@@ -351,14 +353,16 @@ drawn by `ui/game/AppMap.kt`):
 - How it ended stays in the bar until dismissed, the next download or the profile closes, and is read out once, as it
   comes (`Announcer`): "Map downloaded from <host>", "Map download cancelled", or "The map download failed: " with
   Mudlet's reason, in the error colour and interrupting TalkBack. Its close button is "Dismiss the map download", not
-  the bare "Dismiss" of a refusal that may show at the same time. A UI that attaches later shows how the last download
-  ended without reading it out. A refusal shows as the map's others do. The loaded map is the profile's, so the map
+  the bare "Dismiss" of a refusal that may show at the same time. "Map downloaded" goes by itself 5 s after the map in
+  front shows it, as the map shows the load. A UI that attaches later shows how the last download ended without
+  reading it out, unless the map loaded. A refusal shows as the map's others do. The loaded map is the profile's, so the map
   behind the text, the map in front and a script's mapper all show it; as on the desktop, Mudlet then shows its docked
   mapper, where a script has made one (`showLoadedMap()`).
 - Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of
   a failure included: the rest can hold a user name, a password or a token. Lua's `gmcp` table holds the whole URL, as
   the game sent it, as on the desktop.
-- Known limits: the button is only in the map in front, not behind the text, which takes no touches; Mudlet sets no
+- Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
+  no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.
 
 ## libmudlet as the engine

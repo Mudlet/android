@@ -42,6 +42,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
 
@@ -216,6 +217,34 @@ class GameScreenTest {
 
         activate(hasText(string(R.string.connection_disconnect)))
         session.receive("disconnect")
+    }
+
+    @Test
+    fun reconnectOpensTheProfileAgainWithItsPasswordOnAnEngineThatHasLostIt() {
+        val passwords = PasswordStore(compose.activity)
+        assertTrue(passwords.set(GAME.name, "game secret"))
+        try {
+            // A new engine with no profile open, as after the notification's Quit: libmudlet takes a bare connect
+            // there as one for MUDLET_PROFILE, which it makes with the address, a copy of this profile
+            fake.engine.instance = "after quit"
+            session.close()
+            val next = fake.engine.nextSession()
+            next.profiles(listOf(GAME), next.receive("listProfiles"))
+            next.status("connection", "disconnected")
+            waitUntilDisplayed(string(R.string.connection_disconnected))
+
+            activate(hasText(string(R.string.connection_reconnect)))
+            val open = next.receive("openProfile")
+            assertEquals(GAME.name, open.getString("name"))
+            assertEquals("game secret", open.getString("password"))
+            assertTrue(open.getBoolean("connect"))
+            next.assertNoRequest("connect", 1000)
+
+            next.refuse(open, "there is no profile named \"Game\"")
+            waitUntilDisplayed(compose.activity.getString(R.string.connection_reconnect_refused, "openProfile: there is no profile named \"Game\""))
+        } finally {
+            passwords.forget(GAME.name)
+        }
     }
 
     @Test

@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -25,7 +26,9 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.junit4.accessibility.disableAccessibilityChecks
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onLast
@@ -632,6 +635,8 @@ class ScriptMapTest {
         val scale = shownScale(drawn)
         val read = session.received.size
         compose.onNode(map).performTouchInput {
+            // Long enough after the tap that picked room 1 that the drag is not a double tap's second touch, which zooms
+            advanceEventTime(1_000)
             down(at(drawn, 200.0, 90.0))
             repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), (1.5 * scale).toFloat())) }
             advanceEventTime(300)
@@ -680,17 +685,32 @@ class ScriptMapTest {
         activate(button)
     }
 
-    // A text field of the dialog open, by its label
-    private fun field(@StringRes label: Int) = compose.onNode(hasSetTextAction() and hasText(string(label)) and hasAnyAncestor(isDialog()))
+    // A text field of the dialog open, by its label; the dialog is checked before a field brings the keyboard up
+    private fun field(@StringRes label: Int): SemanticsNodeInteraction {
+        val node = hasSetTextAction() and hasText(string(label)) and hasAnyAncestor(isDialog())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
+        if (!typing()) compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+        return compose.onNode(node)
+    }
+
+    private fun typing() = compose.onAllNodes(hasSetTextAction() and isFocused() and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty()
 
     /** As [activate], in the dialog open over the screen: the checks are of the dialog's window. */
     private fun activateInDialog(label: SemanticsMatcher) {
         val node = label and hasClickAction() and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
-        // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
-        if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
-        compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        // The keyboard a field leaves up shrinks the dialog, scrolling its top row partly out of sight, which the checks
+        // take for a touch target too small: [field] checked the dialog before the keyboard came up
+        val unchecked = Build.VERSION.SDK_INT >= 34 && typing()
+        if (unchecked) compose.disableAccessibilityChecks()
+        try {
+            compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+            // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
+            if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
+            compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        } finally {
+            if (unchecked) compose.enableAccessibilityChecks()
+        }
     }
 
     // The mapper in the top right quarter of Mudlet's main window, and its map

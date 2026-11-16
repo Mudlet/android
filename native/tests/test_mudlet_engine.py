@@ -459,7 +459,7 @@ def running_profile_login(port):
     seen = []
 
     def ask(msg):
-        return ctl.ask(msg, answers=("profiles", "error"))
+        return ctl.ask(msg, answers=("profiles", "openProfiles", "error"))
 
     def statuses(since):
         return [(m["key"], m["value"]) for m in seen[since:] if m["t"] == "status" and m["key"] in ("profile", "connection")]
@@ -505,7 +505,7 @@ def running_profile_login(port):
     mark = len(seen)
     beta.send({"t": "runLua", "code": "echo('')"})
     wait_status(beta, "luaResult", lambda v: True, seen)
-    check(m["t"] == "profiles" and ("profile", "Beta closing") not in statuses(mark) and first not in fake_telnet.RECEIVED,
+    check(m["t"] == "openProfiles" and ("profile", "Beta closing") not in statuses(mark) and first not in fake_telnet.RECEIVED,
           f"a connected profile keeps its connection when opened with a new login and password: {statuses(mark)}")
     disconnect()
     mark = len(seen)
@@ -519,14 +519,14 @@ def running_profile_login(port):
     check(m["t"] == "profiles", f"saveProfile changes the open profile's login: {m}")
     mark = len(seen)
     m = ask({"t": "openProfile", "name": "Beta", "password": second})
-    check(m["t"] == "profiles" and opened_again(mark) and logged_in_as("beta-hero-2", second),
+    check(m["t"] == "openProfiles" and opened_again(mark) and logged_in_as("beta-hero-2", second),
           f"opening it disconnected with a new login and password starts it again, logged in with them: {statuses(mark)}")
 
     disconnect()
     mark = len(seen)
     m = ask({"t": "openProfile", "name": "Beta", "password": second})
     wait_status(beta, "connection", lambda v: v == "connected", seen)
-    check(m["t"] == "profiles" and ("profile", "Beta closing") not in statuses(mark),
+    check(m["t"] == "openProfiles" and ("profile", "Beta closing") not in statuses(mark),
           f"opened again with the same login and password, it connects without starting again: {statuses(mark)}")
     profile_checks.password_kept_out(check, first, seen, LOG)
     profile_checks.password_kept_out(check, second, seen, LOG)

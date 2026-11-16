@@ -427,6 +427,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   and raising no `sysMapWindowMousePressEvent`; `findRooms` by name, ignoring case, and by number; `showRoom` centring
   the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; a UI that goes
   stopping it, and the next sent none until it asks; and 0 by 0 stopping it;
+- the map download: a game's GMCP `Client.Map` offering a map from a local web server, as `mapDownload` with only the
+  host; `downloadMap` downloading and loading it, with `sysMapDownloadEvent`, its rooms then found and the app's map
+  drawn; `mapDownload` to a UI that attaches; a 404 and a file that is no map failing with Mudlet's reasons, and a
+  slow download sending progress and cancelled, each leaving the map as it was; the refusals; another profile taking
+  the offer away; and the URL's user name and password in no frame and not the engine's log;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 

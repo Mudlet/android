@@ -10,6 +10,7 @@ usage: test_mudlet_engine.py <path-to-engine-binary>
 """
 import base64
 import glob
+import http.server
 import json
 import os
 import re
@@ -19,6 +20,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import zlib
 
@@ -268,6 +270,7 @@ def main():
     button_bars()
     map_view()
     app_map()
+    map_download()
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
@@ -1697,6 +1700,217 @@ def app_map():
     check(m["message"].startswith("appMapPointer: The app's map has not been drawn yet"), f"and lets its view go: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+class MapServer(http.server.BaseHTTPRequestHandler):
+    """The game's web server for map_download(): FILES by path, /slow.dat trickling 400000 bytes over 20 seconds, so a
+    download of it can be cancelled, and 404 for any other path."""
+    FILES = {}
+    PATHS = []
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        MapServer.PATHS.append(self.path)
+        if self.path == "/slow.dat":
+            self.send_response(200)
+            self.send_header("Content-Length", "400000")
+            self.end_headers()
+            try:
+                for _ in range(400):
+                    self.wfile.write(bytes(1000))
+                    self.wfile.flush()
+                    time.sleep(0.05)
+            except OSError:
+                pass
+            return
+        body = MapServer.FILES.get(self.path)
+        if body is None:
+            self.send_error(404, "Not Found")
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def map_download():
+    """The map the game offers with GMCP's Client.Map: mapDownload with no more of its URL than the host, though it holds
+    a user name and password; downloadMap loading it in place of the profile's, with progress, sysMapDownloadEvent, the
+    rooms then found and the app's map drawn; a UI that attaches told of it; a download that fails, with Mudlet's reason,
+    or is cancelled, leaving the map as it was; the refusals; and the user name and password in no frame or log."""
+    user, password = "mapuser", "map-Pw0rd-never-shown"
+    served = os.path.join(TMP, "served")
+    os.makedirs(served, exist_ok=True)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), MapServer)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    fake_telnet.MAP_URL_BASE = f"http://{user}:{password}@127.0.0.1:{server.server_address[1]}"
+    # A version far past any Mudlet's: refused before the profile's map is touched
+    MapServer.FILES["/garbage.dat"] = b"\x7f\xff\xff\xff" + b"not a map " * 100
+    port = fake_telnet.start_in_thread()
+    profile = "Map Download Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(not any(m["t"] == "mapDownload" for m in seen), "with no profile open, a UI that attaches hears of no map download")
+    for request in ({"t": "downloadMap"}, {"t": "cancelMapDownload"}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+
+    def download(**fields):
+        return lambda m: m["t"] == "mapDownload" and all(m.get(k) == v for k, v in fields.items())
+
+    nothing = {"t": "mapDownload", "offered": False, "host": "", "state": "none", "label": "", "value": 0, "maximum": 0,
+               "cancelable": False, "error": ""}
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": port, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the map download's profile is made: {m}")
+    since = len(seen)
+    c.send({"t": "openProfile", "name": profile})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "mapDownload", seen, since, timeout=30)
+    except TimeoutError as e:
+        check(False, f"a profile that loads sends mapDownload: {e}")
+        stop_engine(proc)
+        return
+    check(m == nothing, f"a profile whose game has offered no map: {m}")
+    m = c.ask({"t": "downloadMap"}, answers=("error",), collect=seen)
+    check(m["message"] == "downloadMap: The game has offered no map to download.", f"downloadMap with no map offered is refused: {m}")
+
+    # Three rooms saved where the server serves them, then gone from the profile's map, so only the download brings them back
+    map_file = os.path.join(served, "map.dat")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'local area = addAreaName("Downloaded Area")',
+        "for id = 1, 3 do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, id * 2, 0, 0)",
+        '  setRoomName(id, "Downloaded room " .. id)',
+        "end",
+        "centerview(1)",
+        f"local saved = saveMap({json.dumps(map_file)})",
+        "for id = 1, 3 do deleteRoom(id) end",
+        'registerAnonymousEventHandler("sysMapDownloadEvent", function() echo("map downloaded\\n") end)',
+        'echo("saved " .. tostring(saved) .. "\\n")',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("saved "), seen, since, timeout=15)
+    check(m["text"] == "saved true" and os.path.isfile(map_file), f"the game's map is saved to be served: {m}")
+    with open(map_file, "rb") as f:
+        MapServer.FILES["/map.dat"] = f.read()
+    m = c.ask({"t": "findRooms", "text": "Downloaded"}, answers=("rooms", "error"), collect=seen)
+    check(m.get("rooms") == [], f"and its rooms are gone from the profile's map: {m}")
+
+    seen_or_next(c, lambda m: m["t"] in ("line", "tail") and "Red bold" in m["text"], seen, 0, timeout=15)
+    since = len(seen)
+    c.send({"t": "send", "text": "map map.dat"})
+    try:
+        m = seen_or_next(c, download(offered=True), seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"the game's Client.Map offers its map: {e}")
+        stop_engine(proc)
+        return
+    check(m == dict(nothing, offered=True, host="127.0.0.1"), f"the game offers its map, from its host only: {m}")
+
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 1})
+    c.send({"t": "runLua", "code": 'echo("marker\\n")'})
+    seen_or_next(c, shown("marker"), seen, since)
+    since = len(seen)
+    c.send({"t": "downloadMap"})
+    try:
+        loaded = seen_or_next(c, download(state="loaded"), seen, since, timeout=30)
+    except TimeoutError as e:
+        check(False, f"downloadMap downloads and loads the game's map: {e}")
+        stop_engine(proc)
+        return
+    states = [m for m in seen[since:] if m["t"] == "mapDownload"]
+    check(states[0] == dict(nothing, offered=True, host="127.0.0.1", state="downloading", cancelable=True),
+          f"downloadMap starts the download, which can be cancelled: {states[0]}")
+    check(loaded == dict(nothing, offered=True, host="127.0.0.1", state="loaded"), f"and it ends loaded: {loaded}")
+    check(all(m["state"] == "downloading" for m in states[:-1]), f"with only progress between: {[m['state'] for m in states]}")
+    check("/map.dat" in MapServer.PATHS, f"from the URL the game offered: {MapServer.PATHS}")
+    seen_or_next(c, shown("map downloaded"), seen, since)
+    check(True, "a loaded map raises sysMapDownloadEvent")
+    check(any("Map download initiated" in t for t in texts_of(seen[since:])), "Mudlet says so in the console, as on the desktop")
+    m = c.ask({"t": "findRooms", "text": "Downloaded"}, answers=("rooms", "error"), collect=seen)
+    check([r["id"] for r in m.get("rooms", [])] == [1, 2, 3], f"the downloaded map's rooms are found: {m}")
+    try:
+        seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"], seen, seen.index(loaded) + 1, timeout=15)
+        check(True, "and the app's map draws the downloaded map")
+    except TimeoutError as e:
+        check(False, f"and the app's map draws the downloaded map: {e}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen.extend(msgs)
+    check([m for m in msgs if m["t"] == "mapDownload"] == [loaded], f"a UI that attaches is told of it: {[m['t'] for m in msgs]}")
+
+    # The same host offers another map, which is not there: the download fails with the server's reason
+    since = len(seen)
+    c.send({"t": "send", "text": "map nosuchmap.dat"})
+    seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
+    c.send({"t": "downloadMap"})
+    try:
+        m = seen_or_next(c, download(state="failed"), seen, since, timeout=30)
+        check(m["error"].startswith("Map download encountered an error: ") and "Not Found" in m["error"]
+              and "/nosuchmap.dat" in m["error"] and not m["cancelable"],
+              f"a map the server does not have fails, with Mudlet's reason, untagged and on one line: {m}")
+    except TimeoutError as e:
+        check(False, f"a map the server does not have fails: {e}")
+    since = len(seen)
+    c.send({"t": "send", "text": "map garbage.dat"})
+    seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
+    c.send({"t": "downloadMap"})
+    try:
+        m = seen_or_next(c, download(state="failed"), seen, since, timeout=30)
+        check("failure in parsing destination file" in m["error"], f"a file that is no map fails as Mudlet reads it: {m}")
+    except TimeoutError as e:
+        check(False, f"a file that is no map fails: {e}")
+    m = c.ask({"t": "findRooms", "text": "Downloaded"}, answers=("rooms", "error"), collect=seen)
+    check([r["id"] for r in m.get("rooms", [])] == [1, 2, 3], f"and the profile's map is as it was: {m}")
+
+    # A download that has not arrived can be cancelled, and only once
+    since = len(seen)
+    c.send({"t": "send", "text": "map slow.dat"})
+    seen_or_next(c, shown("Map offered"), seen, since, timeout=15)
+    c.send({"t": "downloadMap"})
+    try:
+        m = seen_or_next(c, download(state="downloading", cancelable=True), seen, since, timeout=15)
+        m = seen_or_next(c, lambda m: m["t"] == "mapDownload" and m["state"] == "downloading" and m["value"] > 0, seen, since,
+                         timeout=15)
+        check(m["label"] != "" and m["maximum"] > 0 and m["cancelable"], f"a download sends its progress: {m}")
+    except TimeoutError as e:
+        check(False, f"a download sends its progress: {e}")
+    m = c.ask({"t": "downloadMap"}, answers=("error",), collect=seen)
+    check(m["message"] == "downloadMap: the map is already downloading", f"a second downloadMap is refused: {m}")
+    since = len(seen)
+    c.send({"t": "cancelMapDownload"})
+    m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "mapDownload" and m["state"] != "downloading"), seen, since,
+                     timeout=15)
+    check(m == dict(nothing, offered=True, host="127.0.0.1", state="cancelled"), f"cancelMapDownload cancels it: {m}")
+    m = c.ask({"t": "cancelMapDownload"}, answers=("error",), collect=seen)
+    check(m["message"] == "cancelMapDownload: no map is downloading", f"and a second is refused: {m}")
+    m = c.ask({"t": "findRooms", "text": "Downloaded"}, answers=("rooms", "error"), collect=seen)
+    check([r["id"] for r in m.get("rooms", [])] == [1, 2, 3], f"and the profile's map is as it was: {m}")
+
+    # Another profile: the first one's offer goes with it
+    other = "Map Download Other"
+    c.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    since = len(seen)
+    c.send({"t": "openProfile", "name": other, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{other} loaded", seen)
+    check([m for m in seen[since:] if m["t"] == "mapDownload"] == [nothing], f"a profile that closes takes its offer with it: "
+          f"{[m for m in seen[since:] if m['t'] == 'mapDownload']}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    for secret in (password, user):
+        profile_checks.password_kept_out(check, secret, seen, LOG)
+    server.shutdown()
 
 
 if __name__ == "__main__":

@@ -120,7 +120,7 @@ class GameScreenTest {
 
     @Test
     fun atTheLineLimitItStillFollowsAndHolds() {
-        val total = EngineClient.MAX_LINES + 5
+        val total = ProfileSession.MAX_LINES + 5
         for (n in 1..total) session.line(n.toLong(), "line $n")
         waitUntilDisplayed("line $total")
         session.line(total + 1L, "line ${total + 1}")

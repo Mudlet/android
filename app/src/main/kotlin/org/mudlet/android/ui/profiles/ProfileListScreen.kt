@@ -77,7 +77,6 @@ fun ProfileListScreen(
     val hasGames = games.isNotEmpty()
     var hadGames by rememberSaveable { mutableStateOf(hasGames) }
     LaunchedEffect(hasGames) {
-        if (hasGames && !hadGames) list.scrollToItem(0)
         hadGames = hasGames
     }
     MudletScaffold(

@@ -294,7 +294,7 @@ class ProfileSession internal constructor(
             dropped = false
             disconnectAsked = false
         } else if (was == "connected") {
-            dropped = !disconnectAsked
+            dropped = false
             disconnectAsked = false
         }
     }

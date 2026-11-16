@@ -82,14 +82,16 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
         shown.removeAll(closed.toSet())
     }
     // Not the profile's: a switch keeps the map in front (docs/multi-profile.md, "Interactions")
-    var mapOpen by rememberSaveable { mutableStateOf(false) }
     val before = remember { Last<String>() }
     val switched = remember(front.name) {
         val was = before.value
         before.value = front.name
         was != null && was != front.name && front.name.isNotEmpty()
     }
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, onBack, onOpenSettings) }
+    kept.SaveableStateProvider(front.name) {
+        var mapOpen by rememberSaveable { mutableStateOf(false) }
+        ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, onBack, onOpenSettings)
+    }
 }
 
 // What a composition last saw, which changing does not compose again
@@ -275,7 +277,6 @@ private fun ProfileGameScreen(
             onDisconnect = ::disconnect,
             onSwitch = {
                 // First: this game's screen is saved as it leaves the front, and an open sheet would show again on its return
-                gamesOpen = false
                 EngineClient.setFront(it)
             },
             onClose = ::close,

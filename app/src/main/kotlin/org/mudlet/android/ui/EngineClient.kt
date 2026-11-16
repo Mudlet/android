@@ -287,7 +287,7 @@ object EngineClient {
             setFront(name)
         }
         onAnswer(error)
-    }) { Requests.openProfile(name, password, connect = true, alongside = true, id = it) }
+    }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
 
     /** Saves and closes the open profile [name], as Mudlet closes a profile; the next to its right, else its left, takes the front. */
     fun closeProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.closeProfile(name, it) }

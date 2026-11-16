@@ -56,6 +56,20 @@ class ProfileSession internal constructor(
 
     private var rememberedAddress by mutableStateOf<GameAddress?>(null)
 
+    /**
+     * The connection ended without the player's Disconnect, as when the game or the network dropped it, until it is
+     * connected again or the player connects or disconnects. A script's `disconnect()` reads as a drop too.
+     */
+    var dropped by mutableStateOf(false)
+        private set
+
+    // The player asked to disconnect, so the end of the connection that follows is no drop; main thread only
+    private var disconnectAsked = false
+
+    /** The profile's "Reconnect automatically", as the engine lists it: Mudlet dials again by itself after a drop. */
+    val autoReconnect: Boolean
+        get() = EngineClient.profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }?.autoReconnect == true
+
     // The engine's line still being written, such as a prompt, shown below the others
     var tail by mutableStateOf<UiLine?>(null)
         private set
@@ -240,7 +254,7 @@ class ProfileSession internal constructor(
     /** Connects the profile to a game and remembers the address for [reconnect]. False as for [send]. */
     fun connect(host: String, port: Int, tls: Boolean): Boolean {
         rememberAddress(GameAddress(host, port, tls))
-        return send(Requests.connect(host, port, tls))
+        return sendConnection(Requests.connect(host, port, tls), disconnecting = false)
     }
 
     private fun rememberAddress(address: GameAddress) {
@@ -261,10 +275,29 @@ class ProfileSession internal constructor(
     /** Connects to [lastAddress] again; false when there is none or the request was dropped. */
     fun reconnect(): Boolean {
         val address = lastAddress ?: return false
-        return send(Requests.connect(address.host, address.port, address.tls))
+        return sendConnection(Requests.connect(address.host, address.port, address.tls), disconnecting = false)
     }
 
-    fun disconnect(): Boolean = send(Requests.disconnect())
+    fun disconnect(): Boolean = sendConnection(Requests.disconnect(), disconnecting = true)
+
+    // The player has acted on the connection, which a drop's state gives way to
+    private fun sendConnection(message: JSONObject, disconnecting: Boolean): Boolean {
+        if (!send(message)) return false
+        dropped = false
+        disconnectAsked = disconnecting
+        return true
+    }
+
+    // Only a change seen as it happens counts: an attach resends the status from scratch, which is no drop
+    private fun connectionChanged(was: String?, now: String) {
+        if (now == "connected") {
+            dropped = false
+            disconnectAsked = false
+        } else if (was == "connected") {
+            dropped = !disconnectAsked
+            disconnectAsked = false
+        }
+    }
 
     // Lost when the profile has not loaded or the link is down: its load, or the next attach, gets them all
     internal fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
@@ -310,6 +343,9 @@ class ProfileSession internal constructor(
                 sendsAwaitingClear.clear()
                 if (!sameInstance) {
                     lastLuaResult = ""
+                    // A new engine restores the connection itself (status restore); the old one's drop is not this one's
+                    dropped = false
+                    disconnectAsked = false
                     moveTypedLine = false
                     tail = null
                     if (lines.isNotEmpty()) addMarker(app.getString(R.string.marker_new_engine, hello.instance))
@@ -490,7 +526,9 @@ class ProfileSession internal constructor(
             flushPosted = false
         }
         if (statusReset) status.clear()
+        val wasConnection = status["connection"]
         status.putAll(newStatus)
+        newStatus["connection"]?.let { connectionChanged(wasConnection, it) }
         newStatus["luaResult"]?.let { lastLuaResult = it }
         newStatus["profile"]?.let(::profileStatus)
         if (clear) lines.clear()

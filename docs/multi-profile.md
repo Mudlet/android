@@ -3,8 +3,9 @@
 Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 has landed
 protocol 15 and the stand-in engine runs several profiles. E1 has libmudlet run several, each in a `THeadlessSession`
 of its own sharing the pool (UP1, carried as `0007-headless-shared-pool.patch`), restored together. U1 has the app
-attach to the control socket and to each open profile's socket, with a `ProfileSession` for each; it still
-opens one profile at a time and has no way to switch. N1 has the engine notification list the open games, files each
+attach to the control socket and to each open profile's socket, with a `ProfileSession` for each. U2 has the game
+pill and its sheet: several games open, switching, closing, "Open another game", the TalkBack actions and
+announcements, and the profile list's "Open games"; the swipe (U3) and the badges (U4) are still to come. N1 has the engine notification list the open games, files each
 game's tells under it, opens the game a tell's tap is about, and leaves the foreground with no game open.
 
 The aim: several profiles open at once, each with its own connection, and a profile button that lists them on a tap and
@@ -91,13 +92,15 @@ there gets `error`, as a control request sent on a profile socket does.
 
 ## The switcher
 
-- **The profile button** replaces the state text at the left of `ConnectionBar`, above the keyboard: the front
-  profile's name, its connection state as an icon whose shape differs per state, and a chip with the number of open
-  games, with a dot when another game has unread lines or wants attention. Reconnect and Disconnect act on the front
-  profile.
+- **The profile button**, the game pill, sits at the start of the quick bar's row, above the keyboard; the separate
+  connection bar is gone. It shows the front profile's name, its connection state as an icon whose shape differs per
+  state, and a chip with the number of open games, with a dot when another game has unread lines or wants attention.
+  Reconnect and Disconnect, which act on the front profile, are in its sheet; while the game is not connected, one
+  chip beside the pill offers what the state needs (Connect, Reconnect, Reconnect now, Try again, or Stop while it
+  connects).
 - **Tap** opens a bottom sheet with a row per open profile: name, state, an unread badge ("99+" past 99), a bell for
   `attention` and a close button. "Open another game" at the foot goes to the profile list, where Connect sends
-  `openProfile` with `alongside`. At the cap it says "Close a game to open another (at most 4)". It is 4: the emulator
+  `openProfile` with `alongside` while a game is open. At the cap it says "Close a game to open another (at most 4)". It is 4: the emulator
   measures about 10 MB per profile after the first ([`architecture.md`](architecture.md), "Memory per profile"); raise
   it once that is measured on a phone with real games.
 - **Swipe** on the button moves its label with the finger and cross-slides the console. Past 40% of the button's width,

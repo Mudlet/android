@@ -45,20 +45,27 @@ import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
+import kotlin.reflect.KClass
 
 /**
- * The console with the windows the game's scripts draw around it, the input line, the quick bar and the connection bar,
- * top to bottom. After the title bar, TalkBack reads the console, the input line, the quick bar and the connection bar,
- * then the script windows and their switcher, then the button bars. The keyboard pushes them up, so the console shrinks
- * above it. The input line's suggestions and the quick bar's pinned commands come from the profile the engine runs
- * ([rememberEngineSuggestions]), which learns from what is sent. The quick bar's History button, or Ctrl+R on a
- * hardware keyboard, opens the command history ([HistorySheet]). While the game hides input there is neither quick bar
- * nor history. Why the engine could not send something shows over the console's foot, where the keyboard does not hide
- * it. The map is behind the console's text while the setting has it there ([BackgroundMap]), and the title bar's map
- * button brings it to the front over all but the title bar and the connection bar ([FullScreenMap]), input line and
- * quick bar included, until Back or the button again. All of it is the front profile's ([EngineClient.front]), and what
- * the screen keeps of a profile, such as the typed line and where the console is scrolled to, waits for it while
- * another is in front.
+ * The console with the windows the game's scripts draw around it, the input line, and the row below it, top to bottom.
+ * The row holds the game pill ([GamePill]), which shows the front game's connection and opens the game sheet
+ * ([GameSheet]) with Reconnect, Disconnect, the open games and "Open another game", which goes back to the profile
+ * list ([onBack]), where Connect opens one more beside those open; beside the pill, while the game is not connected,
+ * one chip with what to do about it ([ConnectionChip]); then the quick bar's History and pinned commands. After the title bar, TalkBack reads the console, the input line and that row, then the script
+ * windows and their switcher, then the button bars. The keyboard pushes them up, so the console shrinks above it. The
+ * input line's suggestions and the quick bar's pinned commands come from the profile the engine runs
+ * ([rememberEngineSuggestions]), which learns from what is sent. The History button, or Ctrl+R on a hardware keyboard,
+ * opens the command history ([HistorySheet]). While the game hides input the row has only the pill and its chip, and
+ * there is no history. Why the engine could not send something shows over the console's foot, where the keyboard does
+ * not hide it. The map is behind the console's text while the setting has it there ([BackgroundMap]), and the title
+ * bar's map button brings it to the front over the console and the input line ([FullScreenMap]), until Back or the
+ * button again; the row stays below it, without History, as the command it picks would go to the covered line.
+ *
+ * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
+ * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
+ * front, TalkBack says its name and state and the focus goes to its input line; each change of the front game's
+ * connection is said once, with the game's name first, so Mudlet's retries after a drop are not each read out.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
@@ -73,14 +80,26 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
         closed.forEach(kept::removeState)
         shown.removeAll(closed.toSet())
     }
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, onBack, onOpenSettings) }
+    val before = remember { Last<String>() }
+    val switched = remember(front.name) {
+        val was = before.value
+        before.value = front.name
+        was != null && was != front.name && front.name.isNotEmpty()
+    }
+    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, onBack, onOpenSettings) }
+}
+
+// What a composition last saw, which changing does not compose again
+private class Last<T> {
+    var value: T? = null
 }
 
 @Composable
-private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSettings: () -> Unit) {
+private fun ProfileGameScreen(c: ProfileSession, switched: Boolean, onBack: () -> Unit, onOpenSettings: () -> Unit) {
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
     var mapOpen by rememberSaveable { mutableStateOf(false) }
+    var gamesOpen by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -102,6 +121,40 @@ private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSetti
             // The newest reason replaces one still showing; launched apart, as sendErrorShown ends this effect
             snackbars.currentSnackbarData?.dismiss()
             scope.launch { snackbars.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Long) }
+        }
+    }
+
+    val games = EngineClient.sessions
+    val state = ConnectionState.of(c)
+    val stateText = state.text()
+    val name = c.name.ifEmpty { stringResource(R.string.game_none) }
+    // What Reconnect opens again while no game is open
+    val reconnectName = c.name.ifEmpty { EngineClient.lastProfile.orEmpty() }
+    val canReconnect = EngineClient.enginePid > 0 && EngineClient.canReconnect
+    val index = games.indexOf(c)
+    val switchedText = stringResource(R.string.game_state, name, stateText)
+    LaunchedEffect(Unit) { if (switched) Announcer.announce(switchedText, assertive = false) }
+    val heard = remember { Last<KClass<out ConnectionState>>() }
+    val transitionText = stringResource(R.string.connection_announce, name, stateText)
+    LaunchedEffect(state::class) {
+        val was = heard.value
+        heard.value = state::class
+        if (was != null && was != state::class) Announcer.announce(transitionText, assertive = false)
+    }
+
+    fun reconnect() = EngineClient.reconnect(passwords::get) { error ->
+        scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_reconnect_refused, error), withDismissAction = true) }
+    }
+
+    fun disconnect() {
+        c.disconnect()
+    }
+
+    fun close(game: String) = EngineClient.closeProfile(game) { error ->
+        if (error != null) {
+            scope.launch { snackbars.showSnackbar(resources.getString(R.string.game_close_refused, error), withDismissAction = true) }
+        } else if (EngineClient.sessions.isEmpty()) {
+            onBack()
         }
     }
 
@@ -167,35 +220,55 @@ private fun ProfileGameScreen(c: ProfileSession, onBack: () -> Unit, onOpenSetti
                         picked = picked,
                         onPickedShown = { picked = null },
                         covered = mapOpen,
+                        focusOnStart = switched,
                     )
-                    if (!hidden) {
-                        QuickBar(
-                            suggestions.pinned,
-                            onHistory = { historyOpen = true },
-                            onSend = ::sendNow,
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        )
-                    }
                 }
                 if (mapOpen) {
                     FullScreenMap(onClose = { mapOpen = false }, Modifier.fillMaxSize())
                     SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
                 }
             }
-            ConnectionBar(
-                ConnectionState.of(engineAttached = EngineClient.enginePid > 0, connection = c.status["connection"]),
-                canReconnect = EngineClient.canReconnect,
-                onReconnect = {
-                    EngineClient.reconnect(passwords::get) { error ->
-                        scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_reconnect_refused, error), withDismissAction = true) }
-                    }
-                },
-                onDisconnect = { c.disconnect() },
+            QuickBar(
+                if (hidden) emptyList() else suggestions.pinned,
+                onHistory = if (hidden || mapOpen) null else ({ historyOpen = true }),
+                onSend = ::sendNow,
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            )
+            ) {
+                GamePill(
+                    name,
+                    state,
+                    index,
+                    games.size,
+                    onShowGames = { gamesOpen = true },
+                    onReconnect = if (canReconnect) ::reconnect else null,
+                    onDisconnect = if (c.name.isNotEmpty() && state.canDisconnect) ::disconnect else null,
+                    previous = games.getOrNull(index - 1)?.name,
+                    next = if (index >= 0) games.getOrNull(index + 1)?.name else null,
+                    onSwitch = { EngineClient.setFront(it) },
+                )
+                when (val action = state.action) {
+                    null -> {}
+                    ConnectionAction.STOP -> if (c.name.isNotEmpty()) ConnectionChip(action, name, onClick = ::disconnect)
+                    else -> if (canReconnect) ConnectionChip(action, reconnectName, onClick = ::reconnect)
+                }
+            }
         }
     }
     if (historyOpen && !hidden) {
         HistorySheet(suggestions, onPick = { picked = it }, onSend = ::sendNow, onDismiss = { historyOpen = false })
+    }
+    if (gamesOpen) {
+        GameSheet(
+            c,
+            name,
+            games,
+            canReconnect,
+            onReconnect = ::reconnect,
+            onDisconnect = ::disconnect,
+            onSwitch = { EngineClient.setFront(it) },
+            onClose = ::close,
+            onOpenAnother = onBack,
+            onDismiss = { gamesOpen = false },
+        )
     }
 }

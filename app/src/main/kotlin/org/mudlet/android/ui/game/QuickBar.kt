@@ -4,6 +4,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -29,29 +30,42 @@ import org.mudlet.android.R
 const val QUICK_BAR_TAG = "quickBar"
 
 /**
- * The row below the input line: the History button, which [onHistory] opens the command history with, then a button
- * for each of [pinned], which [onSend] sends at once. It scrolls sideways when the buttons do not fit.
+ * The row below the input line: [leading], fixed at its start, then the History button, which [onHistory] opens the
+ * command history with (none while it is null), and a button for each of [pinned], which [onSend] sends at once. Those
+ * after [leading] scroll sideways when they do not fit, so that a gesture on [leading] never scrolls the row.
  */
 @Composable
-fun QuickBar(pinned: List<String>, onHistory: () -> Unit, onSend: (String) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.testTag(QUICK_BAR_TAG).horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TextButton(onHistory, Modifier.heightIn(min = 48.dp)) {
-            Icon(painterResource(R.drawable.ic_history), contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.history_open))
-        }
-        for (command in pinned) {
-            val label = stringResource(R.string.pinned_command, command)
-            FilledTonalButton(
-                onClick = { onSend(command) },
-                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label },
-                contentPadding = PaddingValues(horizontal = 12.dp),
-            ) {
-                Text(command, Modifier.widthIn(max = 160.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+fun QuickBar(
+    pinned: List<String>,
+    onHistory: (() -> Unit)?,
+    onSend: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    leading: @Composable RowScope.() -> Unit = {},
+) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        leading()
+        if (onHistory == null && pinned.isEmpty()) return@Row
+        Row(
+            Modifier.weight(1f).testTag(QUICK_BAR_TAG).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onHistory != null) {
+                TextButton(onHistory, Modifier.heightIn(min = 48.dp)) {
+                    Icon(painterResource(R.drawable.ic_history), contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.history_open))
+                }
+            }
+            for (command in pinned) {
+                val label = stringResource(R.string.pinned_command, command)
+                FilledTonalButton(
+                    onClick = { onSend(command) },
+                    modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = label },
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                ) {
+                    Text(command, Modifier.widthIn(max = 160.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

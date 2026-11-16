@@ -203,7 +203,9 @@ def no_map(c):
     for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False},
                     {"t": "appMapPointer", "type": "doubleClick", "x": 1, "y": 2, "button": 1}, {"t": "showRoom", "room": 1},
                     {"t": "moveMap", "map": "app", "dx": 10, "dy": -5, "zoom": 1.5, "x": 1, "y": 2, "seq": 1},
-                    {"t": "followPlayer", "map": "mapper"}, {"t": "downloadMap"}, {"t": "cancelMapDownload"}):
+                    {"t": "followPlayer", "map": "mapper"}, {"t": "showMapLevel", "map": "app", "level": 1},
+                    {"t": "showMapArea", "map": "mapper", "area": 2}, {"t": "walkToRoom", "room": 1},
+                    {"t": "downloadMap"}, {"t": "cancelMapDownload"}):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: the stand-in engine has no map", f"{request['t']} is refused: {m}")
     for request, message in (({"t": "mapPointer", "type": "move", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
@@ -224,6 +226,10 @@ def no_map(c):
                              ({"t": "moveMap", "map": "mapper", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 0}, "seq must be a whole number from 1"),
                              ({"t": "moveMap", "map": "mapper", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0}, "seq must be a whole number from 1"),
                              ({"t": "followPlayer"}, "map must be app or mapper"),
+                             ({"t": "showMapLevel", "map": "app"}, "level must be a whole number"),
+                             ({"t": "showMapLevel", "level": 1}, "map must be app or mapper"),
+                             ({"t": "showMapArea", "map": "mapper", "area": "2"}, "area must be a whole number"),
+                             ({"t": "walkToRoom", "room": 1.5}, "room must be a whole number"),
                              ({"t": "findRooms", "text": " "}, "text must not be empty"),
                              ({"t": "setAppMapSize", "w": 0, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
                              ({"t": "setAppMapSize", "w": 1.5, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
@@ -236,6 +242,10 @@ def no_map(c):
         check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused first: {request} -> {m['message']}")
     m = c.ask({"t": "findRooms", "text": "Hall"}, answers=("error", "rooms"))
     check(m["t"] == "error" and m["message"] == "findRooms: the stand-in engine has no map", f"findRooms is refused: {m}")
+    for request, message in (({"t": "roomInfo", "room": 1}, "the stand-in engine has no map"), ({"t": "roomInfo", "room": "1"}, "room must be a whole number"),
+                             ({"t": "mapAreas"}, "the stand-in engine has no map")):
+        m = c.ask(request, answers=("error", "room", "areas"))
+        check(m["t"] == "error" and m["message"] == f"{request['t']}: {message}", f"{request} is refused: {m}")
     # A UI that attaches replaces this one, and goes on in its place
     c.close()
     c = Client(SOCK)

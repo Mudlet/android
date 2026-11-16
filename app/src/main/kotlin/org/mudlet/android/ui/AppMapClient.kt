@@ -74,6 +74,12 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         session.send(it)
     }
 
+    override val rooms = MapRooms(MapTarget.APP, mover, session::newRequestId) {
+        refused = null
+        askedRooms = true
+        session.send(it)
+    }
+
     /** The map the game offers and how its download goes, as the engine last said: [NO_DOWNLOAD] until it says. */
     var download by mutableStateOf(NO_DOWNLOAD)
         private set
@@ -97,8 +103,10 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     private var sent: Size? = Size.NONE
     private var pendingSearch: Long? = null
 
-    // Whether the last setMapViewOnly was this map's, whose refusal it shows, or the mapper window's
+    // Whether the last setMapViewOnly was this map's, whose refusal it shows, or the mapper window's; and so for the
+    // last of MapRooms.REQUESTS
     private var askedViewOnly = false
+    private var askedRooms = false
 
     // Asks for the map at the size of what shows it, the full-screen map before the background; for none while the
     // profile is not the front, as only the front's is drawn
@@ -118,6 +126,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         if (bitmap == null) Log.w(TAG, "the engine's app map, ${message.w} by ${message.h}, did not decode")
         map = ScriptWindowsClient.MapImage(bitmap, message.w, message.h, message.viewOnly)
         mover.onFrame(message.view)
+        rooms.onFrame(message.view)
     }
 
     /** The engine's answer to [findRooms]; one to an earlier search is not shown. */
@@ -135,6 +144,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             "setMapViewOnly" -> if (!askedViewOnly) return false
             "findRooms" -> closeSearch()
             "moveMap", "followPlayer" -> if (mover.awaiting) mover.clear() else return false
+            in MapRooms.REQUESTS -> if (askedRooms) rooms.onRefused(request) else return false
             else -> return false
         }
         refused = reason
@@ -144,6 +154,11 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     /** The mapper window asked for the map viewed or edited: a refusal is its, not this map's. */
     internal fun viewOnlyAskedByMapper() {
         askedViewOnly = false
+    }
+
+    /** The mapper window sent one of [MapRooms.REQUESTS]: a refusal is its, not this map's. */
+    internal fun roomsAskedByMapper() {
+        askedRooms = false
     }
 
     /**
@@ -161,6 +176,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             downloadEnd = null
         }
         downloadAsked = false
+        rooms.onAttached(sameInstance)
         sent = Size.NONE
         if (pendingSearch != null) closeSearch()
         update()
@@ -195,10 +211,13 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         return true
     }
 
-    /** Centres the map on [room], selected, and closes the search's results. False as for [ProfileSession.send]. */
+    /**
+     * Centres the map on [room], selected, and closes the search's results, keeping what was searched for to search
+     * again. False as for [ProfileSession.send].
+     */
     fun showRoom(room: Int): Boolean {
         refused = null
-        search = null
+        closeSearch()
         return session.send(Requests.showRoom(room))
     }
 

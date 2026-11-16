@@ -117,6 +117,21 @@ std::optional<IEngine::MapTarget> mapTarget(const QJsonObject& message)
     return std::nullopt;
 }
 
+QString wireName(RoomMatch::Match match)
+{
+    switch (match) {
+    case RoomMatch::Match::exact:
+        return QStringLiteral("exact");
+    case RoomMatch::Match::prefix:
+        return QStringLiteral("prefix");
+    case RoomMatch::Match::contains:
+        return QStringLiteral("contains");
+    case RoomMatch::Match::id:
+        return QStringLiteral("id");
+    }
+    return QStringLiteral("contains");
+}
+
 QString wireName(MapDownload::State state)
 {
     switch (state) {
@@ -513,6 +528,21 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("followPlayer")) {
         const std::optional<IEngine::MapTarget> map = mapTarget(message);
         refuse(type, map ? mEngine->followPlayer(*map) : QStringLiteral("map must be app or mapper"));
+    } else if (type == QLatin1String("showMapLevel")) {
+        const std::optional<IEngine::MapTarget> map = mapTarget(message);
+        const std::optional<int> level = wholeNumber(message.value(QLatin1String("level")));
+        refuse(type, !map ? QStringLiteral("map must be app or mapper") : level ? mEngine->showMapLevel(*map, *level) : QStringLiteral("level must be a whole number"));
+    } else if (type == QLatin1String("showMapArea")) {
+        const std::optional<IEngine::MapTarget> map = mapTarget(message);
+        const std::optional<int> area = wholeNumber(message.value(QLatin1String("area")));
+        refuse(type, !map ? QStringLiteral("map must be app or mapper") : area ? mEngine->showMapArea(*map, *area) : QStringLiteral("area must be a whole number"));
+    } else if (type == QLatin1String("walkToRoom")) {
+        const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+        refuse(type, room ? mEngine->walkToRoom(*room) : QStringLiteral("room must be a whole number"));
+    } else if (type == QLatin1String("roomInfo")) {
+        roomInfo(message);
+    } else if (type == QLatin1String("mapAreas")) {
+        mapAreas();
     } else if (type == QLatin1String("downloadMap")) {
         refuse(type, mEngine->downloadMap());
     } else if (type == QLatin1String("cancelMapDownload")) {
@@ -750,9 +780,57 @@ void SocketBridge::findRooms(const QJsonObject& message)
     const RoomList& list = std::get<RoomList>(found);
     QJsonArray rooms;
     for (const RoomMatch& room : list.rooms) {
-        rooms.append(QJsonObject{{QStringLiteral("id"), room.id}, {QStringLiteral("name"), room.name}, {QStringLiteral("area"), room.area}});
+        rooms.append(QJsonObject{{QStringLiteral("id"), room.id},
+                                 {QStringLiteral("name"), room.name},
+                                 {QStringLiteral("areaId"), room.areaId},
+                                 {QStringLiteral("area"), room.area},
+                                 {QStringLiteral("match"), wireName(room.match)},
+                                 {QStringLiteral("steps"), room.steps}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("rooms")}, {QStringLiteral("text"), text}, {QStringLiteral("rooms"), rooms}, {QStringLiteral("more"), list.more}});
+}
+
+void SocketBridge::roomInfo(const QJsonObject& message)
+{
+    const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
+    if (!room) {
+        sendError(QStringLiteral("roomInfo: room must be a whole number"));
+        return;
+    }
+    const std::variant<RoomDetails, QString> found = mEngine->roomInfo(*room);
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("roomInfo: %1").arg(*problem));
+        return;
+    }
+    const RoomDetails& details = std::get<RoomDetails>(found);
+    QJsonArray exits;
+    for (const RoomExitInfo& exit : details.exits) {
+        exits.append(QJsonObject{{QStringLiteral("direction"), exit.direction}, {QStringLiteral("to"), exit.to}, {QStringLiteral("toName"), exit.toName}, {QStringLiteral("locked"), exit.locked}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("room")},
+               {QStringLiteral("id"), details.id},
+               {QStringLiteral("name"), details.name},
+               {QStringLiteral("areaId"), details.areaId},
+               {QStringLiteral("area"), details.area},
+               {QStringLiteral("x"), details.x},
+               {QStringLiteral("y"), details.y},
+               {QStringLiteral("z"), details.z},
+               {QStringLiteral("steps"), details.steps},
+               {QStringLiteral("exits"), exits}});
+}
+
+void SocketBridge::mapAreas()
+{
+    const std::variant<QList<MapAreaInfo>, QString> found = mEngine->mapAreas();
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("mapAreas: %1").arg(*problem));
+        return;
+    }
+    QJsonArray areas;
+    for (const MapAreaInfo& area : std::get<QList<MapAreaInfo>>(found)) {
+        areas.append(QJsonObject{{QStringLiteral("id"), area.id}, {QStringLiteral("name"), area.name}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("areas")}, {QStringLiteral("areas"), areas}});
 }
 
 void SocketBridge::getImage(const QJsonObject& message)
@@ -1436,6 +1514,10 @@ QJsonObject SocketBridge::mapViewMessage(const MapViewInfo& view)
     for (const MapRoomPlace& room : view.rooms) {
         rooms.append(QJsonObject{{QStringLiteral("id"), room.id}, {QStringLiteral("x"), room.position.x()}, {QStringLiteral("y"), room.position.y()}, {QStringLiteral("name"), room.name}});
     }
+    QJsonArray levels;
+    for (const int level : view.levels) {
+        levels.append(level);
+    }
     return {{QStringLiteral("area"), view.area},
             {QStringLiteral("areaName"), view.areaName},
             {QStringLiteral("level"), view.level},
@@ -1446,7 +1528,8 @@ QJsonObject SocketBridge::mapViewMessage(const MapViewInfo& view)
             {QStringLiteral("player"), view.playerRoom},
             {QStringLiteral("roomSize"), view.roomSize},
             {QStringLiteral("moved"), view.moved},
-            {QStringLiteral("rooms"), rooms}};
+            {QStringLiteral("rooms"), rooms},
+            {QStringLiteral("levels"), levels}};
 }
 
 void SocketBridge::sendIfChanged(QJsonObject& kept, QJsonObject message)

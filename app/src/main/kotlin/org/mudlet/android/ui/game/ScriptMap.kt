@@ -12,11 +12,23 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconToggleButton
@@ -24,13 +36,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -46,6 +61,7 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -58,6 +74,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -71,13 +88,16 @@ import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.MapShift
+import org.mudlet.android.protocol.MapViewInfo
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
+import org.mudlet.android.protocol.RoomInfo
 import org.mudlet.android.protocol.ZoomNotches
 import org.mudlet.android.ui.AppMapClient
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MapMover
+import org.mudlet.android.ui.MapRooms
 import org.mudlet.android.ui.ScriptWindowsClient
 import kotlin.math.exp
 import kotlin.math.hypot
@@ -108,9 +128,14 @@ private val DRAG_ZOOM_DISTANCE = 100.dp
 // A drag let go slower than this a second does not glide on
 private val MIN_FLING_SPEED = 50.dp
 
-// The button that centres the map on the player: its space from the map's corner, and the room a refusal leaves it
+// The button that centres the map on the player: its space from the map's corner, and the room the bar beside it leaves it
 private val FOLLOW_PADDING = 8.dp
 private val FOLLOW_SPACE = 48.dp + FOLLOW_PADDING * 2
+
+// The area and level bar shows on a map at least this high, room for it and the buttons over it; the room picked takes
+// at most this much of the map's height
+private val PLACE_BAR_LEAST_HEIGHT = 144.dp
+private const val ROOM_CARD_FRACTION = 0.5f
 
 // TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
 private const val MIN_FIT_SCALE = 0.01f
@@ -136,6 +161,9 @@ internal interface MapSource {
 
     /** The map's moves by touch. */
     val mover: MapMover
+
+    /** The map's rooms and areas the player asks about. */
+    val rooms: MapRooms
 }
 
 // The mapper window's requests, which ScriptWindowsClient sends
@@ -149,6 +177,8 @@ private object MapperWindow : MapSource {
     override fun dismissRefusal() = EngineClient.front.windows.dismissMapRefusal()
 
     override val mover: MapMover get() = EngineClient.front.windows.mapMover
+
+    override val rooms: MapRooms get() = EngineClient.front.windows.mapRooms
 }
 
 /**
@@ -184,11 +214,12 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
 /**
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways,
  * and moved at once by what the player's touches moved it by until the engine draws that ([MapMover]). A tap selects
- * the room nearest it, a double tap walks there, a drag pans the map and glides on when flung, a pinch zooms about the
- * fingers and a double tap that drags zooms about it, each sent to [source]. In its corner, with [controls], are its
- * [MapButtons]; at its bottom a button that centres it on the player while it does not follow them, and why the engine
- * refused a request. TalkBack reads it as the map, viewed or edited and whether it follows the player, whose actions
- * select or walk to the room in its middle, zoom, move it and centre it on the player.
+ * the room nearest it and shows it ([RoomCard]), a double tap walks there, a drag pans the map and glides on when
+ * flung, a pinch zooms about the fingers and a double tap that drags zooms about it, each sent to [source]. In its
+ * corner, with [controls], are its [MapButtons]; at its bottom why the engine refused a request, the area and level shown
+ * ([MapPlaceBar]) beside a button that centres it on the player while it does not follow them, and the room picked.
+ * TalkBack reads it as the map, viewed or edited and whether it follows the player, whose actions select or walk to the
+ * room in its middle, zoom, move it, show the level above or below and centre it on the player.
  */
 @Composable
 internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier, controls: Boolean = true) {
@@ -216,13 +247,19 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         CustomAccessibilityAction(stringResource(label)) { mover.move(side * direction.x, side * direction.y, 1.0, fit.centre, fit.centre, now = true) }
     }
     val follow = CustomAccessibilityAction(stringResource(R.string.map_follow)) { mover.followPlayer() }
+    val view = mover.view.takeIf { movable }
+    val above = view?.let { v -> v.levels.firstOrNull { it > v.level } }
+    val below = view?.let { v -> v.levels.lastOrNull { it < v.level } }
+    val levelUp = above?.let { CustomAccessibilityAction(stringResource(R.string.map_level_up)) { source.rooms.showLevel(it) } }
+    val levelDown = below?.let { CustomAccessibilityAction(stringResource(R.string.map_level_down)) { source.rooms.showLevel(it) } }
     val actions = listOf(
         CustomAccessibilityAction(stringResource(R.string.map_walk_to_middle)) { source.touch(MapPointerType.DOUBLE_CLICK, fit, fit.centre, reach) },
         CustomAccessibilityAction(stringResource(R.string.map_zoom_in)) { source.zoom(fit, 1) },
         CustomAccessibilityAction(stringResource(R.string.map_zoom_out)) { source.zoom(fit, -1) },
-    ) + (if (movable) pans else emptyList()) + listOfNotNull(follow.takeIf { followShown })
+    ) + (if (movable) pans else emptyList()) + listOfNotNull(levelUp, levelDown, follow.takeIf { followShown })
+    val room = source.rooms.room.takeIf { touchable }
 
-    Box(modifier) {
+    BoxWithConstraints(modifier) {
         Canvas(
             Modifier.fillMaxSize().clipToBounds().pointerInput(source) { mapGestures(source, haptics, scope, decay) { currentFit } }.clearAndSetSemantics {
                 contentDescription = description
@@ -247,17 +284,161 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
                 MapButtons(source, frame, fit, viewOnly, drawn)
             }
         }
-        if (followShown) {
-            SmallFloatingActionButton(
-                { mover.followPlayer() },
-                Modifier.align(Alignment.BottomEnd).padding(FOLLOW_PADDING).minimumInteractiveComponentSize(),
-            ) {
-                Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_follow))
+        // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
+        val placeBar = view != null && maxHeight >= PLACE_BAR_LEAST_HEIGHT
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            source.refusal?.let { MapRefusal(it, source::dismissRefusal) }
+            Box(Modifier.fillMaxWidth()) {
+                if (placeBar && view != null) {
+                    MapPlaceBar(view, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp))
+                }
+                if (followShown) {
+                    SmallFloatingActionButton(
+                        { mover.followPlayer() },
+                        Modifier.align(Alignment.BottomEnd).padding(FOLLOW_PADDING).minimumInteractiveComponentSize(),
+                    ) {
+                        Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_follow))
+                    }
+                }
+            }
+            room?.let { RoomCard(it, source.rooms, Modifier.fillMaxWidth().heightIn(max = maxHeight * ROOM_CARD_FRACTION)) }
+        }
+    }
+}
+
+/**
+ * The area [view] shows, a button that lists the map's areas to show another, and while the area has more than one
+ * level, the level shown between buttons to the level [above] and [below] it; each asked of [rooms].
+ */
+@Composable
+private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: Int?, modifier: Modifier = Modifier) {
+    val attached = EngineClient.enginePid > 0
+    var listed by remember { mutableStateOf(false) }
+    Surface(
+        modifier.padding(CONTROLS_PADDING),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                TextButton(
+                    {
+                        listed = true
+                        rooms.askAreas()
+                    },
+                    Modifier.heightIn(min = 48.dp),
+                    enabled = attached,
+                ) {
+                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Icon(painterResource(R.drawable.ic_arrow_drop_down), null)
+                }
+                DropdownMenu(listed, { listed = false }) {
+                    val areas = rooms.areas
+                    if (areas == null) {
+                        DropdownMenuItem({ Text(stringResource(R.string.map_areas_loading)) }, {}, enabled = false)
+                    } else {
+                        areas.forEach { area ->
+                            DropdownMenuItem(
+                                { Text(area.name, fontWeight = if (area.id == view.area) FontWeight.Bold else null) },
+                                {
+                                    listed = false
+                                    rooms.showArea(area.id)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            if (view.levels.size > 1) {
+                IconButton({ below?.let(rooms::showLevel) }, enabled = attached && below != null) {
+                    Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.map_level_down))
+                }
+                Text(stringResource(R.string.map_level, view.level), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                IconButton({ above?.let(rooms::showLevel) }, enabled = attached && above != null) {
+                    Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.map_level_up))
+                }
             }
         }
-        // Clear of that button, which would otherwise take the touches on its end
-        source.refusal?.let { MapRefusal(it, source::dismissRefusal, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp)) }
     }
+}
+
+/**
+ * The room [info] the player picked on a map: its name, area and number, how far it is, its exits, each a button that
+ * shows the room it leads to, and a button that walks there; read out as it comes. It scrolls where it has not the room.
+ */
+@Composable
+private fun RoomCard(info: RoomInfo, rooms: MapRooms, modifier: Modifier = Modifier) {
+    val attached = EngineClient.enginePid > 0
+    val haptics = LocalHapticFeedback.current
+    Surface(modifier.padding(4.dp), shape = MaterialTheme.shapes.medium, tonalElevation = 3.dp, shadowElevation = 3.dp) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Row {
+                Column(Modifier.weight(1f).padding(start = 16.dp, top = 12.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                    Text(
+                        info.name.ifEmpty { stringResource(R.string.room_unnamed, info.id) },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(stringResource(R.string.room_place, info.area, info.id), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(roomDistance(info.steps), style = MaterialTheme.typography.bodyMedium)
+                }
+                IconButton(rooms::close) {
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.room_close))
+                }
+            }
+            if (info.exits.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    info.exits.forEach { exit ->
+                        val way = exitWay(exit.direction)
+                        val name = exit.toName.ifEmpty { stringResource(R.string.room_unnamed, exit.to) }
+                        AssistChip(
+                            { rooms.ask(exit.to) },
+                            { Text(stringResource(if (exit.locked) R.string.room_exit_locked else R.string.room_exit, way, name), maxLines = 1) },
+                            enabled = attached,
+                        )
+                    }
+                }
+            }
+            FilledTonalButton(
+                { if (rooms.walk(info.id)) haptics.performHapticFeedback(HapticFeedbackType.Confirm) },
+                Modifier.padding(horizontal = 12.dp, vertical = 4.dp).heightIn(min = 48.dp),
+                enabled = attached && info.steps > 0,
+            ) {
+                Icon(painterResource(R.drawable.ic_directions_walk), null)
+                Text(stringResource(R.string.room_walk), Modifier.padding(start = 8.dp))
+            }
+        }
+    }
+}
+
+/** How far a room [steps] from the player's is, in words: here, so many steps, or no known way for -1. */
+@Composable
+internal fun roomDistance(steps: Int): String = when {
+    steps == 0 -> stringResource(R.string.room_here)
+    steps < 0 -> stringResource(R.string.room_no_way)
+    else -> pluralStringResource(R.plurals.room_steps, steps, steps)
+}
+
+// An exit's way in words: one of the twelve directions as the engine names them, or a special exit's own command
+@Composable
+private fun exitWay(direction: String): String {
+    val word = when (direction) {
+        "n" -> R.string.exit_north
+        "ne" -> R.string.exit_northeast
+        "nw" -> R.string.exit_northwest
+        "e" -> R.string.exit_east
+        "w" -> R.string.exit_west
+        "s" -> R.string.exit_south
+        "se" -> R.string.exit_southeast
+        "sw" -> R.string.exit_southwest
+        "up" -> R.string.exit_up
+        "down" -> R.string.exit_down
+        "in" -> R.string.exit_in
+        "out" -> R.string.exit_out
+        else -> return direction
+    }
+    return stringResource(word)
 }
 
 /** [frame] where [fit] puts it, moved by [shift], in the canvas's pixels. */
@@ -280,12 +461,16 @@ private fun MapSource.zoom(fit: MapFit, direction: Int): Boolean {
 }
 
 // [type] at [at], a point of the map as shown: on the room nearest it within [reach] of the map's pixels, or else on
-// the point of the last frame under it, while that is on the frame
+// the point of the last frame under it, while that is on the frame. A press shows the room it is on, or none
 private fun MapSource.touch(type: MapPointerType, fit: MapFit, at: MapPoint, reach: Double): Boolean {
     val room = mover.roomAt(at, reach)
     val point = room?.let { MapPoint(it.x, it.y) } ?: mover.shift.invert(at)
-    if (room == null && (point.x < 0 || point.y < 0 || point.x >= fit.frameW || point.y >= fit.frameH)) return false
-    return pointer(type, point)
+    val onFrame = room != null || (point.x >= 0 && point.y >= 0 && point.x < fit.frameW && point.y < fit.frameH)
+    val sent = onFrame && pointer(type, point)
+    if (type == MapPointerType.PRESS) {
+        if (room != null) rooms.ask(room.id) else rooms.close()
+    }
+    return sent
 }
 
 /**

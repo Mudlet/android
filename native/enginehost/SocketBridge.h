@@ -30,7 +30,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 18;
+    static constexpr int protocolVersion = 19;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -118,6 +118,8 @@ protected:
     QString setAppMapSize(const QJsonObject& message);
     QString moveMap(const QJsonObject& message);
     void findRooms(const QJsonObject& message);
+    void roomInfo(const QJsonObject& message);
+    void mapAreas();
     void getImage(const QJsonObject& message);
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
     void sendIfChanged(QJsonObject& kept, QJsonObject message);

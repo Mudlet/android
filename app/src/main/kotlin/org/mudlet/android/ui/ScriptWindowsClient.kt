@@ -57,6 +57,13 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         session.send(it)
     }
 
+    /** The map's rooms and areas the player asks about. */
+    internal val mapRooms = MapRooms(MapTarget.MAPPER, mapMover, session::newRequestId) {
+        mapRefusal = null
+        session.appMap.roomsAskedByMapper()
+        session.send(it)
+    }
+
     // The size the game screen wants Mudlet's main window to be, and the one this engine instance last got
     private var wantedSize: MudletSize? = null
     private var sentSize: MudletSize? = null
@@ -122,6 +129,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (bitmap == null) Log.w(TAG, "the engine's map, ${message.w} by ${message.h}, did not decode")
         map = MapImage(bitmap, message.w, message.h, message.viewOnly)
         mapMover.onFrame(message.view)
+        mapRooms.onFrame(message.view)
     }
 
     /**
@@ -136,7 +144,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         val reason = message.message.substringAfter(':').trim()
         if (session.appMap.onRefused(request, reason)) return
         if (request == "moveMap" || request == "followPlayer") mapMover.clear()
-        if (request in setOf("mapPointer", "setMapViewOnly", "moveMap", "followPlayer")) mapRefusal = reason
+        if (request in MapRooms.REQUESTS) mapRooms.onRefused(request)
+        if (request in setOf("mapPointer", "setMapViewOnly", "moveMap", "followPlayer") || request in MapRooms.REQUESTS) mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
         // The box's own textBox follows, which puts back what it holds
         if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
@@ -212,6 +221,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         askedImages.retainAll(images.keys)
         // Also a size that could not be sent while the link was down
         wantedSize?.let(::setMainWindowSize)
+        mapRooms.onAttached(sameInstance)
         sentMapScale = 1.0
         setMapScale(wantedMapScale)
         session.appMap.onAttached(sameInstance)

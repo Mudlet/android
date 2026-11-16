@@ -104,7 +104,8 @@ def main():
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
-                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_moves, map_download):
+                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_moves, map_rooms,
+                       map_download):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -2247,12 +2248,15 @@ def app_map():
     except TimeoutError as e:
         check(False, f"the app's map follows the player that centerview() moves, with no script mapper: {e}")
 
+    # The name that starts with the text first; room 1 is the player's, and 3 has no exit to it
     m = c.ask({"t": "findRooms", "text": "HALL"}, answers=("rooms", "error"), collect=seen)
+    area = (m.get("rooms") or [{}])[0].get("areaId")
     check(m == {"t": "rooms", "text": "HALL", "more": False, "re": m.get("re"),
-                "rooms": [{"id": 1, "name": "Great Hall", "area": "App Map Area"}, {"id": 3, "name": "hallway", "area": "App Map Area"}]},
-          f"findRooms finds the rooms whose name holds the text, ignoring case, by name: {m}")
+                "rooms": [{"id": 3, "name": "hallway", "areaId": area, "area": "App Map Area", "match": "prefix", "steps": -1},
+                          {"id": 1, "name": "Great Hall", "areaId": area, "area": "App Map Area", "match": "contains", "steps": 0}]}
+          and area > 0, f"findRooms finds the rooms whose name holds the text, ignoring case, a prefix first: {m}")
     m = c.ask({"t": "findRooms", "text": "2"}, answers=("rooms", "error"), collect=seen)
-    check([r["id"] for r in m.get("rooms", [])] == [2], f"and the room whose id it is: {m}")
+    check([(r["id"], r["match"], r["steps"]) for r in m.get("rooms", [])] == [(2, "id", 1)], f"and the room whose id it is: {m}")
     m = c.ask({"t": "findRooms", "text": "cellar"}, answers=("rooms", "error"), collect=seen)
     check(m.get("rooms") == [] and m.get("more") is False, f"and none when none match: {m}")
     # 105 cells in an area of their own, named so their names sort against their ids, two by two the same but for case
@@ -2269,7 +2273,7 @@ def app_map():
     m = c.ask({"t": "findRooms", "text": "Cell"}, answers=("rooms", "error"), collect=seen)
     check(m.get("more") is True and [(r["name"], r["id"]) for r in m.get("rooms", [])] == cells[:100]
           and all(r["area"] == "Cells" for r in m["rooms"]),
-          f"of 105 rooms found, the first 100 by name, ignoring case, then by id, and more: {m.get('more')}, "
+          f"of 105 rooms found alike (prefixes, no way there), the first 100 by name, ignoring case, then by id, and more: {m.get('more')}, "
           f"{[r['id'] for r in m.get('rooms', [])][:6]}...")
 
     since = len(seen)
@@ -2461,6 +2465,132 @@ def map_moves():
         check(False, f"moveMap of the mapper moves the script's map: {e}")
     app = [m for m in seen if m["t"] == "appMap" and m["w"]]
     check(app[-1]["view"]["following"] and app[-1]["view"]["moved"] == 4, f"and leaves the app's map as it was: {app[-1].get('view')}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def map_rooms():
+    """A room's details and the map's levels and areas: roomInfo with the exits and the steps from the player, which
+    go by no locked exit and by special exits; findRooms ranking a prefix, then the player's area, then the steps;
+    walkToRoom; showMapLevel and showMapArea on the app's map, with the levels in its view; mapAreas; and the
+    refusals."""
+    profile = "Map Rooms Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    level = {"t": "showMapLevel", "map": "app", "level": 1}
+    for request in ({"t": "roomInfo", "room": 1}, {"t": "walkToRoom", "room": 1}, {"t": "mapAreas"}, level,
+                    {"t": "showMapArea", "map": "app", "area": 1}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the rooms' profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    # The Keep: the player in 1, 2 east of it, 3 above it, 4 east of 3 by a locked exit only. The Garden: 5 out of 2,
+    # 6 by 2's special exit, 7 nearest the middle of the three. An area with no rooms is listed nowhere.
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 1})
+    c.send({"t": "runLua", "code": "\n".join([
+        'local keep, garden = addAreaName("Keep"), addAreaName("Garden")',
+        'addAreaName("Empty")',
+        "for id, place in pairs({[1] = {keep, 0, 0, 0}, [2] = {keep, 2, 0, 0}, [3] = {keep, 0, 0, 1}, [4] = {keep, 2, 0, 1},",
+        "                        [5] = {garden, 10, 10, 0}, [6] = {garden, 14, 10, 0}, [7] = {garden, 11, 10, 0}}) do",
+        "  addRoom(id)",
+        "  setRoomArea(id, place[1])",
+        "  setRoomCoordinates(id, place[2], place[3], place[4])",
+        "end",
+        'for id, name in pairs({"Great Hall", "Kitchen", "Tower", "Attic", "Rose Garden", "Pond", "Gate"}) do setRoomName(id, name) end',
+        'setExit(1, 2, "e") setExit(2, 1, "w") setExit(1, 3, "up") setExit(3, 1, "down") setExit(3, 4, "e") setExit(2, 5, "out")',
+        'lockExit(3, "e", true)',
+        'addSpecialExit(2, 6, "climb rope")',
+        "centerview(1)",
+        "updateMap()",
+        'function doSpeedWalk() echo("walk " .. table.concat(speedWalkDir, ",") .. " to " .. table.concat(speedWalkPath, ",") .. "\\n") end',
+    ])})
+
+    def places(m):
+        return {r["id"]: (round(r["x"]), round(r["y"])) for r in m["view"]["rooms"]}
+
+    def viewed(pred):
+        return lambda m: m["t"] == "appMap" and m["w"] and "view" in m and pred(m["view"], places(m))
+
+    try:
+        m = seen_or_next(c, viewed(lambda v, p: p.get(1) == (200, 150)), seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"the app's map comes with its view: {e}")
+        stop_engine(proc)
+        return
+    keep = m["view"]["area"]
+    check(m["view"]["levels"] == [0, 1] and m["view"]["level"] == 0, f"the view lists the area's levels: {m['view']}")
+
+    def info(room):
+        return c.ask({"t": "roomInfo", "room": room}, answers=("room", "error"), collect=seen)
+
+    m = info(1)
+    check({k: v for k, v in m.items() if k != "re"} == {
+        "t": "room", "id": 1, "name": "Great Hall", "areaId": keep, "area": "Keep", "x": 0, "y": 0, "z": 0, "steps": 0,
+        "exits": [{"direction": "e", "to": 2, "toName": "Kitchen", "locked": False},
+                  {"direction": "up", "to": 3, "toName": "Tower", "locked": False}]}, f"roomInfo gives the player's room: {m}")
+    m = info(2)
+    check(m.get("steps") == 1 and m.get("exits") == [
+        {"direction": "w", "to": 1, "toName": "Great Hall", "locked": False},
+        {"direction": "out", "to": 5, "toName": "Rose Garden", "locked": False},
+        {"direction": "climb rope", "to": 6, "toName": "Pond", "locked": False}], f"the directions, then the special exits: {m}")
+    m = info(3)
+    check(m.get("exits", [{}])[0] == {"direction": "e", "to": 4, "toName": "Attic", "locked": True}, f"a locked exit says so: {m}")
+    steps = {room: info(room).get("steps") for room in (4, 5, 6, 7)}
+    check(steps == {4: -1, 5: 2, 6: 2, 7: -1}, f"the steps go by special exits and by no locked exit: {steps}")
+    m = info(99)
+    check(m.get("message") == "roomInfo: there is no room 99 in the map", f"roomInfo of a room not in the map is refused: {m}")
+
+    m = c.ask({"t": "findRooms", "text": "t"}, answers=("rooms", "error"), collect=seen)
+    found = [(r["id"], r["match"], r["steps"]) for r in m.get("rooms", [])]
+    check(found == [(3, "prefix", 1), (1, "contains", 0), (2, "contains", 1), (4, "contains", -1), (7, "contains", -1)],
+          f"findRooms ranks a prefix first, then the player's area, then the fewest steps, no way there last: {found}")
+    m = c.ask({"t": "findRooms", "text": "POND"}, answers=("rooms", "error"), collect=seen)
+    check([(r["id"], r["match"]) for r in m.get("rooms", [])] == [(6, "exact")], f"and says a name that is the text: {m}")
+
+    m = c.ask({"t": "mapAreas"}, answers=("areas", "error"), collect=seen)
+    check([a["name"] for a in m.get("areas", [])] == ["Garden", "Keep"], f"mapAreas lists the areas with rooms by name: {m}")
+    garden = next((a["id"] for a in m.get("areas", []) if a["name"] == "Garden"), 0)
+
+    since = len(seen)
+    c.send(level)
+    try:
+        m = seen_or_next(c, viewed(lambda v, p: v["level"] == 1), seen, since)
+        check(m["view"]["area"] == keep and not m["view"]["following"] and places(m).get(3) == (200, 150),
+              f"showMapLevel shows the level above about the same point, not following: {m['view']}")
+        since = len(seen)
+        c.send({"t": "showMapArea", "map": "app", "area": garden})
+        m = seen_or_next(c, viewed(lambda v, p: v["area"] == garden), seen, since)
+        check(m["view"]["level"] == 0 and m["view"]["levels"] == [0] and not m["view"]["following"]
+              and places(m).get(7) == (200, 150), f"showMapArea shows an area about the room nearest its middle: {m['view']}")
+        since = len(seen)
+        c.send({"t": "showMapArea", "map": "app", "area": keep})
+        m = seen_or_next(c, viewed(lambda v, p: v["area"] == keep), seen, since)
+        check(m["view"]["following"] and m["view"]["level"] == 0 and places(m).get(1) == (200, 150),
+              f"and the player's area following the player: {m['view']}")
+    except TimeoutError as e:
+        check(False, f"showMapLevel and showMapArea move the app's map: {e}")
+    for request, message in (({**level, "level": 5}, "The area shown has no rooms on level 5."),
+                             ({**level, "level": 0.5}, "level must be a whole number"),
+                             ({"t": "showMapArea", "map": "app", "area": 9999}, "There is no area 9999 with rooms in the map."),
+                             ({**level, "map": "mapper"}, "No map is open; a script opens one, as with openMapWidget()."),
+                             ({"t": "walkToRoom", "room": 99}, "There is no room 99 in the map.")):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: {message}", f"{request['t']} is refused with {message}: {m}")
+
+    since = len(seen)
+    c.send({"t": "walkToRoom", "room": 5})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail", "error") and (m["t"] == "error" or m["text"].startswith("walk ")), seen, since)
+    check(m.get("text") == "walk e,out to 2,5", f"walkToRoom walks there by the shortest path: {m}")
+    since = len(seen)
+    c.send({"t": "walkToRoom", "room": 4})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail", "error") and (m["t"] == "error" or "find a path" in m["text"]), seen, since)
+    check("Cannot find a path from 1 to 4" in m.get("text", ""), f"a walk with no way there is told in the console, not refused: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

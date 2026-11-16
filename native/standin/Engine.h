@@ -65,6 +65,11 @@ public:
     QString showRoom(int) override { return noMap(); }
     QString moveMap(MapTarget, const QPointF&, double, const QPointF&, qint64) override { return noMap(); }
     QString followPlayer(MapTarget) override { return noMap(); }
+    QString showMapLevel(MapTarget, int) override { return noMap(); }
+    QString showMapArea(MapTarget, int) override { return noMap(); }
+    std::variant<RoomDetails, QString> roomInfo(int) const override { return noMap(); }
+    QString walkToRoom(int) override { return noMap(); }
+    std::variant<QList<MapAreaInfo>, QString> mapAreas() const override { return noMap(); }
     QString downloadMap() override { return noMap(); }
     QString cancelMapDownload() override { return noMap(); }
 

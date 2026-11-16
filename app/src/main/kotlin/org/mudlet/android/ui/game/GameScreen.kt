@@ -25,17 +25,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
@@ -65,8 +69,10 @@ import kotlin.reflect.KClass
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
- * front, TalkBack says its name and state and the focus goes to its input line; each change of the front game's
- * connection is said once, with the game's name first, so Mudlet's retries after a drop are not each read out.
+ * front, TalkBack says its name and state and the focus goes to its input line. A swipe on the pill, or Ctrl+Tab and
+ * Ctrl+Shift+Tab on a hardware keyboard, brings the next or the previous game, and the console, or the map in front,
+ * slides across with it ([GameSwipe]). Each change of the front game's connection is said once, with the game's name
+ * first, so Mudlet's retries after a drop are not each read out.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
@@ -89,7 +95,10 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
         before.value = front.name
         was != null && was != front.name && front.name.isNotEmpty()
     }
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, onBack, onOpenSettings) }
+    // Not the profile's either: a slide carries on across the switch it makes
+    val scope = rememberCoroutineScope()
+    val swipe = remember { GameSwipe(scope) }
+    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings) }
 }
 
 // What a composition last saw, which changing does not compose again
@@ -103,6 +112,7 @@ private fun ProfileGameScreen(
     switched: Boolean,
     mapOpen: Boolean,
     onMapOpen: (Boolean) -> Unit,
+    swipe: GameSwipe,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -141,6 +151,9 @@ private fun ProfileGameScreen(
     val reconnectName = c.name.ifEmpty { EngineClient.lastProfile.orEmpty() }
     val canReconnect = EngineClient.enginePid > 0 && EngineClient.canReconnect
     val index = games.indexOf(c)
+    val previous = games.getOrNull(index - 1)?.name
+    val next = if (index >= 0) games.getOrNull(index + 1)?.name else null
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val switchedText = stringResource(R.string.game_state, name, stateText)
     LaunchedEffect(Unit) { if (switched) Announcer.announce(switchedText, assertive = false) }
     val heard = remember { Last<KClass<out ConnectionState>>() }
@@ -188,12 +201,18 @@ private fun ProfileGameScreen(
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
                 val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden && !mapOpen
-                // Both halves of the press, so the focused field types no "r"
+                val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
+                // Both halves of the press, so the focused field types no "r" and the focus stays where it is
                 if (ctrlR && event.type == KeyEventType.KeyDown) historyOpen = true
-                ctrlR
+                if (ctrlTab && event.type == KeyEventType.KeyDown) {
+                    val forward = !event.isShiftPressed
+                    val target = if (forward) next else previous
+                    if (target != null && EngineClient.setFront(target)) swipe.arrive(left = forward != rtl)
+                }
+                ctrlR || ctrlTab
             },
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
                 // Drawn on under the map in front, which a predictive back gesture shrinks to show it, but neither read
                 // by TalkBack nor reached by a hardware keyboard's focus; the input line lets go of the keyboard
                 val covered = if (mapOpen) Modifier.clearAndSetSemantics {}.focusProperties { canFocus = false } else Modifier
@@ -253,9 +272,10 @@ private fun ProfileGameScreen(
                     onShowGames = { gamesOpen = true },
                     onReconnect = if (canReconnect) ::reconnect else null,
                     onDisconnect = if (c.name.isNotEmpty() && state.canDisconnect) ::disconnect else null,
-                    previous = games.getOrNull(index - 1)?.name,
-                    next = if (index >= 0) games.getOrNull(index + 1)?.name else null,
-                    onSwitch = { EngineClient.setFront(it) },
+                    previous = previous,
+                    next = next,
+                    onSwitch = EngineClient::setFront,
+                    swipe = swipe,
                 )
                 when (val action = state.action) {
                     null -> {}

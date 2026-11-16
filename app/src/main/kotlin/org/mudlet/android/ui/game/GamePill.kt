@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.game
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -12,8 +13,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -26,8 +32,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
+import kotlin.math.sign
 
 /** The game pill's test tag. */
 const val GAME_PILL_TAG = "gamePill"
@@ -37,7 +45,10 @@ const val GAME_PILL_TAG = "gamePill"
  * connection as an icon whose shape says the state, its [name], and how many games are open when more than one. A tap
  * calls [onShowGames], which opens the game sheet. TalkBack reads "<name>, <state>, game <index + 1> of <count>", and
  * offers Reconnect ([onReconnect]), Disconnect ([onDisconnect]) and the [previous] and [next] games ([onSwitch]) as
- * actions, so neither the sheet nor a gesture is ever needed; a null action is left out.
+ * actions, so neither the sheet nor a gesture is ever needed; a null action is left out. A horizontal drag on it is
+ * [swipe]'s: its label slides with the finger, the neighbour's name comes in from the side, and a release far enough,
+ * or a fling, switches to that game with a tick; the next game is to the right, or to the left in right-to-left
+ * layouts.
  */
 @Composable
 fun GamePill(
@@ -50,9 +61,16 @@ fun GamePill(
     onDisconnect: (() -> Unit)?,
     previous: String?,
     next: String?,
-    onSwitch: (String) -> Unit,
+    onSwitch: (String) -> Boolean,
+    swipe: GameSwipe,
     modifier: Modifier = Modifier,
 ) {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    // The game a slide to the left brings, as the content moves on toward the start in left-to-right layouts
+    val leftward by rememberUpdatedState(if (rtl) previous else next)
+    val rightward by rememberUpdatedState(if (rtl) next else previous)
+    val currentSwitch by rememberUpdatedState(onSwitch)
+    val tick = rememberSwitchTick()
     val stateText = state.text()
     val description = if (index in 0 until count) {
         stringResource(R.string.game_pill_description, name, stateText, index + 1, count)
@@ -69,7 +87,7 @@ fun GamePill(
     val colors = MaterialTheme.colorScheme
     Surface(
         onClick = onShowGames,
-        modifier = modifier.testTag(GAME_PILL_TAG).clearAndSetSemantics {
+        modifier = modifier.testTag(GAME_PILL_TAG).gameSwipe(swipe, { leftward }, { rightward }, { currentSwitch(it) }, tick).clearAndSetSemantics {
             contentDescription = description
             role = Role.Button
             onClick(showLabel) {
@@ -88,7 +106,16 @@ fun GamePill(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ConnectionIcon(state)
-            Text(name, Modifier.widthIn(max = 120.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val slide = swipe.offset
+            Box(Modifier.widthIn(max = 120.dp).clipToBounds()) {
+                PillLabel(name, slide)
+                val beside = when {
+                    slide < 0 -> leftward
+                    slide > 0 -> rightward
+                    else -> null
+                }
+                if (beside != null) PillLabel(beside, slide - sign(slide), Modifier.matchParentSize())
+            }
             if (count > 1) {
                 Surface(shape = CircleShape, color = colors.primary, contentColor = colors.onPrimary) {
                     Text(
@@ -102,6 +129,18 @@ fun GamePill(
             }
         }
     }
+}
+
+// A game's name, slid [slide] of its box's width to the right
+@Composable
+private fun PillLabel(name: String, slide: Float, modifier: Modifier = Modifier) {
+    Text(
+        name,
+        modifier.graphicsLayer { translationX = slide * size.width },
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 private fun action(label: String, run: () -> Unit) = CustomAccessibilityAction(label) {

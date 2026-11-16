@@ -248,6 +248,11 @@ LabelInfo labelInfo(const QString& name, const THeadlessSession::LabelContent& c
     return info;
 }
 
+TextBoxInfo textBoxInfo(const QString& name, const THeadlessSession::TextBoxContent& content)
+{
+    return {name, content.text, content.readOnly, content.placeholder, content.styleSheet, content.tabMovesFocus};
+}
+
 QString placeName(THeadlessSession::ButtonBar::Place place)
 {
     switch (place) {
@@ -1131,7 +1136,7 @@ void MudletEngine::keepPending()
 void MudletEngine::onProfileClosed()
 {
     mLoaded = false;
-    mFrontend->windows({}, {});
+    mFrontend->windows({}, {}, {});
     mFrontend->buttonBars({});
     mFrontend->commands({});
     mMapSize.reset();
@@ -1146,17 +1151,21 @@ void MudletEngine::pushWindows(bool withText)
 {
     QList<ScriptWindowInfo> windows;
     QList<LabelInfo> labels;
+    QList<TextBoxInfo> textBoxes;
     const QList<ScriptWindow> sessionWindows = mSession->scriptWindows();
     for (const ScriptWindow& window : sessionWindows) {
         windows.append(windowInfo(window));
-        if (window.kind != ScriptWindow::Kind::label) {
-            continue;
-        }
-        if (const std::optional<THeadlessSession::LabelContent> content = mSession->labelContent(window.name)) {
-            labels.append(labelInfo(window.name, *content));
+        if (window.kind == ScriptWindow::Kind::label) {
+            if (const std::optional<THeadlessSession::LabelContent> content = mSession->labelContent(window.name)) {
+                labels.append(labelInfo(window.name, *content));
+            }
+        } else if (window.kind == ScriptWindow::Kind::textBox) {
+            if (const std::optional<THeadlessSession::TextBoxContent> content = mSession->textBoxContent(window.name)) {
+                textBoxes.append(textBoxInfo(window.name, *content));
+            }
         }
     }
-    mFrontend->windows(windows, labels);
+    mFrontend->windows(windows, labels, textBoxes);
     // mapRepaintRequested does not come for a mapper that only changed size, or hid
     if (const std::optional<QSize> mapperSize = shownMapperSize(sessionWindows); mapperSize != mMapSize) {
         pushMap(mapperSize);
@@ -1340,6 +1349,22 @@ QString MudletEngine::sendWindowCommandLine(const QString& name, const QString& 
         return QStringLiteral("no profile running");
     }
     return mSession->submitWindowCommandLine(name, text) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::setTextBoxText(const QString& name, QString& text)
+{
+    if (!profileOpen()) {
+        return QStringLiteral("no profile running");
+    }
+    if (!mSession->setTextBoxText(name, text)) {
+        return mSession->errorString();
+    }
+    // Mudlet keeps it as plain text, as the desktop's box does: a non-breaking space as a space, a line or paragraph
+    // separator as a newline
+    if (const std::optional<THeadlessSession::TextBoxContent> content = mSession->textBoxContent(name)) {
+        text = content->text;
+    }
+    return {};
 }
 
 QString MudletEngine::pointer(const QString& window, const PointerEvent& event)

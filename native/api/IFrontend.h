@@ -126,6 +126,23 @@ struct LabelInfo
     bool operator==(const LabelInfo&) const = default;
 };
 
+// What a text box from createTextEdit() holds, as THeadlessSession::TextBoxContent describes it
+struct TextBoxInfo
+{
+    QString name;
+    // Plain text, lines split by newlines
+    QString text;
+    // The player cannot type in it; a script still sets its text
+    bool readOnly = false;
+    // Shown while it is empty
+    QString placeholder;
+    // The box's own, which Mudlet does not interpret
+    QString styleSheet;
+    // Tab moves on to the next control rather than typing a tab
+    bool tabMovesFocus = false;
+    bool operator==(const TextBoxInfo&) const = default;
+};
+
 // A button on a button bar, or an entry of a button's menu, as THeadlessSession::Button describes it
 struct BarButton
 {
@@ -269,9 +286,9 @@ public:
     virtual void attention(int ms) = 0;
     // What the player typed ahead of the game hiding input is to move from the input line into the masked one
     virtual void moveTypedLine() = 0;
-    // Every window the profile's scripts made, parents first, and what each of its labels shows: whole each time,
-    // empty with no profile open
-    virtual void windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels) = 0;
+    // Every window the profile's scripts made, parents first, and what each of its labels shows and text boxes hold:
+    // whole each time, empty with no profile open
+    virtual void windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels, const QList<TextBoxInfo>& textBoxes) = 0;
     // A console's last WindowText::recentRows rows, as they may have changed; IEngine::windowText() is read at other times
     virtual void windowText(const QString& window, const WindowText& text) = 0;
     // Sent when it changes

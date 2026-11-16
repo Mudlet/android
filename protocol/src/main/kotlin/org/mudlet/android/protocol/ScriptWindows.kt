@@ -1,5 +1,6 @@
 package org.mudlet.android.protocol
 
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 import kotlin.math.min
 
@@ -19,6 +20,17 @@ data class ScriptWindows(
     val commandLines: Map<String, String> = emptyMap(),
     /** What each label shows, by its name. */
     val labels: Map<String, LabelContent> = emptyMap(),
+    /** What each text box holds, by its name: as the engine last sent it, or as the player has since typed it ([textBoxTyped]). */
+    val textBoxes: Map<String, TextBoxContent> = emptyMap(),
+    /** How many `setTextBoxText` the UI has sent for each text box on the link's connection [textBoxesTypedOn], by its name, as `textBox` counts them. */
+    val textBoxesTyped: Map<String, Int> = emptyMap(),
+    /** The `EngineLink.connection` that [textBoxesTyped] counts the sends of. */
+    val textBoxesTypedOn: Int = 0,
+    /**
+     * A number for each text box that changes each time a `textBox` changes its text, by its name, which a box drawn
+     * takes as a script's text to show: the player's own text, kept by [textBoxTyped], never changes it.
+     */
+    val textBoxEdits: Map<String, Long> = emptyMap(),
     /**
      * What `getLink` last said of each console's links, by the console's name and the link's id: of those its text still
      * has, kept until the engine answers again, as new text may have changed them.
@@ -32,6 +44,7 @@ data class ScriptWindows(
         is EngineMessage.MainArea -> copy(mainArea = message, charWidth = CharWidth.after(charWidth, message))
         is EngineMessage.WindowCommandLine -> copy(commandLines = commandLines + (message.name to message.text))
         is EngineMessage.Label -> copy(labels = labels + (message.label.name to message.label))
+        is EngineMessage.TextBox -> afterTextBox(message)
         is EngineMessage.Link -> afterLink(message)
         else -> this
     }
@@ -43,6 +56,38 @@ data class ScriptWindows(
     val gaugeParts: Map<WindowKey, Gauge> by lazy { gauges.values.flatMap { gauge -> gauge.parts.map { it to gauge } }.toMap() }
 
     fun commandLineShown(name: String): ScriptWindows = copy(commandLines = commandLines - name)
+
+    /**
+     * The player typed [text] in the text box [name], which the UI sent as `setTextBoxText` on the link's connection
+     * [on]: the engine does not send it back, so it is kept here, and a script's text that differs from it is then a
+     * change the box shows. A send on a later connection than the one counted starts the count afresh, as the engine's
+     * `hello` did, though [attached] has not been called for it yet.
+     */
+    fun textBoxTyped(name: String, text: String, on: Int): ScriptWindows {
+        val box = textBoxes[name]
+        val boxes = if (box == null) textBoxes else textBoxes + (name to box.copy(text = text))
+        // One sent on an older connection is not counted by the engine counting now
+        if (on < textBoxesTypedOn) return copy(textBoxes = boxes)
+        val counts = if (on == textBoxesTypedOn) textBoxesTyped else emptyMap()
+        return copy(textBoxes = boxes, textBoxesTyped = counts + (name to (counts[name] ?: 0) + 1), textBoxesTypedOn = on)
+    }
+
+    /**
+     * The UI attached to the engine on the link's connection [connection], whose `hello` the engine counts the
+     * `setTextBoxText` from afresh: those already sent on it stay counted, the others go.
+     */
+    fun attached(connection: Int): ScriptWindows = if (connection == textBoxesTypedOn) this else copy(textBoxesTyped = emptyMap(), textBoxesTypedOn = connection)
+
+    // One sent before the engine had all the player's typing keeps the player's text, which the engine then has too
+    private fun afterTextBox(message: EngineMessage.TextBox): ScriptWindows {
+        val box = message.textBox
+        val held = textBoxes[box.name]
+        if (held != null && message.typed < (textBoxesTyped[box.name] ?: 0)) {
+            return copy(textBoxes = textBoxes + (box.name to box.copy(text = held.text)))
+        }
+        val edits = if (held?.text == box.text) textBoxEdits else textBoxEdits + (box.name to nextEdit.incrementAndGet())
+        return copy(textBoxes = textBoxes + (box.name to box), textBoxEdits = edits)
+    }
 
     /** The command line along the bottom of [console], which shares its name, while it is shown. */
     fun commandLineOf(console: ScriptWindow): ScriptWindow? = windows.firstOrNull {
@@ -68,10 +113,13 @@ data class ScriptWindows(
         if (message.full) {
             val consoles = message.windows.filter { it.console != null }.mapTo(HashSet()) { it.name }
             val labelNames = message.windows.filter { it.kind == WindowKind.LABEL }.mapTo(HashSet()) { it.name }
+            val textBoxNames = message.windows.filter { it.kind == WindowKind.TEXT_BOX }.mapTo(HashSet()) { it.name }
             return copy(
                 windows = message.windows,
                 text = text.filterKeys { it in consoles },
                 labels = labels.filterKeys { it in labelNames },
+                textBoxes = textBoxes.filterKeys { it in textBoxNames },
+                textBoxEdits = textBoxEdits.filterKeys { it in textBoxNames },
                 links = links.filterKeys { it in consoles },
             )
         }
@@ -82,10 +130,13 @@ data class ScriptWindows(
         // A console's text goes with it; the text of one not described yet stays, as it may come first
         val removedConsoles = removed.filter { it.kind in CONSOLE_KINDS }.mapTo(HashSet()) { it.name }
         val removedLabels = removed.filter { it.kind == WindowKind.LABEL }.mapTo(HashSet()) { it.name }
+        val removedTextBoxes = removed.filter { it.kind == WindowKind.TEXT_BOX }.mapTo(HashSet()) { it.name }
         return copy(
             windows = kept + message.windows.filter { it.key !in keptKeys },
             text = text - removedConsoles,
             labels = labels - removedLabels,
+            textBoxes = textBoxes - removedTextBoxes,
+            textBoxEdits = textBoxEdits - removedTextBoxes,
             links = links - removedConsoles,
         )
     }
@@ -93,6 +144,9 @@ data class ScriptWindows(
     companion object {
         /** The kinds with a console of text: `windowText` is theirs. */
         val CONSOLE_KINDS = setOf(WindowKind.MINI_CONSOLE, WindowKind.USER_WINDOW, WindowKind.MXP_FRAME)
+
+        // Across states and engine instances, and from the clock, so that a box's saved edit is not another's after a restart
+        private val nextEdit = AtomicLong(System.currentTimeMillis())
     }
 }
 

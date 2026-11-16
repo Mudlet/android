@@ -228,6 +228,34 @@ class ProtocolTest {
         )
         assertEquals(mapOf("t" to "closeUserWindow", "name" to "side"), Requests.closeUserWindow("side").toMap())
         assertEquals(mapOf("t" to "sendWindowCommandLine", "name" to "chat", "text" to "look"), Requests.sendWindowCommandLine("chat", "look").toMap())
+        assertEquals(mapOf("t" to "setTextBoxText", "name" to "notes", "text" to "one\ntwo"), Requests.setTextBoxText("notes", "one\ntwo").toMap())
+    }
+
+    @Test
+    fun aTextBoxParsesWithWhatAScriptSet() {
+        assertEquals(
+            EngineMessage.TextBox(TextBoxContent("notes", "one\ntwo", true, "Your notes", "color: red;", true), typed = 3),
+            FrameReader.parse(
+                JSONObject(
+                    """{"t":"textBox","name":"notes","text":"one\ntwo","readOnly":true,"placeholder":"Your notes",""" +
+                        """"styleSheet":"color: red;","tabMovesFocus":true,"typed":3}""",
+                ),
+            ),
+        )
+        assertEquals(
+            EngineMessage.TextBox(TextBoxContent("notes", "", false, "", "", false)),
+            FrameReader.parse(JSONObject("""{"t":"textBox","name":"notes","text":"","readOnly":false,"placeholder":"","styleSheet":"","tabMovesFocus":false}""")),
+        )
+    }
+
+    @Test
+    fun whatThePlayerTypesIsKeptAsPlainTextAsTheEngineKeepsIt() {
+        // As QTextDocument::setPlainText() then toPlainText() leave it
+        assertEquals("a b\nc\nd\ne\nf\ng", TextBoxContent.plain("a\u00A0b\r\nc\rd\u2028e\u2029f\ng"))
+        assertEquals("x\n\ny", TextBoxContent.plain("x\uFDD0\uFDD1y"))
+        // A tab, a zero-width space and the others are kept
+        assertEquals("\t\u000B\u000C\u0085\u200Bé", TextBoxContent.plain("\t\u000B\u000C\u0085\u200Bé"))
+        assertEquals("\n\n", TextBoxContent.plain("\r\n\r\n"))
     }
 
     @Test

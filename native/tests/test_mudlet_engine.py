@@ -104,7 +104,7 @@ def main():
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
-                       script_labels, button_bars, map_view, app_map, map_download):
+                       script_labels, script_text_boxes, button_bars, map_view, app_map, map_download):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -1268,6 +1268,151 @@ def script_labels():
     m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
     check({"name": "pic", "kind": "label"} in m["removed"] and label_of(seen[since:], "pic") is None,
           f"a deleted label is removed, with no label message: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def text_box_of(msgs, name):
+    """The last textBox message for a text box, or None."""
+    return next((m for m in reversed(msgs) if m["t"] == "textBox" and m["name"] == name), None)
+
+
+def script_text_boxes():
+    """What text boxes hold: createTextEdit() and the setTextEdit* functions as a textBox message after its windows
+    message, with how many setTextBoxText the engine had; the player's typing, by setTextBoxText, read back by
+    getTextEditText() as plain text and not sent back, though a script's text after it is, even the text it had before;
+    a hidden or read-only box refusing it with the box as Mudlet holds it; and every box again for a UI that attaches."""
+    game = fake_telnet.start_in_thread()
+    proc, c = start_engine("Text Box Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "setTextBoxText", "name": "notes", "text": "early"})
+    m = c.wait_for(lambda m: m["t"] == "error", collect=seen)
+    check(m["message"] == "setTextBoxText: no profile running", f"setTextBoxText with no profile open is refused: {m}")
+
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'createTextEdit("notes", 20, 30, 200, 100)',
+        'setTextEditText("notes", "first line\\nsecond")',
+        'setTextEditPlaceholder("notes", "Write here")',
+        'setTextEditStyleSheet("notes", [[QPlainTextEdit { color: red; }]])',
+        'setTextEditTabMovesFocus("notes", true)',
+    ])})
+    m = seen_or_next(c, lambda m: m["t"] == "textBox" and m["name"] == "notes" and m["tabMovesFocus"], seen, since)
+    # typed counts the refused "early" too, as the UI counts what it sent
+    check(m == {"t": "textBox", "name": "notes", "text": "first line\nsecond", "readOnly": False, "placeholder": "Write here",
+                "styleSheet": "QPlainTextEdit { color: red; }", "tabMovesFocus": True, "typed": 1},
+          f"createTextEdit() and setTextEdit*() give the text box's content: {m}")
+    first_box = next(i for i, m in enumerate(seen) if m["t"] == "textBox" and m["name"] == "notes")
+    first_window = next((i for i, m in enumerate(seen) if windows_with("notes", "textBox")(m)), len(seen))
+    check(first_window < first_box, "the textBox comes after the windows message that has it")
+    notes = window_of(seen, "notes", "textBox")
+    check(notes is not None and (notes["x"], notes["y"], notes["w"], notes["h"]) == (20, 30, 200, 100) and notes["shown"],
+          f"and is a textBox window at its place: {notes}")
+
+    since = len(seen)
+    c.send({"t": "setTextBoxText", "name": "notes", "text": "the player\ntyped this"})
+    c.send({"t": "runLua", "code": 'echo("box holds [" .. getTextEditText("notes") .. "]\\n")'})
+    seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("box holds ["), seen, since)
+    c.send({"t": "runLua", "code": 'echo("typed read\\n")'})
+    seen_or_next(c, shown("typed read"), seen, since)
+    held = [text for text in texts_of(seen[since:]) if text.startswith(("box holds", "typed this"))]
+    check(held == ["box holds [the player", "typed this]"], f"setTextBoxText gives getTextEditText() what the player typed: {held}")
+    told = [m for m in seen[since:] if m["t"] in ("textBox", "error")]
+    check(not told, f"and the player's text is not sent back, nor refused: {told}")
+
+    # A script's text after the player's is sent, even the text the box had before the player typed
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'setTextEditText("notes", "first line\\nsecond")'})
+    m = seen_or_next(c, lambda m: m["t"] == "textBox" and m["name"] == "notes", seen, since, timeout=10)
+    check(m["text"] == "first line\nsecond" and m["typed"] == 2,
+          f"a script setting the text the box had before the player typed sends it, after the player's two: {m}")
+
+    # Nor is the player's text sent back by a change of the windows, which sends any box that differs from Mudlet's
+    since = len(seen)
+    c.send({"t": "setTextBoxText", "name": "notes", "text": "the player\ntyped this"})
+    c.send({"t": "runLua", "code": 'createLabel("other", 0, 0, 10, 10, 1)'})
+    seen_or_next(c, windows_with("other", "label"), seen, since)
+    c.send({"t": "runLua", "code": 'echo("label made\\n")'})
+    seen_or_next(c, shown("label made"), seen, since)
+    told = [m for m in seen[since:] if m["t"] in ("textBox", "error")]
+    check(not told, f"a windows message after the player's typing sends no textBox for it: {told}")
+
+    # Kept as plain text, as the desktop's box keeps a paste, which a windows message then does not send back either
+    since = len(seen)
+    c.send({"t": "setTextBoxText", "name": "notes", "text": "pasted\u00a0text\r\nand\u2028more"})
+    c.send({"t": "runLua", "code": 'echo("pasted [" .. getTextEditText("notes"):gsub("\\n", "|") .. "]\\n")'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("pasted ["), seen, since)
+    check(m["text"] == "pasted [pasted text|and|more]", f"a non-breaking space, CRLF and line separator are kept as Mudlet keeps them: {m}")
+    c.send({"t": "runLua", "code": 'createLabel("other2", 0, 0, 10, 10, 1)'})
+    seen_or_next(c, windows_with("other2", "label"), seen, since)
+    c.send({"t": "runLua", "code": 'echo("second label made\\n")'})
+    seen_or_next(c, shown("second label made"), seen, since)
+    told = [m for m in seen[since:] if m["t"] in ("textBox", "error")]
+    check(not told, f"and a windows message after the paste sends no textBox for it: {told}")
+    pasted = "pasted text\nand\nmore"
+
+    # Each of the others alone sends the box again
+    for code, key, value in (('setTextEditPlaceholder("notes", "Other")', "placeholder", "Other"),
+                             ('setTextEditTabMovesFocus("notes", false)', "tabMovesFocus", False)):
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        m = seen_or_next(c, lambda m: m["t"] == "textBox" and m["name"] == "notes" and m[key] == value, seen, since)
+        check(m["text"] == pasted and m["typed"] == 4, f"{code} alone sends the box again, with the player's text: {m}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'hideWindow("notes")'})
+    seen_or_next(c, lambda m: m["t"] == "windows" and any(w["name"] == "notes" and not w["shown"] for w in m["windows"]), seen, since)
+    c.send({"t": "setTextBoxText", "name": "notes", "text": "hidden"})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"].startswith("setTextBoxText: ") and "not shown" in m["message"], f"a hidden box refuses the player's typing: {m}")
+    m = seen_or_next(c, lambda m: m["t"] == "textBox" and m["name"] == "notes", seen, since)
+    check(m["text"] == pasted and m["typed"] == 5, f"and is sent again as Mudlet holds it: {m}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'showWindow("notes")'})
+    seen_or_next(c, lambda m: m["t"] == "windows" and any(w["name"] == "notes" and w["shown"] for w in m["windows"]), seen, since)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'setTextEditReadOnly("notes", true)'})
+    m = seen_or_next(c, lambda m: m["t"] == "textBox" and m["name"] == "notes" and m["readOnly"], seen, since)
+    check(m["text"] == pasted and not any(windows_with("notes", "textBox")(w) for w in seen[since:]),
+          f"setTextEditReadOnly() alone sends the box again, with no windows message for it: {m}")
+    since = len(seen)
+    c.send({"t": "setTextBoxText", "name": "notes", "text": "not taken"})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"].startswith("setTextBoxText: ") and "read-only" in m["message"], f"a read-only box refuses the player's typing: {m}")
+    m = seen_or_next(c, lambda m: m["t"] == "textBox" and m["name"] == "notes", seen, since)
+    check(m["text"] == pasted and m["readOnly"] and m["typed"] == 6, f"and is sent again as Mudlet holds it: {m}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'echo("still [" .. getTextEditText("notes") .. "]\\n")'})
+    seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"] == "more]", seen, since)
+    check(True, "getTextEditText() keeps what it held")
+    since = len(seen)
+    c.send({"t": "setTextBoxText", "name": "nonesuch", "text": "x"})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"].startswith("setTextBoxText: ") and "nonesuch" in m["message"], f"and so does a box there is not: {m}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen += msgs
+    full = next((i for i, m in enumerate(msgs) if m["t"] == "windows" and m.get("full")), None)
+    box = next((i for i, m in enumerate(msgs) if m["t"] == "textBox" and m["name"] == "notes"), None)
+    check(full is not None and box is not None and box > full, "a UI that attaches gets every text box after the windows")
+    notes = text_box_of(msgs, "notes")
+    check(notes is not None and notes["readOnly"] and notes["placeholder"] == "Other" and notes["text"] == pasted and notes["typed"] == 0,
+          f"as it was, with its typing counted afresh: {notes}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'deleteTextEdit("notes")'})
+    m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
+    check({"name": "notes", "kind": "textBox"} in m["removed"] and text_box_of(seen[since:], "notes") is None,
+          f"a deleted text box is removed, with no textBox message: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

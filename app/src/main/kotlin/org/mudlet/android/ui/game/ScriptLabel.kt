@@ -121,10 +121,10 @@ import kotlin.math.roundToInt
 
 private const val TAG = "ScriptLabel"
 
-// A clickable label's touch bounds are never smaller than this, around it
-private val MIN_TOUCH_SIZE = 48.dp
+// A clickable label's touch bounds, and a text box's, are never smaller than this, around it
+internal val MIN_TOUCH_SIZE = 48.dp
 
-// Qt's default label font, where neither the label's style sheet nor its window sets one: 10 pt
+// Qt's default font, where neither a label's style sheet nor its window sets one: 10 pt
 private const val DEFAULT_FONT_PX = 10f * LabelStyle.PX_PER_PT
 
 // The colour Qt draws a link in where the text sets none
@@ -225,14 +225,14 @@ private fun AnnounceChanges(text: String, region: LiveRegion) {
 }
 
 /** This rectangle grown about its centre to at least [min] pixels each way. */
-private fun PxRect.grownTo(min: Float): PxRect {
+internal fun PxRect.grownTo(min: Float): PxRect {
     val w2 = max(w, min)
     val h2 = max(h, min)
     return PxRect(x - (w2 - w) / 2, y - (h2 - h) / 2, w2, h2)
 }
 
 /** Lays its content out [w] by [h] pixels at [x], [y] in its parent, whatever the parent's size. */
-private fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier = layout { measurable, constraints ->
+internal fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(Constraints.fixed(w.roundToInt().coerceAtLeast(0), h.roundToInt().coerceAtLeast(0)))
     layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x.roundToInt(), y.roundToInt()) }
 }
@@ -241,11 +241,14 @@ private fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier =
 private fun rememberLabelText(content: LabelContent?, window: ScriptWindow, scale: Float): LabelText {
     val styleSheet = content?.styleSheet.orEmpty()
     val style = remember(styleSheet) { LabelStyle.parse(styleSheet) }
-    val basePx = style.fontSizePx ?: window.fontSize.takeIf { it > 0 }?.let { (it * LabelStyle.PX_PER_PT).toFloat() } ?: DEFAULT_FONT_PX
+    val basePx = fontPx(style, window)
     val text = content?.text.orEmpty()
     val rich = remember(text, basePx) { if (text.isBlank()) null else RichText.parse(text, basePx) }
     return remember(rich, style, scale) { LabelText(style, rich, scale) }
 }
+
+/** The size of a label's or text box's text in Mudlet's pixels: its style sheet's, else its window's font's, else Qt's. */
+internal fun fontPx(style: LabelStyle, window: ScriptWindow): Float = style.fontSizePx ?: window.fontSize.takeIf { it > 0 }?.let { (it * LabelStyle.PX_PER_PT).toFloat() } ?: DEFAULT_FONT_PX
 
 /** A label's style sheet, its text if it has any, and the scale it is drawn at. */
 private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: Float) {
@@ -551,7 +554,7 @@ private fun rasterRequest(content: LabelContent): ImageRequest? = when {
     else -> null
 }
 
-private fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: Density): Modifier = with(density) {
+internal fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: Density): Modifier = with(density) {
     absolutePadding(
         left = (edges.left * sx).coerceAtLeast(0f).toDp(),
         top = (edges.top * sy).coerceAtLeast(0f).toDp(),
@@ -573,7 +576,8 @@ internal fun engineImage(request: ImageRequest?): ImageBitmap? {
     return request?.let { ScriptWindowsClient.images[it] }
 }
 
-private fun DrawScope.drawLabelFrame(
+/** A label's background, its images and its border, as its style sheet sets them; a text box's too, with no images. */
+internal fun DrawScope.drawLabelFrame(
     fill: LabelFill?,
     style: LabelStyle,
     border: Float,
@@ -726,7 +730,7 @@ private fun spanStyle(style: RichText.Style, toSp: (Float) -> TextUnit, link: Bo
 }
 
 // The nearest of the device's fonts to a family a script names; null for its default
-private fun fontFamily(name: String): FontFamily? {
+internal fun fontFamily(name: String): FontFamily? {
     val n = name.lowercase()
     return when {
         "mono" in n || "courier" in n || "consol" in n || "fixed" in n -> FontFamily.Monospace

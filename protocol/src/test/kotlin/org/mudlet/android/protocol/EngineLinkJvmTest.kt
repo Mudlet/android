@@ -173,7 +173,8 @@ class EngineLinkJvmTest {
         assertEquals(PROTOCOL_VERSION, first.version)
         next<EngineMessage.Synced>()
 
-        link.send(Requests.setScreenSize(100, 30))
+        // What is sent says which connection it went out on, as a text box's typing is counted by it
+        assertEquals("the first connection", 1, link.sendOn(Requests.setScreenSize(100, 30)))
 
         link.send(Requests.connect("127.0.0.1", fakePort, false))
         // The tell line comes before the banner's prompt, and next() discards what it skips
@@ -240,6 +241,7 @@ class EngineLinkJvmTest {
         events.clear()
         link.start()
         assertTrue(next<Attached>().same)
+        assertEquals("each attach is a new connection", 2, link.connection)
         val synced = next<EngineMessage.Synced>()
         assertTrue("reattach to the same engine replays nothing", synced.seq == seqBefore)
 

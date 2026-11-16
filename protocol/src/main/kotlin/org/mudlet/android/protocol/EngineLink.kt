@@ -39,6 +39,10 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
     @Volatile private var transport: Transport? = null
 
     @Volatile private var writer: FrameWriter? = null
+
+    /** The number of the connection [send] writes to, counted from 1 by each attach; set with the writer, under the lock. */
+    @Volatile var connection = 0
+        private set
     private var thread: Thread? = null
     private val pending = ConcurrentHashMap<Long, Pair<CountDownLatch, LongArray>>()
     private val nextId = AtomicLong(1)
@@ -72,14 +76,17 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
         thread = null
     }
 
-    fun send(message: JSONObject): Boolean {
-        val w = writer ?: return false
+    fun send(message: JSONObject): Boolean = sendOn(message) != 0
+
+    /** Sends [message] as [send] does, returning the number of the [connection] it went out on, or 0 when it did not. */
+    fun sendOn(message: JSONObject): Int {
+        val (w, n) = synchronized(this) { (writer ?: return 0) to connection }
         return try {
             w.write(message)
-            true
+            n
         } catch (e: IOException) {
             transport?.close()
-            false
+            0
         }
     }
 
@@ -141,7 +148,10 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
                 val same = first.instance == instance
                 if (!same) lastSeq = 0
                 instance = first.instance
-                writer = w
+                synchronized(this) {
+                    connection++
+                    writer = w
+                }
                 listener.onAttached(first, same)
                 while (live(g)) {
                     val m = reader.read()

@@ -97,6 +97,7 @@ green.
 |---|---|---|
 | `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | `scriptWindows()` at `profileLoaded` and on attach (`full` true: replaces all), then the entries `scriptWindowsChanged` names. A window is keyed by name and kind. `kind` is upstream's enum name |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | `labelContent()` for each label in a `windows` message whose content differs from what was last sent. The cursor fields are left out: a touch screen has no pointer to shape |
+| `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | `textBoxContent()` (gap 4, carried) for each text box in a `windows` message whose content differs from what was last sent; not the player's own typing, kept as Mudlet keeps it; `typed`, the `setTextBoxText` for it the bridge has had from this UI |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | `windowLines(window, -300, 300)` for each window `windowTextChanged` names, and for every console on attach; older rows answer `getWindowText` |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The size given, `mainConsoleGrid()` and `mainConsoleTextRect()`, at `profileLoaded` and `mainConsoleAreaChanged` |
 | `windowCommandLine` | `name`, `text` | `windowCommandLineTextChanged`, each name with `windowCommandLineText()` |
@@ -119,6 +120,7 @@ image by path and size while the profile runs.
 | `closeUserWindow` | `name` | `closeUserWindow()` |
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | `pointer()`. `type` is upstream's enum name; `button` and `buttons` use Qt's values (1 left, 2 right, 4 middle) |
 | `sendWindowCommandLine` | `name`, `text` | `setWindowCommandLineText()`, then `submitWindowCommandLine()` |
+| `setTextBoxText` | `name`, `text` | `setTextBoxText()` (gap 4, carried): what the player typed; a refusal is `error`, then the box's `textBox` |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | Reads the file, or `QIcon(path)` at that size, or that frame of a movie (`QMovie`), answered by `image` |
 | `pressButton` | `id` | `pressButton()`; a refusal is `error` |
 | `activateCommand` | `id` | `activateAddonCommand()`; a refusal is `error` |
@@ -205,6 +207,26 @@ adds `doubleClick`, a long press is the right button's `press` and `release` (Ge
 follows when another window is touched. A drag sends `move` with the button held, so sliders built of labels work.
 Click-through and the grab are upstream's to resolve: the app names the topmost shown label under the finger.
 
+### Text boxes
+
+A `textBox` is a text field at its window's geometry, scaled by `s`, with the label style sheet's subset where a
+`QPlainTextEdit` has it: bare declarations and `QPlainTextEdit`, `TTextBox` or `*` blocks give its background, text
+colour, border (with its radius), padding, margin and font; one with no border has an outline, thicker while focused.
+Where its style sheet sets no colours it has the theme's surface and text colours; the desktop's has the profile's
+command-line colours (dark grey on black unless changed), which the engine does not send. Its text is never drawn
+under 9 sp, and scrolls inside it. The player types in it unless `readOnly`, with the `placeholder` shown while it is
+empty, and Tab moves on to the next control when `tabMovesFocus` (a hardware keyboard's; otherwise it types a tab).
+Once the player has stopped typing for 300 ms, all of the box's text goes to the engine with `setTextBoxText`, as
+plain text as Mudlet keeps it, and the app's copy of the box takes it, as the engine sends no `textBox` back. What is
+not yet sent also goes when the player leaves the field, before a tap on a label, button, command, link or the map and
+before a command, so that a script these run reads it, when the field goes (a turn of the screen), and again after the
+link drops. A script's new text replaces the field's, the player's unsent typing with it, as does making it read-only;
+the field tells one from the player's own text by `ScriptWindows.textBoxEdits`, which only the engine's change of the
+text moves, so a key typed as the last text went is kept. A `textBox` the engine sent before it had the player's
+latest text (its `typed` short of what the app sent) keeps the player's text. The app counts what it sent by the link's
+connection it went out on (`EngineLink.connection`), so typing sent on a new connection before the main thread sees
+the attach stays counted, as the engine counts it. A refusal's `textBox` puts back what Mudlet holds.
+
 ### Gauges
 
 Once labels draw, gauges draw: they are three labels. F3 adds their meaning: the app finds sibling labels
@@ -249,13 +271,19 @@ Phase E's requirements apply to every pull request here; in short, and what they
   change of the value: when the `_text` label is live, the `Announcer` says its new text, as the desktop says only
   that label's (the others have no text); twice while TalkBack's focus is on the gauge, which reads its new state
   itself.
+- **Text boxes** are editable fields named by their `placeholder`, else their window name, with ", read only" when
+  the player cannot type in them (still focusable, so TalkBack reads their text). The name is on a node inside the
+  field, as an editable field may not carry a content description itself (the accessibility checks'
+  `EditableContentDescCheck`), and TalkBack reads it with the field. That node is as big as the field, its 48 dp
+  touch area included: inside the box's frame and margins a small box leaves it no size, and a node of no size is not
+  read, which leaves an empty field nothing to say. Their keyboard capitalises sentences.
 - **Button bars and commands** are buttons with their names; push-down buttons and checkable commands are toggles
   (`Role.Switch` with `toggleableState`); a folder says it opens a menu. An icon-only one has its name as its content
   description.
 - **Mini consoles** are lists TalkBack moves through line by line, as the main console after U6. Their new lines are
   not announced: Mudlet announces only the main console's (`announceIncomingText`).
-- **48 dp.** Script geometry can make a clickable label small: its touch bounds grow to 48 dp around it, drawn at its
-  own size, the higher in `stack` winning where two overlap.
+- **48 dp.** Script geometry can make a clickable label or a text box small: its touch bounds grow to 48 dp around
+  it, drawn at its own size, the higher in `stack` winning where two overlap.
 - **No gesture alone.** Long press has its accessibility action; the map's pinch has zoom buttons; the window
   switcher's swipe between pages has its tabs; a drag on a label has no other way, which is the script's design, so
   the label's actions say what a tap does.
@@ -314,8 +342,8 @@ F4 and F5 are independent of each other and of F3.
 
 ## Upstream gaps
 
-Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gap 3 is
-carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those patches,
+Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 3 and 4
+are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those patches,
 `scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
 `3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
 
@@ -379,7 +407,9 @@ Mudlet merges it; the engine sends it as the `label`'s `liveRegion` (`protocol.m
 > window calls. PR title: "Headless: text boxes' content". PR text: `createTextEdit()` boxes are listed by
 > `scriptWindows()` but an app cannot draw or edit them.
 
-Interim: a text box is drawn as an empty, disabled box with its window's background.
+Interim: replaced. The app carries this as the `headless-text-boxes` patch in `scripts/mudlet-patches/` until Mudlet
+merges it; the engine sends it as the `textBox` frame and takes the player's typing as `setTextBoxText`
+(`protocol.md`, "Text boxes").
 
 ### 5. MXP frame tabs
 

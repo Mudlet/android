@@ -353,10 +353,10 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are four: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are five: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
-rows without resizing the main window that `setMainWindowSize` gave, and a label's live region in its
-`labelContent()`.
+rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
+`labelContent()`, and a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -397,6 +397,7 @@ keeps the profiles' passwords in the KeyStore.
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
+| `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
@@ -477,6 +478,13 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   and whose text label is transparent; a label's live region, from Geyser's `liveRegion` and each
   `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; every label to a UI that attaches; `deleteLabel()`
   as `removed`;
+- text boxes: `createTextEdit()` with `setTextEditText()`, `setTextEditPlaceholder()`, `setTextEditStyleSheet()` and
+  `setTextEditTabMovesFocus()` as `textBox` after its `windows`, with its `typed`; `setTextBoxText` read back by
+  `getTextEditText()` and not sent back, by a later `windows` either, and a script's text after it sent, the text from
+  before it included; a paste with a non-breaking space, CRLF and a line separator kept as plain text, and not sent
+  back; `setTextEditPlaceholder()`, `setTextEditTabMovesFocus()` and `setTextEditReadOnly()` alone as `textBox`;
+  `setTextBoxText` refused for a hidden box and a read-only one, by `error` and the box as Mudlet holds it; an unknown
+  box refused; every text box to a UI that attaches, its `typed` counted afresh; `deleteTextEdit()` as `removed`;
 - button bars and commands: a package's bar, with its grid, a push-down button and a folder's menu, and
   `tempButtonToolbar()` bars at the left and floating, as `buttonBars`; `pressButton` sending a push-down button's
   command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and
@@ -1203,6 +1211,18 @@ Item 13 of the on-device checklist covers this.
       download" read their names; the end of the download is read out as it comes, a failure at once.
     - Over https (as most games' map URLs are), the download works: OpenSSL is in the APK (see "TLS").
     - `adb logcat` shows the map's host but never more of its URL: no user name, password, path or query.
+27. Text boxes, with the libmudlet APK: `lua createTextEdit("notes", 0, 0, 300, 120) setTextEditPlaceholder("notes",
+    "Write here")`, then `lua createTextEdit("tiny", 320, 0, 20, 20)`.
+    - "notes" is a field with an outline, "Write here" in it; a tap brings up the keyboard, which starts a sentence with
+      a capital. Type two lines, wait a moment, then `lua echo(getTextEditText("notes") .. "\n")` prints both. A
+      long text scrolls inside the box.
+    - `lua setTextEditText("notes", "from the script")` replaces what is in the field; rotating the phone keeps what
+      was typed. `lua setTextEditStyleSheet("notes", "QPlainTextEdit { background-color: navy; color: yellow;
+      font-size: 14pt }")` restyles it, scaled with its window.
+    - `lua setTextEditReadOnly("notes", true)`: the keyboard no longer types in it, and the text can still be selected.
+    - With a hardware keyboard, `lua setTextEditTabMovesFocus("notes", true)`: Tab moves on instead of typing a tab.
+    - With TalkBack on: swiping reaches "notes" after the console's controls, read as "Write here" and an edit box;
+      read-only, as "Write here, read only"; "tiny", touched easily though drawn small, reads as "tiny".
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

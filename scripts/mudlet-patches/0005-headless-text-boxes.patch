@@ -1,0 +1,435 @@
+Headless: text boxes' content
+
+A frontend that draws text boxes (createTextEdit()) itself needs what each holds, and a way to give Mudlet what the
+player types in it. THeadlessSession had neither: a script's getTextEditText() read the registry, but nothing told the
+app the box's text, read-only state, placeholder, style sheet or Tab behaviour, and the null view dropped the
+placeholder and Tab behaviour, and noted no change of the text, read-only state, placeholder or Tab behaviour.
+
+This adds THeadlessSession::TextBoxContent (text, readOnly, placeholder, styleSheet, tabMovesFocus) and
+textBoxContent(), as getTextEditText() and the setTextEdit*() functions read and set them; the null view keeps the
+placeholder and Tab behaviour, and tells the session of each script setting, so a change names the box in
+scriptWindowsChanged. setTextBoxText() is the player's typing: it sets the text as the GUI's box does as its text
+changes, which raises no event, and is not told back. It is refused for a name that is no text box, for a box that is
+read-only or not shown, and where runLua() is. Tested in HeadlessSessionWindowsTest, and described in
+docs/headless.md beside labelContent().
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 4cf61d8..12bcb86 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1235,6 +1235,27 @@ script sets another, as on the desktop.
+ A change to any of these names the label in `scriptWindowsChanged`. It is empty for a name that is not a
+ label's.
+ 
++`textBoxContent(name)` is what a text box from `createTextEdit()` holds, beside the place and font its
++`ScriptWindow` has, for the app to draw as an editable box of its own:
++
++- `text`, what `getTextEditText()` reads: as `setTextEditText()` or `clearTextEdit()` left it, or as the
++  player typed it;
++- `readOnly`, as `setTextEditReadOnly()` gave it;
++- `placeholder`, as `setTextEditPlaceholder()` gave it, shown while the box is empty;
++- `styleSheet`, as `setTextEditStyleSheet()` gave it, which Mudlet does not interpret for the app, as a
++  label's;
++- `tabMovesFocus`, as `setTextEditTabMovesFocus()` gave it: Tab moves on to the next control rather than
++  typing a tab.
++
++A script's change to any of these names the box in `scriptWindowsChanged`. It is empty for a name that is
++not a text box's.
++
++`setTextBoxText(name, text)` is what the player has typed in it so far, the whole of the box's text, which
++a script's `getTextEditText()` then reads. The GUI's box gives Mudlet its text as it changes and raises no
++event for that, so neither does this; nor is it told back in `scriptWindowsChanged`. It is false for a name
++that is not a text box's, for a box that is read-only or not `shown` in `scriptWindows()`, which a player
++could not type in, though a script still sets its text, and where `runLua()` is refused.
++
+ ### Reading a console's text
+ 
+ `windowLines(window, first, count)` gives the text of a mini console or user window, for the app to draw
+diff --git a/src/TNullConsoleFrontend.cpp b/src/TNullConsoleFrontend.cpp
+index 290e144..7c39e24 100644
+--- a/src/TNullConsoleFrontend.cpp
++++ b/src/TNullConsoleFrontend.cpp
+@@ -3561,6 +3561,7 @@ std::pair<bool, QString> TNullConsoleFrontend::deleteTextBox(const QString& name
+ 
+ bool TNullConsoleFrontend::setTextBoxText(const QString& name, const QString& text)
+ {
++    mWindowNotifier.note();
+     if (!mTextBoxes.contains(name)) {
+         return false;
+     }
+@@ -3568,6 +3569,11 @@ bool TNullConsoleFrontend::setTextBoxText(const QString& name, const QString& te
+     return true;
+ }
+ 
++void TNullConsoleFrontend::typeTextBox(const QString& name, const QString& text)
++{
++    mpHost->windowRegistry().setTextBoxText(name, plainText(text));
++}
++
+ bool TNullConsoleFrontend::setTextBoxFont(const QString& name, const QFont& font)
+ {
+     mWindowNotifier.note();
+@@ -3580,6 +3586,7 @@ bool TNullConsoleFrontend::setTextBoxFont(const QString& name, const QFont& font
+ 
+ bool TNullConsoleFrontend::setTextBoxReadOnly(const QString& name, const bool readOnly)
+ {
++    mWindowNotifier.note();
+     const auto it = mTextBoxes.find(name);
+     if (it == mTextBoxes.end()) {
+         return false;
+@@ -3588,6 +3595,28 @@ bool TNullConsoleFrontend::setTextBoxReadOnly(const QString& name, const bool re
+     return true;
+ }
+ 
++bool TNullConsoleFrontend::setTextBoxPlaceholder(const QString& name, const QString& text)
++{
++    mWindowNotifier.note();
++    const auto it = mTextBoxes.find(name);
++    if (it == mTextBoxes.end()) {
++        return false;
++    }
++    it->second.placeholder = text;
++    return true;
++}
++
++bool TNullConsoleFrontend::setTextBoxTabMovesFocus(const QString& name, const bool tabMovesFocus)
++{
++    mWindowNotifier.note();
++    const auto it = mTextBoxes.find(name);
++    if (it == mTextBoxes.end()) {
++        return false;
++    }
++    it->second.tabMovesFocus = tabMovesFocus;
++    return true;
++}
++
+ bool TNullConsoleFrontend::setTextBoxStyleSheet(const QString& name, const QString& styleSheet)
+ {
+     const auto it = mTextBoxes.find(name);
+@@ -4979,6 +5008,16 @@ std::vector<TNullConsoleFrontend::WindowRecord> TNullConsoleFrontend::windowReco
+     return records;
+ }
+ 
++std::optional<TNullConsoleFrontend::TextBoxRecord> TNullConsoleFrontend::textBoxRecord(const QString& name) const
++{
++    const auto it = mTextBoxes.find(name);
++    if (it == mTextBoxes.end()) {
++        return std::nullopt;
++    }
++    const PlainWindow& textBox = it->second;
++    return TextBoxRecord{textBox.readOnly, textBox.placeholder, textBox.styleSheet, textBox.tabMovesFocus, textBox.shown && shownWithin(textBox.userWindow, textBox.box.get())};
++}
++
+ std::optional<TNullConsoleFrontend::LabelRecord> TNullConsoleFrontend::labelRecord(const QString& name) const
+ {
+     const auto it = mLabels.find(name);
+diff --git a/src/TNullConsoleFrontend.h b/src/TNullConsoleFrontend.h
+index 1d64586..ba2f5bb 100644
+--- a/src/TNullConsoleFrontend.h
++++ b/src/TNullConsoleFrontend.h
+@@ -319,10 +319,10 @@ public:
+     bool setTextBoxText(const QString& name, const QString& text) override;
+     bool clearTextBox(const QString& name) override { return setTextBoxText(name, QString()); }
+     bool setTextBoxReadOnly(const QString& name, bool readOnly) override;
+-    // What these set changes nothing a Lua call reads back
+-    bool setTextBoxPlaceholder(const QString& name, const QString&) override { return mTextBoxes.contains(name); }
++    // What these set no Lua call reads back; textBoxRecord() gives it to a frontend that draws the box
++    bool setTextBoxPlaceholder(const QString& name, const QString& text) override;
+     bool setTextBoxStyleSheet(const QString& name, const QString& styleSheet) override;
+-    bool setTextBoxTabMovesFocus(const QString& name, bool) override { return mTextBoxes.contains(name); }
++    bool setTextBoxTabMovesFocus(const QString& name, bool tabMovesFocus) override;
+     bool setTextBoxFont(const QString& name, const QFont& font) override;
+     void createBuffer(const QString& name) override;
+     void addMiniConsole(const QString& windowname, const QString& name, int x, int y, int width, int height) override;
+@@ -469,6 +469,19 @@ public:
+         qint64 made = 0;
+     };
+     std::optional<LabelRecord> labelRecord(const QString& name) const;
++    // What a text box keeps beside its text and font, which are the registry's, as a real TTextBox keeps it in its
++    // widget; and whether a player could type in it, as it shows, as does each window it is in
++    struct TextBoxRecord
++    {
++        bool readOnly = false;
++        QString placeholder;
++        QString styleSheet;
++        bool tabMovesFocus = false;
++        bool shown = false;
++    };
++    std::optional<TextBoxRecord> textBoxRecord(const QString& name) const;
++    // The player's typing in it, as QPlainTextEdit::textChanged gives the registry its text, which raises nothing
++    void typeTextBox(const QString& name, const QString& text);
+     // A label's model while it is made, or once deleted till deferred deletes run, as the GUI's TLabel is
+     bool holdsLabelModel(const TLabelModel* pModel) const;
+     // Changes as the label of the name is made, hides or moves into another window, or as the console or scroll box
+@@ -565,6 +578,9 @@ private:
+         // QPlainTextEdit::isReadOnly() and the window's own sheet, which its limits depend on
+         bool readOnly = false;
+         QString styleSheet;
++        // A text box's QPlainTextEdit::placeholderText() and tabChangesFocus()
++        QString placeholder;
++        bool tabMovesFocus = false;
+         qint64 stackOrder = 0;
+     };
+     struct SubConsole
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 94596db..06005c0 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -790,6 +790,31 @@ public:
+     };
+     // None for a name that is not a label's
+     std::optional<LabelContent> labelContent(const QString& name) const;
++    // What a text box from createTextEdit() holds, for the app to draw it as the GUI's QPlainTextEdit would. Its
++    // geometry and font are its ScriptWindow's.
++    struct TextBoxContent
++    {
++        // What getTextEditText() reads: as setTextEditText() or clearTextEdit() left it, or the player typed it
++        QString text;
++        // As setTextEditReadOnly() gave it: the player cannot type in it, though a script still sets its text
++        bool readOnly = false;
++        // As setTextEditPlaceholder() gave it, shown while the box is empty
++        QString placeholder;
++        // As setTextEditStyleSheet() gave it, which Mudlet does not interpret: drawing it is the app's to do or not
++        QString styleSheet;
++        // As setTextEditTabMovesFocus() gave it: Tab moves to the next control rather than typing a tab
++        bool tabMovesFocus = false;
++
++        bool operator==(const TextBoxContent&) const = default;
++    };
++    // None for a name that is not a text box's
++    std::optional<TextBoxContent> textBoxContent(const QString& name) const;
++    // What the player has typed in a text box so far, the whole of its text, which a script's getTextEditText()
++    // then reads, as the GUI's box sets it as its text changes; that raises no event there, so none here. No
++    // scriptWindowsChanged follows it. False for a name that is no text box, for a box that is read-only or not
++    // shown (hidden, or in a window that is hidden), which a player could not type in though a script still sets
++    // its text, and where runLua() is refused.
++    bool setTextBoxText(const QString& name, const QString& text);
+     // A row of a console as the GUI draws it: one line of its buffer, after the console's wrap
+     struct WindowLine
+     {
+@@ -1127,7 +1152,8 @@ signals:
+     // a window made, deleted (and so gone from it), moved, resized, shown, hidden, put in another window, raised,
+     // lowered or given another background or font, a console scrolled, by a script, pointer()'s wheel, a clear or a
+     // trim of its oldest rows, or whose grid, scroll bar or timestamps changed, a label whose labelContent() differs,
+-    // and those whose place among their parent's windows moved with it.
++    // a text box whose textBoxContent() does, by a script, and those whose place among their parent's windows moved
++    // with it.
+     // From the event loop, sorted, once however many calls in a turn changed them, and not for calls that changed
+     // nothing.
+     void scriptWindowsChanged(const QString& profile, const QStringList& names);
+@@ -1335,11 +1361,13 @@ private:
+     QString mDeliveredLatency;
+     // What mainConsoleGrid() and mainConsoleTextRect() gave at profileLoaded, then each mainConsoleAreaChanged
+     std::optional<std::pair<QSize, QRect>> mDeliveredMainConsoleArea;
+-    // What scriptWindows() and each label's labelContent() gave at profileLoaded, then as each scriptWindowsChanged was sent
++    // What scriptWindows(), each label's labelContent() and each text box's textBoxContent() gave at profileLoaded,
++    // then as each scriptWindowsChanged was sent, and a text box's text as setTextBoxText() set it
+     struct WindowsTold
+     {
+         QList<ScriptWindow> windows;
+         QHash<QString, LabelContent> labels;
++        QHash<QString, TextBoxContent> textBoxes;
+     };
+     std::optional<WindowsTold> mDeliveredWindows;
+     // The label pointer() last had the pointer enter, until it left, and which label of that name it was
+diff --git a/src/headless/THeadlessSessionWindows.cpp b/src/headless/THeadlessSessionWindows.cpp
+index dac528e..5a0d949 100644
+--- a/src/headless/THeadlessSessionWindows.cpp
++++ b/src/headless/THeadlessSessionWindows.cpp
+@@ -274,11 +274,16 @@ void THeadlessSession::connectWindowRelays(Host* pHost, const unsigned int run)
+                 }
+                 WindowsTold now = windowsNow();
+                 QStringList names = changedNames(byName(mDeliveredWindows->windows), byName(now.windows));
+-                for (auto it = now.labels.cbegin(); it != now.labels.cend(); ++it) {
+-                    if (const auto told = mDeliveredWindows->labels.constFind(it.key()); told != mDeliveredWindows->labels.cend() && *told != it.value()) {
+-                        names << it.key();
++                // A label or text box told before whose content differs
++                const auto changedContent = [&names](const auto& told, const auto& current) {
++                    for (auto it = current.cbegin(); it != current.cend(); ++it) {
++                        if (const auto was = told.constFind(it.key()); was != told.cend() && *was != it.value()) {
++                            names << it.key();
++                        }
+                     }
+-                }
++                };
++                changedContent(mDeliveredWindows->labels, now.labels);
++                changedContent(mDeliveredWindows->textBoxes, now.textBoxes);
+                 if (names.isEmpty()) {
+                     return;
+                 }
+@@ -416,14 +421,17 @@ bool THeadlessSession::submitWindowCommandLine(const QString& commandLine, const
+ 
+ THeadlessSession::WindowsTold THeadlessSession::windowsNow() const
+ {
+-    WindowsTold now{scriptWindows(), {}};
++    WindowsTold now{scriptWindows(), {}, {}};
+     for (const ScriptWindow& window : std::as_const(now.windows)) {
+-        if (window.kind != ScriptWindow::Kind::label) {
+-            continue;
+-        }
+-        // The list is the null view's and the content the registry's model, which could disagree
+-        if (std::optional<LabelContent> content = labelContent(window.name)) {
+-            now.labels.insert(window.name, std::move(*content));
++        if (window.kind == ScriptWindow::Kind::label) {
++            // The list is the null view's and the content the registry's model, which could disagree
++            if (std::optional<LabelContent> content = labelContent(window.name)) {
++                now.labels.insert(window.name, std::move(*content));
++            }
++        } else if (window.kind == ScriptWindow::Kind::textBox) {
++            if (std::optional<TextBoxContent> content = textBoxContent(window.name)) {
++                now.textBoxes.insert(window.name, std::move(*content));
++            }
+         }
+     }
+     return now;
+@@ -478,6 +486,50 @@ std::optional<THeadlessSession::LabelContent> THeadlessSession::labelContent(con
+     return content;
+ }
+ 
++std::optional<THeadlessSession::TextBoxContent> THeadlessSession::textBoxContent(const QString& name) const
++{
++    const auto* pView = mpHost ? dynamic_cast<TNullConsoleFrontend*>(mpHost->consoleFrontend()) : nullptr;
++    const std::optional<TNullConsoleFrontend::TextBoxRecord> record = pView ? pView->textBoxRecord(name) : std::nullopt;
++    // The record is the null view's and the text the registry's, which could disagree
++    const std::optional<QString> text = record ? mpHost->windowRegistry().textBoxText(name) : std::nullopt;
++    if (!text) {
++        return std::nullopt;
++    }
++    return TextBoxContent{*text, record->readOnly, record->placeholder, record->styleSheet, record->tabMovesFocus};
++}
++
++bool THeadlessSession::setTextBoxText(const QString& name, const QString& text)
++{
++    if (!usable()) {
++        return false;
++    }
++    auto* pView = dynamic_cast<TNullConsoleFrontend*>(mpHost->consoleFrontend());
++    const std::optional<TNullConsoleFrontend::TextBoxRecord> record = pView ? pView->textBoxRecord(name) : std::nullopt;
++    if (!record) {
++        //: Error from a frontend with no window that was given what the player typed in a text box that the profile's scripts have not made; %1 is the name it gave
++        mErrorString = tr("The profile has no text box called \"%1\".").arg(name);
++        return false;
++    }
++    if (!record->shown) {
++        //: Error from a frontend with no window that was given what the player typed in a text box that a script has hidden, or that is in a hidden window, which a player could not type in; %1 is its name
++        mErrorString = tr("The text box \"%1\" is not shown, so nothing can be typed in it.").arg(name);
++        return false;
++    }
++    if (record->readOnly) {
++        //: Error from a frontend with no window that was given what the player typed in a text box that a script made read-only; %1 is its name
++        mErrorString = tr("The text box \"%1\" is read-only, so nothing can be typed in it.").arg(name);
++        return false;
++    }
++    pView->typeTextBox(name, text);
++    // The app has what the player typed, so it is not told it back; what a script sets is told
++    if (mDeliveredWindows) {
++        if (const auto told = mDeliveredWindows->textBoxes.find(name); told != mDeliveredWindows->textBoxes.end()) {
++            told->text = mpHost->windowRegistry().textBoxText(name).value_or(QString());
++        }
++    }
++    return true;
++}
++
+ bool THeadlessSession::setUserWindowGeometry(const QString& name, const QRect& geometry, const bool floating)
+ {
+     if (!usable()) {
+diff --git a/test/functional_tests/HeadlessSessionWindowsTest.cpp b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+index 059f55f..1a602f6 100644
+--- a/test/functional_tests/HeadlessSessionWindowsTest.cpp
++++ b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+@@ -747,6 +747,93 @@ end)
+         QVERIFY(!session.closeUserWindow(qsl("uw")));
+     }
+ 
++    void test_aTextBoxsContentIsWhatScriptsSetAndThePlayerTypes()
++    {
++        using TextBoxContent = THeadlessSession::TextBoxContent;
++        const QString name = qsl("Headless Text Box Content");
++        QVERIFY(writeProfile(name));
++        THeadlessSession session;
++        // Refused where runLua() is
++        QVERIFY(!session.setTextBoxText(qsl("notes"), qsl("early")));
++        QCOMPARE(session.errorString(), qsl("No profile is open."));
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QVERIFY(session.setMainWindowSize(QSize(800, 600)));
++        QSignalSpy changes(&session, &THeadlessSession::scriptWindowsChanged);
++        QVERIFY(session.runLua(qsl(R"lua(
++createTextEdit("notes", 0, 0, 200, 100)
++createLabel("lbl", 0, 200, 100, 20, 1)
++createScrollBox("sb", 300, 0, 200, 100)
++createTextEdit("sb", "inBox", 0, 0, 100, 50)
++)lua")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        std::optional<TextBoxContent> content = session.textBoxContent(qsl("notes"));
++        QVERIFY(content);
++        QVERIFY(*content == TextBoxContent{});
++        for (const QString& other : {QString(), qsl("lbl"), qsl("sb"), qsl("nope")}) {
++            QVERIFY(!session.textBoxContent(other));
++            QVERIFY(!session.setTextBoxText(other, qsl("x")));
++            QCOMPARE(session.errorString(), qsl("The profile has no text box called \"%1\".").arg(other));
++        }
++
++        // Each setting alone names the box
++        const auto toldBy = [&](const QString& lua) {
++            if (!session.runLua(lua) || !changes.wait(1000)) {
++                return false;
++            }
++            const bool named = changes.takeFirst().at(1).toStringList() == QStringList{qsl("notes")};
++            changes.clear();
++            return named;
++        };
++        QVERIFY(toldBy(qsl(R"(setTextEditText("notes", "line one\nline two"))")));
++        QVERIFY(toldBy(qsl(R"(setTextEditPlaceholder("notes", "Your notes"))")));
++        QVERIFY(toldBy(qsl(R"(setTextEditStyleSheet("notes", "color: red;"))")));
++        QVERIFY(toldBy(qsl(R"(setTextEditTabMovesFocus("notes", true))")));
++        QVERIFY(toldBy(qsl(R"(setTextEditReadOnly("notes", true))")));
++        content = session.textBoxContent(qsl("notes"));
++        QVERIFY(content);
++        QCOMPARE(content->text, qsl("line one\nline two"));
++        QCOMPARE(content->placeholder, qsl("Your notes"));
++        QCOMPARE(content->styleSheet, qsl("color: red;"));
++        QVERIFY(content->tabMovesFocus);
++        QVERIFY(content->readOnly);
++        // What it has already is no change
++        QVERIFY(session.runLua(qsl(R"(setTextEditReadOnly("notes", true) setTextEditPlaceholder("notes", "Your notes"))")));
++        QVERIFY(!changes.wait(200));
++
++        // A player cannot type in a read-only box, so neither can the app; a script still sets its text
++        QVERIFY(!session.setTextBoxText(qsl("notes"), qsl("typed")));
++        QCOMPARE(session.errorString(), qsl("The text box \"notes\" is read-only, so nothing can be typed in it."));
++        QCOMPARE(luaString(session, qsl("getTextEditText('notes')")), qsl("line one\nline two"));
++        QVERIFY(toldBy(qsl(R"(setTextEditReadOnly("notes", false))")));
++
++        // What the player typed is what a script reads, as a line break and a non-breaking space come back from the
++        // GUI's box, and it is not told back
++        QVERIFY(session.setTextBoxText(qsl("notes"), qsl("typed here now")));
++        QCOMPARE(luaString(session, qsl("getTextEditText('notes')")), qsl("typed\nhere now"));
++        QCOMPARE(session.textBoxContent(qsl("notes"))->text, qsl("typed\nhere now"));
++        QVERIFY(!changes.wait(200));
++        // A script's text is told, though the box had it when last told
++        QVERIFY(toldBy(qsl(R"(setTextEditText("notes", "line one\nline two"))")));
++        QCOMPARE(session.textBoxContent(qsl("notes"))->text, qsl("line one\nline two"));
++        QVERIFY(toldBy(qsl(R"(clearTextEdit("notes"))")));
++        QCOMPARE(session.textBoxContent(qsl("notes"))->text, QString());
++
++        // Nor in one hidden, or in a hidden window
++        QVERIFY(session.runLua(qsl("hideWindow('notes') hideWindow('sb')")));
++        for (const QString& hidden : {qsl("notes"), qsl("inBox")}) {
++            QVERIFY(!session.setTextBoxText(hidden, qsl("unseen")));
++            QCOMPARE(session.errorString(), qsl("The text box \"%1\" is not shown, so nothing can be typed in it.").arg(hidden));
++            QCOMPARE(session.textBoxContent(hidden)->text, QString());
++        }
++        QVERIFY(session.runLua(qsl("showWindow('notes') showWindow('sb')")));
++        QVERIFY(session.setTextBoxText(qsl("notes"), qsl("seen")));
++        QVERIFY(session.setTextBoxText(qsl("inBox"), qsl("seen")));
++        QCOMPARE(luaString(session, qsl("getTextEditText('inBox')")), qsl("seen"));
++
++        QVERIFY(session.shutdown(false));
++    }
++
+     void test_aUserWindowsSheetFindsItsTextByTheGuisName()
+     {
+         const QString name = qsl("HeadlessPaneSheet");

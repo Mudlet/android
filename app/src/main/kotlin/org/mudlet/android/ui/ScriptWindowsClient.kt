@@ -25,6 +25,7 @@ import org.mudlet.android.protocol.Placement
 import org.mudlet.android.protocol.PointerType
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.ScriptWindows
+import org.mudlet.android.protocol.TextBoxContent
 
 /**
  * The script windows' part of [EngineClient] (docs/phase-f.md): the windows, button bars, commands and map the engine
@@ -90,6 +91,9 @@ object ScriptWindowsClient {
     // The label the player last touched, which is told when another is
     private var touchedLabel: String? = null
 
+    // What the player has typed in each text box that the engine has not been sent, as the box last drew it
+    private val typing = HashMap<String, String>()
+
     internal fun onMessage(message: EngineMessage) {
         when (message) {
             is EngineMessage.ButtonBars -> buttonBars = message.bars
@@ -121,7 +125,7 @@ object ScriptWindowsClient {
     /**
      * An `error` from the engine: the refusal of a map request is shown with the map that asked, this or
      * [AppMapClient]'s. A link's is only logged, as a link a script let go of or disabled, or one the player tapped as it
-     * went, is no fault of theirs.
+     * went, is no fault of theirs; so is a text box's, which a script made read-only or hid as the player typed.
      */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
@@ -129,6 +133,8 @@ object ScriptWindowsClient {
         if (AppMapClient.onRefused(request, reason)) return
         if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
+        // The box's own textBox follows, which puts back what it holds
+        if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -169,9 +175,10 @@ object ScriptWindowsClient {
     }
 
     /** A new engine instance knows none of the windows, nor the size or placements the last one was given. */
-    internal fun onAttached(sameInstance: Boolean) {
+    internal fun onAttached(sameInstance: Boolean, connection: Int) {
         if (!sameInstance) {
-            state = ScriptWindows()
+            // Typing already sent on this connection stays counted, as below
+            state = ScriptWindows(textBoxesTyped = state.textBoxesTyped, textBoxesTypedOn = state.textBoxesTypedOn)
             buttonBars = emptyList()
             commands = emptyList()
             map = null
@@ -184,6 +191,9 @@ object ScriptWindowsClient {
             imageOrder.clear()
             askedImages.clear()
         }
+        // Each setTextBoxText is counted afresh on this connection, as the engine counts them after its hello. Typing
+        // may have gone out on it already, from this thread before this post ran, and stays counted
+        state = state.attached(connection)
         // What the last link did not answer is asked again
         pendingImages.clear()
         askedLinks.clear()
@@ -213,20 +223,57 @@ object ScriptWindowsClient {
     }
 
     /** Enter on the command line [name]. False as for [EngineClient.send]. */
-    fun sendWindowCommandLine(name: String, text: String): Boolean = EngineClient.send(Requests.sendWindowCommandLine(name, text))
+    fun sendWindowCommandLine(name: String, text: String): Boolean {
+        flushTyping()
+        return EngineClient.send(Requests.sendWindowCommandLine(name, text))
+    }
 
     fun commandLineShown(name: String) {
         state = state.commandLineShown(name)
+    }
+
+    /** The text box [name] has [text] typed in it that the engine has not been sent, or nothing for null, which [flushTyping] sends. */
+    fun typing(name: String, text: String?) {
+        if (text == null) typing.remove(name) else typing[name] = text
+    }
+
+    /**
+     * Sends what the player has typed in the text box [name], all of it, unless it was sent: the engine sets the box to
+     * it, as plain text as it keeps it, and [state] holds it at once, as the engine does not send it back. Kept to send
+     * again while the link is down; dropped for a box the engine no longer has.
+     */
+    fun flushTyping(name: String) {
+        val text = typing[name] ?: return
+        if (name !in state.textBoxes) {
+            typing.remove(name)
+            return
+        }
+        val plain = TextBoxContent.plain(text)
+        val connection = EngineClient.sendOn(Requests.setTextBoxText(name, plain))
+        if (connection == 0) return
+        typing.remove(name)
+        state = state.textBoxTyped(name, plain, connection)
+    }
+
+    /** Sends what the player has typed in every text box, before what may run a script that reads them. */
+    fun flushTyping() {
+        typing.keys.toList().forEach(::flushTyping)
     }
 
     /**
      * A tap on the button or menu entry [button] of [buttonBars]: its command and script run, and a push-down one goes
      * down or up, which the next [buttonBars] shows. False as for [EngineClient.send].
      */
-    fun pressButton(button: Int): Boolean = EngineClient.send(Requests.pressButton(button))
+    fun pressButton(button: Int): Boolean {
+        flushTyping()
+        return EngineClient.send(Requests.pressButton(button))
+    }
 
     /** A tap on the command [command] of [commands]: a checkable one is ticked or unticked. False as for [EngineClient.send]. */
-    fun activateCommand(command: Int): Boolean = EngineClient.send(Requests.activateCommand(command))
+    fun activateCommand(command: Int): Boolean {
+        flushTyping()
+        return EngineClient.send(Requests.activateCommand(command))
+    }
 
     /**
      * What the player did on the map at [at], in the pixels of the last [map]: a tap selects the room there ([type]
@@ -234,6 +281,7 @@ object ScriptWindowsClient {
      */
     fun mapPointer(type: MapPointerType, at: MapPoint, wheelY: Int = 0): Boolean {
         mapRefusal = null
+        flushTyping()
         val button = if (type == MapPointerType.WHEEL) 0 else POINTER_LEFT
         return EngineClient.send(Requests.mapPointer(type, at.x, at.y, button, 0, wheelY))
     }
@@ -261,7 +309,10 @@ object ScriptWindowsClient {
      * A tap on the link [link] of the console [window], or with [item], that item picked from its menu: what it runs
      * changes the console, whose next text shows it. False as for [EngineClient.send].
      */
-    fun followLink(window: String, link: Int, item: Int? = null): Boolean = EngineClient.send(Requests.followLink(link, item, window, EngineClient.newRequestId()))
+    fun followLink(window: String, link: Int, item: Int? = null): Boolean {
+        flushTyping()
+        return EngineClient.send(Requests.followLink(link, item, window, EngineClient.newRequestId()))
+    }
 
     /** Asks the engine for [request], unless it was asked already; [images] gets it. */
     fun requestImage(request: ImageRequest) {
@@ -278,6 +329,7 @@ object ScriptWindowsClient {
      * changed and [buttons] held after it. The label touched before this one is told the pointer left it.
      */
     fun pointer(label: String, type: PointerType, x: Double, y: Double, button: Int = 0, buttons: Int = 0) {
+        flushTyping()
         if (type == PointerType.ENTER) {
             if (touchedLabel == label) return
             touchedLabel?.let { EngineClient.send(Requests.pointer(it, PointerType.LEAVE, 0.0, 0.0, 0, 0, 0, 0)) }
@@ -297,7 +349,10 @@ object ScriptWindowsClient {
 
             is LabelLink.NotRun -> Log.w(TAG, "the label link \"$href\" was not run: ${link.scheme}: is not a scheme Mudlet handles, and the link is not a Lua command")
 
-            else -> link.request(EngineClient.newRequestId())?.let(EngineClient::send)
+            else -> link.request(EngineClient.newRequestId())?.let {
+                flushTyping()
+                EngineClient.send(it)
+            }
         }
     }
 

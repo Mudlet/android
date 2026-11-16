@@ -53,6 +53,8 @@ public:
     // Nor a map
     QString mapPointer(const PointerEvent&) override { return noMap(); }
     QString setMapViewOnly(bool) override { return noMap(); }
+    // Taken, as there is no map to draw at it
+    QString setMapScale(double) override { return {}; }
     // The app's map is taken, and is always nothing to draw
     QString setAppMapSize(const QSize&, double) override
     {

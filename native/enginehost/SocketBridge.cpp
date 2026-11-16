@@ -205,11 +205,13 @@ void SocketBridge::dropClient(const QString& reason)
 }
 
 // The app's map is drawn only for the UI that asked for it, so one that goes stops it, and the next is told nothing of
-// it until it asks: a UI that died cannot take back its size, and none is drawn while none is attached
+// it until it asks: a UI that died cannot take back its size, and none is drawn while none is attached. The mapper's
+// map goes back to the window's own pixels, as the next UI may show it at another size, or not ask
 void SocketBridge::forgetClient()
 {
     if (mEngine) {
         mEngine->setAppMapSize(QSize(0, 0), 1);
+        mEngine->setMapScale(1);
     }
     mAppMap = QJsonObject();
 }
@@ -438,6 +440,10 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("setMapViewOnly")) {
         const QJsonValue viewOnly = message.value(QLatin1String("viewOnly"));
         refuse(type, viewOnly.isBool() ? mEngine->setMapViewOnly(viewOnly.toBool()) : QStringLiteral("viewOnly must be true or false"));
+    } else if (type == QLatin1String("setMapScale")) {
+        const QJsonValue scale = message.value(QLatin1String("scale"));
+        const bool valid = scale.isDouble() && scale.toDouble() >= 1 && scale.toDouble() <= IEngine::maxMapScale;
+        refuse(type, valid ? mEngine->setMapScale(scale.toDouble()) : QStringLiteral("scale must be a number from 1 to %1").arg(IEngine::maxMapScale));
     } else if (type == QLatin1String("setAppMapSize")) {
         refuse(type, setAppMapSize(message));
     } else if (type == QLatin1String("appMapPointer")) {

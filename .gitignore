@@ -19,3 +19,7 @@ __pycache__/
 # A release's staged engines, as CONTRIBUTING.md and docs/ptb.md stage them
 /staged/
 /instrumented-test/
+
+# Claude Code personal files (may hold secrets)
+**/.claude/settings.local.json
+CLAUDE.local.md

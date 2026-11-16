@@ -300,16 +300,29 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 - The engine is asked (`setMapScale`) to draw it at the scale it is shown at, `MapFit.renderScale`, as Mudlet's pixels
   are scaled to the screen's, several times over for a small mapper that fills a page's pane: its PNG has that many
   more pixels, so the map is as sharp as the screen, and its `w`, `h` and points stay the window's.
-- A tap sends a `mapPointer` press with the left button, which selects the room there, on the finger's lift, so a
-  pinch selects nothing; a second tap near it within the double-tap timeout then sends a double click, which walks
-  there. A pinch turns the wheel a notch for each 7% it scales, as Mudlet's map zooms by notch, about the fingers'
-  middle. A drag does nothing.
-- Buttons in its corner (`MapButtons`) zoom out and in by three notches about the map's middle, and a switch, on while
-  the map is edited, sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason
-  over the map's bottom, until dismissed or the next request.
-- With TalkBack the map reads as "Map of the game", viewing or editing, in the windows' group. A double tap selects the
-  room in its middle, and its actions walk there and zoom; the buttons and the switch read their names. Touches,
-  buttons and actions are off while no engine is attached or no frame of the window's size has come.
+- A tap sends a `mapPointer` press with the left button on the finger's lift, so a pinch selects nothing, at the
+  middle of the room nearest it within 24 dp or its own cell (from the frame's `view.rooms`), so a room smaller than a
+  finger at a low zoom is still hit, or else at the point itself; a second tap near it within the double-tap timeout
+  then sends a double click there, which walks to it, with a confirming tick.
+- A drag pans the map and, let go quickly, glides on as a fling slows; a pinch pans with the fingers and zooms about
+  their middle; a double tap whose second touch drags zooms about it, in as it goes down (`mapGestures`). Each is
+  drawn at once by moving the frame shown (`MapMoves` in `:protocol`, held by `MapMover`), and sent as `moveMap`, at
+  most one every 50 ms while the finger moves and the rest as it lifts; the frame is shown moved by what the engine
+  has not drawn yet until a frame's `view.moved` reaches it, and as it was when a move is refused. The zoom stays
+  within the frame's `minZoom` and `maxZoom`, as the engine keeps it, so what is shown is what it draws next.
+- A pan, or a zoom about a point other than the middle, stops the map following the player (`view.following`):
+  a button at its bottom end then centres it on the player again (`followPlayer`), until the player moves to another
+  room, which follows them again anyway. The map in front sends `followPlayer` as it goes back behind the text, so
+  the map behind the text follows the player.
+- Buttons in its corner (`MapButtons`) zoom out and in by a quarter about the map's middle (`moveMap`, which keeps
+  following the player; three wheel notches while a frame has no `view`), and a switch, on while the map is edited,
+  sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason over
+  the map's bottom, clear of the button that centres it, until dismissed or the next request.
+- With TalkBack the map reads as "Map of the game", viewing or editing, and "not following you" while it does not
+  follow the player, in the windows' group. A double tap selects the room in its middle, and its actions walk there,
+  zoom, move the map up, down, left and right by a third of it, and centre it on the player while it does not follow
+  them; the buttons and the switch read their names. Touches, buttons and actions are off while no engine is
+  attached or no frame of the window's size has come.
 
 ### The map behind the text
 The game screen also has a map of its own, which needs no script: `appMap`, the engine's second map view
@@ -324,7 +337,7 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   game colours is not weighed, so a dim colour of the game's reads less well over the map. It takes no touches, which
   reach the text as before, and TalkBack does not read it.
 - In front: the title bar's map button, a toggle read as "Map" with its state, covers all of the game screen between the
-  title bar and the connection bar, the input line and the quick bar too, with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, pinch, the zoom
+  title bar and the connection bar, the input line and the quick bar too, with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, drag, pinch, the zoom
   buttons, the edit switch, refusals and TalkBack's actions), under a search field. The buttons are beside the field,
   not over the map, whose top line is Mudlet's name of the room, which they would hide. TalkBack does not read what it
   covers, and a hardware keyboard's focus does not reach it. The input line lets go of the focus and the keyboard while
@@ -451,6 +464,7 @@ keeps the profiles' passwords in the KeyStore.
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
 | `renderMap()` at the mapper window's size onto an image larger by `setMapScale`'s scale, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
 | `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
+| `moveMapView()`, `followPlayerOnMap()`, `mapView()` after each `renderMap()` and `renderAppMap()` (carried patch) | `moveMap`, `followPlayer`, answered only when refused; `view` in `map` and `appMap`, with the last `moveMap` drawn as `moved` |
 | `offeredMapUrl()` at `profileLoaded` and at each `offeredMapChanged`; `downloadOfferedMap()`, `cancelMapOperation()`; `mapProgressStarted`, `mapProgressChanged`, `mapProgressCancelDisabled`, `mapDownloadFinished` (carried patch) | `mapDownload`, with the URL's host only, when it changed (progress at most once a percent), and to a UI that attaches; `downloadMap`, `cancelMapDownload`, answered only when refused |
 
 The tail is sent once per pass of the event loop, so a flood sends its lines and a single tail.

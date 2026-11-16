@@ -27,6 +27,9 @@ class MapFit(val frameW: Int, val frameH: Int, val box: PxRect) {
     /** The frame's middle, where the zoom buttons zoom about. */
     val centre: MapPoint = MapPoint(frameW / 2.0, frameH / 2.0)
 
+    /** The point of the frame, as drawn unmoved, at [x], [y] in [box]'s pixels, off it or not; null for a fit with no size. */
+    fun toMap(x: Float, y: Float): MapPoint? = if (scale > 0f) MapPoint(((x - drawn.x) / scale).toDouble(), ((y - drawn.y) / scale).toDouble()) else null
+
     /** The point of the frame under [x], [y], in [box]'s pixels; null off what is drawn. */
     fun toFrame(x: Float, y: Float): MapPoint? {
         if (scale <= 0f || x < drawn.x || y < drawn.y || x >= drawn.right || y >= drawn.bottom) return null

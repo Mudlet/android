@@ -63,6 +63,8 @@ public:
     QString appMapPointer(const PointerEvent&) override { return noMap(); }
     std::variant<RoomList, QString> findRooms(const QString&) const override { return noMap(); }
     QString showRoom(int) override { return noMap(); }
+    QString moveMap(MapTarget, const QPointF&, double, const QPointF&, qint64) override { return noMap(); }
+    QString followPlayer(MapTarget) override { return noMap(); }
     QString downloadMap() override { return noMap(); }
     QString cancelMapDownload() override { return noMap(); }
 

@@ -13,6 +13,7 @@ import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
+import org.mudlet.android.protocol.MapTarget
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.RoomMatch
@@ -68,6 +69,11 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
 
     private var refused by mutableStateOf<String?>(null)
 
+    override val mover = MapMover(MapTarget.APP) {
+        refused = null
+        session.send(it)
+    }
+
     /** The map the game offers and how its download goes, as the engine last said: [NO_DOWNLOAD] until it says. */
     var download by mutableStateOf(NO_DOWNLOAD)
         private set
@@ -106,10 +112,12 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     internal fun onAppMap(message: EngineMessage.AppMap, bitmap: ImageBitmap?) {
         if (message.w == 0 || message.h == 0) {
             map = null
+            mover.onFrame(null)
             return
         }
         if (bitmap == null) Log.w(TAG, "the engine's app map, ${message.w} by ${message.h}, did not decode")
         map = ScriptWindowsClient.MapImage(bitmap, message.w, message.h, message.viewOnly)
+        mover.onFrame(message.view)
     }
 
     /** The engine's answer to [findRooms]; one to an earlier search is not shown. */
@@ -126,6 +134,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             "downloadMap" -> downloadAsked = false
             "setMapViewOnly" -> if (!askedViewOnly) return false
             "findRooms" -> closeSearch()
+            "moveMap", "followPlayer" -> if (mover.awaiting) mover.clear() else return false
             else -> return false
         }
         refused = reason
@@ -142,8 +151,11 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
      * show either, and answers nothing the last was asked.
      */
     internal fun onAttached(sameInstance: Boolean) {
+        // What was moved and not drawn may not have reached the engine
+        mover.clear()
         if (!sameInstance) {
             map = null
+            mover.onFrame(null)
             refused = null
             download = NO_DOWNLOAD
             downloadEnd = null

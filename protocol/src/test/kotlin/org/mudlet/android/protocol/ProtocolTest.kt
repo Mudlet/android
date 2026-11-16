@@ -539,6 +539,35 @@ class ProtocolTest {
     }
 
     @Test
+    fun aMapsViewDecodes() {
+        val map = FrameReader.parse(
+            JSONObject(
+                """{"t":"map","png":"","w":400,"h":300,"viewOnly":true,"view":{"area":2,"areaName":"Castle","level":-1,"zoom":12.5,""" +
+                    """"minZoom":3,"maxZoom":30,"following":false,"player":7,"roomSize":24,"moved":5,""" +
+                    """"rooms":[{"id":7,"x":200.5,"y":150,"name":"Great Hall"},"junk",{"id":8,"x":-3,"y":12}]}}""",
+            ),
+        ) as EngineMessage.Map
+        assertEquals(
+            MapViewInfo(
+                2, "Castle", -1, 12.5, 3.0, 30.0, false, 7, 24.0, 5,
+                listOf(MapRoomPlace(7, 200.5, 150.0, "Great Hall"), MapRoomPlace(8, -3.0, 12.0, "")),
+            ),
+            map.view,
+        )
+        val bare = FrameReader.parse(JSONObject("""{"t":"appMap","png":"","w":0,"h":0,"viewOnly":true}""")) as EngineMessage.AppMap
+        assertEquals(null, bare.view)
+    }
+
+    @Test
+    fun theMapMovesCarryWhatTheEngineReads() {
+        assertEquals(
+            mapOf("t" to "moveMap", "map" to "app", "dx" to 1.5, "dy" to -2.0, "zoom" to 1.25, "x" to 10.0, "y" to 20.0, "seq" to 3),
+            Requests.moveMap(MapTarget.APP, 1.5, -2.0, 1.25, 10.0, 20.0, 3).toMap(),
+        )
+        assertEquals(mapOf("t" to "followPlayer", "map" to "mapper"), Requests.followPlayer(MapTarget.MAPPER).toMap())
+    }
+
+    @Test
     fun theMapScaleRequestCarriesWhatTheEngineReads() {
         assertEquals(mapOf("t" to "setMapScale", "scale" to 2.75), Requests.setMapScale(2.75).toMap())
     }

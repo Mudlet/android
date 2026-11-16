@@ -387,6 +387,20 @@
     <string name="map_zoom_in">Zoom in on the map</string>
     <!-- The map's button, read by a screen reader, that zooms out -->
     <string name="map_zoom_out">Zoom out of the map</string>
+    <!-- The map's state, read by a screen reader, while the player has moved the map away from their character, so it no
+         longer follows them as they walk; %1$s is the state otherwise read, Viewing or Editing -->
+    <string name="map_not_following">%1$s, not following you</string>
+    <!-- The map's button, and TalkBack's action on the map, that centres the map on the player's character again and
+         has it follow them as they walk -->
+    <string name="map_follow">Centre the map on you</string>
+    <!-- TalkBack's action on the map: it moves the map to show more of what is above (north of) what it shows -->
+    <string name="map_pan_up">Move the map up</string>
+    <!-- TalkBack's action on the map: it moves the map to show more of what is below (south of) what it shows -->
+    <string name="map_pan_down">Move the map down</string>
+    <!-- TalkBack's action on the map: it moves the map to show more of what is left of (west of) what it shows -->
+    <string name="map_pan_left">Move the map left</string>
+    <!-- TalkBack's action on the map: it moves the map to show more of what is right of (east of) what it shows -->
+    <string name="map_pan_right">Move the map right</string>
     <!-- The map's button, read by a screen reader, that lets the player change the map -->
     <string name="map_edit">Edit the map</string>
     <!-- Shown over the map when the engine did not do what was asked; %1$s is the engine's reason, in English -->

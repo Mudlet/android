@@ -135,9 +135,15 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
             backProgress = 0f
         }
     }
-    // Its results are of this time the map was in front
+    // Its results are of this time the map was in front; the map behind the text follows the player, as it is not
+    // there to be moved
     val appMap = EngineClient.front.appMap
-    DisposableEffect(appMap) { onDispose { appMap.closeSearch() } }
+    DisposableEffect(appMap) {
+        onDispose {
+            appMap.closeSearch()
+            if (!appMap.mover.following) appMap.mover.followPlayer()
+        }
+    }
     val shrunk = Modifier.graphicsLayer {
         val scale = 1f - backProgress * BACK_SHRINK
         scaleX = scale

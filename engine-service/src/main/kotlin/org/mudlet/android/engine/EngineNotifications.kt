@@ -31,14 +31,8 @@ object EngineNotifications {
     // The id of each profile's group summary for its tells
     private val summaryIds = ConcurrentHashMap<String, Int>()
 
-    /**
-     * An open game, as the engine notification lists it: its profile's name and its connection status, one of the
-     * engine's (docs/protocol.md): "connected", "connecting ...", "disconnected", "error: ...".
-     */
-    data class Game(val name: String, val connection: String) {
-        val connected: Boolean get() = connection == "connected"
-        val connecting: Boolean get() = connection.startsWith("connecting")
-    }
+    /** An open game, as the engine notification lists it: its profile's name and its connection status. */
+    data class Game(val name: String, val connection: String)
 
     @Volatile
     private var games: List<Game> = emptyList()
@@ -74,9 +68,8 @@ object EngineNotifications {
     }
 
     /**
-     * The ongoing notification: its title names the one connected game or counts them, or says that none is connected,
-     * and with several games open it lists each with its connection. [deferred]: Android 12+ waits 10 s before showing
-     * it, so one taken away sooner never shows.
+     * The ongoing notification: with one game open it names it, with more it counts them and lists each with its
+     * connection. [deferred]: Android 12+ waits 10 s before showing it, so one taken away sooner never shows.
      */
     fun engineNotification(context: Context, deferred: Boolean = false): Notification {
         val stop = PendingIntent.getService(
@@ -86,15 +79,16 @@ object EngineNotifications {
             PendingIntent.FLAG_IMMUTABLE,
         )
         val games = games
-        val connected = games.filter { it.connected }
         val builder = NotificationCompat.Builder(context, CHANNEL_ENGINE)
             .setSmallIcon(R.drawable.ic_engine)
-            .setContentTitle(title(context, games, connected))
-            .setContentText(
-                context.getString(
-                    if (games.isNotEmpty() && connected.isEmpty()) R.string.engine_notification_text_not_connected else R.string.engine_notification_text,
-                ),
+            .setContentTitle(
+                when (games.size) {
+                    0 -> context.getString(R.string.engine_notification_title)
+                    1 -> context.getString(R.string.engine_notification_title_profile, games.single().name)
+                    else -> context.resources.getQuantityString(R.plurals.engine_notification_title_games, games.size, games.size)
+                },
             )
+            .setContentText(context.getString(R.string.engine_notification_text))
             .setOngoing(true)
             .setContentIntent(openUi(context))
             .addAction(0, context.getString(R.string.engine_notification_quit), stop)
@@ -103,25 +97,17 @@ object EngineNotifications {
             )
         if (games.size > 1) {
             val lines = NotificationCompat.InboxStyle()
-            games.forEach { lines.addLine(context.getString(R.string.engine_notification_game, it.name, connectionText(context, it))) }
+            games.forEach { lines.addLine(context.getString(R.string.engine_notification_game, it.name, connectionText(context, it.connection))) }
             builder.setStyle(lines)
         }
         return builder.build()
     }
 
-    private fun title(context: Context, games: List<Game>, connected: List<Game>): String = when {
-        games.isEmpty() -> context.getString(R.string.engine_notification_title)
-        connected.size == 1 -> context.getString(R.string.engine_notification_title_profile, connected.single().name)
-        connected.size > 1 -> context.resources.getQuantityString(R.plurals.engine_notification_title_games, connected.size, connected.size)
-        games.size > 1 -> context.resources.getQuantityString(R.plurals.engine_notification_title_none_connected, games.size, games.size)
-        games.single().connecting -> context.getString(R.string.engine_notification_title_connecting, games.single().name)
-        else -> context.getString(R.string.engine_notification_title_not_connected, games.single().name)
-    }
-
-    private fun connectionText(context: Context, game: Game): String = context.getString(
+    // The engine's connection statuses (docs/protocol.md): "connected", "connecting ...", "disconnected", "error: ..."
+    private fun connectionText(context: Context, connection: String): String = context.getString(
         when {
-            game.connected -> R.string.engine_notification_connected
-            game.connecting -> R.string.engine_notification_connecting
+            connection == "connected" -> R.string.engine_notification_connected
+            connection.startsWith("connecting") -> R.string.engine_notification_connecting
             else -> R.string.engine_notification_not_connected
         },
     )

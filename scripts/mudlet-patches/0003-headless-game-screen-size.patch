@@ -12,7 +12,6 @@ the main console's grid, as setScreenSize() tells it (a width below 40 taken as 
 width, once a change has held for 0.3s), and the main window's size and the grid stay as they were.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
-Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 4e80796..253d2f6 100644

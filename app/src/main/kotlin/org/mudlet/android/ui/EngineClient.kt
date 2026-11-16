@@ -352,7 +352,7 @@ object EngineClient {
         val requested = requestedFront?.let { name -> kept.firstOrNull { it.name == name } }
         if (requested == null || requested === engineFront) requestedFront = null
         moveFront(requested ?: engineFront ?: kept.firstOrNull())
-        // After the front has moved: a game in the background that wants attention is said to
+        // After the front has moved, so that only a game in the background is said to want attention
         for ((session, profile) in kept.zip(open)) session.counted(profile)
         markFrontSeen()
         wantedFront?.let { (name, onShown) ->

@@ -99,14 +99,18 @@ class GameBadgesTest {
         counts(BETA.name, lastSeq = 30, unread = 4, attention = false)
         assertSeen(BETA.name, 30)
 
-        show(ALPHA.name)
+        show(ALPHA.name, unread = 12, attention = true)
         assertSeen(ALPHA.name, 12)
         waitFor(pillReading(ALPHA.name, index = 1))
         // Once seen, the engine's next count asks for nothing
         counts(ALPHA.name, lastSeq = 12, unread = 0, attention = false)
         beta.assertNoRequest("markSeen", QUIET_MS)
-        counts(ALPHA.name, lastSeq = 20, unread = 8, attention = false)
+        // Nor is the game in front said to want attention: it has it
+        val said = serial()
+        counts(ALPHA.name, lastSeq = 20, unread = 8, attention = true)
         assertSeen(ALPHA.name, 20)
+        SystemClock.sleep(QUIET_MS.toLong())
+        assertEquals(said, serial())
 
         // The one now in the background has its lines read on the pill
         counts(BETA.name, lastSeq = 35, unread = 5, attention = false)
@@ -141,9 +145,9 @@ class GameBadgesTest {
     }
 
     // From the profile list's open games, as a double tap under TalkBack does
-    private fun show(name: String) {
+    private fun show(name: String, unread: Long = 0, attention: Boolean = false) {
         waitFor(hasText(string(R.string.games_title)))
-        activate(openGame(name))
+        activate(openGame(name, unread, attention))
         assertEquals(name, beta.receive("setFront").getString("name"))
         waitFor(pill)
     }

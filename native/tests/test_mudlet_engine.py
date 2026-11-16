@@ -397,6 +397,7 @@ def profile_requests(port):
     check(("profile", "Beta closing") not in [(m["key"], m["value"]) for m in msgs if m["t"] == "status"],
           "connect connects the open profile, without a switch")
     several_profiles(c, port)
+    running_profile_login(port)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     check(password not in open(LOG, errors="replace").read(), "nor did it log the password on its way out")
@@ -447,6 +448,89 @@ def several_profiles(c, port):
         closed = False
     check(closed, "and once it has closed, none is open and its socket is closed")
     ask(ctl, {"t": "deleteProfile", "name": "Solo"})
+    ctl.close()
+
+
+def running_profile_login(port):
+    """A login and password given to the open profile "Beta", started without either, as the player adds them in the
+    editor and then connects: it starts again with them on the socket it had, but not while it is connected."""
+    ctl = Client(SOCK, profile_sockets=True)
+    ctl.wait_for(lambda m: m["t"] == "synced")
+    seen = []
+
+    def ask(msg):
+        return ctl.ask(msg, answers=("profiles", "error"))
+
+    def statuses(since):
+        return [(m["key"], m["value"]) for m in seen[since:] if m["t"] == "status" and m["key"] in ("profile", "connection")]
+
+    def logged_in_as(login, secret):
+        deadline = time.monotonic() + 15
+        while secret not in fake_telnet.RECEIVED and time.monotonic() < deadline:
+            time.sleep(0.1)
+        got = fake_telnet.RECEIVED
+        return login in got and secret in got and got.index(login) < got.index(secret)
+
+    def opened_again(since):
+        """Closed, loaded and connected on Beta's socket since seen[since]; False if any has not come in time, or the
+        socket closed."""
+        try:
+            for key, value in (("profile", "Beta closing"), ("profile", "Beta loaded"), ("connection", "connected")):
+                if (key, value) not in statuses(since):
+                    wait_status(beta, key, lambda v, value=value: v == value, seen)
+        except (TimeoutError, Closed):
+            return False
+        return True
+
+    def disconnect():
+        beta.send({"t": "disconnect"})
+        wait_status(beta, "connection", lambda v: v == "disconnected", seen)
+
+    def beta_socket():
+        loaded = [("Beta", "loaded")]
+        m = ctl.wait_for(lambda m: m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == loaded, timeout=30)
+        return m["profiles"][0]["socket"]
+
+    ask({"t": "saveProfile", **profile_checks.profile("Beta", port, auto_reconnect=True)})
+    ask({"t": "openProfile", "name": "Beta"})
+    path = beta_socket()
+    beta = Client(path)
+    if ("connection", "connected") not in statuses(0):
+        wait_status(beta, "connection", lambda v: v == "connected", seen)
+    first, second = "pw-first-Zr4-never-logged", "pw-second-Tq8-never-logged"
+    m = ask({"t": "saveProfile", **profile_checks.profile("Beta", port, login="beta-hero", auto_reconnect=True)})
+    check(m["t"] == "profiles", f"saveProfile gives the open profile a login: {m}")
+
+    m = ask({"t": "openProfile", "name": "Beta", "password": first, "alongside": True})
+    mark = len(seen)
+    beta.send({"t": "runLua", "code": "echo('')"})
+    wait_status(beta, "luaResult", lambda v: True, seen)
+    check(m["t"] == "profiles" and ("profile", "Beta closing") not in statuses(mark) and first not in fake_telnet.RECEIVED,
+          f"a connected profile keeps its connection when opened with a new login and password: {statuses(mark)}")
+    disconnect()
+    mark = len(seen)
+    beta.send({"t": "connect", "host": "127.0.0.1", "port": port})
+    check(opened_again(mark) and logged_in_as("beta-hero", first),
+          f"and starts again with them at its next connect, on the socket it had, logged in with them: {statuses(mark)}")
+    check(beta_socket() == path, "the profile keeps its slot and socket through the start again")
+
+    disconnect()
+    m = ask({"t": "saveProfile", **profile_checks.profile("Beta", port, login="beta-hero-2", auto_reconnect=True)})
+    check(m["t"] == "profiles", f"saveProfile changes the open profile's login: {m}")
+    mark = len(seen)
+    m = ask({"t": "openProfile", "name": "Beta", "password": second})
+    check(m["t"] == "profiles" and opened_again(mark) and logged_in_as("beta-hero-2", second),
+          f"opening it disconnected with a new login and password starts it again, logged in with them: {statuses(mark)}")
+
+    disconnect()
+    mark = len(seen)
+    m = ask({"t": "openProfile", "name": "Beta", "password": second})
+    wait_status(beta, "connection", lambda v: v == "connected", seen)
+    check(m["t"] == "profiles" and ("profile", "Beta closing") not in statuses(mark),
+          f"opened again with the same login and password, it connects without starting again: {statuses(mark)}")
+    profile_checks.password_kept_out(check, first, seen, LOG)
+    profile_checks.password_kept_out(check, second, seen, LOG)
+    beta.close()
     ctl.close()
 
 

@@ -475,7 +475,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `moveTypedLine` ahead of `hiddenInput` when a script's typed line is up as the game hides input;
 - the profile requests: each answered with `profiles` or `error`; profiles written in Mudlet's own files; a switch
   of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
-  through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log;
+  through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log; a new login and
+  password for the running profile, which starts again with them on the socket it had, but not while it is connected;
 - the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
   `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
   history, and `printCmdLine()` as `commandLine`;
@@ -614,7 +615,8 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   sets what a game that asks is told.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
-- A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then.
+- A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then;
+  a new login or password from `openProfile` starts it again, at once if it is not connected, else at its next connect.
 - `saveProfile` makes a new profile's folder before its first start, so that start does not remove the passwords an
   earlier profile of the same name may have left in the credential store, as Mudlet does for a new name, and
   `deleteProfile` does not remove them either. The engine stores no password (the app keeps its own, encrypted, and

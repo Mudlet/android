@@ -85,6 +85,8 @@ private:
         quint16 port = 0;
         std::optional<bool> tls;
         QStringList lua;
+        // The running profile starting again, as with a new login: it keeps its socket, which a close and open would not
+        bool again = false;
 
         SessionStore::Session kept() const { return {profile, host, port, connect, tls}; }
     };
@@ -111,6 +113,8 @@ private:
     void openPending();
     void keepPending();
     void connectProfile();
+    void switchTo(PendingOpen open);
+    static QByteArray passwordDigest(const QString& password);
     bool inUse(const QString& folder) const;
     void takeRestore();
     void beginRestore();
@@ -207,6 +211,12 @@ private:
     bool mMapDownloadCancelled = false;
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
+    // The login, and the password's digest, the profile was started with: THeadlessSession takes them only at a start
+    QString mStartedLogin;
+    QByteArray mStartedPassword;
+    // Its login or password changed while it ran: the password it starts again with at its next connect
+    std::optional<QString> mNewPassword;
+    bool mConnected = false;
     // Lua (connects included) asked for while the profile starts, run once it has
     QStringList mPendingLua;
     QString mErrorPending;

@@ -142,7 +142,7 @@ names the Mudlet commits.
 ## Lint
 
 ```sh
-scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings and conflict markers, as CI's Checks workflow
+scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers and vendored code, as CI's Checks workflow
 ./gradlew ktlintFormat           # fix the Kotlin
 FIX=1 scripts/lint.sh clang-format   # fix native/
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after scripts/build-apk.sh
@@ -153,7 +153,10 @@ FIX=1 scripts/lint.sh clang-format   # fix native/
 is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editorconfig`) for Kotlin. The strings check
 (`scripts/check-strings.py`) fails on text written into the Kotlin and on a string in `strings.xml` without a comment
 for translators ([`docs/translations.md`](docs/translations.md)). The conflict-marker check fails on a line a merge
-conflict left in any text file (`<<<<<<< `, `=======`, `>>>>>>> `).
+conflict left in any text file (`<<<<<<< `, `=======`, `>>>>>>> `). The vendored check fails when a file in
+`native/third_party/` differs from the release its `SHA256SUMS` lists, or is not in it, and when a
+`scripts/mudlet-patches/*.patch` lacks the `Upstream:` line before its diff: `Upstream: Mudlet/Mudlet#<number>`, or
+`Upstream: not opened yet`, which the check prints.
 
 ## Ground rules
 

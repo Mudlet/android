@@ -14,6 +14,7 @@ read-only or not shown, and where runLua() is. Tested in HeadlessSessionWindowsT
 docs/headless.md beside labelContent().
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 4cf61d8..12bcb86 100644

@@ -11,6 +11,7 @@ name and password in the rest, or a token in its path or query. MapDownloadTest 
 is for Mudlet's own tests, which Mudlet/android's CI does not build.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/src/TMap.cpp b/src/TMap.cpp
 index 5442996..80785f3 100644

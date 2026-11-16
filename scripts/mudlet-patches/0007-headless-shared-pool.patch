@@ -18,6 +18,7 @@ still refuses it. The pool is shared among the sessions holding it:
 - A start() for a profile the pool has open already is refused, before its connection details are stored.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index aedfb1d..a5a063f 100644

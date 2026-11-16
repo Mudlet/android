@@ -8,6 +8,7 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDataStream>
 #include <QDateTime>
 #include <QDir>
@@ -624,6 +625,7 @@ void MudletEngine::connectSession()
     });
     connect(session, &THeadlessSession::connected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
+        mConnected = true;
         // mKept is already the next profile's
         if (mState == State::stopping) {
             return;
@@ -637,6 +639,7 @@ void MudletEngine::connectSession()
     });
     connect(session, &THeadlessSession::disconnected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
+        mConnected = false;
         if (mState == State::stopping) {
             return;
         }
@@ -775,6 +778,10 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     options.tls = tls;
     // For this run only: THeadlessSession stores none, and a restore has none
     options.password = password;
+    mStartedLogin = mProfiles.read(mProfile).login;
+    mStartedPassword = passwordDigest(password);
+    mNewPassword.reset();
+    mConnected = false;
     mProfileTls = tls;
     if (const QString folder = mProfiles.find(mProfile); !tls.has_value() && !folder.isEmpty()) {
         mProfileTls = mProfiles.read(folder).tls;
@@ -788,7 +795,13 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     mState = State::starting;
     mLoaded = false;
     mCloseWhenStarted = false;
-    mFrontend = mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting);
+    const auto state = mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting;
+    if (mFrontend == mHost->controlFrontend()) {
+        mFrontend = mHost->profileOpened(mProfile, this, state);
+    } else {
+        // Started again, as with a new login, on the socket it had
+        mHost->profileState(mProfile, state);
+    }
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
     mSession->startAsync(options);
@@ -864,6 +877,12 @@ void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bo
             started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
         }
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it").arg(started));
+        return;
+    }
+    if (mNewPassword && (mState == State::starting || mState == State::started) && !mConnected) {
+        qInfo("MudletEngine: %s starts again to connect with its new login or password", qPrintable(mProfile));
+        cancelRestore();
+        switchTo({.profile = mProfile, .password = *mNewPassword, .host = host, .port = port, .tls = tls, .again = true});
         return;
     }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
@@ -1044,31 +1063,47 @@ QString MudletEngine::openProfile(const QString& name, const QString& password, 
     mCloseWhenStarted = false;
     mProfiles.markOpened(folder);
     if (running) {
-        // THeadlessSession takes a password only at a start, so a running profile logs in with the one it started with
         mPendingOpen.reset();
-        if (connect) {
-            connectProfile();
+        if (mProfiles.read(folder).login == mStartedLogin && passwordDigest(password) == mStartedPassword) {
+            mNewPassword.reset();
+            if (connect) {
+                connectProfile();
+            }
+            return {};
         }
-        return {};
+        if (mConnected || !connect) {
+            // Its login or password changed: it starts again with them at its next connect, so a connection is kept
+            qInfo("MudletEngine: %s has a new login or password, for its next connect", qPrintable(folder));
+            mNewPassword = password;
+            return {};
+        }
+        qInfo("MudletEngine: %s starts again with its new login or password", qPrintable(folder));
     }
-    mPendingOpen.emplace();
-    mPendingOpen->profile = folder;
-    mPendingOpen->password = password;
-    mPendingOpen->connect = connect;
-    switch (mState) {
-    case State::idle:
+    PendingOpen open{.profile = folder, .password = password, .connect = connect, .again = running};
+    if (mState == State::idle) {
+        mPendingOpen = std::move(open);
         openPending();
-        break;
-    case State::started:
-        beginSwitch();
-        break;
-    case State::starting:
-        // onStartFinished() switches once that start is over
-    case State::stopping:
-        keepPending();
-        break;
+    } else {
+        switchTo(std::move(open));
     }
     return {};
+}
+
+// The running profile closes and saves, then open starts: another profile, or this one again
+void MudletEngine::switchTo(PendingOpen open)
+{
+    mPendingOpen = std::move(open);
+    if (mState == State::started) {
+        beginSwitch();
+    } else {
+        // starting: onStartFinished() switches once that start is over; stopping: once that close is
+        keepPending();
+    }
+}
+
+QByteArray MudletEngine::passwordDigest(const QString& password)
+{
+    return QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256);
 }
 
 // The running profile, started without connecting or since disconnected, connects to its own address
@@ -1158,7 +1193,9 @@ void MudletEngine::onShutdownFinished(bool saved, const QString& error)
         qWarning("MudletEngine: %s closed without its save: %s", qPrintable(mProfile), qPrintable(error));
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed without its save: %2").arg(mProfile, error));
     }
-    closed();
+    if (!mPendingOpen || !mPendingOpen->again) {
+        closed();
+    }
     if (mPendingOpen) {
         openPending();
     }

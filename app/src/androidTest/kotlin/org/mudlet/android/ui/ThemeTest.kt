@@ -71,6 +71,7 @@ class ThemeTest {
         val dark = compose.activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val mudlet = (if (dark) MudletDarkColors else MudletLightColors).surfaceContainer
         activate(hasContentDescription(string(R.string.settings_title)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
         activate(hasText(string(R.string.settings_appearance)))
         compose.onNode(hasText(string(R.string.settings_text_size))).assertIsDisplayed()
         val row = hasText(string(R.string.settings_wallpaper_colours)) and hasClickAction()

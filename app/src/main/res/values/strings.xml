@@ -248,6 +248,96 @@
     <string name="settings_blank_lines_hide">Hide them</string>
     <!-- One of the choices for blank lines from the game: show a line with a single space instead -->
     <string name="settings_blank_lines_space">Replace them with a space</string>
+    <!-- A page of each game's own settings: on the commands the player sends, and how they are sent -->
+    <string name="settings_input">Input</string>
+    <!-- Under "Input" in the list of settings pages, what that page holds -->
+    <string name="settings_input_summary">What you send and how it is sent</string>
+    <!-- A page of each game's own settings: on the connection to the game, and the game protocols Mudlet speaks
+         with it -->
+    <string name="settings_connection">Connection</string>
+    <!-- Under "Connection" in the list of settings pages, what that page holds -->
+    <string name="settings_connection_summary">Game protocols and secure connections</string>
+    <!-- A switch on a game's Display & text page: join the lines that some games break in two where a network packet
+         ends -->
+    <string name="settings_join_split_lines">Join lines split across packets</string>
+    <!-- Under "Join lines split across packets", what the switch does. Achaea is a game's name. -->
+    <string name="settings_join_split_lines_hint">Some games, such as Achaea, break lines in two where their data arrives in pieces. Mudlet turns this on for those it knows.</string>
+    <!-- Words a player might search the settings for to find "Join lines split across packets", besides the words of
+         its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_join_split_lines_keywords">line breaks, broken lines, GA, go ahead, IRE</string>
+    <!-- A setting on a game's Input page, the heading of three choices: which of the commands sent to the game also
+         show in the game's text -->
+    <string name="settings_sent_text">Show the commands sent</string>
+    <!-- One of the choices for showing the commands sent: those the player types, and those scripts send without
+         hiding them -->
+    <string name="settings_sent_text_script">Unless a script hides them</string>
+    <!-- One of the choices for showing the commands sent: every one, even those scripts hide -->
+    <string name="settings_sent_text_always">All of them</string>
+    <!-- One of the choices for showing the commands sent: none of them -->
+    <string name="settings_sent_text_never">None</string>
+    <!-- Words a player might search the settings for to find "Show the commands sent", besides the words of its name
+         and choices, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_sent_text_keywords">echo, typed, input, commands</string>
+    <!-- A switch on a game's Input page: end each line sent with a line feed alone (Unix style), not a carriage
+         return and a line feed -->
+    <string name="settings_unix_line_endings">Send lines with a plain line feed</string>
+    <!-- Under "Send lines with a plain line feed", what the switch does. LF and CR are the characters' usual names. -->
+    <string name="settings_unix_line_endings_hint">Ends each line sent with LF alone rather than CR and LF, as a few games need.</string>
+    <!-- Words a player might search the settings for to find "Send lines with a plain line feed", besides the words
+         of its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_unix_line_endings_keywords">newline, line endings, Unix, enter, return</string>
+    <!-- A switch on a game's Connection page: ask the player whether to switch to a secure (encrypted) connection
+         when the game says it has one -->
+    <string name="settings_offer_secure">Offer a secure connection</string>
+    <!-- Under "Offer a secure connection", what the switch does -->
+    <string name="settings_offer_secure_hint">When the game says it has a secure connection, ask whether to use it instead.</string>
+    <!-- Words a player might search the settings for to find "Offer a secure connection", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_offer_secure_keywords">TLS, SSL, encryption, encrypted, privacy</string>
+    <!-- Words a player might search the settings for to find any of the game protocol switches on a game's
+         Connection page (GMCP, MSDP and the like), besides the words of their names and descriptions, separated by
+         commas. Use the words a player of your language would search for. -->
+    <string name="settings_protocol_keywords">protocol, telnet, negotiation</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks GMCP (Generic MUD
+         Communication Protocol) with the game. Keep "GMCP". -->
+    <string name="settings_gmcp">GMCP</string>
+    <!-- Under "GMCP", what the protocol carries. All the protocol switches apply from the game's next connection. -->
+    <string name="settings_gmcp_hint">Game data for scripts, such as your health and the room you are in. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MSDP (MUD Server Data
+         Protocol) with the game. Keep "MSDP". -->
+    <string name="settings_msdp">MSDP</string>
+    <!-- Under "MSDP", what the protocol carries -->
+    <string name="settings_msdp_hint">Game data for scripts, as some games send it instead of GMCP. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MSSP (MUD Server Status
+         Protocol) with the game. Keep "MSSP". -->
+    <string name="settings_mssp">MSSP</string>
+    <!-- Under "MSSP", what the protocol carries -->
+    <string name="settings_mssp_hint">The game\'s description of itself, such as its name and how many are playing. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MSP (MUD Sound
+         Protocol) with the game. Keep "MSP". -->
+    <string name="settings_msp">MSP</string>
+    <!-- Under "MSP", what the protocol carries -->
+    <string name="settings_msp_hint">Sounds and music the game asks to play. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MXP (MUD eXtension
+         Protocol) with the game. Keep "MXP". -->
+    <string name="settings_mxp">MXP</string>
+    <!-- Under "MXP", what the protocol carries -->
+    <string name="settings_mxp_hint">Links, menus and frames in the game\'s text. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MTTS (MUD Terminal Type
+         Standard) with the game. Keep "MTTS". -->
+    <string name="settings_mtts">MTTS</string>
+    <!-- Under "MTTS", what the protocol carries -->
+    <string name="settings_mtts_hint">Tells the game what Mudlet can show, such as colours, and whether you use a screen reader. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MNES (MUD New-Environ
+         Standard) with the game. Keep "MNES". -->
+    <string name="settings_mnes">MNES</string>
+    <!-- Under "MNES", what the protocol carries -->
+    <string name="settings_mnes_hint">Tells the game about Mudlet in more detail than MTTS, for games that ask. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks NAWS (Negotiate About
+         Window Size) with the game. Keep "NAWS". -->
+    <string name="settings_naws">NAWS</string>
+    <!-- Under "NAWS", what the protocol carries -->
+    <string name="settings_naws_hint">Tells the game how many columns and rows of text fit, so it can lay out its text to fit. From the next connection.</string>
     <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
          game's text, the map behind the text). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>

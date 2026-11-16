@@ -43,6 +43,8 @@ data object AppSettings : SettingsOwner {
 enum class SettingsCategory(val forGame: Boolean, @StringRes val title: Int, @StringRes val summary: Int, @DrawableRes val icon: Int) {
     DISPLAY(true, R.string.settings_display, R.string.settings_display_summary, R.drawable.ic_text_fields),
     ACCESSIBILITY(true, R.string.settings_accessibility, R.string.settings_accessibility_summary, R.drawable.ic_accessibility),
+    INPUT(true, R.string.settings_input, R.string.settings_input_summary, R.drawable.ic_keyboard),
+    CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
 }
 
@@ -92,6 +94,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             }
         },
         SettingEntry.Switch(
+            SettingsCategory.DISPLAY,
+            Settings.joinSplitLines,
+            R.string.settings_join_split_lines,
+            R.string.settings_join_split_lines_hint,
+            R.string.settings_join_split_lines_keywords,
+        ),
+        SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.readNewText,
             R.string.settings_read_new_text,
@@ -105,6 +114,35 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_advertise_screen_reader_hint,
             R.string.settings_advertise_screen_reader_keywords,
         ),
+        SettingEntry.Choice(SettingsCategory.INPUT, Settings.showSentText, R.string.settings_sent_text, R.string.settings_sent_text_keywords) {
+            when (it) {
+                Settings.SentText.SCRIPT -> R.string.settings_sent_text_script
+                Settings.SentText.ALWAYS -> R.string.settings_sent_text_always
+                Settings.SentText.NEVER -> R.string.settings_sent_text_never
+            }
+        },
+        SettingEntry.Switch(
+            SettingsCategory.INPUT,
+            Settings.unixLineEndings,
+            R.string.settings_unix_line_endings,
+            R.string.settings_unix_line_endings_hint,
+            R.string.settings_unix_line_endings_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.CONNECTION,
+            Settings.offerSecureConnection,
+            R.string.settings_offer_secure,
+            R.string.settings_offer_secure_hint,
+            R.string.settings_offer_secure_keywords,
+        ),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.gmcp, R.string.settings_gmcp, R.string.settings_gmcp_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.msdp, R.string.settings_msdp, R.string.settings_msdp_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mssp, R.string.settings_mssp, R.string.settings_mssp_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.msp, R.string.settings_msp, R.string.settings_msp_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mxp, R.string.settings_mxp, R.string.settings_mxp_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mtts, R.string.settings_mtts, R.string.settings_mtts_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mnes, R.string.settings_mnes, R.string.settings_mnes_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.naws, R.string.settings_naws, R.string.settings_naws_hint, R.string.settings_protocol_keywords),
         SettingEntry.TextSize(
             SettingsCategory.APPEARANCE,
             Settings.textSize,

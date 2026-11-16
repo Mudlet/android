@@ -31,6 +31,28 @@ object Settings {
     /** What becomes of the blank lines a game sends. */
     val blankLines = EnumSetting("blankLinesBehaviour", BlankLines.SHOW, BlankLines.entries, mudlet = true) { it.mudletValue }
 
+    /** Whether to join the lines some games (the IRE ones) split where their packets end; Mudlet turns it on for those. */
+    val joinSplitLines = BoolSetting("fixUnnecessaryLinebreaks", default = false, mudlet = true)
+
+    /** Which of the commands the player sends show in the game's text. */
+    val showSentText = EnumSetting("showSentText", SentText.SCRIPT, SentText.entries, mudlet = true) { it.mudletValue }
+
+    /** Whether each line sent ends with a line feed alone rather than a carriage return and a line feed. */
+    val unixLineEndings = BoolSetting("inputLineStrictUnixEndings", default = false, mudlet = true)
+
+    /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
+    val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
+
+    // The game protocols Mudlet speaks, each from the next connection, with Mudlet's defaults
+    val gmcp = BoolSetting("enableGMCP", default = true, mudlet = true)
+    val msdp = BoolSetting("enableMSDP", default = false, mudlet = true)
+    val mssp = BoolSetting("enableMSSP", default = true, mudlet = true)
+    val msp = BoolSetting("enableMSP", default = true, mudlet = true)
+    val mxp = BoolSetting("enableMXP", default = true, mudlet = true)
+    val mtts = BoolSetting("enableMTTS", default = true, mudlet = true)
+    val mnes = BoolSetting("enableMNES", default = false, mudlet = true)
+    val naws = BoolSetting("enableNAWS", default = true, mudlet = true)
+
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
 
@@ -40,7 +62,27 @@ object Settings {
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)
 
-    private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered, mapBehindText, wallpaperColours)
+    private val all = listOf(
+        textSize,
+        readNewText,
+        advertiseScreenReader,
+        blankLines,
+        joinSplitLines,
+        showSentText,
+        unixLineEndings,
+        offerSecureConnection,
+        gmcp,
+        msdp,
+        mssp,
+        msp,
+        mxp,
+        mtts,
+        mnes,
+        naws,
+        screenReaderOffered,
+        mapBehindText,
+        wallpaperColours,
+    )
 
     /** The settings Mudlet keeps with each profile, whose app values a game added in the app is given. */
     val mudletSettings = all.filter { it.mudlet }
@@ -74,6 +116,13 @@ object Settings {
         SPACE("replacewithspace"),
     }
 
+    /** The values `setConfig("showSentText", ...)` takes; SCRIPT shows them unless a script sends them hidden. */
+    enum class SentText(val mudletValue: String) {
+        SCRIPT("script"),
+        ALWAYS("always"),
+        NEVER("never"),
+    }
+
     /**
      * One setting: [value] is the current one, [set] changes and stores it. A [mudlet] setting's [key] is also the
      * name of the `getConfig()` and `setConfig()` key it has in Mudlet.
@@ -97,6 +146,9 @@ object Settings {
 
         /** [value] as Mudlet's `setConfig()` takes it. */
         fun valueToMudlet(): Any = toMudlet(value)
+
+        /** Whether [value] is other than [default]. */
+        val changed get() = value != default
 
         /** What `getConfig()` gave, or null for a value this setting cannot have. */
         abstract fun fromMudlet(v: Any): T?

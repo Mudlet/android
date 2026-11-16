@@ -93,6 +93,7 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.settings_new_games)))
         assertTextFits("the settings")
         assertAtStart("the settings' first heading", hasText(string(R.string.settings_new_games)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
         activate(hasText(string(R.string.settings_appearance)))
         waitFor(hasText(string(R.string.settings_text_size)))
         assertTextFits("a settings page")

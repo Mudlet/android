@@ -60,7 +60,7 @@ class NotificationPermissionTest {
             assertFalse(granted())
             assertNotNull("the start screen after a denial", device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS))
         }
-        EngineNotifications.postTell(context, TELL, "denied")
+        EngineNotifications.postTell(context, "", TELL, "denied")
         Thread.sleep(QUIET_MS)
         assertTrue("no tell is posted without the permission", notifications.activeNotifications.none { it.title() == TELL })
 
@@ -98,7 +98,7 @@ class NotificationPermissionTest {
 
     private fun assertTellPosted(text: String) {
         EngineNotifications.ensureChannels(context)
-        EngineNotifications.postTell(context, TELL, text)
+        EngineNotifications.postTell(context, "", TELL, text)
         val deadline = System.currentTimeMillis() + UI_MS
         while (notifications.activeNotifications.none { it.title() == TELL }) {
             if (System.currentTimeMillis() > deadline) throw AssertionError("the tell was not posted")

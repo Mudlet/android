@@ -453,8 +453,8 @@ object EngineClient {
         override fun onConnectFailed(attempt: Int, error: IOException) {
             main.post {
                 linkState = "engine not reachable (attempt $attempt: ${error.message})"
-                // The engine is gone (stopped from its notification, crashed, or killed). While a
-                // UI is started we may start a foreground service again.
+                // The engine is gone (stopped from its notification or, with no game open, by Android, crashed, or
+                // killed). While a UI is started we may start a foreground service again.
                 if (attempt >= RESTART_AFTER_FAILED_ATTEMPTS && engineWanted && !restartRequestedForThisOutage && attached) {
                     restartRequestedForThisOutage = true
                     startEngine()

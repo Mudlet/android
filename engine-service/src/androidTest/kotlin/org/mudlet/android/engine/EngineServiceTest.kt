@@ -82,10 +82,12 @@ class EngineServiceTest {
         val shown = await("EngineService in the foreground again, with its notification", probe = probe) {
             engineNotification()?.takeIf { engineService()?.foreground == true }
         }
-        assertEquals(
-            context.getString(R.string.engine_notification_title_profile, DEFAULT_PROFILE),
-            shown.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
-        )
+        assertEquals(context.getString(R.string.engine_notification_title_profile, DEFAULT_PROFILE), shown.title())
+
+        probe.send(Requests.closeProfile(DEFAULT_PROFILE, 2))
+        await("EngineService out of the foreground again once the game closes", probe = probe) {
+            engineService()?.takeIf { !it.foreground && engineNotification() == null }
+        }
     }
 
     @Test

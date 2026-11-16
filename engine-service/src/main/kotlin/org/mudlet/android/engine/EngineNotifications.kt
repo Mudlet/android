@@ -117,7 +117,7 @@ object EngineNotifications {
      */
     @JvmStatic
     fun showProfiles(context: Context, names: Array<String>, connections: Array<String>) {
-        val games = names.mapIndexed { i, name -> Game(name, connections.getOrElse(i) { "" }) }
+        val games = names.zip(connections, ::Game)
         this.games = games
         // Qt's context in the :engine process is the Service; its foreground changes go through the main thread, as
         // onStartCommand's do, so they keep their order
@@ -126,6 +126,7 @@ object EngineNotifications {
             Handler(Looper.getMainLooper()).post { service.showGames(games) }
             return
         }
+        Log.w(EngineService.TAG, "Qt's context is not EngineService: the foreground does not follow the open games")
         refresh(context)
     }
 
@@ -157,12 +158,9 @@ object EngineNotifications {
             .setContentText(text)
             .setAutoCancel(true)
             .setContentIntent(openUi(context, profile, id))
-        if (profile.isEmpty()) {
-            NotificationManagerCompat.from(context).notify(id, n.build())
-            return
-        }
-        n.setSubText(profile).setGroup(profile)
+        if (profile.isNotEmpty()) n.setSubText(profile).setGroup(profile)
         NotificationManagerCompat.from(context).notify(id, n.build())
+        if (profile.isEmpty()) return
         // Android bundles a group's notifications only under its summary
         val summaryId = summaryIds.getOrPut(profile) { nextTellId.getAndIncrement() }
         val summary = NotificationCompat.Builder(context, CHANNEL_TELLS)

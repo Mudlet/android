@@ -832,7 +832,8 @@ that attaches later is told too. The UI shows it as a marker line.
     the engine first says what it has open, as while a restore waits, the service
     stays in the foreground. A start request with no game open is still answered
     with `startForeground`, with a deferred notification that Android 12 and later
-    never show, and then left.
+    never show, and then left. Out of the foreground, Android stops the service
+    about a minute after the UI leaves; the UI starts it again when it is shown.
   - All "Tells" notifications: Lua `notify()` goes through `SocketBridge::notify`
     and `AndroidNotifier` (JNI) to `EngineNotifications.postTell`. They work
     while the UI is dead or frozen. A profile's tells carry its name as their sub

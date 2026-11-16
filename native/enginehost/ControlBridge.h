@@ -65,9 +65,7 @@ private:
     QJsonObject openProfilesMessage() const;
     // To a UI that takes profileSockets, now, or with lines within changeDelayMs
     void sendOpenProfiles(bool now);
-    // The open profiles and their connections to the engine notification, from the event loop, so that a switch's
-    // close and open, which come in one call, do not take the engine out of the foreground between them
-    void showProfilesLater();
+    // The open profiles and their connections to the engine notification
     void showProfiles();
 
     static constexpr int changeDelayMs = 500;
@@ -80,6 +78,8 @@ private:
     // profile's too
     QHash<QString, QString> mEngineStatus;
     QTimer mChangeTimer;
+    // Runs showProfiles from the event loop, so that a switch's close and open, which come in one call, do not take the
+    // engine out of the foreground between them
     QTimer mNotificationTimer;
     // What the engine notification was last given, as names and their connections
     std::optional<std::pair<QStringList, QStringList>> mShown;

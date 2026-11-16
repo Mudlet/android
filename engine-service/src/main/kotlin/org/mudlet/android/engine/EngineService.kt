@@ -65,8 +65,8 @@ class EngineService : QtServiceBase() {
 
     /**
      * The games the engine has open, from EngineNotifications.showProfiles, on the main thread. With none it leaves the
-     * foreground, and its notification goes, until one opens: only the UI opens one, and Android lets a service go
-     * back to the foreground while its app is shown.
+     * foreground, and its notification goes, until one opens. Android lets it back then: the UI opens a game while it
+     * is shown, and a restore opens one before the engine has said it has none (ControlBridge::listen).
      */
     fun showGames(games: List<EngineNotifications.Game>) {
         // Posted from Qt's thread, which runs on while onDestroy stops Qt
@@ -82,7 +82,8 @@ class EngineService : QtServiceBase() {
     override fun onDestroy() {
         destroyed = true
         EngineNotifications.engineShown = false
-        // Only a stop gets here (stopService, or the notification's Quit), never a kill: the next engine restores nothing
+        // Only a stop gets here (stopService, the notification's Quit, or Android stopping it in the background with no
+        // game open), never a kill: the next engine restores nothing
         EngineSession.markStopped(this)
         Log.i(TAG, "onDestroy: QtServiceBase terminates Qt and calls System.exit(0) on this process")
         super.onDestroy()

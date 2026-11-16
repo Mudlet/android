@@ -63,7 +63,7 @@ bool ControlBridge::listen(const QString& path)
     }
     // While a restore waits, the notification keeps saying the game is kept, until the restore opens it
     if (!mOpen.isEmpty() || !mEngineControl || !mEngineControl->restorePending()) {
-        showProfilesLater();
+        mNotificationTimer.start();
     }
     return SocketBridge::listen(path);
 }
@@ -300,7 +300,7 @@ IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, P
     mOpen.append({bridge, state});
     setFront(mOpen.size() - 1);
     sendOpenProfiles(true);
-    showProfilesLater();
+    mNotificationTimer.start();
     return bridge;
 }
 
@@ -336,7 +336,7 @@ void ControlBridge::profileClosed(const QString& name)
     bridge->close();
     bridge->deleteLater();
     sendOpenProfiles(true);
-    showProfilesLater();
+    mNotificationTimer.start();
 }
 
 void ControlBridge::profileChanged(SocketBridge* profile, Change change)
@@ -353,7 +353,7 @@ void ControlBridge::profileChanged(SocketBridge* profile, Change change)
         return;
     case Change::connection:
         sendOpenProfiles(true);
-        showProfilesLater();
+        mNotificationTimer.start();
         return;
     case Change::attention:
         if (!std::exchange(open->attention, true)) {
@@ -395,13 +395,6 @@ QJsonObject ControlBridge::openProfilesMessage() const
                                     {QStringLiteral("front"), i == mFront}});
     }
     return {{QStringLiteral("t"), QStringLiteral("openProfiles")}, {QStringLiteral("profiles"), profiles}};
-}
-
-void ControlBridge::showProfilesLater()
-{
-    if (!mNotificationTimer.isActive()) {
-        mNotificationTimer.start();
-    }
 }
 
 void ControlBridge::showProfiles()

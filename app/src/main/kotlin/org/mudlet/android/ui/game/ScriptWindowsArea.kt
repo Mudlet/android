@@ -32,8 +32,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -47,9 +49,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
@@ -67,8 +71,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
@@ -81,6 +87,7 @@ import org.mudlet.android.protocol.WindowLayout
 import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
+import org.mudlet.android.ui.ConsoleZoomClient
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
@@ -95,6 +102,9 @@ private const val MAX_WINDOW_FONT_SP = 28f
 // The row with a dock's or a page's title and buttons, and the window switcher's row of tabs
 private val HEADER_HEIGHT = 48.dp
 private val SWITCHER_HEIGHT = 56.dp
+
+// How long the size a pinch reached is drawn after the fingers lift, while the engine has not reported a new size
+private const val PINCH_HELD_MS = 2000L
 
 // Script windows come after the console, the input line and the screen's buttons, which keep the default of 0
 internal const val WINDOWS_TRAVERSAL_INDEX = 1f
@@ -153,6 +163,12 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         LaunchedEffect(layout.placements, attaches) {
             for ((name, placement) in layout.placements) client.placeUserWindow(name, placement)
         }
+        // A size a script gives a console the player pinched is set back to the player's, once the engine reports it
+        val zoom = EngineClient.front.consoleZoom
+        val consoleSizes = remember(windows.windows) {
+            windows.windows.filter { it.kind in ScriptWindows.CONSOLE_KINDS }.associate { it.name to ConsoleZoom.points(it.fontSize) }
+        }
+        LaunchedEffect(zoom, consoleSizes, attaches) { for ((name, size) in consoleSizes) zoom.reported(name, size) }
         // A page the layout no longer offers can no longer be open, and one an MXP frame put another of its pages in
         // front of is that one
         LaunchedEffect(layout.selectedPage) { if (selected != layout.selectedPage) selected = layout.selectedPage }
@@ -281,6 +297,10 @@ private fun Modifier.windowSemantics(description: String): Modifier = semantics 
  * window's columns in its width, and read as it reads them, with its [links] as [ConsoleLine] offers them. It follows
  * new rows unless the player or a script scrolled it back. Its own command line, when shown, goes along its bottom.
  *
+ * A two-finger pinch, or TalkBack's actions, set the console's font size, in the points scripts give `setFontSize()`
+ * ([ConsoleZoomClient]): the text is drawn at the size reached while the fingers move, and at the engine's new grid
+ * once it reports it. A two-finger double tap, or TalkBack's reset action, gives back the scripts' size.
+ *
  * Its new rows are not read aloud as the main console's are: a script that wants one read calls `announce()`.
  */
 @Composable
@@ -295,8 +315,24 @@ private fun WindowConsole(
     modifier: Modifier = Modifier,
 ) {
     val window = placed.window
+    val zoom = EngineClient.front.consoleZoom
+    val reported = ConsoleZoom.points(window.fontSize)
+    val zoomable = ConsoleZoomClient.zoomable(window.name, reported)
+    // The size a pinch has reached, drawn until the engine reports the console's new size and grid
+    var pinched by remember { mutableStateOf<Int?>(null) }
+    var pinching by remember { mutableStateOf(false) }
+    var pinchStart by remember { mutableIntStateOf(0) }
+    LaunchedEffect(reported) { pinched = null }
+    // Nor kept for long once the fingers lift, should the engine not take the size (a style sheet's font holds)
+    LaunchedEffect(pinched, pinching) {
+        if (pinched != null && !pinching) {
+            delay(PINCH_HELD_MS)
+            pinched = null
+        }
+    }
     val columns = window.console?.columns ?: 0
-    val wantedSp = if (columns > 0) placed.full.w / columns / metrics.glyphWidthPerSp else metrics.fontSp
+    val scale = pinched?.takeIf { reported > 0 }?.let { it.toFloat() / reported } ?: 1f
+    val wantedSp = (if (columns > 0) placed.full.w / columns / metrics.glyphWidthPerSp else metrics.fontSp) * scale
     val fontSp = wantedSp.coerceIn(MIN_WINDOW_FONT_SP, MAX_WINDOW_FONT_SP)
     // Too small to read at its own width: drawn at the smallest size, as wide as its rows need, and scrolled sideways
     val rowsWidth = if (wantedSp < MIN_WINDOW_FONT_SP) with(density) { (columns * metrics.glyphWidthPerSp * fontSp).toDp() } else null
@@ -331,9 +367,57 @@ private fun WindowConsole(
     }
 
     val description = stringResource(R.string.window_description, title(window))
-    Column(modifier.background(windowColour(window.bg, CONSOLE_BACKGROUND)).windowSemantics(description)) {
+    val current = pinched ?: reported
+    val larger = ConsoleZoom.clamp(current + 1, current)
+    val smaller = ConsoleZoom.clamp(current - 1, current)
+    val chosen = zoom.chosen(window.name)
+    val zoomActions = if (!zoomable) {
+        emptyList()
+    } else {
+        listOfNotNull(
+            CustomAccessibilityAction(stringResource(R.string.window_text_larger)) {
+                zoom.choose(window.name, larger, reported)
+                true
+            }.takeIf { larger != current },
+            CustomAccessibilityAction(stringResource(R.string.window_text_smaller)) {
+                zoom.choose(window.name, smaller, reported)
+                true
+            }.takeIf { smaller != current },
+            CustomAccessibilityAction(stringResource(R.string.window_text_reset)) {
+                zoom.reset(window.name, reported)
+                true
+            }.takeIf { chosen != null },
+        )
+    }
+    // The gesture outlives this composition's values
+    val latestCurrent by rememberUpdatedState(current)
+    val latestReported by rememberUpdatedState(reported)
+    val latestZoom by rememberUpdatedState(zoom)
+    val pinch = if (!zoomable) {
+        Modifier
+    } else {
+        Modifier.pinchToZoom(
+            textSize = { latestCurrent.also { pinchStart = it } },
+            onTextSize = {
+                pinching = true
+                pinched = ConsoleZoom.clamp(it, pinchStart)
+            },
+            onPinchEnd = {
+                pinching = false
+                pinched?.let { latestZoom.choose(window.name, it, latestReported) }
+            },
+            onTwoFingerDoubleTap = {
+                pinching = false
+                pinched = null
+                latestZoom.reset(window.name, latestReported)
+            },
+        )
+    }
+    Column(
+        modifier.background(windowColour(window.bg, CONSOLE_BACKGROUND)).windowSemantics(description).semantics { customActions = zoomActions },
+    ) {
         val sideways = if (rowsWidth != null) Modifier.horizontalScroll(rememberScrollState()) else Modifier
-        Box(Modifier.weight(1f).fillMaxWidth().then(sideways)) {
+        Box(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {
             LazyColumn(if (rowsWidth != null) Modifier.width(rowsWidth).fillMaxSize() else Modifier.fillMaxSize(), state = listState) {
                 // Each row's key is its number in the console, so the rows in view stay put as new ones come
                 items(lines.size, key = { first + it }) { i ->

@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
 import android.os.SystemClock
 import androidx.annotation.StringRes
@@ -30,6 +31,8 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -49,6 +52,8 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.engine.EngineService
+import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
@@ -102,6 +107,7 @@ class ScriptWindowsTest {
     @After
     fun automaticLayout() {
         compose.runOnIdle {
+            EngineClient.front.consoleZoom.reset("chat", 0)
             ScriptWindowsClient.layoutMode = LayoutMode.AUTO
             Settings.blankLines.reset()
             Announcer.touchExplorationOverride = null
@@ -331,7 +337,8 @@ class ScriptWindowsTest {
     private fun showChat() {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
         session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
-        session.windows(listOf(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40)), full = true)
+        // With a size in points, so the window takes a pinch beside its links' taps
+        session.windows(listOf(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40, fontSize = 8.0)), full = true)
     }
 
     // In the chat window, and left out of what TalkBack reads
@@ -375,6 +382,107 @@ class ScriptWindowsTest {
     // TalkBack's action [label] of [node]: found from the test thread, as a semantics lookup waits for idle, and run on the main one
     private fun runAction(node: SemanticsMatcher, label: String) {
         val action = actions(node).single { it.label == label }
+        compose.runOnIdle { action.action() }
+    }
+
+    @Test
+    fun aPinchSetsAMiniConsolesFontSizeWhichOutlastsAScriptsAndTheConsoleMadeAgain() {
+        val textSize = compose.runOnIdle { Settings.textSize.value }
+        fun chat(fontSize: Int) = FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 30, fontSize = fontSize.toDouble())
+
+        // The engine reports chat at [fontSize], or no chat for null. Compose's test clock, and with it the effect that
+        // answers a new size, moves only while the test waits on Compose
+        fun reportChat(fontSize: Int?) {
+            if (fontSize == null) session.windows(emptyList(), removed = listOf("chat" to "miniConsole")) else session.windows(listOf(chat(fontSize)))
+            compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.state.windows.firstOrNull { it.name == "chat" }?.fontSize == fontSize?.toDouble() } }
+            compose.waitForIdle()
+        }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        session.windows(listOf(chat(8)), full = true)
+        session.windowText("chat", listOf("hello from chat"))
+        waitUntilDisplayed("hello from chat")
+        val window = windowNamed("chat")
+        val before = textHeight("hello from chat")
+
+        // Fingers 120 px apart moving to 240: twice the size, drawn as they move
+        compose.onNode(window).performTouchInput {
+            pinch(center - Offset(60f, 0f), center - Offset(120f, 0f), center + Offset(60f, 0f), center + Offset(120f, 0f))
+        }
+        val size = receiveFontSize("chat")
+        assertTrue("a pinch outward makes it larger: $size", size in 12..ConsoleZoom.MAX_SIZE)
+        assertTrue("drawn larger at once: $before, then ${textHeight("hello from chat")}", textHeight("hello from chat") > before * 1.3f)
+        compose.runOnIdle { assertEquals("the main console's text size is the player's other setting", textSize, Settings.textSize.value) }
+        reportChat(size)
+        session.assertNoRequest("runLua", QUIET_MS.toInt())
+
+        // A script's size, and the console made again at Geyser's 8, are set back to the player's
+        reportChat(10)
+        assertEquals(size, receiveFontSize("chat"))
+        reportChat(size)
+        reportChat(null)
+        reportChat(8)
+        assertEquals(size, receiveFontSize("chat"))
+        reportChat(size)
+
+        // TalkBack's actions change it a size at a time, and it is kept for the profile, whose name ignores case
+        compose.onRoot().tryPerformAccessibilityChecks()
+        customAction(window, R.string.window_text_larger)
+        assertEquals(size + 1, receiveFontSize("chat"))
+        reportChat(size + 1)
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.consoleZoom.chosen("chat") } == size + 1 }
+        val prefs = compose.activity.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
+        assertEquals(size + 1, ConsoleZoomClient(GAME.name.uppercase(), { prefs }, { true }).chosen("chat"))
+
+        // A two-finger double tap gives it back the size its script last gave it, and the reset action goes
+        assertTrue(hasCustomAction(window, R.string.window_text_reset))
+        compose.onNode(window).performTouchInput {
+            repeat(2) {
+                down(0, center - Offset(40f, 0f))
+                down(1, center + Offset(40f, 0f))
+                advanceEventTime(50)
+                up(0)
+                up(1)
+                advanceEventTime(100)
+            }
+        }
+        assertEquals(8, receiveFontSize("chat"))
+        reportChat(8)
+        compose.waitUntil(WAIT_MS) { !hasCustomAction(window, R.string.window_text_reset) }
+        assertEquals(null, ConsoleZoomClient(GAME.name, { prefs }, { true }).chosen("chat"))
+        // A script's size then holds
+        reportChat(12)
+        session.assertNoRequest("runLua", QUIET_MS.toInt())
+    }
+
+    @Test
+    fun oneFingerStillScrollsAMiniConsoleThatTakesAPinch() {
+        showChat()
+        session.windowText("chat", (0 until 60).map { "row $it" })
+        waitUntilDisplayed("row 59")
+        compose.onNode(windowNamed("chat")).performTouchInput { swipeDown() }
+        compose.waitUntil(WAIT_MS) { !displayed("row 59") }
+        session.assertNoRequest("runLua", QUIET_MS.toInt())
+    }
+
+    // The size the app's next setFontSize() gives the console [name]
+    private fun receiveFontSize(name: String): Int {
+        val code = session.receive("runLua").getString("code")
+        val match = Regex("""local name, size = "([^"]*)", (\d+)""").find(code)
+        assertTrue("not a setFontSize(): $code", match != null && code.contains("setFontSize(name, size)"))
+        assertEquals(name, match!!.groupValues[1])
+        return match.groupValues[2].toInt()
+    }
+
+    private fun textHeight(text: String): Float = compose.onNodeWithText(text).fetchSemanticsNode().let { node ->
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        layouts.single().size.height.toFloat()
+    }
+
+    private fun hasCustomAction(node: SemanticsMatcher, @StringRes label: Int): Boolean = compose.onNode(node).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label == string(label) }
+
+    private fun customAction(node: SemanticsMatcher, @StringRes label: Int) {
+        val action = compose.onNode(node).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(label) }
         compose.runOnIdle { action.action() }
     }
 

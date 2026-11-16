@@ -491,6 +491,7 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         /**
          * A shown window of a `windows` message (docs/protocol.md): a mini console, unless told, in the main window at
          * [x], [y] in Mudlet's pixels. A console has [columns] and [rows]; [dockArea] puts a user window in a dock.
+         * [fontSize], in points, is what it draws its text in.
          */
         fun window(
             name: String,
@@ -504,10 +505,12 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             parent: String = "",
             parentKind: String = "",
             dockArea: String? = null,
+            fontSize: Double? = null,
         ): JSONObject {
             val window = JSONObject().put("name", name).put("kind", kind).put("parent", parent).put("parentKind", parentKind)
                 .put("x", x).put("y", y).put("w", w).put("h", h).put("visible", true).put("shown", true).put("stack", 0)
             if (kind == "miniConsole" || kind == "userWindow") window.put("columns", columns).put("rows", rows)
+            if (fontSize != null) window.put("fontFamily", "Ubuntu Mono").put("fontSize", fontSize)
             if (dockArea != null) window.put("inDock", true).put("dockArea", dockArea).put("dockFloating", false).put("dockTitle", name)
             return window
         }

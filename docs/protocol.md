@@ -137,9 +137,10 @@ app's map has been drawn and as `mapPointer`, and `showRoom` for a room that is 
 it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`.
 
 `downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
-while no profile is open; `downloadMap` while the game offers no map, and while a map download (the UI's or a
-script's), import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being
-loaded. The stand-in has no map and refuses both.
+while no profile is open; `downloadMap` while the game offers no map, and while the map downloads; `cancelMapDownload`
+while no map downloads, and once the map has arrived and is being loaded. A script's map import or export runs within
+its Lua call, so none is under way when a request is read; its progress is not sent as `mapDownload`, not even the last
+of it, which Mudlet relays after a `downloadMap` read in the same pass. The stand-in has no map and refuses both.
 
 ### Engine to UI
 

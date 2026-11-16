@@ -534,15 +534,22 @@ void MudletProfile::connectSession()
         takeOfferedMap(mSession->offeredMapUrl());
         mFrontend->mapDownload(mMapDownload);
     });
-    // The progress of a map download, import or export a script began is not the download's
+    // The progress of a map import or export a script began is not the download's. Its relays come from the event loop,
+    // so the last of them can come after a download that began in the same pass: the download's progress is what
+    // follows a start. No other map operation can start while a download runs, so the last start is the download's own,
+    // which can be cancelled.
     connect(session, &THeadlessSession::mapProgressStarted, this, [this](const QString&, const QString&, const QString& label, int maximum) {
+        if (mMapDownload.state != MapDownload::State::downloading) {
+            return;
+        }
+        mMapDownloadProgressStarted = true;
         takeMapDownloadProgress(label, 0, maximum, true);
     });
     connect(session, &THeadlessSession::mapProgressChanged, this, [this](const QString&, const QString& label, int value, int maximum) {
         takeMapDownloadProgress(label, value, maximum, label != mMapDownload.label || maximum != mMapDownload.maximum);
     });
     connect(session, &THeadlessSession::mapProgressCancelDisabled, this, [this] {
-        if (mMapDownload.state == MapDownload::State::downloading && std::exchange(mMapDownload.cancelable, false)) {
+        if (mMapDownloadProgressStarted && std::exchange(mMapDownload.cancelable, false)) {
             pushMapDownloadProgress(true);
         }
     });
@@ -1679,6 +1686,7 @@ void MudletProfile::setMapDownloadState(MapDownload::State state, const QString&
     mMapDownload.error = error;
     mMapDownloadPercent = -1;
     mMapDownloadCancelled = false;
+    mMapDownloadProgressStarted = false;
     if (state != MapDownload::State::downloading) {
         mMapDownloadUrl.clear();
     }
@@ -1686,7 +1694,7 @@ void MudletProfile::setMapDownloadState(MapDownload::State state, const QString&
 
 void MudletProfile::takeMapDownloadProgress(const QString& label, int value, int maximum, bool force)
 {
-    if (mMapDownload.state != MapDownload::State::downloading) {
+    if (!mMapDownloadProgressStarted) {
         return;
     }
     mMapDownload.label = label;

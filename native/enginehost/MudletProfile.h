@@ -184,7 +184,8 @@ private:
     void takeOfferedMap(const QString& url);
     // mMapDownload in state, with no progress, cancelable only while downloading, and error only for a failure
     void setMapDownloadState(MapDownload::State state, const QString& error = {});
-    // Mudlet's progress, while the UI's download runs, into mMapDownload, and pushed as pushMapDownloadProgress() does
+    // Mudlet's progress, once the UI's download's own has started, into mMapDownload, and pushed as
+    // pushMapDownloadProgress() does
     void takeMapDownloadProgress(const QString& label, int value, int maximum, bool force);
     // mMapDownload's progress, at most once a percent, as a download reports each piece that arrives; always with force
     void pushMapDownloadProgress(bool force);
@@ -243,6 +244,9 @@ private:
     int mMapDownloadPercent = -1;
     // cancelMapDownload() stopped the download, so its end is a cancel rather than a failure
     bool mMapDownloadCancelled = false;
+    // The download's own progress has started: Mudlet's progress before then is the end of a map import or export a
+    // script began
+    bool mMapDownloadProgressStarted = false;
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
     // The login, and the password's digest, the profile was started with: THeadlessSession takes them only at a start

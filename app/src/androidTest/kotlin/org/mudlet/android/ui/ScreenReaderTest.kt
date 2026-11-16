@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
@@ -25,6 +26,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -253,6 +256,34 @@ class ScreenReaderTest {
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_sent_text_never)), scroll = true)
         assertEquals(mapOf("showSentText" to "never"), values(session.receive("setSettings")))
+    }
+
+    @Test
+    fun aGamesNumberIsSentOnceASlideEndsAndAStepAtATime() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_display)))
+        session.receive("getSettings")
+        val width = hasContentDescription(string(R.string.settings_undo_wrap_width)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        compose.onNode(width).performScrollTo().performTouchInput { swipeRight(startX = centerX, endX = right, durationMillis = 500) }
+        val slid = values(session.receive("setSettings"))["undoServerWrapWidth"] as Int
+        assertTrue("slid to $slid", slid > 80)
+        session.assertNoRequest("setSettings", 500)
+        activate(hasContentDescription(string(R.string.settings_undo_wrap_width_more)), scroll = true)
+        assertEquals(mapOf("undoServerWrapWidth" to slid + 1), values(session.receive("setSettings")))
+        val shown = compose.activity.getString(R.string.settings_undo_wrap_width_value, slid + 1)
+        compose.onNode(width).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
+        compose.runOnIdle { assertEquals("new games keep it", 80, Settings.undoWrapWidth.value) }
+    }
+
+    @Test
+    fun theAdvancedPageChangesTheGamesOwnSettings() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_advanced)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_lazy_trigger_variables)), scroll = true)
+        assertEquals(mapOf("lazyCaptureGlobals" to false), values(session.receive("setSettings")))
     }
 
     @Test

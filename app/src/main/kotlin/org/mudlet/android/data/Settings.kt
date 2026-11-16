@@ -34,6 +34,12 @@ object Settings {
     /** Whether to join the lines some games (the IRE ones) split where their packets end; Mudlet turns it on for those. */
     val joinSplitLines = BoolSetting("fixUnnecessaryLinebreaks", default = false, mudlet = true)
 
+    /** Whether to join the lines a game wraps itself, at [undoWrapWidth], so triggers see them whole. */
+    val undoWrap = BoolSetting("undoServerWrap", default = false, mudlet = true)
+
+    /** The column a game wraps its lines at, for [undoWrap]. */
+    val undoWrapWidth = IntSetting("undoServerWrapWidth", default = 80, range = 20..500, mudlet = true)
+
     /** Which of the commands the player sends show in the game's text. */
     val showSentText = EnumSetting("showSentText", SentText.SCRIPT, SentText.entries, mudlet = true) { it.mudletValue }
 
@@ -52,6 +58,18 @@ object Settings {
     val mtts = BoolSetting("enableMTTS", default = true, mudlet = true)
     val mnes = BoolSetting("enableMNES", default = false, mudlet = true)
     val naws = BoolSetting("enableNAWS", default = true, mudlet = true)
+    val charset = BoolSetting("enableCHARSET", default = true, mudlet = true)
+    val newEnviron = BoolSetting("enableNEWENVIRON", default = true, mudlet = true)
+
+    /** Whether the sounds, music and videos a game plays are named in its text as they start and stop. */
+    val closedCaptions = BoolSetting("enableClosedCaption", default = false, mudlet = true)
+
+    // The workarounds desktop Mudlet has under "Special options", for games that need them
+    val forceCompressionOff = BoolSetting("specialForceCompressionOff", default = false, mudlet = true)
+    val forceGaOff = BoolSetting("specialForceGAOff", default = false, mudlet = true)
+    val versionInTerminalType = BoolSetting("versionInTTYPE", default = false, mudlet = true)
+    val forceMxpOn = BoolSetting("specialForceMXPProcessorOn", default = false, mudlet = true)
+    val lazyTriggerVariables = BoolSetting("lazyCaptureGlobals", default = true, mudlet = true)
 
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
@@ -68,6 +86,8 @@ object Settings {
         advertiseScreenReader,
         blankLines,
         joinSplitLines,
+        undoWrap,
+        undoWrapWidth,
         showSentText,
         unixLineEndings,
         offerSecureConnection,
@@ -79,6 +99,14 @@ object Settings {
         mtts,
         mnes,
         naws,
+        charset,
+        newEnviron,
+        closedCaptions,
+        forceCompressionOff,
+        forceGaOff,
+        versionInTerminalType,
+        forceMxpOn,
+        lazyTriggerVariables,
         screenReaderOffered,
         mapBehindText,
         wallpaperColours,
@@ -165,7 +193,7 @@ object Settings {
     }
 
     /** A whole number within [range]: a value outside it is taken as the nearest end. */
-    class IntSetting(key: String, default: Int, val range: IntRange) : Setting<Int>(key, default) {
+    class IntSetting(key: String, default: Int, val range: IntRange, mudlet: Boolean = false) : Setting<Int>(key, default, mudlet) {
         override fun normalise(v: Int) = v.coerceIn(range)
 
         override fun fromMudlet(v: Any) = (v as? Number)?.toInt()?.coerceIn(range)

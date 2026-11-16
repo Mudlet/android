@@ -20,7 +20,7 @@ QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-deskt
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 scripts/check-apk.sh                                   # the APK checks, after build-apk.sh
 scripts/build-release.sh <staged-dir>... -- -PreleaseChannel=ptb   # AAB + APKs, after STAGE_ONLY=1 build-apk.sh per ABI
-scripts/lint.sh                                        # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers
+scripts/lint.sh                                        # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after build-apk.sh
 ./gradlew ktlintFormat; FIX=1 scripts/lint.sh clang-format             # fix formatting
 ```
@@ -70,8 +70,9 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
   - the command suggestions in `files/suggest/`;
   - the notification channels `engine` and `tells`, whose ids Android keeps the player's choices under.
 - Vendored code is never edited by hand: `native/third_party/` is Lua 5.1.5 as released (`VENDORED.txt`) and changes
-  only by replacing it with another release. Each `scripts/mudlet-patches/*.patch` goes to Mudlet/Mudlet as a pull
-  request, which its header names once it is open.
+  only by replacing it with another release and its `SHA256SUMS`. Each `scripts/mudlet-patches/*.patch` goes to
+  Mudlet/Mudlet as a pull request, which its `Upstream:` line names once it is open. `scripts/lint.sh vendored`
+  checks both.
 - Comment only a why the code cannot show: a Qt or Android quirk, a workaround, an ordering or threading constraint,
   a file or wire format constraint, or why the obvious alternative is wrong. Never narrate the change ("previously",
   "now", "fixes #12"): that is the commit message's. Keep translators' comments and tool directives, and update them

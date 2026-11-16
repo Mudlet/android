@@ -10,6 +10,7 @@ ignores that change, as it did: it reads the live region as the text next change
 HeadlessSessionWindowsTest, and listed among labelContent()'s fields in docs/headless.md.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index ce752c2..4cf61d8 100644

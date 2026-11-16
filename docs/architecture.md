@@ -353,7 +353,7 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   covers, and a hardware keyboard's focus does not reach it. The input line lets go of the focus and the keyboard while
   the map is in front, and Ctrl+R opens no history. Back or the button again sends it back, and the input line has the
   focus again if it had it; with a predictive back gesture the map shrinks as the gesture goes, over the game screen
-  under it.
+  under it. A switch to another open game keeps the map in front, with that game's map.
 - The search sends `findRooms` and puts the keyboard away, as on a small screen it leaves the results no room; each
   result, read as "<room>, <area> (<number>)", is a 48 dp row, and a tap sends `showRoom`, which centres the map on
   that room and selects it, until the player moves, so its actions then walk there. "Finding rooms…", no match and

@@ -60,7 +60,8 @@ import kotlin.reflect.KClass
  * there is no history. Why the engine could not send something shows over the console's foot, where the keyboard does
  * not hide it. The map is behind the console's text while the setting has it there ([BackgroundMap]), and the title
  * bar's map button brings it to the front over the console and the input line ([FullScreenMap]), until Back or the
- * button again; the row stays below it, without History, as the command it picks would go to the covered line.
+ * button again, and for the game switched to; the row stays below it, without History, as the command it picks would
+ * go to the covered line.
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
@@ -80,13 +81,15 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
         closed.forEach(kept::removeState)
         shown.removeAll(closed.toSet())
     }
+    // Not the profile's: a switch keeps the map in front (docs/multi-profile.md, "Interactions")
+    var mapOpen by rememberSaveable { mutableStateOf(false) }
     val before = remember { Last<String>() }
     val switched = remember(front.name) {
         val was = before.value
         before.value = front.name
         was != null && was != front.name && front.name.isNotEmpty()
     }
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, onBack, onOpenSettings) }
+    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, onBack, onOpenSettings) }
 }
 
 // What a composition last saw, which changing does not compose again
@@ -95,10 +98,16 @@ private class Last<T> {
 }
 
 @Composable
-private fun ProfileGameScreen(c: ProfileSession, switched: Boolean, onBack: () -> Unit, onOpenSettings: () -> Unit) {
+private fun ProfileGameScreen(
+    c: ProfileSession,
+    switched: Boolean,
+    mapOpen: Boolean,
+    onMapOpen: (Boolean) -> Unit,
+    onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
-    var mapOpen by rememberSaveable { mutableStateOf(false) }
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
@@ -147,7 +156,9 @@ private fun ProfileGameScreen(c: ProfileSession, switched: Boolean, onBack: () -
     }
 
     fun disconnect() {
-        c.disconnect()
+        if (!c.disconnect()) {
+            scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_disconnect_refused, resources.getString(R.string.profiles_error_not_attached)), withDismissAction = true) }
+        }
     }
 
     fun close(game: String) = EngineClient.closeProfile(game) { error ->
@@ -167,7 +178,7 @@ private fun ProfileGameScreen(c: ProfileSession, switched: Boolean, onBack: () -
         topBar = {
             MudletTopBar(stringResource(R.string.game_title), onBack) {
                 ScriptCommandsButton()
-                MapButton(mapOpen) { mapOpen = it }
+                MapButton(mapOpen, onMapOpen)
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }
@@ -224,7 +235,7 @@ private fun ProfileGameScreen(c: ProfileSession, switched: Boolean, onBack: () -
                     )
                 }
                 if (mapOpen) {
-                    FullScreenMap(onClose = { mapOpen = false }, Modifier.fillMaxSize())
+                    FullScreenMap(onClose = { onMapOpen(false) }, Modifier.fillMaxSize())
                     SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
                 }
             }
@@ -265,7 +276,11 @@ private fun ProfileGameScreen(c: ProfileSession, switched: Boolean, onBack: () -
             canReconnect,
             onReconnect = ::reconnect,
             onDisconnect = ::disconnect,
-            onSwitch = { EngineClient.setFront(it) },
+            onSwitch = {
+                // First: this game's screen is saved as it leaves the front, and an open sheet would show again on its return
+                gamesOpen = false
+                EngineClient.setFront(it)
+            },
             onClose = ::close,
             onOpenAnother = onBack,
             onDismiss = { gamesOpen = false },

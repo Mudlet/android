@@ -121,12 +121,10 @@ fun ProfileListScreen(
                         selected = profile.name == selected,
                         onConnect = {
                             error = null
-                            val onAnswer: (String?) -> Unit = { refused -> if (refused == null) onOpenGame() else error = refused }
                             // Without alongside, the engine would close the games open
-                            if (games.isEmpty()) {
-                                EngineClient.openProfile(profile.name, passwords.get(profile.name), onAnswer)
-                            } else {
-                                EngineClient.openProfileAlongside(profile.name, passwords.get(profile.name), onAnswer)
+                            val open = if (games.isEmpty()) EngineClient::openProfile else EngineClient::openProfileAlongside
+                            open(profile.name, passwords.get(profile.name)) { refused ->
+                                if (refused == null) onOpenGame() else error = refused
                             }
                         },
                         onEdit = { onEditProfile(profile.name) },
@@ -166,7 +164,8 @@ private fun ProfileItem(profile: Profile, index: Int, count: Int, selected: Bool
 @Composable
 private fun OpenGameItem(game: ProfileSession, index: Int, count: Int, onShow: () -> Unit) {
     val state = ConnectionState.of(game)
-    val description = stringResource(R.string.game_state, game.name, state.text())
+    val stateText = state.text()
+    val description = stringResource(R.string.game_state, game.name, stateText)
     ListSegment(index, count) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 56.dp)
@@ -178,7 +177,7 @@ private fun OpenGameItem(game: ProfileSession, index: Int, count: Int, onShow: (
             ConnectionIcon(state, size = 20.dp)
             Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = description }) {
                 Text(game.name, style = MaterialTheme.typography.titleMedium)
-                Text(state.text(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stateText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -496,6 +496,8 @@
     <string name="connection_stop_to">Stop connecting to %1$s</string>
     <!-- Shown when Reconnect could not open the profile last played again; %1$s is the reason, from the engine in English -->
     <string name="connection_reconnect_refused">Not reconnected: %1$s</string>
+    <!-- Shown when Disconnect could not reach the engine; %1$s is why -->
+    <string name="connection_disconnect_refused">Not disconnected: %1$s</string>
     <!-- The game sheet's button that closes the connection to the game in front -->
     <string name="connection_disconnect">Disconnect</string>
     <!-- What TalkBack reads for Disconnect, and the game pill's TalkBack action; %1$s is the game's (profile's) name -->

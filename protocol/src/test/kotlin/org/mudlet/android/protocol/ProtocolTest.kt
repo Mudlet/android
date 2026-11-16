@@ -3,6 +3,7 @@ package org.mudlet.android.protocol
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -294,14 +295,14 @@ class ProtocolTest {
                 """{"t":"label","name":"box","text":"<b>hi</b>","image":"/data/a.svg","svg":true,"svgTint":${RUN_RGB or 0xff0000},""" +
                     """"svgTintAlpha":128,"svgRotation":90.5,"svgShearX":0.25,"svgShearY":-0.5,"movie":"/data/b.gif","moviePaused":true,""" +
                     """"movieFrame":3,"movieSpeed":50,"movieW":64,"movieH":48,"toolTip":"tip","clickThrough":true,"accessibleName":"Box",""" +
-                    """"accessibleButton":true,"liveRegion":"assertive","styleSheet":"QLabel { color: red; }"}""",
+                    """"accessibleButton":true,"liveRegion":"assertive","value":30.5,"valueMin":-10,"valueMax":200,"styleSheet":"QLabel { color: red; }"}""",
             ),
         )
         assertEquals(
             EngineMessage.Label(
                 LabelContent(
                     "box", "<b>hi</b>", "/data/a.svg", true, RUN_RGB or 0xff0000, 128, 90.5, 0.25, -0.5, "/data/b.gif", true, 3, 50, 64, 48,
-                    "tip", true, "Box", true, LiveRegion.ASSERTIVE, "QLabel { color: red; }",
+                    "tip", true, "Box", true, LiveRegion.ASSERTIVE, AccessibleValue(30.5, -10.0, 200.0), "QLabel { color: red; }",
                 ),
             ),
             full,
@@ -314,7 +315,7 @@ class ProtocolTest {
             ),
         ) as EngineMessage.Label
         assertEquals(
-            LabelContent("box", "", "", false, -1, 255, 0.0, 0.0, 0.0, "", false, -1, 100, null, null, "", false, "", false, LiveRegion.OFF, ""),
+            LabelContent("box", "", "", false, -1, 255, 0.0, 0.0, 0.0, "", false, -1, 100, null, null, "", false, "", false, LiveRegion.OFF, null, ""),
             plain.label,
         )
     }
@@ -327,6 +328,42 @@ class ProtocolTest {
         assertEquals(LiveRegion.OFF, liveRegion("off"))
         assertEquals(LiveRegion.OFF, liveRegion("loud"))
         assertEquals(LiveRegion.OFF, liveRegion("Polite"))
+    }
+
+    @Test
+    fun aLabelsAccessibleValueParsesAndOneThatCannotBeReadIsNone() {
+        fun accessibleValue(vararg fields: Pair<String, Any>): AccessibleValue? {
+            val message = JSONObject().put("t", "label").put("name", "hp_back")
+            for ((key, value) in fields) message.put(key, value)
+            return (FrameReader.parse(message) as EngineMessage.Label).label.accessibleValue
+        }
+        assertEquals(AccessibleValue(30.0, 0.0, 60.0), accessibleValue("value" to 30, "valueMin" to 0, "valueMax" to 60))
+        assertEquals("the range is 0 to 100 when not given", AccessibleValue(40.0, 0.0, 100.0), accessibleValue("value" to 40))
+        assertEquals("a value past either end is that end", AccessibleValue(60.0, 0.0, 60.0), accessibleValue("value" to 75, "valueMax" to 60))
+        assertEquals(AccessibleValue(-5.0, -5.0, 5.0), accessibleValue("value" to -9, "valueMin" to -5, "valueMax" to 5))
+        assertNull("no value, no accessible value", accessibleValue("valueMin" to 0, "valueMax" to 60))
+        assertNull("an empty range", accessibleValue("value" to 5, "valueMin" to 5, "valueMax" to 5))
+        assertNull("a range the wrong way round", accessibleValue("value" to 5, "valueMin" to 10, "valueMax" to 0))
+        assertNull("a value that is not a number", accessibleValue("value" to "lots"))
+        assertNull("a value that is a string", accessibleValue("value" to "5"))
+        assertNull("a maximum that is not finite", accessibleValue("value" to 5, "valueMax" to "Infinity"))
+        assertNull("a minimum that is not a number", accessibleValue("value" to 5, "valueMin" to "low"))
+        assertNull("a value that is null", accessibleValue("value" to JSONObject.NULL))
+        assertNull("a range too wide for a double", accessibleValue("value" to 1e308, "valueMin" to -1e308, "valueMax" to 1e308))
+    }
+
+    @Test
+    fun anAccessibleValuesPercentIsHowFarItIsAcrossItsRange() {
+        assertEquals(15, AccessibleValue(30.0, 0.0, 200.0).percent)
+        assertEquals(25, AccessibleValue(-5.0, -10.0, 10.0).percent)
+        assertEquals(0, AccessibleValue(1.0, 1.0, 2.0).percent)
+        assertEquals(100, AccessibleValue(2.0, 1.0, 2.0).percent)
+        assertEquals(33, AccessibleValue(1.0, 0.0, 3.0).percent)
+        // Only one that a screen reader can read is made, as the parser makes it
+        assertThrows(IllegalArgumentException::class.java) { AccessibleValue(5.0, 5.0, 5.0) }
+        assertThrows(IllegalArgumentException::class.java) { AccessibleValue(11.0, 0.0, 10.0) }
+        assertThrows(IllegalArgumentException::class.java) { AccessibleValue(Double.NaN, 0.0, 10.0) }
+        assertThrows(IllegalArgumentException::class.java) { AccessibleValue(1e308, -1e308, 1e308) }
     }
 
     @Test

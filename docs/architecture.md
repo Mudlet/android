@@ -372,10 +372,12 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are five: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are seven: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
-`labelContent()`, and a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`).
+`labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
+a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, and several
+headless sessions sharing one pool of profiles (see [`multi-profile.md`](multi-profile.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -495,9 +497,12 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `label`, its click callback run by a `pointer` press, and `pointer` refused off the window; a new `echo()` as
   `label` alone; `setBackgroundImage()` as the label's `image`, and that file as a PNG from `getImage`, scaled; an
   SVG one with `setSvgTint()` and `setSvgRotation()`; a Geyser `Gauge`'s three labels, whose front width is its value
-  and whose text label is transparent; a label's live region, from Geyser's `liveRegion` and each
-  `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; every label to a UI that attaches; `deleteLabel()`
-  as `removed`;
+  and whose text label is transparent, and whose back label carries its value and maximum, sent again with each new
+  value, kept through `setStyleSheet()`, stopped at the maximum, and cleared for an infinite one, and a
+  `createGauge()` gauge's back label carrying the value `setGauge()` gave it through `moveGauge()`; a label's live
+  region, from Geyser's `liveRegion` and each `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; its
+  accessible value, from each `setLabelAccessibleValue()` or `clearLabelAccessibleValue()` alone, as `label`, clamped
+  to its range, and a refused one sending nothing; every label to a UI that attaches; `deleteLabel()` as `removed`;
 - text boxes: `createTextEdit()` with `setTextEditText()`, `setTextEditPlaceholder()`, `setTextEditStyleSheet()` and
   `setTextEditTabMovesFocus()` as `textBox` after its `windows`, with its `typed`; `setTextBoxText` read back by
   `getTextEditText()` and not sent back, by a later `windows` either, and a script's text after it sent, the text from
@@ -581,8 +586,10 @@ device shows, below the UI's debug hook:
   aloud, and a link in one asked about with `getLink` and the window's name and followed by a tap, its menu and
   TalkBack's actions; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the
   engine as `pointer` events, its 48 dp touch bounds, a gauge read as its progress and its live text label's new text
-  said, politely or not, but not its first nor a new value, a live label as one live node from blank (no stop) to text,
-  a named one with its text as its state,
+  said, politely or not, but not its first nor a new value, the accessible value of a gauge's back label as its
+  progress, and of a label as a progress bar's with its text and percentage as its state, a button's not, a live
+  label with a value not live, its new text said but not a new value, a live label as one live node from blank (no
+  stop) to text, a named one with its text as its state,
   a link's command, and a label's image asked of the engine; the button bars: a bar's buttons
   as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
@@ -1195,7 +1202,10 @@ Item 13 of the on-device checklist covers this.
       what it is saying, without moving focus, and again for each new text; with `"assertive"` it says it at once.
       After `lua news:setAccessibleName("News")`, a new text is said after "News". A gauge whose text label is live
       (for a Geyser gauge `hp`, `lua hp.text:setLiveRegion("polite")`) says its new text, and nothing when only its
-      value changes.
+      value changes. `lua mp = Geyser.Gauge:new({name = "mp", x = 0, y = 40, width = 200, height = 20})
+      mp:setValue(30, 200)`: TalkBack reads "mp", a progress bar at 15%, the value the desktop's screen reader reads;
+      `lua setLabelAccessibleValue("news", 40)` makes the news label a progress bar read as "News", its state "a
+      dragon!, 40%", and `lua clearLabelAccessibleValue("news")` makes it the label it was.
 22. Button bars and commands, with the libmudlet APK. `lua tempButtonToolbar("Moves", 0, 0) tempButton("Moves",
     "North", 0)` adds a top bar, `lua tempButtonToolbar("Side", 1, 1) tempButton("Side", "Go", 1)` a left bar, and
     `lua addCommand{name = "Speech", menuPath = "Tools/Voices", surfaces = {"menu"}}` a command; a push-down button

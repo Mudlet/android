@@ -166,7 +166,7 @@ loaded. The stand-in has no map and refuses both.
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
-| `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `liveRegion`?, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
+| `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `liveRegion`?, `value`?, `valueMin`?, `valueMax`?, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
@@ -233,6 +233,12 @@ What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which
 - `liveRegion` is `polite` or `assertive` once `setLabelLiveRegion()` asked for its changes to be announced, as ARIA's
   `aria-live` does: after what the screen reader is saying, or at once; absent for `off`. The UI takes a value it does
   not know as `off`. libmudlet has it from `scripts/mudlet-patches/` until Mudlet does.
+- `value`, `valueMin` and `valueMax` are the label's accessible value once `setLabelAccessibleValue()` gave it one, as
+  `Geyser.Gauge:setValue()` gives its gauge's back label the gauge's value: a screen reader reads the label as a
+  progress bar at `value`, from `valueMin` to `valueMax`. `valueMin` is less than `valueMax` and `value` between them;
+  all three are absent for none. The UI takes a value with an empty range or one wider than a double holds
+  (`valueMax - valueMin` not finite), or that is not a finite number, as none. libmudlet has it from
+  `scripts/mudlet-patches/` until Mudlet does.
 - `styleSheet` is what `setLabelStyleSheet()` gave it, which the engine does not interpret; drawing it is the UI's.
 
 The files are the engine's: the UI asks for one with `getImage`. A label's cursor is not sent. The engine keeps each

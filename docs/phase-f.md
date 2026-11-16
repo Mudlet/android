@@ -230,8 +230,9 @@ the attach stays counted, as the engine counts it. A refusal's `textBox` puts ba
 ### Gauges
 
 Once labels draw, gauges draw: they are three labels. F3 adds their meaning: the app finds sibling labels
-`<name>_back`, `<name>_front` and `<name>_text` and treats them as one gauge, with the value read from the front
-label's width against the back label's, until upstream gives the value (gap 2).
+`<name>_back`, `<name>_front` and `<name>_text` and treats them as one gauge, with the value
+`Geyser.Gauge:setValue()` gives the back label (gap 2, carried), and else the one read from the front label's width
+against the back label's, as for a gauge drawn by a Mudlet without the patch or by hand.
 
 ### Button bars and commands
 
@@ -265,8 +266,13 @@ Phase E's requirements apply to every pull request here; in short, and what they
   `stateDescription` unless its name says the same, so its new text is said after its name. Unlike the desktop,
   TalkBack also reads a live label when a script makes it live or changes its region, when its name changes, and
   (its name alone) when a named one's text goes blank; and the app does not wait for the profile's "Make script
-  buttons reachable with the keyboard" setting (`accessibleLabels`), which the desktop needs too.
-- **Gauges** are one node: `progressBarRangeInfo` with the value and range, the `_text` label's text as
+  buttons reachable with the keyboard" setting (`accessibleLabels`), which the desktop needs too. A label that is not
+  a button and has an accessible value (`setLabelAccessibleValue()`, gap 2) is a progress bar, as on the desktop:
+  `progressBarRangeInfo` with its value and range, its name, else its text, as its content description, and its
+  percentage as its `stateDescription`, after its text where its name does not say it ("Level 3, 40%"), so the value
+  is always said; not live, for the reason a gauge is not, so the `Announcer` says a live one's new text.
+- **Gauges** are one node: `progressBarRangeInfo` with the value and range (the `_back` label's accessible value,
+  else 0 to 100 from the front label's width), the `_text` label's text, else the percentage, as
   `stateDescription`, the three labels merged into it. That node is not live, as a live node is read again at every
   change of the value: when the `_text` label is live, the `Announcer` says its new text, as the desktop says only
   that label's (the others have no text); twice while TalkBack's focus is on the gauge, which reads its new state
@@ -342,9 +348,9 @@ F4 and F5 are independent of each other and of F3.
 
 ## Upstream gaps
 
-Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 3 and 4
-are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those patches,
-`scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
+Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 2, 3
+and 4 are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those
+patches, `scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
 `3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
 
 Each prompt is ready to paste into a Claude Code session on a checkout of Mudlet/Mudlet's `development`.
@@ -382,7 +388,12 @@ input line, `http(s):` through an intent, anything else as `runLua` of the link;
 > a Geyser gauge is three labels, so screen readers on the desktop and on Android cannot tell its value; this gives
 > the gauge's value to both.
 
-Interim: the app infers a gauge from the `_back`, `_front` and `_text` names and the front label's width.
+Interim: replaced. The app carries this as `scripts/mudlet-patches/0006-headless-label-accessible-value.patch` until
+Mudlet merges it; the engine sends it as the `label`'s `value`, `valueMin` and `valueMax` (`protocol.md`, "Labels").
+`Geyser.Gauge:setValue()` and `setGauge()` set it on the gauge's back label, and clear it for a reading they cannot
+give. The app still finds a gauge by the `_back`, `_front` and `_text` names, and reads the front label's width only
+for a gauge whose back label has no value. The patch leaves out the `_text` label's text as the accessible description,
+which labels do not have yet; the app reads that text as the gauge's state as before.
 
 ### 3. A label's live region in `LabelContent`
 

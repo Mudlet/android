@@ -327,6 +327,9 @@
     <string name="gauge_percent">%1$d%%</string>
     <!-- A script's text box the player cannot type in: %1$s is its placeholder, or the name the script gave it -->
     <string name="text_box_read_only">%1$s, read only</string>
+    <!-- What a screen reader reads as the state of a script's label that shows a value, as a progress bar does: %1$s is
+         the label's text, as the script wrote it, and %2$s its value as a percentage (gauge_percent) -->
+    <string name="label_text_and_value">%1$s, %2$s</string>
 
     <!-- A script's button bars and the commands packages add (Mudlet's buttons and addCommand()). %1$s in
          bar_description is the bar's name; in bar_button_unnamed %1$d is the button's place in its bar or menu, from 1,

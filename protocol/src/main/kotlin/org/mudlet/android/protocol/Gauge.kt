@@ -2,8 +2,9 @@ package org.mudlet.android.protocol
 
 /**
  * A Geyser gauge (docs/phase-f.md, "Gauges"): the labels `<name>_back`, `<name>_front` and, if there, `<name>_text`
- * in one parent. Upstream gives no gauge its value (gap 2), so it is read from the labels: the front's width against
- * the back's, or its height in a vertical gauge, from 0 to 1.
+ * in one parent. [value] is read from the labels: the front's width against the back's, or its height in a vertical
+ * gauge, from 0 to 1. It is what a screen reader is told when the back label has no accessible value (gap 2,
+ * carried), as from a Mudlet without the patch or for a gauge drawn by hand.
  */
 data class Gauge(val name: String, val back: ScriptWindow, val front: ScriptWindow, val text: ScriptWindow?, val value: Float) {
     /** The value as a whole percentage, as a screen reader says it. */

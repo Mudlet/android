@@ -321,7 +321,7 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         fun windowCommandLine(name: String, text: String) = send(JSONObject().put("t", "windowCommandLine").put("name", name).put("text", text))
 
-        /** What the label [name] shows (docs/protocol.md, `label`): [text] as rich text, or the file [image]. */
+        /** What the label [name] shows (docs/protocol.md, `label`): [text] as rich text, or the file [image]; [value] from [valueMin] to [valueMax]. */
         fun label(
             name: String,
             text: String = "",
@@ -331,11 +331,15 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             accessibleButton: Boolean = false,
             styleSheet: String = "",
             liveRegion: String? = null,
+            value: Double? = null,
+            valueMin: Double? = null,
+            valueMax: Double? = null,
         ) = send(
             JSONObject().put("t", "label").put("name", name).put("text", text).put("image", image).put("svg", false)
                 .put("movie", "").put("moviePaused", false).put("movieFrame", -1).put("movieSpeed", 100).put("toolTip", toolTip)
                 .put("clickThrough", false).put("accessibleName", accessibleName).put("accessibleButton", accessibleButton)
-                .put("styleSheet", styleSheet).putOpt("liveRegion", liveRegion),
+                .put("styleSheet", styleSheet).putOpt("liveRegion", liveRegion)
+                .putOpt("value", value).putOpt("valueMin", valueMin).putOpt("valueMax", valueMax),
         )
 
         /**

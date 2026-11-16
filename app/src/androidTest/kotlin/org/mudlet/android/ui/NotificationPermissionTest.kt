@@ -9,6 +9,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertFalse
@@ -20,6 +21,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.engine.EngineNotifications
+import java.util.regex.Pattern
 
 /**
  * The notification permission as a user meets it, on a fresh install (native/tests/android_instrumented.py installs
@@ -80,10 +82,18 @@ class NotificationPermissionTest {
     }
 
     private fun click(button: String) {
-        val found = device.wait(Until.findObject(By.res(PERMISSION_CONTROLLER, button)), UI_MS)
-        assertNotNull("the permission dialog's $button", found)
-        found.click()
-        device.wait(Until.gone(By.pkg(PERMISSION_CONTROLLER)), UI_MS)
+        val selector = By.res(PERMISSION_CONTROLLER, button)
+        assertNotNull("the permission dialog's $button", device.wait(Until.findObject(selector), UI_MS))
+        // On a busy emulator Android's dialog can drop a tap: tap until it closes
+        repeat(TAPS) {
+            try {
+                device.findObject(selector)?.click()
+            } catch (closing: StaleObjectException) {
+                // The button went as it was tapped
+            }
+            if (device.wait(Until.gone(By.pkg(PERMISSION_DIALOG)), TAP_MS)) return
+        }
+        throw AssertionError("the permission dialog stayed open after $TAPS taps on $button")
     }
 
     private fun assertTellPosted(text: String) {
@@ -100,7 +110,11 @@ class NotificationPermissionTest {
     private fun android.service.notification.StatusBarNotification.title() = notification.extras.getCharSequence("android.title")?.toString()
 
     private companion object {
+        // The dialog's resource package; the Google system images run it as com.google.android.permissioncontroller
         const val PERMISSION_CONTROLLER = "com.android.permissioncontroller"
+        val PERMISSION_DIALOG: Pattern = Pattern.compile("com(\\.google)?\\.android\\.permissioncontroller")
+        const val TAPS = 3
+        const val TAP_MS = 5_000L
         const val TELL = "Permission test tell"
         const val UI_MS = 15_000L
         const val QUIET_MS = 1_000L

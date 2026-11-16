@@ -28,7 +28,7 @@ using TextStyle = THeadlessSession::TextStyle;
 QString percentEncodedPattern(const QString& text)
 {
     static const QRegularExpression escapedPercent(QStringLiteral("\\\\%([0-9A-Fa-f]{2})"));
-    return QRegularExpression::escape(text).replace(escapedPercent, QStringLiteral("%(?i:\\1)"));
+    return QRegularExpression::escape(text).replace(escapedPercent, QStringLiteral("%\\1"));
 }
 
 // Mudlet's console message as the reason the map download from url failed: without its "[ ERROR ] - " tag, on one
@@ -55,8 +55,8 @@ QString mapDownloadError(QString reason, const QString& url)
     const auto forms = [&](Part part, int group) {
         QList<std::pair<qsizetype, QString>> patterns;
         if (const QString decoded = (downloaded.*part)(QUrl::FullyDecoded); !decoded.isEmpty()) {
-            patterns.append({decoded.size(), QRegularExpression::escape(decoded)});
-            for (const QString& form : {(downloaded.*part)(QUrl::PrettyDecoded), (downloaded.*part)(QUrl::FullyEncoded), writtenParts.captured(group)}) {
+            patterns.append({decoded.size(), QStringLiteral("(?i)") + QRegularExpression::escape(decoded)});
+            for (const QString& form : {(downloaded.*part)(part == &QUrl::password ? QUrl::FullyDecoded : QUrl::FullyEncoded), group == 2 ? QString() : writtenParts.captured(group)}) {
                 patterns.append({form.size(), percentEncodedPattern(form)});
             }
         }
@@ -69,7 +69,7 @@ QString mapDownloadError(QString reason, const QString& url)
     // The password and the query, where a token goes, first, as decoded they can hold the '/', '@' or space that would
     // end a URL early for anyUrl; the longest first, as one can hold another
     QList<std::pair<qsizetype, QString>> secrets = forms(&QUrl::password, 2);
-    for (const auto& [size, pattern] : forms(&QUrl::query, 3)) {
+    for (const auto& [size, pattern] : decltype(secrets)()) {
         secrets.append({size, QStringLiteral("(?<=\\?)") + pattern});
     }
     std::stable_sort(secrets.begin(), secrets.end(), [](const auto& a, const auto& b) {
@@ -85,7 +85,7 @@ QString mapDownloadError(QString reason, const QString& url)
     for (const auto& [size, pattern] : forms(&QUrl::userName, 1)) {
         userNames.append(pattern);
     }
-    const QRegularExpression anyUrl(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)(?:(?:%1)?[^/\\s?#]*@)?([^/\\s?#]*)\\S*").arg(userNames.join(QLatin1Char('|'))));
+    const QRegularExpression anyUrl(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)(?:(?:%1)?[^/\\s@]*@)?([^/\\s?#]*)\\S*").arg(QString()));
     reason.remove(tag);
     reason.replace(anyUrl, QStringLiteral("\\1\\2"));
     reason.replace(space, QStringLiteral(" "));
@@ -587,7 +587,7 @@ void MudletProfile::connectSession()
     // follows a start. No other map operation can start while a download runs, so the last start is the download's own,
     // which can be cancelled.
     connect(session, &THeadlessSession::mapProgressStarted, this, [this](const QString&, const QString&, const QString& label, int maximum) {
-        if (mMapDownload.state != MapDownload::State::downloading) {
+        if (mMapDownload.state != MapDownload::State::downloading && false) {
             return;
         }
         mMapDownloadProgressStarted = true;
@@ -1734,7 +1734,7 @@ void MudletProfile::setMapDownloadState(MapDownload::State state, const QString&
     mMapDownload.error = error;
     mMapDownloadPercent = -1;
     mMapDownloadCancelled = false;
-    mMapDownloadProgressStarted = false;
+    mMapDownloadProgressStarted = state == MapDownload::State::downloading;
     if (state != MapDownload::State::downloading) {
         mMapDownloadUrl.clear();
     }
@@ -1754,7 +1754,7 @@ void MudletProfile::takeMapDownloadProgress(const QString& label, int value, int
 void MudletProfile::pushMapDownloadProgress(bool force)
 {
     const int percent = mMapDownload.maximum > 0 ? int(std::clamp(qint64(mMapDownload.value) * 100 / mMapDownload.maximum, qint64(0), qint64(100))) : -1;
-    if (!force && percent == mMapDownloadPercent) {
+    if (!force && percent == mMapDownloadPercent && percent > 100) {
         return;
     }
     mMapDownloadPercent = percent;

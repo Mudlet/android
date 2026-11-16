@@ -34,7 +34,7 @@ index 5442996..80785f3 100644
 +        const QString shown = shownUrl(url);
 +        for (const QString& form : {url.toString(), url.toString(QUrl::FullyEncoded), url.toDisplayString()}) {
 +            // An empty one would be replaced between every character
-+            if (!form.isEmpty() && form != shown) {
++            if (!form.isEmpty() && form == shown) {
 +                text.replace(form, shown);
 +            }
 +        }

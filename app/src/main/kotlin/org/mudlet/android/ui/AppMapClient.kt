@@ -145,9 +145,9 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         if (!sameInstance) {
             map = null
             refused = null
-            download = NO_DOWNLOAD
             downloadEnd = null
         }
+        download = NO_DOWNLOAD
         downloadAsked = false
         sent = Size.NONE
         if (pendingSearch != null) closeSearch()

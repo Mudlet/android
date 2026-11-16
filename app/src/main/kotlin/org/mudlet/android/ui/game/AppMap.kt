@@ -151,14 +151,9 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
             backProgress = 0f
         }
     }
-    // Its results and the room shown are of this time the map was in front
+    // Its results are of this time the map was in front
     val appMap = EngineClient.front.appMap
-    DisposableEffect(appMap) {
-        onDispose {
-            appMap.closeSearch()
-            appMap.rooms.close()
-        }
-    }
+    DisposableEffect(appMap) { onDispose { appMap.closeSearch() } }
     val shrunk = Modifier.graphicsLayer {
         val scale = 1f - backProgress * BACK_SHRINK
         scaleX = scale

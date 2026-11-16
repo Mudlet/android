@@ -526,6 +526,10 @@ class AppMapTest {
         val shown = hasText(string(R.string.room_place, "Castle", 3))
         waitFor("the room is shown") { compose.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(field).assert(hasText("hall"))
+        // A rotation keeps the room shown, the UI attached again
+        compose.activityRule.scenario.recreate()
+        session = fake.engine.nextSession()
+        waitFor("the room shows again after a rotation") { compose.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitFor("Back closes the room") { compose.onAllNodes(shown).fetchSemanticsNodes().isEmpty() }
         drawnMap()

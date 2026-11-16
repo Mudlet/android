@@ -285,13 +285,11 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
             }
         }
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
-        val placeBar = view != null && maxHeight >= PLACE_BAR_LEAST_HEIGHT
+        val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             source.refusal?.let { MapRefusal(it, source::dismissRefusal) }
             Box(Modifier.fillMaxWidth()) {
-                if (placeBar && view != null) {
-                    MapPlaceBar(view, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp))
-                }
+                placeBar?.let { MapPlaceBar(it, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp)) }
                 if (followShown) {
                     SmallFloatingActionButton(
                         { mover.followPlayer() },

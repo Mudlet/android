@@ -153,8 +153,8 @@ has no map and refuses both.
 
 `showMapLevel`, `showMapArea` and `walkToRoom` too are answered only when refused, and `roomInfo` by `room` or `error`,
 `mapAreas` by `areas` or `error`, as above. libmudlet refuses all five while no profile is open; `showMapLevel` and
-`showMapArea` as `moveMap` is (`showMapArea` also while the map drawn last shows no area) and for a `level` or `area`
-that is not a whole number; `showMapLevel` for a level the area has no rooms on, `showMapArea` for an area not in the
+`showMapArea` as `moveMap` is, but `showMapArea` not while the map drawn last shows no area, as it can show one then,
+and for a `level` or `area` that is not a whole number; `showMapLevel` for a level the area has no rooms on, `showMapArea` for an area not in the
 map or with no rooms; `walkToRoom` and `roomInfo` for a `room` that is not a whole number or not in the map, and
 `walkToRoom` while the map has no room for the player. A walk that finds no path is not refused: Mudlet says so in the
 console, as on the desktop. The stand-in has no map and refuses all five.

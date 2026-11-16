@@ -53,7 +53,7 @@ index 07707a4..84c2dcd 100644
  `mapViewOnly()` reads which it is; a new profile's map is view-only, and the profile saves it. Scripts hear
  `mapModeChangeEvent` with `"viewing"` or `"editing"` before the call returns, then the session emits
 diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
-index 20e55a2..3727044 100644
+index 20e55a2..4eb74dd 100644
 --- a/src/TNullMapView.cpp
 +++ b/src/TNullMapView.cpp
 @@ -37,6 +37,9 @@
@@ -103,8 +103,8 @@ index 20e55a2..3727044 100644
 +        // As T2DMap::switchArea(): the lowest of the levels with the most rooms
 +        qsizetype most = 0;
 +        for (const int z : pArea->zLevels) {
-+            if (pArea->getRoomsForZ(z).size() > most) {
-+                most = pArea->getRoomsForZ(z).size();
++            if (const qsizetype count = pArea->getRoomsForZ(z).size(); count > most) {
++                most = count;
 +                level = z;
 +            }
 +        }
@@ -196,7 +196,7 @@ index cc31cba..08b2b2c 100644
      QList<DrawnRoom> mDrawnRooms;
      // A wheel turn's zoom and centre, which only the next render() lays out, so the pointer acts on what was drawn
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 68e29a0..fe0d353 100644
+index 68e29a0..0b07ee8 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
 @@ -679,6 +679,19 @@ public:
@@ -214,7 +214,7 @@ index 68e29a0..fe0d353 100644
 +    bool showMapArea(MapTarget map, int areaId);
 +    // Walks the player to the room, as a double-click on it on the GUI's map does, with the profile's doSpeedWalk()
 +    // or else the shortest path by known exits. False, with errorString() saying why, for a room not in the map, with
-+    // no room the player is in, and where submit() is refused.
++    // no room the player is in; a walk that finds no path says so in the console, as the double-click does.
 +    bool walkToRoom(int roomId);
      // A room a map's last render drew, at its middle in the frame's pixels
      struct MapRoom

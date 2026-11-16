@@ -389,6 +389,14 @@ class ScriptWindowsTest {
     fun aPinchSetsAMiniConsolesFontSizeWhichOutlastsAScriptsAndTheConsoleMadeAgain() {
         val textSize = compose.runOnIdle { Settings.textSize.value }
         fun chat(fontSize: Int) = FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 30, fontSize = fontSize.toDouble())
+
+        // The engine reports chat at [fontSize], or no chat for null. Compose's test clock, and with it the effect that
+        // answers a new size, moves only while the test waits on Compose
+        fun reportChat(fontSize: Int?) {
+            if (fontSize == null) session.windows(emptyList(), removed = listOf("chat" to "miniConsole")) else session.windows(listOf(chat(fontSize)))
+            compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.state.windows.firstOrNull { it.name == "chat" }?.fontSize == fontSize?.toDouble() } }
+            compose.waitForIdle()
+        }
         session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
         session.windows(listOf(chat(8)), full = true)
         session.windowText("chat", listOf("hello from chat"))
@@ -404,23 +412,23 @@ class ScriptWindowsTest {
         assertTrue("a pinch outward makes it larger: $size", size in 12..ConsoleZoom.MAX_SIZE)
         assertTrue("drawn larger at once: $before, then ${textHeight("hello from chat")}", textHeight("hello from chat") > before * 1.3f)
         compose.runOnIdle { assertEquals("the main console's text size is the player's other setting", textSize, Settings.textSize.value) }
-        session.windows(listOf(chat(size)))
+        reportChat(size)
         session.assertNoRequest("runLua", QUIET_MS.toInt())
 
         // A script's size, and the console made again at Geyser's 8, are set back to the player's
-        session.windows(listOf(chat(10)))
+        reportChat(10)
         assertEquals(size, receiveFontSize("chat"))
-        session.windows(listOf(chat(size)))
-        session.windows(emptyList(), removed = listOf("chat" to "miniConsole"))
-        session.windows(listOf(chat(8)))
+        reportChat(size)
+        reportChat(null)
+        reportChat(8)
         assertEquals(size, receiveFontSize("chat"))
-        session.windows(listOf(chat(size)))
+        reportChat(size)
 
         // TalkBack's actions change it a size at a time, and it is kept for the profile, whose name ignores case
         compose.onRoot().tryPerformAccessibilityChecks()
         customAction(window, R.string.window_text_larger)
         assertEquals(size + 1, receiveFontSize("chat"))
-        session.windows(listOf(chat(size + 1)))
+        reportChat(size + 1)
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.consoleZoom.chosen("chat") } == size + 1 }
         val prefs = compose.activity.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
         assertEquals(size + 1, ConsoleZoomClient(GAME.name.uppercase(), { prefs }, { true }).chosen("chat"))
@@ -438,11 +446,11 @@ class ScriptWindowsTest {
             }
         }
         assertEquals(8, receiveFontSize("chat"))
-        session.windows(listOf(chat(8)))
+        reportChat(8)
         compose.waitUntil(WAIT_MS) { !hasCustomAction(window, R.string.window_text_reset) }
         assertEquals(null, ConsoleZoomClient(GAME.name, { prefs }, { true }).chosen("chat"))
         // A script's size then holds
-        session.windows(listOf(chat(12)))
+        reportChat(12)
         session.assertNoRequest("runLua", QUIET_MS.toInt())
     }
 

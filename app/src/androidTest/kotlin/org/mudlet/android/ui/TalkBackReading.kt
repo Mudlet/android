@@ -17,11 +17,14 @@ class TalkBackReading(private val compose: AndroidComposeTestRule<*, MainActivit
     val order = traversalOrder(nodes.values.filter { it.parent != null }.map { it.id })
     val read = order.map { describe(nodes.getValue(it)) }
 
-    /** Where each of [expected] is first read, which is in that order, each in its own place. */
+    /**
+     * Where each of [expected] is read, which is in that order, each in its own place: its own node's place, or for one
+     * TalkBack does not stop at, the first related node's.
+     */
     fun assertInOrder(expected: List<Pair<String, SemanticsMatcher>>): List<Pair<String, Int>> {
         val places = expected.map { (name, matcher) ->
             val target = compose.onNode(matcher).fetchSemanticsNode().id
-            name to order.indexOfFirst { related(it, target) }
+            name to order.indexOf(target).takeIf { it >= 0 } ?: order.indexOfFirst { related(it, target) }
         }
         // Each in its own place, so no node they are all within stands in for them
         val at = places.map { it.second }

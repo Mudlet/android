@@ -2,6 +2,8 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
@@ -143,8 +145,11 @@ class GhostTextTest {
         assertEquals("op", session.receive("complete").getString("text"))
         compose.onNode(input).assert(editableText("op"))
 
-        // Onto the History button: a tap elsewhere on the screen need not take the focus from the line
-        compose.onNode(hasText(string(R.string.history_open)) and hasClickAction()).performSemanticsAction(SemanticsActions.RequestFocus)
+        // A view of the test's own: in touch mode no button of the app's takes the focus, and the line keeps it
+        compose.runOnUiThread {
+            val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
+            View(compose.activity).apply { isFocusableInTouchMode = true }.also { content.addView(it, ViewGroup.LayoutParams(1, 1)) }.requestFocus()
+        }
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isEmpty() }
         waitFor(ghost("open door"))
         compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }

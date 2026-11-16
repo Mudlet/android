@@ -374,9 +374,17 @@ drawn by `ui/game/AppMap.kt`):
   reading it out, unless the map loaded. A refusal shows as the map's others do. The loaded map is the profile's, so the map
   behind the text, the map in front and a script's mapper all show it; as on the desktop, Mudlet then shows its docked
   mapper, where a script has made one (`showLoadedMap()`).
-- Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of
-  a failure included: the rest can hold a user name, a password or a token. Lua's `gmcp` table holds the whole URL, as
-  the game sent it, as on the desktop.
+- Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of a
+  failure included: the rest can hold a user name, a password or a token. The engine masks the password in that reason
+  wherever it shows and the query wherever it follows a `?`, decoded, and percent-encoded as the game wrote them and as
+  Qt shows and encodes them, with the hex digits in either case, and cuts any URL to its scheme and host, even in the
+  server's own words, where a user name can be an e-mail address: the host is what follows the last `@` before the path,
+  query or fragment, as a browser reads a URL, and the URL's own user name is taken whole, even with a space in it. What
+  the server repeats in another form can still show, such as a path it repeats on its own or decoded with a space in
+  it, without its query; the query, or a part of it, repeated without the `?` before it, and a part of it even right
+  after one; the password or the query percent-encoded otherwise than the game's URL and Qt write them, such as `%21`
+  for a `!` or `+` for a space; and a user name it repeats outside a URL. Lua's `gmcp` table holds the whole URL, as the game sent it, and Mudlet's console line the
+  server's words, as on the desktop.
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.

@@ -10,6 +10,7 @@ made, scripts see the map as open (Host::mapOpen()), as once the player opens th
 centerview() moves the player on it with no script mapper.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/src/Host.cpp b/src/Host.cpp
 index 54ff520..bd61174 100644

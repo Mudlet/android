@@ -208,8 +208,9 @@ The workflows it calls:
 - **Checks** (`.github/workflows/checks.yml`) runs [`scripts/lint.sh`](scripts/lint.sh): ktlint on the Kotlin,
   clang-format on `native/` (Mudlet's `.clang-format`), ShellCheck on the scripts, actionlint on the workflows, and
   the strings check on `app/` and `engine-service/` (no text written into the Kotlin, a translator's comment on each
-  string: [`docs/translations.md`](docs/translations.md)), and the conflict-marker check on every text file, as six
-  short jobs, each when a file it checks changed.
+  string: [`docs/translations.md`](docs/translations.md)), the conflict-marker check on every text file, and the
+  vendored check (Lua as released, each Mudlet patch's `Upstream:` line), as seven short jobs, each when a file it
+  checks changed.
 
 Every night CI runs the libmudlet jobs against Mudlet's latest `development` (the other jobs build only from this
 repository, which pushes to `main` already check), so a change on Mudlet's side that breaks the Android build shows up;

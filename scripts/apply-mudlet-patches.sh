@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Applies the changes the app needs from Mudlet and Mudlet does not have yet, scripts/mudlet-patches/*.patch, to a
-# Mudlet checkout, in name order. Each goes upstream to Mudlet/Mudlet and is dropped here once merged there. A patch
-# already in the checkout, applied by an earlier run or merged by Mudlet, is left as it is; one that applies neither
-# way stops the build, as Mudlet has changed what it touches. scripts/build-libmudlet.sh and
-# scripts/build-libmudlet-desktop.sh run this first.
+# Mudlet checkout, in name order. Each goes upstream to Mudlet/Mudlet, as its "Upstream:" line says, and is dropped
+# here once merged there. A patch already in the checkout, applied by an earlier run or merged by Mudlet, is left as it
+# is; one that applies neither way stops the build, as Mudlet has changed what it touches. scripts/build-libmudlet.sh
+# and scripts/build-libmudlet-desktop.sh run this first.
 #
 # Usage: scripts/apply-mudlet-patches.sh <mudlet-source>
 set -euo pipefail

@@ -23,6 +23,7 @@ Tested in HeadlessSessionWindowTextTest (the titles, the page in front, bringing
 a header inside a hidden EXTERNAL frame, and closing the page in front). The desktop is unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index a5a063f..2d3259e 100644

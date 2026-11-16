@@ -7,19 +7,22 @@
 #   - strings: scripts/check-strings.py, no hard-coded text in the Kotlin UI and a translator's comment on each string
 #     in strings.xml (docs/translations.md)
 #   - conflict-markers: no line left from a merge conflict (<<<<<<<, =======, >>>>>>>) in a text file
+#   - vendored: each native/third_party/ directory is its release unchanged (its SHA256SUMS), and each
+#     scripts/mudlet-patches/*.patch has an "Upstream:" line naming its Mudlet/Mudlet pull request
 # Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in apks.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
-# Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint] [strings] [conflict-markers]
-# (all six when none is named)
+# Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint] [strings] [conflict-markers] [vendored]
+# (all seven when none is named)
 # clang-format, ShellCheck and actionlint are the versions in scripts/lint-requirements.txt, installed into
 # LINT_VENV (.lint-venv) on first use. ktlint runs through Gradle, with JDK 21.
 set -euo pipefail
+shopt -s nullglob
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 venv=${LINT_VENV:-$root/.lint-venv}
 checks=("$@")
-[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint strings conflict-markers)
+[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint strings conflict-markers vendored)
 
 # The pinned linters, installed once per run
 tools_ready=0
@@ -33,6 +36,38 @@ tools() {
 # Tracked files and new ones not ignored, matching the given pathspecs
 files() { git ls-files -z --cached --others --exclude-standard -- "$@"; }
 native_files() { files 'native/*.c' 'native/*.cpp' 'native/*.h' ':!native/third_party'; }
+
+# A release as published: SHA256SUMS, made from the release's own files, lists every file but itself and
+# VENDORED.txt, which the release does not have
+release_unchanged() {
+    local dir=$1 listed present unlisted
+    if [ ! -f "$dir/SHA256SUMS" ]; then
+        echo "$dir: no SHA256SUMS" >&2
+        return 1
+    fi
+    if ! (cd "$dir" && sha256sum --quiet --strict -c SHA256SUMS); then
+        echo "$dir: differs from the release's files in its SHA256SUMS" >&2
+        return 1
+    fi
+    listed=$(sed -E 's/^[0-9a-f]{64} [ *]//' "$dir/SHA256SUMS" | LC_ALL=C sort) || return 1
+    present=$(cd "$dir" && files . ':!SHA256SUMS' ':!VENDORED.txt' | tr '\0' '\n' | LC_ALL=C sort) || return 1
+    unlisted=$(LC_ALL=C comm -23 <(echo "$present") <(echo "$listed"))
+    if [ -n "$unlisted" ]; then
+        printf '%s: not in the release:\n%s\n' "$dir" "$unlisted" >&2
+        return 1
+    fi
+}
+
+# One "Upstream:" line before the diff, which git apply ignores
+patch_upstream() {
+    local upstream valid='^Upstream: (Mudlet/Mudlet#[1-9][0-9]*|not opened yet)$'
+    upstream=$(sed '/^diff --git /,$d' "$1" | grep '^Upstream:') || true
+    if ! [[ $upstream =~ $valid ]]; then
+        echo "$1: needs one line 'Upstream: Mudlet/Mudlet#<number>', or 'Upstream: not opened yet', before its diff" >&2
+        return 1
+    fi
+    if [ "$upstream" = "Upstream: not opened yet" ]; then echo "$1: not opened upstream yet"; fi
+}
 
 failed=()
 for check in "${checks[@]}"; do
@@ -60,8 +95,14 @@ for check in "${checks[@]}"; do
             status=0
             git grep -nIE --untracked '^(<<<<<<<|>>>>>>>)( |$)|^=======$' || status=$?
             [ "$status" = 1 ] || failed+=("$check") ;;
+        vendored)
+            status=0
+            for dir in native/third_party/*/; do release_unchanged "${dir%/}" || status=1; done
+            for patch in scripts/mudlet-patches/*.patch; do patch_upstream "$patch" || status=1; done
+            [ "$status" = 0 ] || failed+=("$check") ;;
         *)
-            echo "unknown check '$check': ktlint, clang-format, shellcheck, actionlint, strings or conflict-markers" >&2
+            echo "unknown check '$check': ktlint, clang-format, shellcheck, actionlint, strings, conflict-markers" \
+                "or vendored" >&2
             exit 2 ;;
     esac
 done

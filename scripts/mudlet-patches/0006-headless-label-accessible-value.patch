@@ -36,6 +36,7 @@ For the wiki (Manual:Lua_Functions):
 - clearLabelAccessibleValue(labelName): removes it, so the label is read as before. Returns true.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 4cf61d8..9311e33 100644

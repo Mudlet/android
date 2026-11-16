@@ -1,7 +1,6 @@
 package org.mudlet.android.ui
 
 import android.Manifest
-import android.graphics.Bitmap
 import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.annotation.StringRes
@@ -63,11 +62,10 @@ import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.EngineMessages.appMap
 import org.mudlet.android.ui.game.Announcer
-import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.IOException
-import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import kotlin.math.abs
@@ -720,9 +718,6 @@ class AppMapTest {
         return w.toDouble() to h.toDouble()
     }
 
-    private fun appMap(w: Int, h: Int, scale: Double = 1.0, viewOnly: Boolean = true): JSONObject = JSONObject().put("t", "appMap")
-        .put("png", Base64.getEncoder().encodeToString(png((w * scale).toInt(), (h * scale).toInt()))).put("w", w).put("h", h).put("viewOnly", viewOnly)
-
     private fun rooms(request: JSONObject, text: String, found: List<Triple<Int, String, String>>, more: Boolean = false): JSONObject {
         val list = JSONArray(found.map { (id, name, area) -> JSONObject().put("id", id).put("name", name).put("area", area) })
         return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", more).put("re", request.get("id"))
@@ -779,13 +774,6 @@ class AppMapTest {
         val touch = compose.onNode(matcher).fetchSemanticsNode().touchBoundsInRoot
         val min = with(compose.density) { 48.dp.toPx() }
         assertTrue("${touch.width} by ${touch.height}", touch.width >= min - 1 && touch.height >= min - 1)
-    }
-
-    private fun png(w: Int, h: Int): ByteArray {
-        val out = ByteArrayOutputStream()
-        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.WHITE) }
-            .compress(Bitmap.CompressFormat.PNG, 100, out)
-        return out.toByteArray()
     }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)

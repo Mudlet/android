@@ -46,6 +46,8 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.EngineMessages.bar
+import org.mudlet.android.ui.EngineMessages.button
 import java.io.ByteArrayOutputStream
 
 /**
@@ -95,7 +97,7 @@ class ScriptButtonBarsTest {
 
     @Test
     fun aTopBarsButtonIsAButtonAboveTheConsoleReadAfterTheWindowsWhoseTapTheEngineGets() {
-        bars(bar(1, "Moves", "top", listOf(button(10, "North"), button(11, "South"))))
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North"), button(11, "South"))))
         val north = hasText("North") and hasClickAction()
         waitFor(north)
         compose.onNode(north).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
@@ -120,7 +122,7 @@ class ScriptButtonBarsTest {
 
     @Test
     fun aPushDownButtonIsASwitchTheEngineTurnsOn() {
-        bars(bar(1, "Modes", "top", listOf(button(20, "Sneak", pushDown = true))))
+        session.buttonBars(bar(1, "Modes", "top", listOf(button(20, "Sneak", pushDown = true))))
         val sneak = hasText("Sneak") and hasClickAction()
         waitFor(sneak)
         compose.onNode(sneak).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
@@ -129,7 +131,7 @@ class ScriptButtonBarsTest {
         activate(sneak)
         assertEquals(20, session.receive("pressButton").getInt("button"))
         // It is down once the engine says so
-        bars(bar(1, "Modes", "top", listOf(button(20, "Sneak", pushDown = true, checked = true))))
+        session.buttonBars(bar(1, "Modes", "top", listOf(button(20, "Sneak", pushDown = true, checked = true))))
         waitFor(sneak and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
         compose.onRoot().tryPerformAccessibilityChecks()
     }
@@ -137,7 +139,7 @@ class ScriptButtonBarsTest {
     @Test
     fun aFoldersMenuRunsTheEntryPickedAndThenTheFolder() {
         val ice = button(33, "Ice", pushDown = true, checked = true)
-        bars(bar(1, "Spells", "top", listOf(button(30, "Cast", children = listOf(button(31, "Fireball"), button(32, "Shields", children = listOf(ice)))))))
+        session.buttonBars(bar(1, "Spells", "top", listOf(button(30, "Cast", children = listOf(button(31, "Fireball"), button(32, "Shields", children = listOf(ice)))))))
         val cast = hasText("Cast") and hasClickAction()
         waitFor(cast)
         compose.onNode(cast).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
@@ -161,7 +163,7 @@ class ScriptButtonBarsTest {
     fun aFloatingBarsFolderListsItsButtonsAndRunsWhenItsMenuIsClosed() {
         // As upstream gives a floating bar's folder: one entry, the folder itself, holding its buttons
         val inner = button(40, "Tools", children = listOf(button(41, "Map"), button(42, "Log")))
-        bars(bar(2, "Float", "floating", listOf(button(40, "Tools", children = listOf(inner)))))
+        session.buttonBars(bar(2, "Float", "floating", listOf(button(40, "Tools", children = listOf(inner)))))
         val tools = hasText("Tools") and hasClickAction()
         waitFor(tools)
 
@@ -178,7 +180,7 @@ class ScriptButtonBarsTest {
 
     @Test
     fun aLeftBarIsAStripBesideTheConsoleWhenItFitsAndARowAboveItWhenNot() {
-        bars(bar(3, "Side", "left", listOf(button(50, "Look"), button(51, "Inv")), vertical = true))
+        session.buttonBars(bar(3, "Side", "left", listOf(button(50, "Look"), button(51, "Inv")), vertical = true))
         val look = hasText("Look") and hasClickAction()
         val inv = hasText("Inv") and hasClickAction()
         waitFor(look)
@@ -196,7 +198,7 @@ class ScriptButtonBarsTest {
     @Test
     fun aTallBarTakesAQuarterOfTheAreaAtMostAndScrolls() {
         // One column of twelve buttons, far taller than a quarter of the area
-        bars(bar(4, "Grid", "top", (1..12).map { button(70 + it, "B$it") }, columns = 12))
+        session.buttonBars(bar(4, "Grid", "top", (1..12).map { button(70 + it, "B$it") }, columns = 12))
         val group = hasContentDescription(string(R.string.bar_description, "Grid"))
         waitFor(group)
         val top = bounds(group).top
@@ -211,7 +213,7 @@ class ScriptButtonBarsTest {
 
     @Test
     fun anUnnamedIconButtonIsNamedByItsPlaceAndAsksForItsIconAtIconSize() {
-        bars(bar(1, "Moves", "top", listOf(button(60, "", icon = "/icons/look.png"))))
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(60, "", icon = "/icons/look.png"))))
         val look = hasContentDescription(string(R.string.bar_button_unnamed, 1, "Moves")) and hasClickAction()
         waitFor(look)
         compose.waitForIdle()
@@ -263,22 +265,6 @@ class ScriptButtonBarsTest {
     }
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun bars(vararg bars: JSONObject) = session.send(JSONObject().put("t", "buttonBars").put("bars", JSONArray(bars.toList())))
-
-    private fun bar(id: Int, name: String, place: String, buttons: List<JSONObject>, vertical: Boolean = false, columns: Int = 1) = JSONObject()
-        .put("id", id).put("name", name).put("styleSheet", "").put("place", place).put("vertical", vertical).put("columns", columns)
-        .put("fillerOffset", 0).put("buttons", JSONArray(buttons))
-
-    private fun button(
-        id: Int,
-        name: String,
-        icon: String = "",
-        pushDown: Boolean = false,
-        checked: Boolean = false,
-        children: List<JSONObject> = emptyList(),
-    ) = JSONObject().put("id", id).put("name", name).put("icon", icon).put("styleSheet", "").put("pushDown", pushDown).put("checked", checked)
-        .put("menu", children.isNotEmpty()).put("children", JSONArray(children))
 
     private fun commands(vararg commands: JSONObject) = session.send(JSONObject().put("t", "commands").put("commands", JSONArray(commands.toList())))
 

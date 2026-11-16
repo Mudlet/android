@@ -224,15 +224,8 @@ internal fun Modifier.pinchToZoom(
             return@awaitEachGesture
         }
         val tap = onTwoFingerDoubleTap != null && mostPressed == 2 && !moved && upTime - down.uptimeMillis <= viewConfiguration.longPressTimeoutMillis
-        if (!tap) {
-            lastTwoFingerTapUp = 0L
-            onPinchEnd()
-        } else if (lastTwoFingerTapUp != 0L && down.uptimeMillis - lastTwoFingerTapUp <= viewConfiguration.doubleTapTimeoutMillis) {
-            lastTwoFingerTapUp = 0L
-            onTwoFingerDoubleTap?.invoke()
-        } else {
-            lastTwoFingerTapUp = upTime
-            onPinchEnd()
-        }
+        val doubleTap = tap && lastTwoFingerTapUp != 0L && down.uptimeMillis - lastTwoFingerTapUp <= viewConfiguration.doubleTapTimeoutMillis
+        lastTwoFingerTapUp = if (tap && !doubleTap) upTime else 0L
+        if (doubleTap) onTwoFingerDoubleTap?.invoke() else onPinchEnd()
     }
 }

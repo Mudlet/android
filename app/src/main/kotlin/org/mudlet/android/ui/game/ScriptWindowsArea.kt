@@ -330,7 +330,7 @@ private fun WindowConsole(
         }
     }
     val columns = window.console?.columns ?: 0
-    val scale = pinched?.let { if (reported > 0) it.toFloat() / reported else null } ?: 1f
+    val scale = pinched?.takeIf { reported > 0 }?.let { it.toFloat() / reported } ?: 1f
     val wantedSp = (if (columns > 0) placed.full.w / columns / metrics.glyphWidthPerSp else metrics.fontSp) * scale
     val fontSp = wantedSp.coerceIn(MIN_WINDOW_FONT_SP, MAX_WINDOW_FONT_SP)
     // Too small to read at its own width: drawn at the smallest size, as wide as its rows need, and scrolled sideways

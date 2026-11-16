@@ -1,12 +1,9 @@
 package org.mudlet.android.ui
 
 import android.Manifest
-import android.app.LocaleManager
 import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
-import android.os.SystemClock
-import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -25,14 +22,12 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
@@ -225,40 +220,5 @@ class PseudoLocaleTest(private val locale: String) {
         @JvmStatic
         @Parameterized.Parameters(name = "{0}")
         fun locales() = listOf(EN_XA, AR_XB)
-    }
-}
-
-/**
- * The app's language set to [tag], as the system's per-app language setting does, before the Activity starts, and the
- * system's language again afterwards. The system hands the process each change asynchronously, so both wait for it:
- * an Activity started before it arrives would be recreated in the middle of a test.
- */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private class AppLocaleRule(private val tag: String) : ExternalResource() {
-    private val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
-    private val manager = context.getSystemService(LocaleManager::class.java)
-    private lateinit var before: LocaleList
-
-    override fun before() {
-        before = context.resources.configuration.locales
-        manager.applicationLocales = LocaleList.forLanguageTags(tag)
-        await("the app's language to become $tag") { context.resources.configuration.locales[0].toLanguageTag() == tag }
-    }
-
-    override fun after() {
-        manager.applicationLocales = LocaleList.getEmptyLocaleList()
-        await("the app's language to be ${before.toLanguageTags()} again") { context.resources.configuration.locales == before }
-    }
-
-    private fun await(what: String, done: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + WAIT_MS
-        while (!done()) {
-            check(SystemClock.uptimeMillis() < deadline) { "waited $WAIT_MS ms for $what: ${context.resources.configuration.locales}" }
-            Thread.sleep(50)
-        }
-    }
-
-    private companion object {
-        const val WAIT_MS = 10_000L
     }
 }

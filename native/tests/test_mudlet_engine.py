@@ -27,7 +27,7 @@ import zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_telnet  # noqa: E402
 import profile_checks  # noqa: E402
-from protocol_client import PROTOCOL_VERSION, Client  # noqa: E402
+from protocol_client import PROTOCOL_VERSION, Client, Closed  # noqa: E402
 
 ENGINE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "build-desktop-mudlet/enginehost/engine")
 TMP = tempfile.mkdtemp(prefix="mudlet-engine-test-")
@@ -396,9 +396,58 @@ def profile_requests(port):
     wait_status(c, "connection", lambda v: v == "connected", msgs)
     check(("profile", "Beta closing") not in [(m["key"], m["value"]) for m in msgs if m["t"] == "status"],
           "connect connects the open profile, without a switch")
+    several_profiles(c, port)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     check(password not in open(LOG, errors="replace").read(), "nor did it log the password on its way out")
+
+
+def several_profiles(c, port):
+    """Version 15's control and profile sockets, with "Beta" open and connected. libmudlet runs one profile at a time
+    until its sessions share a pool (docs/multi-profile.md), so it refuses a second."""
+    def ask(client, msg):
+        return client.ask(msg, answers=("profiles", "openProfiles", "error"))
+
+    ask(c, {"t": "saveProfile", **profile_checks.profile("Solo", port)})
+    m = ask(c, {"t": "openProfile", "name": "Solo", "alongside": True})
+    check(m["t"] == "error" and m["message"] == "openProfile: one profile at a time", f"libmudlet refuses a second profile: {m}")
+    m = ask(c, {"t": "closeProfile", "name": "Solo"})
+    check(m["t"] == "error" and m["message"] == 'closeProfile: "Solo" is not open', f"closeProfile of a profile not open: {m}")
+    c.close()
+
+    ctl = Client(SOCK, profile_sockets=True)
+    msgs = []
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    listed = [m for m in msgs if m["t"] == "openProfiles"]
+    open_now = listed[-1]["profiles"] if listed else []
+    check([(p["name"], p["slot"], p["state"], p["front"]) for p in open_now] == [("Beta", 1, "loaded", True)]
+          and not [m for m in msgs if m["t"] == "line"], f"the control socket lists the open profile and carries no lines: {listed}")
+    if not open_now:
+        return
+    beta = Client(open_now[0]["socket"])
+    frames = []
+    beta.wait_for(lambda m: m["t"] == "synced", collect=frames)
+    connection = [m["value"] for m in frames if m["t"] == "status" and m["key"] == "connection"]
+    check(frames[0].get("profile") == "Beta" and frames[0]["instance"].endswith("-1") and connection[-1:] == ["connected"],
+          f"the profile's socket serves it: {frames[0]}, connection {connection}")
+    m = ask(beta, {"t": "listProfiles"})
+    check(m["t"] == "error" and m["message"] == "listProfiles: send it on the control socket", f"a control request on a profile's socket: {m}")
+    m = ask(ctl, {"t": "send", "text": "look"})
+    check(m["t"] == "error" and m["message"] == "send: send it on the profile's socket", f"a profile's request on the control socket: {m}")
+
+    m = ask(ctl, {"t": "closeProfile", "name": "Beta"})
+    check(m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == [("Beta", "closing")],
+          f"closeProfile answers with the profile closing: {m}")
+    ctl.wait_for(lambda m: m["t"] == "openProfiles" and not m["profiles"], timeout=30)
+    try:
+        beta.wait_for(lambda m: False, timeout=5)
+    except Closed:
+        closed = True
+    except TimeoutError:
+        closed = False
+    check(closed, "and once it has closed, none is open and its socket is closed")
+    ask(ctl, {"t": "deleteProfile", "name": "Solo"})
+    ctl.close()
 
 
 def input_line():

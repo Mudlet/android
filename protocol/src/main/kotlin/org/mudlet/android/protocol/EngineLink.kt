@@ -23,7 +23,12 @@ interface Transport {
  * dispatches frames, and reconnects with backoff when the engine goes away.
  * Callbacks run on the reader thread.
  */
-class EngineLink(private val connector: () -> Transport, private val listener: Listener) {
+class EngineLink(
+    private val connector: () -> Transport,
+    private val listener: Listener,
+    // On the control socket: the UI attaches to each open profile's socket for its traffic (docs/protocol.md)
+    private val profileSockets: Boolean = false,
+) {
     interface Listener {
         fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean)
         fun onMessage(message: EngineMessage)
@@ -140,7 +145,7 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
             try {
                 val w = FrameWriter(t.output)
                 val reader = FrameReader(t.input)
-                w.write(Requests.hello(instance, lastSeq))
+                w.write(Requests.hello(instance, lastSeq, profileSockets))
                 val first = reader.read()
                 if (first !is EngineMessage.Hello) {
                     throw IOException("engine answered hello with $first")

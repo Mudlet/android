@@ -1,4 +1,4 @@
-set(HOST_SOURCES main.cpp SocketBridge.cpp SocketBridge.h)
+set(HOST_SOURCES main.cpp ControlBridge.cpp ControlBridge.h SocketBridge.cpp SocketBridge.h)
 if(ANDROID)
     list(APPEND HOST_SOURCES AndroidNotifier.cpp AndroidNotifier.h AndroidServiceSetup.cpp AndroidServiceSetup.h)
 endif()

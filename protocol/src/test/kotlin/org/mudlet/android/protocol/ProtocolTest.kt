@@ -62,10 +62,39 @@ class ProtocolTest {
         val saved = Requests.saveProfile(Profile("Alpha", "a.example", 4000, true, "hero", false), 1)
         val fields = mapOf("t" to "saveProfile", "name" to "Alpha", "host" to "a.example", "port" to 4000, "tls" to true, "login" to "hero")
         assertEquals(fields + mapOf("autoReconnect" to false, "id" to 1L), saved.toMap())
-        assertEquals(mapOf("t" to "openProfile", "name" to "Alpha", "connect" to false, "id" to 2L), Requests.openProfile("Alpha", null, false, 2).toMap())
-        assertEquals("pw", Requests.openProfile("Alpha", "pw", true, 3).getString("password"))
+        assertEquals(
+            mapOf("t" to "openProfile", "name" to "Alpha", "connect" to false, "id" to 2L),
+            Requests.openProfile("Alpha", null, connect = false, alongside = false, id = 2).toMap(),
+        )
+        assertEquals("pw", Requests.openProfile("Alpha", "pw", connect = true, alongside = false, id = 3).getString("password"))
+        assertEquals(true, Requests.openProfile("Alpha", null, connect = true, alongside = true, id = 3).getBoolean("alongside"))
         assertEquals(mapOf("t" to "deleteProfile", "name" to "Alpha", "id" to 4L), Requests.deleteProfile("Alpha", 4).toMap())
         assertEquals(mapOf("t" to "listProfiles", "id" to 5L), Requests.listProfiles(5).toMap())
+    }
+
+    @Test
+    fun theOpenProfilesRequestsAndMessages() {
+        assertEquals(false, Requests.hello(null, 0, profileSockets = false).has("profileSockets"))
+        assertEquals(true, Requests.hello(null, 0, profileSockets = true).getBoolean("profileSockets"))
+        assertEquals(mapOf("t" to "closeProfile", "name" to "Beta", "id" to 6L), Requests.closeProfile("Beta", 6).toMap())
+        assertEquals(mapOf("t" to "setFront", "name" to "Beta"), Requests.setFront("Beta").toMap())
+        assertEquals(mapOf("t" to "markSeen", "name" to "Beta", "seq" to 12L), Requests.markSeen("Beta", 12).toMap())
+        assertEquals(
+            EngineMessage.Hello(15, 7, "7-1-2", "Beta"),
+            FrameReader.parse(JSONObject("""{"t":"hello","v":15,"pid":7,"instance":"7-1-2","profile":"Beta"}""")),
+        )
+        assertEquals(EngineMessage.Hello(15, 7, "7-1"), FrameReader.parse(JSONObject("""{"t":"hello","v":15,"pid":7,"instance":"7-1"}""")))
+        val beta = OpenProfile("Beta", 2, "/s/engine-p2.sock", OpenProfileState.CLOSING, "connected", 40, 3, true, false)
+        assertEquals(
+            EngineMessage.OpenProfiles(listOf(beta), 6),
+            FrameReader.parse(
+                JSONObject(
+                    """{"t":"openProfiles","re":6,"profiles":[{"name":"Beta","slot":2,"socket":"/s/engine-p2.sock",""" +
+                        """"state":"closing","connection":"connected","lastSeq":40,"unread":3,"attention":true,"front":false}]}""",
+                ),
+            ),
+        )
+        assertEquals(OpenProfileState.LOADED, OpenProfileState.fromWire("someday"))
     }
 
     @Test

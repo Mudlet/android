@@ -12,6 +12,7 @@
 #include <deque>
 #include <optional>
 
+class ControlBridge;
 class IEngine;
 class QLocalServer;
 class QLocalSocket;
@@ -22,12 +23,14 @@ class QLocalSocket;
 // The engine never waits for the UI: Android freezes a cached UI process, so a
 // UI that stops reading only stops getting lines. They stay in a ring buffer and
 // are sent, with a "gap" marker if the ring overflowed, once the UI drains.
+//
+// One serves each open profile's socket; ControlBridge, the control socket, is one too.
 class SocketBridge : public QObject, public IFrontend
 {
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 14;
+    static constexpr int protocolVersion = 15;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -35,9 +38,23 @@ public:
     // The most rows one getWindowText is answered with
     static constexpr int maxWindowTextRows = 1000;
 
-    explicit SocketBridge(QObject* parent = nullptr);
+    // A profile's socket, owned by control, which hears of its lines, connection and attention; else, with none, the
+    // control socket's
+    explicit SocketBridge(QObject* parent = nullptr, ControlBridge* control = nullptr, const QString& profile = {}, int slot = 0);
     void setEngine(IEngine* engine) { mEngine = engine; }
+    IEngine* engine() const { return mEngine; }
     bool listen(const QString& path);
+    // Drops the UI and removes the socket, as the profile has closed
+    void close();
+    // The control socket's bridge while this profile is the front one, which a UI that left out profileSockets hears
+    // through, as one socket served it in version 13
+    void setMirror(SocketBridge* mirror) { mMirror = mirror; }
+    const QString& profileName() const { return mProfileName; }
+    int slot() const { return mSlot; }
+    QString socketPath() const;
+    qint64 lastSeq() const { return mNextSeq - 1; }
+    QString connection() const { return mStatus.value(QStringLiteral("connection")); }
+    const QHash<QString, QString>& statuses() const { return mStatus; }
 
     void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
     void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
@@ -61,7 +78,7 @@ public:
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
 
-private:
+protected:
     struct StoredLine
     {
         qint64 seq;
@@ -74,25 +91,24 @@ private:
     void onReadyRead();
     void onBytesWritten();
     void handleMessage(const QJsonObject& message);
-    void greet(const QJsonObject& hello);
+    // True once the request is answered here: one for the whole engine, or a refusal of a request sent on the wrong
+    // socket; false to pass it to the profile
+    virtual bool handleControl(const QString& type, const QJsonObject& message);
+    virtual void greet(const QJsonObject& hello);
     void sendLinesAfter(qint64 seq, bool replay);
     // Every status, then the input line's state and the script windows', as a UI attaching or catching up needs them
-    void sendState();
+    virtual void sendState();
+    void sendNotify(const QString& title, const QString& text);
     void sendFrame(const QJsonObject& message);
     // An answer to the request being handled: it carries that request's id as re, and is sent even to a lagging UI
     void sendReply(QJsonObject message);
     void sendError(const QString& message);
-    void sendProfiles();
-    void answerProfiles(const QString& request, const QString& problem);
     // An error naming the request, for a problem that is not empty
     void refuse(const QString& request, const QString& problem);
-    QString saveProfile(const QJsonObject& message);
-    QString openProfile(const QJsonObject& message);
     void complete(const QJsonObject& message);
     void setScreenSize(const QJsonObject& message);
     void getLink(const QJsonObject& message);
     void followLink(const QJsonObject& message);
-    void setAppState(const QJsonObject& message);
     QString setMainWindowSize(const QJsonObject& message);
     void getWindowText(const QJsonObject& message);
     QString placeUserWindow(const QJsonObject& message);
@@ -107,6 +123,8 @@ private:
     void dropClient(const QString& reason);
     void forgetClient();
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
+    // A profile's output goes to this UI: a profile socket's, or the control socket's that left out profileSockets
+    bool outputLive() const { return clientLive() && mProfileOutput; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
     static QJsonObject lineMessage(const StoredLine& stored, bool replay);
     static QJsonArray runsJson(const QList<ColorRun>& runs);
@@ -125,6 +143,12 @@ private:
     // The fields of a map or appMap message, all but its type; empty for a frame too large to send
     static QJsonObject mapMessage(const MapFrame& frame);
 
+    ControlBridge* mControl = nullptr;
+    SocketBridge* mMirror = nullptr;
+    // Empty and 0 for the control socket
+    QString mProfileName;
+    int mSlot = 0;
+    bool mProfileOutput = true;
     QLocalServer* mServer = nullptr;
     QPointer<QLocalSocket> mClient;
     bool mClientGreeted = false;

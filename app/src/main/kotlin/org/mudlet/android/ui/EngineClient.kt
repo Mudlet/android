@@ -364,7 +364,7 @@ object EngineClient {
             prefs().edit { putString(PREF_LAST_PROFILE, name) }
         }
         onAnswer(error)
-    }) { Requests.openProfile(name, password, true, it) }
+    }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
 
     /** Saves [profile], then opens it if the engine took it. */
     fun saveAndOpenProfile(profile: Profile, password: String?, onAnswer: (error: String?) -> Unit) = saveProfile(profile) { error ->

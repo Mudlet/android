@@ -216,6 +216,24 @@ def restarted_after_kill(port):
     e.status = {}
     e.wait(lambda m: m["t"] == "synced")
     check(e.status.get("restore") == f"reconnected {target}", f"a UI attaching later gets the restore status: {e.status.get('restore')}")
+
+    # The restore opens the profile before the control socket listens; a version 15 UI finds its socket all the same
+    e.client.close()
+    e.client = Client(SOCK, profile_sockets=True)
+    listed = e.wait(lambda m: m["t"] == "openProfiles")["profiles"]
+    e.wait(lambda m: m["t"] == "synced")
+    check([p["name"] for p in listed] == [PROFILE] and listed[0]["socket"] == os.path.join(TMP, "engine-p1.sock"),
+          f"the restored profile is listed with its socket: {listed}")
+    if listed and listed[0]["socket"]:
+        profile = Client(listed[0]["socket"])
+        frames = []
+        profile.wait_for(lambda m: m["t"] == "synced", collect=frames)
+        connection = [m["value"] for m in frames if m["t"] == "status" and m["key"] == "connection"]
+        check(frames[0].get("profile") == PROFILE and connection[-1:] == ["connected"], f"and serves it there: {frames[0]}, {connection}")
+        profile.close()
+    e.client.close()
+    e.client = Client(SOCK)
+    e.wait(lambda m: m["t"] == "synced")
     return e
 
 

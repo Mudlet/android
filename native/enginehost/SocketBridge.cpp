@@ -1,5 +1,6 @@
 #include "SocketBridge.h"
 
+#include "ControlBridge.h"
 #include "IEngine.h"
 
 #include <QCoreApplication>
@@ -139,10 +140,27 @@ QList<QJsonObject> changedByName(const QList<Info>& before, const QList<Info>& n
 
 } // namespace
 
-SocketBridge::SocketBridge(QObject* parent)
+namespace {
+
+// Each bridge's own, so that a UI that kept another's sequence numbers, as of a slot's earlier profile, replays from
+// scratch
+QString newInstance(int slot)
+{
+    static qint64 last = 0;
+    last = std::max(last + 1, QDateTime::currentMSecsSinceEpoch());
+    const QString instance = QStringLiteral("%1-%2").arg(QCoreApplication::applicationPid()).arg(last);
+    return slot == 0 ? instance : QStringLiteral("%1-%2").arg(instance).arg(slot);
+}
+
+} // namespace
+
+SocketBridge::SocketBridge(QObject* parent, ControlBridge* control, const QString& profile, int slot)
 : QObject(parent)
+, mControl(control)
+, mProfileName(profile)
+, mSlot(slot)
 , mServer(new QLocalServer(this))
-, mInstance(QStringLiteral("%1-%2").arg(QCoreApplication::applicationPid()).arg(QDateTime::currentMSecsSinceEpoch()))
+, mInstance(newInstance(slot))
 {
     connect(mServer, &QLocalServer::newConnection, this, &SocketBridge::onNewConnection);
 }
@@ -157,6 +175,28 @@ bool SocketBridge::listen(const QString& path)
         return false;
     }
     return true;
+}
+
+void SocketBridge::close()
+{
+    if (mClient) {
+        QLocalSocket* socket = mClient;
+        socket->disconnect(this);
+        connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
+        mClient = nullptr;
+        mClientGreeted = false;
+        // Graceful, unlike abort(), so the profile's last frames, as why it closed, are delivered first
+        socket->disconnectFromServer();
+        forgetClient();
+    }
+    const QString path = mServer->fullServerName();
+    mServer->close();
+    QLocalServer::removeServer(path);
+}
+
+QString SocketBridge::socketPath() const
+{
+    return mServer->fullServerName();
 }
 
 void SocketBridge::onNewConnection()
@@ -209,7 +249,7 @@ void SocketBridge::dropClient(const QString& reason)
 // map goes back to the window's own pixels, as the next UI may show it at another size, or not ask
 void SocketBridge::forgetClient()
 {
-    if (mEngine) {
+    if (mEngine && mProfileOutput) {
         mEngine->setAppMapSize(QSize(0, 0), 1);
         mEngine->setMapScale(1);
     }
@@ -252,6 +292,9 @@ void SocketBridge::onBytesWritten()
     }
     mClientLagging = false;
     sendState();
+    if (!mProfileOutput) {
+        return;
+    }
     sendLinesAfter(mLastSentSeq, false);
     if (!mClientLagging) {
         sendFrame(tailMessage());
@@ -269,13 +312,19 @@ void SocketBridge::greet(const QJsonObject& hello)
         after = std::clamp(qint64(hello.value(QLatin1String("lastSeq")).toDouble()), qint64(0), mNextSeq - 1);
     }
     mLastSentSeq = after;
-    sendFrame({{QStringLiteral("t"), QStringLiteral("hello")},
-               {QStringLiteral("v"), protocolVersion},
-               {QStringLiteral("pid"), qint64(QCoreApplication::applicationPid())},
-               {QStringLiteral("instance"), mInstance}});
+    QJsonObject reply{{QStringLiteral("t"), QStringLiteral("hello")},
+                      {QStringLiteral("v"), protocolVersion},
+                      {QStringLiteral("pid"), qint64(QCoreApplication::applicationPid())},
+                      {QStringLiteral("instance"), mInstance}};
+    if (!mProfileName.isEmpty()) {
+        reply.insert(QStringLiteral("profile"), mProfileName);
+    }
+    sendFrame(reply);
     sendState();
-    sendLinesAfter(after, true);
-    sendFrame(tailMessage());
+    if (mProfileOutput) {
+        sendLinesAfter(after, true);
+        sendFrame(tailMessage());
+    }
     sendFrame({{QStringLiteral("t"), QStringLiteral("synced")}, {QStringLiteral("seq"), mNextSeq - 1}});
 }
 
@@ -370,12 +419,11 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         return;
     }
 
-    if (!mEngine) {
-        return;
-    }
     mCurrentRequestId = message.value(QLatin1String("id"));
     if (type == QLatin1String("ping")) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("pong")}, {QStringLiteral("id"), mCurrentRequestId}});
+    } else if (handleControl(type, message) || !mEngine) {
+        // Answered, or there is no profile to take it
     } else if (type == QLatin1String("connect")) {
         const QJsonValue tls = message.value(QLatin1String("tls"));
         if (!tls.isUndefined() && !tls.isBool()) {
@@ -403,16 +451,6 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         getLink(message);
     } else if (type == QLatin1String("followLink")) {
         followLink(message);
-    } else if (type == QLatin1String("setAppState")) {
-        setAppState(message);
-    } else if (type == QLatin1String("listProfiles")) {
-        sendProfiles();
-    } else if (type == QLatin1String("saveProfile")) {
-        answerProfiles(type, saveProfile(message));
-    } else if (type == QLatin1String("deleteProfile")) {
-        answerProfiles(type, mEngine->deleteProfile(message.value(QLatin1String("name")).toString()));
-    } else if (type == QLatin1String("openProfile")) {
-        answerProfiles(type, openProfile(message));
     } else if (type == QLatin1String("setMainWindowSize")) {
         refuse(type, setMainWindowSize(message));
     } else if (type == QLatin1String("getWindowText")) {
@@ -465,41 +503,21 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     mCurrentRequestId = QJsonValue();
 }
 
-// Checked here rather than taken with defaults, as a profile stored with a wrong field would only fail later, at its connect
-QString SocketBridge::saveProfile(const QJsonObject& message)
+bool SocketBridge::handleControl(const QString& type, const QJsonObject&)
 {
-    const QJsonValue host = message.value(QLatin1String("host"));
-    const QJsonValue port = message.value(QLatin1String("port"));
-    const QJsonValue tls = message.value(QLatin1String("tls"));
-    const QJsonValue login = message.value(QLatin1String("login"));
-    const QJsonValue autoReconnect = message.value(QLatin1String("autoReconnect"));
-    if (!host.isString() || host.toString().trimmed().isEmpty()) {
-        return QStringLiteral("a profile needs a host");
+    static constexpr QLatin1StringView controlRequests[] = {QLatin1StringView("listProfiles"),
+                                                            QLatin1StringView("saveProfile"),
+                                                            QLatin1StringView("deleteProfile"),
+                                                            QLatin1StringView("openProfile"),
+                                                            QLatin1StringView("closeProfile"),
+                                                            QLatin1StringView("setFront"),
+                                                            QLatin1StringView("markSeen"),
+                                                            QLatin1StringView("setAppState")};
+    if (std::find(std::begin(controlRequests), std::end(controlRequests), type) == std::end(controlRequests)) {
+        return false;
     }
-    const double portNumber = port.toDouble(-1);
-    if (!port.isDouble() || portNumber != std::floor(portNumber) || portNumber < 1 || portNumber > 65535) {
-        return QStringLiteral("port must be a whole number from 1 to 65535");
-    }
-    if (!tls.isBool() || !autoReconnect.isBool()) {
-        return QStringLiteral("tls and autoReconnect must be true or false");
-    }
-    if (!login.isString()) {
-        return QStringLiteral("login must be a string");
-    }
-    return mEngine->saveProfile({message.value(QLatin1String("name")).toString(), host.toString().trimmed(), int(portNumber), tls.toBool(), login.toString().trimmed(), autoReconnect.toBool()});
-}
-
-QString SocketBridge::openProfile(const QJsonObject& message)
-{
-    const QJsonValue password = message.value(QLatin1String("password"));
-    const QJsonValue connectNow = message.value(QLatin1String("connect"));
-    if (!password.isUndefined() && !password.isNull() && !password.isString()) {
-        return QStringLiteral("password must be a string");
-    }
-    if (!connectNow.isUndefined() && !connectNow.isBool()) {
-        return QStringLiteral("connect must be true or false");
-    }
-    return mEngine->openProfile(message.value(QLatin1String("name")).toString(), password.toString(), connectNow.toBool(true));
+    sendError(QStringLiteral("%1: send it on the control socket").arg(type));
+    return true;
 }
 
 void SocketBridge::complete(const QJsonObject& message)
@@ -596,17 +614,6 @@ void SocketBridge::followLink(const QJsonObject& message)
     if (const QString problem = mEngine->followLink(*window, *id, item); !problem.isEmpty()) {
         sendError(QStringLiteral("followLink: %1").arg(problem));
     }
-}
-
-void SocketBridge::setAppState(const QJsonObject& message)
-{
-    const QJsonValue active = message.value(QLatin1String("active"));
-    const QJsonValue minimized = message.value(QLatin1String("minimized"));
-    if (!active.isBool() || !minimized.isBool()) {
-        sendError(QStringLiteral("setAppState: active and minimized must be true or false"));
-        return;
-    }
-    mEngine->setAppState(active.toBool(), minimized.toBool());
 }
 
 QString SocketBridge::setMainWindowSize(const QJsonObject& message)
@@ -757,29 +764,6 @@ void SocketBridge::refuse(const QString& request, const QString& problem)
     if (!problem.isEmpty()) {
         sendError(QStringLiteral("%1: %2").arg(request, problem));
     }
-}
-
-void SocketBridge::answerProfiles(const QString& request, const QString& problem)
-{
-    if (problem.isEmpty()) {
-        sendProfiles();
-    } else {
-        sendError(QStringLiteral("%1: %2").arg(request, problem));
-    }
-}
-
-void SocketBridge::sendProfiles()
-{
-    QJsonArray list;
-    for (const Profile& profile : mEngine->profiles()) {
-        list.append(QJsonObject{{QStringLiteral("name"), profile.name},
-                                {QStringLiteral("host"), profile.host},
-                                {QStringLiteral("port"), profile.port},
-                                {QStringLiteral("tls"), profile.tls},
-                                {QStringLiteral("login"), profile.login},
-                                {QStringLiteral("autoReconnect"), profile.autoReconnect}});
-    }
-    sendReply({{QStringLiteral("t"), QStringLiteral("profiles")}, {QStringLiteral("profiles"), list}});
 }
 
 void SocketBridge::sendError(const QString& message)
@@ -1044,11 +1028,17 @@ void SocketBridge::sendFrame(const QJsonObject& message)
 
 void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool isPrompt)
 {
+    if (mMirror) {
+        mMirror->line(text, runs, isPrompt);
+    }
     mScrollback.push_back({mNextSeq++, text, runs, isPrompt});
     if (qsizetype(mScrollback.size()) > scrollbackLines) {
         mScrollback.pop_front();
     }
-    if (clientLive()) {
+    if (mControl) {
+        mControl->profileChanged(this, ControlBridge::Change::lines);
+    }
+    if (outputLive()) {
         sendFrame(lineMessage(mScrollback.back(), false));
         mLastSentSeq = mScrollback.back().seq;
     }
@@ -1056,18 +1046,24 @@ void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool i
 
 void SocketBridge::tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt)
 {
+    if (mMirror) {
+        mMirror->tail(text, runs, isPrompt);
+    }
     mTail = {0, text, runs, isPrompt};
-    if (clientLive()) {
+    if (outputLive()) {
         sendFrame(tailMessage());
     }
 }
 
 void SocketBridge::cleared()
 {
+    if (mMirror) {
+        mMirror->cleared();
+    }
     mScrollback.clear();
     mClearedAfterSeq = mNextSeq - 1;
     mTail = {0, {}, {}, false};
-    if (clientLive()) {
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("clear")}});
     }
 }
@@ -1078,34 +1074,55 @@ void SocketBridge::notify(const QString& title, const QString& text)
     // Posted here, not in the UI, so tells still arrive while the UI process is frozen or dead
     AndroidNotifier::postTell(title, text);
 #endif
-    if (clientLive()) {
+    sendNotify(title, text);
+    if (mMirror) {
+        mMirror->sendNotify(title, text);
+    }
+}
+
+void SocketBridge::sendNotify(const QString& title, const QString& text)
+{
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("notify")}, {QStringLiteral("title"), title}, {QStringLiteral("text"), text}});
     }
 }
 
 void SocketBridge::status(const QString& key, const QString& value)
 {
+    if (mMirror) {
+        mMirror->status(key, value);
+    }
+    const bool connectionChanged = key == QLatin1String("connection") && mStatus.value(key) != value;
     mStatus.insert(key, value);
+    if (mControl && connectionChanged) {
+        mControl->profileChanged(this, ControlBridge::Change::connection);
+    }
     // A reply is sent even to a lagging UI, which would otherwise wait for it forever
-    if (clientLive() || (replying() && mClient && mClientGreeted)) {
+    if (outputLive() || (replying() && mProfileOutput && mClient && mClientGreeted)) {
         sendReply({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), key}, {QStringLiteral("value"), value}});
     }
 }
 
 void SocketBridge::hiddenInput(bool wanted)
 {
+    if (mMirror) {
+        mMirror->hiddenInput(wanted);
+    }
     if (wanted == mHiddenInput) {
         return;
     }
     mHiddenInput = wanted;
-    if (clientLive()) {
+    if (outputLive()) {
         sendFrame(hiddenInputMessage());
     }
 }
 
 void SocketBridge::history(const QStringList& lines)
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->history(lines);
+    }
+    if (outputLive()) {
         sendFrame(historyMessage(lines));
     }
 }
@@ -1113,7 +1130,10 @@ void SocketBridge::history(const QStringList& lines)
 // Not kept: a UI that attaches later keeps what it has on its line
 void SocketBridge::commandLine(const QString& text)
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->commandLine(text);
+    }
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("commandLine")}, {QStringLiteral("text"), text}});
     }
 }
@@ -1121,17 +1141,23 @@ void SocketBridge::commandLine(const QString& text)
 // Not kept, as notify: a UI that attaches later has missed the moment it was for
 void SocketBridge::announce(const QString& text, bool assertive)
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->announce(text, assertive);
+    }
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("announce")}, {QStringLiteral("text"), text}, {QStringLiteral("assertive"), assertive}});
     }
 }
 
 void SocketBridge::linksChanged(const QList<int>& ids)
 {
+    if (mMirror) {
+        mMirror->linksChanged(ids);
+    }
     if (ids.isEmpty()) {
         return;
     }
-    if (clientLive()) {
+    if (outputLive()) {
         sendFrame(linksChangedMessage(ids));
     } else {
         mLinksMissed = true;
@@ -1141,7 +1167,13 @@ void SocketBridge::linksChanged(const QList<int>& ids)
 // Not kept, as announce: the moment it asked for has passed for a UI that attaches later
 void SocketBridge::attention(int ms)
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->attention(ms);
+    }
+    if (mControl) {
+        mControl->profileChanged(this, ControlBridge::Change::attention);
+    }
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("attention")}, {QStringLiteral("ms"), ms}});
     }
 }
@@ -1149,7 +1181,10 @@ void SocketBridge::attention(int ms)
 // Not kept: Mudlet's copy of the line is already empty, and a UI that attaches later keeps what it has on its line
 void SocketBridge::moveTypedLine()
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->moveTypedLine();
+    }
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("moveTypedLine")}});
     }
 }
@@ -1158,6 +1193,9 @@ void SocketBridge::moveTypedLine()
 // windows so that the UI knows its window first; a UI that attaches or drains gets them all
 void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels, const QList<TextBoxInfo>& textBoxes)
 {
+    if (mMirror) {
+        mMirror->windows(windows, labels, textBoxes);
+    }
     using Key = std::pair<QString, QString>;
     QHash<Key, const ScriptWindowInfo*> before;
     for (const ScriptWindowInfo& window : std::as_const(mWindows)) {
@@ -1184,7 +1222,7 @@ void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<L
     mWindows = windows;
     mLabels = labels;
     mTextBoxes = textBoxes;
-    if (!clientLive()) {
+    if (!outputLive()) {
         return;
     }
     if (!changed.isEmpty() || !removed.isEmpty()) {
@@ -1226,18 +1264,24 @@ void SocketBridge::setTextBoxText(const QJsonObject& message)
 // Not kept: a UI that attaches or drains gets every console's from IEngine::windowText()
 void SocketBridge::windowText(const QString& window, const WindowText& text)
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->windowText(window, text);
+    }
+    if (outputLive()) {
         sendFrame(windowTextMessage(window, text));
     }
 }
 
 void SocketBridge::mainArea(const MainArea& area)
 {
+    if (mMirror) {
+        mMirror->mainArea(area);
+    }
     if (mMainArea == area) {
         return;
     }
     mMainArea = area;
-    if (clientLive()) {
+    if (outputLive()) {
         sendFrame(mainAreaMessage(area));
     }
 }
@@ -1245,23 +1289,35 @@ void SocketBridge::mainArea(const MainArea& area)
 // Not kept, as commandLine is not
 void SocketBridge::windowCommandLine(const QString& name, const QString& text)
 {
-    if (clientLive()) {
+    if (mMirror) {
+        mMirror->windowCommandLine(name, text);
+    }
+    if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("windowCommandLine")}, {QStringLiteral("name"), name}, {QStringLiteral("text"), text}});
     }
 }
 
 void SocketBridge::buttonBars(const QList<ButtonBar>& bars)
 {
+    if (mMirror) {
+        mMirror->buttonBars(bars);
+    }
     sendIfChanged(mButtonBars, buttonBarsMessage(bars));
 }
 
 void SocketBridge::commands(const QList<AddonCommandInfo>& commands)
 {
+    if (mMirror) {
+        mMirror->commands(commands);
+    }
     sendIfChanged(mCommands, commandsMessage(commands));
 }
 
 void SocketBridge::map(const std::optional<MapFrame>& frame)
 {
+    if (mMirror) {
+        mMirror->map(frame);
+    }
     // The mapper's window going is told by windows, so nothing is sent for it
     QJsonObject message = frame ? mapMessage(*frame) : QJsonObject();
     if (message.isEmpty()) {
@@ -1275,6 +1331,9 @@ void SocketBridge::map(const std::optional<MapFrame>& frame)
 // Sent with nothing to draw too, as only this tells the UI to take down what it drew
 void SocketBridge::appMap(const std::optional<MapFrame>& frame)
 {
+    if (mMirror) {
+        mMirror->appMap(frame);
+    }
     QJsonObject message = frame ? mapMessage(*frame) : QJsonObject();
     if (message.isEmpty()) {
         message = mapMessage(MapFrame{{}, QSize(0, 0), true});
@@ -1285,6 +1344,9 @@ void SocketBridge::appMap(const std::optional<MapFrame>& frame)
 
 void SocketBridge::mapDownload(const MapDownload& download)
 {
+    if (mMirror) {
+        mMirror->mapDownload(download);
+    }
     sendIfChanged(mMapDownload,
                   {{QStringLiteral("t"), QStringLiteral("mapDownload")},
                    {QStringLiteral("offered"), download.offered},
@@ -1313,7 +1375,7 @@ void SocketBridge::sendIfChanged(QJsonObject& kept, QJsonObject message)
         return;
     }
     kept = std::move(message);
-    if (clientLive()) {
+    if (outputLive()) {
         sendFrame(kept);
     }
 }

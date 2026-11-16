@@ -344,7 +344,7 @@ class ProfileSession internal constructor(
         if (!Settings.awaitsDefaults(name)) return refreshSettings()
         val id = newRequestId()
         defaultsRequests.add(id)
-        if (!sendSettings(Requests.setSettings(Settings.mudletSettings.associate { it.key to it.toMudlet(it.value) }, id))) defaultsRequests.remove(id)
+        if (!sendSettings(Requests.setSettings(Settings.mudletSettings.associate { it.key to it.valueToMudlet() }, id))) defaultsRequests.remove(id)
     }
 
     private fun sendSettings(request: JSONObject): Boolean {

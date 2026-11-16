@@ -95,6 +95,9 @@ object Settings {
         /** [v] as Mudlet's `setConfig()` takes it and `getConfig()` gives it. */
         open fun toMudlet(v: T): Any = v as Any
 
+        /** [value] as Mudlet's `setConfig()` takes it. */
+        fun valueToMudlet(): Any = toMudlet(value)
+
         /** What `getConfig()` gave, or null for a value this setting cannot have. */
         abstract fun fromMudlet(v: Any): T?
 

@@ -211,8 +211,9 @@ fun InputLine(
     }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    // Read as the line is covered, before anything can move the focus; saved, as the map stays in front across a rotation
+    // Read as the line is covered, before the cover's focus properties take the focus away
     val focusedAsCovered = remember(covered) { focused }
+    // Saved, as the map stays in front across a rotation
     var refocus by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(covered) {
         if (covered) {

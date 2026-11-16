@@ -74,9 +74,9 @@ import kotlin.math.min
 /**
  * The app's own map (docs/architecture.md, "The map behind the text"), against a fake engine: asked for at the
  * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; let go when the
- * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, where a
- * tap selects, a double tap walks, the buttons zoom and TalkBack's actions do the same, and Back sends it back; and the
- * room search, whose results centre the map on a room; and the download of the map the game offers.
+ * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, over the
+ * input line and the quick bar, where a tap selects, a double tap walks, the buttons zoom and TalkBack's actions do the
+ * same, and Back sends it back; and the room search, whose results centre the map on a room; and the download of the map the game offers.
  */
 @RunWith(AndroidJUnit4::class)
 class AppMapTest {

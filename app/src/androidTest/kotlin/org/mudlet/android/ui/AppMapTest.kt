@@ -51,6 +51,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -569,23 +570,27 @@ class AppMapTest {
         waitFor("the download says why it failed") { compose.onAllNodes(failed).fetchSemanticsNodes().isNotEmpty() }
         // Told once, by the Announcer, and not again by the text as a live region
         compose.onNode(failed).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
-        val told = compose.runOnIdle {
+        compose.runOnIdle {
             assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_download_failed, reason)))
             assertTrue("a failure interrupts TalkBack", Announcer.current!!.assertive)
-            Announcer.current!!.serial
         }
         checkAccessibility()
 
         // The UI went and came back to the same engine, which says the same again: shown, but not told again. The
         // refusal after it shows once the UI has read the frames before it.
+        val attaches = EngineClient.attachCount
         session.close()
         session = fake.engine.nextSession()
         val again = lastRequest("setAppMapSize", "the same engine is asked again when the UI comes back")
+        // Composed between losing the engine and reading its hello, the game screen tells TalkBack it waits for the
+        // engine, which is up to the threads: what was told once the UI is attached again is the baseline
+        waitFor("the UI is attached again") { EngineClient.attachCount > attaches }
+        val back = compose.runOnIdle { Announcer.current }
         session.send(mapDownload("failed", error = reason))
         session.refuse(again, "read")
         waitFor("the UI read what the engine said again") { compose.onAllNodes(hasText(string(R.string.map_refused, "read"))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(failed).assertIsDisplayed()
-        compose.runOnIdle { assertEquals("a UI that comes back is not told again", told, Announcer.current!!.serial) }
+        compose.runOnIdle { assertSame("a UI that comes back is not told again: ${Announcer.current?.text}", back, Announcer.current) }
         // The refusal is at the map's bottom, which the offer in its middle could reach: the offer waits in the bar
         assertTrue("with a refusal shown the offer is not in the map's middle", compose.onAllNodes(offered).fetchSemanticsNodes().isEmpty())
         compose.onNode(download).assertIsDisplayed()

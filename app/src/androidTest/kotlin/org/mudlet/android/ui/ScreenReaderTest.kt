@@ -265,7 +265,7 @@ class ScreenReaderTest {
         activate(hasText(string(R.string.settings_display)))
         session.receive("getSettings")
         val width = hasContentDescription(string(R.string.settings_undo_wrap_width)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
-        compose.onNode(width).performScrollTo().performTouchInput { swipeRight(startX = centerX, endX = right, durationMillis = 500) }
+        compose.onNode(width).performScrollTo().performTouchInput { swipeRight(startX = centerX, endX = (centerX + right) / 2, durationMillis = 500) }
         val slid = values(session.receive("setSettings"))["undoServerWrapWidth"] as Int
         assertTrue("slid to $slid", slid > 80)
         session.assertNoRequest("setSettings", 500)

@@ -205,6 +205,7 @@ object EngineClient {
      */
     fun showProfile(name: String, onShown: () -> Unit) {
         wantedFront = null
+        if (name.isNotEmpty()) return
         if (setFront(name)) {
             onShown()
         } else if (!openProfilesKnown) {

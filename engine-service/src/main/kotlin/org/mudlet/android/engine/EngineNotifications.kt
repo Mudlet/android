@@ -162,7 +162,6 @@ object EngineNotifications {
             .setContentText(text)
             .setAutoCancel(true)
             .setContentIntent(openUi(context, profile, id))
-        if (profile.isNotEmpty()) n.setSubText(profile).setGroup(profile)
         NotificationManagerCompat.from(context).notify(id, n.build())
         if (profile.isEmpty()) return
         // Android bundles a group's notifications only under its summary

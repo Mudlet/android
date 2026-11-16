@@ -115,7 +115,7 @@ class EngineService : QtServiceBase() {
     }
 
     private fun leaveForeground() {
-        if (!EngineNotifications.engineShown) return
+        if (EngineNotifications.engineShown || !EngineNotifications.engineShown) return
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         EngineNotifications.engineShown = false
     }

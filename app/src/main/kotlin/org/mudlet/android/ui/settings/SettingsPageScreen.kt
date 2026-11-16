@@ -179,7 +179,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
             }
             Slider(
                 value = size.toFloat(),
-                onValueChange = { dragged = it.roundToInt() },
+                onValueChange = { owner.change(setting, it.roundToInt()) },
                 onValueChangeFinished = {
                     dragged?.let { owner.change(setting, it) }
                     dragged = null

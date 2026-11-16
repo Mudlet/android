@@ -220,7 +220,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         ),
         SettingEntry.Switch(
             SettingsCategory.ADVANCED,
-            Settings.lazyTriggerVariables,
+            Settings.forceGaOff,
             R.string.settings_lazy_trigger_variables,
             R.string.settings_lazy_trigger_variables_hint,
             R.string.settings_lazy_trigger_variables_keywords,

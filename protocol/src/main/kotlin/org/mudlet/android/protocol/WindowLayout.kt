@@ -31,6 +31,12 @@ data class PlacedWindow(val window: ScriptWindow, val rect: PxRect, val full: Px
 /** A docked user window's title row, with its close button, above its content. */
 data class DockHeader(val window: ScriptWindow, val rect: PxRect)
 
+/**
+ * An MXP frame's tab header ([ScriptWindow.frameTabs]), drawn at [rect] along the top of the page in front, or of the
+ * pane that page is open in.
+ */
+data class FrameTabStrip(val frame: ScriptWindow, val tabs: ScriptWindow.FrameTabs, val rect: PxRect)
+
 /** The fitted layout, or the stacked; [AUTO] picks fitted from [WindowLayout.FITTED_MIN_WIDTH_DP] up. */
 enum class LayoutMode { AUTO, FITTED, STACKED }
 
@@ -43,6 +49,8 @@ enum class LayoutMode { AUTO, FITTED, STACKED }
  * borders above and below it, and the consoles and maps of the left and right borders and the docks are pages. A page
  * shows in a pane over the console, chosen by the window switcher; floating user windows, docks beyond the room for
  * them, and the docked map are pages in either layout.
+ *
+ * Only the page in front of an MXP frame's tab header is shown, so only it is placed, with the header's tabs above it.
  */
 data class WindowLayout(
     val fitted: Boolean,
@@ -58,10 +66,22 @@ data class WindowLayout(
     val pages: List<ScriptWindow>,
     /** The selected page's pane, its header row at the top, or null for no page selected. */
     val pane: PxRect?,
-    /** The selected page's window and its children, inside [pane] below the header. */
+    /** The selected page's window and its children, inside [pane] below the header, and below its [paneFrameTabs]. */
     val paneWindows: List<PlacedWindow>,
     /** Where the user windows are, by name, for `placeUserWindow`; empty while [scale] is null. */
     val placements: Map<String, Placement>,
+    /** The tab headers of the MXP frames in [windows], each above the page in front, drawn over the windows. */
+    val frameTabs: List<FrameTabStrip> = emptyList(),
+    /**
+     * The tab headers drawn in the pane: first that of the MXP frame whose page in front is open in it, at its top below
+     * its header, then those of the MXP frames in [paneWindows], each above its page in front.
+     */
+    val paneFrameTabs: List<FrameTabStrip> = emptyList(),
+    /**
+     * The page open in the pane: [Area.selectedPage], or, for a page of an MXP frame's tabs that another page has
+     * come in front of, that one; null for none.
+     */
+    val selectedPage: WindowKey? = null,
 ) {
     /** The size of the game area, in pixels, and what the layout depends on from the app. */
     data class Area(
@@ -70,7 +90,7 @@ data class WindowLayout(
         val fitted: Boolean,
         /** The width of a character of the app's console, in pixels. */
         val appCharWidth: Float,
-        /** The height of a dock's title row and of the pane's header. */
+        /** The height of a dock's title row, of the pane's header and the least of an MXP frame's tab header. */
         val headerHeight: Float,
         val selectedPage: WindowKey?,
     )
@@ -86,6 +106,9 @@ data class WindowLayout(
         // Stacked, the windows above and below the console take at most this share of the area's height
         private const val MAX_BANDS_SHARE = 0.5f
 
+        // The height of an MXP frame's tab header in Mudlet's pixels, which its pages' geometry is below
+        private const val FRAME_TABS_HEIGHT = 30f
+
         /** Whether [mode] draws a game area [widthDp] wide fitted. */
         fun fitted(mode: LayoutMode, widthDp: Float): Boolean = when (mode) {
             LayoutMode.FITTED -> true
@@ -99,6 +122,8 @@ data class WindowLayout(
             val tree = Tree(state.windows)
             val pages = ArrayList<ScriptWindow>()
             val placed = ArrayList<PlacedWindow>()
+            // What may show of each window placed, for its tab header should it be an MXP frame's page
+            val clips = HashMap<WindowKey, PxRect>()
             val headers = ArrayList<DockHeader>()
             val placements = HashMap<String, Placement>()
             val mainArea = state.mainArea?.takeIf { it.w > 0 && it.h > 0 }
@@ -108,7 +133,8 @@ data class WindowLayout(
             fun place(window: ScriptWindow, full: PxRect, clip: PxRect) {
                 val shown = full.intersect(clip) ?: return
                 placed.add(PlacedWindow(window, shown, full))
-                tree.placeChildren(window, full, shown, placed)
+                clips[window.key] = clip
+                tree.placeChildren(window, full, shown, placed, clips)
             }
 
             fun placeUserWindow(window: ScriptWindow, rect: PxRect) {
@@ -206,12 +232,42 @@ data class WindowLayout(
             // A page's window fills the pane below its header
             val paneContent = PxRect(pane.x, pane.y + area.headerHeight, pane.w, max(0f, pane.h - area.headerHeight))
             for (page in pages) if (page.kind == WindowKind.USER_WINDOW) placeUserWindow(page, paneContent)
-            val selected = pages.firstOrNull { it.key == area.selectedPage }
-            val paneWindows = ArrayList<PlacedWindow>()
-            if (selected != null && paneContent.h > 0) {
-                paneWindows.add(PlacedWindow(selected, paneContent, paneContent))
-                tree.placeChildren(selected, paneContent, paneContent, paneWindows)
+            val tabHeaders = state.windows.mapNotNull { w -> w.frameTabs?.let { w to it } }
+            fun headerShowing(page: ScriptWindow) = tabHeaders.firstOrNull { (_, tabs) -> page.kind == WindowKind.MXP_FRAME && tabs.front.name == page.name }
+
+            // The page now in front of the tabs that [key] is a page of, should another of them have come in front of it
+            fun frontPageOfTabsHolding(key: WindowKey): ScriptWindow? {
+                if (key.kind != WindowKind.MXP_FRAME) return null
+                val tabs = tabHeaders.firstOrNull { (_, t) -> t.pages.any { it.name == key.name } }?.second ?: return null
+                return pages.firstOrNull { it.key == WindowKey(tabs.front.name, WindowKind.MXP_FRAME) }
             }
+            val selected = pages.firstOrNull { it.key == area.selectedPage } ?: area.selectedPage?.let(::frontPageOfTabsHolding)
+
+            // An MXP frame's tabs go above the page in front, as tall as Mudlet's scaled but never less than a header,
+            // and no higher than the page may show
+            fun tabsAbove(p: PlacedWindow): FrameTabStrip? {
+                val (frame, tabs) = headerShowing(p.window) ?: return null
+                val h = max(area.headerHeight, if (p.window.h > 0) FRAME_TABS_HEIGHT * p.full.h / p.window.h else FRAME_TABS_HEIGHT)
+                val top = clips[p.window.key]?.y ?: p.rect.y
+                return FrameTabStrip(frame, tabs, PxRect(p.rect.x, max(p.full.y - h, top), p.rect.w, h))
+            }
+
+            val paneWindows = ArrayList<PlacedWindow>()
+            val paneFrameTabs = ArrayList<FrameTabStrip>()
+            if (selected != null && paneContent.h > 0) {
+                var content = paneContent
+                val header = headerShowing(selected)
+                if (header != null && paneContent.h > area.headerHeight) {
+                    paneFrameTabs.add(FrameTabStrip(header.first, header.second, paneContent.copy(h = area.headerHeight)))
+                    content = PxRect(paneContent.x, paneContent.y + area.headerHeight, paneContent.w, paneContent.h - area.headerHeight)
+                }
+                paneWindows.add(PlacedWindow(selected, content, content))
+                tree.placeChildren(selected, content, content, paneWindows, clips)
+                // Those of the frames opened in the page
+                paneWindows.drop(1).mapNotNullTo(paneFrameTabs, ::tabsAbove)
+            }
+
+            val frameTabs = placed.mapNotNull(::tabsAbove)
             return WindowLayout(
                 fitted = area.fitted,
                 scale = scale,
@@ -223,6 +279,9 @@ data class WindowLayout(
                 pane = if (selected != null) pane else null,
                 paneWindows = paneWindows,
                 placements = placements,
+                frameTabs = frameTabs,
+                paneFrameTabs = paneFrameTabs,
+                selectedPage = selected?.key,
             )
         }
 
@@ -239,8 +298,8 @@ data class WindowLayout(
 
         fun children(parent: WindowKey?): List<ScriptWindow> = byParent[parent].orEmpty()
 
-        /** Adds [parent]'s shown children, and theirs, as drawn in [rect] and cut to [clip]. */
-        fun placeChildren(parent: ScriptWindow, rect: PxRect, clip: PxRect, out: MutableList<PlacedWindow>) {
+        /** Adds [parent]'s shown children, and theirs, as drawn in [rect] and cut to [clip], and what may show of each to [clips]. */
+        fun placeChildren(parent: ScriptWindow, rect: PxRect, clip: PxRect, out: MutableList<PlacedWindow>, clips: MutableMap<WindowKey, PxRect>) {
             val sx = if (parent.w > 0) rect.w / parent.w else 1f
             val sy = if (parent.h > 0) rect.h / parent.h else 1f
             for (child in children(parent.key)) {
@@ -248,7 +307,8 @@ data class WindowLayout(
                 val full = PxRect(rect.x + child.x * sx, rect.y + child.y * sy, child.w * sx, child.h * sy)
                 val shown = full.intersect(clip) ?: continue
                 out.add(PlacedWindow(child, shown, full))
-                placeChildren(child, full, shown, out)
+                clips[child.key] = clip
+                placeChildren(child, full, shown, out, clips)
             }
         }
     }

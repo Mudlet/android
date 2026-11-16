@@ -120,7 +120,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
      * An `error` from the engine: the refusal of a map request is shown with the map that asked, this or the session's
      * [AppMapClient]'s; that of [setMapScale] is only logged. A link's is only logged too, as a link a script let go of
      * or disabled, or one the player tapped as it went, is no fault of theirs; so is a text box's, which a script made
-     * read-only or hid as the player typed.
+     * read-only or hid as the player typed, and an MXP frame tab's, whose page the game closed or whose frame it hid as
+     * the player tapped.
      */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
@@ -132,6 +133,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
         // The map stays at the scale the engine last took
         if (request == "setMapScale") Log.w(TAG, "the map's scale: ${message.message}")
+        // The tabs follow the engine's windows, so they still show the page in front
+        if (request == "selectFrameTab") Log.w(TAG, "an MXP frame's tab: ${message.message}")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -226,6 +229,11 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     /** The close button of a user window: the engine hides it. */
     fun closeUserWindow(name: String) {
         session.send(Requests.closeUserWindow(name))
+    }
+
+    /** A tap on the tab of an MXP frame's page [name]: the engine brings it forward. */
+    fun selectFrameTab(name: String) {
+        session.send(Requests.selectFrameTab(name))
     }
 
     /** Enter on the command line [name]. False as for [ProfileSession.send]. */

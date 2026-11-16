@@ -96,6 +96,19 @@ class ScriptWindowsTest {
     }
 
     @Test
+    fun anMxpFramesPageIsTitledAsItsTab() {
+        val tabs = ScriptWindow.FrameTabs(listOf(ScriptWindow.FrameTabs.Page("tabs", "Tabs"), ScriptWindow.FrameTabs.Page("chat", "Chat")), 1)
+        val header = window("tabs", WindowKind.MXP_FRAME).copy(frameTabs = tabs)
+        val chat = window("chat", WindowKind.MXP_FRAME)
+        val state = ScriptWindows().after(windows(header, chat, window("side", WindowKind.MXP_FRAME), window("chat")))
+        assertEquals("Tabs", state.tabTitleOf(header))
+        assertEquals("Chat", state.tabTitleOf(chat))
+        // A frame that is no page, and a console that shares a page's name
+        assertNull(state.tabTitleOf(state.windows[2]))
+        assertNull(state.tabTitleOf(state.windows[3]))
+    }
+
+    @Test
     fun fullReplacesEverythingAndDropsTheTextOfConsolesNoLongerThere() {
         val state = ScriptWindows()
             .after(windows(window("a"), window("b")))

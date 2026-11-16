@@ -621,7 +621,10 @@ device shows, below the UI's debug hook:
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
-  docked map as a page; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
+  docked map as a page; an MXP frame's tabs (`ScriptFrameTabsTest`): each page a tab by its title, at least 48 dp,
+  selected for the page in front, a tap on another sending `selectFrameTab` and the page brought forward then drawn,
+  and stacked, the page called by its tab's title, the tabs at the top of the pane, which stays open on that page,
+  with its chip in the switcher selected; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
   the title bar's toggle bringing it to the front, over the input line and the quick bar down to the connection bar,
   with the input line's keyboard gone and its focus back after, where taps, the zoom buttons, the edit switch and
@@ -1322,6 +1325,15 @@ Item 13 of the on-device checklist covers this.
     - With a hardware keyboard, `lua setTextEditTabMovesFocus("notes", true)`: Tab moves on instead of typing a tab.
     - With TalkBack on: swiping reaches "notes" after the console's controls, read as "Write here" and an edit box;
       read-only, as "Write here, read only"; "tiny", touched easily though drawn small, reads as "tiny".
+28. MXP frame tabs, with the libmudlet APK: `lua setConfig("specialForceMXPProcessorOn", true)
+    feedTriggers([[<FRAME Name="tabs" Title="Tabs" Align="left" Width="300" Height="300">]] .. "\n")
+    feedTriggers([[<FRAME Name="chat" Title="Chat" DOCK="tabs" Align="client">]] .. "\n")`, on one line.
+    - Fitted (a tablet, or a phone in landscape): a row of tabs, "Tabs" and "Chat", along the frame's top, "Chat"
+      selected. A tap on "Tabs" selects it and shows the frame's own console there, and a tap on "Chat" goes back.
+    - Stacked (a phone in portrait): the frame is a tab of the window switcher; opened, its tabs are at the top of the
+      pane, and a tap on the other keeps the pane open on that page.
+    - With TalkBack on: swiping reaches "Tabs of Tabs" after the console's controls, then each tab read by its title
+      as a tab, the one in front as selected.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

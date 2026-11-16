@@ -86,6 +86,18 @@ data class HistoryPosition(val position: Int = -1, val draft: String = "") {
 
 private enum class Notice { NOT_SENT, NO_COMPLETION }
 
+// Where the field and its completion button are, so that a tap on the button is left to the button
+private class Placed {
+    var field: LayoutCoordinates? = null
+    var button: LayoutCoordinates? = null
+
+    fun onButton(position: Offset): Boolean {
+        val field = field ?: return false
+        val button = button ?: return false
+        return field.isAttached && button.isAttached && field.localBoundingBoxOf(button).contains(position)
+    }
+}
+
 /**
  * The line the player types commands in. The keyboard's Send key or the Send button hands the line to [onSend] and
  * leaves the keyboard open; an `on...` that returns false could not send its request, and the line then stays.
@@ -188,14 +200,7 @@ fun InputLine(
         focus.requestFocus()
     }
 
-    // The field's and its completion button's, to leave a tap on the button to the button
-    val placed = remember { arrayOfNulls<LayoutCoordinates>(2) }
-
-    fun onCompleteButton(position: Offset): Boolean {
-        val (field, button) = placed
-        if (field == null || button == null || !field.isAttached || !button.isAttached) return false
-        return field.localBoundingBoxOf(button).contains(position)
-    }
+    val placed = remember { Placed() }
 
     val inputChanged by rememberUpdatedState(onInputChanged)
     LaunchedEffect(hiddenInput) {
@@ -290,9 +295,9 @@ fun InputLine(
                             true
                         },
                     )
-                }.onPlaced { placed[0] = it }.pointerInput(line, ghost) {
+                }.onPlaced { placed.field = it }.pointerInput(line, ghost) {
                     if (ghost == null) return@pointerInput
-                    detectTapsAfterTheField(armed = { focused && !onCompleteButton(it) }) {
+                    detectTapsAfterTheField(armed = { focused && !placed.onButton(it) }) {
                         if (text.text.toString() == line && text.selection == TextRange(line.length)) accept()
                     }
                 }.onPreviewKeyEvent { event ->
@@ -312,7 +317,7 @@ fun InputLine(
                 },
                 label = { Text(stringResource(R.string.input_label)) },
                 trailingIcon = {
-                    IconButton({ complete() }, Modifier.onPlaced { placed[1] = it }) {
+                    IconButton({ complete() }, Modifier.onPlaced { placed.button = it }) {
                         Icon(painterResource(R.drawable.ic_keyboard_tab), stringResource(R.string.input_complete))
                     }
                 },

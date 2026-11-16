@@ -134,6 +134,23 @@ class GhostTextTest {
     }
 
     @Test
+    fun aTapThatFocusesTheLineOrIsOnItsCompleteButtonLeavesTheGhost() {
+        send("open door")
+        compose.onNode(input).performTextInput("op")
+        waitFor(ghost("open door"))
+        compose.onNode(button(R.string.input_complete)).performTouchInput { click() }
+        assertEquals("op", session.receive("complete").getString("text"))
+        compose.onNode(input).assert(editableText("op"))
+
+        // Onto the History button: a tap elsewhere on the screen need not take the focus from the line
+        compose.onNode(hasText(string(R.string.history_open)) and hasClickAction()).performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isEmpty() }
+        waitFor(ghost("open door"))
+        compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }
+        compose.onNode(input).assertIsFocused().assert(editableText("op"))
+    }
+
+    @Test
     fun talkBacksActionOnTheLineTakesTheGhost() {
         send("open door")
         compose.onNode(input).performTextInput("op")
@@ -191,7 +208,13 @@ class GhostTextTest {
 
         session.hiddenInput(true)
         waitFor(password)
-        val offersAGhost = SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions) or SemanticsMatcher.keyIsDefined(SemanticsProperties.StateDescription)
+        // The line's action and state for any suggestion, not just any action or state the masked field has of its own
+        val acceptPrefix = string(R.string.input_accept_suggestion, "")
+        val suggestionPrefix = string(R.string.input_suggestion, "")
+        val offersAGhost = SemanticsMatcher("offers a ghost") { node ->
+            node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label.startsWith(acceptPrefix) } ||
+                node.config.getOrNull(SemanticsProperties.StateDescription)?.startsWith(suggestionPrefix) == true
+        }
         assertNone(password and offersAGhost)
         // The start of a command the line would offer: nothing typed here reaches the suggestions
         compose.onNode(password).performTextInput("no")
@@ -218,7 +241,8 @@ class GhostTextTest {
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
-    private fun button(@StringRes id: Int) = hasContentDescription(string(id)) and hasClickAction()
+    // By its label alone: the Next button is disabled here, with nothing newer to go forward to
+    private fun button(@StringRes id: Int) = hasContentDescription(string(id))
 
     /** The input line while it offers TalkBack the action that takes the ghost, which gives [line]. */
     private fun ghost(line: String) = input and SemanticsMatcher("offers to accept '$line'") { node ->

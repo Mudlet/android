@@ -303,7 +303,7 @@ class GameSwitcherTest {
         beta.send(fake.engine.openProfilesMessage(close.opt("id")))
     }
 
-    // The screen is idle before the sheet has slid up and the keyboard the line had has gone down, so this waits for both
+    // Until the sheet's last row stops moving: the checks run before that saw it cut off at the screen's foot
     private fun openTheSheet() {
         activate(pill)
         val openAnother = hasText(string(R.string.game_open_another), substring = true) and hasClickAction()
@@ -373,7 +373,8 @@ class GameSwitcherTest {
             try {
                 roots[i].tryPerformAccessibilityChecks()
             } catch (e: AccessibilityViewCheckException) {
-                throw AssertionError("${e.message}\n${roots[i].printToString()}", e)
+                val elements = e.results.joinToString("\n") { "${it.element?.className} '${it.element?.contentDescription}' '${it.element?.text}'" }
+                throw AssertionError("${e.message}\n$elements\n${compose.onAllNodes(isRoot()).printToString()}", e)
             }
         }
     }

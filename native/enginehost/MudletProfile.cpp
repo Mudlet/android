@@ -28,7 +28,7 @@ using TextStyle = THeadlessSession::TextStyle;
 QString percentEncodedPattern(const QString& text)
 {
     static const QRegularExpression escapedPercent(QStringLiteral("\\\\%([0-9A-Fa-f]{2})"));
-    return QRegularExpression::escape(text).replace(escapedPercent, QStringLiteral("%(?i:\\1)"));
+    return QRegularExpression::escape(text).replace(escapedPercent, QStringLiteral("%\\1"));
 }
 
 // Mudlet's console message as the reason the map download from url failed: without its "[ ERROR ] - " tag, on one

@@ -110,10 +110,12 @@ class ScreenshotTest {
         waitFor(hasText(string(R.string.settings_search_all)))
         save("settings-search-$mode")
         compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
         activate(hasText(string(R.string.settings_appearance)))
         waitFor(hasText(string(R.string.settings_text_size)))
         save("settings-appearance-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_connection)))
         activate(hasText(string(R.string.settings_connection)))
         waitFor(hasText(string(R.string.settings_gmcp)))
         save("settings-connection-$mode")
@@ -164,6 +166,7 @@ class ScreenshotTest {
         if (mode == "light") {
             onATablet {
                 activate(hasContentDescription(string(R.string.settings_title)))
+                compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
                 activate(hasText(string(R.string.settings_appearance)))
                 waitFor(hasText(string(R.string.settings_text_size)))
                 save("settings-tablet-$mode")

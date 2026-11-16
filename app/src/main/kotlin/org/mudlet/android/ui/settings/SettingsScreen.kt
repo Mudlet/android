@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,9 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.SectionHeader
+
+/** The settings hub's test tag. */
+const val SETTINGS_HUB_TAG = "settingsHub"
 
 /**
  * A section of the settings hub: [game]'s categories, or, where it is null, the app's values of the game categories
@@ -72,7 +76,7 @@ fun SettingsScreen(game: String?, onBack: () -> Unit, onOpen: (SettingsPage) -> 
     val resources = LocalResources.current
     MudletScaffold(stringResource(R.string.settings_title), onBack = onBack) { padding ->
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
+            Modifier.fillMaxSize().padding(padding).testTag(SETTINGS_HUB_TAG),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

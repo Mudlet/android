@@ -305,7 +305,10 @@ class ScreenReaderTest {
         compose.onRoot().tryPerformAccessibilityChecks()
         val node = compose.onNode(label and hasClickAction())
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
-        if (scroll) node.performScrollTo()
+        if (scroll) {
+            if (compose.onAllNodes(label and hasClickAction()).fetchSemanticsNodes().isEmpty()) compose.scrollSettingsHubTo(label and hasClickAction())
+            node.performScrollTo()
+        }
         node.assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
         // The test's clock drives the composition: until it runs, a page it opened has not asked for the game's values
         compose.waitForIdle()

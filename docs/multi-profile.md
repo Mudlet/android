@@ -125,7 +125,7 @@ there gets `error`, as a control request sent on a profile socket does.
 
 - **The map.** Each profile's `map` and `appMap` come on its own socket and belong to its `ProfileSession`. Only the
   front profile is asked to render, so background games draw nothing. Whether the map is in front is per screen: after
-  a switch it stays in front if the new game has a map.
+  a switch it stays in front, with the new game's map, or its offer to download one where it has none.
 - **App state.** `setAppState` stays on the control socket. `active` false raises `sysApplicationFocusChangeEvent`
   once in every profile and saves them all; `minimized` goes to every session, so "notify on new data while minimized"
   shows as `attention`.

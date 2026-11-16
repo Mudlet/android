@@ -57,8 +57,8 @@ const val GAME_SHEET_TAG = "gameSheet"
  * Disconnect ([onDisconnect]); then a row for each of the open [games], in the order opened, the front one ticked, which
  * a tap brings to the front ([onSwitch]) and whose close button closes it ([onClose]) after asking first when it is
  * connected; last "Open another game" ([onOpenAnother]), which says why not once [EngineClient.MAX_OPEN_GAMES] are
- * open. What a button does closes the sheet, but closing a game, as do its close button, Back and a tap outside it,
- * each calling [onDismiss] once it has gone.
+ * open. Every button but a game's close button closes the sheet once it has acted, as do the sheet's own close
+ * button, Back and a tap outside it; [onDismiss] is called once it has gone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,7 +169,8 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
 @Composable
 private fun GameRow(name: String, state: ConnectionState, isFront: Boolean, onSwitch: () -> Unit, onClose: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        val description = stringResource(R.string.game_state, name, state.text())
+        val stateText = state.text()
+        val description = stringResource(R.string.game_state, name, stateText)
         Row(
             Modifier.weight(1f).heightIn(min = 56.dp)
                 .clickable(onClickLabel = stringResource(R.string.game_show), role = Role.Button, onClick = onSwitch)
@@ -185,7 +186,7 @@ private fun GameRow(name: String, state: ConnectionState, isFront: Boolean, onSw
                 Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     ConnectionIcon(state, size = 12.dp)
-                    Text(state.text(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stateText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
@@ -95,6 +97,14 @@ class GameSwitcherTest {
         assertEquals(ALPHA.name, beta.receive("setFront").getString("name"))
         waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
         checkAccessibility()
+
+        // The map in front stays there for the game switched to
+        val mapButton = hasContentDescription(string(R.string.app_map_show)) and isToggleable()
+        activate(mapButton)
+        runAction(pill, next(BETA.name))
+        assertEquals(BETA.name, beta.receive("setFront").getString("name"))
+        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
+        compose.onNode(mapButton).assertIsOn()
     }
 
     @Test
@@ -190,6 +200,8 @@ class GameSwitcherTest {
         runAction(pill, next(BETA.name))
         assertEquals(BETA.name, beta.receive("setFront").getString("name"))
         waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
+        // The game the sheet switched away from comes back without it
+        compose.onNode(sheet).assertDoesNotExist()
 
         openTheSheet()
         activate(hasContentDescription(string(R.string.game_close, ALPHA.name)))

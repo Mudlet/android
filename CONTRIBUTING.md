@@ -12,8 +12,14 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, the script windows' state and layout, what a label draws, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
+<<<<<<< HEAD
 | `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and `launcher-icons.py` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md) |
+=======
+| `scripts/` | Builds (APK, release, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `lint.sh` and the strings check it runs, `check-strings.py` |
+| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md) |
+| `crowdin.yml` | What Crowdin translates and where the translations go ([`docs/translations.md`](docs/translations.md)) |
+>>>>>>> 12eda10 (Translations: Crowdin, translator comments, the strings check, pseudo-locales)
 | `.github/` | The workflows (`ci.yml`, which calls `checks.yml`, `apks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
 
@@ -140,7 +146,7 @@ names the Mudlet commits.
 ## Lint
 
 ```sh
-scripts/lint.sh                  # ktlint, clang-format, ShellCheck and actionlint, as CI's Checks workflow
+scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint and strings, as CI's Checks workflow
 ./gradlew ktlintFormat           # fix the Kotlin
 FIX=1 scripts/lint.sh clang-format   # fix native/
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after scripts/build-apk.sh
@@ -148,7 +154,9 @@ FIX=1 scripts/lint.sh clang-format   # fix native/
 
 `scripts/lint.sh` installs clang-format, ShellCheck and actionlint from `scripts/lint-requirements.txt` into
 `.lint-venv` on first use. Android lint fails on a warning; `lint.xml` turns off a check only with a reason. Formatting
-is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editorconfig`) for Kotlin.
+is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editorconfig`) for Kotlin. The strings check
+(`scripts/check-strings.py`) fails on text written into the Kotlin and on a string in `strings.xml` without a comment
+for translators ([`docs/translations.md`](docs/translations.md)).
 
 ## Ground rules
 
@@ -164,6 +172,8 @@ is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editor
   without `ANDROID_OPENSSL_DIR`, and `scripts/check-apk.sh` checks both.
 - **A fix Mudlet needs goes to Mudlet/Mudlet as a pull request**, and is carried here, in the build scripts, until it
   is merged there (as `build-libmudlet.sh` does with the Lua 5.1 FORTIFY fix, Mudlet/Mudlet#12914).
+- **Every text a user sees or hears is in a `strings.xml`**, with a comment for translators right before it; the
+  translations come from Crowdin and are not edited here ([`docs/translations.md`](docs/translations.md)).
 - **Docs change with the code they describe**, in the same pull request.
 - **Build output stays out of git**; `.gitignore` covers what the commands here write.
 

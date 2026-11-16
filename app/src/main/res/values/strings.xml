@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The strings the app shows. app_name comes from app/build.gradle.kts (resValue), as the PTB has a name of its own. -->
+<!-- The strings the app shows, translated on Crowdin (docs/translations.md): each translatable one has a comment for
+     translators right before it. app_name comes from app/build.gradle.kts (resValue), as the PTB has a name of its own. -->
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The arrow button at the start of a screen's title bar, read by a screen reader: it goes back to the screen
+         before -->
     <string name="navigate_back">Back</string>
     <!-- On a wide screen, a profile's editor or a licence opens beside its list: the button at its top that closes
          it, read by TalkBack. %1$s is what it shows, as its title says: a game's name, say, or "New game" -->
@@ -8,19 +11,28 @@
 
     <!-- Shown before Android's own notification permission prompt, to say what the notifications are for -->
     <string name="notifications_explanation_title">Allow notifications?</string>
+    <!-- The text of that explanation dialog. A tell is a private message one player sends another in a MUD. -->
     <string name="notifications_explanation_text">While you use other apps, Mudlet keeps your game connected and your scripts running, and shows a notification you can quit it from. Your scripts can also notify you, for example of a tell.</string>
+    <!-- The explanation dialog's button that goes on to Android's notification permission prompt -->
     <string name="notifications_explanation_continue">Continue</string>
+    <!-- The explanation dialog's button that closes it without asking for the permission -->
     <string name="notifications_explanation_not_now">Not now</string>
 
+    <!-- The start screen's title: the list of the player's games (in Mudlet, a profile is a game and its settings) -->
     <string name="profiles_title">Profiles</string>
     <!-- On a wide screen, where a game's editor opens beside the list of games: what that space shows until one is picked -->
     <string name="profiles_pick">Pick a game to edit it, or add one.</string>
+    <!-- The profile list's text before the engine (the part of the app that runs the game's connection) has started -->
     <string name="profiles_waiting">Waiting for the engine…</string>
+    <!-- The profile list's text while the player has no games yet -->
     <string name="profiles_empty">No games yet. Add one with its address.</string>
+    <!-- The profile list's button that opens the editor for a new game -->
     <string name="profiles_add">Add a game</string>
     <!-- What TalkBack reads for a profile in the list: its name, then its address as host:port -->
     <string name="profile_description">%1$s, %2$s:%3$d</string>
+    <!-- A game's address in the profile list: %1$s is its host name, %2$d its port number -->
     <string name="profile_address">%1$s:%2$d</string>
+    <!-- A profile's button in the profile list that connects to its game and opens the game screen -->
     <string name="profile_connect">Connect</string>
     <!-- TalkBack's label for a profile's Connect button; %1$s is the profile's name -->
     <string name="profile_connect_to">Connect to %1$s</string>
@@ -28,28 +40,48 @@
     <string name="profile_edit">Edit %1$s</string>
     <!-- Why a profile request got no answer. The engine gives its own reasons, in English, for those it refuses -->
     <string name="profiles_error_not_attached">The engine is not running yet. Try again in a moment.</string>
+    <!-- Why a profile request got no answer: the engine (the part of the app that runs the game's connection) stopped
+         first -->
     <string name="profiles_error_engine_lost">The engine stopped before it answered. Try again.</string>
 
+    <!-- The title of the profile editor for a game not saved yet -->
     <string name="profile_new_title">New game</string>
+    <!-- The profile editor's field for the game's name, as the player wants it listed -->
     <string name="profile_name">Name</string>
+    <!-- The profile editor's field for the game's server address (host name), such as mud.example.com -->
     <string name="profile_host">Host</string>
+    <!-- The profile editor's field for the game's port number -->
     <string name="profile_port">Port</string>
+    <!-- Shown under the port field while what is typed there is not a valid port number -->
     <string name="profile_port_invalid">A port from 1 to 65535</string>
+    <!-- The profile editor's switch: connect to the game over an encrypted connection (TLS is the protocol's name) -->
     <string name="profile_tls">Secure connection (TLS)</string>
+    <!-- The profile editor's field for the name of the player's character, which the game asks for on logging in -->
     <string name="profile_login">Character name</string>
+    <!-- The profile editor's field for the character's password, which the game asks for on logging in -->
     <string name="profile_password">Password</string>
+    <!-- Shown under the empty password field when a password is already stored for this game (it is never shown) -->
     <string name="profile_password_stored">A password is stored. Type a new one to replace it.</string>
+    <!-- The profile editor's button that deletes the stored password -->
     <string name="profile_password_forget">Forget password</string>
+    <!-- Shown when saving a game worked but storing its password on the device did not -->
     <string name="profile_password_not_stored">The game was saved, but its password could not be stored.</string>
+    <!-- Shown when deleting the stored password did not work -->
     <string name="profile_password_not_forgotten">The password could not be forgotten.</string>
+    <!-- The profile editor's switch: connect to the game again by itself when the connection drops -->
     <string name="profile_auto_reconnect">Reconnect automatically</string>
+    <!-- The profile editor's button that saves the game -->
     <string name="profile_save">Save</string>
+    <!-- The profile editor's button that deletes the game, after a confirmation dialog -->
     <string name="profile_delete">Delete</string>
     <!-- The title of the dialog that confirms deleting a profile; %1$s is its name -->
     <string name="profile_delete_title">Delete %1$s?</string>
+    <!-- The text of the dialog that confirms deleting a profile -->
     <string name="profile_delete_text">Its settings, scripts and everything else Mudlet keeps for it on this device are deleted too.</string>
+    <!-- The button of the delete confirmation dialog that keeps the profile -->
     <string name="profile_delete_cancel">Cancel</string>
 
+    <!-- The game screen's title: the screen with the game's text, the command line and the connection bar -->
     <string name="game_title">Game</string>
 
     <!-- The About screen, opened from the profile list's top bar: the app's version, its engine, where their source
@@ -61,9 +93,12 @@
     <string name="about_engine_mudlet">Engine: Mudlet %1$s</string>
     <!-- %1$s is the start of the git commit (a hexadecimal identifier) of Mudlet's source code the engine was built from -->
     <string name="about_engine_commit">Built from Mudlet commit %1$s</string>
+    <!-- On the About screen, instead of the commit, when it is not known which Mudlet source code the engine was built
+         from -->
     <string name="about_engine_commit_unknown">Built from a Mudlet source tree whose commit is not known</string>
     <!-- Developer builds carry a small engine of the app's own instead of Mudlet -->
     <string name="about_engine_standin">Engine: the stand-in engine of developer builds, not Mudlet</string>
+    <!-- A heading on the About screen, above the text on the app's free software licence -->
     <string name="about_free_software_heading">Free software</string>
     <!-- The GNU General Public License (GPL) is the licence's name: keep it recognisable, and the version numbers as they are -->
     <string name="about_free_software">Mudlet is free software under the GNU General Public License, version 2 or later. Built together with Qt and OpenSSL, this app as a whole is distributed under version 3 of the GNU GPL: you may share and change it under its terms. It comes with no warranty.</string>
@@ -77,11 +112,15 @@
     <string name="about_qt_source">Source code of Qt %1$s</string>
     <!-- A button that opens the instructions for rebuilding the app with a changed Qt -->
     <string name="about_qt_relink">How to rebuild the app with your own Qt</string>
+    <!-- A heading on the About screen, above the list of the licences of everything the app contains -->
     <string name="about_licences_heading">Licences</string>
     <!-- Headings of the licence list -->
     <string name="about_group_app">This app, Mudlet and Qt</string>
+    <!-- A heading of the licence list: the native libraries, fonts and icons the app contains -->
     <string name="about_group_native">Libraries, fonts and icons built in</string>
+    <!-- A heading of the licence list: third-party code that Qt (a software framework) contains -->
     <string name="about_group_qt">Code from others inside Qt</string>
+    <!-- A heading of the licence list: the Android libraries the app uses -->
     <string name="about_group_android">Android libraries</string>
     <!-- A row of the licence list: %1$s is the version, %2$s the licence's SPDX identifier, such as MIT -->
     <string name="about_component_version_licence">%1$s · %2$s</string>
@@ -89,6 +128,7 @@
     <string name="about_open_licence">read its licence</string>
     <!-- On a wide screen, where a component's licence opens beside the licence list: what that space shows until one is picked -->
     <string name="about_pick">Pick a component to read its licence.</string>
+    <!-- Shown on the About screen while the licence list is read -->
     <string name="about_loading">Loading…</string>
     <!-- %1$s is the error, in English -->
     <string name="about_load_failed">The licence list could not be read: %1$s</string>
@@ -113,28 +153,42 @@
 
     <!-- The settings screen, reached from the title bar of the profile list and of the game screen -->
     <string name="settings_title">Settings</string>
+    <!-- The heading of the settings screen's section on the size of the game's text -->
     <string name="settings_text_size">Text size</string>
+    <!-- Under the text size setting, what it does -->
     <string name="settings_text_size_hint">The size of the game\'s text. Pinching the text with two fingers changes it too, and the system\'s font size scales it.</string>
     <!-- %1$d is the text size, a whole number (in sp, which players need not know) -->
     <string name="settings_text_size_value">Size %1$d</string>
+    <!-- The button, read by a screen reader, that makes the game's text smaller -->
     <string name="settings_text_smaller">Smaller text</string>
+    <!-- The button, read by a screen reader, that makes the game's text larger -->
     <string name="settings_text_larger">Larger text</string>
     <!-- A line of the kind a game sends, to show the text size -->
     <string name="settings_text_size_sample">You see a brass lantern here.</string>
+    <!-- The heading of the settings screen's section for players who use a screen reader such as TalkBack -->
     <string name="settings_screen_reader">Screen reader</string>
+    <!-- A switch in the Screen reader section: have the screen reader read new game text as it arrives -->
     <string name="settings_read_new_text">Read new text aloud</string>
+    <!-- Under "Read new text aloud", what the switch does -->
     <string name="settings_read_new_text_hint">While TalkBack is on, the game\'s new text is read out as it arrives.</string>
+    <!-- A switch in the Screen reader section: tell the games the player connects to that they use a screen reader -->
     <string name="settings_advertise_screen_reader">Tell games I use a screen reader</string>
+    <!-- Under "Tell games I use a screen reader", what the switch does -->
     <string name="settings_advertise_screen_reader_hint">Games that ask are told, and some then send text laid out for screen readers.</string>
     <!-- The settings screen's map section: whether the game's map is drawn faintly behind the game's text. The map
          button above the game's text brings it to the front either way. -->
     <string name="settings_map">Map</string>
+    <!-- The switch in the Map section: draw the game's map faintly behind the game's text -->
     <string name="settings_map_behind_text">Map behind the text</string>
+    <!-- Under "Map behind the text", what the switch does -->
     <string name="settings_map_behind_text_hint">The game\'s map shows faintly behind the game\'s text, following you. The map button brings it to the front.</string>
     <!-- The heading of three choices: what becomes of the empty lines a game sends -->
     <string name="settings_blank_lines">Blank lines from the game</string>
+    <!-- One of the choices for blank lines from the game: show them as they come -->
     <string name="settings_blank_lines_show">Show them</string>
+    <!-- One of the choices for blank lines from the game: leave them out -->
     <string name="settings_blank_lines_hide">Hide them</string>
+    <!-- One of the choices for blank lines from the game: show a line with a single space instead -->
     <string name="settings_blank_lines_space">Replace them with a space</string>
     <!-- The settings screen's section on how the app looks. On Android 12 and later only, which can colour apps
          from the wallpaper (Material You); the game's own colours never change with it. -->
@@ -146,8 +200,11 @@
 
     <!-- Asked once, the first time the app runs with TalkBack on -->
     <string name="screen_reader_offer_title">Tell games you use a screen reader?</string>
+    <!-- The text of that question, asked once when TalkBack is on -->
     <string name="screen_reader_offer_text">Games that ask are told, and some then send text laid out for screen readers. You can change this in the settings.</string>
+    <!-- The question's button that tells the games the player uses a screen reader -->
     <string name="screen_reader_offer_yes">Tell games</string>
+    <!-- The question's button that does not tell the games the player uses a screen reader -->
     <string name="screen_reader_offer_no">Don\'t tell</string>
 
     <!-- What TalkBack says for many game lines that came at once: %1$d is how many, %2$s the last few of them -->
@@ -158,6 +215,7 @@
 
     <!-- The game screen's console: the button back to the newest text, shown while the player is scrolled up -->
     <string name="console_jump_to_bottom">Jump to the bottom</string>
+    <!-- The same button once new lines came in while the player was scrolled up; %1$d is how many -->
     <plurals name="console_jump_new_lines">
         <item quantity="one">Jump to the bottom: %1$d new line</item>
         <item quantity="other">Jump to the bottom: %1$d new lines</item>
@@ -165,15 +223,24 @@
 
     <!-- The game screen's input line, where the player types commands for the game -->
     <string name="input_label">Command</string>
+    <!-- The input line's button that sends the typed command to the game, read by a screen reader -->
     <string name="input_send">Send</string>
+    <!-- The input line's up-arrow button, read by a screen reader: it puts the command typed before into the input
+         line -->
     <string name="input_history_previous">Previous command</string>
+    <!-- The input line's down-arrow button, read by a screen reader: it goes forward again through the commands typed
+         before -->
     <string name="input_history_next">Next command</string>
+    <!-- Shown under the input line when a command could not be sent; the engine is the part of the app that runs the
+         game's connection -->
     <string name="input_not_sent">Not sent: the app is not connected to the engine</string>
     <!-- The button, also the Tab key, that completes the word being typed from the words the game sent -->
     <string name="input_complete">Complete the word</string>
+    <!-- Shown under the input line when no word the game sent starts with what the player typed -->
     <string name="input_no_completion">No completion</string>
     <!-- The masked field that takes the input line's place while the game asks for a password -->
     <string name="input_password_label">Password</string>
+    <!-- The button, read by a screen reader, that closes the password field and brings the input line back -->
     <string name="input_password_close">Close the password field</string>
     <!-- A button above the input line that puts a suggested command, or word, on the line without sending it; %1$s is
          the command or word -->
@@ -185,21 +252,39 @@
     <!-- The row of buttons below the input line: the button that opens the command history, then a button for each
          command the player pinned, which sends it; %1$s is the command -->
     <string name="history_open">History</string>
+    <!-- A button below the input line for a command the player pinned, read by a screen reader: it sends the command;
+         %1$s is the command -->
     <string name="pinned_command">Pinned: %1$s</string>
     <!-- The command history: a sheet over the game screen, opened by the History button or Ctrl+R, that searches
          the commands the player sent; each row puts its command on the input line, and has buttons that send, pin
          or unpin, and forget it; %1$s is the command -->
     <string name="history_title">Command history</string>
+    <!-- The command history's button, read by a screen reader, that closes it -->
     <string name="history_close">Close the history</string>
+    <!-- The command history's search field: it finds the commands sent before that contain what is typed -->
     <string name="history_search">Search the history</string>
+    <!-- A heading in the command history, above the commands the player pinned -->
     <string name="history_pinned">Pinned</string>
+    <!-- A heading in the command history, above the commands sent before -->
     <string name="history_sent">Sent</string>
+    <!-- The command history's text while no command has been sent yet -->
     <string name="history_empty">No commands sent yet</string>
+    <!-- The command history's text when no command contains what is typed in its search field -->
     <string name="history_no_match">No command matches</string>
+    <!-- What a screen reader says tapping a row of the command history does ("Double tap to put it on the command
+         line"): it puts the row's command on the input line -->
     <string name="history_put_on_line">put it on the command line</string>
+    <!-- A row's button in the command history, read by a screen reader, that sends its command again; %1$s is the
+         command -->
     <string name="history_send">Send %1$s</string>
+    <!-- A row's button in the command history, read by a screen reader, that pins its command below the input line;
+         %1$s is the command -->
     <string name="history_pin">Pin %1$s</string>
+    <!-- A row's button in the command history, read by a screen reader, that unpins its command; %1$s is the command
+         -->
     <string name="history_unpin">Unpin %1$s</string>
+    <!-- A row's button in the command history, read by a screen reader, that deletes its command from the history; %1$s
+         is the command -->
     <string name="history_forget">Forget %1$s</string>
     <!-- Shown when the player tries to pin a command while as many are pinned as can be; %1$d is that number -->
     <plurals name="history_pins_full">
@@ -213,13 +298,19 @@
     <!-- The windows a game's scripts draw (mini consoles, user windows) and the window switcher. %1$s is the name the
          script gave the window, or a dock's title -->
     <string name="window_description">%1$s window</string>
+    <!-- The input line of a script's window, read by a screen reader; %1$s is the window's name -->
     <string name="window_command_line">Command line of %1$s</string>
+    <!-- The send button of a script's window's input line, read by a screen reader; %1$s is the window's name -->
     <string name="window_command_send">Send on %1$s</string>
+    <!-- The back button over a script's window shown full screen, read by a screen reader: it closes the window and
+         goes back to the game's text; %1$s is the window's name -->
     <string name="window_back_to_console">Close %1$s and go back to the console</string>
+    <!-- The button, read by a screen reader, that closes a script's window; %1$s is the window's name -->
     <string name="window_close">Close %1$s</string>
     <!-- TalkBack's actions on a link in a line of game text (in a mini console or user window). %1$s is the link's
          tool tip, or the link's own text where it has none -->
     <string name="console_link_follow">Follow link: %1$s</string>
+    <!-- TalkBack's action that opens the menu of a link in the game's text; %1$s is the link's tool tip or text -->
     <string name="console_link_menu">Menu of link: %1$s</string>
     <!-- What TalkBack reads for a blank line of a mini console or user window with "Blank lines from the game" on
          "Replace them with a space": the name of the space character -->
@@ -228,35 +319,61 @@
     <!-- A script's labels and gauges: the actions TalkBack offers on a label (%1$s is a link's text, as the script
          wrote it), and a gauge's value where it has no text of its own -->
     <string name="label_right_click">Right-click</string>
+    <!-- TalkBack's action that follows a link in a script's label; %1$s is the link's text, as the script wrote it -->
     <string name="label_follow_link">Follow link: %1$s</string>
+    <!-- A gauge's value, read by a screen reader where the gauge has no text of its own: %1$d is a whole number from 0
+         to 100, and %% the percent sign -->
     <string name="gauge_percent">%1$d%%</string>
 
     <!-- A script's button bars and the commands packages add (Mudlet's buttons and addCommand()). %1$s in
          bar_description is the bar's name; in bar_button_unnamed %1$d is the button's place in its bar or menu, from 1,
          and %2$s the bar's or the folder's name -->
     <string name="bar_description">%1$s button bar</string>
+    <!-- What a screen reader reads for a button of a script's button bar that has no name: %1$d is its place in its bar
+         or menu, from 1, and %2$s the bar's or the folder's name -->
     <string name="bar_button_unnamed">Button %1$d of %2$s</string>
+    <!-- What a screen reader says tapping a button with a menu in a script's button bar does ("Double tap to open its
+         menu") -->
     <string name="bar_open_menu">Open its menu</string>
+    <!-- The first row of a submenu of a script's button bar or of the Extensions menu: it goes back to the menu before
+         -->
     <string name="menu_back">Back</string>
+    <!-- The arrow at the end of a menu row that opens a submenu, read by a screen reader -->
     <string name="menu_submenu">Submenu</string>
+    <!-- The title bar button, read by a screen reader, that opens the menu of the commands Mudlet packages add
+         (extensions) -->
     <string name="commands_menu">Extensions</string>
+    <!-- The same button while one of those commands asks for the player's attention -->
     <string name="commands_menu_attention">Extensions, one needs attention</string>
+    <!-- Read by a screen reader after a command in the Extensions menu that asks for the player's attention -->
     <string name="command_attention">Needs attention</string>
 
     <!-- The map a game's scripts open (a Geyser.Mapper or openMapWidget()): its tab and what TalkBack reads of it, the
          actions on it, which act on the room in the middle of the map, its buttons, and why the engine did not do what
          was asked (%1$s, the engine's own words) -->
     <string name="map_title">Map</string>
+    <!-- What a screen reader reads for the map a game's scripts open, once it is drawn -->
     <string name="map_description">Map of the game</string>
+    <!-- What a screen reader reads for the map a game's scripts open, before it is drawn -->
     <string name="map_not_drawn">Map, not drawn yet</string>
+    <!-- The state of the map a game's scripts open, read by a screen reader: the player can look at it, not change it
+         -->
     <string name="map_viewing">Viewing</string>
+    <!-- The state of the map a game's scripts open, read by a screen reader: the player can change it -->
     <string name="map_editing">Editing</string>
+    <!-- TalkBack's action on the map: it selects the room in the middle of the map -->
     <string name="map_select_middle">Select the room in the middle</string>
+    <!-- TalkBack's action on the map: the player's character walks to the room in the middle of the map -->
     <string name="map_walk_to_middle">Walk to the room in the middle</string>
+    <!-- The map's button, read by a screen reader, that zooms in -->
     <string name="map_zoom_in">Zoom in on the map</string>
+    <!-- The map's button, read by a screen reader, that zooms out -->
     <string name="map_zoom_out">Zoom out of the map</string>
+    <!-- The map's button, read by a screen reader, that lets the player change the map -->
     <string name="map_edit">Edit the map</string>
+    <!-- Shown over the map when the engine did not do what was asked; %1$s is the engine's reason, in English -->
     <string name="map_refused">Map: %1$s</string>
+    <!-- The button, read by a screen reader, that hides that message -->
     <string name="map_refusal_dismiss">Dismiss</string>
 
     <!-- The game screen's own map, brought to the front over the game's text by a button in the title bar: the button,
@@ -264,42 +381,66 @@
          above the map, and its results; each result is a room's name (%1$s), its area's name (%2$s) and its number
          (%3$d) -->
     <string name="app_map_show">Map</string>
+    <!-- The button above the game screen's own map that opens the search for rooms -->
     <string name="app_map_search">Find a room</string>
+    <!-- The room search's field: the player types a room's name or number -->
     <string name="app_map_search_hint">Room name or number</string>
+    <!-- The room search's button that starts the search -->
     <string name="app_map_search_go">Find</string>
+    <!-- A result of the room search: %1$s is the room's name, %2$s its area's name and %3$d its number -->
     <string name="app_map_room">%1$s, %2$s (%3$d)</string>
+    <!-- Shown while the room search runs -->
     <string name="app_map_searching">Finding rooms…</string>
+    <!-- Shown when no room matches the search; %1$s is what the player typed -->
     <string name="app_map_no_rooms">No room matches \"%1$s\"</string>
+    <!-- Shown under the room search's results when more rooms match than the list shows -->
     <string name="app_map_more_rooms">More rooms match than are shown: try more of the name</string>
+    <!-- The button, read by a screen reader, that closes the room search's results -->
     <string name="app_map_results_close">Close the results</string>
 
     <!-- The download of the map the game offers, above the full-screen map, and in its middle while no map is drawn:
          %1$s is the host the game offers it from (such as mud.example.com); the progress bar's name for TalkBack; how
          a download ended, which TalkBack reads out, the failure with Mudlet's reason (%1$s) -->
     <string name="map_download">Download the map from %1$s</string>
+    <!-- Shown in the middle of the map while no map is drawn and the game offers one; %1$s is the host the game offers
+         it from -->
     <string name="map_download_offered">No map to show yet. The game offers its map from %1$s.</string>
+    <!-- Shown while the map downloads; %1$s is the host it comes from -->
     <string name="map_download_running">Downloading the map from %1$s…</string>
+    <!-- The map download's progress bar, read by a screen reader -->
     <string name="map_download_progress">Map download</string>
+    <!-- The button that stops the map download -->
     <string name="map_download_cancel">Cancel</string>
+    <!-- Shown, and read out by TalkBack, when the map has downloaded; %1$s is the host it came from -->
     <string name="map_download_loaded">Map downloaded from %1$s</string>
+    <!-- Shown, and read out by TalkBack, when the player stopped the map download -->
     <string name="map_download_cancelled">Map download cancelled</string>
+    <!-- Shown, and read out by TalkBack, when the map download failed; %1$s is Mudlet's reason, in English -->
     <string name="map_download_failed">The map download failed: %1$s</string>
+    <!-- The button, read by a screen reader, that hides the map download's message -->
     <string name="map_download_dismiss">Dismiss the map download</string>
 
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
+    <!-- The connection bar while the app is not connected to the game -->
     <string name="connection_disconnected">Disconnected</string>
+    <!-- The connection bar while the app connects to the game, when the game's address is not known -->
     <string name="connection_connecting">Connecting…</string>
     <!-- %1$s is the game's address, as host:port -->
     <string name="connection_connecting_to">Connecting to %1$s…</string>
+    <!-- The connection bar while the app is connected to the game -->
     <string name="connection_connected">Connected</string>
     <!-- %1$s is the engine's reason, in English -->
     <string name="connection_error">Connection error: %1$s</string>
+    <!-- The connection bar's button that connects to the same game again -->
     <string name="connection_reconnect">Reconnect</string>
+    <!-- The connection bar's button that closes the connection to the game -->
     <string name="connection_disconnect">Disconnect</string>
 
     <!-- Lines the app adds to the console between the game's own. The dashes set them apart from the game's text. -->
     <string name="marker_new_engine" tools:ignore="TypographyDashes">--- new engine instance %1$s ---</string>
+    <!-- A line the app adds to the game's text where it left out lines because the screen fell behind; %1$d is how
+         many. The dashes set it apart from the game's text. -->
     <plurals name="marker_lines_skipped" tools:ignore="TypographyDashes">
         <item quantity="one">--- %1$d line skipped while the UI lagged ---</item>
         <item quantity="other">--- %1$d lines skipped while the UI lagged ---</item>

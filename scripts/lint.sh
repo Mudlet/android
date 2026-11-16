@@ -4,10 +4,12 @@
 #   - clang-format: native/'s C and C++, but not native/third_party, with .clang-format (FIX=1 rewrites the files)
 #   - shellcheck: the shell scripts
 #   - actionlint: the workflows, and ShellCheck on their run: steps
+#   - strings: scripts/check-strings.py, no hard-coded text in the Kotlin UI and a translator's comment on each string
+#     in strings.xml (docs/translations.md)
 # Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in apks.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
-# Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint]   (all four when none is named)
+# Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint] [strings]   (all five when none is named)
 # clang-format, ShellCheck and actionlint are the versions in scripts/lint-requirements.txt, installed into
 # LINT_VENV (.lint-venv) on first use. ktlint runs through Gradle, with JDK 21.
 set -euo pipefail
@@ -15,7 +17,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 venv=${LINT_VENV:-$root/.lint-venv}
 checks=("$@")
-[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint)
+[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint strings)
 
 # The pinned linters, installed once per run
 tools_ready=0
@@ -49,8 +51,10 @@ for check in "${checks[@]}"; do
         actionlint)
             tools
             "$venv/bin/actionlint" -shellcheck="$venv/bin/shellcheck" || failed+=("$check") ;;
+        strings)
+            python3 scripts/check-strings.py || failed+=("$check") ;;
         *)
-            echo "unknown check '$check': ktlint, clang-format, shellcheck or actionlint" >&2
+            echo "unknown check '$check': ktlint, clang-format, shellcheck, actionlint or strings" >&2
             exit 2 ;;
     esac
 done

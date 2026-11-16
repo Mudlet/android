@@ -242,12 +242,11 @@
     <string name="input_password_label">Password</string>
     <!-- The button, read by a screen reader, that closes the password field and brings the input line back -->
     <string name="input_password_close">Close the password field</string>
-    <!-- Read by a screen reader after what is typed in the input line, when a suggestion shows greyed after it; %1$s is
-         the whole line the suggestion gives -->
+    <!-- A button above the input line that puts a suggested command, or word, on the line without sending it; %1$s is
+         the command or word -->
     <string name="input_suggestion">Suggestion: %1$s</string>
-    <!-- The input line's action, in a screen reader's list of actions, that completes the line with the suggestion
-         shown greyed after it, without sending it (as a tap on the greyed text, or the right arrow key at the end of
-         the line, does); %1$s is the whole line it gives -->
+    <!-- The button, also the right arrow key at the end of the line, that completes the line with the suggestion shown
+         greyed after it; %1$s is the whole line it gives -->
     <string name="input_accept_suggestion">Accept the suggestion: %1$s</string>
 
     <!-- The row of buttons below the input line: the button that opens the command history, then a button for each

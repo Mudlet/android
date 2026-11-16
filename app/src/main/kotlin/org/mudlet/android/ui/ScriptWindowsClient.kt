@@ -121,7 +121,7 @@ object ScriptWindowsClient {
     /**
      * An `error` from the engine: the refusal of a map request is shown with the map that asked, this or
      * [AppMapClient]'s. A link's is only logged, as a link a script let go of or disabled, or one the player tapped as it
-     * went, is no fault of theirs.
+     * went, is no fault of theirs; so is a text box's, which a script made read-only or hid as the player typed.
      */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
@@ -129,6 +129,8 @@ object ScriptWindowsClient {
         if (AppMapClient.onRefused(request, reason)) return
         if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
+        // The box's own textBox follows, which puts back what it holds
+        if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -217,6 +219,16 @@ object ScriptWindowsClient {
 
     fun commandLineShown(name: String) {
         state = state.commandLineShown(name)
+    }
+
+    /**
+     * What the player has typed in the text box [name], all of it: the engine sets the box to it, and [state] holds it
+     * at once, as the engine does not echo it. False as for [EngineClient.send], and then [state] keeps what it had.
+     */
+    fun setTextBoxText(name: String, text: String): Boolean {
+        val connection = EngineClient.sendOn(Requests.setTextBoxText(name, text))
+        if (connection != 0) state = state.textBoxTyped(name, text, connection)
+        return connection != 0
     }
 
     /**

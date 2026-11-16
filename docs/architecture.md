@@ -1211,6 +1211,18 @@ Item 13 of the on-device checklist covers this.
       download" read their names; the end of the download is read out as it comes, a failure at once.
     - Over https (as most games' map URLs are), the download works: OpenSSL is in the APK (see "TLS").
     - `adb logcat` shows the map's host but never more of its URL: no user name, password, path or query.
+27. Text boxes, with the libmudlet APK: `lua createTextEdit("notes", 0, 0, 300, 120) setTextEditPlaceholder("notes",
+    "Write here")`, then `lua createTextEdit("tiny", 320, 0, 20, 20)`.
+    - "notes" is a field with an outline, "Write here" in it; a tap brings up the keyboard, which starts a sentence with
+      a capital. Type two lines, wait a moment, then `lua echo(getTextEditText("notes") .. "\n")` prints both. A
+      long text scrolls inside the box.
+    - `lua setTextEditText("notes", "from the script")` replaces what is in the field; rotating the phone keeps what
+      was typed. `lua setTextEditStyleSheet("notes", "QPlainTextEdit { background-color: navy; color: yellow;
+      font-size: 14pt }")` restyles it, scaled with its window.
+    - `lua setTextEditReadOnly("notes", true)`: the keyboard no longer types in it, and the text can still be selected.
+    - With a hardware keyboard, `lua setTextEditTabMovesFocus("notes", true)`: Tab moves on instead of typing a tab.
+    - With TalkBack on: swiping reaches "notes" after the console's controls, read as "Write here" and an edit box;
+      read-only, as "Write here, read only"; "tiny", touched easily though drawn small, reads as "tiny".
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

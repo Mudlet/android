@@ -246,6 +246,19 @@ class FakeEngine : AutoCloseable {
                 .put("styleSheet", styleSheet).putOpt("liveRegion", liveRegion),
         )
 
+        /** What the text box [name] holds (docs/protocol.md, `textBox`). */
+        fun textBox(
+            name: String,
+            text: String = "",
+            readOnly: Boolean = false,
+            placeholder: String = "",
+            styleSheet: String = "",
+            tabMovesFocus: Boolean = false,
+        ) = send(
+            JSONObject().put("t", "textBox").put("name", name).put("text", text).put("readOnly", readOnly).put("placeholder", placeholder)
+                .put("styleSheet", styleSheet).put("tabMovesFocus", tabMovesFocus),
+        )
+
         /** The answer to the `getImage` whose id was [re]: [png], a PNG of [w] by [h] pixels. */
         fun image(path: String, png: ByteArray, w: Int, h: Int, re: Any) = send(
             JSONObject().put("t", "image").put("path", path).put("png", Base64.getEncoder().encodeToString(png)).put("w", w).put("h", h).put("re", re),

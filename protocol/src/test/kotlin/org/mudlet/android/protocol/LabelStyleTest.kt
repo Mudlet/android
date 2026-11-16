@@ -84,6 +84,17 @@ class LabelStyleTest {
     }
 
     @Test
+    fun aTextBoxsSheetTakesItsOwnRulesAndNotALabels() {
+        val sheet = "padding: 2px; QPlainTextEdit { color: red; } QLabel { color: blue; } TTextBox { font-size: 12px } QPlainTextEdit:focus { color: green }"
+        val box = LabelStyle.parse(sheet, LabelStyle.TEXT_BOX_SELECTORS)
+        assertEquals(0xFFFF0000.toInt(), box.color)
+        assertEquals(12f, box.fontSizePx)
+        assertEquals(Edges(2f, 2f, 2f, 2f), box.padding)
+        assertEquals(0xFF0000FF.toInt(), LabelStyle.parse(sheet).color)
+        assertNull(LabelStyle.parse(sheet).fontSizePx)
+    }
+
+    @Test
     fun gradientsAndImages() {
         val style = LabelStyle.parse(
             "background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255, 0, 0, 255), stop:1 #0000ff);" +

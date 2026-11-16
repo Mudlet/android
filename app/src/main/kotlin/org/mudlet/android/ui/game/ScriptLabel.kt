@@ -121,11 +121,11 @@ import kotlin.math.roundToInt
 
 private const val TAG = "ScriptLabel"
 
-// A clickable label's touch bounds are never smaller than this, around it
-private val MIN_TOUCH_SIZE = 48.dp
+// A clickable label's touch bounds, and a text box's, are never smaller than this, around it
+internal val MIN_TOUCH_SIZE = 48.dp
 
-// Qt's default label font, where neither the label's style sheet nor its window sets one: 10 pt
-private const val DEFAULT_FONT_PX = 10f * LabelStyle.PX_PER_PT
+// Qt's default font, where neither a label's or text box's style sheet nor its window sets one: 10 pt
+internal const val DEFAULT_FONT_PX = 10f * LabelStyle.PX_PER_PT
 
 // The colour Qt draws a link in where the text sets none
 private val LINK_COLOUR = Color(0xFF4AA3FF)
@@ -225,7 +225,7 @@ private fun AnnounceChanges(text: String, region: LiveRegion) {
 }
 
 /** This rectangle grown about its centre to at least [min] pixels each way. */
-private fun PxRect.grownTo(min: Float): PxRect {
+internal fun PxRect.grownTo(min: Float): PxRect {
     val w2 = max(w, min)
     val h2 = max(h, min)
     return PxRect(x - (w2 - w) / 2, y - (h2 - h) / 2, w2, h2)
@@ -551,7 +551,7 @@ private fun rasterRequest(content: LabelContent): ImageRequest? = when {
     else -> null
 }
 
-private fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: Density): Modifier = with(density) {
+internal fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: Density): Modifier = with(density) {
     absolutePadding(
         left = (edges.left * sx).coerceAtLeast(0f).toDp(),
         top = (edges.top * sy).coerceAtLeast(0f).toDp(),
@@ -573,7 +573,8 @@ internal fun engineImage(request: ImageRequest?): ImageBitmap? {
     return request?.let { ScriptWindowsClient.images[it] }
 }
 
-private fun DrawScope.drawLabelFrame(
+/** A label's background, its images and its border, as its style sheet sets them; a text box's too, with no images. */
+internal fun DrawScope.drawLabelFrame(
     fill: LabelFill?,
     style: LabelStyle,
     border: Float,
@@ -726,7 +727,7 @@ private fun spanStyle(style: RichText.Style, toSp: (Float) -> TextUnit, link: Bo
 }
 
 // The nearest of the device's fonts to a family a script names; null for its default
-private fun fontFamily(name: String): FontFamily? {
+internal fun fontFamily(name: String): FontFamily? {
     val n = name.lowercase()
     return when {
         "mono" in n || "courier" in n || "consol" in n || "fixed" in n -> FontFamily.Monospace

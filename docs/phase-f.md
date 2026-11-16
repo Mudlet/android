@@ -207,6 +207,18 @@ adds `doubleClick`, a long press is the right button's `press` and `release` (Ge
 follows when another window is touched. A drag sends `move` with the button held, so sliders built of labels work.
 Click-through and the grab are upstream's to resolve: the app names the topmost shown label under the finger.
 
+### Text boxes
+
+A `textBox` is a text field at its window's geometry, scaled by `s`, with the label style sheet's subset where a
+`QPlainTextEdit` has it: bare declarations and `QPlainTextEdit`, `TTextBox` or `*` blocks give its background, border,
+padding, margin and font; one with no border has an outline, thicker while focused. Its text is never drawn under
+9 sp, and scrolls inside it. The player types in it unless `readOnly`, with the `placeholder` shown while it is
+empty, and Tab moves on to the next control when `tabMovesFocus` (a hardware keyboard's; otherwise it types a tab).
+Once the player has stopped typing for 300 ms, all of the box's text goes to the engine with `setTextBoxText`, and
+the app's copy of the box takes it, as the engine sends no `textBox` back; what is not yet sent goes when the field
+goes (a turn of the screen) and again after the link drops. A script's new text replaces the field's, the player's
+unsent typing with it; a refusal's `textBox` puts back what Mudlet holds.
+
 ### Gauges
 
 Once labels draw, gauges draw: they are three labels. F3 adds their meaning: the app finds sibling labels
@@ -251,13 +263,19 @@ Phase E's requirements apply to every pull request here; in short, and what they
   change of the value: when the `_text` label is live, the `Announcer` says its new text, as the desktop says only
   that label's (the others have no text); twice while TalkBack's focus is on the gauge, which reads its new state
   itself.
+- **Text boxes** are editable fields named by their `placeholder`, else their window name, with ", read only" when
+  the player cannot type in them (still focusable, so TalkBack reads their text). The name is on a node inside the
+  field, as an editable field may not carry a content description itself (the accessibility checks'
+  `EditableContentDescCheck`), and TalkBack reads it with the field. That node is as big as the field, its 48 dp
+  touch area included: inside the box's frame and margins a small box leaves it no size, and a node of no size is not
+  read, which leaves an empty field nothing to say. Their keyboard capitalises sentences.
 - **Button bars and commands** are buttons with their names; push-down buttons and checkable commands are toggles
   (`Role.Switch` with `toggleableState`); a folder says it opens a menu. An icon-only one has its name as its content
   description.
 - **Mini consoles** are lists TalkBack moves through line by line, as the main console after U6. Their new lines are
   not announced: Mudlet announces only the main console's (`announceIncomingText`).
-- **48 dp.** Script geometry can make a clickable label small: its touch bounds grow to 48 dp around it, drawn at its
-  own size, the higher in `stack` winning where two overlap.
+- **48 dp.** Script geometry can make a clickable label or a text box small: its touch bounds grow to 48 dp around
+  it, drawn at its own size, the higher in `stack` winning where two overlap.
 - **No gesture alone.** Long press has its accessibility action; the map's pinch has zoom buttons; the window
   switcher's swipe between pages has its tabs; a drag on a label has no other way, which is the script's design, so
   the label's actions say what a tap does.

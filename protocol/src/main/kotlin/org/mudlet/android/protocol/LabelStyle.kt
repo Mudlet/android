@@ -57,16 +57,16 @@ data class LabelStyle(
         /**
          * The label's own [sheet]: its bare declarations and those of a `QLabel` (or `TLabel`, or `*`) rule, in
          * order. A rule with any other selector, a state or a sub-control is skipped, as is a declaration the app does
-         * not draw.
+         * not draw. With [selectors] [TEXT_BOX_SELECTORS], a text box's sheet, the same way.
          */
-        fun parse(sheet: String): LabelStyle {
+        fun parse(sheet: String, selectors: Set<String> = LABEL_SELECTORS): LabelStyle {
             var style = LabelStyle()
-            for ((property, value) in declarations(sheet)) style = style.with(property, value)
+            for ((property, value) in declarations(sheet, selectors)) style = style.with(property, value)
             return style
         }
 
-        /** The declarations of [sheet] that apply to a label, in order, each its lower-case property and its value. */
-        fun declarations(sheet: String): List<Pair<String, String>> {
+        /** The declarations of [sheet] that apply to a label, or [selectors]' widget, in order, each its lower-case property and its value. */
+        fun declarations(sheet: String, selectors: Set<String> = LABEL_SELECTORS): List<Pair<String, String>> {
             val text = COMMENT.replace(sheet, " ")
             val out = ArrayList<Pair<String, String>>()
             var i = 0
@@ -79,7 +79,7 @@ data class LabelStyle(
                         val selector = head.substringAfterLast(';')
                         out.addAll(parseDeclarations(head.substring(0, head.length - selector.length)))
                         val end = text.indexOf('}', i + 1).let { if (it < 0) text.length else it }
-                        if (appliesToLabel(selector)) out.addAll(parseDeclarations(text.substring(i + 1, end)))
+                        if (selector.split(',').any { it.trim() in selectors }) out.addAll(parseDeclarations(text.substring(i + 1, end)))
                         i = end + 1
                         start = i
                         continue
@@ -103,8 +103,6 @@ data class LabelStyle(
             val value = declaration.substring(colon + 1).trim().removeSuffix("!important").trim()
             if (property.isEmpty() || value.isEmpty()) null else property to value
         }
-
-        private fun appliesToLabel(selector: String): Boolean = selector.split(',').any { it.trim() in LABEL_SELECTORS }
 
         /**
          * A length in Mudlet's pixels: `px` or none, or `pt` at Qt's 96 dots per inch; null for another unit, or for
@@ -290,6 +288,9 @@ data class LabelStyle(
         const val PX_PER_PT = 96f / 72f
 
         private val LABEL_SELECTORS = setOf("QLabel", "TLabel", "*")
+
+        /** The rules of a text box's sheet that apply to it: Mudlet's `TTextBox` is a `QPlainTextEdit`. */
+        val TEXT_BOX_SELECTORS = setOf("QPlainTextEdit", "TTextBox", "*")
         private val BORDER_STYLES = setOf("none", "solid", "dashed", "dotted", "double", "groove", "ridge", "inset", "outset", "dot-dash", "dot-dot-dash")
         private val COMMENT = Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL)
         private val LENGTH = Regex("(-?[0-9]*\\.?[0-9]+)\\s*([a-z]*)")

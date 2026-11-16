@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -19,9 +20,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +70,15 @@ fun ProfileListScreen(
     val passwords = remember { PasswordStore(context) }
     val profiles = EngineClient.profiles
     var error by remember { mutableStateOf<String?>(null) }
+    val games = EngineClient.sessions
+    val list = rememberLazyListState()
+    // The list keeps its first row where it is when rows come above it, as the games do when the engine tells of them
+    // after its profiles are shown: bring them into view
+    var hadGames by rememberSaveable { mutableStateOf(games.isNotEmpty()) }
+    LaunchedEffect(games.isNotEmpty()) {
+        if (games.isNotEmpty() && !hadGames) list.scrollToItem(0)
+        hadGames = games.isNotEmpty()
+    }
     MudletScaffold(
         stringResource(R.string.profiles_title),
         actions = {
@@ -85,6 +97,7 @@ fun ProfileListScreen(
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
+            list,
             // Room below the last item for the Add button, which floats over the list
             contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
         ) {
@@ -97,7 +110,6 @@ fun ProfileListScreen(
                     )
                 }
             }
-            val games = EngineClient.sessions
             if (games.isNotEmpty()) {
                 item { SectionHeader(stringResource(R.string.games_title)) }
                 itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->

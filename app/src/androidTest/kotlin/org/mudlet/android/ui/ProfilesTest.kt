@@ -219,6 +219,16 @@ class ProfilesTest {
         compose.onNodeWithText(string(R.string.profile_save)).assertIsDisplayed()
     }
 
+    @Test
+    fun gamesTheEngineTellsOfOnceTheProfilesShowAreAtTheTopOfTheList() {
+        listed(ALPHA, BETA)
+        waitFor(hasContentDescription("Alpha, a.example:23"))
+        fake.engine.openAlongside(ALPHA.name)
+        engine.openProfiles()
+        compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
+        compose.onNodeWithText(string(R.string.games_title)).assertIsDisplayed()
+    }
+
     /** The engine answers the UI's listProfiles, sent when it attached, with [profiles]. */
     private fun listed(vararg profiles: Profile) {
         engine.profiles(profiles.toList(), engine.receive("listProfiles"))

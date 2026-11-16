@@ -44,7 +44,7 @@ import java.util.Base64
 
 /**
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
- * settings (the hub, a search and two pages, and in light mode the hub and a page side by side on a tablet), the
+ * settings (the hub, a search and three pages, and in light mode the hub and a page side by side on a tablet), the
  * map in front with a downloaded map and dragged off the player, and the game sheet with two games open, light and
  * dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
@@ -119,6 +119,11 @@ class ScreenshotTest {
         activate(hasText(string(R.string.settings_connection)))
         waitFor(hasText(string(R.string.settings_gmcp)))
         save("settings-connection-$mode")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_display)))
+        activate(hasText(string(R.string.settings_display)))
+        waitFor(hasText(string(R.string.settings_undo_wrap_width)))
+        save("settings-display-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
 

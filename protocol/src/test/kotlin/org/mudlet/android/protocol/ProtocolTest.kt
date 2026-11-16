@@ -259,6 +259,35 @@ class ProtocolTest {
         assertEquals(mapOf("t" to "closeUserWindow", "name" to "side"), Requests.closeUserWindow("side").toMap())
         assertEquals(mapOf("t" to "sendWindowCommandLine", "name" to "chat", "text" to "look"), Requests.sendWindowCommandLine("chat", "look").toMap())
         assertEquals(mapOf("t" to "setTextBoxText", "name" to "notes", "text" to "one\ntwo"), Requests.setTextBoxText("notes", "one\ntwo").toMap())
+        assertEquals(mapOf("t" to "selectFrameTab", "name" to "chat"), Requests.selectFrameTab("chat").toMap())
+    }
+
+    @Test
+    fun anMxpFramesTabsParseWithThePageInFront() {
+        fun frame(tabs: String) = (
+            FrameReader.parse(
+                JSONObject(
+                    """{"t":"windows","windows":[{"name":"tabs","kind":"mxpFrame","parent":"","x":0,"y":0,"w":400,"h":300,""" +
+                        """"visible":true,"shown":true,"stack":0,"inDock":false,"columns":40,"rows":10,"scrollBar":true,"timeStamps":false$tabs}]}""",
+                ),
+            ) as EngineMessage.Windows
+            ).windows.single().frameTabs
+        val tabs = frame(""","tabs":["tabs","chat","log"],"tabTitles":["Tabs","Chat",""],"tabCurrent":1""")
+        // An empty title is the page's name, as Mudlet's tab shows a frame with none
+        assertEquals(
+            ScriptWindow.FrameTabs(
+                listOf(ScriptWindow.FrameTabs.Page("tabs", "Tabs"), ScriptWindow.FrameTabs.Page("chat", "Chat"), ScriptWindow.FrameTabs.Page("log", "log")),
+                1,
+            ),
+            tabs,
+        )
+        assertEquals("chat", tabs!!.front.name)
+        // None for a frame without a header, and for tabs that cannot be read
+        assertNull(frame(""))
+        assertNull(frame(""","tabs":[],"tabTitles":[],"tabCurrent":0"""))
+        assertNull(frame(""","tabs":["tabs"],"tabTitles":["Tabs"],"tabCurrent":1"""))
+        assertNull(frame(""","tabs":["tabs"],"tabTitles":["Tabs"]"""))
+        assertEquals(listOf("tabs", "chat"), frame(""","tabs":["tabs","chat"],"tabCurrent":0""")!!.pages.map { it.title })
     }
 
     @Test

@@ -89,6 +89,13 @@ data class ScriptWindows(
         return copy(textBoxes = textBoxes + (box.name to box), textBoxEdits = edits)
     }
 
+    /** The title on [frame]'s tab, should it be a page of an MXP frame's tab header ([ScriptWindow.frameTabs]). */
+    fun tabTitleOf(frame: ScriptWindow): String? = if (frame.kind != WindowKind.MXP_FRAME) {
+        null
+    } else {
+        windows.firstNotNullOfOrNull { w -> w.frameTabs?.pages?.firstOrNull { it.name == frame.name }?.title }
+    }
+
     /** The command line along the bottom of [console], which shares its name, while it is shown. */
     fun commandLineOf(console: ScriptWindow): ScriptWindow? = windows.firstOrNull {
         it.kind == WindowKind.COMMAND_LINE && it.shown && it.parent == console.name && it.parentKind == console.kind

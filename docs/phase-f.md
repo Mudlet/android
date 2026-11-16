@@ -95,7 +95,7 @@ green.
 
 | Message | Fields | From |
 |---|---|---|
-| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | `scriptWindows()` at `profileLoaded` and on attach (`full` true: replaces all), then the entries `scriptWindowsChanged` names. A window is keyed by name and kind. `kind` is upstream's enum name |
+| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?; `removed`?: `name`, `kind` | `scriptWindows()` at `profileLoaded` and on attach (`full` true: replaces all), then the entries `scriptWindowsChanged` names. A window is keyed by name and kind. `kind` is upstream's enum name. `tabs`, `tabTitles` and `tabCurrent` are an MXP frame's tab header, its `frameTabs` (gap 5, carried) |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | `labelContent()` for each label in a `windows` message whose content differs from what was last sent. The cursor fields are left out: a touch screen has no pointer to shape |
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | `textBoxContent()` (gap 4, carried) for each text box in a `windows` message whose content differs from what was last sent; not the player's own typing, kept as Mudlet keeps it; `typed`, the `setTextBoxText` for it the bridge has had from this UI |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | `windowLines(window, -300, 300)` for each window `windowTextChanged` names, and for every console on attach; older rows answer `getWindowText` |
@@ -121,6 +121,7 @@ image by path and size while the profile runs.
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | `pointer()`. `type` is upstream's enum name; `button` and `buttons` use Qt's values (1 left, 2 right, 4 middle) |
 | `sendWindowCommandLine` | `name`, `text` | `setWindowCommandLineText()`, then `submitWindowCommandLine()` |
 | `setTextBoxText` | `name`, `text` | `setTextBoxText()` (gap 4, carried): what the player typed; a refusal is `error`, then the box's `textBox` |
+| `selectFrameTab` | `name` | `selectFrameTab()` (gap 5, carried): the player's tap on an MXP frame's tab, by the page's frame name; a refusal is `error` |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | Reads the file, or `QIcon(path)` at that size, or that frame of a movie (`QMovie`), answered by `image` |
 | `pressButton` | `id` | `pressButton()`; a refusal is `error` |
 | `activateCommand` | `id` | `activateAddonCommand()`; a refusal is `error` |
@@ -180,7 +181,13 @@ the size of the window, with its `bg` and font scaled by `s`. Each window keeps 
 `getWindowText` for older ones as the player scrolls back. Scrolling stays local; a script's `scrollTo()` arrives as
 `scrolledBackTo` and moves the list there. Links in them are asked about and followed with the extended `getLink` and
 `followLink` (version 12). A console's own command line is an input line along its bottom, sending with
-`sendWindowCommandLine`. MXP frames draw as mini consoles; of their tabs only the page in front shows.
+`sendWindowCommandLine`. MXP frames draw as mini consoles. A frame's tab header (`tabs`, gap 5), where Mudlet gives
+it one, is a row of tabs above the page in front, at least 48 dp tall and as tall as Mudlet's 30 pixels scaled, kept
+inside what may show of the page; stacked, where that page is a page of the switcher, the row is at the top of the
+pane, and the rows of the frames opened in it are above their pages in the pane. Each tab is a `Role.Tab` with its
+title, selected for the page in front; a tap on another sends `selectFrameTab`, and the page the engine then brings
+forward is drawn there, the pane staying open on it. The switcher and the pane's header call such a page by its tab's
+title.
 
 ### Labels
 
@@ -343,15 +350,15 @@ F4 and F5 are independent of each other and of F3.
     size; a `mapPointer` press selects the room (`getMapSelection()` through `runLua` and an `echo()`).
 - **U pull requests:** Compose UI tests against `FakeEngine` on the API 28 and 36 emulators, with the accessibility
   checks: a fake `windows` and `windowText` draw a mini console at its scaled place in both layouts; a label tap
-  sends the `pointer` sequence; a gauge exposes its range; a button bar's button sends `pressButton`; TalkBack's
-  focus order. `android_smoke.py` with libmudlet runs one Geyser script on the emulator and checks a mini console's
+  sends the `pointer` sequence; a gauge exposes its range; a button bar's button sends `pressButton`; an MXP frame's
+  tab sends `selectFrameTab`, the page brought forward then drawn under its tabs; TalkBack's focus order. `android_smoke.py` with libmudlet runs one Geyser script on the emulator and checks a mini console's
   line reaches the UI. On-device checklist items for what only a person judges: a game's real GUI package (for
   example a Geyser layout from a game's own package) in both orientations, and TalkBack over it.
 
 ## Upstream gaps
 
-Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 2, 3
-and 4 are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those
+Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 2, 3, 4
+and 5 are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those
 patches, `scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
 `3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
 
@@ -431,4 +438,7 @@ merges it; the engine sends it as the `textBox` frame and takes the player's typ
 > still needs a window" can drop its tab header item. Tests with an MXP `<FRAME>` and its pages. PR title:
 > "Headless: MXP frame tabs". PR text: an app shows only the front page of a tabbed frame today.
 
-Interim: only the page in front shows; no tabs.
+Interim: replaced. The app carries this as `scripts/mudlet-patches/0008-headless-frame-tabs.patch` until Mudlet
+merges it, with the page named rather than numbered: `frameTabs` on the header frame's `ScriptWindow` and `bool
+selectFrameTab(const QString& page)`. The engine sends it as `tabs`, `tabTitles` and `tabCurrent` in `windows` and
+takes the player's tap as `selectFrameTab` (`protocol.md`, "Script windows").

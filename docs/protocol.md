@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **15**.
+The current version is **16**.
 
 ## Transport
 
@@ -77,6 +77,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `closeUserWindow` | `name` | The dock's close button: hides the user window, as `hideWindow()` does. |
 | `sendWindowCommandLine` | `name`, `text` | Enter on the command line `name`, a console's own from `enableCommandLine()` or one from `createCommandLine()`, holding `text` (`submitWindowCommandLine()`): the line's action, or else the aliases, take each line of it. |
 | `setTextBoxText` | `name`, `text` | What the player has typed in the text box `name` so far: the whole of its `text`, a string (`THeadlessSession::setTextBoxText()`, "Text boxes" below). Refused for a box that is read-only or not `shown`, with `error` and then the box's `textBox` as the engine holds it, so the UI puts back what it showed. Only libmudlet takes it. |
+| `selectFrameTab` | `name` | The player's tap on a tab of an MXP frame's tab header ("Script windows" below): brings the page `name`, an MXP frame, forward (`THeadlessSession::selectFrameTab()`, carried in `scripts/mudlet-patches/`), so the header's frame and the two pages come in the next `windows`. Nothing happens for the page already in front. Only libmudlet takes it. |
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | What the UI's pointer did at `x`, `y` (numbers, which may have fractions) in the pixels of the window `window`, from its top left; `main` is the main console's area (`THeadlessSession::pointer()`). `type` is `press`, `release`, `doubleClick`, `move`, `enter`, `leave` or `wheel`. `button` is the one that changed, for a press, release or double-click, and `buttons` those held after it, as Qt's flags: 1 left, 2 right, 4 middle. `modifiers` are Qt's: 0x02000000 Shift, 0x04000000 Control, 0x08000000 Alt, 0x10000000 Meta. `wheelY` is the wheel's turn in eighths of a degree, 120 a notch, positive away from the player. Each of those four is 0 when absent. A label's callback runs as the GUI's would, with the event table it gives (`button` `LeftButton` and the rest, `x`, `y`); a press or release no label takes goes on to the console under it. |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
 | `pressButton` | `button` | A click on the button or menu entry of `buttonBars` whose `id` is `button`, a whole number (`THeadlessSession::pressButton()`): it sends the button's command through the aliases and runs its script, as the GUI's button does, and a push-down button goes down, or up if it was down. To pick an entry of a folder's menu, the UI presses the entry, then the folder, as the GUI does. |
@@ -112,8 +113,10 @@ The script windows' requests are answered only when refused, with `error` whose 
 colon and why; `getWindowText` and `getImage` are always answered. libmudlet refuses all but `setMainWindowSize` and
 `getImage` while no profile is open, and `pointer` as `THeadlessSession::pointer()` does: for a window that is not
 shown, a point outside it, or another window than the one a held button went down on. It refuses `setTextBoxText` as
-`THeadlessSession::setTextBoxText()` does: for a box there is not, one not shown and one read-only. The stand-in has no
-script windows and refuses all eight.
+`THeadlessSession::setTextBoxText()` does: for a box there is not, one not shown and one read-only, and
+`selectFrameTab` as `THeadlessSession::selectFrameTab()` does: for a name that is no page of a tab header, and for a
+header whose page in front is not shown, as inside a hidden external frame. The stand-in has no script windows and
+refuses all nine.
 
 `pressButton` and `activateCommand` too are answered only when refused, with `error` as above: libmudlet refuses
 them while no profile is open, and for an id that is not one the last `buttonBars` or `commands` would list. The
@@ -162,7 +165,7 @@ loaded. The stand-in has no map and refuses both.
 | `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
-| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
+| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
@@ -200,6 +203,13 @@ What `windows` and `windowText` carry, from libmudlet's `THeadlessSession::scrip
 - A console (a mini console, user window or MXP frame) has `columns` and `rows`, the grid of text it has room for,
   `scrollBar` and `timeStamps`, and `scrolledBackTo`, the row it is scrolled back to, while it does not follow new
   lines.
+- An internal MXP frame given a `TITLE`, not `FLOATING`, and at least 50 of Mudlet's pixels tall (or sized in
+  characters) has a tab header, which Mudlet's GUI draws along its top, in the 30 of its pixels above its console.
+  That frame has `tabs`, the pages by the names of the MXP frames they show, the first being the frame's own console,
+  `tabTitles`, the title on each page's tab, as many as `tabs`, and `tabCurrent`, the index of the page in front,
+  from 0. Each page is a window of its own, at the place and size of the console under the header, and only the one
+  in front is `shown`. A page, and a frame with no header, has none of the three. `selectFrameTab` brings a page
+  forward, as a tap on its tab.
 - The runs of a console's rows are a `line`'s, with two differences: `fg` is always a colour, never -1, as the UI is
   not told a console's own; a `bg` of -1 is the window's `bg`. Their `link` ids are the window's own, which `getLink`
   and `followLink` take with the window's name, and a change to one of those links sends the window's `windowText`
@@ -539,7 +549,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 15, which added several profiles at once: a socket each, `profileSockets` and `profile` in
+As implemented in version 16, which added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and
+`tabCurrent` in `windows`); version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in
 `hello`, `alongside` in `openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
 the text boxes (`setTextBoxText`, `textBox`), and later `setMapScale`, which needs no new version as a UI does without
 it: an engine without it refuses it as unknown, the UI ignores that, and the map stays at the window's pixels; version

@@ -375,13 +375,14 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are seven: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are eight: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
-a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, and several
+a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, several
 headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
-[`multi-profile.md`](multi-profile.md)).
+[`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
+(`frameTabs`), with the player's tap on a tab (`selectFrameTab()`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -424,6 +425,7 @@ keeps the profiles' passwords in the KeyStore.
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
 | `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
+| `frameTabs` of each MXP frame's script window, read with `scriptWindows()`; `selectFrameTab()` (carried patch) | `tabs`, `tabTitles` and `tabCurrent` in the header frame's `windows` entry; `selectFrameTab`, answered only when refused |
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
@@ -525,6 +527,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   back; `setTextEditPlaceholder()`, `setTextEditTabMovesFocus()` and `setTextEditReadOnly()` alone as `textBox`;
   `setTextBoxText` refused for a hidden box and a read-only one, by `error` and the box as Mudlet holds it; an unknown
   box refused; every text box to a UI that attaches, its `typed` counted afresh; `deleteTextEdit()` as `removed`;
+- MXP frame tabs: a titled frame and the `DOCK` frames in it, fed through `feedTriggers()`, as `windows` with the
+  header's `tabs`, `tabTitles` and `tabCurrent`, only the page in front `shown`; `selectFrameTab` bringing a page
+  forward where the one in front was, and the header's own console; refused before a profile is open, for a name
+  that is no page and for a header in an `EXTERNAL` frame that is hidden; the tabs to a UI that attaches; the page in
+  front closing and the one to its left coming forward;
 - button bars and commands: a package's bar, with its grid, a push-down button and a folder's menu, and
   `tempButtonToolbar()` bars at the left and floating, as `buttonBars`; `pressButton` sending a push-down button's
   command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and
@@ -614,7 +621,10 @@ device shows, below the UI's debug hook:
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
-  docked map as a page; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
+  docked map as a page; an MXP frame's tabs (`ScriptFrameTabsTest`): each page a tab by its title, at least 48 dp,
+  selected for the page in front, a tap on another sending `selectFrameTab` and the page brought forward then drawn,
+  and stacked, the page called by its tab's title, the tabs at the top of the pane, which stays open on that page,
+  with its chip in the switcher selected; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
   the title bar's toggle bringing it to the front, over the input line and the quick bar down to the connection bar,
   with the input line's keyboard gone and its focus back after, where taps, the zoom buttons, the edit switch and
@@ -1315,6 +1325,15 @@ Item 13 of the on-device checklist covers this.
     - With a hardware keyboard, `lua setTextEditTabMovesFocus("notes", true)`: Tab moves on instead of typing a tab.
     - With TalkBack on: swiping reaches "notes" after the console's controls, read as "Write here" and an edit box;
       read-only, as "Write here, read only"; "tiny", touched easily though drawn small, reads as "tiny".
+28. MXP frame tabs, with the libmudlet APK: `lua setConfig("specialForceMXPProcessorOn", true)
+    feedTriggers([[<FRAME Name="tabs" Title="Tabs" Align="left" Width="300" Height="300">]] .. "\n")
+    feedTriggers([[<FRAME Name="chat" Title="Chat" DOCK="tabs" Align="client">]] .. "\n")`, on one line.
+    - Fitted (a tablet, or a phone in landscape): a row of tabs, "Tabs" and "Chat", along the frame's top, "Chat"
+      selected. A tap on "Tabs" selects it and shows the frame's own console there, and a tap on "Chat" goes back.
+    - Stacked (a phone in portrait): the frame is a tab of the window switcher; opened, its tabs are at the top of the
+      pane, and a tap on the other keeps the pane open on that page.
+    - With TalkBack on: swiping reaches "Tabs of Tabs" after the console's controls, then each tab read by its title
+      as a tab, the one in front as selected.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

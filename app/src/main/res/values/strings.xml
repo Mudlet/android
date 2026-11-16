@@ -308,6 +308,9 @@
     <string name="window_back_to_console">Close %1$s and go back to the console</string>
     <!-- The button, read by a screen reader, that closes a script's window; %1$s is the window's name -->
     <string name="window_close">Close %1$s</string>
+    <!-- The row of tabs along the top of a game's MXP frame (a window the game itself opens), each tab a page of it,
+         read by a screen reader; %1$s is the frame's title, as the game gave it -->
+    <string name="frame_tabs_description">Tabs of %1$s</string>
     <!-- TalkBack's actions on a link in a line of game text (in a mini console or user window). %1$s is the link's
          tool tip, or the link's own text where it has none -->
     <string name="console_link_follow">Follow link: %1$s</string>

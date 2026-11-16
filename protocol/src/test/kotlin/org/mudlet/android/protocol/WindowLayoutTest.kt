@@ -185,6 +185,108 @@ class WindowLayoutTest {
         assertTrue(layout.windows.isEmpty())
     }
 
+    // A titled MXP frame at [y] in the main area, 200 by 270 below its tab header, its pages "tabs" (its own console),
+    // "chat" and "log", with the one at [current] in front
+    private fun frameWithTabs(current: Int, x: Int = 0, y: Int = 30): List<ScriptWindow> {
+        val names = listOf("tabs", "chat", "log")
+        val tabs = ScriptWindow.FrameTabs(names.map { ScriptWindow.FrameTabs.Page(it, it.replaceFirstChar(Char::uppercase)) }, current)
+        return names.mapIndexed { i, name ->
+            window(name, WindowKind.MXP_FRAME, x = x, y = y, w = 200, h = 270, shown = i == current).let { if (i == 0) it.copy(frameTabs = tabs) else it }
+        }
+    }
+
+    @Test
+    fun anMxpFramesTabsGoAboveThePageInFrontAtLeastAHeaderTallAndInsideTheArea() {
+        val main = mainArea(800, 500, 100, 25, 200, 0, 600, 500)
+        val low = WindowLayout.of(state(main, *frameWithTabs(current = 1, y = 230).toTypedArray()), area(1600f, 1000f, fitted = true))
+        // Only the page in front is drawn, the header frame not among them
+        assertEquals(listOf("chat"), low.windows.map { it.window.name })
+        assertEquals(PxRect(0f, 460f, 400f, 540f), low.rectOf("chat"))
+        val strip = low.frameTabs.single()
+        assertEquals("tabs", strip.frame.name)
+        assertEquals(listOf("tabs", "chat", "log"), strip.tabs.pages.map { it.name })
+        assertEquals(1, strip.tabs.current)
+        // Mudlet's 30 pixels are 60 here, less than a header's 100
+        assertEquals(PxRect(0f, 360f, 400f, HEADER), strip.rect)
+        // With a header less than them, they are as tall as Mudlet's scaled
+        val scaled = WindowLayout.of(state(main, *frameWithTabs(current = 1, y = 230).toTypedArray()), WindowLayout.Area(1600f, 1000f, true, 16f, 40f, null))
+        assertEquals(PxRect(0f, 400f, 400f, 60f), scaled.frameTabs.single().rect)
+        // At the area's top they go over the page's top rather than above the area
+        val high = WindowLayout.of(state(main, *frameWithTabs(current = 0).toTypedArray()), area(1600f, 1000f, fitted = true))
+        assertEquals(listOf("tabs"), high.windows.map { it.window.name })
+        assertEquals(PxRect(0f, 0f, 400f, HEADER), high.frameTabs.single().rect)
+        // A frame with no tabs has none drawn
+        assertTrue(WindowLayout.of(state(main, window("side", WindowKind.MXP_FRAME)), area(1600f, 1000f, fitted = true)).frameTabs.isEmpty())
+    }
+
+    @Test
+    fun stackedAPageInFrontOpensBelowItsTabsAndTheOneBroughtForwardStaysOpen() {
+        // The frame in the left border, so a page
+        val main = mainArea(1000, 500, 100, 25, 300, 50, 600, 400)
+        val chat = WindowKey("chat", WindowKind.MXP_FRAME)
+        val layout = WindowLayout.of(state(main, *frameWithTabs(current = 1, y = 80).toTypedArray()), area(800f, 1600f, fitted = false, selectedPage = chat))
+        assertEquals(listOf("chat"), layout.pages.map { it.name })
+        assertEquals(chat, layout.selectedPage)
+        assertTrue(layout.frameTabs.isEmpty())
+        assertEquals(PxRect(0f, 40f, 800f, 1520f), layout.pane)
+        // The tabs at the top of the pane below its header, the page below them
+        val strip = layout.paneFrameTabs.single()
+        assertEquals(PxRect(0f, 140f, 800f, HEADER), strip.rect)
+        assertEquals("tabs", strip.frame.name)
+        assertEquals(PxRect(0f, 240f, 800f, 1320f), layout.paneWindows.single().rect)
+
+        // "log" brought forward: still open, as the page in front
+        val forward = WindowLayout.of(state(main, *frameWithTabs(current = 2, y = 80).toTypedArray()), area(800f, 1600f, fitted = false, selectedPage = chat))
+        assertEquals(listOf("log"), forward.pages.map { it.name })
+        assertEquals(WindowKey("log", WindowKind.MXP_FRAME), forward.selectedPage)
+        assertEquals("log", forward.paneWindows.single().window.name)
+        assertEquals(2, forward.paneFrameTabs.single().tabs.current)
+
+        // A page that is gone, and no other page of tabs, is open no more
+        val gone = WindowLayout.of(state(main), area(800f, 1600f, fitted = false, selectedPage = chat))
+        assertNull(gone.selectedPage)
+        assertNull(gone.pane)
+        assertTrue(gone.paneFrameTabs.isEmpty())
+    }
+
+    // A titled MXP frame "inner" opened in the frame "outer", its pages "inner" (its own console) and "innerPage", the
+    // latter in front, each at [y] in outer, 200 by [h] below the tabs
+    private fun nestedFrameWithTabs(y: Int, h: Int): List<ScriptWindow> {
+        val tabs = ScriptWindow.FrameTabs(listOf(ScriptWindow.FrameTabs.Page("inner", "Inner"), ScriptWindow.FrameTabs.Page("innerPage", "Page")), 1)
+        return listOf("inner", "innerPage").mapIndexed { i, name ->
+            window(name, WindowKind.MXP_FRAME, x = 0, y = y, w = 200, h = h, parent = "outer", parentKind = WindowKind.MXP_FRAME, shown = i == 1)
+                .let { if (i == 0) it.copy(frameTabs = tabs) else it }
+        }
+    }
+
+    @Test
+    fun theTabsOfAFrameOpenedInAnotherGoAboveItsPageInsideThatFrameFittedOrInThePane() {
+        // Fitted, outer in the main area's left border, 2 screen pixels to each of Mudlet's: the tabs may go above the
+        // page, inside outer
+        val main = mainArea(800, 500, 100, 25, 200, 0, 600, 500)
+        val outer = window("outer", WindowKind.MXP_FRAME, x = 0, y = 0, w = 200, h = 500)
+        val fitted = WindowLayout.of(state(main, outer, *nestedFrameWithTabs(y = 230, h = 270).toTypedArray()), area(1600f, 1000f, fitted = true))
+        assertEquals(listOf("outer", "innerPage"), fitted.windows.map { it.window.name })
+        assertEquals(PxRect(0f, 460f, 400f, 540f), fitted.rectOf("innerPage"))
+        val strip = fitted.frameTabs.single()
+        assertEquals("inner", strip.frame.name)
+        assertEquals(PxRect(0f, 360f, 400f, HEADER), strip.rect)
+
+        // Stacked, outer is a page, its frame's tabs above its page in the pane: 4 by 5 screen pixels to each of outer's
+        val stacked = WindowLayout.of(
+            state(mainArea(1000, 500, 100, 25, 300, 50, 600, 400), outer.copy(y = 80, h = 284), *nestedFrameWithTabs(y = 130, h = 140).toTypedArray()),
+            area(800f, 1600f, fitted = false, selectedPage = outer.key),
+        )
+        assertEquals(listOf("outer"), stacked.pages.map { it.name })
+        assertTrue(stacked.frameTabs.isEmpty())
+        assertEquals(listOf("outer", "innerPage"), stacked.paneWindows.map { it.window.name })
+        assertEquals(PxRect(0f, 790f, 800f, 700f), stacked.paneWindows[1].rect)
+        // Mudlet's 30 pixels are 150 here
+        val inPane = stacked.paneFrameTabs.single()
+        assertEquals("inner", inPane.frame.name)
+        assertEquals(PxRect(0f, 640f, 800f, 150f), inPane.rect)
+    }
+
     private companion object {
         const val HEADER = 100f
     }

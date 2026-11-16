@@ -39,6 +39,8 @@ import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.selftest.SelfTestScreen
+import org.mudlet.android.ui.settings.SettingsPage
+import org.mudlet.android.ui.settings.SettingsPageScreen
 import org.mudlet.android.ui.settings.SettingsScreen
 import org.mudlet.android.ui.theme.MudletMotion
 
@@ -51,7 +53,8 @@ private const val SLIDE_FRACTION = 8
 private object Routes {
     const val PROFILES = "profiles"
     const val GAME = "game"
-    const val SETTINGS = "settings"
+    const val SETTINGS = "settings?game={game}"
+    const val SETTINGS_PAGE = "settingsPage/{page}"
     const val SELF_TEST = "selfTest"
     const val PROFILE = "profile?name={name}"
     const val ABOUT = "about"
@@ -60,12 +63,17 @@ private object Routes {
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
     fun licence(id: String) = "licence/${Uri.encode(id)}"
+
+    fun settings(game: String?) = if (game == null) "settings" else "settings?game=${Uri.encode(game)}"
+
+    fun settingsPage(page: SettingsPage) = "settingsPage/${Uri.encode(page.encode())}"
 }
 
 /**
- * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the settings, About with a
- * licence screen for each component it lists, and, in debug builds only, the self-test. On an expanded screen, a
- * profile's editor and a component's licence open beside their list ([ListDetail]).
+ * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the settings with a screen
+ * for each of their pages, About with a licence screen for each component it lists, and, in debug builds only, the
+ * self-test. On an expanded screen, a profile's editor, a settings page and a component's licence open beside their
+ * list ([ListDetail]).
  * A release build has no route to the self-test, so R8 drops it.
  *
  * On every screen, TalkBack says what the Announcer has to say; the first time TalkBack is on, the app asks whether
@@ -111,7 +119,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                                 if (twoPane) editing = name ?: NEW_PROFILE else nav.navigate(Routes.profile(name)) { launchSingleTop = true }
                             },
                             onOpenSelfTest = if (BuildConfig.DEBUG) ({ nav.navigate(Routes.SELF_TEST) { launchSingleTop = true } }) else null,
-                            onOpenSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                            onOpenSettings = { nav.navigate(Routes.settings(null)) { launchSingleTop = true } },
                             onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
                             selected = editing,
                         )
@@ -154,9 +162,44 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 ProfileEditor(entry.arguments?.getString("name"), onClose = entry.whileShown { nav.navigateUp() })
             }
             composable(Routes.GAME) {
-                GameScreen(onBack = { nav.navigateUp() }, onOpenSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } })
+                GameScreen(
+                    onBack = { nav.navigateUp() },
+                    onOpenSettings = { nav.navigate(Routes.settings(EngineClient.front.name.ifEmpty { null })) { launchSingleTop = true } },
+                )
             }
-            composable(Routes.SETTINGS) { SettingsScreen(onBack = { nav.navigateUp() }) }
+            val game = navArgument("game") {
+                type = NavType.StringType
+                nullable = true
+            }
+            composable(Routes.SETTINGS, listOf(game)) { entry ->
+                // The page open beside the hub, encoded
+                var open by rememberSaveable { mutableStateOf<String?>(null) }
+                ListDetail(
+                    open,
+                    onCloseDetail = { open = null },
+                    onNarrowed = {
+                        open = null
+                        SettingsPage.decode(it)?.let { page -> nav.navigate(Routes.settingsPage(page)) { launchSingleTop = true } }
+                    },
+                    list = { twoPane ->
+                        SettingsScreen(
+                            game = entry.arguments?.getString("game"),
+                            onBack = { nav.navigateUp() },
+                            onOpen = { if (twoPane) open = it.encode() else nav.navigate(Routes.settingsPage(it)) { launchSingleTop = true } },
+                            selected = open?.let(SettingsPage::decode),
+                        )
+                    },
+                    detailContent = { key ->
+                        SettingsPage.decode(key)?.let { SettingsPageScreen(it, onBack = { if (open == key) open = null }) }
+                    },
+                    empty = { DetailPlaceholder(stringResource(R.string.settings_pick)) },
+                )
+            }
+            composable(Routes.SETTINGS_PAGE, listOf(navArgument("page") { type = NavType.StringType })) { entry ->
+                val page = entry.arguments?.getString("page")?.let(SettingsPage::decode)
+                val back = entry.whileShown { nav.navigateUp() }
+                if (page != null) SettingsPageScreen(page, onBack = back) else LaunchedEffect(Unit) { back() }
+            }
             if (BuildConfig.DEBUG) {
                 composable(Routes.SELF_TEST) { SelfTestScreen(onBack = { nav.navigateUp() }, onKillUi = onKillUi) }
             }
@@ -176,7 +219,7 @@ private fun slideOutTo(side: Int) = slideOutHorizontally(MudletMotion.slide) { s
 @Composable
 private fun OfferScreenReaderSetting() {
     fun answer(yes: Boolean) {
-        EngineClient.setMudletSetting(Settings.advertiseScreenReader, yes)
+        EngineClient.setForEveryGame(Settings.advertiseScreenReader, yes)
         Settings.screenReaderOffered.set(true)
     }
     AlertDialog(

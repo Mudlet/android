@@ -13,17 +13,22 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -41,7 +46,8 @@ import org.mudlet.android.ui.game.Announcer
 /**
  * What TalkBack is given, against a fake engine, as the semantics tree shows it: new lines read as one announcement
  * while touch exploration is on (the Announcer's switch stands in for the system's), a script's announce(), the
- * console's lines as plain text, and the screen reader settings, which go to the profile with runLua.
+ * console's lines as plain text, and the settings, which are each game's own: a game added here is given the app's, then a
+ * settings page shows and changes the game's.
  */
 @RunWith(AndroidJUnit4::class)
 class ScreenReaderTest {
@@ -79,6 +85,8 @@ class ScreenReaderTest {
     fun reset() = compose.runOnIdle {
         Announcer.touchExplorationOverride = null
         for (setting in Settings.mudletSettings + Settings.screenReaderOffered) setting.reset()
+        Settings.setAwaitsDefaults(GAME.name, false)
+        EngineClient.sessions.forEach { it.settings.clear() }
     }
 
     @Test
@@ -139,37 +147,82 @@ class ScreenReaderTest {
     }
 
     @Test
-    fun theSettingsGoToTheProfileWithRunLua() {
-        session.status("luaResult", "a script's")
+    fun aGameAddedHereIsGivenTheAppsSettingsThenHasItsOwn() {
+        compose.runOnIdle { Settings.setAwaitsDefaults(GAME.name, true) }
         session.status("profile", "Test loaded")
-        val all = session.receive("runLua")
-        assertEquals(
-            "setConfig(\"announceIncomingText\", true)\nsetConfig(\"advertiseScreenReader\", false)\nsetConfig(\"blankLinesBehaviour\", \"show\")",
-            all.getString("code"),
-        )
-        // The answer to the app's own runLua is no script's result
-        session.reply("luaResult", "ran", all.getLong("id"))
-        line("after the answer")
-        compose.runOnIdle { assertEquals("a script's", EngineClient.front.lastLuaResult) }
+        val defaults = session.receive("setSettings")
+        assertEquals(APP_VALUES, values(defaults))
+        session.settings(values(defaults), defaults.getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !Settings.awaitsDefaults(GAME.name) } }
 
+        // A page asks for the game's own values as it opens: a script, or desktop Mudlet, may have changed them
         activate(hasContentDescription(string(R.string.settings_title)))
-        activate(hasText(string(R.string.settings_read_new_text)), scroll = true)
-        assertEquals("setConfig(\"announceIncomingText\", false)", session.receive("runLua").getString("code"))
-        activate(hasText(string(R.string.settings_advertise_screen_reader)), scroll = true)
-        assertEquals("setConfig(\"advertiseScreenReader\", true)", session.receive("runLua").getString("code"))
-        activate(hasText(string(R.string.settings_blank_lines_hide)), scroll = true)
-        assertEquals("setConfig(\"blankLinesBehaviour\", \"hide\")", session.receive("runLua").getString("code"))
+        activate(hasText(string(R.string.settings_display)))
+        val asked = session.receive("getSettings")
+        assertEquals(Settings.mudletSettings.map { it.key }, (0 until asked.getJSONArray("keys").length()).map { asked.getJSONArray("keys").getString(it) })
+        session.settings(mapOf("announceIncomingText" to false, "advertiseScreenReader" to true, "blankLinesBehaviour" to "hide"), asked.getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.setting(Settings.blankLines) == Settings.BlankLines.HIDE } }
+        compose.onNode(hasText(string(R.string.settings_blank_lines_hide)) and isSelected()).assertIsDisplayed()
+
+        // A change is the game's alone: what new games start with stays as it was
+        activate(hasText(string(R.string.settings_blank_lines_space)), scroll = true)
+        assertEquals(mapOf("blankLinesBehaviour" to "replacewithspace"), values(session.receive("setSettings")))
         compose.runOnIdle {
-            assertEquals(false, Settings.readNewText.value)
-            assertEquals(true, Settings.advertiseScreenReader.value)
-            assertEquals(Settings.BlankLines.HIDE, Settings.blankLines.value)
+            assertEquals(Settings.BlankLines.SPACE, EngineClient.front.setting(Settings.blankLines))
+            assertEquals(Settings.BlankLines.SHOW, Settings.blankLines.value)
+            assertEquals("the game's other settings are its own too", false, EngineClient.front.setting(Settings.readNewText))
+        }
+    }
+
+    // As one copied from desktop Mudlet: a profile the app did not add has settings of its own already
+    @Test
+    fun aGameNotAddedHereKeepsItsOwnSettings() {
+        session.status("profile", "Test loaded")
+        val asked = session.receive("getSettings")
+        session.settings(mapOf("announceIncomingText" to false, "advertiseScreenReader" to true, "blankLinesBehaviour" to "hide"), asked.getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.setting(Settings.blankLines) == Settings.BlankLines.HIDE } }
+        session.assertNoRequest("setSettings", 500)
+        compose.runOnIdle {
+            assertEquals(false, EngineClient.front.setting(Settings.readNewText))
+            assertEquals("the app's own values stay as they were", true, Settings.readNewText.value)
         }
     }
 
     @Test
+    fun aSearchFindsASettingForTheGameAndForNewGames() {
+        loaded()
+        // The profile list's settings have every open game's, and what new games start with
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.onNode(hasSetTextAction()).performTextInput("screen read")
+        val label = string(R.string.settings_advertise_screen_reader)
+        fun found(place: String) = hasText(compose.activity.getString(R.string.settings_breadcrumb, place, string(R.string.settings_accessibility))) and hasText(label)
+
+        // Each chip narrows the search to one of them
+        activate(hasText(string(R.string.settings_new_games)))
+        compose.onNode(found(GAME.name)).assertDoesNotExist()
+        activate(found(string(R.string.settings_new_games)), scroll = true)
+        compose.runOnIdle {
+            assertEquals(true, Settings.advertiseScreenReader.value)
+            assertEquals(false, EngineClient.front.setting(Settings.advertiseScreenReader))
+        }
+        session.assertNoRequest("setSettings", 500)
+        activate(hasText(GAME.name))
+        activate(found(GAME.name), scroll = true)
+        assertEquals(mapOf("advertiseScreenReader" to true), values(session.receive("setSettings")))
+
+        // A result that is not a switch opens its page, which asks for the game's values
+        compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.onNode(hasSetTextAction()).performTextInput("blank")
+        val crumb = compose.activity.getString(R.string.settings_breadcrumb, GAME.name, string(R.string.settings_display))
+        activate(hasText(crumb) and hasText(string(R.string.settings_blank_lines)), scroll = true)
+        session.receive("getSettings")
+        compose.onNode(hasText(string(R.string.settings_blank_lines_show)) and isSelected()).assertIsDisplayed()
+    }
+
+    @Test
     fun theFirstRunWithTouchExplorationOffersToTellGames() {
-        session.status("profile", "Test loaded")
-        session.receive("runLua")
+        loaded()
         compose.runOnIdle {
             Settings.screenReaderOffered.set(false)
             Announcer.touchExplorationOverride = true
@@ -179,13 +232,24 @@ class ScreenReaderTest {
         // The dialog is a window of its own, with a root of its own
         compose.onNode(isRoot() and hasAnyDescendant(title)).tryPerformAccessibilityChecks()
         compose.onNode(hasText(string(R.string.screen_reader_offer_yes)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
-        assertEquals("setConfig(\"advertiseScreenReader\", true)", session.receive("runLua").getString("code"))
+        // Every open game is told, and new games will be
+        assertEquals(mapOf("advertiseScreenReader" to true), values(session.receive("setSettings")))
         compose.runOnIdle {
             assertEquals(true, Settings.advertiseScreenReader.value)
             assertEquals(true, Settings.screenReaderOffered.value)
         }
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(title).fetchSemanticsNodes().isEmpty() }
     }
+
+    // The profile loads, and the app asks for its settings, which are the app's values
+    private fun loaded() {
+        session.status("profile", "Test loaded")
+        val asked = session.receive("getSettings")
+        session.settings(APP_VALUES, asked.getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.settingsAvailable && EngineClient.front.settings.isNotEmpty() } }
+    }
+
+    private fun values(request: JSONObject): Map<String, Any> = request.getJSONObject("values").let { v -> v.keys().asSequence().associateWith { v.get(it) } }
 
     private fun serial() = compose.runOnIdle { Announcer.current?.serial ?: 0L }
 
@@ -208,9 +272,13 @@ class ScreenReaderTest {
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
         if (scroll) node.performScrollTo()
         node.assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+        // The test's clock drives the composition: until it runs, a page it opened has not asked for the game's values
+        compose.waitForIdle()
     }
 
     private companion object {
+        // The app's values of the settings Mudlet keeps, as the app starts
+        val APP_VALUES = mapOf("announceIncomingText" to true, "advertiseScreenReader" to false, "blankLinesBehaviour" to "show")
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
 
         const val WAIT_MS = 10_000L

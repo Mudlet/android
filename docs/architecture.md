@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/`, About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -186,6 +186,22 @@ the game pill and its chip,
 the sheet closes and Ctrl+R does nothing; nothing reaches the search, and a pin can only come from the history,
 which a hidden send never enters.
 
+### Settings
+The settings (`ui/settings/`) are a hub and pages. The hub has a search field, then the categories of the game it was
+opened from (from the profile list: of every open game, then "New games"), then "App · all games"; each category is a
+page whose changes apply at once. `SettingsCatalogue.kt` lists every setting with its category.
+- A game's categories hold Mudlet's own settings of that game (`Settings.mudletSettings`), which Mudlet keeps in the
+  profile, where desktop Mudlet does, so a profile copied between the two keeps them. `ProfileSession` asks for them
+  with `getSettings` as the profile loads and as a page opens (a script may have changed them), and a change sends
+  `setSettings` ([`protocol.md`](protocol.md)). The app's values of them are what a game added in the app is given as
+  it first loads ("New games" changes them); after that it keeps its own, as a game copied in or there before does from
+  the start.
+- The search matches each word of the query against a setting's label, description, choices, category and translated
+  keywords, whatever the case and accents (`searchMatches()`). A result says where it lives ("Aardwolf ›
+  Accessibility"), chips narrow it to one game, the new games or the app, a switch turns where it is found and any
+  other opens its page at the setting, tinted for a moment.
+- On an expanded screen a page opens beside the hub (`ListDetail`); a game's page closes once the game does.
+
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
 scales; text sizes are in sp, so the system font size scales them.
@@ -202,7 +218,7 @@ scales; text sizes are in sp, so the system font size scales them.
 - Motion is Material 3 Expressive's springs (`MudletMotion`): screens slide a little and fade, forward from the end,
   Back the other way, and a predictive back gesture (`android:enableOnBackInvokedCallback`) seeks it as it goes.
 - On an expanded screen (840 dp wide and more, Material's window size classes, measured from the space the app has), a
-  profile's editor and a component's licence open beside their list (`ListDetail`), the list's item tinted; Back,
+  profile's editor, a settings page and a component's licence open beside their list (`ListDetail`), the list's item tinted; Back,
   predictive too, closes them there, and the detail's top bar has Close in place of Back. Narrower, they are screens of
   their own, and one open beside the list moves to its own screen when the window narrows (a foldable folding, say).
 - Material 3 Expressive's own components (`MaterialExpressiveTheme`, the shape morphs, button groups, the flexible top
@@ -426,8 +442,9 @@ rows without resizing the main window that `setMainWindowSize` gave, a label's l
 a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, several
 headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
 [`multi-profile.md`](multi-profile.md)), and an MXP frame's tab header, its pages' titles and the one in front
-(`frameTabs`), with the player's tap on a tab (`selectFrameTab()`), and moving a map by touch with what each frame
-laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)).
+(`frameTabs`), with the player's tap on a tab (`selectFrameTab()`), moving a map by touch with what each frame
+laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)), and a profile's settings
+as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see "Settings").
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -651,8 +668,10 @@ device shows, below the UI's debug hook:
   (`PasswordStoreTest`), whose passwords outlast a new store, go with Forget, are never in the clear, and are excluded
   from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
-  announcement, `announce`, each console line as its plain text) and the `setConfig` calls the screen reader settings
-  send; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
+  announcement, `announce`, each console line as its plain text) and the settings: a game added in the app given
+  the app's (`setSettings`) and any other keeping its own (`getSettings`), read again as a page opens and changed there
+  alone, and a search's switches
+  for the game and for new games; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
   map in front the title bar, its search, the map and the game pill, and nothing it covers; the script
@@ -1272,7 +1291,7 @@ Item 13 of the on-device checklist covers this.
       unlabelled, which `AboutScreenTest` therefore does not check).
 18. Text size and the screen size the game is told, connected to a game with the libmudlet APK.
     - Pinch the game's text with two fingers: it grows and shrinks smoothly, and one finger still scrolls. The
-      settings button in the game screen's title bar opens "Settings", whose text size slider, "Smaller text" and
+      settings button in the game screen's title bar opens "Settings", whose Appearance page's text size slider, "Smaller text" and
       "Larger text" buttons change it too; TalkBack reads the slider as "Text size", with its size, and swiping up or
       down on it changes the size.
     - On a game that shows the width it was told (many have a screen-width option), a line of that many characters
@@ -1284,10 +1303,15 @@ Item 13 of the on-device checklist covers this.
       keeps them.
 19. Screen reader output, with TalkBack on, connected to a game with the libmudlet APK.
     - On the first run with TalkBack on (clear the app's data first), the app asks whether to tell games you use a
-      screen reader; the answer shows in Settings as "Tell games I use a screen reader".
+      screen reader; the answer shows in Settings, on the game's Accessibility page, as "Tell games I use a screen
+      reader".
     - New text is read as it arrives, without moving focus. A burst (`look` in a busy room, or
       `lua for i = 1, 20 do echo("line " .. i .. "\n") end`) is read once, as its count and its last lines, not
-      queued line by line. With "Read new text aloud" off in Settings, nothing is read.
+      queued line by line. With "Read new text aloud" off on the game's Accessibility page, nothing is read.
+    - On the game's Display & text page choose "Hide them": `lua echo(getConfig("blankLinesBehaviour"))` says `hide`.
+      After `lua setConfig("blankLinesBehaviour", "show")`, the page opened again shows "Show them". Close the game
+      and open it again: the choice stays. A game added afterwards starts with the values of "New games"; a profile
+      copied in from desktop Mudlet keeps its own.
     - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
       interrupts it. The same announcement twice is read twice.
     - Swiping through the console moves line by line, and each line is read as its text, without colour or style
@@ -1422,8 +1446,10 @@ Item 13 of the on-device checklist covers this.
     - On a tablet or an unfolded foldable in landscape, Edit opens the editor beside the profile list, and About's
       components their licence beside the list; Back closes it, and folding the device moves an open editor to its own
       screen.
-    - With TalkBack on: the settings' sections read as headings, and the editor beside the list has "Close <name>" at
-      its top.
+    - On a tablet, Settings opens a page beside the list of pages, and a search's result opens its page there with the
+      setting tinted for a moment.
+    - With TalkBack on: the settings' section titles read as headings, and the editor beside the list has
+      "Close <name>" at its top.
 
 28. Several profiles, with the libmudlet debug APK, until the app can open one beside another: connect one game, then
     open two more beside it, each with `adb shell am broadcast -n org.mudlet.mudlet/org.mudlet.android.debug.SmokeTestReceiver

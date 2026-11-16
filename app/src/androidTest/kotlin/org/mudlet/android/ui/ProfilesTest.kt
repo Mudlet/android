@@ -39,6 +39,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 
 /**
@@ -70,7 +71,10 @@ class ProfilesTest {
 
     @After
     fun forgetPasswords() {
-        listOf(ALPHA, BETA, GAMMA).forEach { passwords.forget(it.name) }
+        listOf(ALPHA, BETA, GAMMA).forEach {
+            passwords.forget(it.name)
+            Settings.setAwaitsDefaults(it.name, false)
+        }
     }
 
     @Test
@@ -115,7 +119,10 @@ class ProfilesTest {
         assertFalse("the password goes to the engine only with openProfile", save.has("password"))
         engine.profiles(listOf(GAMMA), save)
         waitFor(hasContentDescription("Gamma, g.example:4242"))
-        compose.runOnIdle { assertEquals("gamma secret", passwords.get("Gamma")) }
+        compose.runOnIdle {
+            assertEquals("gamma secret", passwords.get("Gamma"))
+            assertTrue("a game added here is given the app's settings as it first loads", Settings.awaitsDefaults("Gamma"))
+        }
     }
 
     @Test
@@ -134,7 +141,10 @@ class ProfilesTest {
         assertEquals(ALPHA.copy(port = 2323), profileOf(save))
         engine.profiles(listOf(ALPHA.copy(port = 2323)), save)
         waitFor(hasContentDescription("Alpha, a.example:2323"))
-        compose.runOnIdle { assertEquals("an empty password field keeps the stored one", "alpha secret", passwords.get("Alpha")) }
+        compose.runOnIdle {
+            assertEquals("an empty password field keeps the stored one", "alpha secret", passwords.get("Alpha"))
+            assertFalse("a game edited keeps its own settings", Settings.awaitsDefaults("Alpha"))
+        }
     }
 
     @Test
@@ -150,6 +160,7 @@ class ProfilesTest {
     @Test
     fun deletesOnlyOnceConfirmed() {
         assertTrue(passwords.set("Alpha", "alpha secret"))
+        compose.runOnIdle { Settings.setAwaitsDefaults("Alpha", true) }
         listed(ALPHA, BETA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
 
@@ -167,7 +178,10 @@ class ProfilesTest {
         waitFor(hasContentDescription("Beta, b.example:4000"))
         compose.onNodeWithText(string(R.string.profiles_title)).assertIsDisplayed()
         compose.onNodeWithContentDescription("Alpha, a.example:23").assertDoesNotExist()
-        compose.runOnIdle { assertFalse("its password goes with it", passwords.has("Alpha")) }
+        compose.runOnIdle {
+            assertFalse("its password goes with it", passwords.has("Alpha"))
+            assertFalse("a new game of its name will be given the settings when added", Settings.awaitsDefaults("Alpha"))
+        }
     }
 
     @Test

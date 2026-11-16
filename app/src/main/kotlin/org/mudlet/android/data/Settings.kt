@@ -10,7 +10,9 @@ import androidx.core.content.edit
 
 /**
  * The app's own settings, kept in SharedPreferences. Each one is Compose state, read and set on the main thread. A new
- * setting is a property here, in [all] so that it loads, and a row on the settings screen.
+ * setting is a property here, in [all] so that it loads, and an entry of the settings screen's catalogue
+ * (ui/settings/SettingsCatalogue.kt). A [Setting.mudlet] one is each game's own, kept by Mudlet with its profile: here
+ * it is only what a game added in the app is given as it first loads (ui/ProfileSession.kt reads the game's).
  */
 object Settings {
     private const val PREFS = "settings"
@@ -40,11 +42,23 @@ object Settings {
 
     private val all = listOf(textSize, readNewText, advertiseScreenReader, blankLines, screenReaderOffered, mapBehindText, wallpaperColours)
 
-    /**
-     * The settings Mudlet keeps for each profile too. The app keeps its own copy, as libmudlet's `luaResult` says only
-     * whether the Lua ran, and gives each profile that loads the app's values.
-     */
+    /** The settings Mudlet keeps with each profile, whose app values a game added in the app is given. */
     val mudletSettings = all.filter { it.mudlet }
+
+    // The games added in the app that have not had the app's values of mudletSettings yet, by name. A game the app did
+    // not add, such as one copied from desktop Mudlet, keeps its own from the start.
+    private const val GAMES_AWAITING_DEFAULTS = "gamesAwaitingDefaults"
+
+    /** Whether the game [name] is to be given the app's values of [mudletSettings] as it loads. */
+    fun awaitsDefaults(name: String): Boolean = prefs?.getStringSet(GAMES_AWAITING_DEFAULTS, null)?.contains(name) == true
+
+    /** Marks the game [name] as to be given them, as when it is added, or not, once it has them or is deleted. */
+    fun setAwaitsDefaults(name: String, awaits: Boolean) {
+        val p = prefs ?: return
+        val games = p.getStringSet(GAMES_AWAITING_DEFAULTS, null).orEmpty()
+        if ((name in games) == awaits) return
+        p.edit { putStringSet(GAMES_AWAITING_DEFAULTS, if (awaits) games + name else games - name) }
+    }
 
     fun init(context: Context) {
         if (prefs != null) return
@@ -62,9 +76,9 @@ object Settings {
 
     /**
      * One setting: [value] is the current one, [set] changes and stores it. A [mudlet] setting's [key] is also the
-     * name of the `setConfig()` key it sets in Mudlet.
+     * name of the `getConfig()` and `setConfig()` key it has in Mudlet.
      */
-    abstract class Setting<T>(protected val key: String, val default: T, val mudlet: Boolean = false) {
+    abstract class Setting<T>(val key: String, val default: T, val mudlet: Boolean = false) {
         var value by mutableStateOf(default)
             private set
 
@@ -78,16 +92,20 @@ object Settings {
         @VisibleForTesting
         fun reset() = set(default)
 
-        /** The Lua that gives Mudlet's profile this setting's value. */
-        fun setConfigLua(): String = "setConfig(\"$key\", ${lua(value)})"
+        /** [v] as Mudlet's `setConfig()` takes it and `getConfig()` gives it. */
+        open fun toMudlet(v: T): Any = v as Any
+
+        /** [value] as Mudlet's `setConfig()` takes it. */
+        fun valueToMudlet(): Any = toMudlet(value)
+
+        /** What `getConfig()` gave, or null for a value this setting cannot have. */
+        abstract fun fromMudlet(v: Any): T?
 
         internal fun load(prefs: SharedPreferences) {
             value = normalise(read(prefs))
         }
 
         protected open fun normalise(v: T): T = v
-
-        protected open fun lua(v: T): String = v.toString()
 
         protected abstract fun read(prefs: SharedPreferences): T
 
@@ -98,6 +116,8 @@ object Settings {
     class IntSetting(key: String, default: Int, val range: IntRange) : Setting<Int>(key, default) {
         override fun normalise(v: Int) = v.coerceIn(range)
 
+        override fun fromMudlet(v: Any) = (v as? Number)?.toInt()?.coerceIn(range)
+
         override fun read(prefs: SharedPreferences) = prefs.getInt(key, default)
 
         override fun write(editor: SharedPreferences.Editor, v: Int) {
@@ -106,6 +126,8 @@ object Settings {
     }
 
     class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false) : Setting<Boolean>(key, default, mudlet) {
+        override fun fromMudlet(v: Any) = v as? Boolean
+
         override fun read(prefs: SharedPreferences) = prefs.getBoolean(key, default)
 
         override fun write(editor: SharedPreferences.Editor, v: Boolean) {
@@ -121,8 +143,9 @@ object Settings {
         mudlet: Boolean = false,
         private val mudletValue: (E) -> String,
     ) : Setting<E>(key, default, mudlet) {
-        // The values are fixed strings of letters, which need no escaping
-        override fun lua(v: E) = "\"${mudletValue(v)}\""
+        override fun toMudlet(v: E): Any = mudletValue(v)
+
+        override fun fromMudlet(v: Any) = entries.firstOrNull { mudletValue(it) == v }
 
         override fun read(prefs: SharedPreferences) = prefs.getString(key, null)?.let { name -> entries.firstOrNull { it.name == name } } ?: default
 

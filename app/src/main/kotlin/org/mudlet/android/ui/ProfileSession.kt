@@ -77,6 +77,9 @@ class ProfileSession internal constructor(
     /** The profile's statuses, as its socket last gave them; the engine's own are [EngineClient.engineStatus]. */
     val status = mutableStateMapOf<String, String>()
 
+    /** The profile's settings, by Mudlet's `getConfig()` keys, as the engine last gave them; [setting] reads one. */
+    val settings = mutableStateMapOf<String, Any>()
+
     /** How this session's link to its socket stands, for the self-test screen. */
     var linkState by mutableStateOf("not attached")
         private set
@@ -146,8 +149,13 @@ class ProfileSession internal constructor(
     // The number (linesAdded) after the last console line given to the suggestions, so none is given twice
     internal var linesSuggested = 0L
 
-    // The ids of the runLua requests that carry the app's own Lua, such as its Mudlet settings, whose luaResult is no script's
+    // The ids of the runLua requests that carry the app's own Lua, such as a script console's pinched size, whose luaResult is no script's
     private val appLuaRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
+    // The ids of the getSettings and setSettings requests not yet answered, and of the setSettings among them that give
+    // the game the app's values, which it has once that is answered
+    private val settingsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+    private val defaultsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
     // Reader-thread batches, drained on the main thread
     private val pendingLock = Any()
@@ -299,12 +307,6 @@ class ProfileSession internal constructor(
         }
     }
 
-    // Lost when the profile has not loaded or the link is down: its load, or the next attach, gets them all
-    internal fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
-        if (status["profile"]?.endsWith(" loaded") != true) return
-        runAppLua(settings.joinToString("\n") { it.setConfigLua() })
-    }
-
     /** Runs Lua of the app's own in the profile, whose luaResult is no script's; false when it could not go. */
     internal fun runAppLua(code: String): Boolean {
         val id = newRequestId()
@@ -312,6 +314,53 @@ class ProfileSession internal constructor(
         if (link?.send(Requests.runLua(code, id)) == true) return true
         appLuaRequests.remove(id)
         return false
+    }
+
+    /** This game's value of [setting], one of [Settings.mudletSettings], as Mudlet last gave it; until then, the app's. */
+    fun <T> setting(setting: Settings.Setting<T>): T = settings[setting.key]?.let(setting::fromMudlet) ?: setting.value
+
+    /**
+     * Changes this game's [setting] to [value], shown at once and put right by the engine's answer; false, changing
+     * nothing, while its profile has not loaded or the link is down.
+     */
+    fun <T> changeSetting(setting: Settings.Setting<T>, value: T): Boolean {
+        if (!settingsAvailable) return false
+        val mudletValue = setting.toMudlet(value)
+        if (!sendSettings(Requests.setSettings(mapOf(setting.key to mudletValue), newRequestId()))) return false
+        settings[setting.key] = mudletValue
+        return true
+    }
+
+    /** Asks Mudlet for this game's settings again, as a script may have changed them; nothing while it has not loaded. */
+    fun refreshSettings() {
+        if (settingsAvailable) sendSettings(Requests.getSettings(Settings.mudletSettings.map { it.key }, newRequestId()))
+    }
+
+    /** Whether this game's settings can be read and changed: once its profile has loaded. */
+    val settingsAvailable: Boolean get() = status["profile"]?.endsWith(LOADED) == true
+
+    // A game just added in the app is given the app's values, which then are its own; any other is asked for its own
+    private fun onLoaded() {
+        if (!Settings.awaitsDefaults(name)) return refreshSettings()
+        val id = newRequestId()
+        defaultsRequests.add(id)
+        if (!sendSettings(Requests.setSettings(Settings.mudletSettings.associate { it.key to it.valueToMudlet() }, id))) defaultsRequests.remove(id)
+    }
+
+    private fun sendSettings(request: JSONObject): Boolean {
+        val id = request.getLong("id")
+        settingsRequests.add(id)
+        val sent = link?.send(request) == true
+        if (!sent) settingsRequests.remove(id)
+        return sent
+    }
+
+    private fun onSettings(message: EngineMessage.SettingValues) {
+        val id = (message.replyTo as? Number)?.toLong()
+        if (id == null || !settingsRequests.remove(id)) return
+        settings.putAll(message.values)
+        if (message.refused.isNotEmpty()) Log.w(TAG, "Mudlet did not take these settings: ${message.refused}")
+        if (defaultsRequests.remove(id)) Settings.setAwaitsDefaults(name, false)
     }
 
     internal fun sendScreenSize(size: Pair<Int, Int>) {
@@ -427,6 +476,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Rooms -> post { appMap.onRooms(message) }
 
+                is EngineMessage.SettingValues -> post { onSettings(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }
@@ -445,7 +496,14 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Error -> post {
                     linkState = "engine error: ${message.message}"
-                    windows.onError(message)
+                    val id = (message.replyTo as? Number)?.toLong()
+                    if (id != null && settingsRequests.remove(id)) {
+                        // The settings shown stay as they were; the next load, attach or page asks again
+                        defaultsRequests.remove(id)
+                        Log.w(TAG, "Mudlet's settings: ${message.message}")
+                    } else {
+                        windows.onError(message)
+                    }
                 }
 
                 else -> {}
@@ -537,7 +595,7 @@ class ProfileSession internal constructor(
         // Only the front profile's new lines are read out, as desktop Mudlet reads only the profile in front
         if (news.isNotEmpty() && front()) Announcer.newLines(news)
         // Also when an attach resends the profile status: a setting may have changed while the link was down
-        if (newStatus["profile"]?.endsWith(LOADED) == true) sendMudletSettings(Settings.mudletSettings)
+        if (newStatus["profile"]?.endsWith(LOADED) == true) onLoaded()
     }
 
     // Takes the profile from the engine's status `profile` ("<name> loaded"); its other values change nothing

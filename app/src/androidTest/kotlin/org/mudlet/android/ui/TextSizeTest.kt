@@ -87,11 +87,14 @@ class TextSizeTest {
         assertEquals(DEFAULT_SIZE.sp, consoleFontSize())
 
         activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_appearance)))
         val slider = hasContentDescription(string(R.string.settings_text_size)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
         compose.onNode(slider).performSemanticsAction(SemanticsActions.SetProgress) { it(28f) }
         activate(hasContentDescription(string(R.string.settings_text_smaller)))
         compose.runOnIdle { assertEquals(27, Settings.textSize.value) }
         compose.onNode(slider).assert(stateDescription(compose.activity.getString(R.string.settings_text_size_value, 27)))
+        // The page, then the settings
+        activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
 
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
@@ -134,6 +137,7 @@ class TextSizeTest {
         assertNothingCutOff()
 
         activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_appearance)))
         compose.onNodeWithText(string(R.string.settings_text_size_sample)).assertIsDisplayed()
         assertNothingCutOff()
     }

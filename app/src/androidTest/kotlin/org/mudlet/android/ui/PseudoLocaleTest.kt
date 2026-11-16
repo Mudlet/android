@@ -90,9 +90,14 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.profiles_title)))
 
         activate(hasContentDescription(string(R.string.settings_title)))
-        waitFor(hasText(string(R.string.settings_text_size)))
+        waitFor(hasText(string(R.string.settings_new_games)))
         assertTextFits("the settings")
-        assertAtStart("the settings' first heading", hasText(string(R.string.settings_text_size)))
+        assertAtStart("the settings' first heading", hasText(string(R.string.settings_new_games)))
+        activate(hasText(string(R.string.settings_appearance)))
+        waitFor(hasText(string(R.string.settings_text_size)))
+        assertTextFits("a settings page")
+        assertAtStart("the page's first setting", hasText(string(R.string.settings_text_size)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))
 

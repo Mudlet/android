@@ -203,13 +203,15 @@ class AppMapTest {
     fun theSettingsSwitchTurnsTheMapBehindTheTextOff() {
         assertTrue(lastRequest("setAppMapSize", readPast = true).getInt("w") > 0)
         activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_appearance)))
         val row = hasText(string(R.string.settings_map_behind_text)) and hasClickAction()
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
         compose.onNode(row).performScrollTo()
         activate(row)
         compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.runOnIdle { assertFalse(Settings.mapBehindText.value) }
-        // Back on the game screen, no map is asked for
+        // Back on the game screen, past the settings, no map is asked for
+        activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("the main console")).fetchSemanticsNodes().isNotEmpty() }
         assertNone(lastRequest("setAppMapSize"))

@@ -93,8 +93,8 @@ GUI:
 - `blankLinesBehaviour` (show, hide or replace blank lines with a space), and `caretShortcut`, a key that moves
   between the input line and the console, "for visually impaired players" as `Host.h` puts it.
 
-`announceIncomingText`, `advertiseScreenReader` and `blankLinesBehaviour` are `setConfig()` keys, so the app can set
-them through `runLua`. The announcing itself is GUI code, so the app does its own.
+`announceIncomingText`, `advertiseScreenReader` and `blankLinesBehaviour` are `getConfig()` and `setConfig()` keys, so
+the app reads and sets each game's with `getSettings` and `setSettings`. The announcing itself is GUI code, so the app does its own.
 
 Requirements for every Phase E pull request, not only the screen-reader one:
 
@@ -168,7 +168,7 @@ holds.
 |---|---|---|
 | **Line updates:** a stable id for each main console line in `lineShown`, a `linesUpdated` signal with a `LineUpdate` struct (id, text, runs, prompt, deleted) for a line changed or deleted after it was shown | A trigger's later `replace()`, `deleteLine()` on an earlier line, a link's text restyled | Lines already sent stay as sent (`architecture.md`, "Gaps") |
 | **Profile management:** list the profiles in a config folder with their stored address, TLS, character name and auto-reconnect; delete a profile with its stored passwords; store and forget the character password; set auto-reconnect; Mudlet's list of predefined games | P1 without reading profile files directly; a password that survives an engine restore | The engine reads and writes the profile's `url`, `port`, `ssl_tsl`, `login` and `autoreconnect` files as `MudletEngine::profileReconnects()` reads one now, and deletes the folder; the UI keeps the password (Android KeyStore) and sends it with `openProfile`, so a restored engine has none until the player opens the profile |
-| **Lua results:** `runLua()` giving the values the chunk returned (its error is in `errorString()` already) | Reading `getConfig()` settings and `getPackages()` into the UI | The app keeps its own copy of the settings it sets |
+| **Lua results:** `runLua()` giving the values the chunk returned (its error is in `errorString()` already) | Reading `getPackages()` into the UI | `getConfig()` settings have `THeadlessSession::settings()` instead (`scripts/mudlet-patches`) |
 
 The Lua 5.1 FORTIFY fix stays carried in `scripts/build-libmudlet.sh` (README, "CI") until Mudlet takes it.
 

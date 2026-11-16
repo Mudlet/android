@@ -248,6 +248,28 @@ def no_map(c):
     return c
 
 
+def settings(c):
+    """The stand-in keeps the settings it is given, with no meaning, so a UI reads back what it set: a key never set is
+    left out. A value that is not true or false, a number or a string is refused, and the rest are taken."""
+    m = c.ask({"t": "getSettings", "keys": ["blankLinesBehaviour"]}, answers=("settings", "error"))
+    check(m["t"] == "settings" and m["values"] == {} and "refused" not in m, f"a setting never set is left out: {m}")
+    m = c.ask({"t": "setSettings", "values": {"blankLinesBehaviour": "hide", "mapRoomSize": 5, "announceIncomingText": False,
+                                              "colours": [1, 2]}}, answers=("settings", "error"))
+    check(m["t"] == "settings" and m["values"] == {"blankLinesBehaviour": "hide", "mapRoomSize": 5, "announceIncomingText": False},
+          f"setSettings answers with the values it holds now: {m}")
+    check(m.get("refused") == {"colours": "a setting is true or false, a number or a string"}, f"and those it refused, with why: {m}")
+    m = c.ask({"t": "getSettings", "keys": ["announceIncomingText", "blankLinesBehaviour", "noSuchSetting"]}, answers=("settings", "error"))
+    check(m["values"] == {"announceIncomingText": False, "blankLinesBehaviour": "hide"}, f"getSettings reads them back: {m}")
+    for request, message in (({"t": "getSettings", "keys": []}, "getSettings: keys must be a list of names"),
+                             ({"t": "getSettings", "keys": "blankLinesBehaviour"}, "getSettings: keys must be a list of names"),
+                             ({"t": "getSettings", "keys": ["blankLinesBehaviour", 1]}, "getSettings: keys must be a list of names"),
+                             ({"t": "getSettings", "keys": [""]}, "getSettings: keys must be a list of names"),
+                             ({"t": "setSettings", "values": {}}, "setSettings: values must be an object of settings"),
+                             ({"t": "setSettings", "values": ["blankLinesBehaviour"]}, "setSettings: values must be an object of settings")):
+        m = c.ask(request, answers=("settings", "error"))
+        check(m["t"] == "error" and m["message"] == message, f"{request} is refused: {m}")
+
+
 def open_profiles(m):
     return {p["name"]: p for p in m["profiles"]}
 
@@ -536,6 +558,7 @@ def main():
     script_windows(c)
     buttons_and_commands(c)
     c = no_map(c)
+    settings(c)
     c = multi_profile(c, port)
 
     # Latency

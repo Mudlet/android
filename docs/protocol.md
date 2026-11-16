@@ -147,9 +147,10 @@ than `app` or `mapper`; `moveMap` for numbers that are not numbers, a `zoom` not
 has no map and refuses both.
 
 `downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
-while no profile is open; `downloadMap` while the game offers no map, and while a map download (the UI's or a
-script's), import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being
-loaded. The stand-in has no map and refuses both.
+while no profile is open; `downloadMap` while the game offers no map, and while the map downloads; `cancelMapDownload`
+while no map downloads, and once the map has arrived and is being loaded. A script's map import or export runs within
+its Lua call, so none is under way when a request is read; its progress is not sent as `mapDownload`, not even the last
+of it, which Mudlet relays after a `downloadMap` read in the same pass. The stand-in has no map and refuses both.
 
 `getSettings` and `setSettings` are answered by `settings`, or by `error` whose `message` is the request's name, a colon
 and why: a `keys` or `values` that is not as above, and in libmudlet no profile loaded (`no profile running`). A value in

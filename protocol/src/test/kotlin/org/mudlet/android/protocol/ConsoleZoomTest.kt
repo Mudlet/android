@@ -50,6 +50,18 @@ class ConsoleZoomTest {
     }
 
     @Test
+    fun aScriptThatSetsItsSizeAgainInAnswerKeepsIt() {
+        val (sent, send) = ConsoleZoom(14, 8).reported(10)
+        assertEquals(14, send)
+        // Its handler of sysFontChangeEvent sets 10 again, in the same turn, so the engine never reports 14
+        val (afterAnswer, again) = sent.reported(10)
+        assertNull(again)
+        assertEquals(sent, afterAnswer)
+        // A size it sets later is fought once more
+        assertEquals(14, afterAnswer.reported(14).first.reported(12).second)
+    }
+
+    @Test
     fun theAnswerToAnOlderSendIsNoScriptsSize() {
         // 12 then 14 went before the engine answered either
         val zoom = ConsoleZoom(10, 8).chosen(12).chosen(14)

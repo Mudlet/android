@@ -167,7 +167,7 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         val consoleSizes = remember(windows.windows) {
             windows.windows.filter { it.kind in ScriptWindows.CONSOLE_KINDS }.associate { it.name to ConsoleZoom.points(it.fontSize) }
         }
-        LaunchedEffect(consoleSizes, attaches) { for ((name, size) in consoleSizes) zoom.reported(name, size) }
+        LaunchedEffect(zoom, consoleSizes, attaches) { for ((name, size) in consoleSizes) zoom.reported(name, size) }
         // A page the layout no longer offers can no longer be open, and one an MXP frame put another of its pages in
         // front of is that one
         LaunchedEffect(layout.selectedPage) { if (selected != layout.selectedPage) selected = layout.selectedPage }

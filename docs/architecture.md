@@ -248,6 +248,8 @@ both read alike:
   has the link. TalkBack offers each link not disabled as an action, "Follow link:" and its tool tip, or its text where
   it has none, and one with a menu as another that opens it, as an inline link is too small for a 48 dp target. A tap,
   pick or action while no engine is attached says the link was not sent.
+- The main console's links are not followed yet: its lines have their link runs, but no tap or action uses them.
+  `ConsoleLine` takes them as it does a window's, once the main console asks the engine about them.
 
 ### Script windows' text size
 A two-finger pinch on a mini console, user window or MXP frame sets its font size as a script's `setFontSize(name,
@@ -260,12 +262,11 @@ script's change. The app sends it with `runLua` once the fingers lift (`ConsoleZ
 the engine names `main`, is not pinched.
 - **The player's size wins.** It is kept for each profile and console name, across restarts. When the engine reports
   another size for that console, as after a script's `setFontSize()` or when a script makes the console again, the
-  app sends the player's size again, and keeps the script's as the one to go back to.
+  app sends the player's size again, and keeps the script's as the one to go back to. A script that sets its size
+  again in answer (from `sysFontChangeEvent`, say) keeps it, rather than the two trading sizes without end.
 - **Reset**: a two-finger double tap, or TalkBack's "Reset text size", forgets the player's size and gives the
   console the size its scripts last gave it. TalkBack's "Larger text" and "Smaller text" change it a size at a time.
 - One finger is left to the window's list, its sideways scroll and its links: the pinch takes only two.
-- The main console's links are not followed yet: its lines have their link runs, but no tap or action uses them.
-  `ConsoleLine` takes them as it does a window's, once the main console asks the engine about them.
 
 ### Button bars and commands
 The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt` and `ScriptCommands.kt`, laid out by

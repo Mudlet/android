@@ -8,7 +8,8 @@ import kotlin.math.roundToInt
  * The text size the player chose for a script console (a mini console, user window or MXP frame) by pinching it, in
  * the points `setFontSize(name, size)` takes, against the size the console's scripts give it. The player's choice
  * wins: a size a script sets later, or a console made again with another, is set back to [chosen], until the player
- * resets it, which gives the console the size its scripts last gave it, [scripts].
+ * resets it, which gives the console the size its scripts last gave it, [scripts]. A script that sets its size again in
+ * answer to the player's, before the engine reports the player's, keeps it rather than being fought without end.
  *
  * [inFlight] are the sizes sent since the engine last reported [chosen]: a report of one of those is the answer to an
  * older send, not a script's size.
@@ -19,6 +20,7 @@ data class ConsoleZoom(val chosen: Int, val scripts: Int?, val inFlight: Set<Int
         size <= 0 -> this to null
         size == chosen -> copy(inFlight = emptySet()) to null
         size in inFlight -> this to null
+        size == scripts && inFlight.isNotEmpty() -> this to null
         else -> ConsoleZoom(chosen, size, setOf(chosen)) to chosen
     }
 

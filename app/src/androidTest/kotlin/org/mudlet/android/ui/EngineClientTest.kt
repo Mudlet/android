@@ -60,6 +60,8 @@ class EngineClientTest {
 
     @Test
     fun theMapSearchsRefusalIsNoProfileRequestsAnswer() {
+        // The fake has answered the hello before the link has read it, and a request sent sooner is dropped
+        waitUntil("the link attached") { EngineClient.linkState.startsWith("attached to pid") }
         val answers = LinkedBlockingQueue<String>()
         fun askProfile(): JSONObject {
             onMain { EngineClient.deleteProfile("Nobody") { answers.add(it ?: "done") } }

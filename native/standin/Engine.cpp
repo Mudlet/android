@@ -1,16 +1,5 @@
 #include "Engine.h"
 
-#include <QDateTime>
-#include <QFile>
-#include <QFont>
-#include <QFontDatabase>
-#include <QFontInfo>
-#include <QFontMetrics>
-#include <QGuiApplication>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QSaveFile>
 
 extern "C" {
 #include "lauxlib.h"
@@ -67,12 +56,9 @@ int luaAnnounceFn(lua_State* L)
 
 } // namespace
 
-Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath, QObject* parent)
+Engine::Engine(QObject* parent)
 : QObject(parent)
-, mFrontend(frontend)
-, mProfilesPath(profilesPath)
 {
-    loadProfiles();
     connect(&mSocket, &QTcpSocket::readyRead, this, &Engine::onReadyRead);
     connect(&mSocket, &QTcpSocket::connected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
@@ -101,7 +87,11 @@ Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath
     mCounterTimer.setSingleShot(true);
     mCounterTimer.setInterval(100);
     connect(&mCounterTimer, &QTimer::timeout, this, &Engine::flushCounters);
+}
 
+void Engine::start(IFrontend* frontend)
+{
+    mFrontend = frontend;
     mLua = luaL_newstate();
     luaL_openlibs(mLua);
     lua_pushlightuserdata(mLua, this);
@@ -115,31 +105,20 @@ Engine::Engine(IFrontend* frontend, int heartbeatMs, const QString& profilesPath
         lua_pop(mLua, 1);
     }
 
-    reportFont();
-
-    mLastHeartbeatMs = QDateTime::currentMSecsSinceEpoch();
-    mHeartbeat.setInterval(heartbeatMs);
-    connect(&mHeartbeat, &QTimer::timeout, this, &Engine::onHeartbeat);
-    mHeartbeat.start();
     mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
 }
 
 Engine::~Engine()
 {
-    lua_close(mLua);
+    if (mLua) {
+        lua_close(mLua);
+    }
 }
 
-void Engine::reportFont()
+void Engine::close()
 {
-    if (!qobject_cast<QGuiApplication*>(QCoreApplication::instance())) {
-        mFrontend->status(QStringLiteral("fontError"), QStringLiteral("no QGuiApplication"));
-        return;
-    }
-    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    font.setPixelSize(14);
-    mFrontend->status(QStringLiteral("fontFamily"), QFontInfo(font).family());
-    mFrontend->status(QStringLiteral("advanceM"), QString::number(QFontMetrics(font).horizontalAdvance(QLatin1Char('M'))));
-    mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
+    mPromptTimer.stop();
+    mSocket.abort();
 }
 
 void Engine::connectTo(const QString& host, quint16 port, std::optional<bool> tls)
@@ -300,124 +279,6 @@ void Engine::sendNaws()
     }
     message.append(char(IAC)).append(char(SE));
     mSocket.write(message);
-}
-
-// {"v": 1, "profiles": [{"name", "host", "port", "tls", "login", "autoReconnect"}, ...]}, the last opened first
-void Engine::loadProfiles()
-{
-    QFile file(mProfilesPath);
-    if (!file.exists()) {
-        return;
-    }
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning("Engine: cannot read the profiles in %s: %s", qPrintable(mProfilesPath), qPrintable(file.errorString()));
-        return;
-    }
-    QJsonParseError error{};
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
-    if (!doc.isObject()) {
-        qWarning("Engine: ignoring the unreadable profiles in %s: %s", qPrintable(mProfilesPath), qPrintable(error.errorString()));
-        return;
-    }
-    for (const QJsonValue& value : doc.object().value(QLatin1String("profiles")).toArray()) {
-        const QJsonObject json = value.toObject();
-        const Profile profile{json.value(QLatin1String("name")).toString(),
-                              json.value(QLatin1String("host")).toString(),
-                              json.value(QLatin1String("port")).toInt(23),
-                              json.value(QLatin1String("tls")).toBool(),
-                              json.value(QLatin1String("login")).toString(),
-                              json.value(QLatin1String("autoReconnect")).toBool()};
-        if (Profile::newNameProblem(profile.name).isEmpty() && profileIndex(profile.name) < 0) {
-            mProfiles.append(profile);
-        }
-    }
-}
-
-// Kept in memory only once on disk, so the UI is never shown a profile a restart would lose
-QString Engine::storeProfiles(const QList<Profile>& profiles)
-{
-    QJsonArray list;
-    for (const Profile& profile : profiles) {
-        list.append(QJsonObject{{QStringLiteral("name"), profile.name},
-                                {QStringLiteral("host"), profile.host},
-                                {QStringLiteral("port"), profile.port},
-                                {QStringLiteral("tls"), profile.tls},
-                                {QStringLiteral("login"), profile.login},
-                                {QStringLiteral("autoReconnect"), profile.autoReconnect}});
-    }
-    QSaveFile file(mProfilesPath);
-    if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(QJsonObject{{QStringLiteral("v"), 1}, {QStringLiteral("profiles"), list}}).toJson()) < 0 || !file.commit()) {
-        return QStringLiteral("could not store the profiles in %1: %2").arg(mProfilesPath, file.errorString());
-    }
-    mProfiles = profiles;
-    return {};
-}
-
-qsizetype Engine::profileIndex(const QString& name) const
-{
-    for (qsizetype i = 0; i < mProfiles.size(); ++i) {
-        if (mProfiles.at(i).name.compare(name, Qt::CaseInsensitive) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-QString Engine::saveProfile(const Profile& profile)
-{
-    QList<Profile> profiles = mProfiles;
-    const qsizetype index = profileIndex(profile.name);
-    if (index >= 0) {
-        // Under the name it was created with, as libmudlet keeps its folder's
-        Profile updated = profile;
-        updated.name = profiles.at(index).name;
-        profiles[index] = updated;
-    } else if (const QString problem = Profile::newNameProblem(profile.name); !problem.isEmpty()) {
-        return problem;
-    } else {
-        profiles.prepend(profile);
-    }
-    return storeProfiles(profiles);
-}
-
-QString Engine::deleteProfile(const QString& name)
-{
-    const qsizetype index = profileIndex(name);
-    if (index < 0) {
-        return QStringLiteral("there is no profile named \"%1\"").arg(name);
-    }
-    if (mOpenProfile.compare(name, Qt::CaseInsensitive) == 0) {
-        return QStringLiteral("\"%1\" is open: open another profile before deleting it").arg(mOpenProfile);
-    }
-    QList<Profile> profiles = mProfiles;
-    profiles.removeAt(index);
-    return storeProfiles(profiles);
-}
-
-// The stand-in has no login, so the password goes nowhere
-QString Engine::openProfile(const QString& name, const QString&, bool connect)
-{
-    const qsizetype index = profileIndex(name);
-    if (index < 0) {
-        return QStringLiteral("there is no profile named \"%1\"").arg(name);
-    }
-    QList<Profile> profiles = mProfiles;
-    const Profile profile = profiles.takeAt(index);
-    profiles.prepend(profile);
-    if (const QString problem = storeProfiles(profiles); !problem.isEmpty()) {
-        return problem;
-    }
-    const bool switching = mOpenProfile != profile.name;
-    mOpenProfile = profile.name;
-    if (switching) {
-        mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile.name));
-    }
-    if (connect && (switching || mSocket.state() == QAbstractSocket::UnconnectedState)) {
-        connectTo(profile.host, quint16(profile.port), profile.tls);
-    } else if (!connect && switching) {
-        disconnectFromGame();
-    }
-    return {};
 }
 
 void Engine::luaNotify(const QString& title, const QString& text)
@@ -662,16 +523,4 @@ void Engine::flushCounters()
     mFrontend->status(QStringLiteral("promptsReceived"), QString::number(mPromptsReceived));
     mFrontend->status(QStringLiteral("luaOnLineCalls"), QString::number(mLuaCalls));
     mFrontend->status(QStringLiteral("notificationsPosted"), QString::number(mNotifications));
-}
-
-void Engine::onHeartbeat()
-{
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    const qint64 gap = now - mLastHeartbeatMs;
-    mLastHeartbeatMs = now;
-    ++mHeartbeatTicks;
-    mMaxHeartbeatGapMs = std::max(mMaxHeartbeatGapMs, gap);
-    mFrontend->status(QStringLiteral("heartbeatTicks"), QString::number(mHeartbeatTicks));
-    mFrontend->status(QStringLiteral("heartbeatLastGapMs"), QString::number(gap));
-    mFrontend->status(QStringLiteral("heartbeatMaxGapMs"), QString::number(mMaxHeartbeatGapMs));
 }

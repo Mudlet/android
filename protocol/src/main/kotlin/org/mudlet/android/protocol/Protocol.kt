@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 13
+const val PROTOCOL_VERSION = 14
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -38,6 +38,36 @@ const val MODIFIER_META = 0x10000000
 
 /** A profile as the engine lists it; the password is never part of one. */
 data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
+
+/** Where an open profile is in its life (docs/protocol.md, `openProfiles`); a state this client does not know is [LOADED]. */
+enum class OpenProfileState(val wire: String) {
+    STARTING("starting"),
+    RESTORING("restoring"),
+    LOADED("loaded"),
+    CLOSING("closing"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): OpenProfileState = entries.firstOrNull { it.wire == wire } ?: LOADED
+    }
+}
+
+/**
+ * An open profile, served on its own [socket] (docs/protocol.md, "Several profiles"). [connection] is its last
+ * `connection` status; [unread] counts its lines after the last Requests.markSeen, and [attention] says it asked for
+ * the player since.
+ */
+data class OpenProfile(
+    val name: String,
+    val slot: Int,
+    val socket: String,
+    val state: OpenProfileState,
+    val connection: String,
+    val lastSeq: Long,
+    val unread: Long,
+    val attention: Boolean,
+    val front: Boolean,
+)
 
 /** An item of a link's menu; a [separator] has no label. */
 data class LinkItem(val label: String, val enabled: Boolean, val separator: Boolean)
@@ -241,7 +271,8 @@ data class AddonCommand(
 data class WindowRow(val text: String, val runs: IntArray, val prompt: Boolean, val wrapped: Boolean)
 
 sealed interface EngineMessage {
-    data class Hello(val version: Int, val pid: Int, val instance: String) : EngineMessage
+    /** [profile] names the profile a profile's socket serves; null on the control socket. */
+    data class Hello(val version: Int, val pid: Int, val instance: String, val profile: String? = null) : EngineMessage
     data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val replay: Boolean) : EngineMessage
     data class Tail(val text: String, val runs: IntArray, val prompt: Boolean) : EngineMessage
 
@@ -256,6 +287,9 @@ sealed interface EngineMessage {
 
     /** The answer to every profile request: the profiles, the last opened first. */
     data class Profiles(val profiles: List<Profile>, val replyTo: Any?) : EngineMessage
+
+    /** Every open profile, in the order opened, to a UI that attached with profileSockets. */
+    data class OpenProfiles(val profiles: List<OpenProfile>, val replyTo: Any?) : EngineMessage
 
     /** The game hides what the player types, as for a password ([wanted]), or has stopped. */
     data class HiddenInput(val wanted: Boolean) : EngineMessage
@@ -365,9 +399,13 @@ sealed interface EngineMessage {
 }
 
 object Requests {
-    fun hello(instance: String?, lastSeq: Long): JSONObject = JSONObject()
+    /** With [profileSockets], on the control socket, the UI attaches to each open profile's socket for its traffic. */
+    fun hello(instance: String?, lastSeq: Long, profileSockets: Boolean): JSONObject = JSONObject()
         .put("t", "hello").put("v", PROTOCOL_VERSION).put("client", "android-compose")
-        .apply { if (instance != null) put("instance", instance).put("lastSeq", lastSeq) }
+        .apply {
+            if (instance != null) put("instance", instance).put("lastSeq", lastSeq)
+            if (profileSockets) put("profileSockets", true)
+        }
 
     fun connect(host: String, port: Int, tls: Boolean): JSONObject = JSONObject().put("t", "connect").put("host", host).put("port", port).put("tls", tls)
     fun send(text: String): JSONObject = JSONObject().put("t", "send").put("text", text)
@@ -412,10 +450,20 @@ object Requests {
 
     fun deleteProfile(name: String, id: Long): JSONObject = JSONObject().put("t", "deleteProfile").put("name", name).put("id", id)
 
-    /** [password] is for this run of the profile only; null sends none. */
-    fun openProfile(name: String, password: String?, connect: Boolean, id: Long): JSONObject = JSONObject()
+    /** [password] is for this run of the profile only; null sends none. [alongside] keeps the others open. */
+    fun openProfile(name: String, password: String?, connect: Boolean, alongside: Boolean, id: Long): JSONObject = JSONObject()
         .put("t", "openProfile").put("name", name).put("connect", connect).put("id", id)
-        .apply { if (password != null) put("password", password) }
+        .apply {
+            if (password != null) put("password", password)
+            if (alongside) put("alongside", true)
+        }
+
+    /** Answered by [EngineMessage.OpenProfiles], or an Error, with [id] as its replyTo. */
+    fun closeProfile(name: String, id: Long): JSONObject = JSONObject().put("t", "closeProfile").put("name", name).put("id", id)
+    fun setFront(name: String): JSONObject = JSONObject().put("t", "setFront").put("name", name)
+
+    /** The player has seen [name]'s lines up to [seq]. */
+    fun markSeen(name: String, seq: Long): JSONObject = JSONObject().put("t", "markSeen").put("name", name).put("seq", seq)
 
     // The script windows'. A refusal is an Error naming the request.
     fun setMainWindowSize(w: Int, h: Int): JSONObject = JSONObject().put("t", "setMainWindowSize").put("w", w).put("h", h)
@@ -534,7 +582,7 @@ class FrameReader(input: InputStream) {
 
     companion object {
         fun parse(o: JSONObject): EngineMessage = when (val t = o.optString("t")) {
-            "hello" -> EngineMessage.Hello(o.getInt("v"), o.optInt("pid"), o.optString("instance"))
+            "hello" -> EngineMessage.Hello(o.getInt("v"), o.optInt("pid"), o.optString("instance"), o.optString("profile").ifEmpty { null })
 
             "line" -> EngineMessage.Line(
                 o.getLong("seq"),
@@ -561,6 +609,8 @@ class FrameReader(input: InputStream) {
             "error" -> EngineMessage.Error(o.optString("message"), o.opt("re"))
 
             "profiles" -> EngineMessage.Profiles(parseProfiles(o.optJSONArray("profiles")), o.opt("re"))
+
+            "openProfiles" -> EngineMessage.OpenProfiles(objects(o.optJSONArray("profiles")).map(::parseOpenProfile), o.opt("re"))
 
             "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
 
@@ -662,6 +712,18 @@ class FrameReader(input: InputStream) {
                 Profile(p.getString("name"), p.optString("host"), p.optInt("port", 23), p.optBoolean("tls"), p.optString("login"), p.optBoolean("autoReconnect"))
             }
         }
+
+        private fun parseOpenProfile(p: JSONObject) = OpenProfile(
+            p.optString("name"),
+            p.optInt("slot"),
+            p.optString("socket"),
+            OpenProfileState.fromWire(p.optString("state")),
+            p.optString("connection"),
+            p.optLong("lastSeq"),
+            p.optLong("unread"),
+            p.optBoolean("attention"),
+            p.optBoolean("front"),
+        )
 
         private fun parseLinkItems(items: JSONArray?): List<LinkItem> {
             if (items == null) return emptyList()

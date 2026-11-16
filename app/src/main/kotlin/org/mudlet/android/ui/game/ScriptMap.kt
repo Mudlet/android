@@ -41,6 +41,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -133,8 +134,9 @@ private val FOLLOW_PADDING = 8.dp
 private val FOLLOW_SPACE = 48.dp + FOLLOW_PADDING * 2
 
 // The area and level bar shows on a map at least this high, room for it and the buttons over it; the room picked takes
-// at most this much of the map's height
+// at most this much of the map's height; nothing at the bottom reaches up over the buttons, which keep their 48 dp
 private val PLACE_BAR_LEAST_HEIGHT = 144.dp
+private val CONTROLS_SPACE = 48.dp + CONTROLS_PADDING * 2
 private const val ROOM_CARD_FRACTION = 0.5f
 
 // TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
@@ -287,7 +289,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
         val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }
         val roomCardHeight = maxHeight * ROOM_CARD_FRACTION
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(top = if (controls) CONTROLS_SPACE else 0.dp)) {
             source.refusal?.let { MapRefusal(it, source::dismissRefusal) }
             Box(Modifier.fillMaxWidth()) {
                 placeBar?.let { MapPlaceBar(it, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp)) }
@@ -371,41 +373,44 @@ private fun RoomCard(info: RoomInfo, rooms: MapRooms, modifier: Modifier = Modif
     val attached = EngineClient.enginePid > 0
     val haptics = LocalHapticFeedback.current
     Surface(modifier.padding(4.dp), shape = MaterialTheme.shapes.medium, tonalElevation = 3.dp, shadowElevation = 3.dp) {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            Row {
-                Column(Modifier.weight(1f).padding(start = 16.dp, top = 12.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
-                    Text(
-                        info.name.ifEmpty { stringResource(R.string.room_unnamed, info.id) },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(stringResource(R.string.room_place, info.area, info.id), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(roomDistance(info.steps), style = MaterialTheme.typography.bodyMedium)
-                }
-                IconButton(rooms::close) {
-                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.room_close))
-                }
-            }
-            if (info.exits.isNotEmpty()) {
-                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    info.exits.forEach { exit ->
-                        val way = exitWay(exit.direction)
-                        val name = exit.toName.ifEmpty { stringResource(R.string.room_unnamed, exit.to) }
-                        AssistChip(
-                            { rooms.ask(exit.to) },
-                            { Text(stringResource(if (exit.locked) R.string.room_exit_locked else R.string.room_exit, way, name), maxLines = 1) },
-                            enabled = attached,
+        // Another room is shown from its top, its name and close button, not scrolled as far as the last one was
+        key(info.id) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Row {
+                    Column(Modifier.weight(1f).padding(start = 16.dp, top = 12.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                        Text(
+                            info.name.ifEmpty { stringResource(R.string.room_unnamed, info.id) },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                         )
+                        Text(stringResource(R.string.room_place, info.area, info.id), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(roomDistance(info.steps), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    IconButton(rooms::close) {
+                        Icon(painterResource(R.drawable.ic_close), stringResource(R.string.room_close))
                     }
                 }
-            }
-            FilledTonalButton(
-                { if (rooms.walk(info.id)) haptics.performHapticFeedback(HapticFeedbackType.Confirm) },
-                Modifier.padding(horizontal = 12.dp, vertical = 4.dp).heightIn(min = 48.dp),
-                enabled = attached && info.steps > 0,
-            ) {
-                Icon(painterResource(R.drawable.ic_directions_walk), null)
-                Text(stringResource(R.string.room_walk), Modifier.padding(start = 8.dp))
+                if (info.exits.isNotEmpty()) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        info.exits.forEach { exit ->
+                            val way = exitWay(exit.direction)
+                            val name = exit.toName.ifEmpty { stringResource(R.string.room_unnamed, exit.to) }
+                            AssistChip(
+                                { rooms.ask(exit.to) },
+                                { Text(stringResource(if (exit.locked) R.string.room_exit_locked else R.string.room_exit, way, name), maxLines = 1) },
+                                enabled = attached,
+                            )
+                        }
+                    }
+                }
+                FilledTonalButton(
+                    { if (rooms.walk(info.id)) haptics.performHapticFeedback(HapticFeedbackType.Confirm) },
+                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp).heightIn(min = 48.dp),
+                    enabled = attached && info.steps > 0,
+                ) {
+                    Icon(painterResource(R.drawable.ic_directions_walk), null)
+                    Text(stringResource(R.string.room_walk), Modifier.padding(start = 8.dp))
+                }
             }
         }
     }

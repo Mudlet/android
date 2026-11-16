@@ -104,7 +104,7 @@ def main():
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
-                       script_labels, script_text_boxes, button_bars, map_view, app_map, map_download):
+                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_download):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -1674,6 +1674,104 @@ def script_text_boxes():
     m = seen_or_next(c, lambda m: m["t"] == "windows" and m.get("removed"), seen, since)
     check({"name": "notes", "kind": "textBox"} in m["removed"] and text_box_of(seen[since:], "notes") is None,
           f"a deleted text box is removed, with no textBox message: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def frame_tabs():
+    """An MXP frame's tab header (patch 0008): a titled frame's tabs, tabTitles and tabCurrent in windows, its own
+    console first, and only the page in front shown; selectFrameTab bringing another forward, where the one in front
+    was, and the header's own console; the refusals, a hidden header's among them; the tabs again for a UI that
+    attaches; and a page that closes leaving them."""
+    game = fake_telnet.start_in_thread()
+    proc, c = start_engine("Frame Tabs Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "selectFrameTab", "name": "chat"})
+    m = c.wait_for(lambda m: m["t"] == "error", collect=seen)
+    check(m["message"] == "selectFrameTab: no profile running", f"selectFrameTab with no profile open is refused: {m}")
+
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+
+    def feed(*tags):
+        return [f"feedTriggers([[{tag}]] .. '\\n')" for tag in tags]
+
+    def tabs_of(window):
+        return None if window is None or "tabs" not in window else (window["tabs"], window.get("tabTitles"), window.get("tabCurrent"))
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join(["setConfig('specialForceMXPProcessorOn', true)"] + feed(
+        '<FRAME Name="tabs" Title="Tabs" Align="left" Width="200" Height="300">',
+        '<FRAME Name="chat" Title="Chat" DOCK="tabs" Align="client">',
+        '<FRAME Name="log" DOCK="tabs" Align="client">',
+        '<FRAME Name="side" Align="right" Width="200" Height="300">',
+    ))})
+    seen_or_next(c, windows_with("tabs", "mxpFrame", lambda w: len(w.get("tabs", [])) == 3), seen, since)
+    seen_or_next(c, windows_with("side", "mxpFrame"), seen, since)
+    tabs, chat, log, side = (window_of(seen, name, "mxpFrame") for name in ("tabs", "chat", "log", "side"))
+    check(tabs_of(tabs) == (["tabs", "chat", "log"], ["Tabs", "Chat", "log"], 1),
+          f"a titled frame has tabs, its own console first, each with its title or name, the first page in front: {tabs}")
+    check(chat is not None and log is not None and chat["shown"] and not log["shown"] and not tabs["shown"],
+          f"and only the page in front is shown: {chat} {log}")
+    check(tabs_of(chat) is None and tabs_of(side) is None, f"a page has no tabs, nor has a frame with no title: {chat} {side}")
+
+    since = len(seen)
+    c.send({"t": "selectFrameTab", "name": "log"})
+    seen_or_next(c, windows_with("tabs", "mxpFrame", lambda w: w.get("tabCurrent") == 2), seen, since)
+    tabs, chat, log = (window_of(seen, name, "mxpFrame") for name in ("tabs", "chat", "log"))
+    check(log["shown"] and not chat["shown"] and (log["x"], log["y"], log["w"], log["h"]) == (chat["x"], chat["y"], chat["w"], chat["h"]),
+          f"selectFrameTab brings the page forward where the one in front was: {log} {chat}")
+    check(not any(m["t"] == "error" for m in seen[since:]), "and is not answered")
+    for name in ("side", "nonesuch"):
+        since = len(seen)
+        c.send({"t": "selectFrameTab", "name": name})
+        m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+        check(m["message"].startswith("selectFrameTab: ") and name in m["message"], f"a name that is no page is refused: {m}")
+
+    # A header a player could not click, in an EXTERNAL frame that is hidden, is refused; shown again, its own console
+    # comes forward
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join(feed(
+        '<FRAME Name="away" EXTERNAL Width="300" Height="200">',
+        '<DEST away><FRAME Name="inner" Title="Inner" Align="top" Width="100%" Height="100%"></DEST>',
+        '<FRAME Name="innerPage" DOCK="inner" Align="client">',
+    ) + ["hideWindow('away')"])})
+    seen_or_next(c, windows_with("inner", "mxpFrame", lambda w: len(w.get("tabs", [])) == 2), seen, since)
+    seen_or_next(c, windows_with("away", "mxpFrame", lambda w: not w["shown"]), seen, since)
+    inner = window_of(seen, "inner", "mxpFrame")
+    check(tabs_of(inner) == (["inner", "innerPage"], ["Inner", "innerPage"], 1), f"a frame opened in an EXTERNAL one has tabs: {inner}")
+    since = len(seen)
+    c.send({"t": "selectFrameTab", "name": "inner"})
+    m = seen_or_next(c, lambda m: m["t"] == "error", seen, since)
+    check(m["message"].startswith("selectFrameTab: ") and "inner" in m["message"], f"a hidden header's tab is refused: {m}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "showWindow('away')"})
+    seen_or_next(c, windows_with("away", "mxpFrame", lambda w: w["shown"]), seen, since)
+    since = len(seen)
+    c.send({"t": "selectFrameTab", "name": "inner"})
+    seen_or_next(c, windows_with("inner", "mxpFrame", lambda w: w.get("tabCurrent") == 0), seen, since)
+    inner, inner_page = (window_of(seen, name, "mxpFrame") for name in ("inner", "innerPage"))
+    check(inner["shown"] and not inner_page["shown"], f"the header's own console comes forward: {inner} {inner_page}")
+
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seen += msgs
+    full = next((m for m in msgs if m["t"] == "windows" and m.get("full")), None)
+    tabs = window_of([full] if full else [], "tabs", "mxpFrame")
+    check(tabs_of(tabs) == (["tabs", "chat", "log"], ["Tabs", "Chat", "log"], 2), f"a UI that attaches gets the tabs as they are: {tabs}")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "\n".join(feed('<FRAME log ACTION="close">'))})
+    seen_or_next(c, windows_with("tabs", "mxpFrame", lambda w: len(w.get("tabs", [])) == 2), seen, since)
+    removed = [r for m in seen[since:] if m["t"] == "windows" for r in m.get("removed", [])]
+    tabs = window_of(seen, "tabs", "mxpFrame")
+    check({"name": "log", "kind": "mxpFrame"} in removed and tabs_of(tabs) == (["tabs", "chat"], ["Tabs", "Chat"], 1)
+          and window_of(seen, "chat", "mxpFrame")["shown"],
+          f"a page in front that closes leaves the tabs, and the one to its left comes forward: {removed} {tabs}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

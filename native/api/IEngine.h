@@ -79,6 +79,8 @@ public:
     // What the player has typed in a text box so far, the whole of its text, which is then set to what the box holds,
     // as Mudlet keeps it
     virtual QString setTextBoxText(const QString& name, QString& text) = 0;
+    // The player's tap on a tab of an MXP frame's tab header, which brings that page, the MXP frame name, forward
+    virtual QString selectFrameTab(const QString& name) = 0;
     // What the UI's pointer did on a window
     virtual QString pointer(const QString& window, const PointerEvent& event) = 0;
     // The image file, or icon, at path as PNG, scaled to size unless it is empty, or that frame of an animated one;

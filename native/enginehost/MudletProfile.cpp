@@ -185,6 +185,15 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
     if (isConsole(window.kind)) {
         info.console = ScriptWindowInfo::Console{window.scrolledBackTo, window.grid.width(), window.grid.height(), window.scrollBar, window.timeStamps};
     }
+    if (window.frameTabs) {
+        ScriptWindowInfo::FrameTabs tabs;
+        for (const ScriptWindow::FrameTabs::Page& page : window.frameTabs->pages) {
+            tabs.pages.append(page.name);
+            tabs.titles.append(page.title);
+        }
+        tabs.current = window.frameTabs->current;
+        info.frameTabs = tabs;
+    }
     return info;
 }
 
@@ -1433,6 +1442,14 @@ QString MudletProfile::setTextBoxText(const QString& name, QString& text)
         text = content->text;
     }
     return {};
+}
+
+QString MudletProfile::selectFrameTab(const QString& name)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->selectFrameTab(name) ? QString() : mSession->errorString();
 }
 
 QString MudletProfile::pointer(const QString& window, const PointerEvent& event)

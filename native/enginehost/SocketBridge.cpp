@@ -463,6 +463,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, mEngine->sendWindowCommandLine(message.value(QLatin1String("name")).toString(), message.value(QLatin1String("text")).toString()));
     } else if (type == QLatin1String("setTextBoxText")) {
         setTextBoxText(message);
+    } else if (type == QLatin1String("selectFrameTab")) {
+        refuse(type, mEngine->selectFrameTab(message.value(QLatin1String("name")).toString()));
     } else if (type == QLatin1String("pointer")) {
         refuse(type, pointer(message));
     } else if (type == QLatin1String("getImage")) {
@@ -874,6 +876,11 @@ QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
         json.insert(QStringLiteral("rows"), window.console->rows);
         json.insert(QStringLiteral("scrollBar"), window.console->scrollBar);
         json.insert(QStringLiteral("timeStamps"), window.console->timeStamps);
+    }
+    if (window.frameTabs) {
+        json.insert(QStringLiteral("tabs"), QJsonArray::fromStringList(window.frameTabs->pages));
+        json.insert(QStringLiteral("tabTitles"), QJsonArray::fromStringList(window.frameTabs->titles));
+        json.insert(QStringLiteral("tabCurrent"), window.frameTabs->current);
     }
     return json;
 }

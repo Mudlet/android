@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 15
+const val PROTOCOL_VERSION = 16
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -120,6 +120,8 @@ data class ScriptWindow(
     val dock: Dock?,
     /** A mini console's, user window's or MXP frame's. */
     val console: Console?,
+    /** An MXP frame's tab header; null for a frame without one, for a page of one and for the other kinds. */
+    val frameTabs: FrameTabs? = null,
 ) {
     val key get() = WindowKey(name, kind)
 
@@ -128,6 +130,22 @@ data class ScriptWindow(
 
     /** [scrolledBackTo] is the row it is scrolled back to, null while it follows new lines. */
     data class Console(val scrolledBackTo: Int?, val columns: Int, val rows: Int, val scrollBar: Boolean, val timeStamps: Boolean)
+
+    /**
+     * The tabs Mudlet draws along an MXP frame's top, above its console: [pages], never empty, each the MXP frame it
+     * shows, the first being this frame's own console, and [current] the index of the one in front, which only is
+     * shown. [Requests.selectFrameTab] brings another forward.
+     */
+    data class FrameTabs(val pages: List<Page>, val current: Int) {
+        init {
+            require(pages.isNotEmpty() && current in pages.indices) { "no page $current of ${pages.size}" }
+        }
+
+        /** [name] is the MXP frame it shows, and [title] the text on its tab. */
+        data class Page(val name: String, val title: String)
+
+        val front get() = pages[current]
+    }
 }
 
 /** What a label shows, as THeadlessSession::labelContent() gives it (docs/protocol.md, `label`). */
@@ -544,6 +562,9 @@ object Requests {
     /** What the player has typed in the text box [name] so far, the whole of its [text]; a refusal is followed by its [EngineMessage.TextBox]. */
     fun setTextBoxText(name: String, text: String): JSONObject = JSONObject().put("t", "setTextBoxText").put("name", name).put("text", text)
 
+    /** The player's tap on the tab of the MXP frame page [name] (ScriptWindow.FrameTabs), which brings it forward. */
+    fun selectFrameTab(name: String): JSONObject = JSONObject().put("t", "selectFrameTab").put("name", name)
+
     /**
      * What the pointer did at [x], [y] in [window]'s pixels ("main" for the main console's area): [button] that
      * changed and [buttons] held after it as POINTER_*, [modifiers] as MODIFIER_*, [wheelY] in eighths of a degree.
@@ -852,7 +873,20 @@ class FrameReader(input: InputStream) {
                 } else {
                     null
                 },
+                frameTabs = parseFrameTabs(w),
             )
+        }
+
+        // Null for none, or for tabs that cannot be read; a missing title is the page's name, as Mudlet's tab shows it
+        private fun parseFrameTabs(w: JSONObject): ScriptWindow.FrameTabs? {
+            val names = w.optJSONArray("tabs") ?: return null
+            val titles = w.optJSONArray("tabTitles")
+            val pages = List(names.length()) { i ->
+                val name = names.optString(i)
+                ScriptWindow.FrameTabs.Page(name, titles?.optString(i).orEmpty().ifEmpty { name })
+            }
+            val current = w.optInt("tabCurrent", -1)
+            return if (pages.isNotEmpty() && current in pages.indices) ScriptWindow.FrameTabs(pages, current) else null
         }
 
         private fun parseLabel(l: JSONObject) = LabelContent(

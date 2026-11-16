@@ -68,6 +68,17 @@ struct ScriptWindowInfo
         bool operator==(const Console&) const = default;
     };
     std::optional<Console> console;
+    // An MXP frame's tab header, drawn along its top above its console: each page by the name of the MXP frame it
+    // shows, the first being this frame's own console, with the title on its tab, and the index of the one in front.
+    // None for a frame without a header, a page among them, and the other kinds
+    struct FrameTabs
+    {
+        QStringList pages;
+        QStringList titles;
+        int current = 0;
+        bool operator==(const FrameTabs&) const = default;
+    };
+    std::optional<FrameTabs> frameTabs;
     bool operator==(const ScriptWindowInfo&) const = default;
 };
 

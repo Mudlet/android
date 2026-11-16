@@ -425,6 +425,7 @@ keeps the profiles' passwords in the KeyStore.
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
 | `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
+| `frameTabs` of each MXP frame's script window, read with `scriptWindows()`; `selectFrameTab()` (carried patch) | `tabs`, `tabTitles` and `tabCurrent` in the header frame's `windows` entry; `selectFrameTab`, answered only when refused |
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
@@ -526,6 +527,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   back; `setTextEditPlaceholder()`, `setTextEditTabMovesFocus()` and `setTextEditReadOnly()` alone as `textBox`;
   `setTextBoxText` refused for a hidden box and a read-only one, by `error` and the box as Mudlet holds it; an unknown
   box refused; every text box to a UI that attaches, its `typed` counted afresh; `deleteTextEdit()` as `removed`;
+- MXP frame tabs: a titled frame and the `DOCK` frames in it, fed through `feedTriggers()`, as `windows` with the
+  header's `tabs`, `tabTitles` and `tabCurrent`, only the page in front `shown`; `selectFrameTab` bringing a page
+  forward where the one in front was, and the header's own console; refused before a profile is open, for a name
+  that is no page and for a header in an `EXTERNAL` frame that is hidden; the tabs to a UI that attaches; the page in
+  front closing and the one to its left coming forward;
 - button bars and commands: a package's bar, with its grid, a push-down button and a folder's menu, and
   `tempButtonToolbar()` bars at the left and floating, as `buttonBars`; `pressButton` sending a push-down button's
   command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and

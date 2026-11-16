@@ -84,10 +84,6 @@ object ScriptWindowsClient {
     private val shownImages = HashMap<ImageRequest, Int>()
     private val imageOrder = LinkedHashSet<ImageRequest>()
 
-    // Apart from EngineClient's ids, which count from 1, so that the engine's error for one of these is never taken
-    // as the answer to a profile request
-    private var nextId = FIRST_ID
-
     // The links of each console asked about since its text last came, answered or not
     private val askedLinks = HashMap<String, HashSet<Int>>()
 
@@ -258,19 +254,19 @@ object ScriptWindowsClient {
     fun requestLink(window: String, link: Int) {
         val asked = askedLinks.getOrPut(window) { HashSet() }
         if (!asked.add(link)) return
-        if (!EngineClient.send(Requests.getLink(link, window, nextId++))) asked.remove(link)
+        if (!EngineClient.send(Requests.getLink(link, window, EngineClient.newRequestId()))) asked.remove(link)
     }
 
     /**
      * A tap on the link [link] of the console [window], or with [item], that item picked from its menu: what it runs
      * changes the console, whose next text shows it. False as for [EngineClient.send].
      */
-    fun followLink(window: String, link: Int, item: Int? = null): Boolean = EngineClient.send(Requests.followLink(link, item, window, nextId++))
+    fun followLink(window: String, link: Int, item: Int? = null): Boolean = EngineClient.send(Requests.followLink(link, item, window, EngineClient.newRequestId()))
 
     /** Asks the engine for [request], unless it was asked already; [images] gets it. */
     fun requestImage(request: ImageRequest) {
         if (request in images || request in askedImages) return
-        val id = nextId++
+        val id = EngineClient.newRequestId()
         if (EngineClient.send(Requests.getImage(request.path, request.w, request.h, request.frame, id))) {
             askedImages.add(request)
             pendingImages[id] = request
@@ -301,12 +297,11 @@ object ScriptWindowsClient {
 
             is LabelLink.NotRun -> Log.w(TAG, "the label link \"$href\" was not run: ${link.scheme}: is not a scheme Mudlet handles, and the link is not a Lua command")
 
-            else -> link.request(nextId++)?.let(EngineClient::send)
+            else -> link.request(EngineClient.newRequestId())?.let(EngineClient::send)
         }
     }
 
     private const val TAG = "ScriptWindows"
-    private const val FIRST_ID = 1L shl 40
 
     // The images kept beyond those shown: few enough that sized ones asked again as labels resize do not pile up
     private const val MAX_IMAGES = 64

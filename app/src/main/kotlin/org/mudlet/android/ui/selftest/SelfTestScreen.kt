@@ -266,7 +266,7 @@ fun SelfTestScreen(onBack: () -> Unit, onKillUi: () -> Unit) {
             val submit = {
                 val text = command
                 if (text.startsWith("lua ")) {
-                    c.send(Requests.runLua(text.removePrefix("lua "), System.nanoTime()))
+                    c.send(Requests.runLua(text.removePrefix("lua "), c.newRequestId()))
                 } else {
                     c.send(Requests.send(text))
                 }

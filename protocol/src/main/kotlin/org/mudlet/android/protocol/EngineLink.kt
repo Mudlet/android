@@ -83,9 +83,15 @@ class EngineLink(private val connector: () -> Transport, private val listener: L
         }
     }
 
+    /**
+     * The `id` for a request on this link, unique among every sender's: the engine copies it into its answers' `re` as it
+     * came (docs/protocol.md), so ids from separate counters would let one sender take another's answer.
+     */
+    fun newRequestId(): Long = nextId.getAndIncrement()
+
     /** Round trip of one ping in nanoseconds, or null on timeout or when detached. */
     fun ping(timeoutMs: Long = 2000): Long? {
-        val id = nextId.getAndIncrement()
+        val id = newRequestId()
         val latch = CountDownLatch(1)
         val slot = LongArray(1)
         pending[id] = latch to slot

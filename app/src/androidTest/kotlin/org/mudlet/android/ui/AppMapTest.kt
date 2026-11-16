@@ -28,6 +28,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
@@ -64,6 +65,7 @@ import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineMessages.appMap
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.GAME_PILL_TAG
 import java.io.EOFException
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
@@ -301,22 +303,22 @@ class AppMapTest {
     }
 
     @Test
-    fun theMapInFrontCoversTheInputLineAndQuickBarAndTheInputLineHasItsFocusBackAfter() {
+    fun theMapInFrontCoversTheInputLineAndHidesHistoryAndTheInputLineHasItsFocusBackAfter() {
         val input = hasSetTextAction() and hasText(string(R.string.input_label))
-        val quickBar = hasText(string(R.string.history_open)) and hasClickAction()
-        val connectionBar = hasText(string(R.string.connection_disconnect)) and hasClickAction()
-        // Where they are with no keyboard up, as the map in front has none
-        val quickBarAt = bounds(quickBar)
+        val history = hasText(string(R.string.history_open)) and hasClickAction()
+        val pill = hasTestTag(GAME_PILL_TAG)
+        // Where it is with no keyboard up, as the map in front has none
+        val inputAt = bounds(input)
 
         // Without the focus, the input line does not take it when the map goes
         activate(button)
         waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
-        assertCovered(input, quickBar, quickBarAt, connectionBar)
+        assertCovered(input, inputAt, history, pill)
         checkAccessibility()
         activate(button)
         waitFor("the input line is back") { compose.onAllNodes(input).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(input).assertIsDisplayed()
-        compose.onNode(quickBar).assertIsDisplayed()
+        compose.onNode(history).assertIsDisplayed()
         compose.waitForIdle()
         assertTrue("the input line stays without the focus. ${screen()}", compose.onAllNodes(input and isFocused()).fetchSemanticsNodes().isEmpty())
 
@@ -326,7 +328,7 @@ class AppMapTest {
         activate(button)
         waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
         waitFor("the input line's keyboard goes") { !keyboardShown() }
-        assertCovered(input, quickBar, quickBarAt, connectionBar)
+        assertCovered(input, inputAt, history, pill)
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitFor("the input line is back, with the focus") { compose.onAllNodes(input and isFocused()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(input).assertIsDisplayed()
@@ -677,18 +679,19 @@ class AppMapTest {
     }
 
     /**
-     * The map in front covers the [input] line and the [quickBar], which was at [quickBarAt]: neither is read, and the
-     * map reaches from above them down to the [connectionBar], which it leaves shown.
+     * The map in front covers the [input] line, which was at [inputAt], and the [history] button goes, as what it picks
+     * would go to the covered line: neither is read, and the map reaches from above the line down to the row with the
+     * game [pill], which it leaves shown.
      */
-    private fun assertCovered(input: SemanticsMatcher, quickBar: SemanticsMatcher, quickBarAt: Rect, connectionBar: SemanticsMatcher) {
-        for ((name, matcher) in listOf("the input line" to input, "the quick bar" to quickBar)) {
+    private fun assertCovered(input: SemanticsMatcher, inputAt: Rect, history: SemanticsMatcher, pill: SemanticsMatcher) {
+        for ((name, matcher) in listOf("the input line" to input, "the History button" to history)) {
             assertTrue("$name is not read. ${screen()}", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
         }
-        compose.onNode(connectionBar).assertIsDisplayed()
+        compose.onNode(pill).assertIsDisplayed()
         val map = bounds(mapShown())
-        val connectionTop = bounds(connectionBar).top
-        assertTrue("the map, at $map, reaches past the quick bar's foot, ${quickBarAt.bottom}. ${screen()}", map.bottom >= quickBarAt.bottom - EDGE_PX)
-        assertTrue("the map, at $map, ends above the connection bar, at $connectionTop. ${screen()}", map.bottom <= connectionTop + EDGE_PX)
+        val pillTop = bounds(pill).top
+        assertTrue("the map, at $map, reaches past the input line's foot, ${inputAt.bottom}. ${screen()}", map.bottom >= inputAt.bottom - EDGE_PX)
+        assertTrue("the map, at $map, ends above the game pill, at $pillTop. ${screen()}", map.bottom <= pillTop + EDGE_PX)
     }
 
     private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()

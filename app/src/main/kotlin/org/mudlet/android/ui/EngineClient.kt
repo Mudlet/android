@@ -55,6 +55,9 @@ object EngineClient {
 
     private const val PREF_LAST_PROFILE = "lastProfile"
 
+    /** How many profiles the engine keeps open at once (docs/protocol.md, `openProfile`): it refuses another. */
+    const val MAX_OPEN_GAMES = 4
+
     /** The engine's own statuses, from its control socket; each profile's are its [ProfileSession.status]. */
     val engineStatus = mutableStateMapOf<String, String>()
 
@@ -270,16 +273,31 @@ object EngineClient {
 
     /** Opens and connects the profile [name], closing those open; Reconnect then goes to its address, or opens it again once none is. */
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
-        if (error == null) {
-            lastProfile = name
-            prefs().edit { putString(PREF_LAST_PROFILE, name) }
-            session(name)?.forgetAddress() ?: ProfileSession.forgetAddress(prefs(), name)
-        }
+        if (error == null) opened(name)
         onAnswer(error)
     }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
 
-    /** Opens and connects the profile [name] beside those open, where it becomes the front; the profile list does not offer this yet. */
-    fun openProfileAlongside(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.openProfile(name, null, connect = true, alongside = true, id = it) }
+    /**
+     * Opens and connects the profile [name], with [password] for this run, beside those open, and makes it the front;
+     * one already open stays as it is, and comes to the front.
+     */
+    fun openProfileAlongside(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
+        if (error == null) {
+            opened(name)
+            setFront(name)
+        }
+        onAnswer(error)
+    }) { Requests.openProfile(name, password, connect = true, alongside = true, id = it) }
+
+    /** Saves and closes the open profile [name], as Mudlet closes a profile; the next to its right, else its left, takes the front. */
+    fun closeProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.closeProfile(name, it) }
+
+    // The engine opened [name], connected to its own address: Reconnect goes there, and opens it again once none is open
+    private fun opened(name: String) {
+        lastProfile = name
+        prefs().edit { putString(PREF_LAST_PROFILE, name) }
+        session(name)?.forgetAddress() ?: ProfileSession.forgetAddress(prefs(), name)
+    }
 
     /** Saves [profile], then opens it if the engine took it. */
     fun saveAndOpenProfile(profile: Profile, password: String?, onAnswer: (error: String?) -> Unit) = saveProfile(profile) { error ->

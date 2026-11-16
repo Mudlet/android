@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
@@ -29,13 +30,15 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
+import org.mudlet.android.ui.game.GAME_PILL_TAG
+import org.mudlet.android.ui.game.GAME_SHEET_TAG
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Base64
 
 /**
- * Screenshots of the profile list, the game screen with the map behind its text, the settings and the map in front, with
- * a downloaded map, light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
+ * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
+ * settings, the map in front with a downloaded map and the game sheet with two games open, light and dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */
@@ -77,7 +80,13 @@ class ScreenshotTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(GAME_LINES.last().first)).fetchSemanticsNodes().isNotEmpty() }
         // The first ask may come before the game screen's openProfile, which the test reads past
         session.send(appMap(session.receiveLast("setAppMapSize", readPast = true)))
+        session.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         save("game-$mode")
+        session.status("connection", "disconnected")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.connection_reconnect_to, PROFILES[0].name))).fetchSemanticsNodes().isNotEmpty() }
+        save("game-lost-$mode")
+        session.status("connection", "connected")
 
         activate(hasContentDescription(string(R.string.settings_title)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.settings_text_size))).fetchSemanticsNodes().isNotEmpty() }
@@ -95,6 +104,18 @@ class ScreenshotTest {
         session.send(appMap(session.receiveLast("setAppMapSize"), roomName = ROOM_NAME))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_description))).fetchSemanticsNodes().isNotEmpty() }
         save("map-$mode")
+        activate(hasContentDescription(string(R.string.app_map_show)))
+
+        fake.engine.openAlongside(PROFILES[1].name)
+        session.openProfiles()
+        val second = session.forProfile(PROFILES[1].name)
+        second.synced(0)
+        second.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { EngineClient.sessions.size == 2 && EngineClient.sessions.all { it.status["connection"] == "connected" } }
+        compose.runOnIdle { EngineClient.setFront(PROFILES[0].name) }
+        activate(hasTestTag(GAME_PILL_TAG))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        save("games-$mode")
     }
 
     /** The whole screen, system bars included, once the app has drawn what it last composed. */

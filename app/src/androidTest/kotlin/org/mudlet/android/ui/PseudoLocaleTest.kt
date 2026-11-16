@@ -44,7 +44,7 @@ import kotlin.math.abs
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, the settings and the game screen, with the connection bar's longer states and the password field, no text is
+ * editor, the settings and the game screen, with the connection chip's states and the password field, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
  */
@@ -108,11 +108,11 @@ class PseudoLocaleTest(private val locale: String) {
         assertAtStart("the Back button", hasContentDescription(string(R.string.navigate_back)))
 
         session.status("connection", "connecting $ADDRESS")
-        waitFor(hasText(string(R.string.connection_connecting_to, ADDRESS)))
-        assertTextFits("the connection bar, connecting")
+        waitFor(hasText(string(R.string.connection_stop)))
+        assertTextFits("the game pill's row, connecting")
         session.status("connection", "error: $REASON")
-        waitFor(hasText(string(R.string.connection_error, REASON)))
-        assertTextFits("the connection bar, failed")
+        waitFor(hasText(string(R.string.connection_try_again)))
+        assertTextFits("the game pill's row, failed")
 
         session.hiddenInput(true)
         waitFor(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))

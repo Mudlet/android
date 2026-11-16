@@ -116,7 +116,8 @@ private class Placed {
  * there is no ghost text.
  *
  * While [covered] (by the map in front), the line lets go of the focus, and so of the keyboard; uncovered, it takes the
- * focus back if it had it.
+ * focus back if it had it. With [focusOnStart] (as another game comes to the front), the line takes the focus when it
+ * first shows, unless covered.
  */
 @Composable
 fun InputLine(
@@ -134,6 +135,7 @@ fun InputLine(
     picked: String? = null,
     onPickedShown: () -> Unit = {},
     covered: Boolean = false,
+    focusOnStart: Boolean = false,
 ) {
     // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
     // keyboard sends before the next frame, which a value and onValueChange field would apply to the old text
@@ -231,6 +233,9 @@ fun InputLine(
             refocus = false
             (if (hiddenInput) hiddenFocus else focus).requestFocus()
         }
+    }
+    LaunchedEffect(Unit) {
+        if (focusOnStart && !covered) (if (hiddenInput) hiddenFocus else focus).requestFocus()
     }
     LaunchedEffect(commandLine) {
         if (commandLine == null) return@LaunchedEffect

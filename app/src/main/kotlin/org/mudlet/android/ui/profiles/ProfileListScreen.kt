@@ -1,9 +1,13 @@
 package org.mudlet.android.ui.profiles
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -36,11 +41,18 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.ProfileSession
+import org.mudlet.android.ui.SectionHeader
+import org.mudlet.android.ui.game.ConnectionIcon
+import org.mudlet.android.ui.game.ConnectionState
+import org.mudlet.android.ui.game.text
 
 /**
- * The start screen: the engine's profiles, the last used first, each with Connect and Edit, and Add. Connect opens the
- * profile with its stored password and goes to the game screen once the engine has begun to open it. Its top bar opens
- * the settings and the About screen. [selected] is the profile whose editor is open beside the list, if one is.
+ * The start screen: the games open, if any, then the engine's profiles, the last used first, each with Connect and
+ * Edit, and Add. Connect opens the profile with its stored password and goes to the game screen once the engine has
+ * begun to open it; while games are open, it opens one beside them, and one already open just comes to the front, as
+ * a tap on an open game does (docs/multi-profile.md, "The switcher"). Its top bar opens the settings and the About
+ * screen. [selected] is the profile whose editor is open beside the list, if one is.
  */
 @Composable
 fun ProfileListScreen(
@@ -85,12 +97,23 @@ fun ProfileListScreen(
                     )
                 }
             }
+            val games = EngineClient.sessions
+            if (games.isNotEmpty()) {
+                item { SectionHeader(stringResource(R.string.games_title)) }
+                itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
+                    OpenGameItem(game, i, games.size) {
+                        EngineClient.setFront(game.name)
+                        onOpenGame()
+                    }
+                }
+                item { SectionHeader(stringResource(R.string.profiles_all)) }
+            }
             when {
                 profiles == null -> item { Text(stringResource(R.string.profiles_waiting), style = MaterialTheme.typography.bodyLarge) }
 
                 profiles.isEmpty() -> item { Text(stringResource(R.string.profiles_empty), style = MaterialTheme.typography.bodyLarge) }
 
-                else -> itemsIndexed(profiles, key = { _, profile -> profile.name }) { i, profile ->
+                else -> itemsIndexed(profiles, key = { _, profile -> "profile:" + profile.name }) { i, profile ->
                     ProfileItem(
                         profile,
                         i,
@@ -98,8 +121,12 @@ fun ProfileListScreen(
                         selected = profile.name == selected,
                         onConnect = {
                             error = null
-                            EngineClient.openProfile(profile.name, passwords.get(profile.name)) { refused ->
-                                if (refused == null) onOpenGame() else error = refused
+                            val onAnswer: (String?) -> Unit = { refused -> if (refused == null) onOpenGame() else error = refused }
+                            // Without alongside, the engine would close the games open
+                            if (games.isEmpty()) {
+                                EngineClient.openProfile(profile.name, passwords.get(profile.name), onAnswer)
+                            } else {
+                                EngineClient.openProfileAlongside(profile.name, passwords.get(profile.name), onAnswer)
                             }
                         },
                         onEdit = { onEditProfile(profile.name) },
@@ -131,6 +158,28 @@ private fun ProfileItem(profile: Profile, index: Int, count: Int, selected: Bool
                 Icon(painterResource(R.drawable.ic_edit), contentDescription = stringResource(R.string.profile_edit, profile.name))
             }
             Button(onConnect, Modifier.semantics { contentDescription = connectLabel }) { Text(stringResource(R.string.profile_connect)) }
+        }
+    }
+}
+
+/** An open game, its name and connection state, which a tap brings to the front. */
+@Composable
+private fun OpenGameItem(game: ProfileSession, index: Int, count: Int, onShow: () -> Unit) {
+    val state = ConnectionState.of(game)
+    val description = stringResource(R.string.game_state, game.name, state.text())
+    ListSegment(index, count) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                .clickable(onClickLabel = stringResource(R.string.game_show), role = Role.Button, onClick = onShow)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ConnectionIcon(state, size = 20.dp)
+            Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = description }) {
+                Text(game.name, style = MaterialTheme.typography.titleMedium)
+                Text(state.text(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

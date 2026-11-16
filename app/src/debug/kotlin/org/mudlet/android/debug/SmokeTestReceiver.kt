@@ -98,7 +98,7 @@ class SmokeTestReceiver : BroadcastReceiver() {
             if (error != null) {
                 profileAnswer = error
             } else {
-                EngineClient.openProfileAlongside(profile.name) { profileAnswer = it ?: "ok" }
+                EngineClient.openProfileAlongside(profile.name, null) { profileAnswer = it ?: "ok" }
             }
         }
         return if (profileAnswer == "waiting") null else profileAnswer

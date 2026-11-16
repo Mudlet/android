@@ -460,8 +460,8 @@ new session beside them, up to `ControlBridge::maxOpenProfiles`.
   connect of a new profile gets `no profile`.
 - An engine started after the last one was killed loads that one's profile again, and connects it
   if the connection was wanted (see "Restoring the session" below).
-- When the engine quits, it closes each profile with `shutdownAsync(true)`, the last opened first, and waits up to
-  5 s for each one's sysExitEvent and save.
+- When the engine quits, it closes each profile with `shutdownAsync(true)` in turn, and waits up to 5 s for each
+  one's sysExitEvent and save.
 - On the desktop, SIGTERM quits the engine the same way.
 - `setAppState` is the pool's: with `active` false it raises sysApplicationFocusChangeEvent once in every profile,
   then saves them all (`saveAsync()`, which writes the whole pool), as the system may kill a process in the
@@ -492,7 +492,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   password for the running profile, which starts again with them on the socket it had, but not while it is connected;
 - several profiles: a second opened `alongside` the first, on a game of its own, with its own socket; a trigger in the
   profile behind whose `raiseGlobalEvent()` reaches the other's script; `setFront` raising
-  `sysProfileFocusChangeEvent` in both; and each closed while the other runs on;
+  `sysProfileFocusChangeEvent` in both; `setAppState` raising `sysApplicationFocusChangeEvent` once in each, with
+  one save; and each closed while the other runs on;
 - the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
   `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
   history, and `printCmdLine()` as `commandLine`;

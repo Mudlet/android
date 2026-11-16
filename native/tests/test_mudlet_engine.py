@@ -406,8 +406,8 @@ def profile_requests(port):
 def several_profiles(c, port):
     """Version 15's control and profile sockets, with "Beta" open and connected: "Solo" opened alongside it, on a game
     of its own, in the same pool of profiles (docs/multi-profile.md). A trigger in Beta, which is behind, reaches
-    Solo's script through raiseGlobalEvent; setFront raises sysProfileFocusChangeEvent in both; closing either leaves
-    the other running."""
+    Solo's script through raiseGlobalEvent; setFront raises sysProfileFocusChangeEvent in both, and setAppState
+    sysApplicationFocusChangeEvent once in each, with one save; closing either leaves the other running."""
     def ask(client, msg):
         return client.ask(msg, answers=("profiles", "openProfiles", "error"))
 
@@ -425,6 +425,12 @@ def several_profiles(c, port):
             return True
         except TimeoutError:
             return False
+
+    def drain(client, frames, seconds=1):
+        try:
+            client.wait_for(lambda m: False, timeout=seconds, collect=frames)
+        except TimeoutError:
+            pass
 
     solo_port = fake_telnet.start_in_thread(banner=b"Solo's game\r\n")
     ask(c, {"t": "saveProfile", **profile_checks.profile("Solo", solo_port)})
@@ -481,6 +487,21 @@ def several_profiles(c, port):
           "setFront raises sysProfileFocusChangeEvent: gained in the new front, lost in the one before")
     m = ctl.wait_for(lambda m: m["t"] == "openProfiles" and m["profiles"][0]["front"], timeout=10)
     check([p["front"] for p in m["profiles"]] == [True, False], f"and lists it in front: {m}")
+
+    app = 'registerAnonymousEventHandler("sysApplicationFocusChangeEvent", function(_, active) echo("app " .. tostring(active) .. "\\n") end)'
+    lua(beta, app, frames)
+    lua(solo, app, solo_frames)
+    control = []
+    ctl.send({"t": "setAppState", "active": False, "minimized": True})
+    left = shows(beta, "app false", frames) and shows(solo, "app false", solo_frames)
+    saved = wait_status(ctl, "save", lambda v: True, control)
+    drain(beta, frames)
+    drain(solo, solo_frames)
+    once = [len([m for m in got if m["t"] == "line" and m["text"] == "app false"]) for got in (frames, solo_frames)]
+    check(left and once == [1, 1] and saved == "saved",
+          f"the app leaving the front raises sysApplicationFocusChangeEvent once in each profile, and saves: {once}, {saved}")
+    ctl.send({"t": "setAppState", "active": True, "minimized": False})
+    check(shows(beta, "app true", frames) and shows(solo, "app true", solo_frames), "and coming back, in each again")
 
     m = ask(ctl, {"t": "closeProfile", "name": "Solo"})
     check(m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == [("Beta", "loaded"), ("Solo", "closing")],

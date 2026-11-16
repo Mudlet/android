@@ -86,9 +86,9 @@ MudletEngine::~MudletEngine()
         QTimer::singleShot(5000, &loop, &QEventLoop::quit);
         loop.exec();
     }
-    // The first opened last, as its shutdown closes the rest of the pool
-    for (auto it = mOpen.crbegin(); it != mOpen.crend(); ++it) {
-        (*it)->closeAtExit();
+    // Each with its sysExitEvent and save; the last to close takes the pool with it
+    for (MudletProfile* profile : std::as_const(mOpen)) {
+        profile->closeAtExit();
     }
     qDeleteAll(mOpen);
     qDeleteAll(mRestoreQueue);
@@ -382,8 +382,13 @@ void MudletEngine::applyFront()
         return;
     }
     MudletProfile* front = openNamed(mFront);
-    if (front && front->started() && front->showInFront()) {
+    if (!front || !front->started()) {
+        return;
+    }
+    if (front->showInFront()) {
         mAppliedFront = front->name();
+    } else {
+        qWarning("MudletEngine: setActiveProfile(%s) refused: %s", qPrintable(front->name()), qPrintable(front->session().errorString()));
     }
 }
 

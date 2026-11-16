@@ -293,6 +293,10 @@ def several_restored(e, port):
     """Two profiles open, the second alongside the first and so in front, both connected: a kill brings back both, the
     front one first and the other staggered after it, and the front one stays in front."""
     other = "Second Profile"
+
+    def listed(m):
+        return m["t"] == "openProfiles" and [(p["name"], p["state"], p["connection"]) for p in m["profiles"]]
+
     e.connect(port)
     e.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": port, "tls": False, "login": "",
            "autoReconnect": False})
@@ -301,8 +305,7 @@ def several_restored(e, port):
     e.client = Client(SOCK, profile_sockets=True)
     m = e.client.ask({"t": "openProfile", "name": other, "alongside": True}, answers=("openProfiles", "error"))
     check(m["t"] == "openProfiles", f"a second profile opens alongside: {m}")
-    e.wait(lambda m: m["t"] == "openProfiles" and [(p["name"], p["state"], p["connection"]) for p in m["profiles"]]
-           == [(PROFILE, "loaded", "connected"), (other, "loaded", "connected")])
+    e.wait(lambda m: listed(m) == [(PROFILE, "loaded", "connected"), (other, "loaded", "connected")])
     kept = state()
     check(kept is not None and [p["profile"] for p in kept["profiles"]] == [PROFILE, other] and kept["front"] == other
           and all(p["connect"] for p in kept["profiles"]), f"both are kept on disk, with the front one: {kept}")
@@ -314,8 +317,7 @@ def several_restored(e, port):
     first = e.wait(lambda m: m["t"] == "openProfiles")["profiles"]
     attached = time.monotonic()
     check([p["name"] for p in first] == [other], f"the front profile is restored first, alone: {first}")
-    both = e.wait(lambda m: m["t"] == "openProfiles" and [(p["name"], p["state"], p["connection"]) for p in m["profiles"]]
-                  == [(other, "loaded", "connected"), (PROFILE, "loaded", "connected")], timeout=40)["profiles"]
+    both = e.wait(lambda m: listed(m) == [(other, "loaded", "connected"), (PROFILE, "loaded", "connected")], timeout=40)["profiles"]
     gap = time.monotonic() - attached
     check(gap >= 1.5, f"then the other, staggered after it: loaded {gap:.1f} s after the first was listed")
     check([p["front"] for p in both] == [True, False], f"and the front profile stays in front: {both}")

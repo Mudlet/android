@@ -82,7 +82,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -245,16 +244,19 @@ private fun rememberLabelText(content: LabelContent?, window: ScriptWindow, scal
     val basePx = fontPx(style, window)
     val text = content?.text.orEmpty()
     val rich = remember(text, basePx) { if (text.isBlank()) null else RichText.parse(text, basePx) }
-    return remember(rich, style, scale) { LabelText(style, rich, scale) }
+    val linksFollowable = content?.linksFollowable != false
+    return remember(rich, style, scale, linksFollowable) { LabelText(style, rich, scale, linksFollowable) }
 }
 
 /** The size of a label's or text box's text in Mudlet's pixels: its style sheet's, else its window's font's, else Qt's. */
 internal fun fontPx(style: LabelStyle, window: ScriptWindow): Float = style.fontSizePx ?: window.fontSize.takeIf { it > 0 }?.let { (it * LabelStyle.PX_PER_PT).toFloat() } ?: DEFAULT_FONT_PX
 
-/** A label's style sheet, its text if it has any, and the scale it is drawn at. */
-private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: Float) {
+/** A label's style sheet, its text if it has any, the scale it is drawn at, and whether its links are followed. */
+private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: Float, val linksFollowable: Boolean) {
     val plain: String = rich?.plain.orEmpty()
-    val links: List<Pair<String, String>> = rich?.links.orEmpty()
+
+    /** The links a screen reader is offered as actions. */
+    val links: List<Pair<String, String>> = if (linksFollowable) rich?.links.orEmpty() else emptyList()
 }
 
 /**
@@ -562,8 +564,8 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
                     }
                 }
             }
-        } else if (text.rich != null) {
-            LabelTextView(window.name, text, text.rich, style, Modifier.fillMaxWidth().align(alignment))
+        } else {
+            LabelTextView(window.name, text, Modifier.fillMaxWidth().align(alignment))
         }
     }
 }
@@ -697,27 +699,28 @@ private fun LabelSvg(content: LabelContent) {
     }
 }
 
-/** The label's rich text, unwrapped as QLabel draws it, with its links followed when tapped. */
+/** The label's rich text, unwrapped as QLabel draws it, with its links followed when tapped, where they are followed. */
 @Composable
-private fun LabelTextView(label: String, text: LabelText, rich: RichText, style: LabelStyle, modifier: Modifier = Modifier) {
+private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = Modifier) {
+    val rich = text.rich ?: return
+    val style = text.style
     val context = LocalContext.current
     val density = LocalDensity.current
     val scale = text.scale
     val toSp: (Float) -> TextUnit = { px -> with(density) { (px * scale).toSp() } }
-    val annotated = remember(label, rich, style, scale, density) {
+    // Keyed on the whole of what the label's text is drawn from, so a change to any part of it, as to whether its links
+    // are followed, redraws it
+    val annotated = remember(label, text, density) {
         buildAnnotatedString {
             for (block in rich.blocks) {
                 withStyle(ParagraphStyle(textAlign = textAlign(block.align ?: style.hAlign))) {
                     for (span in block.spans) {
                         val href = span.style.href
-                        if (href == null) {
-                            withStyle(spanStyle(span.style, toSp)) { append(span.text) }
-                        } else {
-                            val link = LinkAnnotation.Clickable(href, linkInteractionListener = { EngineClient.front.windows.followLabelLink(context, label, href) })
-                            withLink(link) {
-                                withStyle(spanStyle(span.style, toSp, link = true)) { append(span.text) }
-                            }
-                        }
+                        val link = if (href != null && text.linksFollowable) LinkAnnotation.Clickable(href, linkInteractionListener = { EngineClient.front.windows.followLabelLink(context, label, href) }) else null
+                        if (link != null) pushLink(link)
+                        // Drawn as a link whether or not it is followed, as QLabel draws one whatever its text interaction
+                        withStyle(spanStyle(span.style, toSp, link = href != null)) { append(span.text) }
+                        if (link != null) pop()
                     }
                 }
             }

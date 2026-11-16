@@ -185,7 +185,14 @@ data class LabelContent(
     val accessibleValue: AccessibleValue?,
     /** As setLabelStyleSheet() gave it, which the engine does not interpret. */
     val styleSheet: String,
-)
+) {
+    /**
+     * The links in its text are followed, by a tap or a screen reader's action; not a click-through label's, as
+     * Mudlet's `TLabel::setClickThrough()` turns its text interaction off, so its links take neither the mouse nor the
+     * keyboard, by which the desktop's screen readers reach them.
+     */
+    val linksFollowable: Boolean get() = !clickThrough
+}
 
 /** What a text box from createTextEdit() holds, as THeadlessSession::textBoxContent() gives it (docs/protocol.md, `textBox`). */
 data class TextBoxContent(

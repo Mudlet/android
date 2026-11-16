@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.click
@@ -34,6 +35,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -64,8 +66,9 @@ import kotlin.math.abs
  * bounds, a long press as the right button with the tool tip, a drag, a gauge read as its progress and its live text
  * label's new text said, the accessible value of a gauge's back label or of a label as its progress, a live label with
  * one as its new text said, a live label as one live node, a link followed by the engine, by its action or a tap, with
- * its href as Qt reads it, a `prompt:` one giving the input line the focus, but a web link opened in the browser, and
- * the images the engine is asked for.
+ * its href as Qt reads it, a `prompt:` one giving the input line the focus, but a web link opened in the browser, a
+ * click-through label's links neither tapped nor actions, also once a label already drawn is made click-through, and
+ * both again once it no longer is, and the images the engine is asked for.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -452,6 +455,60 @@ class ScriptLabelsTest {
         session.refuse(request, "The label \"nav\" has no link to \"send:north \".")
         // Neither sent to the engine again nor run some other way: one call, as a call for one type skips the other
         session.assertNoRequest(setOf("followLabelLink", "runLua"), 1_000)
+    }
+
+    @Test
+    fun aClickThroughLabelsLinksAreNeitherTappedNorActions() {
+        // One read by its text, whose link would be a node of its own, and one by its name, whose link would be its action
+        val link = """Go <a href="send:north">north</a>"""
+        val centred = "qproperty-alignment: 'AlignCenter'"
+        session.windows(listOf(label("hint", w = 300, h = 40), label("nav", y = 100, w = 300, h = 40)), full = true)
+        session.label("hint", text = link, styleSheet = centred, clickThrough = true)
+        session.label("nav", text = link, styleSheet = centred, accessibleName = "Directions", clickThrough = true)
+        val hint = hasText("Go north")
+        val nav = hasContentDescription("Directions")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hint).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(nav).fetchSemanticsNodes().isNotEmpty() }
+        compose.onRoot().tryPerformAccessibilityChecks()
+        // Still drawn as a link, as QLabel draws one whatever its text interaction
+        val drawn = compose.onNode(hint).fetchSemanticsNode().config[SemanticsProperties.Text].single { it.text == "Go north" }
+        assertTrue("'north' is drawn as a link: ${drawn.spanStyles}", drawn.spanStyles.any { it.start <= 3 && it.end >= 8 && it.item.textDecoration?.contains(TextDecoration.Underline) == true })
+
+        // As on the desktop, where the label takes neither the mouse nor the keyboard a screen reader reaches links by
+        compose.onAllNodes(hasClickAction() and (hint or hasAnyAncestor(hint)), useUnmergedTree = true).assertCountEquals(0)
+        compose.onNode(nav).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.CustomActions))
+        compose.onNode(nav).assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        // A tap on the link passes through to what is under the label
+        compose.onNode(hint).performTouchInput { click(center) }
+        tapLinkIn("Directions")
+        session.assertNoRequest("followLabelLink", 1_000)
+    }
+
+    @Test
+    fun aLabelMadeClickThroughOnceDrawnFollowsNoLinkUntilItIsNoLonger() {
+        session.windows(listOf(label("nav", w = 300, h = 40)), full = true)
+        val nav = hasContentDescription("Directions")
+        val follow = string(R.string.label_follow_link, "north")
+
+        // As a script's enableClickthrough() or disableClickthrough() on the label showing its link: only that changes
+        fun show(clickThrough: Boolean) {
+            session.label("nav", text = """<a href="send:north">north</a>""", styleSheet = "qproperty-alignment: 'AlignCenter'", accessibleName = "Directions", clickThrough = clickThrough)
+            compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.state.labels["nav"]?.clickThrough == clickThrough } }
+            compose.onRoot().tryPerformAccessibilityChecks()
+        }
+        fun actions() = compose.onNode(nav).fetchSemanticsNode().config.getOrElse(SemanticsActions.CustomActions) { emptyList() }.map { it.label }
+
+        show(clickThrough = false)
+        assertEquals(listOf(follow), actions())
+        show(clickThrough = true)
+        assertEquals(emptyList<String>(), actions())
+        // A tap on its centred link passes through to what is under the label
+        tapLinkIn("Directions")
+        session.assertNoRequest("followLabelLink", 1_000)
+
+        show(clickThrough = false)
+        assertEquals(listOf(follow), actions())
+        tapLinkIn("Directions")
+        assertEquals("nav", session.receive("followLabelLink").getString("label"))
     }
 
     // The label "nav", with one link, followed by its accessibility action

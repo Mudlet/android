@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.settings
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
@@ -45,6 +46,7 @@ enum class SettingsCategory(val forGame: Boolean, @StringRes val title: Int, @St
     ACCESSIBILITY(true, R.string.settings_accessibility, R.string.settings_accessibility_summary, R.drawable.ic_accessibility),
     INPUT(true, R.string.settings_input, R.string.settings_input_summary, R.drawable.ic_keyboard),
     CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
+    ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
 }
 
@@ -79,8 +81,21 @@ sealed class SettingEntry(
         fun choose(owner: SettingsOwner, index: Int) = owner.change(setting, setting.entries[index])
     }
 
-    /** The console's text size: a slider with a sample of game text. */
-    class TextSize(category: SettingsCategory, override val setting: Settings.IntSetting, label: Int, hint: Int, keywords: Int) : SettingEntry(category, label, hint, keywords)
+    /**
+     * A whole number: a slider, with buttons a step [less] and [more], its value as [valueText] has it and, for the
+     * console's text size, a [sample] of game text at that size.
+     */
+    class Number(
+        category: SettingsCategory,
+        override val setting: Settings.IntSetting,
+        label: Int,
+        hint: Int,
+        keywords: Int,
+        @PluralsRes val valueText: Int,
+        @StringRes val less: Int,
+        @StringRes val more: Int,
+        val sample: Boolean = false,
+    ) : SettingEntry(category, label, hint, keywords)
 }
 
 /** Every setting the settings screen has, in the order its pages show them. A game category's are each game's own. */
@@ -101,6 +116,23 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_join_split_lines_keywords,
         ),
         SettingEntry.Switch(
+            SettingsCategory.DISPLAY,
+            Settings.undoWrap,
+            R.string.settings_undo_wrap,
+            R.string.settings_undo_wrap_hint,
+            R.string.settings_undo_wrap_keywords,
+        ),
+        SettingEntry.Number(
+            SettingsCategory.DISPLAY,
+            Settings.undoWrapWidth,
+            R.string.settings_undo_wrap_width,
+            R.string.settings_undo_wrap_width_hint,
+            R.string.settings_undo_wrap_keywords,
+            valueText = R.plurals.settings_undo_wrap_width_value,
+            less = R.string.settings_undo_wrap_width_less,
+            more = R.string.settings_undo_wrap_width_more,
+        ),
+        SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.readNewText,
             R.string.settings_read_new_text,
@@ -113,6 +145,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_advertise_screen_reader,
             R.string.settings_advertise_screen_reader_hint,
             R.string.settings_advertise_screen_reader_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ACCESSIBILITY,
+            Settings.closedCaptions,
+            R.string.settings_closed_captions,
+            R.string.settings_closed_captions_hint,
+            R.string.settings_closed_captions_keywords,
         ),
         SettingEntry.Choice(SettingsCategory.INPUT, Settings.showSentText, R.string.settings_sent_text, R.string.settings_sent_text_keywords) {
             when (it) {
@@ -143,12 +182,59 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mtts, R.string.settings_mtts, R.string.settings_mtts_hint, R.string.settings_protocol_keywords),
         SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.mnes, R.string.settings_mnes, R.string.settings_mnes_hint, R.string.settings_protocol_keywords),
         SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.naws, R.string.settings_naws, R.string.settings_naws_hint, R.string.settings_protocol_keywords),
-        SettingEntry.TextSize(
+        SettingEntry.Switch(SettingsCategory.CONNECTION, Settings.charset, R.string.settings_charset, R.string.settings_charset_hint, R.string.settings_protocol_keywords),
+        SettingEntry.Switch(
+            SettingsCategory.CONNECTION,
+            Settings.newEnviron,
+            R.string.settings_new_environ,
+            R.string.settings_new_environ_hint,
+            R.string.settings_protocol_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ADVANCED,
+            Settings.forceCompressionOff,
+            R.string.settings_force_compression_off,
+            R.string.settings_force_compression_off_hint,
+            R.string.settings_force_compression_off_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ADVANCED,
+            Settings.forceGaOff,
+            R.string.settings_force_ga_off,
+            R.string.settings_force_ga_off_hint,
+            R.string.settings_force_ga_off_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ADVANCED,
+            Settings.versionInTerminalType,
+            R.string.settings_version_in_ttype,
+            R.string.settings_version_in_ttype_hint,
+            R.string.settings_version_in_ttype_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ADVANCED,
+            Settings.forceMxpOn,
+            R.string.settings_force_mxp_on,
+            R.string.settings_force_mxp_on_hint,
+            R.string.settings_force_mxp_on_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ADVANCED,
+            Settings.lazyTriggerVariables,
+            R.string.settings_lazy_trigger_variables,
+            R.string.settings_lazy_trigger_variables_hint,
+            R.string.settings_lazy_trigger_variables_keywords,
+        ),
+        SettingEntry.Number(
             SettingsCategory.APPEARANCE,
             Settings.textSize,
             R.string.settings_text_size,
             R.string.settings_text_size_hint,
             R.string.settings_text_size_keywords,
+            valueText = R.plurals.settings_text_size_value,
+            less = R.string.settings_text_smaller,
+            more = R.string.settings_text_larger,
+            sample = true,
         ),
         // Android 12 and later only, which can colour apps from the wallpaper
         if (wallpaperColoursAvailable) {

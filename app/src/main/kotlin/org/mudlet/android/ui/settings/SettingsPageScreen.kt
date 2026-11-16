@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -54,6 +55,8 @@ internal val MAX_WIDTH = 640.dp
 
 // How long the row search opened a page at stays tinted
 private const val HIGHLIGHT_MS = 1500L
+
+private const val MAX_MARKED_STEPS = 40
 
 /**
  * A settings page: its category's settings for its game, or the app's, in a column no wider than reads well. Each
@@ -107,7 +110,7 @@ private fun EntryRows(entry: SettingEntry, owner: SettingsOwner) {
     when (entry) {
         is SettingEntry.Switch -> SwitchRow(entry, owner)
         is SettingEntry.Choice<*> -> ChoiceRows(entry, owner)
-        is SettingEntry.TextSize -> TextSizeRows(entry, owner)
+        is SettingEntry.Number -> NumberRows(entry, owner)
     }
 }
 
@@ -154,42 +157,54 @@ private fun ChoiceRows(entry: SettingEntry.Choice<*>, owner: SettingsOwner) {
     }
 }
 
-/** The console's text size: a slider, with buttons a step either way, and a sample at that size. */
+/**
+ * A whole number: a slider, with buttons a step either way, its value and any sample at that size. A drag changes it
+ * as the finger lifts, so a game's is sent once.
+ */
 @Composable
-private fun TextSizeRows(entry: SettingEntry.TextSize, owner: SettingsOwner) {
+private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
     val setting = entry.setting
-    val size = owner.value(setting)
+    var dragged by remember { mutableStateOf<Int?>(null) }
+    val size = dragged ?: owner.value(setting)
     val range = setting.range
     val label = stringResource(entry.label)
-    val value = stringResource(R.string.settings_text_size_value, size)
+    val value = pluralStringResource(entry.valueText, size, size)
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
         entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton({ owner.change(setting, size - 1) }, enabled = size > range.first) {
-                Icon(painterResource(R.drawable.ic_remove), stringResource(R.string.settings_text_smaller))
+            // Clamped: a disabled button still has its click action, which a test or an accessibility service can call
+            IconButton({ owner.change(setting, (size - 1).coerceIn(range)) }, enabled = size > range.first) {
+                Icon(painterResource(R.drawable.ic_remove), stringResource(entry.less))
             }
             Slider(
                 value = size.toFloat(),
-                onValueChange = { owner.change(setting, it.roundToInt()) },
+                onValueChange = { dragged = it.roundToInt() },
+                onValueChangeFinished = {
+                    dragged?.let { owner.change(setting, it) }
+                    dragged = null
+                },
                 modifier = Modifier.weight(1f).semantics {
                     contentDescription = label
                     stateDescription = value
                 },
                 valueRange = range.first.toFloat()..range.last.toFloat(),
-                steps = range.last - range.first - 1,
+                // A mark a step on a short range; a long one's would run together
+                steps = if (range.last - range.first <= MAX_MARKED_STEPS) range.last - range.first - 1 else 0,
             )
-            IconButton({ owner.change(setting, size + 1) }, enabled = size < range.last) {
-                Icon(painterResource(R.drawable.ic_add), stringResource(R.string.settings_text_larger))
+            IconButton({ owner.change(setting, (size + 1).coerceIn(range)) }, enabled = size < range.last) {
+                Icon(painterResource(R.drawable.ic_add), stringResource(entry.more))
             }
         }
         Text(value, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            stringResource(R.string.settings_text_size_sample),
-            Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(8.dp),
-            color = CONSOLE_FOREGROUND,
-            fontFamily = FontFamily.Monospace,
-            fontSize = size.sp,
-        )
+        if (entry.sample) {
+            Text(
+                stringResource(R.string.settings_text_size_sample),
+                Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(8.dp),
+                color = CONSOLE_FOREGROUND,
+                fontFamily = FontFamily.Monospace,
+                fontSize = size.sp,
+            )
+        }
     }
 }

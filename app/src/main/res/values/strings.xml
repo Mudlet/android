@@ -205,6 +205,14 @@
     <!-- Words a player might search the settings for to find "Tell games I use a screen reader", besides the words of
          its name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_advertise_screen_reader_keywords">blind, accessibility, MTTS, TalkBack</string>
+    <!-- A switch on a game's Accessibility page: name, in the game's text, each sound, piece of music or video the
+         game plays as it starts and stops, such as "[a door creaks plays]" -->
+    <string name="settings_closed_captions">Captions for sounds and music</string>
+    <!-- Under "Captions for sounds and music", what the switch does -->
+    <string name="settings_closed_captions_hint">Names each sound, piece of music or video the game plays in its text, as it starts and stops.</string>
+    <!-- Words a player might search the settings for to find "Captions for sounds and music", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_closed_captions_keywords">closed captions, subtitles, deaf, hearing, audio, media</string>
     <!-- Words a player might search the settings for to find "Blank lines from the game", besides the words of its
          name and choices, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_blank_lines_keywords">empty lines, spacing, gaps, screen reader</string>
@@ -219,7 +227,10 @@
     <!-- Under the text size setting, what it does -->
     <string name="settings_text_size_hint">The size of the game\'s text. Pinching the text with two fingers changes it too, and the system\'s font size scales it.</string>
     <!-- %1$d is the text size, a whole number (in sp, which players need not know) -->
-    <string name="settings_text_size_value">Size %1$d</string>
+    <plurals name="settings_text_size_value">
+        <item quantity="one">Size %1$d</item>
+        <item quantity="other">Size %1$d</item>
+    </plurals>
     <!-- The button, read by a screen reader, that makes the game's text smaller -->
     <string name="settings_text_smaller">Smaller text</string>
     <!-- The button, read by a screen reader, that makes the game's text larger -->
@@ -257,6 +268,10 @@
     <string name="settings_connection">Connection</string>
     <!-- Under "Connection" in the list of settings pages, what that page holds -->
     <string name="settings_connection_summary">Game protocols and secure connections</string>
+    <!-- A page of each game's own settings: workarounds for games that need them, which most players leave alone -->
+    <string name="settings_advanced">Advanced</string>
+    <!-- Under "Advanced" in the list of settings pages, what that page holds -->
+    <string name="settings_advanced_summary">Workarounds for games that need them</string>
     <!-- A switch on a game's Display & text page: join the lines that some games break in two where a network packet
          ends -->
     <string name="settings_join_split_lines">Join lines split across packets</string>
@@ -265,6 +280,29 @@
     <!-- Words a player might search the settings for to find "Join lines split across packets", besides the words of
          its name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_join_split_lines_keywords">line breaks, broken lines, GA, go ahead, IRE</string>
+    <!-- A switch on a game's Display & text page: join back together the lines a game wraps itself at a fixed width,
+         so the player's triggers see each line whole -->
+    <string name="settings_undo_wrap">Undo the game\'s own wrapping</string>
+    <!-- Under "Undo the game's own wrapping", what the switch does -->
+    <string name="settings_undo_wrap_hint">For games that wrap their lines and cannot be told not to: the lines are joined again, so triggers see them whole and the text fits your screen. Experimental.</string>
+    <!-- Words a player might search the settings for to find "Undo the game's own wrapping" and the width it is
+         undone at, besides the words of their names and descriptions, separated by commas. Use the words a player of
+         your language would search for. -->
+    <string name="settings_undo_wrap_keywords">wrap, word wrap, line length, columns, width, triggers</string>
+    <!-- A setting on a game's Display & text page, under "Undo the game's own wrapping": the column the game wraps
+         its lines at -->
+    <string name="settings_undo_wrap_width">The game wraps at</string>
+    <!-- Under "The game wraps at", what the setting is for -->
+    <string name="settings_undo_wrap_width_hint">The longest line the game sends, in characters. Lines that would have fitted are joined.</string>
+    <!-- %1$d is the column a game wraps its lines at, a whole number of characters such as 80 -->
+    <plurals name="settings_undo_wrap_width_value">
+        <item quantity="one">%1$d character</item>
+        <item quantity="other">%1$d characters</item>
+    </plurals>
+    <!-- The button, read by a screen reader, that lowers the column the game wraps at by one -->
+    <string name="settings_undo_wrap_width_less">Fewer characters</string>
+    <!-- The button, read by a screen reader, that raises the column the game wraps at by one -->
+    <string name="settings_undo_wrap_width_more">More characters</string>
     <!-- A setting on a game's Input page, the heading of three choices: which of the commands sent to the game also
          show in the game's text -->
     <string name="settings_sent_text">Show the commands sent</string>
@@ -338,6 +376,56 @@
     <string name="settings_naws">NAWS</string>
     <!-- Under "NAWS", what the protocol carries -->
     <string name="settings_naws_hint">Tells the game how many columns and rows of text fit, so it can lay out its text to fit. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks CHARSET (the telnet
+         option for agreeing on a text encoding) with the game. Keep "CHARSET". -->
+    <string name="settings_charset">CHARSET</string>
+    <!-- Under "CHARSET", what the protocol carries -->
+    <string name="settings_charset_hint">Lets the game and Mudlet agree on the text encoding, such as UTF-8. From the next connection.</string>
+    <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks NEW-ENVIRON (the telnet
+         option for telling the game about the client) with the game. Keep "NEW-ENVIRON". -->
+    <string name="settings_new_environ">NEW-ENVIRON</string>
+    <!-- Under "NEW-ENVIRON", what the protocol carries -->
+    <string name="settings_new_environ_hint">Tells the game about Mudlet, for games that ask, as MNES does. From the next connection.</string>
+    <!-- A switch on a game's Advanced page: never compress the data the game sends (MCCP), for games whose compression
+         is broken -->
+    <string name="settings_force_compression_off">Turn compression off</string>
+    <!-- Under "Turn compression off", what the switch does -->
+    <string name="settings_force_compression_off_hint">Declines the game\'s offer to compress what it sends, for games where that garbles the text. From the next connection.</string>
+    <!-- Words a player might search the settings for to find "Turn compression off", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_force_compression_off_keywords">MCCP, zlib, garbled, corrupt</string>
+    <!-- A switch on a game's Advanced page: ignore the telnet "go ahead" signal (GA) some games send after a prompt -->
+    <string name="settings_force_ga_off">Ignore the go-ahead signal</string>
+    <!-- Under "Ignore the go-ahead signal", what the switch does -->
+    <string name="settings_force_ga_off_hint">For games that send it where it does not belong, which breaks lines or prompts apart.</string>
+    <!-- Words a player might search the settings for to find "Ignore the go-ahead signal", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_force_ga_off_keywords">GA, telnet, prompt, broken lines</string>
+    <!-- A switch on a game's Advanced page: send Mudlet's version along with its name when the game asks what client
+         this is (telnet TTYPE) -->
+    <string name="settings_version_in_ttype">Send Mudlet\'s version with its name</string>
+    <!-- Under "Send Mudlet's version with its name", what the switch does -->
+    <string name="settings_version_in_ttype_hint">Some games expect a version number when they ask which client you use, though the telnet standard does not allow one there.</string>
+    <!-- Words a player might search the settings for to find "Send Mudlet's version with its name", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_version_in_ttype_keywords">TTYPE, terminal type, MTTS, client, version</string>
+    <!-- A switch on a game's Advanced page: read MXP (MUD eXtension Protocol) markup even though the game never
+         offered MXP. Keep "MXP". -->
+    <string name="settings_force_mxp_on">Read MXP the game does not offer</string>
+    <!-- Under "Read MXP the game does not offer", what the switch does -->
+    <string name="settings_force_mxp_on_hint">For games that send MXP links and menus without offering MXP first. To have no MXP at all, turn MXP off on the Connection page.</string>
+    <!-- Words a player might search the settings for to find "Read MXP the game does not offer", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_force_mxp_on_keywords">MXP, links, menus, markup</string>
+    <!-- A switch on a game's Advanced page: let Mudlet prepare the variables a trigger's script reads (matches,
+         multimatches, line) only when the script reads them, which makes triggers faster -->
+    <string name="settings_lazy_trigger_variables">Prepare trigger variables as scripts read them</string>
+    <!-- Under "Prepare trigger variables as scripts read them", what the switch does. "pairs" and "_G" are Lua and
+         stay as they are. -->
+    <string name="settings_lazy_trigger_variables_hint">Makes triggers faster; scripts see the same values. Turn it off only if a script or package goes through Lua\'s globals with pairs on _G and misbehaves.</string>
+    <!-- Words a player might search the settings for to find "Prepare trigger variables as scripts read them", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_lazy_trigger_variables_keywords">performance, speed, faster, matches, multimatches, Lua</string>
     <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
          game's text, the map behind the text). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>

@@ -302,8 +302,9 @@ drawn by `ui/game/AppMap.kt`):
   from <host>", "Map download cancelled", or "The map download failed: " with Mudlet's reason, in the error colour and
   interrupting TalkBack. A refusal shows as the map's others do. The loaded map is the profile's, so the map behind
   the text, the map in front and a script's mapper all show it.
-- Only the URL's host is shown: the engine never sends the rest, which can hold a user name and password. Lua's `gmcp`
-  table holds the whole URL, as the game sent it, as on the desktop.
+- Of the URL, only its host is shown, and no message or log line carries more than its scheme and host, the reason of
+  a failure included: the rest can hold a user name, a password or a token. Lua's `gmcp` table holds the whole URL, as
+  the game sent it, as on the desktop.
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches; Mudlet sets no
   time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.
 
@@ -448,10 +449,12 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   the map on a room, and refused for one not in the map; `setMapViewOnly` with only this map open; a UI that goes
   stopping it, and the next sent none until it asks; and 0 by 0 stopping it;
 - the map download: a game's GMCP `Client.Map` offering a map from a local web server, as `mapDownload` with only the
-  host; `downloadMap` downloading and loading it, with `sysMapDownloadEvent`, its rooms then found and the app's map
-  drawn; `mapDownload` to a UI that attaches; a 404 and a file that is no map failing with Mudlet's reasons, and a
-  slow download sending progress and cancelled, each leaving the map as it was; the refusals; another profile taking
-  the offer away; and the URL's user name and password in no frame and not the engine's log;
+  host; `downloadMap` downloading and loading it, a Mudlet binary map and an XML one, with `sysMapDownloadEvent`, no
+  Cancel once the map has arrived, its rooms then found and the app's map drawn; `mapDownload` to a UI that attaches;
+  a 404 failing with Mudlet's reason, which names the host but not the path or query, and a file that is no map
+  failing, and a slow download sending its progress at most once a percent and cancelled, each leaving the map as it
+  was; the refusals; another profile taking the offer away; and the URL's user name, password (percent-encoded in the
+  URL) and token in no frame and not the engine's log;
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
@@ -1136,7 +1139,7 @@ Item 13 of the on-device checklist covers this.
     - With TalkBack on: the button, the progress bar (as "Map download" and how far), Cancel and the dismiss button
       read their names; the end of the download is read out as it comes, a failure at once.
     - Over https (as most games' map URLs are), the download works: OpenSSL is in the APK (see "TLS").
-    - `adb logcat` shows the map's host but never a user name or password from its URL.
+    - `adb logcat` shows the map's host but never more of its URL: no user name, password, path or query.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

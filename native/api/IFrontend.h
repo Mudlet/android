@@ -200,13 +200,14 @@ struct MapDownload
     QString host;
     // none until a download is asked for since the profile loaded; cancelled once IEngine::cancelMapDownload() stopped it
     State state = State::none;
-    // While downloading, what Mudlet's progress dialog says, and how far it has got of maximum, 0 while unknown
+    // While downloading, what Mudlet's progress dialog says, and how far it has got of maximum: 0 until its progress
+    // starts, then Mudlet's guess of 4000000 bytes until the server says the size, so value can pass it
     QString label;
     int value = 0;
     int maximum = 0;
     // While downloading, until it has arrived and is being loaded
     bool cancelable = false;
-    // Why it failed, as Mudlet said in the console, with no user name or password from a URL
+    // Why it failed, as Mudlet said in the console, with no more of any URL than its scheme and host
     QString error;
 
     bool operator==(const MapDownload&) const = default;

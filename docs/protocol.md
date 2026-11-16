@@ -121,9 +121,9 @@ app's map has been drawn and as `mapPointer`, and `showRoom` for a room that is 
 it takes `setAppMapSize` and refuses `appMapPointer`, `findRooms` and `showRoom`.
 
 `downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
-while no profile is open; `downloadMap` while the game offers no map, while the map downloads, and while a script's map
-import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being loaded. The
-stand-in has no map and refuses both.
+while no profile is open; `downloadMap` while the game offers no map, and while a map download (the UI's or a
+script's), import or export runs; `cancelMapDownload` while no map downloads, and once the map has arrived and is being
+loaded. The stand-in has no map and refuses both.
 
 ### Engine to UI
 
@@ -158,7 +158,7 @@ stand-in has no map and refuses both.
 | `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
 | `appMap` | `png`, `w`, `h`, `viewOnly` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
-| `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 while unknown), and `cancelable` true until the map has arrived; `error` is why it `failed`, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
+| `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
 ### Script windows
@@ -308,8 +308,11 @@ A game offers its map with GMCP's `Client.Map`, `{"url": "..."}` (the MMP's map 
 turns into a "Download from game" button. libmudlet tells the UI with `mapDownload` (`THeadlessSession::offeredMapUrl()`
 and `downloadOfferedMap()`, a Mudlet patch the app carries in `scripts/mudlet-patches/` until Mudlet has it).
 
-- `offered` turns true as the game offers a map, with `host` its URL's host. The rest of the URL is never sent: it can
-  hold a user name and password, which neither the engine's messages nor its log carry.
+- `offered` turns true as the game offers a map, with `host` its URL's host. No more of the URL is sent or logged,
+  by the engine or by Mudlet's messages the patch changes, which name only its scheme and host: the rest can hold a
+  user name, a password or a token. If the game offers another map while one downloads, `offered` follows the offer,
+  but `host` stays the download's: its end names where the map came from, and a `mapDownload` with the new offer's
+  host follows it.
 - `downloadMap` downloads it as the desktop does (`TMap::downloadMap()`): a URL whose path ends in `xml` to the
   profile's `map.xml`, read as an XML map, any other to its map folder as `map.dat`, loaded as Mudlet's own map. The
   profile's map is replaced only by a map that arrived whole and reads, which raises `sysMapDownloadEvent`. Mudlet
@@ -319,8 +322,9 @@ and `downloadOfferedMap()`, a Mudlet patch the app carries in `scripts/mudlet-pa
   size, so `value` can pass it; while an XML map is read, they count its steps and rooms. `cancelable` is true until
   the map has arrived, and `cancelMapDownload` stops it until then. Mudlet sets no time limit: a download that stalls
   runs until it is stopped.
-- It ends `loaded`, and `appMap` and `map` then show the new map; `failed`, with `error` Mudlet's console message
-  without its tag (such as `[ ERROR ] - `), on one line, and without the user name or password of any URL in it; or
+- It ends `loaded`, and `appMap` and `map` then show the new map (an `appMap` can come just before `loaded`, as the
+  map is redrawn once it is in place); `failed`, with `error` Mudlet's console message without its tag (such as
+  `[ ERROR ] - `), on one line, and with no more of any URL in it than its scheme and host; or
   `cancelled`. A download that failed or was stopped leaves the profile's map as it was.
 - A profile starts at `none`, offered or not as the game has offered by then, and `offered` false and `none` follow
   its close.

@@ -42,21 +42,23 @@ using ScriptWindow = THeadlessSession::ScriptWindow;
 using TextRun = THeadlessSession::TextRun;
 using TextStyle = THeadlessSession::TextStyle;
 
-// Mudlet's console message as the reason a map download failed: without its "[ ERROR ] - " tag, on one line, and with
-// no user name or password of the offered URL, or of any URL Qt's error quotes
-QString mapDownloadError(QString reason, const QString& offered)
+// Mudlet's console message as the reason the map download from url failed: without its "[ ERROR ] - " tag, on one
+// line, and of any URL in it only the scheme and host, as a game can put a user name, password or token in the rest.
+// The patch's messages show no more already; this holds should Mudlet's or Qt's text change.
+QString mapDownloadError(QString reason, const QString& url)
 {
     static const QRegularExpression tag(QStringLiteral("^\\s*\\[\\s*\\w+\\s*\\]\\s*-\\s*"));
-    static const QRegularExpression userInfo(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)[^/\\s]*@"));
+    static const QRegularExpression anyUrl(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)(?:[^/\\s@]*@)?([^/\\s?#]*)\\S*"));
     static const QRegularExpression space(QStringLiteral("\\s+"));
-    reason.remove(tag);
-    reason.replace(userInfo, QStringLiteral("\\1"));
-    const QUrl url = QUrl::fromUserInput(offered);
-    for (const QString& password : {url.password(QUrl::FullyDecoded), url.password(QUrl::FullyEncoded)}) {
+    // First, as a password decoded can hold the '/' or '@' that would end the URL early for anyUrl
+    const QUrl downloaded = QUrl::fromUserInput(url);
+    for (const QString& password : {downloaded.password(QUrl::FullyDecoded), downloaded.password(QUrl::FullyEncoded)}) {
         if (!password.isEmpty()) {
             reason.replace(password, QStringLiteral("***"));
         }
     }
+    reason.remove(tag);
+    reason.replace(anyUrl, QStringLiteral("\\1\\2"));
     reason = reason.replace(space, QStringLiteral(" ")).trimmed();
     return reason.isEmpty() ? QStringLiteral("the map download failed") : reason;
 }
@@ -516,9 +518,8 @@ void MudletEngine::connectSession()
         pushButtonBars();
         pushCommands();
         pushAppMap();
-        mMapDownload = {};
-        mMapDownloadCancelled = false;
-        takeOfferedMap();
+        setMapDownloadState(MapDownload::State::none);
+        takeOfferedMap(mSession->offeredMapUrl());
         mFrontend->mapDownload(mMapDownload);
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
@@ -553,10 +554,10 @@ void MudletEngine::connectSession()
     connect(session, &THeadlessSession::mapRepaintRequested, this, pushShownMap);
     connect(session, &THeadlessSession::mapViewOnlyChanged, this, pushShownMap);
     connect(session, &THeadlessSession::offeredMapChanged, this, [this] {
-        takeOfferedMap();
+        takeOfferedMap(mSession->offeredMapUrl());
         mFrontend->mapDownload(mMapDownload);
     });
-    // The progress of an import or export a script began is not the download's
+    // The progress of a map download, import or export a script began is not the download's
     connect(session, &THeadlessSession::mapProgressStarted, this, [this](const QString&, const QString&, const QString& label, int maximum) {
         if (mMapDownload.state == MapDownload::State::downloading) {
             mMapDownload.label = label;
@@ -584,21 +585,23 @@ void MudletEngine::connectSession()
         if (mMapDownload.state != MapDownload::State::downloading) {
             return;
         }
-        const bool cancelled = std::exchange(mMapDownloadCancelled, false) && !loaded;
-        mMapDownload.state = loaded ? MapDownload::State::loaded : cancelled ? MapDownload::State::cancelled : MapDownload::State::failed;
-        mMapDownload.label.clear();
-        mMapDownload.value = 0;
-        mMapDownload.maximum = 0;
-        mMapDownload.cancelable = false;
-        mMapDownload.error = loaded || cancelled ? QString() : mapDownloadError(error, mSession->offeredMapUrl());
         if (loaded) {
+            setMapDownloadState(MapDownload::State::loaded);
             qInfo("MudletEngine: the map from %s loaded", qPrintable(mMapDownload.host));
-        } else if (cancelled) {
+        } else if (mMapDownloadCancelled) {
+            setMapDownloadState(MapDownload::State::cancelled);
             qInfo("MudletEngine: the map download from %s was cancelled", qPrintable(mMapDownload.host));
         } else {
+            setMapDownloadState(MapDownload::State::failed, mapDownloadError(error, mMapDownloadUrl));
             qWarning("MudletEngine: the map download from %s failed: %s", qPrintable(mMapDownload.host), qPrintable(mMapDownload.error));
         }
         mFrontend->mapDownload(mMapDownload);
+        // The end names the host the map came from; the game may have offered another since
+        const MapDownload ended = mMapDownload;
+        takeOfferedMap(mSession->offeredMapUrl());
+        if (mMapDownload != ended) {
+            mFrontend->mapDownload(mMapDownload);
+        }
         if (loaded) {
             pushShownMap();
         }
@@ -1131,8 +1134,8 @@ void MudletEngine::onProfileClosed()
     mMapSize.reset();
     mFrontend->map(std::nullopt);
     pushAppMap();
-    mMapDownload = {};
-    mMapDownloadCancelled = false;
+    setMapDownloadState(MapDownload::State::none);
+    takeOfferedMap({});
     mFrontend->mapDownload(mMapDownload);
 }
 
@@ -1495,18 +1498,14 @@ QString MudletEngine::downloadMap()
     if (mMapDownload.state == MapDownload::State::downloading) {
         return QStringLiteral("the map is already downloading");
     }
+    const QString url = mSession->offeredMapUrl();
     if (!mSession->downloadOfferedMap()) {
         return mSession->errorString();
     }
-    takeOfferedMap();
-    mMapDownload.state = MapDownload::State::downloading;
-    mMapDownload.label.clear();
-    mMapDownload.value = 0;
-    mMapDownload.maximum = 0;
-    mMapDownload.cancelable = true;
-    mMapDownload.error.clear();
-    mMapDownloadCancelled = false;
-    // Only the host: the URL can hold a user name and password
+    takeOfferedMap(url);
+    setMapDownloadState(MapDownload::State::downloading);
+    mMapDownloadUrl = url;
+    // Only the host: the rest of the URL can hold a user name, password or token
     qInfo("MudletEngine: downloading the map from %s", qPrintable(mMapDownload.host));
     pushMapDownloadProgress(true);
     return {};
@@ -1530,11 +1529,27 @@ QString MudletEngine::cancelMapDownload()
     return {};
 }
 
-void MudletEngine::takeOfferedMap()
+void MudletEngine::takeOfferedMap(const QString& url)
 {
-    const QString offered = mSession ? mSession->offeredMapUrl() : QString();
-    mMapDownload.offered = !offered.isEmpty();
-    mMapDownload.host = mMapDownload.offered ? QUrl::fromUserInput(offered).host() : QString();
+    mMapDownload.offered = !url.isEmpty();
+    if (mMapDownload.state != MapDownload::State::downloading) {
+        mMapDownload.host = QUrl::fromUserInput(url).host();
+    }
+}
+
+void MudletEngine::setMapDownloadState(MapDownload::State state, const QString& error)
+{
+    mMapDownload.state = state;
+    mMapDownload.label.clear();
+    mMapDownload.value = 0;
+    mMapDownload.maximum = 0;
+    mMapDownload.cancelable = state == MapDownload::State::downloading;
+    mMapDownload.error = error;
+    mMapDownloadPercent = -1;
+    mMapDownloadCancelled = false;
+    if (state != MapDownload::State::downloading) {
+        mMapDownloadUrl.clear();
+    }
 }
 
 void MudletEngine::pushMapDownloadProgress(bool force)

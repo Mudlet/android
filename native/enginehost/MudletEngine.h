@@ -138,8 +138,10 @@ private:
     // The app's map at the size asked for, or none where it cannot be drawn, as for a map with no rooms, warned of
     std::optional<MapFrame> drawAppMap();
     void warnAppMapUndrawn(const QString& why);
-    // Whether the game offers a map, and where, into mMapDownload
-    void takeOfferedMap();
+    // Whether the game offers a map, at url (none if empty), into mMapDownload; a download keeps the host it is from
+    void takeOfferedMap(const QString& url);
+    // mMapDownload in state, with no progress, cancelable only while downloading, and error only for a failure
+    void setMapDownloadState(MapDownload::State state, const QString& error = {});
     // mMapDownload's progress, at most once a percent, as a download reports each piece that arrives; always with force
     void pushMapDownloadProgress(bool force);
 
@@ -175,8 +177,11 @@ private:
     double mAppMapScale = 1;
     // Why the app's map was last not drawn, since it was last drawn: warned of once
     QString mAppMapUndrawn;
-    // The map the game offers, and the download of it, as last sent
+    // The map the game offers, and the download of it, as the engine knows it: progress within a percent of what was
+    // last sent is held back (pushMapDownloadProgress())
     MapDownload mMapDownload;
+    // The URL being downloaded, as the game may offer another meanwhile: for its password to mask, never sent or logged
+    QString mMapDownloadUrl;
     // The percentage of the download last sent, -1 while its size is unknown
     int mMapDownloadPercent = -1;
     // cancelMapDownload() stopped the download, so its end is a cancel rather than a failure

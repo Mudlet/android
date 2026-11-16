@@ -347,8 +347,9 @@ sealed interface EngineMessage {
     /**
      * The map the game offers ([offered], from the [host] of its URL, never the rest of it) and how its download
      * (Requests.downloadMap) goes: while [MapDownloadState.DOWNLOADING], Mudlet's progress [label] and [value] of
-     * [maximum] (0 while unknown), and [cancelable] until the map has arrived; [error] is why it failed. Only libmudlet
-     * sends it, on each change and to each UI that attaches.
+     * [maximum] (0 until it starts, then Mudlet's guess of the size until the server says it, which [value] can pass),
+     * and [cancelable] until the map has arrived; [error] is why it failed, naming no more of a URL than its scheme
+     * and host. Only libmudlet sends it, on each change and to each UI that attaches.
      */
     data class MapDownload(
         val offered: Boolean,

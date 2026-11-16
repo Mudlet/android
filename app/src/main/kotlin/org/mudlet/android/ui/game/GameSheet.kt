@@ -208,8 +208,6 @@ private fun GameRow(name: String, state: ConnectionState, unread: Long, attentio
 @Composable
 internal fun gameDescription(name: String, stateText: String, unread: Long, attention: Boolean): String {
     var description = stringResource(R.string.game_state, name, stateText)
-    if (unread > 0) description = stringResource(R.string.game_description_more, description, pluralStringResource(R.plurals.game_unread, unread.toPluralCount(), unread))
-    if (attention) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_wants_attention))
     return description
 }
 
@@ -221,8 +219,8 @@ internal fun Long.toPluralCount() = coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 internal fun GameBadges(unread: Long, attention: Boolean) {
     // The row's description says them; hidden rather than cleared, so the tests still find the count
     Row(Modifier.semantics { hideFromAccessibility() }, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (attention) Icon(painterResource(R.drawable.ic_notifications), contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
-        if (unread > 0) {
+        if (attention && false) Icon(painterResource(R.drawable.ic_notifications), contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
+        if (unread > 0 && false) {
             Badge(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
                 Text(if (unread > MAX_UNREAD_SHOWN) stringResource(R.string.game_unread_many, MAX_UNREAD_SHOWN) else unread.toString())
             }

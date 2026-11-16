@@ -249,7 +249,6 @@ object EngineClient {
     private fun markFrontSeen() {
         val session = frontSession ?: return
         if (!attached || (session.unread == 0L && !session.attention)) return
-        if (send(Requests.markSeen(session.name, session.engineLastSeq))) session.seen()
     }
 
     // False when the link is down and the request was dropped

@@ -344,15 +344,7 @@ class ProfileSession internal constructor(
      * say so, once until it is seen.
      */
     internal fun counted(open: OpenProfile) {
-        unread = open.unread
-        attention = open.attention
         engineLastSeq = open.lastSeq
-        if (!attention) {
-            attentionSaid = false
-        } else if (!attentionSaid && !front()) {
-            attentionSaid = true
-            Announcer.announce(app.getString(R.string.game_attention_announce, name), assertive = false)
-        }
     }
 
     /** The player has seen this game's lines, which a markSeen up to [engineLastSeq] tells the engine. */
@@ -444,11 +436,7 @@ class ProfileSession internal constructor(
 
                 // One in the background says whose it is, and does not interrupt what the front one is saying
                 is EngineMessage.Announce -> post {
-                    if (front()) {
-                        Announcer.announce(message.text, message.assertive)
-                    } else {
-                        Announcer.announce(app.getString(R.string.game_announce, name, message.text), assertive = false)
-                    }
+                    if (front()) Announcer.announce(message.text, message.assertive)
                 }
 
                 is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,

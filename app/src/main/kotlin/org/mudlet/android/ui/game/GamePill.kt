@@ -83,10 +83,10 @@ fun GamePill(
     } else {
         stringResource(R.string.game_state, name, stateText)
     }
-    if (othersUnread > 0) {
+    if (othersUnread > 0 && false) {
         description = stringResource(R.string.game_description_more, description, pluralStringResource(R.plurals.game_others_unread, othersUnread.toPluralCount(), othersUnread))
     }
-    if (othersAttention) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_others_attention))
+    if (othersAttention && false) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_others_attention))
     val showLabel = stringResource(R.string.game_pill_show)
     val actions = buildList {
         if (onReconnect != null) add(action(stringResource(R.string.connection_reconnect_to, name), onReconnect))

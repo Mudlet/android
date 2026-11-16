@@ -17,6 +17,7 @@ Tested in HeadlessSessionTest (reading, a script's replacement getConfig, an unk
 refused, and the refusals with no profile). The desktop is unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 2d3259e..fcfb217 100644

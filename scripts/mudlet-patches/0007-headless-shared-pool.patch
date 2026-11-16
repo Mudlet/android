@@ -20,10 +20,10 @@ still refuses it. The pool is shared among the sessions holding it:
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 4cf61d8..85db218 100644
+index aedfb1d..a5a063f 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
-@@ -1439,6 +1439,30 @@ the desktop GUI pumps the event loop from it, for its progress dialog and its Ab
+@@ -1464,6 +1464,30 @@ the desktop GUI pumps the event loop from it, for its progress dialog and its Ab
  `cancelMapOperation()` while the operation runs, and anything else posted meanwhile, such as a profile
  close, runs once the operation has returned.
  
@@ -54,7 +54,7 @@ index 4cf61d8..85db218 100644
  ## Embedding it: Mudlet's own resources
  
  `mudlet_core` is a static library, and the linker keeps a Qt resource from one only if something
-@@ -1556,7 +1580,8 @@ package can quiet its sounds or notifications while the player is away. The stat
+@@ -1581,7 +1605,8 @@ package can quiet its sounds or notifications while the player is away. The stat
  raises nothing, as the GUI tells scripts only of a change. It starts as active, and before `start()` it
  is only kept, for the next change to be told against; a profile opened later hears nothing until the
  next change, as in the GUI. `applicationActive()` reads it. It is refused while a profile loads, during
@@ -64,7 +64,7 @@ index 4cf61d8..85db218 100644
  
  `setWindowMinimized()` tells the session the app's window is minimized or hidden, or a phone app has
  gone to the background, as the GUI's main window is minimized: only then does new game text bring
-@@ -1592,8 +1617,8 @@ is refused where `submit()` is, and while the scripts are stopped its events rea
+@@ -1617,8 +1642,8 @@ is refused where `submit()` is, and while the scripts are stopped its events rea
  `setSoundsMuted()` is the main window's mute buttons, for `SoundSource::scripts`, the sounds scripts
  play, or `SoundSource::game`, those the game sends over GMCP or MSP, and `toggleAllSoundsMuted()` is
  the button for both, which unmutes both when both are muted and otherwise mutes both. As in the GUI,
@@ -414,7 +414,7 @@ index 3f7f93e..eb405f6 100644
      });
  }
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 94596db..3216b05 100644
+index 5bd774e..201757a 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
 @@ -160,11 +160,15 @@ public:
@@ -447,7 +447,7 @@ index 94596db..3216b05 100644
      bool setApplicationActive(bool active);
      bool applicationActive() const { return mApplicationActive; }
      // The main console's replay recording button: true records what the game sends into a new file in the
-@@ -877,13 +883,16 @@ public:
+@@ -913,13 +919,16 @@ public:
      void transportClosed(quint64 connection, const QString& reason = QString());
  
      // sysExitEvent and, if asked, a save for every profile that loaded, then the pool goes. Meanwhile no profile
@@ -469,7 +469,7 @@ index 94596db..3216b05 100644
      void shutdownAsync(bool save);
      // The save shutdown(true) makes, with the profiles left running: every profile that loaded, the session's own
      // and ones its scripts opened, writes its save, synced modules, map and profile.ini, and the window layout is written,
-@@ -892,13 +901,14 @@ public:
+@@ -928,13 +937,14 @@ public:
      // as shutdown() does, though not for a reconnect. A profile whose save could not be loaded is left as it is,
      // keeping its last good save and map. False if a profile was not saved, a close a script began meanwhile
      // included, or the layout was not, errorString() saying which; a session the frontend deletes in the event
@@ -487,7 +487,7 @@ index 94596db..3216b05 100644
      QStringList unsavedProfiles() const { return mUnsavedProfiles; }
      bool saveFailed() const { return !mUnsavedProfiles.isEmpty(); }
  
-@@ -1160,6 +1170,13 @@ private:
+@@ -1197,6 +1207,13 @@ private:
      void beginShutdown(bool save, const std::shared_ptr<bool>& saved, std::function<void(bool)> done);
      void shutdownOnceResetsEnd(bool save, const std::shared_ptr<bool>& saved, std::function<void(bool)> done);
      void shutdownOnceReleased(const std::shared_ptr<bool>& saved, std::function<void(bool)> done);
@@ -501,7 +501,7 @@ index 94596db..3216b05 100644
      void beginSave(std::function<void(bool)> done);
      void saveEach(QList<QPointer<Host>> profiles, qsizetype closesUnsavedBefore, QStringList unsaved, std::function<void(bool)> done);
      bool storeConnectionDetails(const Options&, std::optional<bool> tls);
-@@ -1306,7 +1323,18 @@ private:
+@@ -1343,7 +1360,18 @@ private:
      unsigned int mAddonCommandsQueuedRun = 0;
      // The same for buttonsChanged
      unsigned int mButtonsQueuedRun = 0;

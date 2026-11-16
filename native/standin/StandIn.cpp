@@ -67,7 +67,7 @@ QString StandIn::openProfile(const QString& name, const QString&, bool connect, 
             session->connectTo(profile.host, quint16(profile.port), profile.tls);
         }
     }
-    for (qsizetype i = mOpen.size() - 1; i >= 0 && !alongside; --i) {
+    for (qsizetype i = mOpen.size() - 1; i >= 0; --i) {
         if (mOpen.at(i).session != session) {
             closeAt(i);
         }

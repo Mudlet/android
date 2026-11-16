@@ -30,12 +30,15 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
+import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
@@ -63,6 +66,9 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
     val snackbars = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val notSent = stringResource(R.string.input_not_sent)
+    val context = LocalContext.current
+    val passwords = remember { PasswordStore(context) }
+    val resources = LocalResources.current
     val hidden = c.hiddenInput
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
@@ -157,8 +163,12 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
             }
             ConnectionBar(
                 ConnectionState.of(engineAttached = c.enginePid > 0, connection = c.status["connection"]),
-                canReconnect = c.lastAddress != null,
-                onReconnect = { c.reconnect() },
+                canReconnect = c.canReconnect,
+                onReconnect = {
+                    c.reconnect(passwords::get) { error ->
+                        scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_reconnect_refused, error), withDismissAction = true) }
+                    }
+                },
                 onDisconnect = { c.disconnect() },
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             )

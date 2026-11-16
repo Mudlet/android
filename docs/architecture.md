@@ -199,8 +199,11 @@ scales; text sizes are in sp, so the system font size scales them.
 The profile list (`ui/profiles/ProfileListScreen.kt`) shows the engine's `profiles`, which `EngineClient` asks for
 each time it attaches, and its editor (`ProfileEditor.kt`) sends `saveProfile` and `deleteProfile`. Each waits for its
 answer, and a refusal shows the engine's reason, which is in English. Connect sends `openProfile` with the profile's
-stored password and goes to the game screen once it is answered with `profiles`; the game screen's Reconnect then goes
-to that profile's address. A profile's name cannot change, as the engine keeps the name a profile was created with.
+stored password and goes to the game screen once it is answered with `profiles`; the game screen's Reconnect then sends
+`connect` with its address while the engine runs it, and otherwise `openProfile` with its stored password, as on an
+engine started again after the notification's Quit, where a bare `connect` would have libmudlet make a profile named
+`MUDLET_PROFILE` with that address, a copy of the player's. A profile's name cannot change, as the engine keeps the
+name a profile was created with.
 
 The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
 never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's

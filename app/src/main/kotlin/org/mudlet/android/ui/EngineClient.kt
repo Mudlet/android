@@ -61,6 +61,7 @@ object EngineClient {
     private const val PREF_LAST_HOST = "lastHost"
     private const val PREF_LAST_PORT = "lastPort"
     private const val PREF_LAST_TLS = "lastTls"
+    private const val PREF_LAST_PROFILE = "lastProfile"
 
     // How long after a send the engine's emptying of its line (an empty commandLine) is taken as that send's
     private const val SEND_CLEAR_WINDOW_MS = 3000L
@@ -77,9 +78,15 @@ object EngineClient {
     var linesAdded by mutableLongStateOf(0L)
         private set
 
-    /** The last address [connect] was given, kept across UI process restarts: what Reconnect connects to. */
+    /** The last address [connect] was given, kept across UI process restarts: what Reconnect connects to without [lastProfile]. */
     var lastAddress by mutableStateOf<GameAddress?>(null)
         private set
+
+    /** The profile last opened, kept across UI process restarts: what Reconnect opens again, until [connect] is given an address. */
+    var lastProfile by mutableStateOf<String?>(null)
+        private set
+
+    val canReconnect: Boolean get() = lastProfile != null || lastAddress != null
 
     // The engine's line still being written, such as a prompt, shown below the others
     var tail by mutableStateOf<UiLine?>(null)
@@ -189,6 +196,7 @@ object EngineClient {
         val p = prefs()
         val host = p.getString(PREF_LAST_HOST, null)
         if (host != null) lastAddress = GameAddress(host, p.getInt(PREF_LAST_PORT, 23), p.getBoolean(PREF_LAST_TLS, false))
+        lastProfile = p.getString(PREF_LAST_PROFILE, null)
     }
 
     fun startEngine() {
@@ -279,23 +287,41 @@ object EngineClient {
 
     /** Connects the engine to a game and remembers the address for [reconnect]. False as for [send]. */
     fun connect(host: String, port: Int, tls: Boolean): Boolean {
-        rememberAddress(GameAddress(host, port, tls))
+        lastAddress = GameAddress(host, port, tls)
+        lastProfile = null
+        prefs().edit {
+            putString(PREF_LAST_HOST, host)
+            putInt(PREF_LAST_PORT, port)
+            putBoolean(PREF_LAST_TLS, tls)
+            remove(PREF_LAST_PROFILE)
+        }
         return send(Requests.connect(host, port, tls))
     }
 
-    private fun rememberAddress(address: GameAddress) {
-        lastAddress = address
-        prefs().edit {
-            putString(PREF_LAST_HOST, address.host)
-            putInt(PREF_LAST_PORT, address.port)
-            putBoolean(PREF_LAST_TLS, address.tls)
+    /**
+     * Connects [lastProfile] again: the running profile to its address, or, on an engine not running it, by opening it
+     * with [passwordOf] its name. Without one, connects to [lastAddress]. Why it could not goes to [onRefused].
+     */
+    fun reconnect(passwordOf: (profile: String) -> String?, onRefused: (error: String) -> Unit) {
+        val name = lastProfile
+        if (name == null) {
+            lastAddress?.let { connectAgain(it, onRefused) }
+            return
+        }
+        // Its own connect for the running one, as openProfile leaves alone a profile that is connected or reconnecting
+        val running = profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }
+            ?.takeIf { status["profile"].let { s -> s.equals("$name loaded", true) || s.equals("$name starting", true) } }
+        if (running != null) {
+            connectAgain(GameAddress(running.host, running.port, running.tls), onRefused)
+        } else {
+            // Not a bare connect: on an engine that has opened no profile since it started, as after the notification's
+            // Quit, libmudlet would make a profile of MUDLET_PROFILE's name with this address, a copy of the player's
+            openProfile(name, passwordOf(name)) { error -> if (error != null) onRefused(error) }
         }
     }
 
-    /** Connects to [lastAddress] again; false when there is none or the request was dropped. */
-    fun reconnect(): Boolean {
-        val address = lastAddress ?: return false
-        return send(Requests.connect(address.host, address.port, address.tls))
+    private fun connectAgain(address: GameAddress, onRefused: (error: String) -> Unit) {
+        if (!send(Requests.connect(address.host, address.port, address.tls))) onRefused(app.getString(R.string.profiles_error_not_attached))
     }
 
     fun disconnect(): Boolean = send(Requests.disconnect())
@@ -331,10 +357,11 @@ object EngineClient {
 
     fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.deleteProfile(name, it) }
 
-    /** Opens and connects the profile [name]; once the engine has, Reconnect goes to its address. */
+    /** Opens and connects the profile [name]; once the engine has, Reconnect opens it again. */
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) {
-            profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { rememberAddress(GameAddress(it.host, it.port, it.tls)) }
+            lastProfile = name
+            prefs().edit { putString(PREF_LAST_PROFILE, name) }
         }
         onAnswer(error)
     }) { Requests.openProfile(name, password, true, it) }

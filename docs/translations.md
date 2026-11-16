@@ -79,6 +79,6 @@ the English when the APK is built:
 
 On a phone or emulator with a debug build, turn on Developer options; both then appear in Settings, System,
 Languages. `PseudoLocaleTest` (`app/src/androidTest`) runs the app in each, as the per-app language setting of
-Android 13 and later does, so on the API 36 emulator of CI's emulator job only: on the profile list and the game
-screen, no text may be cut short, overflow its box or leave the screen, ar-XB must be mirrored, and the
-accessibility checks run.
+Android 13 and later does, so on the API 36 emulator of CI's emulator job only: on the profile list, the profile
+editor, the settings and the game screen, no text may be cut short, overflow its box or leave the screen, ar-XB must
+be mirrored, and the accessibility checks run.

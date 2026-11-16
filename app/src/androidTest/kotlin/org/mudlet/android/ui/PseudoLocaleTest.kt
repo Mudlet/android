@@ -37,14 +37,15 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
+import org.mudlet.android.protocol.Profile
 import java.util.Locale
 import kotlin.math.abs
 
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
- * runs longer than the English, and ar-XB, right to left. On the profile list and on the game screen, with the
- * connection bar's longer states and the password field, no text is cut off, overflows its box or leaves the screen,
- * and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
+ * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
+ * editor, the settings and the game screen, with the connection bar's longer states and the password field, no text is
+ * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
  */
 @RunWith(Parameterized::class)
@@ -72,14 +73,36 @@ class PseudoLocaleTest(private val locale: String) {
         assertNotEquals("$locale's title", english(R.string.profiles_title), string(R.string.profiles_title))
 
         compose.onNodeWithText(string(R.string.profiles_title)).assertIsDisplayed()
-        assertTextFits("the profile list")
-        assertAtStart("the profile list's text", hasText(string(R.string.profiles_empty)))
-        assertAtStart("the profile list's button", hasText(string(R.string.profiles_open_game)) and hasClickAction())
-
         val session = fake.engine.nextSession()
+        // EngineClient lives as long as the process, so an earlier test's lines would still be there
         session.clear()
         session.synced(0)
-        activate(hasText(string(R.string.profiles_open_game)))
+        session.profiles(emptyList(), session.receive("listProfiles"))
+        waitFor(hasText(string(R.string.profiles_empty)))
+        assertTextFits("the empty profile list")
+        assertAtStart("the empty profile list's text", hasText(string(R.string.profiles_empty)))
+
+        activate(hasContentDescription(string(R.string.profiles_add)))
+        waitFor(hasText(string(R.string.profile_new_title)))
+        assertTextFits("the profile editor")
+        assertAtStart("the profile editor's Back button", hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.profiles_title)))
+
+        activate(hasContentDescription(string(R.string.settings_title)))
+        waitFor(hasText(string(R.string.settings_text_size)))
+        assertTextFits("the settings")
+        assertAtStart("the settings' first heading", hasText(string(R.string.settings_text_size)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.profiles_title)))
+
+        session.profiles(listOf(GAME))
+        waitFor(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
+        assertTextFits("the profile list")
+        assertAtStart("a profile", hasContentDescription(string(R.string.profile_description, GAME.name, GAME.host, GAME.port)))
+
+        activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
+        session.profiles(listOf(GAME), session.receive("openProfile"))
         waitFor(hasText(string(R.string.game_title)))
         assertTextFits("the game screen")
         assertAtStart("the Back button", hasContentDescription(string(R.string.navigate_back)))
@@ -189,6 +212,7 @@ class PseudoLocaleTest(private val locale: String) {
         private const val EN_XA = "en-XA"
         private const val AR_XB = "ar-XB"
         private const val ADDRESS = "mud.example.org:4000"
+        private val GAME = Profile("Game", "mud.example.org", 4000, false, "", false)
         private const val REASON = "Connection refused by the remote host"
 
         // Rounding of the bounds to pixels

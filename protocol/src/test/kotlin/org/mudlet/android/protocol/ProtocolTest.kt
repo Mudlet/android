@@ -568,6 +568,31 @@ class ProtocolTest {
     }
 
     @Test
+    fun aProfilesSettingsAreRequestedAndReadAsTheEngineHasThem() {
+        val keys = listOf("blankLinesBehaviour", "announceIncomingText")
+        assertEquals(mapOf("t" to "getSettings", "keys" to keys, "id" to 3L), Requests.getSettings(keys, 3).toMap())
+        val values = mapOf("blankLinesBehaviour" to "hide", "announceIncomingText" to false, "mapRoomSize" to 5)
+        assertEquals(mapOf("t" to "setSettings", "values" to values, "id" to 4L), Requests.setSettings(values, 4).toMap())
+        assertThrows(IllegalArgumentException::class.java) { Requests.getSettings(emptyList(), 5) }
+        assertThrows(IllegalArgumentException::class.java) { Requests.setSettings(emptyMap(), 5) }
+        assertThrows(IllegalArgumentException::class.java) { Requests.setSettings(mapOf("colours" to listOf(1, 2)), 5) }
+
+        val answer = FrameReader.parse(
+            JSONObject(
+                """{"t":"settings","values":{"blankLinesBehaviour":"hide","announceIncomingText":false,"mapRoomSize":5,"odd":[1]},
+                |"refused":{"noSuchSetting":"'noSuchSetting' isn't a valid configuration option"},"re":4}
+                """.trimMargin(),
+            ),
+        ) as EngineMessage.SettingValues
+        // A whole number reads as the Double a fraction would; a value no setting has is left out
+        assertEquals(mapOf("blankLinesBehaviour" to "hide", "announceIncomingText" to false, "mapRoomSize" to 5.0), answer.values)
+        assertEquals(mapOf("noSuchSetting" to "'noSuchSetting' isn't a valid configuration option"), answer.refused)
+        assertEquals(4, answer.replyTo)
+        val bare = FrameReader.parse(JSONObject("""{"t":"settings"}""")) as EngineMessage.SettingValues
+        assertEquals(EngineMessage.SettingValues(emptyMap(), emptyMap(), null), bare)
+    }
+
+    @Test
     fun theMapScaleRequestCarriesWhatTheEngineReads() {
         assertEquals(mapOf("t" to "setMapScale", "scale" to 2.75), Requests.setMapScale(2.75).toMap())
     }

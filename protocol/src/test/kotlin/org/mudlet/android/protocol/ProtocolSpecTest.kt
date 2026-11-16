@@ -83,6 +83,8 @@ class ProtocolSpecTest {
                         PointerType::class.java -> PointerType.PRESS
                         MapPointerType::class.java -> MapPointerType.PRESS
                         MapTarget::class.java -> MapTarget.APP
+                        List::class.java -> listOf("x")
+                        Map::class.java -> mapOf("x" to true)
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

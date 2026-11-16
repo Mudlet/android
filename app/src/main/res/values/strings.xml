@@ -312,7 +312,7 @@
          Protocol) with the game. Keep "MSSP". -->
     <string name="settings_mssp">MSSP</string>
     <!-- Under "MSSP", what the protocol carries -->
-    <string name="settings_mssp_hint">The game's description of itself, such as its name and how many are playing. From the next connection.</string>
+    <string name="settings_mssp_hint">The game\'s description of itself, such as its name and how many are playing. From the next connection.</string>
     <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MSP (MUD Sound
          Protocol) with the game. Keep "MSP". -->
     <string name="settings_msp">MSP</string>
@@ -322,7 +322,7 @@
          Protocol) with the game. Keep "MXP". -->
     <string name="settings_mxp">MXP</string>
     <!-- Under "MXP", what the protocol carries -->
-    <string name="settings_mxp_hint">Links, menus and frames in the game's text. From the next connection.</string>
+    <string name="settings_mxp_hint">Links, menus and frames in the game\'s text. From the next connection.</string>
     <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MTTS (MUD Terminal Type
          Standard) with the game. Keep "MTTS". -->
     <string name="settings_mtts">MTTS</string>

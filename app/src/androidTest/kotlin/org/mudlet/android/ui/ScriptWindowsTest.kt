@@ -32,6 +32,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -336,7 +337,8 @@ class ScriptWindowsTest {
     private fun showChat() {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
         session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
-        session.windows(listOf(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40)), full = true)
+        // With a size in points, so the window takes a pinch beside its links' taps
+        session.windows(listOf(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40, fontSize = 8.0)), full = true)
     }
 
     // In the chat window, and left out of what TalkBack reads
@@ -441,6 +443,16 @@ class ScriptWindowsTest {
         assertEquals(null, ConsoleZoomClient(GAME.name, { prefs }, { true }).chosen("chat"))
         // A script's size then holds
         session.windows(listOf(chat(12)))
+        session.assertNoRequest("runLua", QUIET_MS.toInt())
+    }
+
+    @Test
+    fun oneFingerStillScrollsAMiniConsoleThatTakesAPinch() {
+        showChat()
+        session.windowText("chat", (0 until 60).map { "row $it" })
+        waitUntilDisplayed("row 59")
+        compose.onNode(windowNamed("chat")).performTouchInput { swipeDown() }
+        compose.waitUntil(WAIT_MS) { !displayed("row 59") }
         session.assertNoRequest("runLua", QUIET_MS.toInt())
     }
 

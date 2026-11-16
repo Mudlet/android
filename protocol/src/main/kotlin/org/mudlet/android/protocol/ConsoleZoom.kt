@@ -14,7 +14,7 @@ import kotlin.math.roundToInt
  * [inFlight] are the sizes sent since the engine last reported [chosen]: a report of one of those is the answer to an
  * older send, not a script's size.
  */
-data class ConsoleZoom(val chosen: Int, val scripts: Int?, val inFlight: Set<Int> = emptySet()) {
+data class ConsoleZoom(val chosen: Int, val scripts: Int, val inFlight: Set<Int> = emptySet()) {
     /** The engine reports the console at [size] points: the state after it, and the size to send, if any. */
     fun reported(size: Int): Pair<ConsoleZoom, Int?> = when {
         size <= 0 -> this to null

@@ -21,7 +21,8 @@ internal class ConsoleZoomClient(profile: String, private val prefs: () -> Share
         for ((key, value) in prefs().all) {
             if (!key.startsWith(prefix) || value !is String) continue
             val chosen = value.substringBefore(',').toIntOrNull() ?: continue
-            zooms[decode(key.removePrefix(prefix))] = ConsoleZoom(chosen, value.substringAfter(',', "").toIntOrNull())
+            val scripts = value.substringAfter(',', "").toIntOrNull() ?: continue
+            zooms[decode(key.removePrefix(prefix))] = ConsoleZoom(chosen, scripts)
         }
     }
 
@@ -47,7 +48,7 @@ internal class ConsoleZoomClient(profile: String, private val prefs: () -> Share
     /** Forgets the player's size for the console [name] and gives it its scripts' last size again; kept if that could not go. */
     fun reset(name: String, reported: Int) {
         val size = (zooms[name] ?: return).scripts
-        if (size != null && size != reported && !runLua(ConsoleZoom.setFontSizeLua(name, size))) return
+        if (size != reported && !runLua(ConsoleZoom.setFontSizeLua(name, size))) return
         zooms.remove(name)
         prefs().edit { remove(key(name)) }
     }
@@ -57,7 +58,7 @@ internal class ConsoleZoomClient(profile: String, private val prefs: () -> Share
 
     private fun put(name: String, zoom: ConsoleZoom) {
         val old = zooms.put(name, zoom)
-        if (old?.chosen != zoom.chosen || old.scripts != zoom.scripts) prefs().edit { putString(key(name), "${zoom.chosen},${zoom.scripts ?: ""}") }
+        if (old?.chosen != zoom.chosen || old.scripts != zoom.scripts) prefs().edit { putString(key(name), "${zoom.chosen},${zoom.scripts}") }
     }
 
     private fun key(name: String) = prefix + encode(name)

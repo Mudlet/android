@@ -271,7 +271,7 @@ class ScreenReaderTest {
         session.assertNoRequest("setSettings", 500)
         activate(hasContentDescription(string(R.string.settings_undo_wrap_width_more)), scroll = true)
         assertEquals(mapOf("undoServerWrapWidth" to slid + 1), values(session.receive("setSettings")))
-        val shown = compose.activity.getString(R.string.settings_undo_wrap_width_value, slid + 1)
+        val shown = compose.activity.resources.getQuantityString(R.plurals.settings_undo_wrap_width_value, slid + 1, slid + 1)
         compose.onNode(width).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
         compose.runOnIdle { assertEquals("new games keep it", 80, Settings.undoWrapWidth.value) }
     }

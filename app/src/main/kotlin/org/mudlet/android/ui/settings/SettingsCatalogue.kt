@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.settings
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
@@ -90,7 +91,7 @@ sealed class SettingEntry(
         label: Int,
         hint: Int,
         keywords: Int,
-        @StringRes val valueText: Int,
+        @PluralsRes val valueText: Int,
         @StringRes val less: Int,
         @StringRes val more: Int,
         val sample: Boolean = false,
@@ -127,7 +128,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_undo_wrap_width,
             R.string.settings_undo_wrap_width_hint,
             R.string.settings_undo_wrap_keywords,
-            valueText = R.string.settings_undo_wrap_width_value,
+            valueText = R.plurals.settings_undo_wrap_width_value,
             less = R.string.settings_undo_wrap_width_less,
             more = R.string.settings_undo_wrap_width_more,
         ),
@@ -230,7 +231,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_text_size,
             R.string.settings_text_size_hint,
             R.string.settings_text_size_keywords,
-            valueText = R.string.settings_text_size_value,
+            valueText = R.plurals.settings_text_size_value,
             less = R.string.settings_text_smaller,
             more = R.string.settings_text_larger,
             sample = true,

@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -167,7 +168,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
     val size = dragged ?: owner.value(setting)
     val range = setting.range
     val label = stringResource(entry.label)
-    val value = stringResource(entry.valueText, size)
+    val value = pluralStringResource(entry.valueText, size, size)
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
         entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }

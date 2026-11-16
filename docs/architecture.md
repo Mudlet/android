@@ -353,10 +353,10 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are four: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are five: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
-rows without resizing the main window that `setMainWindowSize` gave, and a label's live region in its
-`labelContent()`.
+rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
+`labelContent()`, and a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

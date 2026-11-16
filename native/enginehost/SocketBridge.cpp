@@ -120,6 +120,23 @@ QString wireName(MapDownload::State state)
     return {};
 }
 
+// The messages of those of now that are new or differ from what they were before, matched by name
+template <typename Info, typename Message>
+QList<QJsonObject> changedByName(const QList<Info>& before, const QList<Info>& now, Message message)
+{
+    QHash<QString, const Info*> was;
+    for (const Info& info : before) {
+        was.insert(info.name, &info);
+    }
+    QList<QJsonObject> changed;
+    for (const Info& info : now) {
+        if (const Info* old = was.value(info.name); !old || *old != info) {
+            changed.append(message(info));
+        }
+    }
+    return changed;
+}
+
 } // namespace
 
 SocketBridge::SocketBridge(QObject* parent)
@@ -242,6 +259,8 @@ void SocketBridge::onBytesWritten()
 void SocketBridge::greet(const QJsonObject& hello)
 {
     mClientGreeted = true;
+    // Its text boxes' typing is counted from its hello, as the UI counts it
+    mTextBoxTyped.clear();
     // A UI that was only detached says what it already has, so it gets just the rest
     qint64 after = 0;
     if (hello.value(QLatin1String("instance")).toString() == mInstance) {
@@ -280,6 +299,9 @@ void SocketBridge::sendState()
     sendFrame({{QStringLiteral("t"), QStringLiteral("windows")}, {QStringLiteral("full"), true}, {QStringLiteral("windows"), windows}});
     for (const LabelInfo& label : std::as_const(mLabels)) {
         sendFrame(labelMessage(label));
+    }
+    for (const TextBoxInfo& textBox : std::as_const(mTextBoxes)) {
+        sendFrame(textBoxMessage(textBox));
     }
     if (!mMap.isEmpty()) {
         sendFrame(mMap);
@@ -399,6 +421,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, mEngine->closeUserWindow(message.value(QLatin1String("name")).toString()));
     } else if (type == QLatin1String("sendWindowCommandLine")) {
         refuse(type, mEngine->sendWindowCommandLine(message.value(QLatin1String("name")).toString(), message.value(QLatin1String("text")).toString()));
+    } else if (type == QLatin1String("setTextBoxText")) {
+        setTextBoxText(message);
     } else if (type == QLatin1String("pointer")) {
         refuse(type, pointer(message));
     } else if (type == QLatin1String("getImage")) {
@@ -905,6 +929,18 @@ QJsonObject SocketBridge::labelMessage(const LabelInfo& label)
     return json;
 }
 
+QJsonObject SocketBridge::textBoxMessage(const TextBoxInfo& textBox) const
+{
+    return {{QStringLiteral("t"), QStringLiteral("textBox")},
+            {QStringLiteral("name"), textBox.name},
+            {QStringLiteral("text"), textBox.text},
+            {QStringLiteral("readOnly"), textBox.readOnly},
+            {QStringLiteral("placeholder"), textBox.placeholder},
+            {QStringLiteral("styleSheet"), textBox.styleSheet},
+            {QStringLiteral("tabMovesFocus"), textBox.tabMovesFocus},
+            {QStringLiteral("typed"), mTextBoxTyped.value(textBox.name)}};
+}
+
 QJsonArray SocketBridge::buttonsJson(const QList<BarButton>& buttons)
 {
     QJsonArray json;
@@ -1112,9 +1148,9 @@ void SocketBridge::moveTypedLine()
     }
 }
 
-// Only what changed is sent, the windows keyed by name and kind and the labels by name, each label after the windows
-// so that the UI knows its window first; a UI that attaches or drains gets them all
-void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels)
+// Only what changed is sent, the windows keyed by name and kind and the labels and text boxes by name, each after the
+// windows so that the UI knows its window first; a UI that attaches or drains gets them all
+void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels, const QList<TextBoxInfo>& textBoxes)
 {
     using Key = std::pair<QString, QString>;
     QHash<Key, const ScriptWindowInfo*> before;
@@ -1134,19 +1170,14 @@ void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<L
             removed.append(QJsonObject{{QStringLiteral("name"), window.name}, {QStringLiteral("kind"), window.kind}});
         }
     }
-    QHash<QString, const LabelInfo*> labelsBefore;
-    for (const LabelInfo& label : std::as_const(mLabels)) {
-        labelsBefore.insert(label.name, &label);
-    }
-    QList<QJsonObject> changedLabels;
-    for (const LabelInfo& label : labels) {
-        const LabelInfo* was = labelsBefore.value(label.name);
-        if (!was || *was != label) {
-            changedLabels.append(labelMessage(label));
-        }
-    }
+    // Labels before text boxes, each after the windows frame that places it
+    QList<QJsonObject> changedContent = changedByName(mLabels, labels, &SocketBridge::labelMessage);
+    changedContent += changedByName(mTextBoxes, textBoxes, [this](const TextBoxInfo& textBox) {
+        return textBoxMessage(textBox);
+    });
     mWindows = windows;
     mLabels = labels;
+    mTextBoxes = textBoxes;
     if (!clientLive()) {
         return;
     }
@@ -1157,8 +1188,32 @@ void SocketBridge::windows(const QList<ScriptWindowInfo>& windows, const QList<L
         }
         sendFrame(message);
     }
-    for (const QJsonObject& label : std::as_const(changedLabels)) {
-        sendFrame(label);
+    for (const QJsonObject& content : changedContent) {
+        sendFrame(content);
+    }
+}
+
+// What Mudlet kept of the player's text is kept here too, so it is not sent back; a refusal is followed by the box as
+// Mudlet holds it, so the UI puts back what it showed the player. Taken or not, each counts in the box's typed from
+// then on, before Mudlet can tell of the box
+void SocketBridge::setTextBoxText(const QJsonObject& message)
+{
+    const QString name = message.value(QLatin1String("name")).toString();
+    ++mTextBoxTyped[name];
+    const QJsonValue value = message.value(QLatin1String("text"));
+    QString text = value.toString();
+    // Not taken as empty, which would clear what the player typed
+    const QString problem = value.isString() ? mEngine->setTextBoxText(name, text) : QStringLiteral("text must be a string");
+    const auto kept = std::ranges::find(mTextBoxes, name, &TextBoxInfo::name);
+    if (problem.isEmpty()) {
+        if (kept != mTextBoxes.end()) {
+            kept->text = text;
+        }
+        return;
+    }
+    refuse(QStringLiteral("setTextBoxText"), problem);
+    if (kept != mTextBoxes.end()) {
+        sendFrame(textBoxMessage(*kept));
     }
 }
 

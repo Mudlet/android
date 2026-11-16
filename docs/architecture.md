@@ -397,6 +397,7 @@ keeps the profiles' passwords in the KeyStore.
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
+| `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
@@ -477,6 +478,13 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   and whose text label is transparent; a label's live region, from Geyser's `liveRegion` and each
   `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; every label to a UI that attaches; `deleteLabel()`
   as `removed`;
+- text boxes: `createTextEdit()` with `setTextEditText()`, `setTextEditPlaceholder()`, `setTextEditStyleSheet()` and
+  `setTextEditTabMovesFocus()` as `textBox` after its `windows`, with its `typed`; `setTextBoxText` read back by
+  `getTextEditText()` and not sent back, by a later `windows` either, and a script's text after it sent, the text from
+  before it included; a paste with a non-breaking space, CRLF and a line separator kept as plain text, and not sent
+  back; `setTextEditPlaceholder()`, `setTextEditTabMovesFocus()` and `setTextEditReadOnly()` alone as `textBox`;
+  `setTextBoxText` refused for a hidden box and a read-only one, by `error` and the box as Mudlet holds it; an unknown
+  box refused; every text box to a UI that attaches, its `typed` counted afresh; `deleteTextEdit()` as `removed`;
 - button bars and commands: a package's bar, with its grid, a push-down button and a folder's menu, and
   `tempButtonToolbar()` bars at the left and floating, as `buttonBars`; `pressButton` sending a push-down button's
   command for down, then up, and running its script, and a menu entry pressed; `addCommand()` and

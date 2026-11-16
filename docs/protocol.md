@@ -10,7 +10,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **13**.
+The current version is **14**.
 
 ## Transport
 
@@ -73,6 +73,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `placeUserWindow` | `name`, `x`, `y`, `w`, `h`, `floating` | Where the UI put the user window `name`, in the main window's pixels, docked or `floating` (`setUserWindowGeometry()`). A new size raises `sysUserWindowResizeEvent`. `w` and `h` above 0. |
 | `closeUserWindow` | `name` | The dock's close button: hides the user window, as `hideWindow()` does. |
 | `sendWindowCommandLine` | `name`, `text` | Enter on the command line `name`, a console's own from `enableCommandLine()` or one from `createCommandLine()`, holding `text` (`submitWindowCommandLine()`): the line's action, or else the aliases, take each line of it. |
+| `setTextBoxText` | `name`, `text` | What the player has typed in the text box `name` so far: the whole of its `text`, a string (`THeadlessSession::setTextBoxText()`, "Text boxes" below). Refused for a box that is read-only or not `shown`, with `error` and then the box's `textBox` as the engine holds it, so the UI puts back what it showed. Only libmudlet takes it. |
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | What the UI's pointer did at `x`, `y` (numbers, which may have fractions) in the pixels of the window `window`, from its top left; `main` is the main console's area (`THeadlessSession::pointer()`). `type` is `press`, `release`, `doubleClick`, `move`, `enter`, `leave` or `wheel`. `button` is the one that changed, for a press, release or double-click, and `buttons` those held after it, as Qt's flags: 1 left, 2 right, 4 middle. `modifiers` are Qt's: 0x02000000 Shift, 0x04000000 Control, 0x08000000 Alt, 0x10000000 Meta. `wheelY` is the wheel's turn in eighths of a degree, 120 a notch, positive away from the player. Each of those four is 0 when absent. A label's callback runs as the GUI's would, with the event table it gives (`button` `LeftButton` and the rest, `x`, `y`); a press or release no label takes goes on to the console under it. |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
 | `pressButton` | `button` | A click on the button or menu entry of `buttonBars` whose `id` is `button`, a whole number (`THeadlessSession::pressButton()`): it sends the button's command through the aliases and runs its script, as the GUI's button does, and a push-down button goes down, or up if it was down. To pick an entry of a folder's menu, the UI presses the entry, then the folder, as the GUI does. |
@@ -101,8 +102,9 @@ it names whatever profile is open.
 The script windows' requests are answered only when refused, with `error` whose `message` is the request's name, a
 colon and why; `getWindowText` and `getImage` are always answered. libmudlet refuses all but `setMainWindowSize` and
 `getImage` while no profile is open, and `pointer` as `THeadlessSession::pointer()` does: for a window that is not
-shown, a point outside it, or another window than the one a held button went down on. The stand-in has no script
-windows and refuses all seven.
+shown, a point outside it, or another window than the one a held button went down on. It refuses `setTextBoxText` as
+`THeadlessSession::setTextBoxText()` does: for a box there is not, one not shown and one read-only. The stand-in has no
+script windows and refuses all eight.
 
 `pressButton` and `activateCommand` too are answered only when refused, with `error` as above: libmudlet refuses
 them while no profile is open, and for an id that is not one the last `buttonBars` or `commands` would list. The
@@ -153,6 +155,7 @@ loaded. The stand-in has no map and refuses both.
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `liveRegion`?, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. Only libmudlet sends it. |
+| `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 | `map` | `png`, `w`, `h`, `viewOnly` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels, and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
@@ -223,6 +226,33 @@ What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which
 The files are the engine's: the UI asks for one with `getImage`. A label's cursor is not sent. The engine keeps each
 label's content and sends a `label` only when it differs from what it last sent; a label that goes is in the
 `windows` message's `removed`, with no `label`.
+
+### Text boxes
+
+What `textBox` carries, from libmudlet's `THeadlessSession::textBoxContent()`, for a box a script made with
+`createTextEdit()`:
+
+- `text` is what `getTextEditText()` reads: plain text, its lines split by newlines, as `setTextEditText()` or
+  `clearTextEdit()` left it, or as the player typed it.
+- With `readOnly` true, as `setTextEditReadOnly()` set it, the player cannot type in it; a script still sets its text.
+- `placeholder` is what `setTextEditPlaceholder()` gave it, shown while the box is empty.
+- `styleSheet` is what `setTextEditStyleSheet()` gave it, which the engine does not interpret, as a label's.
+- With `tabMovesFocus` true, as `setTextEditTabMovesFocus()` set it, Tab moves on to the next control rather than
+  typing a tab.
+
+Its place and font are its window's. The UI sends what the player types with `setTextBoxText`, the whole text each
+time, which a script then reads with `getTextEditText()`; on the desktop that raises no event, so it raises none here.
+The engine keeps it as the desktop's box would, as plain text (a non-breaking space as a space, a carriage return, line
+or paragraph separator as a newline), and does not send it back, so a `textBox` comes only for a script's change, which
+the UI shows in place of what the player typed. The UI sends the text as the engine keeps it, and before a `pointer`,
+`pressButton`, `activateCommand`, `sendWindowCommandLine`, `followLink`, `mapPointer`, `appMapPointer` or `send`, so that
+a script these run reads what the player typed. A refused `setTextBoxText`, for a box a script made read-only or hid
+before the request came, is followed by the box's `textBox` as the engine holds it.
+
+A `textBox` can cross a `setTextBoxText` on the way: one whose `typed` is below the number of `setTextBoxText` the UI
+has sent for the box since its `hello` was sent before the engine had the player's latest text, which then replaced its
+`text`, so the UI keeps what the player typed and takes the rest. libmudlet has all of this from
+`scripts/mudlet-patches/` until Mudlet does.
 
 ### Button bars and commands
 
@@ -423,9 +453,9 @@ a UI says `hello`, the engine sends, in this order:
 1. its own `hello`;
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
    `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
-   engine has sent one, `windows` with `full` true, a `label` for each label, `map` while the mapper shows,
-   `mapDownload` if the engine has sent one, `buttonBars`, `commands`, and a `windowText` of each console's last 300
-   rows;
+   engine has sent one, `windows` with `full` true, a `label` for each label, a `textBox` for each text box, `map` while
+   the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, and a `windowText` of each
+   console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
@@ -464,23 +494,23 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 13, which added the map download (`downloadMap`, `cancelMapDownload`, `mapDownload`); version
-12 added `window` to `getLink`, `followLink` and `link`, so that a script window's links can be asked about and
-followed; version 11 added the app's map (`setAppMapSize`, `appMapPointer`, `showRoom`, `appMap`) and the room search
-(`findRooms`, `rooms`); version 10 added the map (`map`, `mapPointer`, `setMapViewOnly`); version 9 added the button
-bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`); version 8 added the labels' messages
-(`label`, `image`, and `bgAlpha` in `windows`) and requests (`pointer`, `getImage`); version 7 added the script windows'
-requests (`setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and
-messages (`windows`, `windowText`, `mainArea`, `windowCommandLine`); version 6 added `setAppState` and the messages
-`attention` and `moveTypedLine`; version 5 added the link requests (`getLink`, `followLink`) and messages (`link`,
-`linksChanged`); version 4 replaced `setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with `setScreenSize`
-and added `announce`; version 3 added the input line's requests (`sendHidden`, `dismissHidden`, `complete`) and messages
-(`hiddenInput`, `history`, `commandLine`); version 2 added the profile requests and `profiles`:
+As implemented in version 14, which added the text boxes (`setTextBoxText`, `textBox`); version 13 added the map
+download (`downloadMap`, `cancelMapDownload`, `mapDownload`); version 12 added `window` to `getLink`, `followLink` and
+`link`, so that a script window's links can be asked about and followed; version 11 added the app's map
+(`setAppMapSize`, `appMapPointer`, `showRoom`, `appMap`) and the room search (`findRooms`, `rooms`); version 10 added
+the map (`map`, `mapPointer`, `setMapViewOnly`); version 9 added the button bars and commands (`buttonBars`, `commands`,
+`pressButton`, `activateCommand`); version 8 added the labels' messages (`label`, `image`, and `bgAlpha` in `windows`)
+and requests (`pointer`, `getImage`); version 7 added the script windows' requests (`setMainWindowSize`,
+`getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`) and messages (`windows`, `windowText`,
+`mainArea`, `windowCommandLine`); version 6 added `setAppState` and the messages `attention` and `moveTypedLine`;
+version 5 added the link requests (`getLink`, `followLink`) and messages (`link`, `linksChanged`); version 4 replaced
+`setViewWidthPx` (and its statuses `columns` and `viewWidthPx`) with `setScreenSize` and added `announce`; version 3
+added the input line's requests (`sendHidden`, `dismissHidden`, `complete`) and messages (`hiddenInput`, `history`,
+`commandLine`); version 2 added the profile requests and `profiles`:
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
-- The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=13`) and closes the connection. A first frame that is not `hello` is refused the
-  same way.
+- The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends `error` (`expected hello with v=`
+  and its version) and closes the connection. A first frame that is not `hello` is refused the same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.
 - An unknown `t` from the UI gets `error` (`unknown type <t>`), and the connection stays open.

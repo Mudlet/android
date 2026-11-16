@@ -89,6 +89,9 @@ public:
     virtual QString closeUserWindow(const QString& name) = 0;
     // Enter on a window's command line holding text
     virtual QString sendWindowCommandLine(const QString& name, const QString& text) = 0;
+    // What the player has typed in a text box so far, the whole of its text, which is then set to what the box holds,
+    // as Mudlet keeps it
+    virtual QString setTextBoxText(const QString& name, QString& text) = 0;
     // What the UI's pointer did on a window
     virtual QString pointer(const QString& window, const PointerEvent& event) = 0;
     // The image file, or icon, at path as PNG, scaled to size unless it is empty, or that frame of an animated one;

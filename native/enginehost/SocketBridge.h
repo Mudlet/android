@@ -27,7 +27,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 13;
+    static constexpr int protocolVersion = 14;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -51,7 +51,7 @@ public:
     void linksChanged(const QList<int>& ids) override;
     void attention(int ms) override;
     void moveTypedLine() override;
-    void windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels) override;
+    void windows(const QList<ScriptWindowInfo>& windows, const QList<LabelInfo>& labels, const QList<TextBoxInfo>& textBoxes) override;
     void windowText(const QString& window, const WindowText& text) override;
     void mainArea(const MainArea& area) override;
     void windowCommandLine(const QString& name, const QString& text) override;
@@ -97,6 +97,7 @@ private:
     void getWindowText(const QJsonObject& message);
     QString placeUserWindow(const QJsonObject& message);
     QString pointer(const QJsonObject& message);
+    void setTextBoxText(const QJsonObject& message);
     QString mapPointer(const QJsonObject& message);
     QString setAppMapSize(const QJsonObject& message);
     void findRooms(const QJsonObject& message);
@@ -115,6 +116,7 @@ private:
     static QJsonObject linksChangedMessage(const QList<int>& ids);
     static QJsonObject windowJson(const ScriptWindowInfo& window);
     static QJsonObject labelMessage(const LabelInfo& label);
+    QJsonObject textBoxMessage(const TextBoxInfo& textBox) const;
     static QJsonObject windowTextMessage(const QString& window, const WindowText& text);
     static QJsonObject mainAreaMessage(const MainArea& area);
     static QJsonArray buttonsJson(const QList<BarButton>& buttons);
@@ -137,6 +139,10 @@ private:
     // As IFrontend::windows() last gave them
     QList<ScriptWindowInfo> mWindows;
     QList<LabelInfo> mLabels;
+    // As IFrontend::windows() last gave them, with what Mudlet kept of the text the UI sent since, so it is not sent back
+    QList<TextBoxInfo> mTextBoxes;
+    // How many setTextBoxText this UI has sent for each text box, by its name, which each textBox carries
+    QHash<QString, int> mTextBoxTyped;
     // None until the engine has sent one
     std::optional<MainArea> mMainArea;
     // As IFrontend::buttonBars() and commands() last gave them, as sent

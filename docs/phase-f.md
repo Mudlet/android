@@ -97,6 +97,7 @@ green.
 |---|---|---|
 | `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?; `removed`?: `name`, `kind` | `scriptWindows()` at `profileLoaded` and on attach (`full` true: replaces all), then the entries `scriptWindowsChanged` names. A window is keyed by name and kind. `kind` is upstream's enum name |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | `labelContent()` for each label in a `windows` message whose content differs from what was last sent. The cursor fields are left out: a touch screen has no pointer to shape |
+| `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | `textBoxContent()` (gap 4, carried) for each text box in a `windows` message whose content differs from what was last sent; not the player's own typing, kept as Mudlet keeps it; `typed`, the `setTextBoxText` for it the bridge has had from this UI |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | `windowLines(window, -300, 300)` for each window `windowTextChanged` names, and for every console on attach; older rows answer `getWindowText` |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The size given, `mainConsoleGrid()` and `mainConsoleTextRect()`, at `profileLoaded` and `mainConsoleAreaChanged` |
 | `windowCommandLine` | `name`, `text` | `windowCommandLineTextChanged`, each name with `windowCommandLineText()` |
@@ -119,6 +120,7 @@ image by path and size while the profile runs.
 | `closeUserWindow` | `name` | `closeUserWindow()` |
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | `pointer()`. `type` is upstream's enum name; `button` and `buttons` use Qt's values (1 left, 2 right, 4 middle) |
 | `sendWindowCommandLine` | `name`, `text` | `setWindowCommandLineText()`, then `submitWindowCommandLine()` |
+| `setTextBoxText` | `name`, `text` | `setTextBoxText()` (gap 4, carried): what the player typed; a refusal is `error`, then the box's `textBox` |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | Reads the file, or `QIcon(path)` at that size, or that frame of a movie (`QMovie`), answered by `image` |
 | `pressButton` | `id` | `pressButton()`; a refusal is `error` |
 | `activateCommand` | `id` | `activateAddonCommand()`; a refusal is `error` |
@@ -314,8 +316,8 @@ F4 and F5 are independent of each other and of F3.
 
 ## Upstream gaps
 
-Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gap 3 is
-carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those patches,
+Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 3 and 4
+are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those patches,
 `scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
 `3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
 
@@ -379,7 +381,9 @@ Mudlet merges it; the engine sends it as the `label`'s `liveRegion` (`protocol.m
 > window calls. PR title: "Headless: text boxes' content". PR text: `createTextEdit()` boxes are listed by
 > `scriptWindows()` but an app cannot draw or edit them.
 
-Interim: a text box is drawn as an empty, disabled box with its window's background.
+Interim: replaced. The app carries this as the `headless-text-boxes` patch in `scripts/mudlet-patches/` until Mudlet
+merges it; the engine sends it as the `textBox` frame and takes the player's typing as `setTextBoxText`
+(`protocol.md`, "Text boxes").
 
 ### 5. MXP frame tabs
 

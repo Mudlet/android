@@ -1,6 +1,7 @@
 package org.mudlet.android.protocol
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -143,6 +144,64 @@ class ScriptWindowsTest {
         assertEquals(setOf("hp", "mp"), consoleGone.labels.keys)
         assertEquals(setOf("mp"), state.after(windows(removed = listOf(hp.key))).labels.keys)
         assertEquals(setOf("hp"), state.after(windows(hp, full = true)).labels.keys)
+    }
+
+    @Test
+    fun aTextBoxsContentIsKeptAsTypedUntilItGoesOrAFullListLeavesItOut() {
+        val notes = window("notes", WindowKind.TEXT_BOX)
+        val state = ScriptWindows()
+            .after(windows(notes, window("log", WindowKind.TEXT_BOX)))
+            .after(EngineMessage.TextBox(TextBoxContent("notes", "first", false, "Notes", "", false)))
+            .after(EngineMessage.TextBox(TextBoxContent("log", "", true, "", "", true)))
+        // What the player typed is kept, as the engine does not send it back
+        val typed = state.textBoxTyped("notes", "first draft", on = 1)
+        assertEquals(mapOf("notes" to "first draft", "log" to ""), typed.textBoxes.mapValues { it.value.text })
+        assertEquals("Notes", typed.textBoxes.getValue("notes").placeholder)
+        // A box the engine has not described is not made up
+        assertEquals(typed.textBoxes, typed.textBoxTyped("nope", "x", on = 1).textBoxes)
+        // A script setting the text the box had before the player typed is a change
+        val reset = typed.after(EngineMessage.TextBox(TextBoxContent("notes", "first", false, "Notes", "", false), typed = 1))
+        assertEquals("first", reset.textBoxes.getValue("notes").text)
+        // A label of the same name is another window
+        assertEquals(setOf("notes", "log"), state.after(windows(removed = listOf(WindowKey("notes", WindowKind.LABEL)))).textBoxes.keys)
+        assertEquals(setOf("log"), state.after(windows(removed = listOf(notes.key))).textBoxes.keys)
+        assertEquals(setOf("notes"), state.after(windows(notes, full = true)).textBoxes.keys)
+    }
+
+    @Test
+    fun aTextBoxsEditChangesOnlyWithTheEnginesTextAndOneSentBeforeThePlayersTypingKeepsIt() {
+        fun box(text: String, placeholder: String = "Notes") = TextBoxContent("notes", text, false, placeholder, "", false)
+        val state = ScriptWindows().after(windows(window("notes", WindowKind.TEXT_BOX))).after(EngineMessage.TextBox(box("first")))
+        val first = state.textBoxEdits.getValue("notes")
+        // The player's own text is no edit, and the engine's of the same text is none either
+        val typed = state.textBoxTyped("notes", "abc", on = 1)
+        assertEquals(mapOf("notes" to 1), typed.textBoxesTyped)
+        assertEquals(first, typed.textBoxEdits["notes"])
+        assertEquals(first, typed.after(EngineMessage.TextBox(box("abc", "Other"), typed = 1)).textBoxEdits["notes"])
+        // Sent before the engine had the player's text: the rest of it is taken, the text not, and it is no edit
+        val stale = typed.textBoxTyped("notes", "abcd", on = 1).after(EngineMessage.TextBox(box("abc", "Other"), typed = 1))
+        assertEquals(box("abcd", "Other"), stale.textBoxes["notes"])
+        assertEquals(first, stale.textBoxEdits["notes"])
+        // A script's text after it is an edit, even the text the box had before the player typed
+        val reset = stale.after(EngineMessage.TextBox(box("first"), typed = 2))
+        assertEquals("first", reset.textBoxes.getValue("notes").text)
+        assertNotEquals(first, reset.textBoxEdits.getValue("notes"))
+        // A UI that attaches again on a new connection counts afresh, as the engine does, and takes the box it is sent whole
+        val attached = stale.attached(2)
+        assertEquals(emptyMap<String, Int>(), attached.textBoxesTyped)
+        assertEquals("first", attached.after(EngineMessage.TextBox(box("first"))).textBoxes.getValue("notes").text)
+        // One sent on the new connection before the UI sees it attach stays counted, as the engine counts it after its
+        // hello: the box sent before the engine read it keeps the player's text, and is no edit
+        val early = stale.textBoxTyped("notes", "abcde", on = 2).attached(2)
+        assertEquals(mapOf("notes" to 1), early.textBoxesTyped)
+        val crossed = early.after(EngineMessage.TextBox(box("abc")))
+        assertEquals("abcde", crossed.textBoxes.getValue("notes").text)
+        assertEquals(first, crossed.textBoxEdits["notes"])
+        // One sent on the old connection counts on neither
+        assertEquals(mapOf("notes" to 1), early.textBoxTyped("notes", "abcdef", on = 1).textBoxesTyped)
+        // A new box's text is an edit; one removed has none
+        assertNull(reset.after(windows(removed = listOf(WindowKey("notes", WindowKind.TEXT_BOX)))).textBoxEdits["notes"])
+        assertNull(reset.after(windows(full = true)).textBoxEdits["notes"])
     }
 
     @Test

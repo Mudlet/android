@@ -151,6 +151,7 @@ def script_windows(c):
     side = {"name": "side", "x": 0, "y": 0, "w": 300, "h": 200, "floating": False}
     for request in ({"t": "setMainWindowSize", "w": 800, "h": 600}, dict(side, t="placeUserWindow"),
                     {"t": "closeUserWindow", "name": "side"}, {"t": "sendWindowCommandLine", "name": "chat", "text": "hi"},
+                    {"t": "setTextBoxText", "name": "notes", "text": "hi"},
                     {"t": "pointer", "window": "box", "type": "press", "x": 1.5, "y": 2, "button": 1, "buttons": 1},
                     {"t": "getImage", "path": "/no/such.png", "w": 16, "h": 16, "frame": 0}):
         m = c.ask(request, answers=("error",))
@@ -163,6 +164,7 @@ def script_windows(c):
             (dict(side, t="placeUserWindow", x="0"), "x, y, w and h must be whole numbers, w and h above 0"),
             (dict(side, t="placeUserWindow", floating="no"), "floating must be true or false"),
             ({"t": "getWindowText", "window": "chat", "first": 0, "count": 0}, "first and count must be whole numbers, count above 0"),
+            ({"t": "setTextBoxText", "name": "notes", "text": 5}, "text must be a string"),
             ({"t": "pointer", "window": "box", "type": "tap", "x": 1, "y": 2}, "type must be press, release, doubleClick, move, enter, leave or wheel"),
             ({"t": "pointer", "window": "box", "type": "press", "x": "1", "y": 2}, "x and y must be numbers"),
             ({"t": "pointer", "window": "box", "type": "press", "x": 1, "y": 2, "button": -1},

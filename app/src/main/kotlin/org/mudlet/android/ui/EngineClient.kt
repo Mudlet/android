@@ -228,10 +228,13 @@ object EngineClient {
     fun newRequestId(): Long = link.newRequestId()
 
     /** False when the link is down and the command was dropped. */
-    fun send(message: org.json.JSONObject): Boolean {
-        val sent = link.send(message)
-        if (!sent) linkState = "not attached: command dropped"
-        return sent
+    fun send(message: org.json.JSONObject): Boolean = sendOn(message) != 0
+
+    /** As [send], returning the number of the link's connection the command went out on, or 0 when it was dropped. */
+    fun sendOn(message: org.json.JSONObject): Int {
+        val connection = link.sendOn(message)
+        if (connection == 0) linkState = "not attached: command dropped"
+        return connection
     }
 
     // A request the engine answers with status sendError when it cannot carry it out
@@ -494,7 +497,7 @@ object EngineClient {
                 is EngineMessage.Announce -> post { Announcer.announce(message.text, message.assertive) }
 
                 is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
-                is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.Link,
+                is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.Link,
                 -> post { ScriptWindowsClient.onMessage(message) }
 
                 is EngineMessage.Image -> {

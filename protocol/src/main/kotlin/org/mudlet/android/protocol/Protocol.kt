@@ -10,7 +10,7 @@ import java.util.Base64
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 13
+const val PROTOCOL_VERSION = 14
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -135,6 +135,32 @@ data class LabelContent(
     /** As setLabelStyleSheet() gave it, which the engine does not interpret. */
     val styleSheet: String,
 )
+
+/** What a text box from createTextEdit() holds, as THeadlessSession::textBoxContent() gives it (docs/protocol.md, `textBox`). */
+data class TextBoxContent(
+    val name: String,
+    /** Plain text, lines split by newlines, as getTextEditText() reads it. */
+    val text: String,
+    /** The player cannot type in it; a script still sets its text. */
+    val readOnly: Boolean,
+    /** Shown while it is empty. */
+    val placeholder: String,
+    /** As setTextEditStyleSheet() gave it, which the engine does not interpret. */
+    val styleSheet: String,
+    /** Tab moves on to the next control rather than typing a tab. */
+    val tabMovesFocus: Boolean,
+) {
+    companion object {
+        /**
+         * [text] as the engine keeps what the player types, as plain text as the desktop's box does: a non-breaking space
+         * as a space, and a carriage return, line or paragraph separator as a newline.
+         */
+        fun plain(text: String): String = buildString(text.length) { text.replace("\r\n", "\n").forEach { append(PLAIN[it] ?: it) } }
+
+        // As QTextDocument::toPlainText() gives them; U+FDD0 and U+FDD1 are its frames' marks
+        private val PLAIN = mapOf('\r' to '\n', '\u2028' to '\n', '\u2029' to '\n', '\uFDD0' to '\n', '\uFDD1' to '\n', '\u00A0' to ' ')
+    }
+}
 
 /** What a pointer did, as upstream's WindowPointerEvent names it on the wire. */
 enum class PointerType(val wire: String) {
@@ -331,6 +357,13 @@ sealed interface EngineMessage {
     /** A label's content, new or changed; it follows the [Windows] that has the label. */
     data class Label(val label: LabelContent) : EngineMessage
 
+    /**
+     * A text box's content, new or changed by a script, or as the engine holds it after a refused setTextBoxText; it
+     * follows the [Windows] that has the box. [typed] is how many setTextBoxText for it the engine had from this UI
+     * when it sent it: one that has fewer than the UI sent carries text older than the player's.
+     */
+    data class TextBox(val textBox: TextBoxContent, val typed: Int = 0) : EngineMessage
+
     /** The answer to getImage: [png] is a PNG of [w] by [h] pixels, empty if it did not decode. */
     data class Image(val path: String, val png: ByteArray, val w: Int, val h: Int, val replyTo: Any?) : EngineMessage
 
@@ -443,6 +476,9 @@ object Requests {
 
     fun closeUserWindow(name: String): JSONObject = JSONObject().put("t", "closeUserWindow").put("name", name)
     fun sendWindowCommandLine(name: String, text: String): JSONObject = JSONObject().put("t", "sendWindowCommandLine").put("name", name).put("text", text)
+
+    /** What the player has typed in the text box [name] so far, the whole of its [text]; a refusal is followed by its [EngineMessage.TextBox]. */
+    fun setTextBoxText(name: String, text: String): JSONObject = JSONObject().put("t", "setTextBoxText").put("name", name).put("text", text)
 
     /**
      * What the pointer did at [x], [y] in [window]'s pixels ("main" for the main console's area): [button] that
@@ -637,6 +673,18 @@ class FrameReader(input: InputStream) {
             "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))
 
             "label" -> EngineMessage.Label(parseLabel(o))
+
+            "textBox" -> EngineMessage.TextBox(
+                TextBoxContent(
+                    o.optString("name"),
+                    o.optString("text"),
+                    o.optBoolean("readOnly"),
+                    o.optString("placeholder"),
+                    o.optString("styleSheet"),
+                    o.optBoolean("tabMovesFocus"),
+                ),
+                o.optInt("typed"),
+            )
 
             "image" -> EngineMessage.Image(o.optString("path"), decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.opt("re"))
 

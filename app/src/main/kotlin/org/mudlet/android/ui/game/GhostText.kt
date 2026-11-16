@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.text.SpanStyle
 
@@ -24,15 +23,15 @@ data class GhostTransformation(val ghost: String, val color: Color) : OutputTran
 }
 
 /**
- * Calls [onTap] after each tap that starts where [armed] holds, once the text field this modifies has handled it:
+ * Calls [onTap] after each tap that starts where [armed] holds, once the text field it is on has handled the tap:
  * the field handles a pointer event before the modifiers ahead of it in its chain do, so by then it has put the cursor
  * where the tap was. A tap on the ghost cannot put the cursor inside it, so it leaves the cursor at the end of the
  * typed text, where the ghost starts. A long press or a drag is not a tap. Nothing is consumed.
  */
 suspend fun PointerInputScope.detectTapsAfterTheField(armed: (Offset) -> Boolean, onTap: () -> Unit) {
     awaitEachGesture {
-        // Initial: read before the field acts on the press, which can move the focus
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        // The field has consumed the press by now, but acts on it only at its release
+        val down = awaitFirstDown(requireUnconsumed = false)
         if (!armed(down.position)) return@awaitEachGesture
         val tapped = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
             var change = down

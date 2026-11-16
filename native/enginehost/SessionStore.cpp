@@ -10,7 +10,27 @@
 
 namespace {
 
-constexpr int fileVersion = 1;
+// 1 kept one profile, as its fields at the top level; an engine started after an update to 2 still restores it
+constexpr int fileVersion = 2;
+
+SessionStore::Session sessionFrom(const QJsonObject& json)
+{
+    const QJsonValue tls = json.value(QLatin1String("tls"));
+    return {json.value(QLatin1String("profile")).toString(),
+            json.value(QLatin1String("host")).toString(),
+            json.value(QLatin1String("port")).toInt(),
+            json.value(QLatin1String("connect")).toBool(),
+            tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt};
+}
+
+QJsonObject sessionJson(const SessionStore::Session& session)
+{
+    QJsonObject json{{QStringLiteral("profile"), session.profile}, {QStringLiteral("host"), session.host}, {QStringLiteral("port"), session.port}, {QStringLiteral("connect"), session.connect}};
+    if (session.tls.has_value()) {
+        json.insert(QStringLiteral("tls"), *session.tls);
+    }
+    return json;
+}
 
 } // namespace
 
@@ -36,7 +56,8 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
     }
     QJsonParseError error{};
     const QJsonObject json = QJsonDocument::fromJson(file.readAll(), &error).object();
-    if (error.error != QJsonParseError::NoError || json.value(QLatin1String("v")).toInt() != fileVersion) {
+    const int version = json.value(QLatin1String("v")).toInt();
+    if (error.error != QJsonParseError::NoError || version < 1 || version > fileVersion) {
         qWarning("SessionStore: ignoring %s: %s", qPrintable(mPath), error.error != QJsonParseError::NoError ? qPrintable(error.errorString()) : "an unknown version");
         return {};
     }
@@ -46,15 +67,28 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
             mRestores.append(ms);
         }
     }
-    Restore restore;
-    const QJsonValue tls = json.value(QLatin1String("tls"));
-    restore.session = {json.value(QLatin1String("profile")).toString(),
-                       json.value(QLatin1String("host")).toString(),
-                       json.value(QLatin1String("port")).toInt(),
-                       json.value(QLatin1String("connect")).toBool(),
-                       tls.isBool() ? std::optional<bool>(tls.toBool()) : std::nullopt};
-    if (restore.session.profile.isEmpty()) {
+    QList<Session> sessions;
+    if (version == 1) {
+        sessions.append(sessionFrom(json));
+    } else {
+        for (const QJsonValue& at : json.value(QLatin1String("profiles")).toArray()) {
+            sessions.append(sessionFrom(at.toObject()));
+        }
+    }
+    sessions.removeIf([](const Session& session) {
+        return session.profile.isEmpty();
+    });
+    if (sessions.isEmpty()) {
         return {};
+    }
+    const QString front = version == 1 ? sessions.first().profile : json.value(QLatin1String("front")).toString();
+    Restore restore;
+    for (const Session& session : std::as_const(sessions)) {
+        if (session.profile == front) {
+            restore.sessions.prepend(session);
+        } else {
+            restore.sessions.append(session);
+        }
     }
     if (mRestores.size() >= maxRestores) {
         restore.kind = Restore::Kind::gaveUp;
@@ -66,7 +100,7 @@ SessionStore::Restore SessionStore::takeRestore(qint64 nowMs)
     restore.kind = Restore::Kind::restore;
     restore.attempt = int(mRestores.size());
     restore.reconnectDelayMs = reconnectDelayMs[restore.attempt - 1];
-    save(restore.session);
+    save(sessions, front);
     return restore;
 }
 
@@ -78,21 +112,17 @@ void SessionStore::clear()
     }
 }
 
-void SessionStore::save(const Session& session)
+void SessionStore::save(const QList<Session>& sessions, const QString& front)
 {
     QJsonArray restores;
     for (const qint64 ms : std::as_const(mRestores)) {
         restores.append(ms);
     }
-    QJsonObject json{{QStringLiteral("v"), fileVersion},
-                     {QStringLiteral("profile"), session.profile},
-                     {QStringLiteral("host"), session.host},
-                     {QStringLiteral("port"), session.port},
-                     {QStringLiteral("connect"), session.connect},
-                     {QStringLiteral("restores"), restores}};
-    if (session.tls.has_value()) {
-        json.insert(QStringLiteral("tls"), *session.tls);
+    QJsonArray profiles;
+    for (const Session& session : sessions) {
+        profiles.append(sessionJson(session));
     }
+    const QJsonObject json{{QStringLiteral("v"), fileVersion}, {QStringLiteral("profiles"), profiles}, {QStringLiteral("front"), front}, {QStringLiteral("restores"), restores}};
     QDir().mkpath(QFileInfo(mPath).absolutePath());
     // Written beside the file and renamed over it, so a kill part-way leaves the last whole one
     QSaveFile file(mPath);

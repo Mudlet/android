@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Host test of the session restore of the engine with libmudlet (MudletEngine, SessionStore): the engine is killed
 (SIGKILL) mid-session and started again, as Android does, and must bring the profile back and reconnect it to
-fake_telnet.py, with the TLS choice it was started with, or the profile the UI opened by name; it must not after an
-orderly stop, the app's stop marker or the user's disconnect, nor keep restoring in a crash loop. Build the engine as
-for test_mudlet_engine.py.
+fake_telnet.py, with the TLS choice it was started with, or the profile the UI opened by name, or every profile open,
+the front one first; it must not after an orderly stop, the app's stop marker or the user's disconnect, nor keep
+restoring in a crash loop. Build the engine as for test_mudlet_engine.py.
 
 usage: test_mudlet_restore.py <path-to-engine-binary>
 """
@@ -139,11 +139,14 @@ class Engine:
 
 
 def state():
+    """The kept session: the front profile's entry, with the file's restores, profiles and front."""
     try:
         with open(STATE) as f:
-            return json.load(f)
+            kept = json.load(f)
     except FileNotFoundError:
         return None
+    front = [p for p in kept["profiles"] if p["profile"] == kept["front"]]
+    return dict(front[0] if front else {}, **kept)
 
 
 def set_autoreconnect(on):
@@ -283,6 +286,50 @@ def opened_profile_restored(e, port):
     check(e.wait_status("profile", lambda v: v.endswith("loaded")) == f"{other} loaded", "and loads it")
     with open(LOG, errors="replace") as f:
         check(password not in f.read(), "nor is the password in the engine's log")
+    return e
+
+
+def several_restored(e, port):
+    """Two profiles open, the second alongside the first and so in front, both connected: a kill brings back both, the
+    front one first and the other staggered after it, and the front one stays in front."""
+    other = "Second Profile"
+
+    def listed(m):
+        return m["t"] == "openProfiles" and [(p["name"], p["state"], p["connection"]) for p in m["profiles"]]
+
+    e.connect(port)
+    e.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": port, "tls": False, "login": "",
+           "autoReconnect": False})
+    # The control socket takes one UI at a time: this one, with profile sockets, in place of the version 14 one
+    e.client.close()
+    e.client = Client(SOCK, profile_sockets=True)
+    m = e.client.ask({"t": "openProfile", "name": other, "alongside": True}, answers=("openProfiles", "error"))
+    check(m["t"] == "openProfiles", f"a second profile opens alongside: {m}")
+    e.wait(lambda m: listed(m) == [(PROFILE, "loaded", "connected"), (other, "loaded", "connected")])
+    kept = state()
+    check(kept is not None and [p["profile"] for p in kept["profiles"]] == [PROFILE, other] and kept["front"] == other
+          and all(p["connect"] for p in kept["profiles"]), f"both are kept on disk, with the front one: {kept}")
+    e.kill()
+
+    e = Engine()
+    e.client.close()
+    e.client = Client(SOCK, profile_sockets=True)
+    first = e.wait(lambda m: m["t"] == "openProfiles")["profiles"]
+    attached = time.monotonic()
+    check([p["name"] for p in first] == [other], f"the front profile is restored first, alone: {first}")
+    both = e.wait(lambda m: listed(m) == [(other, "loaded", "connected"), (PROFILE, "loaded", "connected")], timeout=40)["profiles"]
+    gap = time.monotonic() - attached
+    check(gap >= 1.5, f"then the other, staggered after it: loaded {gap:.1f} s after the first was listed")
+    check([p["front"] for p in both] == [True, False], f"and the front profile stays in front: {both}")
+    log = e.log()
+    check(f"restore: reconnected {other}\n" in log and f"restore: reconnected 127.0.0.1:{port}\n" in log,
+          "the restore reports both reconnected")
+    e.client.close()
+    e.client = Client(SOCK)
+    e.wait(lambda m: m["t"] == "synced")
+    e.send({"t": "send", "text": "echo after both"})
+    e.wait(lambda m: m["t"] in ("line", "tail") and m["text"] == "You said: after both")
+    check(True, "a UI without profile sockets reaches the front profile")
     return e
 
 
@@ -447,6 +494,8 @@ def main():
     e = game_down(e, autoreconnect=True)
     e = orderly_stop(e)
     e = opened_profile_restored(e, port)
+    e = orderly_stop(e)
+    e = several_restored(e, port)
     e = orderly_stop(e)
     e = crash_loop(e, port)
     e.stop()

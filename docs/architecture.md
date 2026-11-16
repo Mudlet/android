@@ -362,8 +362,11 @@ drawn by `ui/game/AppMap.kt`):
   time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.
 
 ## libmudlet as the engine
-Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
-one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
+Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the
+same socket protocol: each open profile is a `MudletProfile` (`native/enginehost/MudletProfile.*`) in a
+`THeadlessSession` of its own, and the sessions share the process's pool of profiles
+([`multi-profile.md`](multi-profile.md)). `MudletEngine` keeps what is the whole engine's: the profiles' store, the
+app's state, the save and the restore. It uses only `THeadlessSession`'s
 public API, from Mudlet's `development`: it includes no Mudlet header but
 `THeadlessSession.h` (which brings `TDebug.h` and `utils.h`) and sets none of Mudlet's
 defines. What the app needs of that API and Mudlet does not have yet is carried in
@@ -377,7 +380,8 @@ offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game 
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
 a label's accessible value, which Geyser's gauges set and screen readers read as a progress bar's, and several
-headless sessions sharing one pool of profiles (see [`multi-profile.md`](multi-profile.md)).
+headless sessions sharing one pool of profiles, each with one profile (`0007-headless-shared-pool.patch`; see
+[`multi-profile.md`](multi-profile.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -434,29 +438,36 @@ headless API does, `native/enginehost/ProfileStore.*` reads and writes Mudlet's 
 `<configDir>/profiles`, and `saveProfile` writes the files Mudlet's connection dialog writes there (`url`, `port`,
 `ssl_tsl`, `login`, `autoreconnect`), each one `QString` in a `QDataStream` at `Qt_5_12`, through `QSaveFile`.
 `deleteProfile` removes the folder (`QDir::removeRecursively()`). Mudlet records no order, so the engine keeps the
-order profiles were last opened or created in, `<configDir>/profile-order.json`. `openProfile` closes a running
-profile with `shutdownAsync(true)`, as Mudlet closes one, then starts the other with `startAsync()`, its password in
-`Options::password` for that start only.
+order profiles were last opened or created in, `<configDir>/profile-order.json`. `openProfile` without `alongside`
+closes the running profiles with `shutdownAsync(true)`, as Mudlet closes one, then starts the other with
+`startAsync()`, its password in `Options::password` for that start only; with `alongside`, it starts the profile in a
+new session beside them, up to `ControlBridge::maxOpenProfiles`.
 
 **Lifecycle.**
 - `openProfile`, or the first `connect` or `runLua`, calls `startAsync()` with `Options::configDir` set to
   `<files>/mudlet` (`MUDLET_CONFIG_DIR` overrides it on the desktop). A `connect` or `runLua` starts the profile
   `MUDLET_PROFILE` names (`Android` unless set), or the one last opened.
-- An `openProfile` while another profile runs closes that one first (status `profile` `<name> closing`, then
-  `<name> closed`); a close Mudlet refuses, as while a script runs, leaves it running (`<name> not closed: ...`) and
-  calls off the open.
+- An `openProfile` without `alongside` while other profiles run closes them first (status `profile` `<name>
+  closing`, then `<name> closed`); a close Mudlet refuses, as while a script runs, leaves that profile running
+  (`<name> not closed: ...`) and calls off the open. `closeProfile` closes one, and the others run on.
+- While one profile's start loads it, `THeadlessSession` refuses every other session of the pool, so what the others
+  are asked meanwhile (a close, a save, the app's state, the front, a command typed) waits for that load to end.
+- `setFront` runs Lua `setActiveProfile()` in the new front profile once it has started, which raises
+  `sysProfileFocusChangeEvent`, lost in the one before and gained in it, as a desktop tab change does.
 - Requests that arrive during the start are queued, and run once `startFinished` reports
   `started`. Those that arrive while a profile is being opened are for that one.
 - `start()` can create a profile only from a game's address, so Lua sent before the first
   connect of a new profile gets `no profile`.
 - An engine started after the last one was killed loads that one's profile again, and connects it
   if the connection was wanted (see "Restoring the session" below).
-- When the engine quits, it calls `shutdownAsync(true)` and waits up to 5 s for the profile's
-  sysExitEvent and save.
+- When the engine quits, it closes each profile with `shutdownAsync(true)` in turn, and waits up to 5 s for each
+  one's sysExitEvent and save.
 - On the desktop, SIGTERM quits the engine the same way.
-- `setAppState` with `active` false raises sysApplicationFocusChangeEvent, then saves the profile (`saveAsync()`), as
-  the system may kill a process in the background without warning. `EngineService.onTrimMemory()` saves it too, through
-  `EngineNative.nativeSave()`. A switch or quit asked during a save waits for it, as Mudlet refuses to close then.
+- `setAppState` is the pool's: with `active` false it raises sysApplicationFocusChangeEvent once in every profile,
+  then saves them all (`saveAsync()`, which writes the whole pool), as the system may kill a process in the
+  background without warning; `minimized` goes to every profile. `EngineService.onTrimMemory()` saves them too,
+  through `EngineNative.nativeSave()`. A switch or close asked during a save waits for it, as Mudlet refuses to close
+  then.
 - On Android this depends on QtServiceBase ending the event loop when the service is destroyed.
   That has not been tried on a device.
 
@@ -479,6 +490,10 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
   through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log; a new login and
   password for the running profile, which starts again with them on the socket it had, but not while it is connected;
+- several profiles: a second opened `alongside` the first, on a game of its own, with its own socket; a trigger in the
+  profile behind whose `raiseGlobalEvent()` reaches the other's script; `setFront` raising
+  `sysProfileFocusChangeEvent` in both; `setAppState` raising `sysApplicationFocusChangeEvent` once in each, with
+  one save; and each closed while the other runs on;
 - the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
   `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
   history, and `printCmdLine()` as `commandLine`;
@@ -536,7 +551,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
   certificate accepted once the profile accepts self-signed ones.
 
-`native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL.
+`native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL, with
+one profile open and with two.
 `native/tests/profile_checks.py` holds the profile requests both host tests run, the stand-in's `test_engine.py` too.
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
@@ -552,6 +568,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
 - that `am send-trim-memory` has the engine save the profile;
 - that a Geyser `MiniConsole` and the line a script `cecho()`s on it reach the UI;
+- that two more profiles open beside the first, recording the engine's PSS (`dumpsys meminfo`) with one, two and
+  three open in `memory.json` among its output, which "Memory per profile" below takes its figures from;
 - that after `:engine` is killed, the UI starts a new engine and attaches to it;
 - that logcat never holds the password.
 
@@ -640,13 +658,14 @@ CI runs both on API 28, the app's minSdk, and on API 36.
 ### Restoring the session
 Android kills `:engine` when it needs the memory, and the user can kill it from the self-test. The engine is started
 again within about half a second while the UI is shown (the UI starts it, and the system may too), but a new engine
-knew nothing of the profile, so the player was silently left disconnected. Now the engine keeps what it needs to
-start the profile again on disk, and a new engine restores it. Only the engine with libmudlet does this; the
+knew nothing of the profiles, so the player was silently left disconnected. Now the engine keeps what it needs to
+start each open profile again on disk, and a new engine restores them. Only the engine with libmudlet does this; the
 stand-in does not.
 
 **What is kept.** `native/enginehost/SessionStore.*` keeps one JSON file, `<files>/engine-session.json`
-(`MUDLET_ENGINE_STATE`; the app names it in `EngineSession.kt`). It holds:
-- the profile, while one runs, the one `openProfile` named included, which is the only `THeadlessSession::Options`
+(`MUDLET_ENGINE_STATE`; the app names it in `EngineSession.kt`), version 2 (a version 1 file, of one profile, is
+still read). It holds, for each profile open, in the order opened:
+- the profile, the one `openProfile` named included, which is the only `THeadlessSession::Options`
   field the engine sets besides the connection's and an `openProfile`'s password, which is never kept, so a restored
   profile does not log in (`configDir` comes from the app's files, as at any start);
 - the host and port the UI last connected it to, passed again as `Options::host` and `port` (an empty host leaves
@@ -654,6 +673,9 @@ stand-in does not.
 - whether the connection is wanted;
 - the TLS choice the profile was started with, if the `connect` that started it made one, passed again as
   `Options::tls`, so that the UI's next `connect` with that choice is not refused;
+
+and once for the engine:
+- the front profile;
 - when each restore within the last 10 minutes started.
 
 The file is rewritten whenever one of these changes, through `QSaveFile`, so a kill part-way through leaves the last
@@ -675,15 +697,18 @@ whole file.
   the destructor runs, or the engine was not running when the user stopped it.
 - A profile that a script closed, or that failed to load, is forgotten.
 
-**How it restores.** The profile is loaded with `startAsync()` from the event loop, once the engine listens, and
-connected if that was wanted. It does not wait for a UI. Status `restore`
+**How it restores.** The front profile is loaded with `startAsync()` from the event loop, once the engine listens,
+and connected if that was wanted. Each of the others starts `SessionStore::staggerMs` (2 s) after the one before it
+has loaded, so the games are not all called at once, and stays behind the front one. It does not wait for a UI. A UI
+that opens a profile without `alongside` calls off what has not started yet. Status `restore`
 ([`protocol.md`](protocol.md), "The restore status") says what happened, and the engine keeps the status, so a UI
 that attaches later is told too. The UI shows it as a marker line.
 
 **Not hammering a game.**
 - Each restore counts itself in the file before it starts, so one that kills the engine still counts.
 - The first restore within 10 minutes connects at once, the second after 10 s, the third after 30 s.
-- A start that finds three restores within 10 minutes restores nothing (`gaveUp`) and forgets the profile. A crash
+- The count is the engine's, not each profile's: one start that restores three profiles counts once.
+- A start that finds three restores within 10 minutes restores nothing (`gaveUp`) and forgets the profiles. A crash
   loop therefore calls a game at most three more times. The profile comes back when the user starts it again.
 - A failed reconnect is not retried by the engine. Mudlet retries it on its own, with its own back-off from 5 s,
   only for a profile that reconnects automatically.
@@ -878,6 +903,20 @@ that attaches later is told too. The UI shows it as a marker line.
 - **Total estimate: 10-20 MB PSS** more than an in-process design. Not measured.
   On the phone, run `adb shell dumpsys meminfo org.mudlet.mudlet` and
   `... org.mudlet.mudlet:engine`.
+
+### Memory per profile
+Each profile libmudlet opens beside another adds its own Lua state, Mudlet's Lua files, console and map to `:engine`.
+The emulator smoke test opens three on one game and writes the engine's total PSS with one, two and three open to
+`memory.json` in its output (CI's artifact), and prints it. On CI's x86_64 emulators (PR #92) each profile after the
+first added about 10 MB, against an engine of about 100 MB with one:
+
+| Emulator | One open | Two | Three | Each after the first |
+|---|---|---|---|---|
+| API 36 | 110,575 kB | 118,594 kB | 131,387 kB | about 10.4 MB |
+| API 28 | 98,907 kB | 107,173 kB | 118,547 kB | about 9.8 MB |
+
+So `ControlBridge::maxOpenProfiles` stays at 4: four profiles cost the engine about 30 MB more than one. A profile's
+scripts, packages and map add to this, so measure on a phone with real games before raising it.
 
 ## What building Mudlet on it costs
 - **The engine side is straightforward.** `libengine.so` would become
@@ -1287,6 +1326,15 @@ Item 13 of the on-device checklist covers this.
       screen.
     - With TalkBack on: the settings' sections read as headings, and the editor beside the list has "Close <name>" at
       its top.
+
+28. Several profiles, with the libmudlet debug APK, until the app can open one beside another: connect one game, then
+    open two more beside it, each with `adb shell am broadcast -n org.mudlet.mudlet/org.mudlet.android.debug.SmokeTestReceiver
+    --es cmd openAlongside --es profile <name> --es host <host> --ei port <port>`.
+    - After each loads, note `adb shell dumpsys meminfo org.mudlet.mudlet:engine`'s TOTAL PSS, against
+      "Memory per profile"; a real game's scripts and map weigh more than the smoke test's.
+    - `lua raiseGlobalEvent("x")` in one reaches a handler for `x` in each of the others.
+    - Press "Kill engine process": all three come back, the front one first and each other one about 2 s after the one
+      before it, and the game shown is still the front one.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

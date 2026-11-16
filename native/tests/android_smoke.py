@@ -16,8 +16,10 @@ It installs and launches the app, then drives the UI through the debug build's S
      showNotification() reaches the UI and is posted as an Android notification;
   6. told that memory is short (am send-trim-memory), the engine saves the profile;
   7. a Geyser mini console a script makes reaches the UI, shown, with the line it cecho()s;
-  8. after the :engine process is killed, the UI starts a new engine and attaches to it;
-  9. the profile's password is nowhere in logcat.
+  8. two more profiles open beside the first, on the same game, and the engine's PSS (dumpsys meminfo) with one, two
+     and three open goes to <out>/memory.json, to size ControlBridge::maxOpenProfiles by;
+  9. after the :engine process is killed, the UI starts a new engine and attaches to it;
+  10. the profile's password is nowhere in logcat.
 If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
 
@@ -62,6 +64,8 @@ LOGIN = "hero"
 PASSWORD = "smoke-pw-" + os.urandom(6).hex()
 BOLD = 1
 RUN_STRIDE = 6
+# After a profile has loaded, before its memory is read: Mudlet's Lua and the game's banner settle by then
+MEMORY_SETTLE_S = 3
 
 
 class SmokeFailure(Exception):
@@ -209,6 +213,15 @@ def run_at(line, index):
     return next((r for r in runs_of(line) if r[0] <= index < r[0] + r[1]), None)
 
 
+def engine_pss(pid):
+    """The engine process's total PSS in kB, from dumpsys meminfo."""
+    out = shell(f"dumpsys meminfo {pid}")
+    m = re.search(r"TOTAL PSS:\s+(\d+)", out) or re.search(r"^\s*TOTAL\s+(\d+)", out, re.M)
+    if not m:
+        raise SmokeFailure(f"no total PSS in dumpsys meminfo {pid}:\n{out[:2000]}")
+    return int(m.group(1))
+
+
 def check_engine_process(pid):
     """That the engine the UI is attached to is the one process named :engine."""
     pids = shell(f"pidof {ENGINE_PROCESS}", check=False).split()
@@ -348,6 +361,23 @@ def run(dev, apk):
     if not chat["shown"]:
         raise SmokeFailure(f"the mini console is hidden: {chat}")
     ok(f"the UI has the mini console and its line: {chat}")
+
+    step("memory per profile: the engine's PSS with one, two and three profiles open")
+    pss = {1: engine_pss(engine_pid)}
+    for count, name in ((2, "Smoke Two"), (3, "Smoke Three")):
+        dev.command("openAlongside", profile=name, host=HOST_FROM_EMULATOR, port=port)
+        loaded = f"{name} loaded"
+        state = dev.wait(f"'{name}' to load beside the others",
+                         lambda s: s["profileAnswer"] not in ("waiting", "ok")
+                         or any(o["name"] == name and o["profile"] == loaded for o in s["open"]), 180)
+        if state["profileAnswer"] not in ("waiting", "ok"):
+            raise SmokeFailure(f"the engine refused '{name}' alongside: {state['profileAnswer']}")
+        time.sleep(MEMORY_SETTLE_S)
+        pss[count] = engine_pss(engine_pid)
+    with open(os.path.join(dev.out, "memory.json"), "w") as f:
+        json.dump({"pssKb": pss}, f, indent=1)
+    ok(f"engine PSS by profiles open: {pss} kB; each profile after the first adds about "
+       f"{(pss[3] - pss[1]) // 2} kB (ControlBridge::maxOpenProfiles caps them)")
 
     step("kill the :engine process: the UI starts a new engine and attaches to it")
     dev.screenshot("before-kill.png")

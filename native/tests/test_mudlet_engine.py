@@ -404,14 +404,36 @@ def profile_requests(port):
 
 
 def several_profiles(c, port):
-    """Version 15's control and profile sockets, with "Beta" open and connected. libmudlet runs one profile at a time
-    until its sessions share a pool (docs/multi-profile.md), so it refuses a second."""
+    """Version 15's control and profile sockets, with "Beta" open and connected: "Solo" opened alongside it, on a game
+    of its own, in the same pool of profiles (docs/multi-profile.md). A trigger in Beta, which is behind, reaches
+    Solo's script through raiseGlobalEvent; setFront raises sysProfileFocusChangeEvent in both, and setAppState
+    sysApplicationFocusChangeEvent once in each, with one save; closing either leaves the other running."""
     def ask(client, msg):
         return client.ask(msg, answers=("profiles", "openProfiles", "error"))
 
-    ask(c, {"t": "saveProfile", **profile_checks.profile("Solo", port)})
-    m = ask(c, {"t": "openProfile", "name": "Solo", "alongside": True})
-    check(m["t"] == "error" and m["message"] == "openProfile: one profile at a time", f"libmudlet refuses a second profile: {m}")
+    def lua(client, code, frames):
+        client.next_id += 1
+        client.send({"t": "runLua", "id": client.next_id, "code": code})
+        return client.wait_for(lambda m: m["t"] == "status" and m["key"] == "luaResult" and m.get("re") == client.next_id,
+                               collect=frames)
+
+    def shows(client, text, frames, timeout=10):
+        if any(shown(text)(m) for m in frames):
+            return True
+        try:
+            client.wait_for(shown(text), timeout=timeout, collect=frames)
+            return True
+        except TimeoutError:
+            return False
+
+    def drain(client, frames, seconds=1):
+        try:
+            client.wait_for(lambda m: False, timeout=seconds, collect=frames)
+        except TimeoutError:
+            pass
+
+    solo_port = fake_telnet.start_in_thread(banner=b"Solo's game\r\n")
+    ask(c, {"t": "saveProfile", **profile_checks.profile("Solo", solo_port)})
     m = ask(c, {"t": "closeProfile", "name": "Solo"})
     check(m["t"] == "error" and m["message"] == 'closeProfile: "Solo" is not open', f"closeProfile of a profile not open: {m}")
     c.close()
@@ -435,6 +457,58 @@ def several_profiles(c, port):
     check(m["t"] == "error" and m["message"] == "listProfiles: send it on the control socket", f"a control request on a profile's socket: {m}")
     m = ask(ctl, {"t": "send", "text": "look"})
     check(m["t"] == "error" and m["message"] == "send: send it on the profile's socket", f"a profile's request on the control socket: {m}")
+
+    m = ask(ctl, {"t": "openProfile", "name": "Solo", "alongside": True})
+    check(m["t"] == "openProfiles" and [p["name"] for p in m["profiles"]] == ["Beta", "Solo"],
+          f"openProfile alongside answers with both profiles: {m}")
+    both = ctl.wait_for(lambda m: m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]]
+                        == [("Beta", "loaded"), ("Solo", "loaded")], timeout=30)["profiles"]
+    check([(p["slot"], p["front"]) for p in both] == [(1, False), (2, True)],
+          f"the second profile loads beside the first, and is in front: {both}")
+    solo = Client(both[1]["socket"])
+    solo_frames = []
+    solo.wait_for(lambda m: m["t"] == "synced", collect=solo_frames)
+    if not [m for m in solo_frames if m["t"] == "status" and m["key"] == "connection" and m["value"] == "connected"]:
+        solo.wait_for(profile_checks.is_status("connection", "connected"), timeout=15, collect=solo_frames)
+    check(solo_frames[0].get("profile") == "Solo" and shows(solo, "Solo's game", solo_frames),
+          f"its socket serves it, connected to its own game: {solo_frames[0]}")
+
+    lua(solo, 'registerAnonymousEventHandler("betaHeard", function(_, t) echo("Solo heard: " .. t .. "\\n") end)', solo_frames)
+    lua(beta, 'tempTrigger("You said: ping", function() raiseGlobalEvent("betaHeard", line) end)', frames)
+    beta.send({"t": "send", "text": "echo ping"})
+    check(shows(beta, "You said: ping", frames) and shows(solo, "Solo heard: You said: ping", solo_frames),
+          "a trigger in the profile behind runs, and its raiseGlobalEvent reaches the other profile's script")
+
+    focus = 'registerAnonymousEventHandler("sysProfileFocusChangeEvent", function(_, gained) echo("focus " .. tostring(gained) .. "\\n") end)'
+    lua(beta, focus, frames)
+    lua(solo, focus, solo_frames)
+    ctl.send({"t": "setFront", "name": "Beta"})
+    check(shows(beta, "focus true", frames) and shows(solo, "focus false", solo_frames),
+          "setFront raises sysProfileFocusChangeEvent: gained in the new front, lost in the one before")
+    m = ctl.wait_for(lambda m: m["t"] == "openProfiles" and m["profiles"][0]["front"], timeout=10)
+    check([p["front"] for p in m["profiles"]] == [True, False], f"and lists it in front: {m}")
+
+    app = 'registerAnonymousEventHandler("sysApplicationFocusChangeEvent", function(_, active) echo("app " .. tostring(active) .. "\\n") end)'
+    lua(beta, app, frames)
+    lua(solo, app, solo_frames)
+    control = []
+    ctl.send({"t": "setAppState", "active": False, "minimized": True})
+    left = shows(beta, "app false", frames) and shows(solo, "app false", solo_frames)
+    saved = wait_status(ctl, "save", lambda v: True, control)["value"]
+    drain(beta, frames)
+    drain(solo, solo_frames)
+    once = [len([m for m in got if m["t"] == "line" and m["text"] == "app false"]) for got in (frames, solo_frames)]
+    check(left and once == [1, 1] and saved == "saved",
+          f"the app leaving the front raises sysApplicationFocusChangeEvent once in each profile, and saves: {once}, {saved}")
+    ctl.send({"t": "setAppState", "active": True, "minimized": False})
+    check(shows(beta, "app true", frames) and shows(solo, "app true", solo_frames), "and coming back, in each again")
+
+    m = ask(ctl, {"t": "closeProfile", "name": "Solo"})
+    check(m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == [("Beta", "loaded"), ("Solo", "closing")],
+          f"closeProfile answers with that profile closing: {m}")
+    ctl.wait_for(lambda m: m["t"] == "openProfiles" and [p["name"] for p in m["profiles"]] == ["Beta"], timeout=30)
+    beta.send({"t": "send", "text": "echo still here"})
+    check(shows(beta, "You said: still here", frames), "the other profile runs on, connected, once one has closed")
 
     m = ask(ctl, {"t": "closeProfile", "name": "Beta"})
     check(m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]] == [("Beta", "closing")],

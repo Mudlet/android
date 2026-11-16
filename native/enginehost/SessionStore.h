@@ -5,8 +5,8 @@
 
 #include <optional>
 
-// What the engine keeps on disk so that, started again after it was killed, it can bring back the profile it ran and
-// its game connection (docs/architecture.md, "Restoring the session"). One JSON file, replaced atomically on each
+// What the engine keeps on disk so that, started again after it was killed, it can bring back the profiles it ran and
+// their game connections (docs/architecture.md, "Restoring the session"). One JSON file, replaced atomically on each
 // change. An orderly stop removes it; a stop marker, which the app writes when the user stops the engine, removes it
 // at the next start-up, in case the stop ended the process before the engine could.
 class SessionStore
@@ -20,9 +20,13 @@ public:
     // an engine that keeps dying
     static constexpr int reconnectDelayMs[maxRestores] = {0, 10 * 1000, 30 * 1000};
 
+    // How long a restore waits after one profile has loaded before it starts the next, so a phone on a weak network does
+    // not call every game at once
+    static constexpr int staggerMs = 2000;
+
+    // One open profile
     struct Session
     {
-        // Empty while no profile runs
         QString profile;
         // The game the UI last connected to; empty for the address stored in the profile
         QString host;
@@ -40,13 +44,14 @@ public:
         enum class Kind {
             // Nothing to restore: no profile ran, or the engine before this one stopped in order
             none,
-            // The engine before this one died with a profile running
+            // The engine before this one died with profiles running
             restore,
             // It did, but this many restores within the window came before: a crash loop
             gaveUp
         };
         Kind kind = Kind::none;
-        Session session;
+        // The front profile first, then the others in the order they were opened
+        QList<Session> sessions;
         // This restore's number within the window, from 1; for gaveUp, how many came before
         int attempt = 0;
         int reconnectDelayMs = 0;
@@ -57,8 +62,8 @@ public:
     // Once, at start-up: what the engine before this one left, which a restore then counts in the file before it
     // starts, so that one which kills the engine still counts
     Restore takeRestore(qint64 nowMs);
-    // The session as it is now, kept with the restores of the window
-    void save(const Session& session);
+    // The open profiles as they are now, in the order opened, and the one in front, kept with the restores of the window
+    void save(const QList<Session>& sessions, const QString& front);
     // An orderly stop: nothing to restore
     void clear();
 

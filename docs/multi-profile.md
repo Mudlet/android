@@ -1,0 +1,160 @@
+# Several games at once
+
+Status: planned, November 2026; the pull request plan at the end says what lands in which order. Today the app runs one
+profile at a time: `openProfile` closes the running one (`MudletEngine`, `shutdownAsync(true)` then `startAsync()`), and
+`EngineClient` holds one `EngineLink`.
+
+The aim: several profiles open at once, each with its own connection, and a profile button that lists them on a tap and
+moves to the next or the previous one on a horizontal swipe, as Firefox for Android does with its tabs.
+
+## Engine: one process, one session per profile
+
+Upstream already holds several `Host`s in one pool: `HostManager::openProfile()` takes a name,
+`requestProfileClose(name)` closes one, `TNullAppFrontend::setActiveProfileTab()` moves the front and raises
+`sysProfileFocusChangeEvent`, and most `THeadlessSession` signals carry `const QString& profile`. What stops it is the
+session:
+
+- `THeadlessSession::prepareStart()` ("One pool a process") refuses a start while `HostManager::self()` exists, so a
+  second session cannot open anything.
+- Every call (`submit()`, `runLua()`, `setScreenSize()`, `renderMap()`, `pointer()`, ...) acts on the session's one
+  `mpHost`, which 188 lines of `src/headless/*.cpp` use.
+- `shutdown()` and `shutdownAsync()` close the whole pool, and `~THeadlessSession()` deletes it.
+
+The plan is one `THeadlessSession` per profile, all sharing the process's pool. Each session keeps its one `mpHost`
+and its API. The upstream change (Mudlet/Mudlet, `src/headless/THeadlessSession.{h,cpp}` and `src/HostManager.h`):
+
+1. `prepareStart()` joins an existing pool when `Options::configDir` matches the one it was settled with, returns
+   `invalidConfigDir` otherwise, and refuses only while the pool is closing.
+2. `mpPool` becomes a `std::shared_ptr<HostManager>` held by each session, with a file-static `std::weak_ptr`; the
+   pool goes with the last session.
+3. `HostManager::setProfileOpenedHook()` replaces the hook it held, so it becomes an add/remove pair, or one
+   dispatcher that routes by `Host*`.
+4. `shutdown()`, `shutdownAsync()` and `~THeadlessSession()`: a session that is not the last closes only its own
+   profile (`requestProfileClose()`, then waits for its save). `StartResult::poolClosing` applies only to the last.
+5. A save asked while another session's save runs joins it; `save()` already writes every profile in the pool.
+6. `setApplicationActive()` keeps its state in the pool, so `sysApplicationFocusChangeEvent` is raised once, not once
+   a session. `setWindowMinimized()` stays per session: each relays its own profile's `attentionRequested`.
+7. Optional: `setInFront()`. Until then Lua `setActiveProfile("<name>")` through `runLua()` does the same.
+
+What this costs: each extra profile adds its Lua state, mudlet-lua, console and map, estimated at 15-25 MB PSS and to
+be measured (E1 below). As on the desktop, `raiseGlobalEvent()` and synced modules work between profiles, a busy
+script stalls every profile, and a kill takes them all; the restore brings them all back.
+
+**Rejected: one engine process per profile** (`EngineService1..N`, each with its own `:engineN` process). It needs no
+upstream change and isolates a crash to one game, but:
+
+- Each game costs 45-65 MB PSS more (the libmudlet engine is 80 MB idle and 98 MB after a flood,
+  [`c-device.md`](decisions/hosting-results/c-device.md); only read-only `.so` pages are shared), and a Qt start of
+  165-237 ms.
+- N is fixed in the manifest, and each process needs a foreground notification of its own.
+- N processes write one config dir (`Mudlet.ini`, `profile-order.json`), which needs cross-process locks.
+- `raiseGlobalEvent()` and module sync don't cross processes.
+
+With a socket per profile (below), the UI does not depend on which layout serves it. Until the upstream change is in the
+pinned Mudlet revision, libmudlet keeps one profile at a time and the stand-in engine runs several, so the protocol and
+the UI can land and be tested first.
+
+## Protocol (version 14)
+
+Version 14, after the map download's 13. **A socket per profile, not profile ids on frames:** flow control is per
+connection (4 MiB high water), so on one connection a flooding background game would put the front game into lag.
+A socket per profile keeps the ring, the replay on attach, the lag handling and `EngineLink` as they are, per profile.
+
+- **Control socket**, `engine.sock` as now. It carries `hello`, `ping`, `listProfiles`, `saveProfile`,
+  `deleteProfile`, `setAppState`, the engine-wide statuses (`enginePid`, `platform`, `appState`, the heartbeat,
+  `save`) and the messages below.
+- **Profile sockets**, `engine-p<slot>.sock` beside it. `slot` is the lowest free number from 1, which keeps the path
+  well under `sun_path`'s 108 bytes whatever the profile's name. Each speaks today's per-profile set unchanged
+  (`connect`, `send`, `line`, `status`, `notify`, `windows`, `map`, ...). Its `hello` reply adds `profile`, and
+  `instance` is `<pid>-<ms>-<slot>`, so a slot reused for another profile replays from scratch. The same
+  `UserAccessOption` and `SO_PEERCRED` checks apply.
+
+New on the control socket:
+
+| Message | Dir | Fields | Meaning |
+|---|---|---|---|
+| `openProfile` | UI→E | `name`, `password`?, `connect`?, `alongside`?, `id`? | With `alongside`, starts the profile beside the others; one already open stays as it is. Answered by `openProfiles`, or `error` `openProfile: at most 4 open`, or from libmudlet before the upstream change `openProfile: one profile at a time`. Without it, the others close first, as in version 13. |
+| `closeProfile` | UI→E | `name`, `id`? | Saves and closes that profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles` or `error`. |
+| `setFront` | UI→E | `name` | The profile the player is looking at: raises `sysProfileFocusChangeEvent`, as a desktop tab change does. |
+| `markSeen` | UI→E | `name`, `seq` | The player has seen that profile's lines up to `seq`: clears `attention`, and `unread` counts from there. |
+| `openProfiles` | E→UI | `profiles`: `name`, `slot`, `socket`, `state`, `connection`, `lastSeq`, `unread`, `attention`, `front`; `re`? | Every open profile, in the order opened. `state` is `starting`, `loaded`, `closing` or `restoring`. `attention` is set by `alert()`, the bell or new data while minimized, until seen. Sent on attach and on every change (line counts coalesced to every 500 ms), and as the answer to `openProfile` and `closeProfile`. |
+
+The profile opened last becomes the front; when the front closes, the next one to the right takes over, else the one to
+the left. `unread` lives in the engine because the engine sees every line while the UI is detached.
+
+**Compatibility.** The app keeps working unchanged until U1. `hello` gains `profileSockets`. A UI that leaves it out
+gets version 13's behaviour on the control socket: the front profile's lines, statuses and windows, and its profile
+requests go to the front profile. With `profileSockets` true, the control socket carries only the control traffic, and a profile request sent
+there gets `error`, as a control request sent on a profile socket does.
+
+## The switcher
+
+- **The profile button** replaces the state text at the left of `ConnectionBar`, above the keyboard: the front
+  profile's name, its connection state as an icon whose shape differs per state, and a chip with the number of open
+  games, with a dot when another game has unread lines or wants attention. Reconnect and Disconnect act on the front
+  profile.
+- **Tap** opens a bottom sheet with a row per open profile: name, state, an unread badge ("99+" past 99), a bell for
+  `attention` and a close button. "Open another game" at the foot goes to the profile list, where Connect sends
+  `openProfile` with `alongside`. At the cap it says "Close a game to open another (at most 4)". Start at 4; raise it
+  once memory is measured on a phone.
+- **Swipe** on the button moves its label with the finger and cross-slides the console. Past 40% of the button's width,
+  or on a fling, it commits with a haptic tick; at either end it rubber-bands, with no wrap-around. It mirrors in
+  right-to-left layouts; a drag from the system's back-gesture inset belongs to the system. A hardware keyboard gets
+  Ctrl+Tab and Ctrl+Shift+Tab.
+- **TalkBack.** The button reads "Aardwolf, connected, game 2 of 3, 5 new lines in other games", with the custom
+  actions "Next game: Achaea" and "Previous game: Aardwolf", so the swipe is never the only way. After a switch a
+  polite live region says "Achaea, connected" and focus goes to the input line. New lines are read only for the front
+  profile; a background `announce()` is read politely with the profile's name first, and a background `attention`
+  once as "New activity in Achaea".
+- **Back** on the game screen goes to the profile list, which gains an "Open games" section; it never walks the games.
+  Turn on `android:enableOnBackInvokedCallback` for the predictive preview.
+- **Closing a game** asks first when it is connected ("Close Achaea? This disconnects from the game and saves the
+  profile."), then sends `closeProfile`. Disconnect leaves the profile open with its scrollback and scripts. With the
+  last game closed, the engine leaves the foreground until something opens.
+- **Per-profile state:** `EngineClient` becomes a registry of `ProfileSession`s by name, each with its `EngineLink`,
+  lines, statuses, history, input draft, scroll position, script windows and map. While the Activity is started the
+  UI attaches to every open profile's socket, so switching is instant. Text size and the other settings stay global.
+
+## Interactions
+
+- **The map.** Each profile's `map` and `appMap` come on its own socket and belong to its `ProfileSession`. Only the
+  front profile is asked to render, so background games draw nothing. Whether the map is in front is per screen: after
+  a switch it stays in front if the new game has a map.
+- **App state.** `setAppState` stays on the control socket. `active` false raises `sysApplicationFocusChangeEvent`
+  once in every profile and saves them all; `minimized` goes to every session, so "notify on new data while minimized"
+  shows as `attention`.
+- **Saving.** One `save()` writes every profile of the pool; status `save` on the control socket names any profile not
+  saved.
+- **The restore.** `SessionStore` (`engine-session.json`) keeps every open profile, with its address, TLS and whether
+  its connection is wanted, and the front. A restore reopens the front first, then the others 2 s apart. The limit of
+  three restores in 10 minutes stays engine-wide. As now, a restored profile has no password.
+- **Notifications.** A tell gets its profile as `setSubText` and `setGroup()`, and its tap makes that profile the
+  front. The foreground notification reads "Mudlet: 3 games" with a line per game, and with one game looks as it does
+  today. `AndroidNotifier::showProfile` becomes `showProfiles(list)`.
+
+## Pull request plan
+
+Each follows the repo's rules: a protocol change in one commit across `docs/protocol.md`, the bridge, `Protocol.kt`
+and `protocol_client.py`, with `ProtocolSpecTest` green.
+
+| PR | Repo | What | Needs |
+|---|---|---|---|
+| M0 | android | This document | - |
+| UP1 | Mudlet | Several `THeadlessSession`s share one pool: items 1-6 above, with `headless.md` and tests | - |
+| P1 | android | Protocol 14: the control and profile sockets and the messages above; the bridge split into a control bridge and a bridge per profile; the stand-in runs several profiles, libmudlet refuses a second | M0 |
+| U1 | android | `EngineClient` becomes a registry of `ProfileSession`s; `FakeEngine` serves several sockets. With one game nothing visible changes | P1 |
+| U2 | android | The profile button and its sheet, "Open another game", closing, TalkBack, "Open games", predictive back | U1 |
+| U3 | android | The swipe, its slide, rubber band and haptic, right-to-left, Ctrl+Tab | U2 |
+| U4 | android | Unread and attention badges, `markSeen`, background speech | U2 |
+| N1 | android | Notifications per profile: `showProfiles`, grouped tells that open their game, leaving the foreground with no game open | P1 |
+| E1 | android | libmudlet with several profiles: a session each sharing the pool, the restore of the list, `setFront`, app state for the pool; host tests with two games and `raiseGlobalEvent()`; memory per profile measured to set the cap | UP1 in the pinned revision; P1 |
+
+```
+M0 ── P1 ─┬─ U1 ── U2 ─┬─ U3
+          │            └─ U4
+          ├─ N1
+UP1 ──────┴──────────────────── E1
+```
+
+Everything but E1 is checked in CI against the stand-in and `FakeEngine`. What only a phone shows (the swipe's feel,
+TalkBack's speech, memory with three real games) goes on the on-device checklist in the PR that adds it.

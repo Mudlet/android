@@ -259,6 +259,19 @@
     <string name="app_map_more_rooms">More rooms match than are shown: try more of the name</string>
     <string name="app_map_results_close">Close the results</string>
 
+    <!-- The download of the map the game offers, above the full-screen map, and in its middle while no map is drawn:
+         %1$s is the host the game offers it from (such as mud.example.com); the progress bar's name for TalkBack; how
+         a download ended, which TalkBack reads out, the failure with Mudlet's reason (%1$s) -->
+    <string name="map_download">Download the map from %1$s</string>
+    <string name="map_download_offered">No map to show yet. The game offers its map from %1$s.</string>
+    <string name="map_download_running">Downloading the map from %1$s…</string>
+    <string name="map_download_progress">Map download</string>
+    <string name="map_download_cancel">Cancel</string>
+    <string name="map_download_loaded">Map downloaded from %1$s</string>
+    <string name="map_download_cancelled">Map download cancelled</string>
+    <string name="map_download_failed">The map download failed: %1$s</string>
+    <string name="map_download_dismiss">Dismiss</string>
+
     <!-- The game screen's connection bar: the state of the connection to the game, and its buttons -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <string name="connection_disconnected">Disconnected</string>

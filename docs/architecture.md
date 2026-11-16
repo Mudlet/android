@@ -287,6 +287,26 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   view moved by `showRoom` (or a pan) that draws second keeps its place until the player moves to another room; the
   stand-in engine has no map, so neither draws anything there.
 
+### Downloading the map
+A game can offer its map, as GMCP's `Client.Map` (docs/protocol.md, "Downloading the map"; a carried Mudlet patch),
+which the desktop's mapper turns into a "Download from game" button. The app's map has it (`AppMapClient.download`,
+drawn by `ui/game/AppMap.kt`):
+- With no map drawn, the map in front says so in its middle, with a button "Download the map from <host>"; with a map,
+  the same button is in a bar under the search field, as a game may offer a newer map. Neither shows while the game
+  offers none, nor while a download runs.
+- The button sends `downloadMap`. While it runs, the bar shows Mudlet's progress label, or "Downloading the map from
+  <host>…", and a progress bar read as "Map download": how far, while the size is known, else indeterminate, as
+  Mudlet's guess of the size can be passed. Its Cancel button, a 48 dp target, sends `cancelMapDownload` while Mudlet
+  can still stop it.
+- How it ended stays in the bar until dismissed or the next download, and is read out as it comes: "Map downloaded
+  from <host>", "Map download cancelled", or "The map download failed: " with Mudlet's reason, in the error colour and
+  interrupting TalkBack. A refusal shows as the map's others do. The loaded map is the profile's, so the map behind
+  the text, the map in front and a script's mapper all show it.
+- Only the URL's host is shown: the engine never sends the rest, which can hold a user name and password. Lua's `gmcp`
+  table holds the whole URL, as the game sent it, as on the desktop.
+- Known limits: the button is only in the map in front, not behind the text, which takes no touches; Mudlet sets no
+  time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.
+
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`):
 one profile at a time in a `THeadlessSession` behind the same socket protocol. It uses only that class's
@@ -484,8 +504,10 @@ device shows, below the UI's debug hook:
   docked map as a page; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
   the title bar's toggle bringing it to the front, where taps, the zoom buttons, the edit switch and TalkBack's actions
-  reach it as `appMapPointer`, and Back sending it back, and the room search with its results, no match, more matches
-  and a refusal; and the notification permission, explained and then asked on Android 13 and later, on a fresh install.
+  reach it as `appMapPointer`, and Back sending it back, the room search with its results, no match, more matches
+  and a refusal, and the map download: no button with no offer, the offer with no map drawn sending `downloadMap`, its
+  progress and Cancel, how it ended (cancelled, failed, read out at once, until dismissed, and loaded, the map then
+  drawn and the offer above it), a refusal, and the offer gone with the profile; and the notification permission, explained and then asked on Android 13 and later, on a fresh install.
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only.
@@ -1104,6 +1126,17 @@ Item 13 of the on-device checklist covers this.
       Nothing in the window is read aloud as it comes; `lua announce("from win")` is.
     - With "Blank lines from the game" on Hide, swiping skips the window's blank row, still drawn; on Space it reads as
       "Space".
+26. Downloading the map, with the libmudlet APK and a game that offers its map over GMCP (`Client.Map`), as many
+    IRE-style games do, or a profile whose `lua gmcp.Client.Map` shows a URL. Start with no map (a new profile).
+    - The map button's map says there is no map yet, with "Download the map from <host>"; a tap shows the progress and
+      Cancel, then "Map downloaded from <host>", and the map, in front and behind the text, then follows the player.
+      The bar under the search field then offers the download again.
+    - Cancel stops a download (on a slow connection, or a large map), and says so; the map is as it was. With the
+      phone offline, the download fails with Mudlet's reason, shown in red; dismissing it takes it away.
+    - With TalkBack on: the button, the progress bar (as "Map download" and how far), Cancel and the dismiss button
+      read their names; the end of the download is read out as it comes, a failure at once.
+    - Over https (as most games' map URLs are), the download works: OpenSSL is in the APK (see "TLS").
+    - `adb logcat` shows the map's host but never a user name or password from its URL.
 
 ## Problems hit
 - **`QJsonDocument` sorts keys**, so `"t"` is not the first key. A test that

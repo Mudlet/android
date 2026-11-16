@@ -513,6 +513,8 @@ object EngineClient {
 
                 is EngineMessage.Rooms -> post { AppMapClient.onRooms(message) }
 
+                is EngineMessage.MapDownload -> post { AppMapClient.onMapDownload(message, app.resources) }
+
                 is EngineMessage.Notify -> post { notifyCount++ }
 
                 is EngineMessage.MoveTypedLine -> post { moveTypedLine = true }

@@ -668,7 +668,9 @@ device shows, below the UI's debug hook:
   actions with the announcement and the focus after a switch, the chip for each state of the connection with a drop
   told once and Mudlet's own retries read as one state, the game sheet's Reconnect, Disconnect, switch and close
   (asking first while connected, and back to the list after the last), and "Open another game" opening one beside
-  the others until four are open; the
+  the others until four are open; the swipe on the pill (`GameSwipeTest`, mirrored in ar-XB): a drag far enough or a
+  fling brings the game beside with a tick, a short slow one springs back, nothing goes past the first or the last
+  game, Ctrl+Tab and Ctrl+Shift+Tab switch too, and a sideways swipe on the console or the quick bar switches nothing; the
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
   host:port", adding, editing, deleting only once confirmed, the engine's refusals, and Connect sending
@@ -1270,6 +1272,11 @@ Item 13 of the on-device checklist covers this.
       name and state, and puts the focus on its input line. Closing a connected game asks first; closing the last one
       goes back to the profile list. Turn off the network for a moment: the pill turns red, reads "Connection lost"
       and offers Reconnect, or "Reconnect now" when the profile reconnects by itself.
+    - Three games open, TalkBack off: drag the pill sideways. Its name and the console follow the finger, the next
+      game's name comes in from the right; let go past about 40% of the pill's width, or flick, and it switches with
+      a tick; let go short and it springs back. At the first and the last game it only gives a little. The console
+      still scrolls up and down, the quick bar still scrolls sideways, and a swipe in from the screen's edge is the
+      system's Back. In Arabic (or ar-XB) it is mirrored. With a hardware keyboard, Ctrl+Tab and Ctrl+Shift+Tab switch.
 16. The input line's engine features, connected to a game with the libmudlet APK.
     - At a password prompt (any game's login), the input line becomes a "Password" field with the keyboard's password
       layout, still open. TalkBack reads it as a password field and says "dot" or nothing for what is typed, never the

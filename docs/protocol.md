@@ -427,8 +427,18 @@ and `downloadOfferedMap()`, a Mudlet patch the app carries in `scripts/mudlet-pa
   runs until it is stopped.
 - It ends `loaded`, and `appMap` and `map` then show the new map (an `appMap` can come just before `loaded`, as the
   map is redrawn once it is in place); `failed`, with `error` Mudlet's console message without its tag (such as
-  `[ ERROR ] - `), on one line, and with no more of any URL in it than its scheme and host; or
-  `cancelled`. A download that failed or was stopped leaves the profile's map as it was.
+  `[ ERROR ] - `), on one line, with no more of any URL in it than its scheme and host, and the URL's password and
+  query as `***` elsewhere, as in the server's own words (which Mudlet's console line keeps as they are): the password
+  wherever it shows and the query wherever it follows a `?`, each decoded, as it is, and percent-encoded as the game's
+  URL writes it and as Qt shows and encodes it (`QUrl`'s `PrettyDecoded` and `FullyEncoded`, which normalise the
+  encoding), with the hex digits in either case; or `cancelled`. The host of a URL is what follows the last `@` before
+  its path, query or fragment, as a browser reads a URL, and the URL's own user name, in any of those forms, is taken
+  whole, so a space, `/`, `?` or `#` in it does not end the URL early. What the server repeats in another form
+  can still show, such as a path it repeats on its own or decoded with a space in it, the query, or a part of it,
+  repeated without the `?` before it, a part of it even right after one, the password or the query percent-encoded
+  otherwise than the game's URL and Qt write them (such as `%21` for a `!` or `+` for a space), and a user name it
+  repeats outside a URL. A download that failed or was stopped
+  leaves the profile's map as it was.
 - A profile starts at `none`, offered or not as the game has offered by then, and `offered` false and `none` follow
   its close.
 

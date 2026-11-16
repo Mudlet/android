@@ -23,21 +23,69 @@ using ScriptWindow = THeadlessSession::ScriptWindow;
 using TextRun = THeadlessSession::TextRun;
 using TextStyle = THeadlessSession::TextStyle;
 
+// A pattern for percent-encoded text: the text as it is, but each %XX's hex digits in either case. escape() makes
+// each '%' "\%" and leaves hex digits as they are.
+QString percentEncodedPattern(const QString& text)
+{
+    static const QRegularExpression escapedPercent(QStringLiteral("\\\\%([0-9A-Fa-f]{2})"));
+    return QRegularExpression::escape(text).replace(escapedPercent, QStringLiteral("%(?i:\\1)"));
+}
+
 // Mudlet's console message as the reason the map download from url failed: without its "[ ERROR ] - " tag, on one
-// line, and of any URL in it only the scheme and host, as a game can put a user name, password or token in the rest.
-// The patch's messages show no more already; this holds should Mudlet's or Qt's text change.
+// line, with the URL's password and query as *** and of any URL in it only the scheme and host. The patch already cuts
+// the URL in Qt's own text to that, but the server's own words, which the message keeps, can repeat the URL whole, its
+// user name, password and token included, or its path and query on their own. The password is masked wherever it
+// shows, the query wherever it follows a '?', and the URL's own user name taken whole where a URL repeats it, each
+// decoded, as Qt shows it (PrettyDecoded) and encodes it, and as the game's URL writes it, the encoded forms with their
+// hex digits in either case.
 QString mapDownloadError(QString reason, const QString& url)
 {
     static const QRegularExpression tag(QStringLiteral("^\\s*\\[\\s*\\w+\\s*\\]\\s*-\\s*"));
-    static const QRegularExpression anyUrl(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)(?:[^/\\s@]*@)?([^/\\s?#]*)\\S*"));
     static const QRegularExpression space(QStringLiteral("\\s+"));
-    // First, as a password decoded can hold the '/' or '@' that would end the URL early for anyUrl
+    // The URL's user name, password and query as the game wrote them, read as QUrl reads them: the user info ends at
+    // its first '@', and the user name at the user info's first ':'
+    static const QRegularExpression written(QStringLiteral("^(?:[A-Za-z][A-Za-z0-9+.-]*://)?(?:([^/?#:@]*)(?::([^/?#@]*))?@)?[^?#]*(?:\\?([^#]*))?"));
     const QUrl downloaded = QUrl::fromUserInput(url);
-    for (const QString& password : {downloaded.password(QUrl::FullyDecoded), downloaded.password(QUrl::FullyEncoded)}) {
-        if (!password.isEmpty()) {
-            reason.replace(password, QStringLiteral("***"));
+    const QRegularExpressionMatch writtenParts = written.match(url.trimmed());
+    // The patterns of a part of the URL as a server can repeat it, each with the length of the text it stands for:
+    // decoded, as Qt shows or encodes it, and as the game wrote it, whose percent-encoding Qt normalises. Decoded, it
+    // is matched as it is, not in any case, which could take a word of the reason. A part QUrl does not find goes in
+    // no request, and the game's text then reads otherwise than QUrl reads it, so it has none
+    using Part = QString (QUrl::*)(QUrl::ComponentFormattingOptions) const;
+    const auto forms = [&](Part part, int group) {
+        QList<std::pair<qsizetype, QString>> patterns;
+        if (const QString decoded = (downloaded.*part)(QUrl::FullyDecoded); !decoded.isEmpty()) {
+            patterns.append({decoded.size(), QRegularExpression::escape(decoded)});
+            for (const QString& form : {(downloaded.*part)(QUrl::PrettyDecoded), (downloaded.*part)(QUrl::FullyEncoded), writtenParts.captured(group)}) {
+                patterns.append({form.size(), percentEncodedPattern(form)});
+            }
         }
+        // One that is empty would match everywhere, and one that is no pattern (a lone surrogate) would stop anyUrl
+        patterns.removeIf([](const auto& pattern) {
+            return pattern.first == 0 || !QRegularExpression(pattern.second).isValid();
+        });
+        return patterns;
+    };
+    // The password and the query, where a token goes, first, as decoded they can hold the '/', '@' or space that would
+    // end a URL early for anyUrl; the longest first, as one can hold another
+    QList<std::pair<qsizetype, QString>> secrets = forms(&QUrl::password, 2);
+    for (const auto& [size, pattern] : forms(&QUrl::query, 3)) {
+        secrets.append({size, QStringLiteral("(?<=\\?)") + pattern});
     }
+    std::stable_sort(secrets.begin(), secrets.end(), [](const auto& a, const auto& b) {
+        return a.first > b.first;
+    });
+    for (const auto& [size, pattern] : std::as_const(secrets)) {
+        reason.replace(QRegularExpression(pattern), QStringLiteral("***"));
+    }
+    // Any URL: its scheme and host. The host follows the user info's last '@' before the path, query or fragment, as a
+    // browser reads a URL, so a user name repeated decoded can hold an '@'; the URL's own user name is taken whole,
+    // so a space, '/', '?' or '#' in it does not end the user info early
+    QStringList userNames;
+    for (const auto& [size, pattern] : forms(&QUrl::userName, 1)) {
+        userNames.append(pattern);
+    }
+    const QRegularExpression anyUrl(QStringLiteral("([A-Za-z][A-Za-z0-9+.-]*://)(?:(?:%1)?[^/\\s?#]*@)?([^/\\s?#]*)\\S*").arg(userNames.join(QLatin1Char('|'))));
     reason.remove(tag);
     reason.replace(anyUrl, QStringLiteral("\\1\\2"));
     reason.replace(space, QStringLiteral(" "));

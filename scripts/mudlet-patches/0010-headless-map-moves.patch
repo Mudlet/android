@@ -21,6 +21,7 @@ about a room, the zoom bound, following again on followPlayerOnMap() and on the 
 moved apart from the app's, and the refusals). The desktop is unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
 index 2d3259e..07707a4 100644

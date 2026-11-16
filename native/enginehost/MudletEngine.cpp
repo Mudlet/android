@@ -1218,7 +1218,14 @@ std::optional<MapFrame> MudletEngine::drawMap(const QSize& size)
         qWarning("MudletEngine: the mapper, %dx%d, is larger than %d pixels a side, so the map is not drawn", size.width(), size.height(), PngImage::maxSide);
         return std::nullopt;
     }
-    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    // Drawn in the window's pixels onto an image of the device's, so the lines and names are as sharp as the screen
+    const double scale = std::max(1.0, std::min({mMapScale, double(PngImage::maxSide) / size.width(), double(PngImage::maxSide) / size.height()}));
+    QImage image(size * scale, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull()) {
+        qWarning("MudletEngine: no memory for the map at %dx%d by %g", size.width(), size.height(), scale);
+        return std::nullopt;
+    }
+    image.setDevicePixelRatio(scale);
     image.fill(Qt::transparent);
     QPainter painter(&image);
     const bool drawn = mSession->renderMap(painter, size);
@@ -1439,6 +1446,18 @@ QString MudletEngine::setMapViewOnly(bool viewOnly)
         return QStringLiteral("no profile running");
     }
     return mSession->setMapViewOnly(viewOnly) ? QString() : mSession->errorString();
+}
+
+QString MudletEngine::setMapScale(double scale)
+{
+    if (scale == mMapScale) {
+        return {};
+    }
+    mMapScale = scale;
+    if (mMapSize && profileOpen()) {
+        pushMap(mMapSize);
+    }
+    return {};
 }
 
 QString MudletEngine::setAppMapSize(const QSize& size, double scale)

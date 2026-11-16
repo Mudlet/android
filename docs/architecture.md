@@ -265,6 +265,9 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   a dock the main window's size, is a "Map" page in either layout, and a mapper beside the text is one when stacked.
 - The frame is drawn only while it is the window's size, as the engine draws one at each new size; scaled alike both
   ways to fit and centred, so a touch maps back to the frame's pixel under it.
+- The engine is asked (`setMapScale`) to draw it at the scale it is shown at, `MapFit.renderScale`, as Mudlet's pixels
+  are scaled to the screen's, several times over for a small mapper that fills a page's pane: its PNG has that many
+  more pixels, so the map is as sharp as the screen, and its `w`, `h` and points stay the window's.
 - A tap sends a `mapPointer` press with the left button, which selects the room there, on the finger's lift, so a
   pinch selects nothing; a second tap near it within the double-tap timeout then sends a double click, which walks
   there. A pinch turns the wheel a notch for each 7% it scales, as Mudlet's map zooms by notch, about the fingers'
@@ -401,7 +404,7 @@ keeps the profiles' passwords in the KeyStore.
 | none: the engine reads the file itself, with `QImageReader` or as a `QIcon` | `getImage`, answered by `image` as a PNG |
 | `buttonBars()` at `profileLoaded` and at each `buttonsChanged`; `pressButton()` | `buttonBars`, whole, when it changed, and to a UI that attaches; `pressButton`, answered only when refused |
 | `addonCommands()` at `profileLoaded` and at each `addonCommandsChanged`; `activateAddonCommand()` | `commands`, the same way; `activateCommand`, answered only when refused |
-| `renderMap()` at the mapper window's size, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
+| `renderMap()` at the mapper window's size onto an image larger by `setMapScale`'s scale, at each `mapRepaintRequested` and `mapViewOnlyChanged` and when the mapper shows or changes size; `mapPointer()`, `setMapViewOnly()` | `map`, when it changed, and to a UI that attaches while the mapper shows; `mapPointer`, `setMapViewOnly`, answered only when refused |
 | `renderAppMap()` at the size and scale `setAppMapSize` asks, at the same cues; `appMapPointer()`, `findRooms()`, `showRoomOnAppMap()`, `closeAppMap()` (carried patch) | `appMap`, when it changed, empty while nothing is drawn, and not to a UI that attaches, as the size goes with the UI that asked (`closeAppMap()`, as at 0 by 0); `setAppMapSize`, `appMapPointer`, `showRoom`, answered only when refused; `findRooms` answered by `rooms` |
 | `offeredMapUrl()` at `profileLoaded` and at each `offeredMapChanged`; `downloadOfferedMap()`, `cancelMapOperation()`; `mapProgressStarted`, `mapProgressChanged`, `mapProgressCancelDisabled`, `mapDownloadFinished` (carried patch) | `mapDownload`, with the URL's host only, when it changed (progress at most once a percent), and to a UI that attaches; `downloadMap`, `cancelMapDownload`, answered only when refused |
 
@@ -483,7 +486,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   `setCommandChecked()` as `commands`, `activateCommand` raising `sysCommandClicked` and ticking it; a disabled or
   unknown one refused, both lists to a UI that attaches, and `removeCommand()`;
 - the map: a map built with `addRoom()` and `setExit()` in a `Geyser.Mapper`, as `map` at the mapper's size with the
-  rooms drawn where the layout puts them; a `mapPointer` press selecting the room under it and raising
+  rooms drawn where the layout puts them, on twice the pixels after `setMapScale` 2, and at the window's again for the
+  next UI; a `mapPointer` press selecting the room under it and raising
   `sysMapWindowMousePressEvent`, a double-click walking to a room through `doSpeedWalk()`, a wheel turn zooming and less
   than half a notch refused; `setMapViewOnly` raising `mapModeChangeEvent`; `pointer` on the window `mapper`; the map to
   a UI that attaches, and none while the mapper hides;

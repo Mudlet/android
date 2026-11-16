@@ -57,6 +57,7 @@ public:
     QString activateCommand(int id) override;
     QString mapPointer(const PointerEvent& event) override;
     QString setMapViewOnly(bool viewOnly) override;
+    QString setMapScale(double scale) override;
     QString setAppMapSize(const QSize& size, double scale) override;
     QString appMapPointer(const PointerEvent& event) override;
     std::variant<RoomList, QString> findRooms(const QString& text) const override;
@@ -175,6 +176,8 @@ private:
     QSize mMainWindowSize{0, 0};
     // The size of the mapper window as pushMap() last had it: none while it did not show
     std::optional<QSize> mMapSize;
+    // Device pixels to each of the mapper window's, as setMapScale() asked
+    double mMapScale = 1;
     // The app's map as setAppMapSize() asked for it: empty for none
     QSize mAppMapSize{0, 0};
     double mAppMapScale = 1;

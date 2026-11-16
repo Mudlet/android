@@ -56,6 +56,11 @@ object ScriptWindowsClient {
     private var wantedSize: MudletSize? = null
     private var sentSize: MudletSize? = null
 
+    // The scale the mapper window's map is shown at, and the one the engine draws it at since the UI attached: 1 until
+    // asked, as the engine goes back to 1 when a UI goes; null when it could not be sent
+    private var wantedMapScale = 1.0
+    private var sentMapScale: Double? = 1.0
+
     // Where this engine instance was last told each user window is
     private val sentPlacements = HashMap<String, Placement>()
 
@@ -68,7 +73,7 @@ object ScriptWindowsClient {
 
     /**
      * A `map` or `appMap` frame: [w] by [h] its size in the map's pixels, and [bitmap] its PNG, null if that did not
-     * decode, of as many pixels for `map` and larger by the scale asked for `appMap`; [viewOnly] false while the map is
+     * decode, larger by the scale asked for with [setMapScale] or `setAppMapSize`; [viewOnly] false while the map is
      * edited.
      */
     class MapImage(val bitmap: ImageBitmap?, val w: Int, val h: Int, val viewOnly: Boolean)
@@ -120,8 +125,8 @@ object ScriptWindowsClient {
 
     /**
      * An `error` from the engine: the refusal of a map request is shown with the map that asked, this or
-     * [AppMapClient]'s. A link's is only logged, as a link a script let go of or disabled, or one the player tapped as it
-     * went, is no fault of theirs.
+     * [AppMapClient]'s; that of [setMapScale] is only logged. A link's is only logged too, as a link a script let go of
+     * or disabled, or one the player tapped as it went, is no fault of theirs.
      */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
@@ -129,6 +134,8 @@ object ScriptWindowsClient {
         if (AppMapClient.onRefused(request, reason)) return
         if (request == "mapPointer" || request == "setMapViewOnly") mapRefusal = reason
         if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
+        // The map stays at the scale the engine last took
+        if (request == "setMapScale") Log.w(TAG, "the map's scale: ${message.message}")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -190,6 +197,8 @@ object ScriptWindowsClient {
         askedImages.retainAll(images.keys)
         // Also a size that could not be sent while the link was down
         wantedSize?.let(::setMainWindowSize)
+        sentMapScale = 1.0
+        setMapScale(wantedMapScale)
         AppMapClient.onAttached(sameInstance)
     }
 
@@ -198,6 +207,13 @@ object ScriptWindowsClient {
         wantedSize = size
         if (size == sentSize) return
         sentSize = if (EngineClient.send(Requests.setMainWindowSize(size.w, size.h))) size else null
+    }
+
+    /** Has the engine draw [map] at [scale] device pixels to each of the mapper window's, unless it does already. */
+    fun setMapScale(scale: Double) {
+        wantedMapScale = scale
+        if (scale == sentMapScale) return
+        sentMapScale = if (EngineClient.send(Requests.setMapScale(scale))) scale else null
     }
 
     /** Tells the engine where the user window [name] is, unless it was told already. */

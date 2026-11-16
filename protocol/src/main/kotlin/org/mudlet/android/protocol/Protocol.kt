@@ -342,7 +342,7 @@ sealed interface EngineMessage {
 
     /**
      * The 2D map as the mapper window shows it, drawn again: [png] is a PNG of [w] by [h] pixels, the window's size,
-     * empty if it did not decode; [viewOnly] while the map is viewed, not edited. Drawn over the mapper only while [w]
+     * times the scale [Requests.setMapScale] asked for, empty if it did not decode; [viewOnly] while the map is viewed, not edited. Drawn over the mapper only while [w]
      * and [h] are its size; none comes while the mapper hides or has no size.
      */
     data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
@@ -480,6 +480,12 @@ object Requests {
 
     /** The map viewed only, or edited. Answered only by an Error, when refused. */
     fun setMapViewOnly(viewOnly: Boolean): JSONObject = JSONObject().put("t", "setMapViewOnly").put("viewOnly", viewOnly)
+
+    /**
+     * The mapper window's [EngineMessage.Map] drawn from now on at [scale] device pixels to each of the window's (1 to
+     * [MapFit.MAX_RENDER_SCALE]), its `w` and `h` still the window's. Answered only by an Error, when refused.
+     */
+    fun setMapScale(scale: Double): JSONObject = JSONObject().put("t", "setMapScale").put("scale", scale)
 
     /**
      * The app's own map, apart from any a script opened, drawn at [w] by [h] of its pixels with [scale] device pixels

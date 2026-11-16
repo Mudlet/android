@@ -1,5 +1,6 @@
 package org.mudlet.android.protocol
 
+import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.min
 
@@ -13,6 +14,12 @@ data class MapPoint(val x: Double, val y: Double)
 class MapFit(val frameW: Int, val frameH: Int, val box: PxRect) {
     /** Screen pixels per pixel of the frame; 0 for a frame or box with no size. */
     val scale: Float = if (frameW > 0 && frameH > 0 && box.w > 0 && box.h > 0) min(box.w / frameW, box.h / frameH) else 0f
+
+    /**
+     * What to ask the engine to draw the mapper's map at (`setMapScale`): [scale] in hundredths, down, so a box a
+     * fraction of a pixel larger asks for no new map; at least 1 and at most [MAX_RENDER_SCALE], which the engine takes.
+     */
+    val renderScale: Double = (floor(scale * 100.0) / 100).coerceIn(1.0, MAX_RENDER_SCALE)
 
     /** Where the frame is drawn, inside [box]. */
     val drawn: PxRect = PxRect(box.x + (box.w - frameW * scale) / 2, box.y + (box.h - frameH * scale) / 2, frameW * scale, frameH * scale)
@@ -28,6 +35,11 @@ class MapFit(val frameW: Int, val frameH: Int, val box: PxRect) {
             ((x - drawn.x) / scale).toDouble().coerceIn(0.0, frameW - 1.0),
             ((y - drawn.y) / scale).toDouble().coerceIn(0.0, frameH - 1.0),
         )
+    }
+
+    companion object {
+        /** The largest `setMapScale` the engine takes: IEngine::maxMapScale. */
+        const val MAX_RENDER_SCALE = 8.0
     }
 }
 

@@ -2,7 +2,6 @@
 
 #include "IFrontend.h"
 #include "Link.h"
-#include "Profile.h"
 
 #include <QByteArray>
 #include <QList>
@@ -41,7 +40,8 @@ struct PngImage
     QSize size;
 };
 
-// What the host asks of an engine: the stand-in, or libmudlet behind MudletEngine
+// What the host asks of one profile's session, the stand-in's or libmudlet's (MudletEngine); IEngineControl has what
+// is the whole engine's
 class IEngine
 {
 public:
@@ -65,19 +65,6 @@ public:
     virtual QString link(const QString& window, int id, Link& link) const = 0;
     // Follows it as a tap does, or picks item from its menu; else why nothing ran, as "disabled"
     virtual QString followLink(const QString& window, int id, std::optional<int> item) = 0;
-    // The app in front (active) or not, and its window minimized or sent to the background; leaving the front saves
-    virtual void setAppState(bool active, bool minimized) = 0;
-    // Writes the profile now, as the system may stop the engine without warning
-    virtual void save() = 0;
-
-    // The last opened or created first. The others return why they did nothing, empty once done.
-    virtual QList<Profile> profiles() const = 0;
-    // Creates a profile, or updates the one with that name, ignoring case
-    virtual QString saveProfile(const Profile& profile) = 0;
-    virtual QString deleteProfile(const QString& name) = 0;
-    // Starts that profile, first closing and saving another that runs. The password is for this run only.
-    virtual QString openProfile(const QString& name, const QString& password, bool connect) = 0;
-
     // The script windows'. The main window's size in pixels, kept for the next profile too.
     virtual QString setMainWindowSize(int width, int height) = 0;
     // Up to count rows of a console from row first, which counts back from the end below 0; none for a name that is

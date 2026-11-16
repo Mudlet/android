@@ -364,9 +364,10 @@ std::optional<THeadlessSession::MapPointerEvent> mapPointerEvent(const PointerEv
 
 } // namespace
 
-MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent)
+MudletEngine::MudletEngine(IEngineHost* host, int heartbeatMs, QObject* parent)
 : QObject(parent)
-, mFrontend(frontend)
+, mHost(host)
+, mFrontend(host->controlFrontend())
 , mProfile(qEnvironmentVariable("MUDLET_PROFILE", QStringLiteral("Android")))
 , mDefaultProfile(mProfile)
 , mConfigDir(settleConfigDir())
@@ -392,8 +393,8 @@ MudletEngine::MudletEngine(IFrontend* frontend, int heartbeatMs, QObject* parent
     connect(&mCounterTimer, &QTimer::timeout, this, &MudletEngine::flushCounters);
 
     reportFont();
-    mFrontend->status(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
-    mFrontend->status(QStringLiteral("configDir"), mConfigDir);
+    mHost->engineStatus(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
+    mHost->engineStatus(QStringLiteral("configDir"), mConfigDir);
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 (not started)").arg(mProfile));
     mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
 
@@ -516,6 +517,7 @@ void MudletEngine::connectSession()
     connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
         mProfiles.markOpened(profile);
         showProfileInNotification(profile);
+        mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
         mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
         mFrontend->history(mSession->commandHistory());
@@ -661,6 +663,7 @@ void MudletEngine::connectSession()
         persist();
         mRestoring = false;
         onProfileClosed();
+        closed();
     });
 }
 
@@ -724,7 +727,7 @@ void MudletEngine::restoreStatus(const QString& phase, const QString& detail)
 {
     const QString value = detail.isEmpty() ? phase : QStringLiteral("%1 %2").arg(phase, detail);
     qInfo("MudletEngine: restore: %s", qPrintable(value));
-    mFrontend->status(QStringLiteral("restore"), value);
+    mHost->engineStatus(QStringLiteral("restore"), value);
 }
 
 void MudletEngine::persist()
@@ -751,9 +754,9 @@ void MudletEngine::reportFont()
 {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     font.setPixelSize(14);
-    mFrontend->status(QStringLiteral("fontFamily"), QFontInfo(font).family());
-    mFrontend->status(QStringLiteral("advanceM"), QString::number(QFontMetrics(font).horizontalAdvance(QLatin1Char('M'))));
-    mFrontend->status(QStringLiteral("platform"), QGuiApplication::platformName());
+    mHost->engineStatus(QStringLiteral("fontFamily"), QFontInfo(font).family());
+    mHost->engineStatus(QStringLiteral("advanceM"), QString::number(QFontMetrics(font).horizontalAdvance(QLatin1Char('M'))));
+    mHost->engineStatus(QStringLiteral("platform"), QGuiApplication::platformName());
 }
 
 void MudletEngine::start(const QString& host, quint16 port, bool connect, std::optional<bool> tls, const QString& password)
@@ -779,6 +782,8 @@ void MudletEngine::start(const QString& host, quint16 port, bool connect, std::o
     persist();
     mState = State::starting;
     mLoaded = false;
+    mCloseWhenStarted = false;
+    mFrontend = mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting);
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
     mSession->startAsync(options);
@@ -800,6 +805,7 @@ void MudletEngine::onStartFinished(int result, const QString& error)
         if (std::exchange(mRestoring, false)) {
             restoreStatus(QStringLiteral("failed"), error);
         }
+        closed();
         if (mPendingOpen) {
             openPending();
         }
@@ -817,8 +823,8 @@ void MudletEngine::onStartFinished(int result, const QString& error)
     for (const QString& code : pending) {
         runNow(code);
     }
-    // Opened while this one started
-    if (mPendingOpen) {
+    // Opened or closed while this one started
+    if (mPendingOpen || mCloseWhenStarted) {
         beginSwitch();
     }
 }
@@ -838,6 +844,11 @@ void MudletEngine::connectTo(const QString& host, quint16 port, std::optional<bo
         mPendingOpen->tls = tls;
         mPendingOpen->connect = true;
         keepPending();
+        return;
+    }
+    // Before mKept changes: closeProfile has already cleared it, so that a restart brings no profile back
+    if (mState == State::stopping) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: the profile is closing"));
         return;
     }
     // A running profile connects as it was started: THeadlessSession takes the TLS choice only in start(), and
@@ -964,7 +975,7 @@ void MudletEngine::runLua(const QString& code)
         runNow(code);
         return;
     case State::stopping:
-        // Not reached: a switch always has its open pending
+        mFrontend->status(QStringLiteral("luaResult"), QStringLiteral("refused: the profile is closing"));
         return;
     }
 }
@@ -1014,15 +1025,20 @@ bool MudletEngine::inUse(const QString& folder) const
     return (mState != State::idle && same(mProfile)) || (mPendingOpen && same(mPendingOpen->profile)) || (mRestoreTimer.isActive() && same(mKept.profile));
 }
 
-QString MudletEngine::openProfile(const QString& name, const QString& password, bool connect)
+QString MudletEngine::openProfile(const QString& name, const QString& password, bool connect, bool alongside)
 {
     const QString folder = mProfiles.find(name);
     if (folder.isEmpty()) {
         return QStringLiteral("there is no profile named \"%1\"").arg(name);
     }
+    const bool running = (mState == State::starting || mState == State::started) && folder.compare(mProfile, Qt::CaseInsensitive) == 0;
+    if (alongside && !running && (mState != State::idle || mPendingOpen)) {
+        return QStringLiteral("one profile at a time");
+    }
     cancelRestore();
+    mCloseWhenStarted = false;
     mProfiles.markOpened(folder);
-    if ((mState == State::starting || mState == State::started) && folder.compare(mProfile, Qt::CaseInsensitive) == 0) {
+    if (running) {
         // THeadlessSession takes a password only at a start, so a running profile logs in with the one it started with
         mPendingOpen.reset();
         if (connect) {
@@ -1070,12 +1086,45 @@ void MudletEngine::connectProfile()
     }
 }
 
-// The running profile closes and saves, as Mudlet's own close does, before the pending one starts
+QString MudletEngine::closeProfile(const QString& name)
+{
+    const bool same = name.compare(mProfile, Qt::CaseInsensitive) == 0;
+    if (mPendingOpen && name.compare(mPendingOpen->profile, Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("\"%1\" is still opening: close it once it has started").arg(mPendingOpen->profile);
+    }
+    if (mState == State::idle || !same) {
+        return QStringLiteral("\"%1\" is not open").arg(name);
+    }
+    cancelRestore();
+    switch (mState) {
+    case State::started:
+        beginSwitch();
+        break;
+    case State::starting:
+        // onStartFinished() closes it once that start is over
+        mCloseWhenStarted = true;
+        break;
+    case State::idle:
+    case State::stopping:
+        break;
+    }
+    return {};
+}
+
+// The running profile closes and saves, as Mudlet's own close does, before any pending one starts; with none pending, a
+// restart of the engine brings none back
 void MudletEngine::beginSwitch()
 {
     mState = State::stopping;
+    mCloseWhenStarted = false;
     mKeptBeforeSwitch = mKept;
-    keepPending();
+    if (mPendingOpen) {
+        keepPending();
+    } else {
+        mKept = {};
+        persist();
+    }
+    mHost->profileState(mProfile, IEngineHost::ProfileState::closing);
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closing").arg(mProfile));
     // Else onSaveFinished() begins it, as THeadlessSession refuses a shutdown while a save runs
     if (!mSaving) {
@@ -1091,6 +1140,7 @@ void MudletEngine::onShutdownFinished(bool saved, const QString& error)
         mPendingOpen.reset();
         mKept = mKeptBeforeSwitch;
         persist();
+        mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 not closed: %2").arg(mProfile, error));
         return;
     }
@@ -1103,7 +1153,16 @@ void MudletEngine::onShutdownFinished(bool saved, const QString& error)
         qWarning("MudletEngine: %s closed without its save: %s", qPrintable(mProfile), qPrintable(error));
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed without its save: %2").arg(mProfile, error));
     }
-    openPending();
+    closed();
+    if (mPendingOpen) {
+        openPending();
+    }
+}
+
+void MudletEngine::closed()
+{
+    mHost->profileClosed(mProfile);
+    mFrontend = mHost->controlFrontend();
 }
 
 void MudletEngine::openPending()
@@ -1121,7 +1180,7 @@ void MudletEngine::openPending()
 // From the switch's start, a restart of the engine brings back the profile being opened, not the one closing
 void MudletEngine::keepPending()
 {
-    if (mState != State::stopping) {
+    if (mState != State::stopping || !mPendingOpen) {
         return;
     }
     mKept = mPendingOpen->kept();
@@ -1640,10 +1699,10 @@ void MudletEngine::onSaveFinished(bool saved, const QString& error)
 {
     mSaving = false;
     if (saved) {
-        mFrontend->status(QStringLiteral("save"), QStringLiteral("saved"));
+        mHost->engineStatus(QStringLiteral("save"), QStringLiteral("saved"));
     } else {
         qWarning("MudletEngine: the profile was not saved: %s", qPrintable(error));
-        mFrontend->status(QStringLiteral("save"), QStringLiteral("not saved: %1").arg(error));
+        mHost->engineStatus(QStringLiteral("save"), QStringLiteral("not saved: %1").arg(error));
     }
     // A switch asked for during the save
     if (!mClosing && mState == State::stopping) {
@@ -1867,7 +1926,7 @@ void MudletEngine::onHeartbeat()
     mLastHeartbeatMs = now;
     ++mHeartbeatTicks;
     mMaxHeartbeatGapMs = std::max(mMaxHeartbeatGapMs, gap);
-    mFrontend->status(QStringLiteral("heartbeatTicks"), QString::number(mHeartbeatTicks));
-    mFrontend->status(QStringLiteral("heartbeatLastGapMs"), QString::number(gap));
-    mFrontend->status(QStringLiteral("heartbeatMaxGapMs"), QString::number(mMaxHeartbeatGapMs));
+    mHost->engineStatus(QStringLiteral("heartbeatTicks"), QString::number(mHeartbeatTicks));
+    mHost->engineStatus(QStringLiteral("heartbeatLastGapMs"), QString::number(gap));
+    mHost->engineStatus(QStringLiteral("heartbeatMaxGapMs"), QString::number(mMaxHeartbeatGapMs));
 }

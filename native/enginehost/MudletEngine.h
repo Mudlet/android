@@ -1,6 +1,8 @@
 #pragma once
 
 #include "IEngine.h"
+#include "IEngineControl.h"
+#include "IEngineHost.h"
 #include "IFrontend.h"
 #include "ProfileStore.h"
 #include "SessionStore.h"
@@ -20,13 +22,14 @@ class THeadlessSession;
 
 // libmudlet behind the same host protocol as the stand-in: one profile at a time in a THeadlessSession, started by
 // openProfile, on the first connect or Lua call, or at start-up to restore the one the engine before it ran when that
-// engine was killed. Only THeadlessSession's public API is used.
-class MudletEngine : public QObject, public IEngine
+// engine was killed; a second asked to open alongside is refused, as upstream allows one pool a process. Only
+// THeadlessSession's public API is used.
+class MudletEngine : public QObject, public IEngine, public IEngineControl
 {
     Q_OBJECT
 
 public:
-    explicit MudletEngine(IFrontend* frontend, int heartbeatMs = 30000, QObject* parent = nullptr);
+    explicit MudletEngine(IEngineHost* host, int heartbeatMs = 30000, QObject* parent = nullptr);
     ~MudletEngine() override;
 
     void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
@@ -45,7 +48,9 @@ public:
     QList<Profile> profiles() const override { return mProfiles.profiles(); }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
-    QString openProfile(const QString& name, const QString& password, bool connect) override;
+    QString openProfile(const QString& name, const QString& password, bool connect, bool alongside) override;
+    QString closeProfile(const QString& name) override;
+    IEngine* defaultSession() override { return this; }
     QString setMainWindowSize(int width, int height) override;
     std::optional<WindowText> windowText(const QString& window, int first, int count) const override;
     QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) override;
@@ -96,7 +101,10 @@ private:
     // False, with status sendError, while no profile is running to take what the player types
     bool takesInput();
     void shutdownSession(bool alreadyClosing);
+    // Closes the running profile, then opens any pending one
     void beginSwitch();
+    // The profile has closed: what it showed goes to the control socket again
+    void closed();
     void onShutdownFinished(bool saved, const QString& error);
     void openPending();
     void keepPending();
@@ -156,6 +164,8 @@ private:
     void scheduleTailSync();
     void syncTail();
 
+    IEngineHost* mHost;
+    // The running profile's, else the control socket's
     IFrontend* mFrontend;
     std::unique_ptr<THeadlessSession> mSession;
     // The profile running, or the one the next start starts
@@ -168,6 +178,8 @@ private:
     // What mKept was before a switch began, for a close that is refused
     SessionStore::Session mKeptBeforeSwitch;
     State mState = State::idle;
+    // closeProfile while the profile started: it closes once started
+    bool mCloseWhenStarted = false;
     // The profile has loaded, since its start
     bool mLoaded = false;
     // The main window's size the UI gave, which each profile takes as it loads; empty for none, or once a profile refused it.

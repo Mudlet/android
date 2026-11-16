@@ -2,7 +2,8 @@
 
 How the UI process talks to the engine process, as implemented by:
 
-- the engine: [`native/enginehost/SocketBridge.cpp`](../native/enginehost/SocketBridge.cpp) (C++, Qt);
+- the engine: [`native/enginehost/SocketBridge.cpp`](../native/enginehost/SocketBridge.cpp), a socket's, and
+  [`ControlBridge.cpp`](../native/enginehost/ControlBridge.cpp), the control socket's (C++, Qt);
 - the app: [`protocol/`](../protocol/src/main/kotlin/org/mudlet/android/protocol) (`Protocol.kt` and `EngineLink.kt`);
 - the host tests' client: [`native/tests/protocol_client.py`](../native/tests/protocol_client.py).
 
@@ -10,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **13**.
+The current version is **14**.
 
 ## Transport
 
@@ -23,7 +24,9 @@ The current version is **13**.
   - The engine removes a stale socket file before it listens, as a killed engine leaves one behind.
   - It listens with `QLocalServer::UserAccessOption`.
   - It checks each peer's uid with `SO_PEERCRED` against its own, and closes a connection from any other uid.
-- One UI at a time. A new connection replaces the current one, which the engine closes.
+- The control socket is the one above. Each open profile has a socket of its own beside it, `engine-p<slot>.sock`
+  ("Several profiles" below), which the engine makes and checks the same way, and removes when the profile closes.
+- One UI at a time on each socket. A new connection replaces the current one, which the engine closes.
 - The UI reconnects on its own when the engine goes away (`EngineLink`). It retries every 50 ms for 2 s, then backs
   off from 100 ms to at most 2 s.
 
@@ -51,7 +54,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 
 | Message | Fields | Meaning |
 |---|---|---|
-| `hello` | `v`, `client`, `instance`?, `lastSeq`? | Must be the first frame. `v` is the protocol version, `client` names the client (the app sends `android-compose`; the engine ignores it). `instance` and `lastSeq` are what the UI already has: the engine instance it last attached to and the last line `seq` it holds. The app sends both or neither. |
+| `hello` | `v`, `client`, `instance`?, `lastSeq`?, `profileSockets`? | Must be the first frame. `v` is the protocol version, `client` names the client (the app sends `android-compose`; the engine ignores it). `instance` and `lastSeq` are what the UI already has: the engine instance it last attached to and the last line `seq` it holds. The app sends both or neither. `profileSockets`, false if absent and read only on the control socket, says the UI attaches to each profile's socket, so the control socket carries only the control traffic ("Several profiles" below). |
 | `ping` | `id` | Asks for a `pong` with the same `id`. |
 | `connect` | `host`, `port`, `tls`? | Connects the engine to a game server. `port` defaults to 23. `tls` true encrypts the connection, false does not; absent, the profile's own choice stands. libmudlet takes `tls` only when this `connect` starts the profile, and stores it with the profile, as Mudlet's connection dialog does: while the profile runs, a `tls` other than the one it started with gets status `connection` `error: ...`. The stand-in answers `tls` true the same way, as it has no TLS. A `tls` that is not a boolean gets `error`. |
 | `send` | `text` | A command line. libmudlet takes it as typed input (`THeadlessSession::submit()`); the stand-in sends it to the game as it is. |
@@ -67,7 +70,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `listProfiles` | `id`? | Asks for `profiles`. |
 | `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile read its details when it started, so a change takes effect at its next start. |
 | `deleteProfile` | `name`, `id`? | Deletes the profile, with everything Mudlet keeps for it. Refused while it is running, being opened or closed, or waited for by a restore. |
-| `openProfile` | `name`, `password`?, `connect`?, `id`? | Starts the profile `name`. One already running is first closed and saved, as Mudlet closes a profile. `password` is for this run only: Mudlet's auto-login sends the profile's `login` and then this password once it connects, and nothing stores it. `connect`, true if absent, connects the profile to its own address. Opening the profile that is running leaves it running, with the password it was started with, and connects it if `connect` and it is not connected. While a profile is being opened, `connect`, `disconnect` and `runLua` are for it. |
+| `openProfile` | `name`, `password`?, `connect`?, `alongside`?, `id`? | Starts the profile `name`. Without `alongside`, those open are first closed and saved, as Mudlet closes a profile; with it, the profile starts beside them, and `error` `openProfile: at most 4 open` refuses a fifth, as libmudlet refuses a second with `openProfile: one profile at a time`. `password` is for this run only: Mudlet's auto-login sends the profile's `login` and then this password once it connects, and nothing stores it. `connect`, true if absent, connects the profile to its own address. Opening the profile that is running leaves it running, with the password it was started with, and connects it if `connect` and it is not connected. While a profile is being opened, `connect`, `disconnect` and `runLua` are for it. |
 | `setMainWindowSize` | `w`, `h` | The main window's size in Mudlet's pixels, whole numbers above 0. The borders scripts set take their room from it, and the main console's font decides the grid in what is left (`mainArea`). libmudlet gives it to the running profile at once (`THeadlessSession::setMainWindowSize()`, which raises `sysWindowResizeEvent`) and keeps it for each profile that loads later, which may still refuse it: `mainArea` then gives 0 for it. A `setScreenSize` before or after it leaves it the main window's size; the game is still told the console's columns and rows, not the grid Mudlet's font fits in this size. |
 | `getWindowText` | `window`, `first`, `count`, `id`? | Up to `count` rows, at most 1000, of the console `window` (a mini console, user window or MXP frame; `main` is the main console, as in Mudlet) from row `first`, counted from 0. A negative `first` counts back from the end, so `-count` is the last `count` rows. Answered by `windowText`, or `error` for a name that is no console's. |
 | `placeUserWindow` | `name`, `x`, `y`, `w`, `h`, `floating` | Where the UI put the user window `name`, in the main window's pixels, docked or `floating` (`setUserWindowGeometry()`). A new size raises `sysUserWindowResizeEvent`. `w` and `h` above 0. |
@@ -83,14 +86,19 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`. `text` must not be blank. |
 | `showRoom` | `room` | Centres the app's map on the room whose id is `room`, a whole number, and selects it, as a pan on the desktop's mapper does (`THeadlessSession::showRoomOnAppMap()`): it stays until the player moves or a script centres the map. |
+| `closeProfile` | `name`, `id`? | Saves and closes that open profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles`, or `error` (`closeProfile: "<name>" is not open`). |
+| `setFront` | `name` | The open profile the player is looking at: a UI that left out `profileSockets` sees it and its requests go to it. |
+| `markSeen` | `name`, `seq` | The player has seen that open profile's lines up to `seq`: its `attention` clears, and its `unread` counts from there. |
 | `downloadMap` | | Downloads the map the game offers, which `mapDownload` tells of, and loads it in place of the profile's, as the desktop mapper's "Download from game" does (`THeadlessSession::downloadOfferedMap()`, "Downloading the map" below). `mapDownload` follows how it goes. |
 | `cancelMapDownload` | | Stops that download, as the Abort of Mudlet's progress dialog does (`THeadlessSession::cancelMapOperation()`), while `mapDownload`'s `cancelable` holds: `mapDownload` with `state` `cancelled` follows. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `windowText`, `image`, `rooms` or `error` that answers it, and into `pong`.
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms` or `error` that answers it,
+and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
-Each profile request is answered with `profiles`, or with `error` whose `message` is the request's name, a colon and
+Each profile request is answered with `profiles` (`openProfile` from a UI that sent `profileSockets`, with
+`openProfiles`), or with `error` whose `message` is the request's name, a colon and
 why it was refused: a bad name or field, a profile that does not exist, or one that is in use. An `openProfile`
 answered with `profiles` has begun: status `profile` tells how the close and the start go. In libmudlet a `connect`
 before any `openProfile` starts the profile `MUDLET_PROFILE` names (`Android` in the app), making it if it does not
@@ -129,7 +137,7 @@ loaded. The stand-in has no map and refuses both.
 
 | Message | Fields | Meaning |
 |---|---|---|
-| `hello` | `v`, `pid`, `instance` | The answer to the UI's `hello`. `pid` is the engine process's id. `instance` is an opaque string that differs for each run of the engine (now `<pid>-<ms since the epoch>`); its sequence numbers start again at 1. |
+| `hello` | `v`, `pid`, `instance`, `profile`? | The answer to the UI's `hello`. `pid` is the engine process's id. `instance` is an opaque string that differs for each run of the engine and each profile socket (now `<pid>-<ms since the epoch>`, and `-<slot>` after it on a profile's socket); its sequence numbers start again at 1. `profile` names the profile on a profile's socket. |
 | `line` | `seq`, `text`, `runs`, `prompt`, `replay`? | A finished line, which never changes. `seq` counts lines from 1 for each instance, by one. `prompt` is true for a prompt (a line ended by a telnet go-ahead or end-of-record, or the stand-in's 500 ms of silence). `replay` is true on lines sent from the ring buffer in answer to `hello`. |
 | `tail` | `text`, `runs`, `prompt` | The console's bottom line, which may still change or be ended. It replaces the previous tail. Empty `text` means none. Only libmudlet sends tails; the stand-in sends its prompts as lines. |
 | `clear` | | The console was emptied: the UI drops its lines and the tail. |
@@ -139,6 +147,7 @@ loaded. The stand-in has no map and refuses both.
 | `gap` | `skipped` | `skipped` lines fell out of the ring buffer before the UI could get them. They come just before the next line. |
 | `synced` | `seq` | Ends the answer to `hello`: the newest line's `seq` (0 for none) when the engine greeted the UI. |
 | `error` | `message`, `re`? | The engine could not handle a frame. After a bad `hello` it then closes the connection. |
+| `openProfiles` | `profiles`: `name`, `slot`, `socket`, `state`, `connection`, `lastSeq`, `unread`, `attention`, `front`; `re`? | Every open profile, in the order opened, to a UI that sent `profileSockets`: on attach, on each change (new lines at most every 500 ms), and as the answer to its `openProfile` and to `closeProfile`. `socket` is the path of its socket, `state` is `starting`, `restoring`, `loaded` or `closing`, `connection` its last status `connection`, `lastSeq` its newest line, `unread` the lines after the last `markSeen`, `attention` whether it asked for `attention` since, and `front` true for the front one. |
 | `profiles` | `profiles`: `name`, `host`, `port`, `tls`, `login`, `autoReconnect`; `re`? | Every profile, the last opened or created first, then any the engine has not opened, by name. Each is an object with the fields `saveProfile` takes; there is no password in it. |
 | `hiddenInput` | `wanted` | The game hides what the player types, as for a password (`wanted` true), or has stopped: the UI masks its input line and sends what is typed there with `sendHidden`. libmudlet sends it from `hiddenInputWanted`, which a disconnect or the profile closing also ends, and never while the profile shows passwords as they are typed; the stand-in from the game's telnet `WILL ECHO` and `WONT ECHO`. Sent on each change, and to each UI that attaches. |
 | `history` | `lines` | The input line's history, newest first, each line once, as Mudlet's up arrow walks it (`commandHistory()`): the lines `send` sent, as their aliases left them, and those the profile's earlier sessions kept, but nothing sent while input was hidden. Sent to each UI that attaches, and by libmudlet when a profile has loaded. In between, the UI adds the lines it sends itself; the next attach corrects what it guessed. The stand-in's is the lines `send` sent since it started. |
@@ -415,6 +424,27 @@ a script window's rows, `link` is among that window's links, counted on their ow
 profile's window of the same name: a UI drops a window's links with its text, when `windows` removes the window, as
 libmudlet does for each window of a profile that closes, and when the window's next `windowText` no longer has them.
 
+## Several profiles
+
+Each open profile has its socket, `engine-p<slot>.sock` beside the control socket, where `slot` is the lowest number
+from 1 that no open profile has; [`multi-profile.md`](multi-profile.md) has the design. On it go the requests and
+messages of one profile, as in version 13: everything but `listProfiles`, `saveProfile`, `deleteProfile`,
+`openProfile`, `closeProfile`, `setFront`, `markSeen` and `setAppState`, which it refuses with `error`
+(`<t>: send it on the control socket`). Its ring, attach and flow control are its own, and its lines count from 1.
+
+What the control socket carries depends on the UI's `hello`:
+
+- With `profileSockets`, the control requests above, `ping`, `openProfiles`, and the engine's own statuses (`enginePid`,
+  `socketPath`, `appState`, the font, the heartbeat, `save`, `restore`, `engineKind`, `configDir`); any other request
+  gets `error` (`<t>: send it on the profile's socket`).
+- Without it, as in version 13: the front profile's lines, statuses and windows too, and the other requests go to the
+  front profile, or, with none open, to the engine (in libmudlet a `connect` or `runLua` starts a profile). When the
+  front changes, the new front's statuses that differ are sent. No `openProfiles` is sent unasked.
+
+The profile opened last becomes the front; when the front closes, the next one opened after it takes over, else the
+one before. The stand-in runs up to 4 profiles at once. libmudlet runs one, as upstream allows one profile pool a
+process; it refuses `alongside` while another is open.
+
 ## Attaching: hello, instance and lastSeq
 
 The engine keeps the last 2000 lines in a ring buffer, its current tail, and the last value of every status key. When
@@ -464,8 +494,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 13, which added the map download (`downloadMap`, `cancelMapDownload`, `mapDownload`); version
-12 added `window` to `getLink`, `followLink` and `link`, so that a script window's links can be asked about and
+As implemented in version 14, which added several profiles at once: a socket each, `profileSockets` and `profile` in
+`hello`, `alongside` in `openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 13 added the
+map download (`downloadMap`, `cancelMapDownload`, `mapDownload`); version 12 added `window` to `getLink`, `followLink` and `link`, so that a script window's links can be asked about and
 followed; version 11 added the app's map (`setAppMapSize`, `appMapPointer`, `showRoom`, `appMap`) and the room search
 (`findRooms`, `rooms`); version 10 added the map (`map`, `mapPointer`, `setMapViewOnly`); version 9 added the button
 bars and commands (`buttonBars`, `commands`, `pressButton`, `activateCommand`); version 8 added the labels' messages
@@ -479,7 +510,7 @@ and added `announce`; version 3 added the input line's requests (`sendHidden`, `
 
 - The UI sends its version in `hello` `v`, and the engine sends its own in its `hello`.
 - The engine accepts only a `hello` whose `v` equals its own. Otherwise it sends
-  `error` (`expected hello with v=13`) and closes the connection. A first frame that is not `hello` is refused the
+  `error` (`expected hello with v=14`) and closes the connection. A first frame that is not `hello` is refused the
   same way.
 - The app does not check the engine's `v`. A refused `hello` reaches `EngineLink` as an `error` where it expects
   `hello`, so it reports the link lost and keeps retrying.

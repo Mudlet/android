@@ -30,9 +30,9 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
-| `native/enginehost/` | `libengine`'s `main()`, `SocketBridge` (the protocol's engine side), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
-| `native/api/` | `IEngine` and `IFrontend`, between the host and an engine |
-| `native/standin/` | The stand-in engine for fast tests: minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
+| `native/enginehost/` | `libengine`'s `main()`, the protocol's engine side (`ControlBridge` on the control socket, which keeps the open profiles, and a `SocketBridge` per open profile), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
+| `native/api/` | Between the host and an engine: `IEngineControl` (the profiles, app state, saving) and `IEngineHost` (profiles opening and closing, the engine-wide statuses) for the engine as a whole; `IEngine` and `IFrontend` for one profile's session |
+| `native/standin/` | The stand-in engine for fast tests, which runs several profiles at once (`StandIn`, with an `Engine` each): minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
 | `native/tests/` | The fake game server, the Python protocol client, and the host tests of both engines |
 
 ## How it is wired
@@ -42,8 +42,9 @@ Kotlin + Compose, no Qt                     QtServiceBase + libengine.so (Qt Cor
 
 :app       MainActivity -> EngineClient     :engine-service    EngineService : QtServiceBase
 :protocol  EngineLink (reader thread)       native/enginehost  QLocalServer (Qt's main thread)
-              <======== LocalSocket ========>                  SocketBridge : IFrontend -> the engine
-              frames: u32 BE length + JSON                       (MudletEngine, or the stand-in)
+              <======== LocalSocket ========>                  ControlBridge -> IEngineControl
+              frames: u32 BE length + JSON                     SocketBridge : IFrontend -> IEngine, per profile
+                                                                 (MudletEngine, or the stand-in)
                                                                AndroidNotifier -> EngineNotifications.postTell (JNI)
 ```
 
@@ -64,7 +65,8 @@ Startup:
 6. `EngineService` then calls `EngineNative.nativeServiceReady()`, a JNI
    function bound by name in `libengine`. `main()` waits up to 10 s for this
    call. Only after it does `main()` create `QGuiApplication`, the `Engine` and
-   the `SocketBridge`, and call `listen()` on `noBackupFilesDir/engine.sock`.
+   the `ControlBridge`, and call `listen()` on `noBackupFilesDir/engine.sock`.
+   Each profile that opens gets a `SocketBridge` on `engine-p<slot>.sock` beside it.
 7. The UI's `EngineLink` retries the connection every 50 ms for 2 s, then backs
    off from 100 ms to 2 s, until the socket appears.
 

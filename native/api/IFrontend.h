@@ -121,6 +121,16 @@ struct LabelInfo
     bool accessibleButton = false;
     // How a screen reader is told of new text, as setLabelLiveRegion() gave it: "polite" or "assertive", empty for off
     QString liveRegion;
+    // What a screen reader reads it as, as a progress bar's, as setLabelAccessibleValue() gave it: value, from min to
+    // max. Geyser gives a gauge's back label the gauge's value. None for a label without one
+    struct AccessibleValue
+    {
+        double value = 0;
+        double min = 0;
+        double max = 100;
+        bool operator==(const AccessibleValue&) const = default;
+    };
+    std::optional<AccessibleValue> accessibleValue;
     // The label's own, which Mudlet does not interpret
     QString styleSheet;
     bool operator==(const LabelInfo&) const = default;

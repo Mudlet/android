@@ -245,6 +245,9 @@ LabelInfo labelInfo(const QString& name, const THeadlessSession::LabelContent& c
     info.accessibleName = content.accessibleName;
     info.accessibleButton = content.accessibleButton;
     info.liveRegion = liveRegionName(content.liveRegion);
+    if (const auto& value = content.accessibleValue) {
+        info.accessibleValue = LabelInfo::AccessibleValue{.value = value->value, .min = value->min, .max = value->max};
+    }
     info.styleSheet = content.styleSheet;
     return info;
 }

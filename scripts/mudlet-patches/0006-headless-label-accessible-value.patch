@@ -1,0 +1,914 @@
+Give labels an accessible value, so screen readers read gauges
+
+A Geyser gauge is three labels, so a screen reader cannot tell its value, on the desktop or in a frontend that draws
+labels itself: the value lives in Lua (Geyser.Gauge:setValue() sets self.value), and only the front label's width
+shows it.
+
+This adds setLabelAccessibleValue(name, value[, min, max]), getLabelAccessibleValue(name) and
+clearLabelAccessibleValue(name). Their argument errors are the other label functions': nil and a message for an
+empty or unknown name, an empty range or a number that is not finite, and a Lua error for an argument that is not a
+number. A value past either end is taken as that end, as a progress bar shows it. TLabelModel keeps it and tells
+the view of a real change through a new mAccessibleValueChanged callback, after a Role change when the label gains or
+loses one.
+
+- Desktop: while a label that is not a button has a value, TAccessibleLabel reports the progress bar role and
+  implements QAccessibleValueInterface, TLabel sends a QAccessibleValueChangeEvent for a new value, and
+  getLabelAccessibleRole() says "progressbar".
+- Geyser.Gauge:setValue() sets it on the gauge's back label, out of the maximum it was given, or of 100, and
+  setGauge() on a createGauge() gauge's, out of its maximum. A reading neither can give (not a number, or out of a
+  maximum not above 0 or infinite) clears it, so a reader goes by what the gauge draws; they check this themselves
+  rather than call setLabelAccessibleValue(), whose warning would come at every prompt. Each keeps the value and maximum it was given
+  for laying the gauge out again (Geyser.Gauge:setStyleSheet(); moveGauge(), resizeGauge() and setGaugeWindow()),
+  which until now passed the percentage or fraction and would have made it out of 100 or 1.
+- Headless: THeadlessSession::LabelContent carries it as accessibleValue (value, min, max), so a change names the
+  label in scriptWindowsChanged; listed among labelContent()'s fields in docs/headless.md.
+
+Tested in UI_spec.lua, GeyserGauge_spec.lua and GUIUtils_spec.lua (the functions, their errors, both kinds of gauge),
+HeadlessSessionWindowsTest (labelContent() and the change), LabelAccessibleInterfaceTest (the desktop interface and
+its events) and ConsoleModelExtractionTest (refused with no view). Left for later: the gauge's text as the back
+label's accessible description, which needs a description labels do not have yet.
+
+For the wiki (Manual:Lua_Functions):
+- setLabelAccessibleValue(labelName, value, [minimum], [maximum]): gives the label a value that a screen reader reads
+  as a progress bar's, from minimum to maximum (0 and 100 when left out); a value past either end is that end.
+  Returns true, or nil and a message. Geyser's and createGauge()'s gauges set it on their back label.
+- getLabelAccessibleValue(labelName): the value, minimum and maximum, or nil for a label without one.
+- clearLabelAccessibleValue(labelName): removes it, so the label is read as before. Returns true.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 4cf61d8..9311e33 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1205,6 +1205,10 @@ trimmed under the row it is scrolled back to.
+ - `toolTip` and `toolTipDuration`, in seconds, 0 for the platform's own;
+ - `cursor`, unset for the parent's, or the shape `setLabelCursor()` gave it, or `Qt::BitmapCursor` with
+   `customCursor` and `customCursorHotSpot` from `setLabelCustomCursor()`;
++- `accessibleValue`, as `setLabelAccessibleValue()` gave it: `value`, from `min` to `max`, which a screen
++  reader reads as a progress bar's, and none for a label without one. `Geyser.Gauge:setValue()` and `setGauge()`
++  give it to the gauge's back label, so an app that draws the gauge has its value without reading the front label's
++  width;
+ - `clickThrough`, as `enableClickthrough()` sets it;
+ - `accessibleName` and `accessibleButton`, what a screen reader says for it and whether it is told it is
+   a button;
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 1455129..6e2f946 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -7406,6 +7406,16 @@ bool Host::setLabelLiveRegion(const QString& name, TLabelLiveRegion liveRegion)
+     return false;
+ }
+ 
++bool Host::setLabelAccessibleValue(const QString& name, std::optional<TLabelAccessibleValue> value)
++{
++    auto* pModel = mWindowRegistry.labelModel(name);
++    if (pModel) {
++        pModel->setAccessibleValue(value);
++        return true;
++    }
++    return false;
++}
++
+ bool Host::setLabelAccessibleName(const QString& name, const QString& accessibleName)
+ {
+     auto* pModel = mWindowRegistry.labelModel(name);
+@@ -7918,6 +7928,14 @@ std::optional<TLabelLiveRegion> Host::labelLiveRegion(const QString& name) const
+     return {};
+ }
+ 
++std::optional<std::optional<TLabelAccessibleValue>> Host::labelAccessibleValue(const QString& name) const
++{
++    if (const TLabelModel* pLabel = mWindowRegistry.labelModel(name)) {
++        return pLabel->mAccessibleValue;
++    }
++    return {};
++}
++
+ std::optional<QString> Host::labelAccessibleRole(const QString& name) const
+ {
+     const TLabelModel* pLabel = mWindowRegistry.labelModel(name);
+@@ -7927,6 +7945,9 @@ std::optional<QString> Host::labelAccessibleRole(const QString& name) const
+     if (pLabel->actsAsButton()) {
+         return qsl("button");
+     }
++    if (pLabel->mAccessibleValue) {
++        return qsl("progressbar");
++    }
+     switch (pLabel->mShownContent) {
+     case TLabelModel::ShownContent::Graphic:
+         return qsl("graphic");
+diff --git a/src/Host.h b/src/Host.h
+index 9a33c6e..83ef13d 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -76,6 +76,7 @@ class QSettings;
+ class TEvent;
+ class TArea;
+ enum class TLabelLiveRegion : int;
++struct TLabelAccessibleValue;
+ class LuaInterface;
+ class XMLexport;
+ class TMedia;
+@@ -813,6 +814,8 @@ public:
+     // std::nullopt goes back to deciding by the label's callbacks
+     bool setLabelAccessibleButton(const QString& name, std::optional<bool> button);
+     bool setLabelLiveRegion(const QString& name, TLabelLiveRegion liveRegion);
++    // std::nullopt clears it
++    bool setLabelAccessibleValue(const QString& name, std::optional<TLabelAccessibleValue> value);
+     bool setLabelAccessibleName(const QString& name, const QString& accessibleName);
+     std::pair<bool, QString> setMovie(const QString& labelName, const QString& moviePath);
+     bool setBackgroundColor(const QString& name, int r, int g, int b, int alpha);
+@@ -855,9 +858,11 @@ public:
+     std::optional<QString> labelStyleSheet(const QString& name) const;
+     std::optional<QString> labelToolTip(const QString& name) const;
+     std::optional<QString> labelAccessibleName(const QString& name) const;
+-    // "button", "graphic", "animation" or "text": what a screen reader is told the label is
++    // "button", "progressbar", "graphic", "animation" or "text": what a screen reader is told the label is
+     std::optional<QString> labelAccessibleRole(const QString& name) const;
+     std::optional<TLabelLiveRegion> labelLiveRegion(const QString& name) const;
++    // The outer one empty for no such label, the inner one for a label with no accessible value
++    std::optional<std::optional<TLabelAccessibleValue>> labelAccessibleValue(const QString& name) const;
+     std::optional<QFont> labelFont(const QString& name) const;
+     std::optional<QString> labelText(const QString& name) const;
+     // The title in .second when .first is true, otherwise why there is none, in setUserWindowTitle()'s words.
+diff --git a/src/TAccessibleLabel.cpp b/src/TAccessibleLabel.cpp
+index f00087b..3e0d843 100644
+--- a/src/TAccessibleLabel.cpp
++++ b/src/TAccessibleLabel.cpp
+@@ -36,11 +36,28 @@ bool TAccessibleLabel::actsAsButton() const
+     return label()->model().actsAsButton();
+ }
+ 
++const TLabelAccessibleValue* TAccessibleLabel::accessibleValue() const
++{
++    const std::optional<TLabelAccessibleValue>& value = label()->model().mAccessibleValue;
++    return value && !actsAsButton() ? &*value : nullptr;
++}
++
++void* TAccessibleLabel::interface_cast(QAccessible::InterfaceType t)
++{
++    if (t == QAccessible::ValueInterface && accessibleValue()) {
++        return static_cast<QAccessibleValueInterface*>(this);
++    }
++    return QAccessibleWidget::interface_cast(t);
++}
++
+ QAccessible::Role TAccessibleLabel::role() const
+ {
+     if (actsAsButton()) {
+         return QAccessible::Button;
+     }
++    if (accessibleValue()) {
++        return QAccessible::ProgressBar;
++    }
+     // As Qt's own QLabel interface reports a pixmap or movie; Mudlet's SVG layer counts as a pixmap
+     if (label()->movie()) {
+         return QAccessible::Animation;
+@@ -74,6 +91,30 @@ void TAccessibleLabel::doAction(const QString& actionName)
+     QAccessibleWidget::doAction(actionName);
+ }
+ 
++QVariant TAccessibleLabel::currentValue() const
++{
++    const TLabelAccessibleValue* value = accessibleValue();
++    return value ? QVariant(value->value) : QVariant();
++}
++
++QVariant TAccessibleLabel::maximumValue() const
++{
++    const TLabelAccessibleValue* value = accessibleValue();
++    return value ? QVariant(value->max) : QVariant();
++}
++
++QVariant TAccessibleLabel::minimumValue() const
++{
++    const TLabelAccessibleValue* value = accessibleValue();
++    return value ? QVariant(value->min) : QVariant();
++}
++
++QVariant TAccessibleLabel::minimumStepSize() const
++{
++    // Any value between the two ends is one, as for Qt's own progress bar
++    return accessibleValue() ? QVariant(0.0) : QVariant();
++}
++
+ /*static*/ QAccessibleInterface* TAccessibleLabel::labelFactory(const QString& classname, QObject* object)
+ {
+     // pInterface, not interface: the latter is a macro on MinGW
+diff --git a/src/TAccessibleLabel.h b/src/TAccessibleLabel.h
+index 67fc94f..46dbb14 100644
+--- a/src/TAccessibleLabel.h
++++ b/src/TAccessibleLabel.h
+@@ -23,24 +23,36 @@
+ #include <QAccessibleWidget>
+ 
+ class TLabel;
++struct TLabelAccessibleValue;
+ 
+-// A script's label as assistive technology sees it: a button as TLabelModel decides, else a graphic, an
+-// animation or static text by what it shows, and named as TLabelModel decides.
+-class TAccessibleLabel : public QAccessibleWidget
++// A script's label as assistive technology sees it: a button as TLabelModel decides, else a progress bar while it
++// has an accessible value, else a graphic, an animation or static text by what it shows, and named as TLabelModel
++// decides.
++class TAccessibleLabel : public QAccessibleWidget, public QAccessibleValueInterface
+ {
+ public:
+     explicit TAccessibleLabel(QWidget* widget);
+ 
++    void* interface_cast(QAccessible::InterfaceType t) override;
+     QAccessible::Role role() const override;
+     QString text(QAccessible::Text t) const override;
+     QStringList actionNames() const override;
+     void doAction(const QString& actionName) override;
+ 
++    // QAccessibleValueInterface, while it has an accessible value: a script sets it, not the screen reader
++    QVariant currentValue() const override;
++    void setCurrentValue(const QVariant&) override {}
++    QVariant maximumValue() const override;
++    QVariant minimumValue() const override;
++    QVariant minimumStepSize() const override;
++
+     static QAccessibleInterface* labelFactory(const QString& classname, QObject* object);
+ 
+ private:
+     TLabel* label() const;
+     bool actsAsButton() const;
++    // The label's accessible value, unless it is a button, which a value does not make a progress bar
++    const TLabelAccessibleValue* accessibleValue() const;
+ };
+ 
+ #endif // MUDLET_TACCESSIBLELABEL_H
+diff --git a/src/TLabel.cpp b/src/TLabel.cpp
+index 039039b..ef36664 100644
+--- a/src/TLabel.cpp
++++ b/src/TLabel.cpp
+@@ -87,6 +87,12 @@ TLabel::TLabel(Host* pH, const QString& name, QWidget* pW)
+     mpModel->mAccessibilityChanged = [this](TLabelModel::AccessibilityChange change) {
+         accessibilityChanged(change);
+     };
++    mpModel->mAccessibleValueChanged = [this]() {
++        if (const std::optional<TLabelAccessibleValue>& value = mpModel->mAccessibleValue; value && !mpModel->actsAsButton()) {
++            QAccessibleValueChangeEvent event(this, value->value);
++            QAccessible::updateAccessibility(&event);
++        }
++    };
+     updateKeyboardAccess();
+ 
+     connect(this, &QLabel::linkActivated, this, &TLabel::slot_linkActivated);
+diff --git a/src/TLabelModel.cpp b/src/TLabelModel.cpp
+index 75f972c..4d3aedd 100644
+--- a/src/TLabelModel.cpp
++++ b/src/TLabelModel.cpp
+@@ -581,6 +581,22 @@ void TLabelModel::setClickThrough(bool clickThrough)
+     accessibilityChanged(AccessibilityChange::Role);
+ }
+ 
++void TLabelModel::setAccessibleValue(std::optional<TLabelAccessibleValue> value)
++{
++    if (mAccessibleValue == value) {
++        return;
++    }
++    // A button stays a button; any other label is a progress bar while it has a value
++    const bool roleChanges = mAccessibleValue.has_value() != value.has_value() && !actsAsButton();
++    mAccessibleValue = value;
++    if (roleChanges) {
++        accessibilityChanged(AccessibilityChange::Role);
++    }
++    if (mAccessibleValueChanged) {
++        mAccessibleValueChanged();
++    }
++}
++
+ void TLabelModel::setText(const QString& text)
+ {
+     if (mText == text) {
+diff --git a/src/TLabelModel.h b/src/TLabelModel.h
+index 0a78863..3888229 100644
+--- a/src/TLabelModel.h
++++ b/src/TLabelModel.h
+@@ -39,6 +39,16 @@ class QSvgRenderer;
+ // How a change of a label's text is announced to a screen reader, as ARIA's aria-live
+ enum class TLabelLiveRegion : int { Off, Polite, Assertive };
+ 
++// What a screen reader reads a label as when it shows a value, as a progress bar: value, from min to max
++struct TLabelAccessibleValue
++{
++    double value = 0.0;
++    double min = 0.0;
++    double max = 100.0;
++
++    bool operator==(const TLabelAccessibleValue&) const = default;
++};
++
+ // A label's widget-free state, so the Widgets-free core can hold a named label without a QLabel.
+ // Owned by its TLabel, whose same-named reference members alias it; TWindowRegistry indexes
+ // these by name but does NOT own them.
+@@ -79,6 +89,12 @@ struct TLabelModel
+     std::function<void(AccessibilityChange)> mAccessibilityChanged;
+     void accessibilityChanged(AccessibilityChange change) const;
+ 
++    // std::nullopt for none. Gaining or losing one is a Role change, as a label that is not a button is a progress
++    // bar while it has one; any change at all is told to mAccessibleValueChanged, set by the widget or the headless
++    // front end, if there is one
++    void setAccessibleValue(std::optional<TLabelAccessibleValue> value);
++    std::function<void()> mAccessibleValueChanged;
++
+     // Whether the SVG renderer is worth trying on a file, judged by its first bytes.
+     static bool svgCandidate(const QString& path);
+     static bool loadSvg(QSvgRenderer& renderer, const QString& path);
+@@ -146,6 +162,8 @@ struct TLabelModel
+     // Set by a script whose label's callbacks are not a button's, such as a drag handle; empty means automatic
+     std::optional<bool> mAccessibleButton;
+     TLabelLiveRegion mLiveRegion = TLabelLiveRegion::Off;
++    // What setLabelAccessibleValue() gave it, as Geyser gives a gauge's back label its value; none until then
++    std::optional<TLabelAccessibleValue> mAccessibleValue;
+     bool mClickThrough = false;
+     QFont mFont;
+     // QLabel::text(), which a pixmap or movie empties, written by the view after each change.
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index 62a59ae..61b99d0 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -7617,6 +7617,9 @@ void TLuaInterpreter::initLuaGlobals()
+     lua_register(pGlobalLua, "getLabelAccessibleRole", TLuaInterpreter::getLabelAccessibleRole);
+     lua_register(pGlobalLua, "setLabelLiveRegion", TLuaInterpreter::setLabelLiveRegion);
+     lua_register(pGlobalLua, "getLabelLiveRegion", TLuaInterpreter::getLabelLiveRegion);
++    lua_register(pGlobalLua, "setLabelAccessibleValue", TLuaInterpreter::setLabelAccessibleValue);
++    lua_register(pGlobalLua, "getLabelAccessibleValue", TLuaInterpreter::getLabelAccessibleValue);
++    lua_register(pGlobalLua, "clearLabelAccessibleValue", TLuaInterpreter::clearLabelAccessibleValue);
+     lua_register(pGlobalLua, "setLabelCursor", TLuaInterpreter::setLabelCursor);
+     lua_register(pGlobalLua, "setLabelCustomCursor", TLuaInterpreter::setLabelCustomCursor);
+     lua_register(pGlobalLua, "raiseWindow", TLuaInterpreter::raiseWindow);
+diff --git a/src/TLuaInterpreter.h b/src/TLuaInterpreter.h
+index 1143ae4..2dc50fe 100644
+--- a/src/TLuaInterpreter.h
++++ b/src/TLuaInterpreter.h
+@@ -580,6 +580,9 @@ public:
+     static int getLabelAccessibleRole(lua_State*);
+     static int setLabelLiveRegion(lua_State*);
+     static int getLabelLiveRegion(lua_State*);
++    static int setLabelAccessibleValue(lua_State*);
++    static int getLabelAccessibleValue(lua_State*);
++    static int clearLabelAccessibleValue(lua_State*);
+     static int setLabelCursor(lua_State*);
+     static int setLabelCustomCursor(lua_State*);
+     static int moveWindow(lua_State*);
+diff --git a/src/TLuaInterpreterUI.cpp b/src/TLuaInterpreterUI.cpp
+index a51c6eb..ebff892 100644
+--- a/src/TLuaInterpreterUI.cpp
++++ b/src/TLuaInterpreterUI.cpp
+@@ -3735,6 +3735,80 @@ int TLuaInterpreter::getLabelLiveRegion(lua_State* L)
+     return warnArgumentValue(L, __func__, qsl("label name '%1' not found").arg(labelName));
+ }
+ 
++// Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setLabelAccessibleValue
++int TLuaInterpreter::setLabelAccessibleValue(lua_State* L)
++{
++    const QString labelName = getVerifiedString(L, __func__, 1, "label name");
++    const double given = getVerifiedDouble(L, __func__, 2, "value");
++    // The range is optional: 0 to 100 without it
++    TLabelAccessibleValue value;
++    if (!lua_isnoneornil(L, 3)) {
++        value.min = getVerifiedDouble(L, __func__, 3, "minimum", true);
++    }
++    if (!lua_isnoneornil(L, 4)) {
++        value.max = getVerifiedDouble(L, __func__, 4, "maximum", true);
++    }
++    if (labelName.isEmpty()) {
++        return warnArgumentValue(L, __func__, "a label cannot have an empty string as its name");
++    }
++    if (!std::isfinite(given) || !std::isfinite(value.min) || !std::isfinite(value.max)) {
++        return warnArgumentValue(L, __func__, "the value, minimum and maximum must be finite numbers");
++    }
++    if (value.min >= value.max) {
++        return warnArgumentValue(L, __func__, qsl("the minimum (%1) must be less than the maximum (%2)").arg(value.min).arg(value.max));
++    }
++    // As a progress bar shows it: one past either end, as a gauge that is not strict may be, is at that end
++    value.value = std::clamp(given, value.min, value.max);
++
++    Host& host = getHostFromLua(L);
++    if (!host.setLabelAccessibleValue(labelName, value)) {
++        return warnArgumentValue(L, __func__, qsl("label name '%1' not found").arg(labelName));
++    }
++
++    lua_pushboolean(L, true);
++    return 1;
++}
++
++// Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getLabelAccessibleValue
++int TLuaInterpreter::getLabelAccessibleValue(lua_State* L)
++{
++    const QString labelName = getVerifiedString(L, __func__, 1, "label name");
++    if (labelName.isEmpty()) {
++        return warnArgumentValue(L, __func__, "a label cannot have an empty string as its name");
++    }
++
++    const Host& host = getHostFromLua(L);
++    const std::optional<std::optional<TLabelAccessibleValue>> value = host.labelAccessibleValue(labelName);
++    if (!value) {
++        return warnArgumentValue(L, __func__, qsl("label name '%1' not found").arg(labelName));
++    }
++    if (!*value) {
++        lua_pushnil(L);
++        return 1;
++    }
++    lua_pushnumber(L, (*value)->value);
++    lua_pushnumber(L, (*value)->min);
++    lua_pushnumber(L, (*value)->max);
++    return 3;
++}
++
++// Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#clearLabelAccessibleValue
++int TLuaInterpreter::clearLabelAccessibleValue(lua_State* L)
++{
++    const QString labelName = getVerifiedString(L, __func__, 1, "label name");
++    if (labelName.isEmpty()) {
++        return warnArgumentValue(L, __func__, "a label cannot have an empty string as its name");
++    }
++
++    Host& host = getHostFromLua(L);
++    if (!host.setLabelAccessibleValue(labelName, std::nullopt)) {
++        return warnArgumentValue(L, __func__, qsl("label name '%1' not found").arg(labelName));
++    }
++
++    lua_pushboolean(L, true);
++    return 1;
++}
++
+ // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getLabelAccessibleRole
+ int TLuaInterpreter::getLabelAccessibleRole(lua_State* L)
+ {
+diff --git a/src/TNullConsoleFrontend.cpp b/src/TNullConsoleFrontend.cpp
+index 290e144..9840310 100644
+--- a/src/TNullConsoleFrontend.cpp
++++ b/src/TNullConsoleFrontend.cpp
+@@ -1368,6 +1368,10 @@ void TNullConsoleFrontend::createLabel(const QString& windowname, const QString&
+     pLabel->mAccessibilityChanged = [this](TLabelModel::AccessibilityChange) {
+         mWindowNotifier.note();
+     };
++    // ... and gives it a value
++    pLabel->mAccessibleValueChanged = [this]() {
++        mWindowNotifier.note();
++    };
+     pLabel->setClickThrough(clickThrough);
+     pLabel->mGeometry = QRect(QPoint(x, y), widgetSize(width, height));
+     auto [userWindow, box] = containerFor(windowname, false);
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 94596db..56bf12b 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -776,6 +776,17 @@ public:
+         QPoint customCursorHotSpot;
+         // The pointer passes through it to what is under it
+         bool clickThrough = false;
++        // What a screen reader reads it as, as a progress bar, as setLabelAccessibleValue() gave it: value, from min
++        // to max. Geyser gives a gauge's back label the gauge's value. None for a label without one
++        struct AccessibleValue
++        {
++            double value = 0.0;
++            double min = 0.0;
++            double max = 100.0;
++
++            bool operator==(const AccessibleValue&) const = default;
++        };
++        std::optional<AccessibleValue> accessibleValue;
+         // What a screen reader says for it, and whether it is told it is a button
+         QString accessibleName;
+         bool accessibleButton = false;
+diff --git a/src/headless/THeadlessSessionWindows.cpp b/src/headless/THeadlessSessionWindows.cpp
+index dac528e..c21e497 100644
+--- a/src/headless/THeadlessSessionWindows.cpp
++++ b/src/headless/THeadlessSessionWindows.cpp
+@@ -460,6 +460,9 @@ std::optional<THeadlessSession::LabelContent> THeadlessSession::labelContent(con
+     content.cursor = record->cursor;
+     content.customCursor = record->customCursor;
+     content.customCursorHotSpot = record->customCursorHotSpot;
++    if (const std::optional<TLabelAccessibleValue>& value = pModel->mAccessibleValue) {
++        content.accessibleValue = LabelContent::AccessibleValue{.value = value->value, .min = value->min, .max = value->max};
++    }
+     content.clickThrough = pModel->mClickThrough;
+     content.accessibleName = pModel->effectiveAccessibleName();
+     content.accessibleButton = pModel->actsAsButton();
+diff --git a/src/mudlet-lua/lua/GUIUtils.lua b/src/mudlet-lua/lua/GUIUtils.lua
+index fc50cc7..1ffc48a 100644
+--- a/src/mudlet-lua/lua/GUIUtils.lua
++++ b/src/mudlet-lua/lua/GUIUtils.lua
+@@ -292,7 +292,7 @@ function moveGauge(gaugeName, x, y)
+   moveWindow(gaugeName .. "_text", x, y)
+   -- save new values in table
+   gaugesTable[gaugeName].x, gaugesTable[gaugeName].y = x, y
+-  setGauge(gaugeName, gaugesTable[gaugeName].value, 1)
++  setGauge(gaugeName, gaugesTable[gaugeName].current or gaugesTable[gaugeName].value, gaugesTable[gaugeName].maximum or 1)
+ end
+ 
+ 
+@@ -350,7 +350,7 @@ function setGaugeWindow(windowName, gaugeName, x, y, show)
+   end
+   -- save new values in table
+   gaugesTable[gaugeName].x, gaugesTable[gaugeName].y = x, y
+-  setGauge(gaugeName, gaugesTable[gaugeName].value, 1)
++  setGauge(gaugeName, gaugesTable[gaugeName].current or gaugesTable[gaugeName].value, gaugesTable[gaugeName].maximum or 1)
+ end
+ 
+ local function namedColorError(message)
+@@ -614,8 +614,9 @@ function setGauge(gaugeName, currentValue, maxValue, gaugeText)
+   assert(tonumber(currentValue) ~= nil, 'setGauge: bad argument #2 type (unable to convert '..type(currentValue)..' to a number!)')
+   assert(tonumber(maxValue) ~= nil, 'setGauge: bad argument #3 type (unable to convert '..type(maxValue)..' to a number!)')
+   local value = currentValue / maxValue
+-  -- save new values in table
++  -- save new values in table, and those given, which moving or resizing the gauge lays it out with again
+   gaugesTable[gaugeName].value = value
++  gaugesTable[gaugeName].current, gaugesTable[gaugeName].maximum = currentValue, maxValue
+   local info = gaugesTable[gaugeName]
+   local x, y, w, h = info.x, info.y, info.width, info.height
+ 
+@@ -632,6 +633,15 @@ function setGauge(gaugeName, currentValue, maxValue, gaugeText)
+     resizeWindow(gaugeName .. "_front", w, h * value)
+     moveWindow(gaugeName .. "_front", x, y)
+   end
++  -- what a screen reader reads the gauge as, as Geyser.Gauge:setValue() gives it: a progress bar's value on the
++  -- back label, or none for a reading it cannot give (a maximum not above 0 or infinite, a current value that is not
++  -- a number or is minus infinity), checked here, as setLabelAccessibleValue() would warn of it at every prompt
++  local current, maximum = tonumber(currentValue), tonumber(maxValue)
++  if maximum > 0 and maximum < math.huge and current > -math.huge then
++    setLabelAccessibleValue(gaugeName .. "_back", math.min(current, maximum), 0, maximum)
++  else
++    clearLabelAccessibleValue(gaugeName .. "_back")
++  end
+   if gaugeText then
+     setGaugeText(gaugeName, gaugeText)
+   end
+@@ -1166,7 +1176,7 @@ function resizeGauge(gaugeName, width, height)
+   resizeWindow(gaugeName .. "_text", width, height)
+   -- save new values in table
+   gaugesTable[gaugeName].width, gaugesTable[gaugeName].height = width, height
+-  setGauge(gaugeName, gaugesTable[gaugeName].value, 1)
++  setGauge(gaugeName, gaugesTable[gaugeName].current or gaugesTable[gaugeName].value, gaugesTable[gaugeName].maximum or 1)
+ end
+ 
+ 
+diff --git a/src/mudlet-lua/lua/geyser/GeyserGauge.lua b/src/mudlet-lua/lua/geyser/GeyserGauge.lua
+index dc04e0f..3d56cc1 100644
+--- a/src/mudlet-lua/lua/geyser/GeyserGauge.lua
++++ b/src/mudlet-lua/lua/geyser/GeyserGauge.lua
+@@ -572,6 +572,19 @@ function Geyser.Gauge:setValue (currentValue, maxValue, text)
+     resizeWindow(front.name, inPlaceSize(self, fill, front))
+   end
+ 
++  -- what a screen reader reads the gauge as, as a progress bar: the back label is the gauge's size, so its value
++  -- is the gauge's, out of the maximum given, or of 100; one past the end is at the end. A reading it cannot give,
++  -- not a number or out of an infinite maximum, leaves it none, so a reader goes by what the gauge draws; checked
++  -- here, as setLabelAccessibleValue() would warn of it at every prompt
++  local maximum = maxValue or 100
++  if maximum > 0 and maximum < math.huge and currentValue == currentValue then
++    setLabelAccessibleValue(self.back.name, math.min(currentValue, maximum), 0, maximum)
++  else
++    clearLabelAccessibleValue(self.back.name)
++  end
++  -- kept for setStyleSheet(), which lays the gauge out again: self.value is a percentage, which would lose the maximum
++  self.currentValue, self.maxValue = currentValue, maxValue
++
+   if text then
+     self.text:echo(text)
+   end
+@@ -706,9 +719,9 @@ function Geyser.Gauge:setStyleSheet(css, cssback, cssText)
+     self.text:setStyleSheet(cssText)
+   end
+   
+-  -- Recalculate gauge positioning with the new stylesheet
++  -- Recalculate gauge positioning with the new stylesheet, from the value and maximum last given, if any
+   if self.value then
+-    self:setValue(self.value)
++    self:setValue(self.currentValue or self.value, self.maxValue)
+   end
+ end
+ 
+diff --git a/src/mudlet-lua/tests/GUIUtils_spec.lua b/src/mudlet-lua/tests/GUIUtils_spec.lua
+index daecce9..4852e9d 100644
+--- a/src/mudlet-lua/tests/GUIUtils_spec.lua
++++ b/src/mudlet-lua/tests/GUIUtils_spec.lua
+@@ -2228,6 +2228,25 @@ describe("Tests the GUI utilities as far as possible without mudlet", function()
+         assert.has_error(function() setGauge(gaugeName, "lots", 1) end)
+         assert.has_error(function() setGauge(gaugeName, 1, "lots") end)
+       end)
++
++      it("Should give its back label its value for screen readers, which moving or resizing the gauge keeps", function()
++        setGauge(gaugeName, 30, 200)
++        assert.are.same({30, 0, 200}, {getLabelAccessibleValue(gaugeName .. "_back")})
++        moveGauge(gaugeName, 5, 6)
++        resizeGauge(gaugeName, 200, 20)
++        assert.are.same({30, 0, 200}, {getLabelAccessibleValue(gaugeName .. "_back")})
++        assert.equals(30, select(3, getWindowGeometry(gaugeName .. "_front")))
++        assert.is_nil(getLabelAccessibleValue(gaugeName .. "_front"))
++        -- past the maximum is at the maximum, and a reading it cannot give is none
++        setGauge(gaugeName, 3, 2)
++        assert.are.same({2, 0, 2}, {getLabelAccessibleValue(gaugeName .. "_back")})
++        -- without asking setLabelAccessibleValue(), which would warn of it at every prompt
++        local setSpy = spy.on(_G, "setLabelAccessibleValue")
++        finally(function() _G.setLabelAccessibleValue:revert() end)
++        setGauge(gaugeName, 5, math.huge)
++        assert.is_nil(getLabelAccessibleValue(gaugeName .. "_back"))
++        assert.spy(setSpy).was_not_called()
++      end)
+     end)
+ 
+     describe("Tests the functionality of moveGauge", function()
+diff --git a/src/mudlet-lua/tests/GeyserGauge_spec.lua b/src/mudlet-lua/tests/GeyserGauge_spec.lua
+index 952f8ca..13f4cc4 100644
+--- a/src/mudlet-lua/tests/GeyserGauge_spec.lua
++++ b/src/mudlet-lua/tests/GeyserGauge_spec.lua
+@@ -124,6 +124,39 @@ describe("Tests functionality of Geyser.Gauge", function()
+       assert.are.equal(200, geometry("ggsStrict_front").width)
+     end)
+ 
++    it("gives its back label its value for screen readers, out of the maximum given", function()
++      gauge:setValue(50, 200)
++      assert.are.same({50, 0, 200}, {getLabelAccessibleValue("ggsValue_back")})
++      gauge:setValue(30)
++      assert.are.same({30, 0, 100}, {getLabelAccessibleValue("ggsValue_back")})
++      -- a gauge that is not strict overflows, but a progress bar stops at its end
++      gauge:setValue(150)
++      assert.are.same({100, 0, 100}, {getLabelAccessibleValue("ggsValue_back")})
++      assert.is_nil(getLabelAccessibleValue("ggsValue_front"))
++      assert.is_nil(getLabelAccessibleValue("ggsValue_text"))
++    end)
++
++    it("keeps its back label's value out of the maximum given through a new style sheet", function()
++      gauge:setValue(30, 200)
++      gauge:setStyleSheet("background-color: red;", "background-color: black;")
++      assert.are.same({30, 0, 200}, {getLabelAccessibleValue("ggsValue_back")})
++      assert.are.equal(30, geometry("ggsValue_front").width)
++    end)
++
++    it("leaves its back label no value for a reading it cannot give, so a reader goes by what it draws", function()
++      gauge:setValue(30, 200)
++      -- without asking setLabelAccessibleValue(), which would warn of it at every prompt
++      local setSpy = spy.on(_G, "setLabelAccessibleValue")
++      finally(function() _G.setLabelAccessibleValue:revert() end)
++      gauge:setValue(5, math.huge)
++      assert.is_nil(getLabelAccessibleValue("ggsValue_back"))
++      assert.spy(setSpy).was_not_called()
++      -- an infinite value is at the end, as a strict gauge draws it
++      local strict = track(Geyser.Gauge:new({name = "ggsStrictValue", x = 0, y = 0, width = 200, height = 40, strict = true}))
++      strict:setValue(math.huge)
++      assert.are.same({100, 0, 100}, {getLabelAccessibleValue("ggsStrictValue_back")})
++    end)
++
+     it("writes the optional third argument onto the text label", function()
+       gauge:setValue(40, 100, "40 of 100")
+       assert.is_truthy(getLabelText("ggsValue_text"):find("40 of 100", 1, true))
+diff --git a/src/mudlet-lua/tests/UI_spec.lua b/src/mudlet-lua/tests/UI_spec.lua
+index 82e9947..08e40a2 100644
+--- a/src/mudlet-lua/tests/UI_spec.lua
++++ b/src/mudlet-lua/tests/UI_spec.lua
+@@ -7335,6 +7335,77 @@ describe("Widget state getters", function()
+     end)
+   end)
+ 
++  describe("setLabelAccessibleValue/getLabelAccessibleValue/clearLabelAccessibleValue", function()
++    after_each(function()
++      clearLabelAccessibleValue(label)
++    end)
++
++    it("is none until it is set, and holds what it is set to until it is cleared", function()
++      assert.is_nil(getLabelAccessibleValue(label))
++      assert.is_true(setLabelAccessibleValue(label, 25, 0, 200))
++      assert.are.same({25, 0, 200}, {getLabelAccessibleValue(label)})
++      assert.is_true(setLabelAccessibleValue(label, 40))
++      assert.are.same({40, 0, 100}, {getLabelAccessibleValue(label)})
++      assert.is_true(clearLabelAccessibleValue(label))
++      assert.is_nil(getLabelAccessibleValue(label))
++    end)
++
++    it("takes a value past either end as that end", function()
++      assert.is_true(setLabelAccessibleValue(label, -5, 0, 10))
++      assert.are.same({0, 0, 10}, {getLabelAccessibleValue(label)})
++      assert.is_true(setLabelAccessibleValue(label, 15, 0, 10))
++      assert.are.same({10, 0, 10}, {getLabelAccessibleValue(label)})
++    end)
++
++    it("makes a label a progress bar until it is cleared, but a button stays a button", function()
++      assert.are.equal("text", getLabelAccessibleRole(label))
++      setLabelAccessibleValue(label, 1)
++      assert.are.equal("progressbar", getLabelAccessibleRole(label))
++      setLabelAccessibleRole(label, "button")
++      assert.are.equal("button", getLabelAccessibleRole(label))
++      setLabelAccessibleRole(label, "")
++      clearLabelAccessibleValue(label)
++      assert.are.equal("text", getLabelAccessibleRole(label))
++    end)
++
++    it("returns nil and a message for an empty label name", function()
++      for _, call in ipairs({function() return setLabelAccessibleValue("", 1) end, function() return getLabelAccessibleValue("") end,
++                             function() return clearLabelAccessibleValue("") end}) do
++        local ok, err = call()
++        assert.is_nil(ok)
++        assert.are.equal("a label cannot have an empty string as its name", err)
++      end
++    end)
++
++    it("returns nil and a message for a range that is empty or a number that is not finite, leaving the value as it was", function()
++      setLabelAccessibleValue(label, 5, 0, 10)
++      local ok, err = setLabelAccessibleValue(label, 5, 10, 10)
++      assert.is_nil(ok)
++      assert.is_truthy(err:find("must be less than the maximum", 1, true))
++      for _, bad in ipairs({{0 / 0}, {1, -math.huge}, {1, 0, math.huge}}) do
++        ok, err = setLabelAccessibleValue(label, unpack(bad))
++        assert.is_nil(ok)
++        assert.are.equal("the value, minimum and maximum must be finite numbers", err)
++      end
++      assert.are.same({5, 0, 10}, {getLabelAccessibleValue(label)})
++    end)
++
++    it("raises for an argument that is not a number", function()
++      assert.has_error(function() setLabelAccessibleValue(label, "five") end)
++      assert.has_error(function() setLabelAccessibleValue(label, 5, "zero") end)
++      assert.has_error(function() setLabelAccessibleValue(label, 5, 0, {}) end)
++    end)
++
++    it("returns nil and a message naming an unknown label", function()
++      local unknown = name("wdgNoSuchLabel")
++      for _, call in ipairs({setLabelAccessibleValue, getLabelAccessibleValue, clearLabelAccessibleValue}) do
++        local ok, err = call(unknown, 1)
++        assert.is_nil(ok)
++        assert.are.equal(("label name '%s' not found"):format(unknown), err)
++      end
++    end)
++  end)
++
+   describe("setLabelLiveRegion/getLabelLiveRegion", function()
+     after_each(function()
+       setLabelLiveRegion(label, "off")
+diff --git a/test/functional_tests/ConsoleModelExtractionTest.cpp b/test/functional_tests/ConsoleModelExtractionTest.cpp
+index 605f0e4..75b3f9d 100644
+--- a/test/functional_tests/ConsoleModelExtractionTest.cpp
++++ b/test/functional_tests/ConsoleModelExtractionTest.cpp
+@@ -2130,6 +2130,9 @@ expectRefusal('getLabelAccessibleRole', getLabelAccessibleRole('noViewLbl'))
+ expectRefusal('setLabelAccessibleRole', setLabelAccessibleRole('noViewLbl', 'text'))
+ expectRefusal('getLabelLiveRegion', getLabelLiveRegion('noViewLbl'))
+ expectRefusal('setLabelLiveRegion', setLabelLiveRegion('noViewLbl', 'polite'))
++expectRefusal('getLabelAccessibleValue', getLabelAccessibleValue('noViewLbl'))
++expectRefusal('setLabelAccessibleValue', setLabelAccessibleValue('noViewLbl', 1))
++expectRefusal('clearLabelAccessibleValue', clearLabelAccessibleValue('noViewLbl'))
+ expectRefusal('setLabelCursor', setLabelCursor('noViewLbl', 0))
+ expectRefusal('setLabelCustomCursor', setLabelCustomCursor('noViewLbl', '/nowhere.png'))
+ expectRefusal('getLabelText', getLabelText('noViewLbl'))
+diff --git a/test/functional_tests/HeadlessSessionWindowsTest.cpp b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+index 059f55f..375b81a 100644
+--- a/test/functional_tests/HeadlessSessionWindowsTest.cpp
++++ b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+@@ -783,6 +783,91 @@ createMiniConsole("again", 0, 0, 100, 100)
+         QVERIFY(session.shutdown(false));
+     }
+ 
++    void test_aLabelsAccessibleValueIsItsContent()
++    {
++        using AccessibleValue = THeadlessSession::LabelContent::AccessibleValue;
++        const QString name = qsl("Headless Label Accessible Value");
++        QVERIFY(writeProfile(name));
++        THeadlessSession session;
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QVERIFY(session.setMainWindowSize(QSize(800, 600)));
++        QSignalSpy changes(&session, &THeadlessSession::scriptWindowsChanged);
++        QVERIFY(session.runLua(qsl(R"lua(
++createLabel("lbl", 0, 0, 100, 20, 1)
++hpGauge = Geyser.Gauge:new({name = "hp", x = 0, y = 300, width = 200, height = 20})
++hpGauge:setValue(30, 200)
++)lua")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        std::optional<THeadlessSession::LabelContent> content = session.labelContent(qsl("lbl"));
++        QVERIFY(content);
++        QVERIFY(!content->accessibleValue);
++        // A gauge's value is on its back label, out of the maximum it was given; the other two have none
++        content = session.labelContent(qsl("hp_back"));
++        QVERIFY(content);
++        QCOMPARE(content->accessibleValue, std::optional(AccessibleValue{.value = 30.0, .min = 0.0, .max = 200.0}));
++        QVERIFY(!session.labelContent(qsl("hp_front"))->accessibleValue);
++        QVERIFY(!session.labelContent(qsl("hp_text"))->accessibleValue);
++
++        // Nothing else about the label changes, so the value alone names it
++        const auto toldAs = [&](const QString& lua, const std::optional<AccessibleValue> expected) {
++            if (!session.runLua(lua) || !changes.wait(1000)) {
++                return false;
++            }
++            const bool named = changes.takeFirst().at(1).toStringList() == QStringList{qsl("lbl")};
++            changes.clear();
++            const std::optional<THeadlessSession::LabelContent> now = session.labelContent(qsl("lbl"));
++            return named && now && now->accessibleValue == expected;
++        };
++        QVERIFY(toldAs(qsl(R"(setLabelAccessibleValue("lbl", 5, 0, 10))"), AccessibleValue{.value = 5.0, .min = 0.0, .max = 10.0}));
++        // As a progress bar shows it, a value past the end is at the end
++        QVERIFY(toldAs(qsl(R"(setLabelAccessibleValue("lbl", 15, 0, 10))"), AccessibleValue{.value = 10.0, .min = 0.0, .max = 10.0}));
++        // Out of 0 to 100 unless told otherwise
++        QVERIFY(toldAs(qsl(R"(setLabelAccessibleValue("lbl", 40))"), AccessibleValue{.value = 40.0, .min = 0.0, .max = 100.0}));
++        // The one it has already is no change
++        QVERIFY(session.runLua(qsl(R"(setLabelAccessibleValue("lbl", 40, 0, 100))")));
++        QVERIFY(!changes.wait(200));
++        // Nor is one refused, with nil and a message as Mudlet's other label functions refuse
++        QVERIFY(session.runLua(qsl(R"lua(
++local ok, message = setLabelAccessibleValue("lbl", 5, 10, 10)
++assert(ok == nil and message:find("must be less than the maximum", 1, true), message)
++ok, message = setLabelAccessibleValue("lbl", 0 / 0)
++assert(ok == nil and message:find("finite", 1, true), message)
++ok, message = setLabelAccessibleValue("nonesuch", 5)
++assert(ok == nil and message == "label name 'nonesuch' not found", message)
++assert(not pcall(setLabelAccessibleValue, "lbl", "five"))
++local value, min, max = getLabelAccessibleValue("lbl")
++assert(value == 40 and min == 0 and max == 100)
++)lua")));
++        QVERIFY(!changes.wait(200));
++        QVERIFY(toldAs(qsl(R"(clearLabelAccessibleValue("lbl"))"), std::nullopt));
++        QVERIFY(session.runLua(qsl(R"(assert(getLabelAccessibleValue("lbl") == nil))")));
++
++        // A new value of the gauge names its back label
++        QVERIFY(session.runLua(qsl("hpGauge:setValue(50)")));
++        QVERIFY(changes.wait(1000));
++        QVERIFY(changes.takeFirst().at(1).toStringList().contains(qsl("hp_back")));
++        QCOMPARE(session.labelContent(qsl("hp_back"))->accessibleValue, std::optional(AccessibleValue{.value = 50.0, .min = 0.0, .max = 100.0}));
++        // A new style sheet lays the gauge out again, out of the maximum it was given, not of 100
++        changes.clear();
++        QVERIFY(session.runLua(qsl(R"lua(hpGauge:setValue(30, 200); hpGauge:setStyleSheet("background-color: red", "background-color: black"))lua")));
++        QVERIFY(changes.wait(1000));
++        QCOMPARE(session.labelContent(qsl("hp_back"))->accessibleValue, std::optional(AccessibleValue{.value = 30.0, .min = 0.0, .max = 200.0}));
++        // A reading it cannot give leaves it none, not the last, so a reader goes by what the gauge draws
++        changes.clear();
++        QVERIFY(session.runLua(qsl("hpGauge:setValue(5, math.huge)")));
++        QVERIFY(changes.wait(1000));
++        QVERIFY(!session.labelContent(qsl("hp_back"))->accessibleValue);
++        // createGauge()'s gauges have it too, kept as they move
++        changes.clear();
++        QVERIFY(session.runLua(qsl(R"lua(createGauge("old", 100, 10, 0, 400); setGauge("old", 3, 12); moveGauge("old", 0, 420))lua")));
++        QVERIFY(changes.wait(1000));
++        QCOMPARE(session.labelContent(qsl("old_back"))->accessibleValue, std::optional(AccessibleValue{.value = 3.0, .min = 0.0, .max = 12.0}));
++        QVERIFY(!session.labelContent(qsl("old_front"))->accessibleValue);
++
++        QVERIFY(session.shutdown(false));
++    }
++
+     void test_labelsRunTheirCallbacksAsTheGuisMouseDoes()
+     {
+         const QString name = qsl("Headless Label Pointer");
+diff --git a/test/functional_tests/LabelAccessibleInterfaceTest.cpp b/test/functional_tests/LabelAccessibleInterfaceTest.cpp
+index a1ba552..a010b29 100644
+--- a/test/functional_tests/LabelAccessibleInterfaceTest.cpp
++++ b/test/functional_tests/LabelAccessibleInterfaceTest.cpp
+@@ -226,7 +226,7 @@ private slots:
+     {
+         QVERIFY(runLua(
+                 qsl("setConfig('accessibleLabels', false); setLabelClickCallback('%1', nil); setLabelReleaseCallback('%1', nil); setLabelAccessibleName('%1', ''); setLabelAccessibleRole('%1', ''); "
+-                    "setLabelLiveRegion('%1', 'off'); disableClickthrough('%1'); resetBackgroundImage('%1'); resetLabelToolTip('%1'); "
++                    "setLabelLiveRegion('%1', 'off'); clearLabelAccessibleValue('%1'); disableClickthrough('%1'); resetBackgroundImage('%1'); resetLabelToolTip('%1'); "
+                     "echo('%1', 'plain'); accessibleLabelClicks = nil; accessibleLabelReleased = nil; accessibleLinkHit = nil")
+                         .arg(mLabelName)));
+     }
+@@ -945,6 +945,47 @@ private slots:
+         QCOMPARE(accessible()->role(), QAccessible::Button);
+     }
+ 
++    // As a Geyser gauge's back label is, so a screen reader reads the gauge's value
++    void test_aLabelWithAValueIsAProgressBar()
++    {
++        listenTo(label());
++        auto restore = qScopeGuard([this]() {
++            stopListening();
++        });
++        QVERIFY(accessible()->valueInterface() == nullptr);
++        QVERIFY(runLua(qsl("assert(setLabelAccessibleValue('%1', 30, 0, 200))").arg(mLabelName)));
++        QCOMPARE(accessible()->role(), QAccessible::ProgressBar);
++        QAccessibleValueInterface* value = accessible()->valueInterface();
++        QVERIFY(value);
++        QCOMPARE(value->currentValue().toDouble(), 30.0);
++        QCOMPARE(value->minimumValue().toDouble(), 0.0);
++        QCOMPARE(value->maximumValue().toDouble(), 200.0);
++        QVERIFY2(smEvents.contains(QAccessible::ActionChanged), "gaining a value was not announced as a role change");
++        QVERIFY2(smEvents.contains(QAccessible::ValueChanged), "the value was not announced");
++
++        smEvents.clear();
++        QVERIFY(runLua(qsl("setLabelAccessibleValue('%1', 50, 0, 200)").arg(mLabelName)));
++        QCOMPARE(accessible()->valueInterface()->currentValue().toDouble(), 50.0);
++        QVERIFY2(smEvents.contains(QAccessible::ValueChanged), "a new value was not announced");
++        QVERIFY2(!smEvents.contains(QAccessible::ActionChanged), "a new value was announced as a role change");
++        // A gauge is set on every prompt, mostly to the value it has
++        smEvents.clear();
++        QVERIFY(runLua(qsl("setLabelAccessibleValue('%1', 50, 0, 200)").arg(mLabelName)));
++        QVERIFY2(smEvents.isEmpty(), "a value that did not change was announced");
++
++        // A button stays one, and has no value to read
++        QVERIFY(runLua(qsl("setLabelClickCallback('%1', function() end)").arg(mLabelName)));
++        QCOMPARE(accessible()->role(), QAccessible::Button);
++        QVERIFY(accessible()->valueInterface() == nullptr);
++        QVERIFY(runLua(qsl("setLabelClickCallback('%1', nil)").arg(mLabelName)));
++
++        smEvents.clear();
++        QVERIFY(runLua(qsl("clearLabelAccessibleValue('%1')").arg(mLabelName)));
++        QCOMPARE(accessible()->role(), QAccessible::StaticText);
++        QVERIFY(accessible()->valueInterface() == nullptr);
++        QVERIFY2(smEvents.contains(QAccessible::ActionChanged), "losing the value was not announced as a role change");
++    }
++
+     // As Qt's own interface for a QLabel says of one
+     void test_anImageLabelIsAGraphic()
+     {

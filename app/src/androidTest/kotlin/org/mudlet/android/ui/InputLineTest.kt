@@ -105,7 +105,7 @@ class InputLineTest {
     @Test
     fun theHistoryIsTheEnginesWithTheCommandsSentSince() {
         session.history(listOf("north", "look"))
-        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.history } == listOf("north", "look") }
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.history } == listOf("north", "look") }
         compose.onNode(input).performTextInput("draft")
         previous()
         compose.onNode(input).assert(editableText("north"))
@@ -135,7 +135,7 @@ class InputLineTest {
         compose.onNode(input).performTextInput("n")
         session.commandLine("")
         session.history(listOf("marker"))
-        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.history } == listOf("marker") }
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.history } == listOf("marker") }
         compose.onNode(input).assert(editableText("n"))
 
         // A script's own clearCmdLine() still empties it

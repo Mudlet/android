@@ -83,11 +83,11 @@ internal interface MapSource {
 
     /**
      * What the player did on the map at [at], in the pixels of its last frame: a tap selects the room there ([type]
-     * press), a double tap walks to it, and a wheel turn of [wheelY] zooms about it. False as for [EngineClient.send].
+     * press), a double tap walks to it, and a wheel turn of [wheelY] zooms about it. False as for [org.mudlet.android.ui.ProfileSession.send].
      */
     fun pointer(type: MapPointerType, at: MapPoint, wheelY: Int = 0): Boolean
 
-    /** The map viewed only, or edited; the next frame says which it is. False as for [EngineClient.send]. */
+    /** The map viewed only, or edited; the next frame says which it is. False as for [org.mudlet.android.ui.ProfileSession.send]. */
     fun setViewOnly(viewOnly: Boolean): Boolean
 
     /** The player read [refusal]. */
@@ -96,13 +96,13 @@ internal interface MapSource {
 
 // The mapper window's requests, which ScriptWindowsClient sends
 private object MapperWindow : MapSource {
-    override val refusal: String? get() = ScriptWindowsClient.mapRefusal
+    override val refusal: String? get() = EngineClient.front.windows.mapRefusal
 
-    override fun pointer(type: MapPointerType, at: MapPoint, wheelY: Int) = ScriptWindowsClient.mapPointer(type, at, wheelY)
+    override fun pointer(type: MapPointerType, at: MapPoint, wheelY: Int) = EngineClient.front.windows.mapPointer(type, at, wheelY)
 
-    override fun setViewOnly(viewOnly: Boolean) = ScriptWindowsClient.setMapViewOnly(viewOnly)
+    override fun setViewOnly(viewOnly: Boolean) = EngineClient.front.windows.setMapViewOnly(viewOnly)
 
-    override fun dismissRefusal() = ScriptWindowsClient.dismissMapRefusal()
+    override fun dismissRefusal() = EngineClient.front.windows.dismissMapRefusal()
 }
 
 /**
@@ -115,13 +115,13 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
     val window = placed.window
     val rect = placed.rect
     val full = placed.full
-    val map = ScriptWindowsClient.map
+    val map = EngineClient.front.windows.map
     // One of another size is from before the mapper changed size (docs/protocol.md, "The map")
     val frame: ImageBitmap? = map?.bitmap?.takeIf { map.w == window.w && map.h == window.h }
     // In this node's pixels: the window as a whole, of which [rect] may show only a part
     val fit = remember(window.w, window.h, rect, full) { MapFit(window.w, window.h, PxRect(full.x - rect.x, full.y - rect.y, full.w, full.h)) }
     // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred
-    LaunchedEffect(fit.renderScale) { ScriptWindowsClient.setMapScale(fit.renderScale) }
+    LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
     MapView(
         MapperWindow,
         frame,

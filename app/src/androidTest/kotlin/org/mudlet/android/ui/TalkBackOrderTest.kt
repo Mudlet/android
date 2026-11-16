@@ -85,7 +85,7 @@ class TalkBackOrderTest {
         waitFor(hasText(WINDOW_ROW))
         waitFor(hasText("North") and hasClickAction())
         waitFor(hasContentDescription(ANNOUNCEMENT))
-        compose.waitUntil(WAIT_MS) { AppMapClient.map != null }
+        compose.waitUntil(WAIT_MS) { EngineClient.front.appMap.map != null }
         compose.onRoot().tryPerformAccessibilityChecks()
 
         val reading = TalkBackReading(compose)

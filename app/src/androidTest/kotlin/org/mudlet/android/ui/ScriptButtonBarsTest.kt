@@ -224,7 +224,7 @@ class ScriptButtonBarsTest {
         assertEquals(px, request.getInt("h"))
 
         session.image("/icons/look.png", png(px, px), px, px, request.get("id"))
-        compose.waitUntil(WAIT_MS) { ScriptWindowsClient.images[ScriptWindowsClient.ImageRequest("/icons/look.png", px, px)] != null }
+        compose.waitUntil(WAIT_MS) { EngineClient.front.windows.images[ScriptWindowsClient.ImageRequest("/icons/look.png", px, px)] != null }
         compose.onRoot().tryPerformAccessibilityChecks()
         activate(look)
         assertEquals(60, session.receive("pressButton").getInt("button"))

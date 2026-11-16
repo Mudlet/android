@@ -74,7 +74,6 @@ import org.mudlet.android.ui.AppMapClient
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.ScriptWindowsClient
 
 // How much smaller the map in front is at the end of a back gesture
 private const val BACK_SHRINK = 0.1f
@@ -98,7 +97,7 @@ internal fun BoxScope.BackgroundMap(colors: ConsoleColors) {
     if (alpha <= 0f) return
     var size by remember { mutableStateOf(IntSize.Zero) }
     AskForMap(AppMapClient.Owner.BACKGROUND, size)
-    val map = AppMapClient.map
+    val map = EngineClient.front.appMap.map
     Canvas(Modifier.matchParentSize().onSizeChanged { size = it }.clearAndSetSemantics {}) {
         val drawn = map ?: return@Canvas
         val frame = drawn.bitmap ?: return@Canvas
@@ -134,7 +133,8 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
     // Its results are of this time the map was in front
-    DisposableEffect(Unit) { onDispose { AppMapClient.closeSearch() } }
+    val appMap = EngineClient.front.appMap
+    DisposableEffect(appMap) { onDispose { appMap.closeSearch() } }
     val shrunk = Modifier.graphicsLayer {
         val scale = 1f - backProgress * BACK_SHRINK
         scaleX = scale
@@ -148,10 +148,10 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
         var editing by remember { mutableStateOf(false) }
         Column(Modifier.matchParentSize()) {
             RoomSearchField(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).onFocusChanged { editing = it.hasFocus })
-            val map = AppMapClient.map
+            val map = EngineClient.front.appMap.map
             // In the map's middle with no map drawn, but not where it would share the map with the search's results or a
             // refusal at its bottom: whichever is drawn over the other would take its touches and TalkBack
-            val offerInMap = map == null && (AppMapClient.search == null || editing) && AppMapClient.refusal == null
+            val offerInMap = map == null && (EngineClient.front.appMap.search == null || editing) && EngineClient.front.appMap.refusal == null
             MapDownloadBar(offerHere = !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 var size by remember { mutableStateOf(IntSize.Zero) }
@@ -159,7 +159,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
                 val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
                 MapView(
-                    AppMapClient,
+                    EngineClient.front.appMap,
                     map?.bitmap,
                     fit,
                     viewOnly = map?.viewOnly ?: true,
@@ -177,7 +177,7 @@ internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
                 // least their head and a whole result. Where the map has not that room, as in a short window, they
                 // wait for it: squeezed, their close button and rows would be cut off
                 val below = maxHeight - MAP_CONTROLS_HEIGHT
-                val search = AppMapClient.search
+                val search = EngineClient.front.appMap.search
                 if (search != null && !editing && below >= RESULTS_HEAD + RESULT_ROW) {
                     val results = maxOf(below / 2, RESULTS_HEAD + RESULT_ROW)
                     RoomResults(search, Modifier.align(Alignment.TopStart).padding(top = MAP_CONTROLS_HEIGHT).fillMaxWidth().heightIn(max = results))
@@ -217,7 +217,7 @@ private fun RoomSearchField(modifier: Modifier = Modifier) {
         if (text.isBlank()) return
         keyboard?.hide()
         focus.clearFocus()
-        AppMapClient.findRooms(text.trim())
+        EngineClient.front.appMap.findRooms(text.trim())
     }
 
     OutlinedTextField(
@@ -260,7 +260,7 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                 } else {
                     Spacer(Modifier.weight(1f))
                 }
-                IconButton(AppMapClient::closeSearch) {
+                IconButton(EngineClient.front.appMap::closeSearch) {
                     Icon(painterResource(R.drawable.ic_close), stringResource(R.string.app_map_results_close))
                 }
             }
@@ -268,7 +268,7 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                 items(rooms.orEmpty(), key = { it.id }) { room ->
                     Text(
                         stringResource(R.string.app_map_room, room.name, room.area, room.id),
-                        Modifier.fillMaxWidth().heightIn(min = RESULT_ROW).clickable(role = Role.Button) { AppMapClient.showRoom(room.id) }
+                        Modifier.fillMaxWidth().heightIn(min = RESULT_ROW).clickable(role = Role.Button) { EngineClient.front.appMap.showRoom(room.id) }
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         style = MaterialTheme.typography.bodyLarge,
                     )
@@ -285,8 +285,8 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
  */
 @Composable
 private fun MapDownloadBar(offerHere: Boolean, modifier: Modifier = Modifier) {
-    val download = AppMapClient.download
-    val end = AppMapClient.downloadEnd
+    val download = EngineClient.front.appMap.download
+    val end = EngineClient.front.appMap.downloadEnd
     val downloading = download.state == MapDownloadState.DOWNLOADING
     val offer = offerHere && download.offered && !downloading
     if (!downloading && end == null && !offer) return
@@ -313,7 +313,7 @@ private fun MapDownloadProgress(download: EngineMessage.MapDownload) {
             Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
         )
-        TextButton(AppMapClient::cancelMapDownload, Modifier.heightIn(min = 48.dp), enabled = download.cancelable && EngineClient.enginePid > 0) {
+        TextButton(EngineClient.front.appMap::cancelMapDownload, Modifier.heightIn(min = 48.dp), enabled = download.cancelable && EngineClient.enginePid > 0) {
             Text(stringResource(R.string.map_download_cancel))
         }
     }
@@ -338,7 +338,7 @@ private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
             color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.bodyMedium,
         )
-        IconButton(AppMapClient::dismissDownloadEnd) {
+        IconButton(EngineClient.front.appMap::dismissDownloadEnd) {
             Icon(painterResource(R.drawable.ic_close), stringResource(R.string.map_download_dismiss))
         }
     }
@@ -347,7 +347,7 @@ private fun MapDownloadEnd(end: EngineMessage.MapDownload) {
 // The button that downloads the map from [host], which the game offers
 @Composable
 private fun DownloadMapButton(host: String, modifier: Modifier = Modifier) {
-    Button(AppMapClient::downloadMap, modifier.heightIn(min = 48.dp), enabled = EngineClient.enginePid > 0 && !AppMapClient.downloadAsked) {
+    Button(EngineClient.front.appMap::downloadMap, modifier.heightIn(min = 48.dp), enabled = EngineClient.enginePid > 0 && !EngineClient.front.appMap.downloadAsked) {
         Text(stringResource(R.string.map_download, host))
     }
 }
@@ -358,7 +358,7 @@ private fun DownloadMapButton(host: String, modifier: Modifier = Modifier) {
  */
 @Composable
 private fun MapOffer(modifier: Modifier = Modifier) {
-    val download = AppMapClient.download
+    val download = EngineClient.front.appMap.download
     if (!download.offered || download.state == MapDownloadState.DOWNLOADING) return
     Surface(modifier, shape = MaterialTheme.shapes.medium, tonalElevation = 3.dp) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -374,4 +374,4 @@ private fun MapOffer(modifier: Modifier = Modifier) {
 }
 
 /** Whether a window a script opened shows the map already, so it is not drawn behind the text as well. */
-internal fun mapperShown(): Boolean = ScriptWindowsClient.state.windows.any { it.kind == WindowKind.MAPPER && it.shown }
+internal fun mapperShown(): Boolean = EngineClient.front.windows.state.windows.any { it.kind == WindowKind.MAPPER && it.shown }

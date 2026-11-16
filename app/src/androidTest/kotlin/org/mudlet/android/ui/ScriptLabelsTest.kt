@@ -330,7 +330,7 @@ class ScriptLabelsTest {
         assertTrue(!request.has("w") && !request.has("frame"))
 
         session.image("/data/key.png", png(8, 4), 8, 4, request.get("id"))
-        compose.waitUntil(WAIT_MS) { ScriptWindowsClient.images[ScriptWindowsClient.ImageRequest("/data/key.png")]?.width == 8 }
+        compose.waitUntil(WAIT_MS) { EngineClient.front.windows.images[ScriptWindowsClient.ImageRequest("/data/key.png")]?.width == 8 }
         compose.onRoot().tryPerformAccessibilityChecks()
     }
 

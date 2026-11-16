@@ -65,7 +65,7 @@ private const val CELLS_MEASURED = 100
 /**
  * The game's text: [lines], then [tail] (the prompt), in their colours and styles, at [textSizeSp] in [colors]. At the
  * bottom it follows new lines; scrolled up, it stays where it is and offers a button back to the bottom that counts the
- * lines that came meanwhile. [linesAdded] is EngineClient's count, which numbers the lines.
+ * lines that came meanwhile. [linesAdded] is the profile session's count, which numbers the lines.
  *
  * Each line is one node for TalkBack, whose text is the line's without its styles.
  *

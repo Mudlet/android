@@ -294,18 +294,28 @@ object EngineClient {
     }
 
     /**
-     * Opens [lastProfile] again, with [passwordOf] its name, which connects it if it is running and starts it if the
-     * engine no longer runs it; without one, connects to [lastAddress]. Why it could not goes to [onRefused].
+     * Connects [lastProfile] again: the running profile to its address, or, on an engine not running it, by opening it
+     * with [passwordOf] its name. Without one, connects to [lastAddress]. Why it could not goes to [onRefused].
      */
     fun reconnect(passwordOf: (profile: String) -> String?, onRefused: (error: String) -> Unit) {
-        // Not a bare connect: on an engine that has opened no profile since it started, as after the notification's
-        // Quit, libmudlet would make a profile of MUDLET_PROFILE's name with this address, a copy of the player's
         val name = lastProfile
-        if (name != null) {
-            openProfile(name, passwordOf(name)) { error -> if (error != null) onRefused(error) }
+        if (name == null) {
+            lastAddress?.let { connectAgain(it, onRefused) }
             return
         }
-        val address = lastAddress ?: return
+        // Its own connect for the running one, as openProfile leaves alone a profile that is connected or reconnecting
+        val running = profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }
+            ?.takeIf { status["profile"].let { s -> s.equals("$name loaded", true) || s.equals("$name starting", true) } }
+        if (running != null) {
+            connectAgain(GameAddress(running.host, running.port, running.tls), onRefused)
+        } else {
+            // Not a bare connect: on an engine that has opened no profile since it started, as after the notification's
+            // Quit, libmudlet would make a profile of MUDLET_PROFILE's name with this address, a copy of the player's
+            openProfile(name, passwordOf(name)) { error -> if (error != null) onRefused(error) }
+        }
+    }
+
+    private fun connectAgain(address: GameAddress, onRefused: (error: String) -> Unit) {
         if (!send(Requests.connect(address.host, address.port, address.tls))) onRefused(app.getString(R.string.profiles_error_not_attached))
     }
 

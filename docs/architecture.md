@@ -200,8 +200,8 @@ The profile list (`ui/profiles/ProfileListScreen.kt`) shows the engine's `profil
 each time it attaches, and its editor (`ProfileEditor.kt`) sends `saveProfile` and `deleteProfile`. Each waits for its
 answer, and a refusal shows the engine's reason, which is in English. Connect sends `openProfile` with the profile's
 stored password and goes to the game screen once it is answered with `profiles`; the game screen's Reconnect then sends
-`openProfile` for that profile again, with its stored password, which connects it if it is running and starts it on an
-engine that is not, as after the notification's Quit. A bare `connect` there would have libmudlet make a profile named
+`connect` with its address while the engine runs it, and otherwise `openProfile` with its stored password, as on an
+engine started again after the notification's Quit, where a bare `connect` would have libmudlet make a profile named
 `MUDLET_PROFILE` with that address, a copy of the player's. A profile's name cannot change, as the engine keeps the
 name a profile was created with.
 

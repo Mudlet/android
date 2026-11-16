@@ -220,10 +220,19 @@ class GameScreenTest {
     }
 
     @Test
-    fun reconnectOpensTheProfileAgainWithItsPasswordOnAnEngineThatHasLostIt() {
+    fun reconnectConnectsTheRunningProfileAndOpensItWithItsPasswordOnAnEngineThatHasLostIt() {
         val passwords = PasswordStore(compose.activity)
         assertTrue(passwords.set(GAME.name, "game secret"))
         try {
+            // The running profile gets a connect of its own, as an openProfile would leave it connected
+            session.status("profile", "Game loaded")
+            session.status("connection", "connected")
+            waitUntilDisplayed(string(R.string.connection_connected))
+            activate(hasText(string(R.string.connection_reconnect)))
+            val connect = session.receive("connect")
+            assertEquals(GAME.host, connect.getString("host"))
+            assertEquals(GAME.port, connect.getInt("port"))
+
             // A new engine with no profile open, as after the notification's Quit: libmudlet takes a bare connect
             // there as one for MUDLET_PROFILE, which it makes with the address, a copy of this profile
             fake.engine.instance = "after quit"

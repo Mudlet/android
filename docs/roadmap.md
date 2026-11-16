@@ -126,8 +126,8 @@ The screen-reader pull request adds:
   also downloads the map the game offers (`mapDownload`, version 13).
 - A script editor for triggers, aliases, timers, keys and scripts.
 - A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
-- More than one profile at once: upstream allows one profile pool per process, so it needs either several engine
-  processes or upstream work.
+- More than one profile at once, with a profile switcher: upstream allows one profile pool per process, so it needs
+  upstream work; the plan and its pull requests are in [`multi-profile.md`](multi-profile.md).
 - The game's secure-port offer (`secureConnectionOffered`), the dialogs for a bad TLS certificate, a proxy, logging,
   replays, the debug console, the error console as a screen, spell-check, Discord, IRC.
 - Tablets' and Chromebooks' layouts beyond what a resizable phone layout gives, hardware keyboard bindings

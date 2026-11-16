@@ -166,7 +166,7 @@ class ScreenReaderTest {
 
         // A change is the game's alone: what new games start with stays as it was
         activate(hasText(string(R.string.settings_blank_lines_space)), scroll = true)
-        assertEquals(mapOf("blankLinesBehaviour" to "space"), values(session.receive("setSettings")))
+        assertEquals(mapOf("blankLinesBehaviour" to "replacewithspace"), values(session.receive("setSettings")))
         compose.runOnIdle {
             assertEquals(Settings.BlankLines.SPACE, EngineClient.front.setting(Settings.blankLines))
             assertEquals(Settings.BlankLines.SHOW, Settings.blankLines.value)

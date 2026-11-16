@@ -181,6 +181,17 @@ def run(dev, args):
 
 
 def diag_permission(dev, args, label):
+    hogs = [subprocess.Popen(["adb", "shell", "while :; do :; done"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for _ in range(args.stress)]
+    try:
+        diag_permission_run(dev, args, f"{label}-stress{args.stress}")
+    finally:
+        for hog in hogs:
+            hog.kill()
+        shell("pkill -f 'while :; do :; done'", check=False)
+
+
+def diag_permission_run(dev, args, label):
     focus = [l.strip() for l in shell("dumpsys window windows", check=False).splitlines()
              if "mCurrentFocus" in l or "mFocusedApp" in l or "Window #" in l]
     print(f"DIAG-BEFORE {label}\n" + "\n".join(focus), flush=True)
@@ -215,6 +226,7 @@ def main():
     parser.add_argument("--out", required=True)
     parser.add_argument("--symbols", help="directory with the unstripped engine library, for ndk-stack")
     parser.add_argument("--diag", help="DIAG: only the permission test, with this label")
+    parser.add_argument("--stress", type=int, default=0, help="DIAG: busy loops on the device during the test")
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
     global LOG

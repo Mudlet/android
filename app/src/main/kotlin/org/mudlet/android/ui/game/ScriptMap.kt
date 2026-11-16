@@ -286,6 +286,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         }
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
         val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }
+        val roomCardHeight = maxHeight * ROOM_CARD_FRACTION
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             source.refusal?.let { MapRefusal(it, source::dismissRefusal) }
             Box(Modifier.fillMaxWidth()) {
@@ -299,7 +300,7 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
                     }
                 }
             }
-            room?.let { RoomCard(it, source.rooms, Modifier.fillMaxWidth().heightIn(max = maxHeight * ROOM_CARD_FRACTION)) }
+            room?.let { RoomCard(it, source.rooms, Modifier.fillMaxWidth().heightIn(max = roomCardHeight)) }
         }
     }
 }

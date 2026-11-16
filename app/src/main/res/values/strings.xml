@@ -797,6 +797,34 @@
     <!-- What TalkBack reads for an open game, and says when one comes to the front; %1$s is the game's (profile's) name,
          %2$s its connection state, such as "Connected" -->
     <string name="game_state">%1$s, %2$s</string>
+    <!-- Joins what TalkBack reads for an open game, %1$s, and more about it, %2$s, such as "12 new lines" -->
+    <string name="game_description_more">%1$s, %2$s</string>
+    <!-- Read by TalkBack after the game pill's description: how many lines the other open games have that the player has
+         not seen; %1$d is that number -->
+    <plurals name="game_others_unread">
+        <item quantity="one">%1$d new line in other games</item>
+        <item quantity="other">%1$d new lines in other games</item>
+    </plurals>
+    <!-- Read by TalkBack after the game pill's description: another open game asked for the player's attention, as a
+         script's alert() or the game's bell does -->
+    <string name="game_others_attention">another game wants attention</string>
+    <!-- Read by TalkBack for an open game in the game sheet and the profile list: how many of its lines the player has
+         not seen; %1$d is that number -->
+    <plurals name="game_unread">
+        <item quantity="one">%1$d new line</item>
+        <item quantity="other">%1$d new lines</item>
+    </plurals>
+    <!-- Read by TalkBack for an open game that asked for the player's attention, as a script's alert() or the game's bell
+         does, shown as a bell -->
+    <string name="game_wants_attention">wants attention</string>
+    <!-- The badge of an open game with more unseen lines than it counts; %1$d is the most it counts, 99 -->
+    <string name="game_unread_many">%1$d+</string>
+    <!-- What TalkBack says when a game in the background asks for the player's attention; %1$s is the game's (profile's)
+         name -->
+    <string name="game_attention_announce">New activity in %1$s</string>
+    <!-- What TalkBack says when a script of a game in the background asks it to say something; %1$s is the game's
+         (profile's) name, %2$s what the script asked to be said -->
+    <string name="game_announce">%1$s: %2$s</string>
     <!-- What TalkBack says the game pill's tap does: it opens the game sheet -->
     <string name="game_pill_show">Show open games</string>
     <!-- The game pill's TalkBack action that brings the next open game to the front; %1$s is that game's (profile's) name -->

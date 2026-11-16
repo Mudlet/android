@@ -77,7 +77,8 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         val open = synchronized(games) { games.toList() }
         val profiles = open.mapIndexed { i, game ->
             JSONObject().put("name", game.profile).put("slot", game.slot).put("socket", game.path).put("state", "loaded")
-                .put("connection", "").put("lastSeq", 0).put("unread", 0).put("attention", false).put("front", i == open.lastIndex)
+                .put("connection", "").put("lastSeq", game.lastSeq).put("unread", game.unread).put("attention", game.attention)
+                .put("front", i == open.lastIndex)
         }
         return JSONObject().put("t", "openProfiles").put("profiles", JSONArray(profiles)).putOpt("re", re)
     }
@@ -101,6 +102,17 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
     /** Opens the profile [name] in front, on a socket of its own, leaving the others open; [Session.openProfiles] tells the UI. */
     fun openAlongside(name: String) {
         openProfile(name, alongside = true)
+    }
+
+    /**
+     * What [openProfilesMessage] says of the open profile [name]'s lines: the last one's seq, how many the player has not
+     * seen and whether it wants attention; [Session.openProfiles] tells the UI.
+     */
+    fun counts(name: String, lastSeq: Long, unread: Long, attention: Boolean) {
+        val game = server(name)
+        game.lastSeq = lastSeq
+        game.unread = unread
+        game.attention = attention
     }
 
     /** Closes the open profile [name], whose socket goes; [Session.openProfiles] tells the UI. */
@@ -130,6 +142,12 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         private val live = CopyOnWriteArrayList<Connection>()
 
         @Volatile private var stopped = false
+
+        @Volatile var lastSeq = 0L
+
+        @Volatile var unread = 0L
+
+        @Volatile var attention = false
 
         init {
             thread(name = "fake-engine-${profile ?: "control"}", isDaemon = true) {

@@ -688,7 +688,11 @@ device shows, below the UI's debug hook:
   (asking first while connected, and back to the list after the last), and "Open another game" opening one beside
   the others until four are open; the swipe on the pill (`GameSwipeTest`, mirrored in ar-XB): a drag far enough or a
   fling brings the game beside with a tick, a short slow one springs back, nothing goes past the first or the last
-  game, Ctrl+Tab and Ctrl+Shift+Tab switch too, and a sideways swipe on the console or the quick bar switches nothing; the
+  game, Ctrl+Tab and Ctrl+Shift+Tab switch too, and a sideways swipe on the console or the quick bar switches nothing;
+  the badges (`GameBadgesTest`): the engine's unread count ("99+" past 99) and attention bell on the open games, read
+  by TalkBack there and as "new lines in other games" on the pill, `markSeen` for the game in front as it comes to
+  the front and as its lines come, "New activity in" said once for a game in the background, and its `announce()`
+  said politely after its name; the
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
   host:port", adding, editing, deleting only once confirmed, the engine's refusals, and Connect sending

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,6 +108,8 @@ fun GameSheet(
                 GameRow(
                     game.name,
                     state,
+                    game.unread,
+                    game.attention,
                     isFront = game === front,
                     onSwitch = andHide { onSwitch(game.name) },
                     onClose = { if (state.live) closing = game.name else onClose(game.name) },
@@ -165,12 +169,14 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
     }
 }
 
-/** An open game: its name and state, which a tap brings to the front, ticked while it is; then its close button. */
+/**
+ * An open game: its name, state and badges, which a tap brings to the front, ticked while it is; then its close button.
+ */
 @Composable
-private fun GameRow(name: String, state: ConnectionState, isFront: Boolean, onSwitch: () -> Unit, onClose: () -> Unit) {
+private fun GameRow(name: String, state: ConnectionState, unread: Long, attention: Boolean, isFront: Boolean, onSwitch: () -> Unit, onClose: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         val stateText = state.text()
-        val description = stringResource(R.string.game_state, name, stateText)
+        val description = gameDescription(name, stateText, unread, attention)
         Row(
             Modifier.weight(1f).heightIn(min = 56.dp)
                 .clickable(onClickLabel = stringResource(R.string.game_show), role = Role.Button, onClick = onSwitch)
@@ -189,10 +195,42 @@ private fun GameRow(name: String, state: ConnectionState, isFront: Boolean, onSw
                     Text(stateText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            GameBadges(unread, attention)
         }
         IconButton(onClose) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.game_close, name)) }
     }
 }
+
+/**
+ * What TalkBack reads for the open game [name] in [stateText]: "Achaea, connected, 12 new lines, wants attention", with
+ * no more than the name and state when it has neither [unread] lines nor [attention].
+ */
+@Composable
+internal fun gameDescription(name: String, stateText: String, unread: Long, attention: Boolean): String {
+    var description = stringResource(R.string.game_state, name, stateText)
+    if (unread > 0) description = stringResource(R.string.game_description_more, description, pluralStringResource(R.plurals.game_unread, unread.toPluralCount(), unread))
+    if (attention) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_wants_attention))
+    return description
+}
+
+// Android's plurals take an Int, whose largest picks the form any larger count would
+internal fun Long.toPluralCount() = coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+
+/** An open game's bell while it wants [attention], and its count of [unread] lines, "99+" past 99; TalkBack reads neither. */
+@Composable
+internal fun GameBadges(unread: Long, attention: Boolean) {
+    // The row's description says them; hidden rather than cleared, so the tests still find the count
+    Row(Modifier.semantics { hideFromAccessibility() }, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (attention) Icon(painterResource(R.drawable.ic_notifications), contentDescription = null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.error)
+        if (unread > 0) {
+            Badge(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
+                Text(if (unread > MAX_UNREAD_SHOWN) stringResource(R.string.game_unread_many, MAX_UNREAD_SHOWN) else unread.toString())
+            }
+        }
+    }
+}
+
+private const val MAX_UNREAD_SHOWN = 99
 
 @Composable
 private fun OpenAnother(full: Boolean, onOpenAnother: () -> Unit) {

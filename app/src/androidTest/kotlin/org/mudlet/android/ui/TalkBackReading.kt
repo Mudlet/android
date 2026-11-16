@@ -24,7 +24,7 @@ class TalkBackReading(private val compose: AndroidComposeTestRule<*, MainActivit
     fun assertInOrder(expected: List<Pair<String, SemanticsMatcher>>): List<Pair<String, Int>> {
         val places = expected.map { (name, matcher) ->
             val target = compose.onNode(matcher).fetchSemanticsNode().id
-            name to order.indexOf(target).takeIf { it >= 0 } ?: order.indexOfFirst { related(it, target) }
+            name to (order.indexOf(target).takeIf { it >= 0 } ?: order.indexOfFirst { related(it, target) })
         }
         // Each in its own place, so no node they are all within stands in for them
         val at = places.map { it.second }

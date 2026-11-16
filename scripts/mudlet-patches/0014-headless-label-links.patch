@@ -1,0 +1,610 @@
+Headless: follow a label's link
+
+An app drawing labels itself has no QLabel to emit linkActivated, so a link in a label's rich text (send:, prompt:,
+http(s): or Lua) did nothing in THeadlessSession, on the Android client or any other frontend with no window:
+TLabel::slot_linkActivated() alone knew what a click on one does.
+
+- TLabelModel gains followLink(), TLabel::slot_linkActivated()'s handling moved out of the widget: send: goes to the
+  game through the aliases, prompt: to the main command line through the console frontend, http(s): through
+  TAppFrontend::openWebPage(), a scheme that is neither and no Lua method call is noted in the Errors console with
+  the same (TLabel-context) translation, and anything else runs as Lua. It says which it did, and linkScheme()
+  reads a link's scheme as it does. visitLink() marks a link visited where the label has a visited colour, and
+  linkTargets() reads a text's hrefs as QLabel reads them, so also a link containsAnchorTag() misses, as one with a
+  raw < in its href. TLabel calls followLink() and visitLink(), and still gives the command line focus after a
+  prompt: link; the desktop is unchanged.
+- TNullConsoleFrontend::visitLabelLink() marks the link visited and restyles the label, as setLinkStyle() does, so
+  the visited style changes labelContent().text and names the label in scriptWindowsChanged.
+- THeadlessSession::followLabelLink(label, href) is the player's click: ran, or failed with errorString() for a Lua
+  error, a link not run, a web link nothing opened and a prompt: link while the game hides input, which is not
+  followed at all, as the GUI puts its text in the hidden-input box a frontend with no window does not have;
+  unknown, with errorString(), for a name that is not a label's and an href that is not one of its links as its
+  text holds them now; refused where runLua() is.
+- docs/headless.md describes it in "Embedding it: the windows scripts make".
+
+Tested in HeadlessSessionWindowsTest (each scheme, aliases, a Lua error, a scheme not run, a prompt: link while
+the game hides input, the refusals, links with a raw < in the href or a space after the tag's <, the visited restyle
+and clearVisitedLinks(), and a link whose Lua deletes its label). LabelAnchorInteractionTest covers the desktop's
+clicks as before.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 40ec0ce..02d59e0 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1424,6 +1424,26 @@ than a `leave`'s, whether or not a window ran anything for it, as for the moves
+ window was at the press if it has gone since, and with nil and
+ "the profile has no main window" until the first.
+ 
++`pointer()` runs a label's callbacks, not the links in its text: Mudlet lays out no rich text for a label, so
++the app finds the link the player tapped and passes it to `followLabelLink(label, href)`, which follows it as
++the GUI's label follows a click on it. The link is marked visited where `setLinkStyle()` gave the label a
++visited colour, which restyles its `text` and so names it in `scriptWindowsChanged`, for an anchor the link
++style reaches: `<a href="...">` or `<a href='...'>`, with no entity in a double-quoted `href`, as the visited
++links are compared with the `href` as written, in a label where `containsAnchorTag()` finds a link. Then a
++`send:` link's text goes to the game through the aliases, a `prompt:` link's text replaces the main command
++line's, which `commandLineTextRequested` tells, an `http:` or `https:` link opens through `QDesktopServices`, a
++link of any other scheme that is not a Lua method call, such as `mailto:`, `ftp://` or `javascript:`, runs
++nothing and is noted in the error console, and anything else runs as Lua, all before it returns. The scheme is
++read as a browser reads it, in any case and without the whitespace around the `href`, and a `send:` or
++`prompt:` link's text keeps a trailing space. It returns `ran`, or `failed`, with `errorString()` saying why,
++for a Lua error, a link not run, a web link nothing opened and a `prompt:` link while the game hides input
++(`hiddenInputWanted`): the GUI then puts the text in its hidden-input box, which a frontend with no window
++does not have, so the link is not followed or marked visited. It is `unknown`, with `errorString()` saying
++why, for a name that is not a label's and for an `href` that is not one of the label's links as its `text`
++holds them now, read as Qt reads them, with their entities decoded, and `refused` where `runLua()` is. An app
++that opens web links its own way, as one whose engine runs where it cannot start a browser, may keep them from
++it; they are then not marked visited.
++
+ ## Embedding it: calls that do not wait
+ 
+ `start()`, `installPackage()`, `save()` and `shutdown()` return only once they are done, and run the
+diff --git a/src/TLabel.cpp b/src/TLabel.cpp
+index ef36664..c76a91b 100644
+--- a/src/TLabel.cpp
++++ b/src/TLabel.cpp
+@@ -32,7 +32,6 @@
+ 
+ #include <QAccessible>
+ #include <QApplication>
+-#include <QDesktopServices>
+ #include <QPainter>
+ #include <QSvgRenderer>
+ #include <QTextBlock>
+@@ -40,7 +39,6 @@
+ #include <QTextDocument>
+ #include <QTextDocumentFragment>
+ #include <QTimer>
+-#include <QUrl>
+ #include <QtEvents>
+ #include <chrono>
+ #include <utility>
+@@ -912,61 +910,22 @@ void TLabel::reapplyLinkStyle()
+ 
+ void TLabel::slot_linkActivated(const QString& link)
+ {
+-    if (!mLinkVisitedColor.isEmpty()) {
+-        mVisitedLinks.insert(link);
++    if (mpModel->visitLink(link)) {
+         reapplyLinkStyle();
+     }
+ 
+-    // Check for custom schemes by looking for the colon separator; a browser
+-    // also drops the whitespace around an href before reading its scheme
+-    const QString href = link.trimmed();
+-    const int colonPos = href.indexOf(':');
+-
+-    if (colonPos > 0) {
+-        const QString scheme = href.left(colonPos).toLower(); // RFC 3986: schemes are case-insensitive
+-        // Untrimmed: a prompt: or send: payload can end in a space the player means to keep
+-        const QString payload = link.mid(link.indexOf(':') + 1);
+-
+-        // Handle custom Mudlet URL schemes for Lua commands
+-        if (scheme == qsl("send")) {
+-            // send: scheme - send the command to the MUD immediately
+-            mpHost->send(payload);
+-            return;
+-        }
+-
+-        if (scheme == qsl("prompt")) {
+-            // prompt: scheme - put text in command line and wait for user to press enter
+-            if (mpHost->mainConsoleView() && mpHost->mainConsoleView()->mpCommandLine) {
+-                QPointer<TCommandLine> commandLine = mpHost->mainConsoleView()->mpCommandLine;
+-                mpHost->mainConsoleView()->printToCommandLine(payload);
+-                // Defer the focus operation to avoid issues with QPointer manipulation
+-                // during the signal handler execution
+-                QTimer::singleShot(0ms, commandLine.data(), [commandLine]() {
+-                    if (commandLine) {
+-                        commandLine->setFocus();
+-                    }
+-                });
++    // TLabelModel::followLink() is what a frontend without this widget runs as well
++    if (mpModel->followLink(link) != TLabelModel::LinkFollowed::prompted || !mpHost->mainConsoleView()) {
++        return;
++    }
++    // The prompt: link's text is on the command line, for the player to finish
++    if (QPointer<TCommandLine> commandLine = mpHost->mainConsoleView()->mpCommandLine) {
++        // Defer the focus operation to avoid issues with QPointer manipulation
++        // during the signal handler execution
++        QTimer::singleShot(0ms, commandLine.data(), [commandLine]() {
++            if (commandLine) {
++                commandLine->setFocus();
+             }
+-            return;
+-        }
+-
+-        if (scheme == qsl("http") || scheme == qsl("https")) {
+-            QDesktopServices::openUrl(QUrl(href));
+-            return;
+-        }
+-
+-        // After a scheme-shaped prefix only a Lua method call - tel:go(), pkg.ui:show "x" - is Lua;
+-        // ftp://host, mailto:a@b.c or about:blank are URLs that Lua would only report as syntax errors.
+-        static const QRegularExpression schemeName(qsl("^[a-z][a-z0-9+.-]*$"));
+-        // Lua allows whitespace and --[[ ]] comments on either side of the method name
+-        static const QRegularExpression methodCall(qsl("^(?:\\s|--\\[(=*)\\[.*?\\]\\1\\])*[A-Za-z_][A-Za-z0-9_]*(?:\\s|--\\[(=*)\\[.*?\\]\\2\\])*[(\"'{[]"));
+-        if (scheme == qsl("javascript") || (schemeName.match(scheme).hasMatch() && !methodCall.match(payload).hasMatch())) {
+-            //: Printed in the Errors console when a link in a label is clicked but neither handled nor run; %1 is the link, %2 its scheme
+-            const QString note = tr("[LINK:] The label link \"%1\" was not run: %2: is not a scheme Mudlet handles, and the link is not a Lua command.").arg(link, scheme);
+-            emit mpHost->signal_errorConsolePrint(note + QChar::LineFeed, QColor(255, 128, 0), QColor(Qt::black));
+-            return;
+-        }
++        });
+     }
+-
+-    mpHost->mLuaInterpreter.compileAndExecuteScript(link);
+ }
+diff --git a/src/TLabelModel.cpp b/src/TLabelModel.cpp
+index 4d3aedd..cba47ef 100644
+--- a/src/TLabelModel.cpp
++++ b/src/TLabelModel.cpp
+@@ -20,11 +20,15 @@
+ #include "TLabelModel.h"
+ 
+ #include "Host.h"
++#include "TAppFrontend.h"
++#include "TConsoleFrontend.h"
+ 
++#include <QCoreApplication>
+ #include <QFile>
+ #include <QImage>
+ #include <QRegularExpression>
+ #include <QSvgRenderer>
++#include <QTextBlock>
+ #include <QTextDocument>
+ #include <QTextDocumentFragment>
+ 
+@@ -361,6 +365,89 @@ QString TLabelModel::restyledText()
+     return styleLinks(mUnstyledText);
+ }
+ 
++QStringList TLabelModel::linkTargets(const QString& text)
++{
++    // Read as QLabel reads its rich text, so every link it draws, not only those containsAnchorTag() finds: a raw
++    // '<' in a quoted href or a space after the tag's '<' still makes a link
++    QStringList targets;
++    QTextDocument document;
++    document.setHtml(text);
++    for (QTextBlock block = document.begin(); block.isValid(); block = block.next()) {
++        for (auto it = block.begin(); !it.atEnd(); ++it) {
++            const QTextCharFormat format = it.fragment().charFormat();
++            if (!format.isAnchor()) {
++                continue;
++            }
++            // One link split across fragments by a change of style inside it is still one link
++            if (const QString href = format.anchorHref(); !href.isEmpty() && !targets.contains(href)) {
++                targets.append(href);
++            }
++        }
++    }
++    return targets;
++}
++
++bool TLabelModel::visitLink(const QString& link)
++{
++    if (mLinkVisitedColor.isEmpty()) {
++        return false;
++    }
++    mVisitedLinks.insert(link);
++    return true;
++}
++
++QString TLabelModel::linkScheme(const QString& link)
++{
++    // Check for custom schemes by looking for the colon separator; a browser
++    // also drops the whitespace around an href before reading its scheme
++    const QString href = link.trimmed();
++    const int colonPos = href.indexOf(':');
++    // RFC 3986: schemes are case-insensitive
++    return colonPos > 0 ? href.left(colonPos).toLower() : QString();
++}
++
++TLabelModel::LinkFollowed TLabelModel::followLink(const QString& link) const
++{
++    if (!mpHost) {
++        return LinkFollowed::failed;
++    }
++    if (const QString scheme = linkScheme(link); !scheme.isEmpty()) {
++        // Untrimmed: a prompt: or send: payload can end in a space the player means to keep
++        const QString payload = link.mid(link.indexOf(':') + 1);
++
++        // Handle custom Mudlet URL schemes for Lua commands
++        if (scheme == qsl("send")) {
++            // send: scheme - send the command to the MUD immediately
++            mpHost->send(payload);
++            return LinkFollowed::sent;
++        }
++
++        if (scheme == qsl("prompt")) {
++            // prompt: scheme - put text in command line and wait for user to press enter
++            mpHost->consoleFrontend()->replaceCommandLineText(qsl("main"), payload);
++            return LinkFollowed::prompted;
++        }
++
++        if (scheme == qsl("http") || scheme == qsl("https")) {
++            return TAppFrontend::instance()->openWebPage(link.trimmed()) ? LinkFollowed::opened : LinkFollowed::notOpened;
++        }
++
++        // After a scheme-shaped prefix only a Lua method call - tel:go(), pkg.ui:show "x" - is Lua;
++        // ftp://host, mailto:a@b.c or about:blank are URLs that Lua would only report as syntax errors.
++        static const QRegularExpression schemeName(qsl("^[a-z][a-z0-9+.-]*$"));
++        // Lua allows whitespace and --[[ ]] comments on either side of the method name
++        static const QRegularExpression methodCall(qsl("^(?:\\s|--\\[(=*)\\[.*?\\]\\1\\])*[A-Za-z_][A-Za-z0-9_]*(?:\\s|--\\[(=*)\\[.*?\\]\\2\\])*[(\"'{[]"));
++        if (scheme == qsl("javascript") || (schemeName.match(scheme).hasMatch() && !methodCall.match(payload).hasMatch())) {
++            //: Printed in the Errors console when a link in a label is clicked but neither handled nor run; %1 is the link, %2 its scheme
++            const QString note = QCoreApplication::translate("TLabel", "[LINK:] The label link \"%1\" was not run: %2: is not a scheme Mudlet handles, and the link is not a Lua command.").arg(link, scheme);
++            emit mpHost->signal_errorConsolePrint(note + QChar::LineFeed, QColor(255, 128, 0), QColor(Qt::black));
++            return LinkFollowed::notRun;
++        }
++    }
++
++    return mpHost->mLuaInterpreter.compileAndExecuteScript(link) ? LinkFollowed::ran : LinkFollowed::failed;
++}
++
+ // If we have link styling configured and the text contains HTML links,
+ // we need to inject inline styles because QTextDocument doesn't use
+ // widget stylesheets or QPalette for link colors when a stylesheet exists
+diff --git a/src/TLabelModel.h b/src/TLabelModel.h
+index 3888229..9263408 100644
+--- a/src/TLabelModel.h
++++ b/src/TLabelModel.h
+@@ -28,6 +28,7 @@
+ #include <QSet>
+ #include <QSize>
+ #include <QString>
++#include <QStringList>
+ 
+ #include <functional>
+ #include <optional>
+@@ -126,6 +127,27 @@ struct TLabelModel
+     QString linkStyledText(const QString& text);
+     // What the label shows for its text once the link style or the visited links change
+     QString restyledText();
++    // The href of each link in the text, in the order of the text, as QLabel reads them to draw them as links
++    static QStringList linkTargets(const QString& text);
++    // Marks the link visited, as following it does, where a visited colour is set: true when the view should show
++    // restyledText(), false when nothing changed
++    bool visitLink(const QString& link);
++    // What following a link did. A browser drops the whitespace around an href before reading its scheme, and so
++    // does this; the payload of a send: or prompt: link is kept untrimmed, as it can end in a space the player means.
++    enum class LinkFollowed {
++        sent,      // send: its text went to the game, through the aliases
++        prompted,  // prompt: its text is on the main command line, for the player to finish and send
++        opened,    // http: or https: the system opened it
++        notOpened, // http: or https: nothing opened it
++        notRun,    // another scheme and not a Lua method call, such as mailto: - noted in the Errors console
++        ran,       // anything else is Lua, which ran
++        failed     // the Lua did not compile or raised an error, as the Errors console says
++    };
++    // What a click on a link does, whichever frontend shows the label; marking it visited is visitLink()'s
++    LinkFollowed followLink(const QString& link) const;
++    // The scheme followLink() reads: in lower case, before the first colon of the href without the whitespace around
++    // it, and empty where there is no colon or nothing before it
++    static QString linkScheme(const QString& link);
+ 
+     QPointer<Host> mpHost;
+     QString mName;
+diff --git a/src/TNullConsoleFrontend.cpp b/src/TNullConsoleFrontend.cpp
+index 0e74bf3..ebc797f 100644
+--- a/src/TNullConsoleFrontend.cpp
++++ b/src/TNullConsoleFrontend.cpp
+@@ -3798,6 +3798,14 @@ bool TNullConsoleFrontend::clearLabelVisitedLinks(const QString& name)
+     return true;
+ }
+ 
++void TNullConsoleFrontend::visitLabelLink(const QString& name, const QString& link)
++{
++    const auto it = mLabels.find(name);
++    if (it != mLabels.end() && it->second.pModel->visitLink(link)) {
++        reapplyLabelLinkStyle(it->second);
++    }
++}
++
+ // QWidget::resize() takes a negative size as nothing
+ bool TNullConsoleFrontend::resizeLabel(const QString& name, const int width, const int height)
+ {
+diff --git a/src/TNullConsoleFrontend.h b/src/TNullConsoleFrontend.h
+index a7ed682..f03dade 100644
+--- a/src/TNullConsoleFrontend.h
++++ b/src/TNullConsoleFrontend.h
+@@ -252,6 +252,9 @@ public:
+     bool setLabelLinkStyle(const QString& name, const QString& linkColor, const QString& linkVisitedColor, bool underline) override;
+     bool resetLabelLinkStyle(const QString& name) override;
+     bool clearLabelVisitedLinks(const QString& name) override;
++    // TLabel::slot_linkActivated()'s marking of the link visited, and the restyle where that changed what the label
++    // shows; nothing where no label has the name
++    void visitLabelLink(const QString& name, const QString& link);
+     bool showLabel(const QString& name) override { return setLabelShown(name, true); }
+     bool hideLabel(const QString& name) override { return setLabelShown(name, false); }
+     bool resizeLabel(const QString& name, int width, int height) override;
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 0887446..03ea83c 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -342,6 +342,18 @@ public:
+     // The same for a link of that window, shown or hidden, as only the app knows what its pointer can reach;
+     // unknown too for a name windowLines() refuses. What it changes of the link is windowTextChanged's to tell.
+     LinkResult followWindowLink(const QString& window, int link, std::optional<int> item = std::nullopt);
++    // Follows a link in a label's rich text as a click on it does in the GUI, with TLabel's own handling: the link
++    // is marked visited where the label has a visited colour, which restyles labelContent().text, for an anchor
++    // TLabelModel::styleLinks() styles, and so names the label in scriptWindowsChanged; then a send: link's text
++    // goes to the game through the aliases, a prompt: link's text replaces the main command line's, as
++    // commandLineTextRequested tells, an http: or https: link opens through QDesktopServices, a link of any other
++    // scheme that is not a Lua method call, such as mailto:, runs nothing and is noted in the Errors console, and
++    // anything else runs as Lua, all before this returns. ran, or failed where the Lua raised an error, the link was
++    // not run or nothing opened it, which errorString() gives; failed too, followed and marked not at all, for a
++    // prompt: link while the game hides input, whose text the GUI puts in its hidden-input box. unknown, with
++    // errorString() saying why, for a name that is not a label's and for an href that is not one of the label's
++    // links as its text holds them now, read as QLabel reads them. refused: where submit() is.
++    LinkResult followLabelLink(const QString& label, const QString& href);
+     // Whether the main console shows each line's time beside it, as the GUI's timestamp button says; false with
+     // no profile open. A getter, so it may be called from any handler.
+     bool timeStampsShown() const;
+diff --git a/src/headless/THeadlessSessionLinks.cpp b/src/headless/THeadlessSessionLinks.cpp
+index 0c244c7..e345450 100644
+--- a/src/headless/THeadlessSessionLinks.cpp
++++ b/src/headless/THeadlessSessionLinks.cpp
+@@ -22,6 +22,9 @@
+ #include "Host.h"
+ #include "MudletApp.h"
+ #include "TConsoleModel.h"
++#include "TLabelModel.h"
++#include "TNullConsoleFrontend.h"
++#include "TWindowRegistry.h"
+ 
+ #include <QFile>
+ #include <QPointer>
+@@ -138,6 +141,62 @@ THeadlessSession::LinkResult THeadlessSession::followWindowLink(const QString& w
+     return LinkResult::failed;
+ }
+ 
++THeadlessSession::LinkResult THeadlessSession::followLabelLink(const QString& label, const QString& href)
++{
++    if (!usable()) {
++        return LinkResult::refused;
++    }
++    auto* pView = dynamic_cast<TNullConsoleFrontend*>(mpHost->consoleFrontend());
++    TLabelModel* pModel = pView && pView->labelRecord(label) ? mpHost->windowRegistry().labelModel(label) : nullptr;
++    if (!pModel) {
++        //: Error from a frontend with no window asked to follow a link in a label that the profile does not have; %1 is the name it gave
++        mErrorString = tr("The profile has no label called \"%1\".").arg(label);
++        return LinkResult::unknown;
++    }
++    // Only a link the label shows can be clicked; a pixmap or movie empties the text, and its links with it
++    if (!TLabelModel::linkTargets(pModel->mText).contains(href)) {
++        //: Error from a frontend with no window asked to follow a link in a label whose text has no link to that address; %1 is the label's name, %2 the link it gave
++        mErrorString = tr("The label \"%1\" has no link to \"%2\".").arg(label, href);
++        return LinkResult::unknown;
++    }
++    // The GUI puts a prompt: link's text in its hidden-input box while the game hides what is typed; with no window
++    // there is no such box, and the main command line takes nothing then, so the link is not followed at all
++    if (mpHost->passwordEntryWanted() && TLabelModel::linkScheme(href) == qsl("prompt")) {
++        //: Error from a frontend with no window asked to follow a prompt: link in a label, which puts text on the input line, while the game hides what is typed, as for a password
++        mErrorString = tr("The game is hiding input, so the link's text was not put on the input line.");
++        return LinkResult::failed;
++    }
++    pView->visitLabelLink(label, href);
++    QString errorText;
++    const auto errorCapture = connect(mpHost, &Host::signal_errorConsolePrint, this, [&errorText](const QString& text) {
++        errorText = text;
++    });
++    const QPointer<THeadlessSession> self(this);
++    // The Lua a link runs may delete the label, so the model is not read again after this
++    const TLabelModel::LinkFollowed followed = pModel->followLink(href);
++    disconnect(errorCapture);
++    switch (followed) {
++    case TLabelModel::LinkFollowed::sent:
++    case TLabelModel::LinkFollowed::prompted:
++    case TLabelModel::LinkFollowed::opened:
++    case TLabelModel::LinkFollowed::ran:
++        return LinkResult::ran;
++    case TLabelModel::LinkFollowed::notOpened:
++    case TLabelModel::LinkFollowed::notRun:
++    case TLabelModel::LinkFollowed::failed:
++        break;
++    }
++    if (self) {
++        if (followed == TLabelModel::LinkFollowed::notOpened) {
++            //: Error from a frontend with no window that followed a web link in a label which no application on the system opened; %1 is the link
++            mErrorString = tr("Nothing opened the web link \"%1\".").arg(href.trimmed());
++        } else {
++            mErrorString = luaErrorOf(errorText);
++        }
++    }
++    return LinkResult::failed;
++}
++
+ void THeadlessSession::connectLinkRelays(Host* pHost, const unsigned int run)
+ {
+     mChangedLinks.clear();
+diff --git a/test/functional_tests/HeadlessSessionWindowsTest.cpp b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+index 77f7e3d..46ede52 100644
+--- a/test/functional_tests/HeadlessSessionWindowsTest.cpp
++++ b/test/functional_tests/HeadlessSessionWindowsTest.cpp
+@@ -25,11 +25,14 @@
+  * Run with: ctest -R HeadlessSessionWindowsTest -V
+  */
+ 
++#include <QDesktopServices>
+ #include <QDir>
+ #include <QFile>
+ #include <QImage>
++#include <QScopeGuard>
+ #include <QSignalSpy>
+ #include <QTemporaryDir>
++#include <QUrl>
+ #include <QtTest/QtTest>
+ 
+ #include <optional>
+@@ -45,6 +48,18 @@
+ 
+ using Kind = THeadlessSession::ScriptWindow::Kind;
+ 
++// Takes the web pages QDesktopServices would open, so a test opens none
++class HeadlessLabelLinkUrlCatcher : public QObject
++{
++    Q_OBJECT
++
++public:
++    QList<QUrl> mUrls;
++
++public slots:
++    void slot_openUrl(const QUrl& url) { mUrls.append(url); }
++};
++
+ class HeadlessSessionWindowsTest : public QObject
+ {
+     Q_OBJECT
+@@ -1626,6 +1641,131 @@ setLabelOnLeave("u", function() seen[#seen + 1] = "u.leave" end) setLabelWheelCa
+         QVERIFY(session.shutdown(false));
+     }
+ 
++    void test_aLabelsLinkIsFollowedAsTheGuisClickFollowsIt()
++    {
++        using LinkResult = THeadlessSession::LinkResult;
++        const QString name = qsl("Headless Label Links");
++        QVERIFY(writeProfile(name));
++        THeadlessSession session;
++        // Refused where runLua() is
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:n")), LinkResult::refused);
++        QVERIFY(!session.errorString().isEmpty());
++        QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        QVERIFY(session.setMainWindowSize(QSize(800, 600)));
++        HeadlessLabelLinkUrlCatcher catcher;
++        QDesktopServices::setUrlHandler(qsl("https"), &catcher, "slot_openUrl");
++        const auto unsetHandler = qScopeGuard([] {
++            QDesktopServices::unsetUrlHandler(qsl("https"));
++        });
++        QSignalSpy prompted(&session, &THeadlessSession::commandLineTextRequested);
++        QSignalSpy changes(&session, &THeadlessSession::scriptWindowsChanged);
++        QVERIFY(session.runLua(qsl(R"lua(
++headlessSent, headlessRan = {}, 0
++registerAnonymousEventHandler("sysDataSendRequest", function(_, command) headlessSent[#headlessSent + 1] = command end)
++tempAlias("^n$", [[send("north", false)]])
++createLabel("lbl", 0, 0, 400, 40, 1)
++echo("lbl", [[<a href="send:n">go</a> <a href="PROMPT:tell Bob ">tell</a> <a href="https://example.org/a?b=1&amp;c=2">site</a> <a href="headlessRan = headlessRan + 1">count</a> <a href="error('headless link error')">bad</a> <a href="mailto:bob@example.org">mail</a>]])
++createLabel("plain", 0, 50, 100, 20, 1)
++echo("plain", "no links here")
++)lua")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        const auto sent = [&session]() {
++            return luaString(session, qsl("table.concat(headlessSent, '|')"));
++        };
++
++        // send: goes to the game through the aliases
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:n")), LinkResult::ran);
++        QCOMPARE(sent(), qsl("north"));
++        // prompt: is the main command line's, its trailing space kept, whatever the scheme's case
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("PROMPT:tell Bob ")), LinkResult::ran);
++        QCOMPARE(prompted.size(), 1);
++        QCOMPARE(prompted.first().at(1).toString(), qsl("tell Bob "));
++        // Not while the game hides what is typed: the GUI puts the text in its hidden-input box, which there is not
++        // here, so the link is not followed and says why
++        session.host()->setRemoteEchoingActive(true);
++        QVERIFY(session.host()->passwordEntryWanted());
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("PROMPT:tell Bob ")), LinkResult::failed);
++        QVERIFY2(session.errorString().contains(qsl("hiding input")), qPrintable(session.errorString()));
++        session.host()->setRemoteEchoingActive(false);
++        QCOMPARE(prompted.size(), 1);
++        // http: and https: open through QDesktopServices, with the href's entities decoded as Qt reads them
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("https://example.org/a?b=1&c=2")), LinkResult::ran);
++        QCOMPARE(catcher.mUrls, QList<QUrl>{QUrl(qsl("https://example.org/a?b=1&c=2"))});
++        // Anything else is Lua, which runs before it returns, or fails with its error
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("headlessRan = headlessRan + 1")), LinkResult::ran);
++        QCOMPARE(luaString(session, qsl("headlessRan")), qsl("1"));
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("error('headless link error')")), LinkResult::failed);
++        QVERIFY2(session.errorString().contains(qsl("headless link error")), qPrintable(session.errorString()));
++        // A scheme Mudlet does not handle that is no Lua method call runs nothing, and says so
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("mailto:bob@example.org")), LinkResult::failed);
++        QVERIFY2(session.errorString().contains(qsl("mailto: is not a scheme Mudlet handles")), qPrintable(session.errorString()));
++        QCOMPARE(sent(), qsl("north"));
++        QCOMPARE(prompted.size(), 1);
++        QCOMPARE(catcher.mUrls.size(), 1);
++
++        // Only a label's own links, as its text holds them now, are followed
++        QCOMPARE(session.followLabelLink(qsl("nonesuch"), qsl("send:n")), LinkResult::unknown);
++        QVERIFY2(session.errorString().contains(qsl("nonesuch")), qPrintable(session.errorString()));
++        QCOMPARE(session.followLabelLink(qsl("plain"), qsl("send:n")), LinkResult::unknown);
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:south")), LinkResult::unknown);
++        QVERIFY2(session.errorString().contains(qsl("send:south")), qPrintable(session.errorString()));
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:n ")), LinkResult::unknown);
++        QCOMPARE(sent(), qsl("north"));
++        // No label's links reach the main console's, nor a console's
++        QVERIFY(session.runLua(qsl(R"(createMiniConsole("mini", 0, 100, 200, 100))")));
++        QCOMPARE(session.followLabelLink(qsl("mini"), qsl("send:n")), LinkResult::unknown);
++        QCOMPARE(session.followLabelLink(qsl("main"), qsl("send:n")), LinkResult::unknown);
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        QVERIFY(session.runLua(qsl(R"(echo("lbl", [[<a href="send:n">go</a>]]))")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("mailto:bob@example.org")), LinkResult::unknown);
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:n")), LinkResult::ran);
++        QCOMPARE(sent(), qsl("north|north"));
++        // Followed with no visited colour, nothing about the label changed
++        QVERIFY(!changes.wait(200));
++        // Its links are read as Qt reads them: a raw < inside a quoted href, or a space after the tag's <, still makes one
++        QVERIFY(session.runLua(qsl(R"lua(
++createLabel("lt", 0, 80, 400, 20, 1)
++echo("lt", [[<a href="headlessRan = headlessRan + (1 < 2 and 10 or 0)">lt</a> < a href="headlessRan = headlessRan + 100">spaced</a>]])
++)lua")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        QCOMPARE(session.followLabelLink(qsl("lt"), qsl("headlessRan = headlessRan + (1 < 2 and 10 or 0)")), LinkResult::ran);
++        QCOMPARE(session.followLabelLink(qsl("lt"), qsl("headlessRan = headlessRan + 100")), LinkResult::ran);
++        QCOMPARE(luaString(session, qsl("headlessRan")), qsl("111"));
++
++        // The visited style restyles the text, which names the label
++        QVERIFY(session.runLua(qsl(R"(setLinkStyle("lbl", "#00ff00", "#ff00ff"))")));
++        QVERIFY(changes.wait(1000));
++        changes.clear();
++        QVERIFY(session.labelContent(qsl("lbl"))->text.contains(qsl("#00ff00")));
++        QVERIFY(!session.labelContent(qsl("lbl"))->text.contains(qsl("#ff00ff")));
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:n")), LinkResult::ran);
++        QVERIFY(changes.wait(1000));
++        QCOMPARE(changes.takeFirst().at(1).toStringList(), QStringList{qsl("lbl")});
++        changes.clear();
++        QVERIFY2(session.labelContent(qsl("lbl"))->text.contains(qsl("#ff00ff")), qPrintable(session.labelContent(qsl("lbl"))->text));
++        QVERIFY(!session.labelContent(qsl("lbl"))->text.contains(qsl("#00ff00")));
++        QCOMPARE(sent(), qsl("north|north|north"));
++        // A visited link followed again changes nothing more
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("send:n")), LinkResult::ran);
++        QVERIFY(!changes.wait(200));
++        // clearVisitedLinks() takes the visited style off again
++        QVERIFY(session.runLua(qsl(R"(clearVisitedLinks("lbl"))")));
++        QVERIFY(changes.wait(1000));
++        QVERIFY(session.labelContent(qsl("lbl"))->text.contains(qsl("#00ff00")));
++
++        // A link whose Lua deletes its own label still answers
++        QVERIFY(session.runLua(qsl(R"lua(echo("lbl", [[<a href="deleteLabel('lbl')">close</a>]]))lua")));
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("deleteLabel('lbl')")), LinkResult::ran);
++        QVERIFY(!session.labelContent(qsl("lbl")));
++        QCOMPARE(session.followLabelLink(qsl("lbl"), qsl("deleteLabel('lbl')")), LinkResult::unknown);
++        QVERIFY(session.shutdown(false));
++    }
++
+     void test_aConsolesScrollIsReadAndTold()
+     {
+         const QString name = qsl("Headless Windows Scroll");

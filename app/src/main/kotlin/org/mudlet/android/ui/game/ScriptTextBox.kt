@@ -92,13 +92,15 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit:
     // The script's text the field last took: the player's own, which the engine does not send back, never changes it, so
     // what they typed after what was sent stays. Saved with the field, so that a script's text while it was away shows
     var shownEdit by rememberSaveable(name) { mutableStateOf(edit) }
-    // Also when it turns read-only, which drops what the player typed that was not yet sent
-    LaunchedEffect(edit, readOnly) {
-        if (scriptText == null) return@LaunchedEffect
+    // Also when it turns read-only, which drops what the player typed that was not yet sent. Taken here, as the field is
+    // drawn with it, not in an effect after: the field's editor would have the old text until the next frame, and an
+    // edit of the keyboard's that changes the field in between (the composing region it sets on a word, or a key) would
+    // put that back, and a tap on a label would send it, as what the player typed
+    if (scriptText != null) {
         if ((edit != shownEdit || readOnly) && TextBoxContent.plain(value.text) != scriptText) {
             value = TextFieldValue(scriptText, TextRange(scriptText.length))
         }
-        shownEdit = edit
+        if (edit != shownEdit) shownEdit = edit
     }
 
     // What the player typed that the engine has not been sent, which the profile's ScriptWindowsClient holds to send

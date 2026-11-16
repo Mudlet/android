@@ -494,7 +494,7 @@ def several_profiles(c, port):
     control = []
     ctl.send({"t": "setAppState", "active": False, "minimized": True})
     left = shows(beta, "app false", frames) and shows(solo, "app false", solo_frames)
-    saved = wait_status(ctl, "save", lambda v: True, control)
+    saved = wait_status(ctl, "save", lambda v: True, control)["value"]
     drain(beta, frames)
     drain(solo, solo_frames)
     once = [len([m for m in got if m["t"] == "line" and m["text"] == "app false"]) for got in (frames, solo_frames)]

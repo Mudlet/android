@@ -518,8 +518,11 @@ device shows, below the UI's debug hook:
   button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
   aloud, and a link in one asked about with `getLink` and the window's name and followed by a tap, its menu and
   TalkBack's actions; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the
-  engine as `pointer` events, its 48 dp touch bounds, a gauge read as its progress, a link's command, and a label's
-  image asked of the engine; the button bars: a bar's buttons as 48 dp buttons above or beside the console and read
+  engine as `pointer` events, its 48 dp touch bounds, a gauge read as its progress and its live text label's new text
+  said, politely or not, but not its first nor a new value, a live label as one live node from blank (no stop) to text,
+  a named one with its text as its state,
+  a link's command, and a label's image asked of the engine; the button bars: a bar's buttons
+  as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
@@ -1107,6 +1110,12 @@ Item 13 of the on-device checklist covers this.
       drag. A link in a label's text runs its command.
     - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
       its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
+      `lua news = Geyser.Label:new({name = "news", x = 0, y = 0, width = 200, height = 30, liveRegion = "polite"})`
+      makes a blank live label, which swiping skips; `lua news:echo("a dragon!")`: TalkBack says "a dragon!" after
+      what it is saying, without moving focus, and again for each new text; with `"assertive"` it says it at once.
+      After `lua news:setAccessibleName("News")`, a new text is said after "News". A gauge whose text label is live
+      (for a Geyser gauge `hp`, `lua hp.text:setLiveRegion("polite")`) says its new text, and nothing when only its
+      value changes.
 22. Button bars and commands, with the libmudlet APK. `lua tempButtonToolbar("Moves", 0, 0) tempButton("Moves",
     "North", 0)` adds a top bar, `lua tempButtonToolbar("Side", 1, 1) tempButton("Side", "Go", 1)` a left bar, and
     `lua addCommand{name = "Speech", menuPath = "Tools/Voices", surfaces = {"menu"}}` a command; a push-down button

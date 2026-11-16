@@ -238,11 +238,12 @@ class FakeEngine : AutoCloseable {
             accessibleName: String = "",
             accessibleButton: Boolean = false,
             styleSheet: String = "",
+            liveRegion: String? = null,
         ) = send(
             JSONObject().put("t", "label").put("name", name).put("text", text).put("image", image).put("svg", false)
                 .put("movie", "").put("moviePaused", false).put("movieFrame", -1).put("movieSpeed", 100).put("toolTip", toolTip)
                 .put("clickThrough", false).put("accessibleName", accessibleName).put("accessibleButton", accessibleButton)
-                .put("styleSheet", styleSheet),
+                .put("styleSheet", styleSheet).putOpt("liveRegion", liveRegion),
         )
 
         /** The answer to the `getImage` whose id was [re]: [png], a PNG of [w] by [h] pixels. */

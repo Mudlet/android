@@ -68,7 +68,9 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.SpanStyle
@@ -100,6 +102,7 @@ import org.mudlet.android.protocol.HAlign
 import org.mudlet.android.protocol.LabelContent
 import org.mudlet.android.protocol.LabelFill
 import org.mudlet.android.protocol.LabelStyle
+import org.mudlet.android.protocol.LiveRegion
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.POINTER_RIGHT
 import org.mudlet.android.protocol.PlacedWindow
@@ -137,6 +140,7 @@ private const val MAX_TILES = 4096
  * window is, and the player's touches sent back to it as `pointer` events. A clickable one is a button, read by its
  * accessible name, and touched within 48 dp around it; one with text is read as text; one with only an image and no
  * name is left out. Of a [gauge]'s three labels, its back is read as the gauge's progress, and the other two not at all.
+ * A label with a live region has TalkBack read it again each time what it reads changes.
  */
 @Composable
 internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Gauge?, density: Density, modifier: Modifier = Modifier) {
@@ -196,6 +200,30 @@ internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Ga
     }
 }
 
+/** Has TalkBack told of a change of this node as [region] asks: after what it is saying, at once, or not at all. */
+private fun SemanticsPropertyReceiver.liveAs(region: LiveRegion?) {
+    when (region) {
+        LiveRegion.POLITE -> liveRegion = LiveRegionMode.Polite
+        LiveRegion.ASSERTIVE -> liveRegion = LiveRegionMode.Assertive
+        LiveRegion.OFF, null -> {}
+    }
+}
+
+/**
+ * Has the [Announcer] say [text] each time it changes to one not blank while [region] is live, as the desktop says a
+ * live label's new text (`TLabel::announceTextChange()`); not the text it had when first drawn.
+ */
+@Composable
+private fun AnnounceChanges(text: String, region: LiveRegion) {
+    var before by remember { mutableStateOf(text) }
+    LaunchedEffect(text) {
+        if (text != before && text.isNotBlank() && region != LiveRegion.OFF) {
+            Announcer.announce(text, assertive = region == LiveRegion.ASSERTIVE)
+        }
+        before = text
+    }
+}
+
 /** This rectangle grown about its centre to at least [min] pixels each way. */
 private fun PxRect.grownTo(min: Float): PxRect {
     val w2 = max(w, min)
@@ -228,7 +256,9 @@ private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: F
 /**
  * What a screen reader is told of the label, as docs/phase-f.md's "Touch and TalkBack" says: a button its click and
  * right-click, which send the tap's and the long press's `pointer` events to the label's centre, and its links as
- * actions; a gauge its progress. Null for a label read by its text, as drawn; nothing set for one left out.
+ * actions; a gauge its progress. A live label is one node, blank or not, live as its live region asks, which reads
+ * its text, or its name with its text as its state; a live gauge's text label has the [Announcer] say its new text.
+ * Null for a label read by its text, as drawn; nothing set for one left out.
  */
 @Composable
 private fun labelReading(
@@ -251,6 +281,7 @@ private fun labelReading(
     val accessibleName = content?.accessibleName.orEmpty()
     val button = content?.accessibleButton == true
     val name = window.name
+    val live = content?.liveRegion?.takeIf { it != LiveRegion.OFF }
 
     fun SemanticsPropertyReceiver.asButton() {
         role = Role.Button
@@ -268,10 +299,23 @@ private fun labelReading(
         traversalIndex = WINDOWS_TRAVERSAL_INDEX
     }
 
+    // A live label read by its name says its new text as its state, as the desktop says a live label's new text,
+    // name or not; not where the name already says it
+    fun SemanticsPropertyReceiver.liveText(readAs: String) {
+        if (live != null && plain.isNotBlank() && !plain.trim().equals(readAs.trim(), ignoreCase = true)) {
+            stateDescription = plain
+        }
+    }
+
     if (gauge != null) {
         if (gauge.back.key != window.key) return {}
-        val gaugeText = gauge.text?.let { ScriptWindowsClient.state.labels[it.name] }?.text?.let { RichText.parse(it, DEFAULT_FONT_PX).plain }
+        val labels = ScriptWindowsClient.state.labels
+        val textLabel = gauge.text?.let { labels[it.name] }
+        val gaugeText = textLabel?.text?.let { RichText.parse(it, DEFAULT_FONT_PX).plain }
         val state = gaugeText?.ifBlank { null } ?: stringResource(R.string.gauge_percent, gauge.percent)
+        // A live node would be read again at each change of the value too, so the text label's new text is announced
+        // instead: on the desktop only it speaks, the back and front having no text
+        if (textLabel != null && gaugeText != null) AnnounceChanges(gaugeText, textLabel.liveRegion)
         return {
             contentDescription = accessibleName.ifEmpty { gauge.name }
             progressBarRangeInfo = ProgressBarRangeInfo(gauge.percent.toFloat(), 0f..100f)
@@ -287,8 +331,20 @@ private fun labelReading(
         }
         return {
             contentDescription = label.ifEmpty { name }
+            if (accessibleName.isNotEmpty()) liveText(accessibleName)
             asButton()
             if (linkActions.isNotEmpty()) customActions = linkActions
+            liveAs(live)
+            inOrder()
+        }
+    }
+    // A live label keeps one node, blank or not, so its first text is a change TalkBack hears; its links are then
+    // actions, as a named label's are. Blank, it holds no text, so it is not a stop that says nothing
+    if (live != null && accessibleName.isEmpty()) {
+        return {
+            if (plain.isNotEmpty()) this.text = AnnotatedString(plain)
+            if (linkActions.isNotEmpty()) customActions = linkActions
+            liveAs(live)
             inOrder()
         }
     }
@@ -299,7 +355,9 @@ private fun labelReading(
         accessibleName.isNotEmpty() -> {
             {
                 contentDescription = accessibleName
+                liveText(accessibleName)
                 if (linkActions.isNotEmpty()) customActions = linkActions
+                liveAs(live)
                 inOrder()
             }
         }

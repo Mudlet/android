@@ -68,7 +68,7 @@ Checked against the same commit; each has a prompt under "Upstream gaps" below.
    it, so the app cannot give TalkBack a progress value. `setLabelAccessibleRole()` takes only `button`, `text` or
    `''`.
 3. **A label's live region.** `setLabelLiveRegion()` (`polite`, `assertive`, `off`) is stored on the label, but
-   `LabelContent` does not carry it.
+   `LabelContent` does not carry it, and setting it alone does not name the label in `scriptWindowsChanged`.
 4. **Text boxes.** `createTextEdit()` windows are listed (kind `textBox`), but neither their text, read-only flag
    and placeholder nor a way to pass the player's typing back exists in the session.
 5. **MXP frame tabs.** Only `shown` tells which page is in front; titles and bringing a page forward are missing, as
@@ -237,10 +237,18 @@ Phase E's requirements apply to every pull request here; in short, and what they
   its text without formatting, else its tool tip; its click is the tap's `pointer` sequence, and a right-click menu
   is a custom accessibility action. A label with text and no callbacks is text. One with only an image and no
   `accessibleName` is decorative and left out of the tree, unless it is a button, which then gets its name from its
-  window name, and a lint-style warning in the log. A label's live region, once upstream gives it (gap 3), becomes
-  `liveRegion`.
+  window name, and a lint-style warning in the log. A label with a live region (gap 3) is one node with
+  `liveRegion`, blank or not, so TalkBack says its new text as the desktop does, its first text too. An unnamed one
+  reads its text, its links as actions as a named label's are; a named one, or a named button, has its text as its
+  `stateDescription` unless its name says the same, so its new text is said after its name. Unlike the desktop,
+  TalkBack also reads a live label when a script makes it live or changes its region, when its name changes, and
+  (its name alone) when a named one's text goes blank; and the app does not wait for the profile's "Make script
+  buttons reachable with the keyboard" setting (`accessibleLabels`), which the desktop needs too.
 - **Gauges** are one node: `progressBarRangeInfo` with the value and range, the `_text` label's text as
-  `stateDescription`, the three labels merged into it.
+  `stateDescription`, the three labels merged into it. That node is not live, as a live node is read again at every
+  change of the value: when the `_text` label is live, the `Announcer` says its new text, as the desktop says only
+  that label's (the others have no text); twice while TalkBack's focus is on the gauge, which reads its new state
+  itself.
 - **Button bars and commands** are buttons with their names; push-down buttons and checkable commands are toggles
   (`Role.Switch` with `toggleableState`); a folder says it opens a menu. An icon-only one has its name as its content
   description.
@@ -306,9 +314,10 @@ F4 and F5 are independent of each other and of F3.
 
 ## Upstream gaps
 
-Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests; nothing here
-needs a patch carried in `scripts/`, as each interim is the app's own. `scripts/build-libmudlet.sh` still carries
-only the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in `3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
+Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gap 3 is
+carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those patches,
+`scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
+`3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
 
 Each prompt is ready to paste into a Claude Code session on a checkout of Mudlet/Mudlet's `development`.
 
@@ -356,7 +365,8 @@ Interim: the app infers a gauge from the `_back`, `_front` and `_text` names and
 > a label's live region". PR text: a frontend that draws labels itself needs it to announce a label's changes as the
 > desktop's screen reader support does.
 
-Interim: labels have no live region.
+Interim: replaced. The app carries this as `scripts/mudlet-patches/0004-headless-label-live-region.patch` until
+Mudlet merges it; the engine sends it as the `label`'s `liveRegion` (`protocol.md`, "Labels").
 
 ### 4. Text boxes
 

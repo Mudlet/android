@@ -98,6 +98,11 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         return game
     }
 
+    /** Opens the profile [name] in front, on a socket of its own, leaving the others open; [Session.openProfiles] tells the UI. */
+    fun openAlongside(name: String) {
+        openProfile(name, alongside = true)
+    }
+
     /** Closes the open profile [name], whose socket goes; [Session.openProfiles] tells the UI. */
     fun closeProfile(name: String) {
         val game = server(name)

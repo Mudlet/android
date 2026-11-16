@@ -46,9 +46,14 @@ class ProfileSession internal constructor(
     var linesAdded by mutableLongStateOf(0L)
         private set
 
-    /** The last address [connect] was given, kept across UI process restarts: what Reconnect connects to. */
-    var lastAddress by mutableStateOf<GameAddress?>(null)
-        private set
+    /**
+     * What Reconnect connects to: the last address [connect] was given, kept across UI process restarts, else the
+     * profile's own as the engine lists it.
+     */
+    val lastAddress: GameAddress?
+        get() = rememberedAddress ?: EngineClient.profiles?.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { GameAddress(it.host, it.port, it.tls) }
+
+    private var rememberedAddress by mutableStateOf<GameAddress?>(null)
 
     // The engine's line still being written, such as a prompt, shown below the others
     var tail by mutableStateOf<UiLine?>(null)
@@ -142,7 +147,7 @@ class ProfileSession internal constructor(
     init {
         val p = prefs()
         val host = p.getString(PREF_LAST_HOST + name, null)
-        if (host != null) lastAddress = GameAddress(host, p.getInt(PREF_LAST_PORT + name, 23), p.getBoolean(PREF_LAST_TLS + name, false))
+        if (host != null) rememberedAddress = GameAddress(host, p.getInt(PREF_LAST_PORT + name, 23), p.getBoolean(PREF_LAST_TLS + name, false))
     }
 
     private fun prefs() = app.getSharedPreferences(EngineService.PREFS, Context.MODE_PRIVATE)
@@ -235,7 +240,7 @@ class ProfileSession internal constructor(
     }
 
     internal fun rememberAddress(address: GameAddress) {
-        lastAddress = address
+        rememberedAddress = address
         prefs().edit {
             putString(PREF_LAST_HOST + name, address.host)
             putInt(PREF_LAST_PORT + name, address.port)

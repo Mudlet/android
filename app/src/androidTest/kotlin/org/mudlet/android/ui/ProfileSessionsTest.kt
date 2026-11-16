@@ -12,6 +12,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
+import org.mudlet.android.protocol.Profile
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -128,6 +129,20 @@ class ProfileSessionsTest {
     }
 
     @Test
+    fun eachProfileReconnectsToItsOwnAddress() {
+        beta.profiles(listOf(Profile(ALPHA, "alpha.example", 4000, false, "", false), Profile(BETA, "beta.example", 5000, true, "", false)))
+        waitUntil("the profile list arrived") { EngineClient.profiles?.any { it.host == "beta.example" } == true }
+        onMain {
+            // A profile nothing has connected keeps no address of its own: the engine's list gives it
+            assertEquals(GameAddress("alpha.example", 4000, false), EngineClient.session(ALPHA)!!.lastAddress)
+            assertEquals(GameAddress("beta.example", 5000, true), EngineClient.session(BETA)!!.lastAddress)
+        }
+        assertTrue(onMain { EngineClient.session(ALPHA)!!.reconnect() })
+        assertEquals("alpha.example", alpha.receive("connect").getString("host"))
+        beta.assertNoRequest("connect", QUIET_MS)
+    }
+
+    @Test
     fun setFrontTellsTheEngineAndMovesTheFront() {
         assertTrue(onMain { EngineClient.setFront(ALPHA) })
         assertEquals(ALPHA, beta.receive("setFront").getString("name"))
@@ -151,6 +166,18 @@ class ProfileSessionsTest {
             assertEquals(ALPHA, EngineClient.front.name)
             assertTrue(EngineClient.front.lines.none { it.text == "beta's last line" })
         }
+    }
+
+    @Test
+    fun aProfileReopenedOnAnotherSocketFollowsIt() {
+        fake.engine.closeProfile(ALPHA)
+        fake.engine.openAlongside(ALPHA)
+        beta.openProfiles()
+        val reopened = beta.forProfile(ALPHA)
+        reopened.line(1, "on the new socket")
+        waitUntil("the line on the new socket arrived") { EngineClient.session(ALPHA)!!.lines.any { it.text == "on the new socket" } }
+        assertTrue(onMain { EngineClient.session(ALPHA)!!.sendCommand("look") })
+        assertEquals("look", reopened.receive("send").getString("text"))
     }
 
     private fun <T> onMain(block: () -> T): T {

@@ -339,12 +339,20 @@ class ProfileSession internal constructor(
     /** Whether this game's settings can be read and changed: once its profile has loaded. */
     val settingsAvailable: Boolean get() = status["profile"]?.endsWith(LOADED) == true
 
-    // A game just added in the app is given the app's values, which then are its own; any other is asked for its own
+    // Each game is asked for its settings as it loads, a game just added in the app first given its defaults
     private fun onLoaded() {
-        if (!Settings.awaitsDefaults(name)) return refreshSettings()
+        if (Settings.awaitsDefaults(name)) giveDefaults()
+        refreshSettings()
+    }
+
+    // The app's values the player changed, which then are the game's own; for the rest the game keeps Mudlet's, some of
+    // which Mudlet picks for the game
+    private fun giveDefaults() {
+        val changed = Settings.mudletSettings.filter { it.changed }
+        if (changed.isEmpty()) return Settings.setAwaitsDefaults(name, false)
         val id = newRequestId()
         defaultsRequests.add(id)
-        if (!sendSettings(Requests.setSettings(Settings.mudletSettings.associate { it.key to it.valueToMudlet() }, id))) defaultsRequests.remove(id)
+        if (!sendSettings(Requests.setSettings(changed.associate { it.key to it.valueToMudlet() }, id))) defaultsRequests.remove(id)
     }
 
     private fun sendSettings(request: JSONObject): Boolean {

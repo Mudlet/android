@@ -172,9 +172,14 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             ?: throw AssertionError("the UI did not attach to ${profile ?: "the control socket"} of the fake engine within $timeoutMs ms")
 
         /** As the engine process dying: every connection ends, and the socket is there again for the next engine. */
-        fun dropConnections() {
-            live.forEach(Connection::close)
-            live.clear()
+        fun dropConnections() = takeConnections().forEach(Connection::close)
+
+        // The connections made so far, which [nextSession] no longer hands out
+        fun takeConnections(): List<Connection> {
+            val taken = live.toList()
+            live.removeAll(taken.toSet())
+            attached.removeAll(taken.toSet())
+            return taken
         }
 
         fun stop() {
@@ -357,10 +362,10 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         /** As the engine process dying: the UI sees every connection end, and attaches again to the next. */
         override fun close() {
-            control.close()
-            game?.close()
-            this@FakeEngine.control.dropConnections()
-            synchronized(games) { games.toList() }.forEach(Server::dropConnections)
+            // Taken from every socket before any closes: the UI attaches again the moment one does, to the next engine
+            val servers = listOf(this@FakeEngine.control) + synchronized(games) { games.toList() }
+            val ending = servers.flatMap(Server::takeConnections) + listOfNotNull(control, game)
+            ending.toSet().forEach(Connection::close)
         }
     }
 

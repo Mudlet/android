@@ -221,9 +221,11 @@ class ProfilesTest {
 
     @Test
     fun gamesTheEngineTellsOfOnceTheProfilesShowAreAtTheTopOfTheList() {
-        listed(ALPHA, BETA)
-        waitFor(hasContentDescription("Alpha, a.example:23"))
-        fake.engine.openAlongside(ALPHA.name)
+        // More than the screen holds, so the list can scroll the games out of view
+        val many = (1..10).map { Profile("Profile $it", "p$it.example", 23, false, "", false) }
+        listed(*many.toTypedArray())
+        waitFor(hasContentDescription("Profile 1, p1.example:23"))
+        fake.engine.openAlongside(many[0].name)
         engine.openProfiles()
         compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
         compose.onNodeWithText(string(R.string.games_title)).assertIsDisplayed()

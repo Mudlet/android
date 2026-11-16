@@ -1,15 +1,25 @@
 package org.mudlet.android.ui
 
 import android.net.Uri
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
@@ -29,6 +39,13 @@ import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsScreen
+import org.mudlet.android.ui.theme.MudletMotion
+
+// A profile's name is never empty, so the editor of a new one is open beside the list as this
+private const val NEW_PROFILE = ""
+
+// How far a screen slides as it comes and goes, as a fraction of the width
+private const val SLIDE_FRACTION = 8
 
 private object Routes {
     const val PROFILES = "profiles"
@@ -46,7 +63,8 @@ private object Routes {
 
 /**
  * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the settings, About with a
- * licence screen for each component it lists, and, in debug builds only, the self-test.
+ * licence screen for each component it lists, and, in debug builds only, the self-test. On an expanded screen, a
+ * profile's editor and a component's licence open beside their list ([ListDetail]).
  * A release build has no route to the self-test, so R8 drops it.
  *
  * On every screen, TalkBack says what the Announcer has to say; the first time TalkBack is on, the app asks whether
@@ -56,17 +74,64 @@ private object Routes {
 fun AppNavigation(onKillUi: () -> Unit) {
     val nav = rememberNavController()
     Box(Modifier.fillMaxSize()) {
-        NavHost(nav, startDestination = Routes.PROFILES) {
+        // Material's shared axis: forward slides in from the end, Back (and its predictive gesture) the other way
+        val end = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
+        NavHost(
+            nav,
+            startDestination = Routes.PROFILES,
+            enterTransition = { slideInFrom(end) },
+            exitTransition = { slideOutTo(-end) },
+            popEnterTransition = { slideInFrom(-end) },
+            popExitTransition = { slideOutTo(end) },
+        ) {
             composable(Routes.PROFILES) { entry ->
-                ProfileListScreen(
-                    onOpenGame = entry.whileShown { nav.navigate(Routes.GAME) { launchSingleTop = true } },
-                    onEditProfile = { nav.navigate(Routes.profile(it)) { launchSingleTop = true } },
-                    onOpenSelfTest = if (BuildConfig.DEBUG) ({ nav.navigate(Routes.SELF_TEST) { launchSingleTop = true } }) else null,
-                    onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
+                // The profile whose editor is open beside the list: its name, or NEW_PROFILE
+                var editing by rememberSaveable { mutableStateOf<String?>(null) }
+                ListDetail(
+                    editing,
+                    onCloseDetail = { editing = null },
+                    onNarrowed = {
+                        editing = null
+                        nav.navigate(Routes.profile(it.ifEmpty { null })) { launchSingleTop = true }
+                    },
+                    list = { twoPane ->
+                        ProfileListScreen(
+                            onOpenGame = entry.whileShown { nav.navigate(Routes.GAME) { launchSingleTop = true } },
+                            onEditProfile = { name ->
+                                if (twoPane) editing = name ?: NEW_PROFILE else nav.navigate(Routes.profile(name)) { launchSingleTop = true }
+                            },
+                            onOpenSelfTest = if (BuildConfig.DEBUG) ({ nav.navigate(Routes.SELF_TEST) { launchSingleTop = true } }) else null,
+                            onOpenSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                            onOpenAbout = { nav.navigate(Routes.ABOUT) { launchSingleTop = true } },
+                            selected = editing,
+                        )
+                    },
+                    detailContent = { key ->
+                        // The engine's answer can come once another profile's editor has taken this one's place
+                        ProfileEditor(key.ifEmpty { null }, onClose = { if (editing == key) editing = null })
+                    },
+                    empty = { DetailPlaceholder(stringResource(R.string.profiles_pick)) },
                 )
             }
             composable(Routes.ABOUT) {
-                AboutScreen(onBack = { nav.navigateUp() }, onOpenComponent = { nav.navigate(Routes.licence(it)) { launchSingleTop = true } })
+                var open by rememberSaveable { mutableStateOf<String?>(null) }
+                ListDetail(
+                    open,
+                    onCloseDetail = { open = null },
+                    onNarrowed = {
+                        open = null
+                        nav.navigate(Routes.licence(it)) { launchSingleTop = true }
+                    },
+                    list = { twoPane ->
+                        AboutScreen(
+                            onBack = { nav.navigateUp() },
+                            onOpenComponent = { if (twoPane) open = it else nav.navigate(Routes.licence(it)) { launchSingleTop = true } },
+                            selected = open,
+                        )
+                    },
+                    detailContent = { LicenceScreen(it, onBack = { open = null }) },
+                    empty = { DetailPlaceholder(stringResource(R.string.about_pick)) },
+                )
             }
             composable(Routes.LICENCE, listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 LicenceScreen(componentId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.navigateUp() })
@@ -91,6 +156,11 @@ fun AppNavigation(onKillUi: () -> Unit) {
     }
     if (Announcer.touchExploration && !Settings.screenReaderOffered.value) OfferScreenReaderSetting()
 }
+
+// [side] is 1 for the right, -1 for the left
+private fun slideInFrom(side: Int) = slideInHorizontally(MudletMotion.slide) { side * it / SLIDE_FRACTION } + fadeIn(MudletMotion.effects())
+
+private fun slideOutTo(side: Int) = slideOutHorizontally(MudletMotion.slide) { side * it / SLIDE_FRACTION } + fadeOut(MudletMotion.effects())
 
 /** Asks once whether games are to be told a screen reader is in use; the answer is the setting, which can change later. */
 @Composable

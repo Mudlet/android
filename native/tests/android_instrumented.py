@@ -133,15 +133,26 @@ def thread_stacks(dev, name, process):
 
 def pull_screenshots(dev):
     """Copies the PNGs ScreenshotTest saved in the app's files (files/screenshots) into <out>/screenshots."""
-    names = [n for n in shell(f"run-as {APP} ls files/screenshots", check=False).split() if n.endswith(".png")]
+    listing = shell(f"run-as {APP} ls files/screenshots 2>&1", check=False)
+    names = [n for n in listing.split() if n.endswith(".png")]
     if not names:
+        # None below API 31, which ScreenshotTest skips; on a later release, ScreenshotTest's own result says why
+        log(f"screenshots: none ({listing.strip()[:200]})")
         return
     out = os.path.join(dev.out, "screenshots")
     os.makedirs(out, exist_ok=True)
+    copied = []
     for name in names:
-        with open(os.path.join(out, name), "wb") as f:
-            subprocess.run(["adb", "exec-out", "run-as", APP, "cat", f"files/screenshots/{name}"], stdout=f, timeout=60)
-    log(f"screenshots: {', '.join(sorted(names))}")
+        path = os.path.join(out, name)
+        with open(path, "wb") as f:
+            done = subprocess.run(["adb", "exec-out", "run-as", APP, "cat", f"files/screenshots/{name}"], stdout=f,
+                                  stderr=subprocess.PIPE, timeout=60)
+        if done.returncode == 0:
+            copied.append(name)
+        else:
+            os.remove(path)
+            log(f"screenshot {name} not copied: {done.stderr.decode(errors='replace').strip()}")
+    log(f"screenshots: {', '.join(sorted(copied))}")
 
 
 def install(apk, grant=False):

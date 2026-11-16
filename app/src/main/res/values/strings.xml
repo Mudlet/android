@@ -2,6 +2,9 @@
 <!-- The strings the app shows. app_name comes from app/build.gradle.kts (resValue), as the PTB has a name of its own. -->
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="navigate_back">Back</string>
+    <!-- On a wide screen, a profile's editor or a licence opens beside its list: the button at its top that closes
+         it, read by TalkBack. %1$s is what it shows, as its title says: a game's name, say, or "New game" -->
+    <string name="detail_close">Close %1$s</string>
 
     <!-- Shown before Android's own notification permission prompt, to say what the notifications are for -->
     <string name="notifications_explanation_title">Allow notifications?</string>
@@ -10,6 +13,8 @@
     <string name="notifications_explanation_not_now">Not now</string>
 
     <string name="profiles_title">Profiles</string>
+    <!-- On a wide screen, where a game's editor opens beside the list of games: what that space shows until one is picked -->
+    <string name="profiles_pick">Pick a game to edit it, or add one.</string>
     <string name="profiles_waiting">Waiting for the engine…</string>
     <string name="profiles_empty">No games yet. Add one with its address.</string>
     <string name="profiles_add">Add a game</string>
@@ -82,6 +87,8 @@
     <string name="about_component_version_licence">%1$s · %2$s</string>
     <!-- What TalkBack says tapping a row of the licence list does: "Double tap to read its licence" -->
     <string name="about_open_licence">read its licence</string>
+    <!-- On a wide screen, where a component's licence opens beside the licence list: what that space shows until one is picked -->
+    <string name="about_pick">Pick a component to read its licence.</string>
     <string name="about_loading">Loading…</string>
     <!-- %1$s is the error, in English -->
     <string name="about_load_failed">The licence list could not be read: %1$s</string>
@@ -104,7 +111,7 @@
     <!-- %1$s is the component's internal identifier -->
     <string name="licence_not_found">No component %1$s in the licence list.</string>
 
-    <!-- The settings screen, reached from the game screen's title bar -->
+    <!-- The settings screen, reached from the title bar of the profile list and of the game screen -->
     <string name="settings_title">Settings</string>
     <string name="settings_text_size">Text size</string>
     <string name="settings_text_size_hint">The size of the game\'s text. Pinching the text with two fingers changes it too, and the system\'s font size scales it.</string>
@@ -129,6 +136,13 @@
     <string name="settings_blank_lines_show">Show them</string>
     <string name="settings_blank_lines_hide">Hide them</string>
     <string name="settings_blank_lines_space">Replace them with a space</string>
+    <!-- The settings screen's section on how the app looks. On Android 12 and later only, which can colour apps
+         from the wallpaper (Material You); the game's own colours never change with it. -->
+    <string name="settings_appearance">Appearance</string>
+    <!-- The switch in the Appearance section: on, the app's screens take their colours from the wallpaper -->
+    <string name="settings_wallpaper_colours">Colours from my wallpaper</string>
+    <!-- Under "Colours from my wallpaper", what the switch does -->
+    <string name="settings_wallpaper_colours_hint">The app\'s screens take their colours from your wallpaper. Off, they use Mudlet\'s own. The game\'s text keeps the game\'s colours.</string>
 
     <!-- Asked once, the first time the app runs with TalkBack on -->
     <string name="screen_reader_offer_title">Tell games you use a screen reader?</string>

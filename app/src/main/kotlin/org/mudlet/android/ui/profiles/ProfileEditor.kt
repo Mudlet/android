@@ -17,7 +17,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,7 +43,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.MudletTopBar
+import org.mudlet.android.ui.MudletScaffold
 
 /**
  * Adds a profile ([name] null) or edits the one named [name], whose name cannot change, as the engine keeps the name a
@@ -88,7 +87,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit) {
         }
     }
 
-    Scaffold(topBar = { MudletTopBar(name ?: stringResource(R.string.profile_new_title), onClose) }) { padding ->
+    MudletScaffold(name ?: stringResource(R.string.profile_new_title), onBack = onClose) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().verticalScroll(rememberScrollState())
                 .padding(16.dp),

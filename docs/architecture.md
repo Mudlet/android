@@ -248,6 +248,22 @@ both read alike:
   has the link. TalkBack offers each link not disabled as an action, "Follow link:" and its tool tip, or its text where
   it has none, and one with a menu as another that opens it, as an inline link is too small for a 48 dp target. A tap,
   pick or action while no engine is attached says the link was not sent.
+
+### Script windows' text size
+A two-finger pinch on a mini console, user window or MXP frame sets its font size as a script's `setFontSize(name,
+size)` does, in the same whole points, so `getFontSize()` gives it, the engine's grid (and with it the columns the
+app fits in the window's width) follows, and scripts get `sysFontChangeEvent` and `sysConsoleSizeChanged` as for a
+script's change. The app sends it with `runLua` once the fingers lift (`ConsoleZoom` in `:protocol`,
+`ConsoleZoomClient`), drawing the size reached meanwhile; a Geyser console with auto wrap then wraps to its new width
+(its `resetAutoWrap()`, not Geyser's `setFontSize()`, which can resize a window sized in characters). A pinch reaches
+4 to 40 points, or as far as the size a script gave beyond them; a console whose font is sized in pixels, or that
+the engine names `main`, is not pinched.
+- **The player's size wins.** It is kept for each profile and console name, across restarts. When the engine reports
+  another size for that console, as after a script's `setFontSize()` or when a script makes the console again, the
+  app sends the player's size again, and keeps the script's as the one to go back to.
+- **Reset**: a two-finger double tap, or TalkBack's "Reset text size", forgets the player's size and gives the
+  console the size its scripts last gave it. TalkBack's "Larger text" and "Smaller text" change it a size at a time.
+- One finger is left to the window's list, its sideways scroll and its links: the pinch takes only two.
 - The main console's links are not followed yet: its lines have their link runs, but no tap or action uses them.
   `ConsoleLine` takes them as it does a window's, once the main console asks the engine about them.
 
@@ -1334,6 +1350,18 @@ Item 13 of the on-device checklist covers this.
       pane, and a tap on the other keeps the pane open on that page.
     - With TalkBack on: swiping reaches "Tabs of Tabs" after the console's controls, then each tab read by its title
       as a tab, the one in front as selected.
+29. A script window's text size, with the libmudlet APK: `lua win = Geyser.MiniConsole:new({name = "win", x = "50%",
+    y = 0, width = "50%", height = "30%", wrapAt = "auto"})`, then `lua registerAnonymousEventHandler("sysFontChangeEvent",
+    function(_, name, _, size) echo(name .. " " .. size .. "\n") end)` and `lua echo("win", string.rep("word ", 40))`.
+    - Pinch the window with two fingers: its text grows or shrinks as the fingers move, the main console's does not,
+      and once they lift `win <size>` shows on the main console and `lua echo(getFontSize("win"))` gives that size. New
+      text in the window wraps to its new width. One finger still scrolls it, and a tap on a link in it still follows.
+    - `lua win:setFontSize(8)` changes nothing that stays: the window goes back to the pinched size. Close and reopen the
+      profile, or kill the app and start it again: the window comes back at the pinched size.
+    - Tap the window twice with two fingers: it goes back to 8 (the size its script last gave it), and a later
+      `lua win:setFontSize(12)` holds.
+    - With TalkBack on: the window's actions offer "Larger text" and "Smaller text", which change it a size at a time,
+      and once changed "Reset text size".
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

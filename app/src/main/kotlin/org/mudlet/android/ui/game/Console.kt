@@ -30,7 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -181,23 +183,56 @@ private data class CellSize(val width: Float, val height: Int) {
 
 /**
  * Two fingers spreading or closing scale [textSize] by how far they moved since they came down, and hand the result to
- * [onTextSize]. One finger is left to the list, to scroll.
+ * [onTextSize]; [onPinchEnd] follows once every finger has lifted. Two fingers tapped twice, without moving, call
+ * [onTwoFingerDoubleTap] instead. One finger is left to the list, to scroll, and to the links, to tap.
  */
-private fun Modifier.pinchToZoom(textSize: () -> Int, onTextSize: (Int) -> Unit) = pointerInput(Unit) {
+internal fun Modifier.pinchToZoom(
+    textSize: () -> Int,
+    onTextSize: (Int) -> Unit,
+    onPinchEnd: () -> Unit = {},
+    onTwoFingerDoubleTap: (() -> Unit)? = null,
+) = pointerInput(Unit) {
+    var lastTwoFingerTapUp = 0L
     awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val downAt = HashMap<PointerId, Offset>()
+        downAt[down.id] = down.position
         var start = 0
         var zoom = 1f
+        var mostPressed = 1
+        var moved = false
+        var upTime = down.uptimeMillis
         while (true) {
             // Seen before the list, so a pinch never scrolls it
             val event = awaitPointerEvent(PointerEventPass.Initial)
+            for (change in event.changes) {
+                val from = downAt.getOrPut(change.id) { change.position }
+                if ((change.position - from).getDistance() > viewConfiguration.touchSlop) moved = true
+                upTime = maxOf(upTime, change.uptimeMillis)
+            }
             val pressed = event.changes.count { it.pressed }
             if (pressed == 0) break
+            mostPressed = maxOf(mostPressed, pressed)
             if (pressed < 2) continue
             if (start == 0) start = textSize()
             zoom *= event.calculateZoom()
             onTextSize((start * zoom).roundToInt())
             event.changes.forEach { it.consume() }
+        }
+        if (start == 0) {
+            lastTwoFingerTapUp = 0L
+            return@awaitEachGesture
+        }
+        val tap = onTwoFingerDoubleTap != null && mostPressed == 2 && !moved && upTime - down.uptimeMillis <= viewConfiguration.longPressTimeoutMillis
+        if (!tap) {
+            lastTwoFingerTapUp = 0L
+            onPinchEnd()
+        } else if (lastTwoFingerTapUp != 0L && down.uptimeMillis - lastTwoFingerTapUp <= viewConfiguration.doubleTapTimeoutMillis) {
+            lastTwoFingerTapUp = 0L
+            onTwoFingerDoubleTap?.invoke()
+        } else {
+            lastTwoFingerTapUp = upTime
+            onPinchEnd()
         }
     }
 }

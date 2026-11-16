@@ -308,6 +308,15 @@
     <string name="window_back_to_console">Close %1$s and go back to the console</string>
     <!-- The button, read by a screen reader, that closes a script's window; %1$s is the window's name -->
     <string name="window_close">Close %1$s</string>
+    <!-- A screen reader's action on a script's window of game text (a mini console or user window): makes its text one
+         size larger, as pinching it outward with two fingers does -->
+    <string name="window_text_larger">Larger text</string>
+    <!-- A screen reader's action on a script's window of game text: makes its text one size smaller, as pinching it
+         inward with two fingers does -->
+    <string name="window_text_smaller">Smaller text</string>
+    <!-- A screen reader's action on a script's window of game text whose size the player changed: gives it back the
+         size the game's scripts chose, as tapping it twice with two fingers does -->
+    <string name="window_text_reset">Reset text size</string>
     <!-- The row of tabs along the top of a game's MXP frame (a window the game itself opens), each tab a page of it,
          read by a screen reader; %1$s is the frame's title, as the game gave it -->
     <string name="frame_tabs_description">Tabs of %1$s</string>

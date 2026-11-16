@@ -299,7 +299,8 @@ Phase E's requirements apply to every pull request here; in short, and what they
   not announced: Mudlet announces only the main console's (`announceIncomingText`).
 - **48 dp.** Script geometry can make a clickable label or a text box small: its touch bounds grow to 48 dp around
   it, drawn at its own size, the higher in `stack` winning where two overlap.
-- **No gesture alone.** Long press has its accessibility action; the map's pinch has zoom buttons; the window
+- **No gesture alone.** Long press has its accessibility action; the map's pinch has zoom buttons; a script
+  console's pinch and two-finger double tap have its "Larger text", "Smaller text" and "Reset text size"; the window
   switcher's swipe between pages has its tabs; a drag on a label has no other way, which is the script's design, so
   the label's actions say what a tap does.
 - **Focus order**: the main console, the input line and the game screen's own buttons, as in Phase E; then the

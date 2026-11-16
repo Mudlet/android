@@ -107,6 +107,9 @@ class ProfileSession internal constructor(
     /** The app's own map of this profile. */
     internal val appMap = AppMapClient(this)
 
+    /** The text sizes the player pinched this profile's script consoles to. */
+    internal val consoleZoom = ConsoleZoomClient(name, ::prefs, ::runAppLua)
+
     // The socket the link connects to, which a profile reopened in another slot changes; null for none
     @Volatile private var socket: String? = socket
 
@@ -129,8 +132,8 @@ class ProfileSession internal constructor(
     // The number (linesAdded) after the last console line given to the suggestions, so none is given twice
     internal var linesSuggested = 0L
 
-    // The ids of the runLua requests that carry the app's Mudlet settings, whose luaResult is no script's
-    private val settingsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+    // The ids of the runLua requests that carry the app's own Lua, such as its Mudlet settings, whose luaResult is no script's
+    private val appLuaRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
     // Reader-thread batches, drained on the main thread
     private val pendingLock = Any()
@@ -266,9 +269,16 @@ class ProfileSession internal constructor(
     // Lost when the profile has not loaded or the link is down: its load, or the next attach, gets them all
     internal fun sendMudletSettings(settings: List<Settings.Setting<*>>) {
         if (status["profile"]?.endsWith(" loaded") != true) return
+        runAppLua(settings.joinToString("\n") { it.setConfigLua() })
+    }
+
+    /** Runs Lua of the app's own in the profile, whose luaResult is no script's; false when it could not go. */
+    internal fun runAppLua(code: String): Boolean {
         val id = newRequestId()
-        settingsRequests.add(id)
-        if (link?.send(Requests.runLua(settings.joinToString("\n") { it.setConfigLua() }, id)) != true) settingsRequests.remove(id)
+        appLuaRequests.add(id)
+        if (link?.send(Requests.runLua(code, id)) == true) return true
+        appLuaRequests.remove(id)
+        return false
     }
 
     internal fun sendScreenSize(size: Pair<Int, Int>) {
@@ -338,9 +348,9 @@ class ProfileSession internal constructor(
                 is EngineMessage.Status -> if (message.key == "completion") {
                     val id = (message.replyTo as? Number)?.toLong()
                     if (id != null) post { completions.remove(id)?.invoke(message.value) }
-                } else if (message.key == "luaResult" && (message.replyTo as? Number)?.toLong()?.let(settingsRequests::remove) == true) {
+                } else if (message.key == "luaResult" && (message.replyTo as? Number)?.toLong()?.let(appLuaRequests::remove) == true) {
                     // libmudlet answers "ran", the stand-in nothing, when the chunk ran
-                    if (message.value != "ran" && message.value.isNotEmpty()) Log.w(TAG, "Mudlet did not take the app's settings: ${message.value}")
+                    if (message.value != "ran" && message.value.isNotEmpty()) Log.w(TAG, "Mudlet did not run the app's Lua: ${message.value}")
                 } else {
                     if (message.key == "sendError" && !replaying && inputSentAt > 0 && SystemClock.elapsedRealtime() - inputSentAt < SEND_ERROR_WINDOW_MS) {
                         post { sendError = message.value }

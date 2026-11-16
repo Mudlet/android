@@ -180,6 +180,33 @@ def run(dev, args):
     return failures
 
 
+def diag_permission(dev, args, label):
+    focus = [l.strip() for l in shell("dumpsys window windows", check=False).splitlines()
+             if "mCurrentFocus" in l or "mFocusedApp" in l or "Window #" in l]
+    print(f"DIAG-BEFORE {label}\n" + "\n".join(focus), flush=True)
+    for package in (APP_TESTS, APP, ENGINE_TESTS):
+        adb("uninstall", package, check=False)
+    for command in ("input keyevent KEYCODE_WAKEUP", "svc power stayon true", "wm dismiss-keyguard",
+                    "settings put system screen_off_timeout 1800000"):
+        shell(command, check=False)
+    dev.start_logcat()
+    install(args.app)
+    install(args.app_tests)
+    failures = instrument(dev, "app-permission", APP_TESTS, APP, f"DIAG {label}: the notification permission",
+                          480, "-e", "class", PERMISSION_TEST)
+    dev.stop_logcat()
+    log(f"DIAG-RESULT {label} {'FAIL' if failures else 'PASS'}")
+    noise = re.compile(r"AppsFilter|PermissionControllerServiceImpl|Unexpected CPU variant|Known variants|hiddenapi|"
+                       r"AssetManager2|Slow operation|ProcessObserver|chatty|Compiler allocated")
+    lines = [line for line in dev.log_text().splitlines() if not noise.search(line) and " V " not in line]
+    if failures:
+        for f in failures:
+            print("DIAG-FAILURE " + f.replace("\n", "\nDIAG| "), flush=True)
+        print("DIAG-LOGCAT\n" + "\n".join(lines[-900:]), flush=True)
+    else:
+        print("DIAG-MARKERS\n" + "\n".join(line for line in lines if "DIAG79" in line), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--app", required=True)
@@ -187,6 +214,7 @@ def main():
     parser.add_argument("--engine-tests", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--symbols", help="directory with the unstripped engine library, for ndk-stack")
+    parser.add_argument("--diag", help="DIAG: only the permission test, with this label")
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
     global LOG
@@ -194,6 +222,9 @@ def main():
     open(LOG, "w").close()
     dev = Device(args.out, os.path.abspath(args.app), args.symbols)
     dev.logcat_path = os.path.join(args.out, "logcat-instrumented.txt")
+    if args.diag:
+        diag_permission(dev, args, args.diag)
+        return
     try:
         failures = run(dev, args)
     except (SmokeFailure, subprocess.TimeoutExpired) as e:

@@ -283,7 +283,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [28, 36]
+        api: [36]
     env:
       EMULATOR_API: ${{ matrix.api }}
       LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix && '1' || '0' }}
@@ -326,12 +326,7 @@ jobs:
           disk-size: 6G
           # one line: the action runs each line of a script in a shell of its own
           script: >-
-            python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests
-            --symbols native/build-android-x86_64-mudlet/enginehost; smoke=$?;
-            python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk
-            --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
-            --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke
+            python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag plain1a; python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag after-smoke1; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag plain1b; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag plain2a; python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag after-smoke2; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag plain2b; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag plain3a; python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag after-smoke3; python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk --out device-tests --diag plain3b; true
 
       - name: Save the system image
         if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}

@@ -53,10 +53,26 @@ class NotificationPermissionTest {
         )
 
         ActivityScenario.launch(MainActivity::class.java).use {
+            diag("launched")
             continuePastExplanation()
+            diag("continued")
             click("permission_deny_button")
+            diag("denied")
             assertFalse(granted())
-            assertNotNull("the start screen after a denial", device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS))
+            if (device.wait(Until.findObject(By.text(startScreenTitle)), UI_MS) == null) {
+                diag("no start screen")
+                val tree = java.io.ByteArrayOutputStream().also { device.dumpWindowHierarchy(it) }.toString()
+                val windows = device.executeShellCommand("dumpsys window windows").lines()
+                    .filter { "mCurrentFocus" in it || "mFocusedApp" in it || "Window #" in it || "mViewVisibility" in it || "isOnScreen" in it }
+                    .joinToString("\n")
+                val acts = device.executeShellCommand("dumpsys activity activities").lines()
+                    .filter { "Resumed" in it || "* ActivityRecord" in it || "Hist #" in it || "state=" in it }.take(60).joinToString("\n")
+                throw AssertionError(
+                    "DIAG no start screen, pkg=${device.currentPackageName}\nWINDOWS\n$windows\nACTIVITIES\n$acts\nTREE\n" +
+                        tree.replace("><", ">\n<").take(14000),
+                )
+            }
+            diag("start screen")
         }
         EngineNotifications.postTell(context, TELL, "denied")
         Thread.sleep(QUIET_MS)
@@ -71,6 +87,8 @@ class NotificationPermissionTest {
         assertTellPosted("allowed")
     }
 
+    private fun diag(step: String) = android.util.Log.i("DIAG79", "$step at ${System.currentTimeMillis() % 100_000}")
+
     private fun granted() = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     private fun continuePastExplanation() {
@@ -82,8 +100,9 @@ class NotificationPermissionTest {
     private fun click(button: String) {
         val found = device.wait(Until.findObject(By.res(PERMISSION_CONTROLLER, button)), UI_MS)
         assertNotNull("the permission dialog's $button", found)
+        diag("dialog $button found")
         found.click()
-        device.wait(Until.gone(By.pkg(PERMISSION_CONTROLLER)), UI_MS)
+        diag("dialog gone: ${device.wait(Until.gone(By.pkg(PERMISSION_CONTROLLER)), UI_MS)}")
     }
 
     private fun assertTellPosted(text: String) {

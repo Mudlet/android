@@ -24,7 +24,7 @@ data class ConsoleZoom(val chosen: Int, val scripts: Int?, val inFlight: Set<Int
         else -> ConsoleZoom(chosen, size, setOf(chosen)) to chosen
     }
 
-    /** The player picks [size]: the state after it; [size] is sent unless the engine already reports it. */
+    /** The player picks [size]: the state after it, which awaits the engine's report of [size]. */
     fun chosen(size: Int): ConsoleZoom = if (size == chosen) this else copy(chosen = size, inFlight = inFlight + size)
 
     companion object {
@@ -43,9 +43,9 @@ data class ConsoleZoom(val chosen: Int, val scripts: Int?, val inFlight: Set<Int
 
         /**
          * The Lua that gives the console [name] the size [size], as a script would with `setFontSize()`, which raises
-         * `sysFontChangeEvent` and then `sysConsoleSizeChanged` for its new grid. A Geyser console with auto wrap on
-         * wraps to its new width, as `Geyser.MiniConsole:setFontSize()` has it, without that method's own resize of a
-         * window whose constraints are in characters.
+         * `sysFontChangeEvent`. A Geyser console with auto wrap on wraps to its new width, as
+         * `Geyser.MiniConsole:setFontSize()` has it, without that method's own resize of a window whose constraints are
+         * in characters. A broken Geyser does not stop the size, which has already been set.
          */
         fun setFontSizeLua(name: String, size: Int): String = """
             |do

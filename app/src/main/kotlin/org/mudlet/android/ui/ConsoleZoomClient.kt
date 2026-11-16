@@ -44,12 +44,12 @@ internal class ConsoleZoomClient(profile: String, private val prefs: () -> Share
         put(name, if (size == reported) next else sent(next, name, size))
     }
 
-    /** Forgets the player's size for the console [name] and gives it its scripts' last size again. */
+    /** Forgets the player's size for the console [name] and gives it its scripts' last size again; kept if that could not go. */
     fun reset(name: String, reported: Int) {
-        val zoom = zooms.remove(name) ?: return
+        val size = (zooms[name] ?: return).scripts
+        if (size != null && size != reported && !runLua(ConsoleZoom.setFontSizeLua(name, size))) return
+        zooms.remove(name)
         prefs().edit { remove(key(name)) }
-        val size = zoom.scripts ?: return
-        if (size != reported) runLua(ConsoleZoom.setFontSizeLua(name, size))
     }
 
     // A send that did not go is not awaited, so the next report sends it again

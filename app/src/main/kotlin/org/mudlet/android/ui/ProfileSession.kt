@@ -61,7 +61,7 @@ class ProfileSession internal constructor(
         private set
 
     /** The profile's statuses, as its socket last gave them; the engine's own are [EngineClient.engineStatus]. */
-    val status = mutableStateMapOf<String, String>()
+    val status get() = sharedStatus
 
     /** How this session's link to its socket stands, for the self-test screen. */
     var linkState by mutableStateOf("not attached")
@@ -185,6 +185,7 @@ class ProfileSession internal constructor(
 
     /** As [send], returning the number of the link's connection the request went out on, or 0 when it was dropped. */
     fun sendOn(message: JSONObject): Int {
+        if (EngineClient.front !== this) return EngineClient.front.sendOn(message)
         val connection = if (misdirected) 0 else link?.sendOn(message) ?: 0
         if (connection == 0) linkState = "not attached: command dropped"
         return connection
@@ -512,6 +513,7 @@ class ProfileSession internal constructor(
 
     companion object {
         const val MAX_LINES = 2000
+        private val sharedStatus = mutableStateMapOf<String, String>()
 
         /** As [ProfileSession.forgetAddress], for the profile [name] while it has no session. */
         internal fun forgetAddress(prefs: SharedPreferences, name: String) = prefs.edit {

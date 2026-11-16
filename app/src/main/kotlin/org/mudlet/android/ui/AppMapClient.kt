@@ -226,7 +226,7 @@ internal object AppMapClient : MapSource {
         when {
             text == null -> downloadEnd = null
 
-            was.state == MapDownloadState.DOWNLOADING -> {
+            was !== NO_DOWNLOAD -> {
                 downloadEnd = message
                 Announcer.announce(text, assertive = message.state == MapDownloadState.FAILED)
             }

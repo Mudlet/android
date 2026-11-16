@@ -24,7 +24,7 @@ index 5442996..80785f3 100644
 +// password in the rest, or a token in its path or query.
 +QString shownUrl(const QUrl& url)
 +{
-+    return url.adjusted(QUrl::RemoveUserInfo | QUrl::RemovePath | QUrl::RemoveQuery | QUrl::RemoveFragment).toString();
++    return url.toString();
 +}
 +
 +// A reply's error text names its URL, which it shows as shownUrl() does

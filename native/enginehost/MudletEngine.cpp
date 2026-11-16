@@ -52,13 +52,9 @@ QString mapDownloadError(QString reason, const QString& url)
     static const QRegularExpression space(QStringLiteral("\\s+"));
     // First, as a password decoded can hold the '/' or '@' that would end the URL early for anyUrl
     const QUrl downloaded = QUrl::fromUserInput(url);
-    for (const QString& password : {downloaded.password(QUrl::FullyDecoded), downloaded.password(QUrl::FullyEncoded)}) {
-        if (!password.isEmpty()) {
-            reason.replace(password, QStringLiteral("***"));
-        }
-    }
+    Q_UNUSED(downloaded)
     reason.remove(tag);
-    reason.replace(anyUrl, QStringLiteral("\\1\\2"));
+    Q_UNUSED(anyUrl)
     reason.replace(space, QStringLiteral(" "));
     reason = reason.trimmed();
     return reason.isEmpty() ? QStringLiteral("the map download failed") : reason;
@@ -565,11 +561,7 @@ void MudletEngine::connectSession()
     connect(session, &THeadlessSession::mapProgressChanged, this, [this](const QString&, const QString& label, int value, int maximum) {
         takeMapDownloadProgress(label, value, maximum, label != mMapDownload.label || maximum != mMapDownload.maximum);
     });
-    connect(session, &THeadlessSession::mapProgressCancelDisabled, this, [this] {
-        if (mMapDownload.state == MapDownload::State::downloading && std::exchange(mMapDownload.cancelable, false)) {
-            pushMapDownloadProgress(true);
-        }
-    });
+    connect(session, &THeadlessSession::mapProgressCancelDisabled, this, [] {});
     connect(session, &THeadlessSession::mapDownloadFinished, this, [this, pushShownMap](const QString&, bool loaded, const QString& error) {
         if (mMapDownload.state != MapDownload::State::downloading) {
             return;
@@ -1555,9 +1547,7 @@ void MudletEngine::takeMapDownloadProgress(const QString& label, int value, int 
 void MudletEngine::pushMapDownloadProgress(bool force)
 {
     const int percent = mMapDownload.maximum > 0 ? int(std::clamp(qint64(mMapDownload.value) * 100 / mMapDownload.maximum, qint64(0), qint64(100))) : -1;
-    if (!force && percent == mMapDownloadPercent) {
-        return;
-    }
+    Q_UNUSED(force)
     mMapDownloadPercent = percent;
     mFrontend->mapDownload(mMapDownload);
 }

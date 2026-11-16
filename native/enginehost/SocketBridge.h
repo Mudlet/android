@@ -30,7 +30,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 16;
+    static constexpr int protocolVersion = 18;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -116,6 +116,7 @@ protected:
     void setTextBoxText(const QJsonObject& message);
     QString mapPointer(const QJsonObject& message);
     QString setAppMapSize(const QJsonObject& message);
+    QString moveMap(const QJsonObject& message);
     void findRooms(const QJsonObject& message);
     void getImage(const QJsonObject& message);
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
@@ -142,6 +143,7 @@ protected:
     static QJsonObject commandsMessage(const QList<AddonCommandInfo>& commands);
     // The fields of a map or appMap message, all but its type; empty for a frame too large to send
     static QJsonObject mapMessage(const MapFrame& frame);
+    static QJsonObject mapViewMessage(const MapViewInfo& view);
 
     ControlBridge* mControl = nullptr;
     SocketBridge* mMirror = nullptr;

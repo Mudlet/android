@@ -348,6 +348,11 @@ std::optional<THeadlessSession::MapPointerEvent> mapPointerEvent(const PointerEv
     return sessionEvent;
 }
 
+THeadlessSession::MapTarget sessionMap(IEngine::MapTarget map)
+{
+    return map == IEngine::MapTarget::app ? THeadlessSession::MapTarget::app : THeadlessSession::MapTarget::script;
+}
+
 // As in libmudlet, "main" names the main console too, whose ids are offset
 bool isMainConsole(const QString& window)
 {
@@ -1318,7 +1323,7 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
         qWarning("MudletEngine: the map could not be made a PNG");
         return std::nullopt;
     }
-    return MapFrame{png, size, mSession->mapViewOnly()};
+    return MapFrame{png, size, mSession->mapViewOnly(), mapView(MapTarget::mapper)};
 }
 
 // Nothing while none is asked for: setAppMapSize() said so once
@@ -1355,7 +1360,31 @@ std::optional<MapFrame> MudletProfile::drawAppMap()
         return std::nullopt;
     }
     mAppMapUndrawn.clear();
-    return MapFrame{png, mAppMapSize, mSession->mapViewOnly()};
+    return MapFrame{png, mAppMapSize, mSession->mapViewOnly(), mapView(MapTarget::app)};
+}
+
+std::optional<MapViewInfo> MudletProfile::mapView(MapTarget map) const
+{
+    const std::optional<THeadlessSession::MapView> view = mSession->mapView(sessionMap(map));
+    if (!view) {
+        return std::nullopt;
+    }
+    MapViewInfo info{view->areaId,
+                     view->areaName,
+                     view->level,
+                     view->zoom,
+                     view->minZoom,
+                     view->maxZoom,
+                     view->following,
+                     view->playerRoomId,
+                     view->roomSize,
+                     map == MapTarget::app ? mAppMapMoved : mMapMoved,
+                     {}};
+    info.rooms.reserve(view->rooms.size());
+    for (const THeadlessSession::MapRoom& room : view->rooms) {
+        info.rooms.append({room.id, room.position, room.name});
+    }
+    return info;
 }
 
 // Once for each reason in a row, as each repaint meets it again: a map with no rooms is warned of once
@@ -1620,6 +1649,26 @@ QString MudletProfile::showRoom(int room)
         return QStringLiteral("no profile running");
     }
     return mSession->showRoomOnAppMap(room) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (!mSession->moveMapView(sessionMap(map), pan, zoom, about)) {
+        return mSession->errorString();
+    }
+    (map == MapTarget::app ? mAppMapMoved : mMapMoved) = seq;
+    return {};
+}
+
+QString MudletProfile::followPlayer(MapTarget map)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->followPlayerOnMap(sessionMap(map)) ? QString() : mSession->errorString();
 }
 
 QString MudletProfile::downloadMap()

@@ -45,14 +45,16 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.EngineMessages.mapView
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import kotlin.math.min
 
 /**
  * The map (docs/architecture.md, "The map"), against a fake engine: the engine's frame drawn in the mapper window,
- * a tap, a double tap (not two taps apart) and a pinch sent as `mapPointer` at the point of the frame under them, the zoom buttons and
- * TalkBack's actions that do the same without a gesture, the switch between viewing and editing it, a refusal shown
+ * a tap and a double tap (not two taps apart) sent as `mapPointer` at the room nearest them or the point of the frame
+ * under them, a drag and a pinch sent as `moveMap`, the zoom buttons and TalkBack's actions that do the same without a
+ * gesture, the button that centres the map on the player, the switch between viewing and editing it, a refusal shown
  * until dismissed, a frame of another size not drawn, and openMapWidget()'s docked map as a page.
  */
 @RunWith(AndroidJUnit4::class)
@@ -161,8 +163,8 @@ class ScriptMapTest {
     }
 
     @Test
-    fun thePinchAndTheZoomButtonsTurnTheWheelWhichTheEngineZoomsBy() {
-        showMap()
+    fun theZoomButtonsZoomAboutTheMiddleAndAPinchAboutTheFingersWithinTheEnginesBounds() {
+        showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
         val zoomIn = hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()
         val zoomOut = hasContentDescription(string(R.string.map_zoom_out)) and hasClickAction()
@@ -172,31 +174,137 @@ class ScriptMapTest {
             assertTrue("a zoom button is ${touch.width} by ${touch.height}", touch.width >= min - 1 && touch.height >= min - 1)
         }
 
-        // Three notches about the map's middle, with no button
+        // A quarter about the map's middle, which still follows the player
         activate(zoomIn)
-        val wheelIn = session.receive("mapPointer")
-        assertEquals("wheel", wheelIn.getString("type"))
-        assertEquals(360, wheelIn.getInt("wheelY"))
-        assertFalse(wheelIn.has("button"))
-        assertPoint(200.0, 150.0, wheelIn)
+        val moveIn = session.receive("moveMap")
+        assertEquals("mapper", moveIn.getString("map"))
+        assertEquals(BUTTON_ZOOM, moveIn.getDouble("zoom"), 1e-9)
+        assertEquals(0.0, moveIn.getDouble("dx"), 1e-9)
+        assertEquals(0.0, moveIn.getDouble("dy"), 1e-9)
+        assertPoint(200.0, 150.0, moveIn)
         activate(zoomOut)
-        assertEquals(-360, session.receive("mapPointer").getInt("wheelY"))
+        val moveOut = session.receive("moveMap")
+        assertEquals(1 / BUTTON_ZOOM, moveOut.getDouble("zoom"), 1e-9)
+        assertEquals(moveIn.getInt("seq") + 1, moveOut.getInt("seq"))
+        assertTrue("following, no button to centre it", compose.onAllNodes(followButton()).fetchSemanticsNodes().isEmpty())
 
-        // Fingers spread across the middle zoom in about it, in whole notches, and select nothing
+        // Fingers spread across the middle zoom in about it, as far as 3 rooms across of the frame's 20, and select nothing
         val read = session.received.size
         compose.onNode(map).performTouchInput {
-            val apart = Offset(width * 0.35f, 0f)
-            val near = Offset(width * 0.05f, 0f)
+            val apart = Offset(width * 0.45f, 0f)
+            val near = Offset(width * 0.02f, 0f)
             pinch(center - near, center - apart, center + near, center + apart, durationMillis = 400)
         }
-        session.receiveLast("mapPointer")
-        val pinch = session.received.drop(read).filter { it.optString("t") == "mapPointer" }
-        assertTrue("no wheel", pinch.isNotEmpty())
-        for (event in pinch) {
-            assertEquals("wheel", event.getString("type"))
-            assertTrue("wheelY ${event.getInt("wheelY")}", event.getInt("wheelY") > 0 && event.getInt("wheelY") % 120 == 0)
-            assertPoint(200.0, 150.0, event, PINCH_POINTS)
+        session.receiveLast("moveMap")
+        val sent = session.received.drop(read)
+        val pinch = sent.filter { it.optString("t") == "moveMap" }
+        assertTrue("no move", pinch.isNotEmpty())
+        val zoom = pinch.fold(1.0) { all, move -> all * move.getDouble("zoom") }
+        assertTrue("zoomed by $zoom", zoom > 1.5 && zoom <= 20.0 / 3 + 1e-6)
+        for (move in pinch) assertPoint(200.0, 150.0, move, PINCH_POINTS)
+        assertTrue("the pinch pressed: $sent", sent.none { it.optString("t") == "mapPointer" })
+    }
+
+    @Test
+    fun aDragPansTheMapUntilTheButtonCentresItOnThePlayerAgain() {
+        showMap(mapView(MAP_W, MAP_H))
+        val map = drawnMap()
+        val scale = shownScale(bounds(map))
+        val read = session.received.size
+        // Slowly, and still before it is let go, so it does not glide on
+        compose.onNode(map).performTouchInput {
+            down(center)
+            repeat(DRAG_STEPS) { moveBy(Offset((DRAG_STEP * scale).toFloat(), 0f)) }
+            advanceEventTime(300)
+            up()
         }
+        session.receiveLast("moveMap")
+        val sent = session.received.drop(read)
+        val drag = sent.filter { it.optString("t") == "moveMap" }
+        assertTrue("the drag pressed: $sent", sent.none { it.optString("t") == "mapPointer" })
+        val panned = drag.sumOf { it.getDouble("dx") }
+        // Less the touch slop, after which a touch is a drag
+        assertTrue("panned by $panned of ${DRAG_STEPS * DRAG_STEP}", panned > DRAG_STEPS * DRAG_STEP / 2 && panned <= DRAG_STEPS * DRAG_STEP + POINTS)
+        for (move in drag) {
+            assertEquals("mapper", move.getString("map"))
+            assertEquals(0.0, move.getDouble("dy"), 1e-6)
+            assertEquals(1.0, move.getDouble("zoom"), 1e-9)
+        }
+        assertEquals((1..drag.size).map { drag[0].getInt("seq") + it - 1 }, drag.map { it.getInt("seq") })
+
+        // Off the player: the map says so, and a button centres it on them, until the engine's frame follows them again
+        val notFollowing = string(R.string.map_not_following, string(R.string.map_viewing))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(followButton()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(map).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, notFollowing))
+        val min = with(compose.density) { 48.dp.toPx() }
+        val touch = touchBounds(followButton())
+        assertTrue("the button is ${touch.width} by ${touch.height}", touch.width >= min - 1 && touch.height >= min - 1)
+        session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, following = false, moved = drag.last().getInt("seq"))))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        activate(followButton())
+        assertEquals("mapper", session.receive("followPlayer").getString("map"))
+        session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, moved = drag.last().getInt("seq"))))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(followButton()).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(map).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.map_viewing)))
+    }
+
+    @Test
+    fun aTapGoesToTheNearestRoomWithinAFingersReach() {
+        showMap(mapView(MAP_W, MAP_H, rooms = mapOf(1 to (200.0 to 150.0), 2 to (230.0 to 150.0))))
+        val map = drawnMap()
+        val drawn = bounds(map)
+        val reach = with(compose.density) { 24.dp.toPx() } / shownScale(drawn)
+        assertTrue("a finger reaches $reach of the frame's pixels", reach > 11)
+        // Off room 2's square of 15, but within a finger of it, and far from any room, clear of the buttons at the top end
+        compose.onNode(map).performTouchInput {
+            click(at(drawn, 236.5, 156.5))
+            advanceEventTime(1_000)
+            click(at(drawn, 60.0, 60.0))
+        }
+        assertPoint(230.0, 150.0, session.receive("mapPointer"))
+        assertPoint(60.0, 60.0, session.receive("mapPointer"))
+
+        // Long enough after that tap that the double tap's first is not its second
+        compose.onNode(map).performTouchInput {
+            advanceEventTime(1_000)
+            doubleClick(at(drawn, 196.0, 155.0))
+        }
+        val press = session.receive("mapPointer")
+        val walk = session.receive("mapPointer")
+        assertEquals(listOf("press", "doubleClick"), listOf(press.getString("type"), walk.getString("type")))
+        for (event in listOf(press, walk)) assertPoint(200.0, 150.0, event)
+    }
+
+    @Test
+    fun talkBackScrollsTheMapAndCentresItOnThePlayerAndARefusalIsShownWithIt() {
+        showMap(mapView(MAP_W, MAP_H))
+        val map = drawnMap()
+        fun actions() = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions]
+
+        // Found off the main thread, which may not wait for the screen to settle, and run on it
+        fun act(label: Int) {
+            val action = actions().single { it.label == string(label) }
+            compose.runOnIdle { action.action() }
+        }
+        assertTrue("no centring while it follows", actions().none { it.label == string(R.string.map_follow) })
+        // A third of the narrow side, 300: to show what is left of it, the map moves right
+        act(R.string.map_pan_left)
+        val left = session.receive("moveMap")
+        assertEquals(100.0, left.getDouble("dx"), 1e-6)
+        assertEquals(0.0, left.getDouble("dy"), 1e-6)
+        act(R.string.map_pan_up)
+        assertEquals(100.0, session.receive("moveMap").getDouble("dy"), 1e-6)
+        compose.waitUntil(WAIT_MS) { actions().any { it.label == string(R.string.map_follow) } }
+        act(R.string.map_follow)
+        assertEquals("mapper", session.receive("followPlayer").getString("map"))
+
+        // The engine's refusal of a move is this map's, which then shows as the engine last drew it
+        act(R.string.map_pan_right)
+        val right = session.receive("moveMap")
+        assertEquals(-100.0, right.getDouble("dx"), 1e-6)
+        session.refuse(right, "The map drawn last shows no area to move.")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "The map drawn last shows no area to move."))).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(followButton()).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test
@@ -318,13 +426,19 @@ class ScriptMapTest {
     private fun mapper() = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = MAP_W, h = MAP_H)
 
     // The mapper in the top right quarter of Mudlet's main window, and its map
-    private fun showMap() {
+    private fun showMap(view: JSONObject? = null) {
         session.windows(listOf(mapper()), full = true)
-        session.send(mapFrame(MAP_W, MAP_H))
+        session.send(mapFrame(MAP_W, MAP_H, view = view))
     }
 
-    private fun mapFrame(w: Int, h: Int, viewOnly: Boolean = true): JSONObject = JSONObject().put("t", "map")
+    private fun mapFrame(w: Int, h: Int, viewOnly: Boolean = true, view: JSONObject? = null): JSONObject = JSONObject().put("t", "map")
         .put("png", Base64.getEncoder().encodeToString(png(w, h))).put("w", w).put("h", h).put("viewOnly", viewOnly)
+        .apply { if (view != null) put("view", view) }
+
+    private fun followButton() = hasContentDescription(string(R.string.map_follow)) and hasClickAction()
+
+    // The screen's pixels to each of the frame's, in the map's node of [bounds]
+    private fun shownScale(bounds: Rect): Double = min(bounds.width / MAP_W, bounds.height / MAP_H).toDouble()
 
     // The map once it is drawn; the test's clock recomposes only while the test waits on Compose
     private fun drawnMap(): SemanticsMatcher {
@@ -391,6 +505,13 @@ class ScriptMapTest {
 
         // The middle of two fingers, each moved a step at a time
         const val PINCH_POINTS = 4.0
+
+        // As ScriptMap's buttons zoom
+        const val BUTTON_ZOOM = 1.25
+
+        // A drag of 10 steps of 10 of the frame's pixels
+        const val DRAG_STEPS = 10
+        const val DRAG_STEP = 10.0
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L
     }

@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 16
+const val PROTOCOL_VERSION = 18
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -247,6 +247,35 @@ enum class MapPointerType(val wire: String) {
 /** A room of the map that findRooms found, with its area's name (docs/protocol.md, `rooms`); [id] is what Requests.showRoom takes. */
 data class RoomMatch(val id: Int, val name: String, val area: String)
 
+/** Which map [Requests.moveMap] and [Requests.followPlayer] act on: the mapper window's ([EngineMessage.Map]) or the app's own ([EngineMessage.AppMap]). */
+enum class MapTarget(val wire: String) {
+    MAPPER("mapper"),
+    APP("app"),
+}
+
+/** A room a map frame drew: its middle at [x], [y] in the frame's pixels. */
+data class MapRoomPlace(val id: Int, val x: Double, val y: Double, val name: String)
+
+/**
+ * What a map frame laid out (docs/protocol.md, "Moving a map"): the [area] and [level] shown; [zoom], the rooms across
+ * the frame's narrow side, which [Requests.moveMap] keeps within [minZoom] and [maxZoom] (the least shows the rooms
+ * largest); whether it is [following] the [player]'s room (0 for none); a room's cell, [roomSize], in the frame's pixels;
+ * the seq of the last moveMap it draws, [moved]; and the [rooms] drawn, at most 500, the nearest the middle.
+ */
+data class MapViewInfo(
+    val area: Int,
+    val areaName: String,
+    val level: Int,
+    val zoom: Double,
+    val minZoom: Double,
+    val maxZoom: Double,
+    val following: Boolean,
+    val player: Int,
+    val roomSize: Double,
+    val moved: Int,
+    val rooms: List<MapRoomPlace>,
+)
+
 /** How the download of the map the game offers goes (docs/protocol.md, `mapDownload`); a state this client does not know is [NONE]. */
 enum class MapDownloadState(val wire: String) {
     NONE("none"),
@@ -443,18 +472,19 @@ sealed interface EngineMessage {
 
     /**
      * The 2D map as the mapper window shows it, drawn again: [png] is a PNG of [w] by [h] pixels, the window's size,
-     * times the scale [Requests.setMapScale] asked for, empty if it did not decode; [viewOnly] while the map is viewed, not edited. Drawn over the mapper only while [w]
-     * and [h] are its size; none comes while the mapper hides or has no size.
+     * times the scale [Requests.setMapScale] asked for, empty if it did not decode; [viewOnly] while the map is viewed, not edited; [view] what
+     * it laid out, null where it showed no area. Drawn over the mapper only while [w] and [h] are its size; none comes while the mapper hides or
+     * has no size.
      */
-    data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
+    data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null) : EngineMessage
 
     /**
      * The app's own map (Requests.setAppMapSize), drawn again: [png] is a PNG of [w] by [h] of the map's pixels, at the
-     * scale asked for, empty if it did not decode; [viewOnly] as for [Map]. [w] and [h] are 0, and [png] empty, while
+     * scale asked for, empty if it did not decode; [viewOnly] and [view] as for [Map]. [w] and [h] are 0, and [png] empty, while
      * there is nothing to draw, as with no profile open or a map with no rooms. Sent only while asked for: the engine
      * forgets the size when the UI goes, so one that attaches is sent none until it asks again.
      */
-    data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean) : EngineMessage
+    data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null) : EngineMessage
 
     /** The answer to findRooms for [text]: up to 100 [rooms], by name then id, and [more] when there were more. */
     data class Rooms(val text: String, val rooms: List<RoomMatch>, val more: Boolean, val replyTo: Any?) : EngineMessage
@@ -624,6 +654,17 @@ object Requests {
     /** The app's map centred on [room], which it selects, until the player moves. Answered only by an Error, when refused. */
     fun showRoom(room: Int): JSONObject = JSONObject().put("t", "showRoom").put("room", room)
 
+    /**
+     * What the last frame of [map] drew moved by [dx], [dy] of its pixels, then zoomed by [zoom] (above 0; 2 shows the rooms twice
+     * as large) about its point [x], [y]; the frames drawn after it carry [seq], counted up from 1, as [MapViewInfo.moved]. Stops
+     * following the player where it moves the player off the middle. Answered only by an Error, when refused.
+     */
+    fun moveMap(map: MapTarget, dx: Double, dy: Double, zoom: Double, x: Double, y: Double, seq: Int): JSONObject = JSONObject()
+        .put("t", "moveMap").put("map", map.wire).put("dx", dx).put("dy", dy).put("zoom", zoom).put("x", x).put("y", y).put("seq", seq)
+
+    /** [map] centred on the player's room, following the player again. Answered only by an Error, when refused. */
+    fun followPlayer(map: MapTarget): JSONObject = JSONObject().put("t", "followPlayer").put("map", map.wire)
+
     /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
     fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
 
@@ -785,9 +826,9 @@ class FrameReader(input: InputStream) {
 
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
 
-            "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true))
+            "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true), o.optJSONObject("view")?.let(::parseMapView))
 
-            "appMap" -> EngineMessage.AppMap(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true))
+            "appMap" -> EngineMessage.AppMap(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true), o.optJSONObject("view")?.let(::parseMapView))
 
             "rooms" -> EngineMessage.Rooms(
                 o.optString("text"),
@@ -954,6 +995,20 @@ class FrameReader(input: InputStream) {
             checked = b.optBoolean("checked"),
             menu = b.optBoolean("menu"),
             children = objects(b.optJSONArray("children")).map(::parseButton),
+        )
+
+        private fun parseMapView(v: JSONObject) = MapViewInfo(
+            v.optInt("area"),
+            v.optString("areaName"),
+            v.optInt("level"),
+            v.optDouble("zoom", 0.0),
+            v.optDouble("minZoom", 0.0),
+            v.optDouble("maxZoom", 0.0),
+            v.optBoolean("following", true),
+            v.optInt("player"),
+            v.optDouble("roomSize", 0.0),
+            v.optInt("moved"),
+            objects(v.optJSONArray("rooms")).map { MapRoomPlace(it.optInt("id"), it.optDouble("x", 0.0), it.optDouble("y", 0.0), it.optString("name")) },
         )
 
         private fun parseCommand(c: JSONObject) = AddonCommand(

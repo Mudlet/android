@@ -63,6 +63,7 @@ import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineMessages.appMap
+import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.game.Announcer
 import java.io.EOFException
 import java.io.IOException
@@ -75,8 +76,8 @@ import kotlin.math.min
  * The app's own map (docs/architecture.md, "The map behind the text"), against a fake engine: asked for at the
  * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; let go when the
  * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, over the
- * input line and the quick bar, where a tap selects, a double tap walks, the buttons zoom and TalkBack's actions do the
- * same, and Back sends it back; and the room search, whose results centre the map on a room; and the download of the map the game offers.
+ * input line and the quick bar, where a tap selects, a double tap walks, a drag moves it, the buttons zoom and TalkBack's
+ * actions do the same, and Back sends it back, following the player again; and the room search, whose results centre the map on a room; and the download of the map the game offers.
  */
 @RunWith(AndroidJUnit4::class)
 class AppMapTest {
@@ -394,6 +395,39 @@ class AppMapTest {
         session.send(JSONObject().put("t", "error").put("message", "appMapPointer: no profile running"))
         val refusal = hasText(string(R.string.map_refused, "no profile running"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(refusal).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun aDragPansTheMapInFrontWhichFollowsThePlayerAgainOnceItGoesBehindTheText() {
+        val (w, h) = openMap(withView = true)
+        val map = drawnMap()
+        val drawn = bounds(map)
+        val scale = min(drawn.width / w, drawn.height / h)
+        compose.onNode(map).performTouchInput {
+            down(center)
+            repeat(10) { moveBy(Offset(0f, (10 * scale).toFloat())) }
+            advanceEventTime(300)
+            up()
+        }
+        val move = request("moveMap", "a drag on the map in front moves it")
+        assertEquals("app", move.getString("map"))
+        assertTrue("moved by ${move.getDouble("dy")}", move.getDouble("dy") > 0)
+        noRequest("appMapPointer")
+        val follow = hasContentDescription(string(R.string.map_follow)) and hasClickAction()
+        waitFor("the button that centres the map shows") { compose.onAllNodes(follow).fetchSemanticsNodes().isNotEmpty() }
+
+        // A rotation keeps the map in front where the player moved it: the UI attaches again, and the engine, which
+        // drew the move, sends the frame again
+        compose.activityRule.scenario.recreate()
+        session = fake.engine.nextSession()
+        val again = lastRequest("setAppMapSize", "the map is asked for again after a rotation")
+        session.send(appMap(again.getInt("w"), again.getInt("h"), scale = again.getDouble("scale"), view = mapView(again.getInt("w"), again.getInt("h"), following = false, moved = move.getInt("seq"))))
+        waitFor("the button shows again after a rotation") { compose.onAllNodes(follow).fetchSemanticsNodes().isNotEmpty() }
+        noRequest("followPlayer")
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(map).fetchSemanticsNodes().isEmpty() }
+        assertEquals("app", request("followPlayer", "the map behind the text follows the player").getString("map"))
     }
 
     @Test
@@ -787,13 +821,13 @@ class AppMapTest {
     }
 
     // Opens the map in front, and returns the size it is asked at, once the engine has drawn it
-    private fun openMap(): Pair<Double, Double> {
+    private fun openMap(withView: Boolean = false): Pair<Double, Double> {
         activate(button)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
         val size = lastRequest("setAppMapSize")
         val w = size.getInt("w")
         val h = size.getInt("h")
-        session.send(appMap(w, h, scale = size.getDouble("scale")))
+        session.send(appMap(w, h, scale = size.getDouble("scale"), view = if (withView) mapView(w, h) else null))
         return w.toDouble() to h.toDouble()
     }
 

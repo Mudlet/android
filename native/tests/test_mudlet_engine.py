@@ -104,7 +104,7 @@ def main():
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
         for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
-                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_download):
+                       script_labels, script_text_boxes, frame_tabs, button_bars, map_view, app_map, map_moves, map_download):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -2345,6 +2345,122 @@ def app_map():
     check(m == empty, f"0 by 0 stops the app's map: {m}")
     m = c.ask({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
     check(m["message"].startswith("appMapPointer: The app's map has not been drawn yet"), f"and lets its view go: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def map_moves():
+    """Moving a map by touch: view in each appMap and map, with the area, level, zoom and its bounds, following, the
+    player's room, the room size and the rooms drawn at their places; moveMap panning and zooming about a point,
+    carried as moved, stopping following, clamped at maxZoom; followPlayer and the player's move following again; the
+    script's mapper moved apart from the app's map; and the refusals."""
+    profile = "Map Moves Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    pan = {"t": "moveMap", "map": "app", "dx": 30, "dy": 0, "zoom": 1, "x": 200, "y": 150, "seq": 1}
+    for request in (pan, {"t": "followPlayer", "map": "app"}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the moves' profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    m = c.ask(pan, answers=("error",), collect=seen)
+    check(m["message"] == "moveMap: The app's map has not been drawn yet; it moves what renderAppMap() drew.",
+          f"a move of an app's map not drawn is refused: {m}")
+    m = c.ask({"t": "followPlayer", "map": "mapper"}, answers=("error",), collect=seen)
+    check(m["message"] == "followPlayer: No map is open; a script opens one, as with openMapWidget().",
+          f"and of a script's map no script opened: {m}")
+
+    # As in app_map(): the area's first zoom of 20 on a map 300 high is rooms of 15 pixels, room 1 (the player's) in the
+    # middle, room 2 two to its east, room 3 four to its north
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 1})
+    c.send({"t": "runLua", "code": "\n".join([
+        'local area = addAreaName("Move Area")',
+        "for id, place in pairs({[1] = {0, 0}, [2] = {2, 0}, [3] = {0, 4}}) do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, place[1], place[2], 0)",
+        "end",
+        'setRoomName(1, "Great Hall")',
+        'setRoomName(2, "Kitchen")',
+        'setRoomName(3, "Tower")',
+        "centerview(1)",
+        "updateMap()",
+    ])})
+
+    def places(m):
+        return {r["id"]: (round(r["x"]), round(r["y"])) for r in m["view"]["rooms"]}
+
+    def viewed(pred):
+        return lambda m: m["t"] == "appMap" and m["w"] and "view" in m and pred(m["view"], places(m))
+
+    try:
+        m = seen_or_next(c, viewed(lambda v, p: p.get(1) == (200, 150)), seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"the app's map comes with its view: {e}")
+        stop_engine(proc)
+        return
+    v = m["view"]
+    check({k: v[k] for k in ("areaName", "level", "following", "player", "moved")}
+          == {"areaName": "Move Area", "level": 0, "following": True, "player": 1, "moved": 0}
+          and v["area"] > 0 and abs(v["zoom"] - 20) < 0.01 and v["minZoom"] == 3 and v["maxZoom"] == 30
+          and abs(v["roomSize"] - 15) < 0.01, f"the view says the area, level, zoom and its bounds, following the player in room 1: {v}")
+    check(places(m) == {1: (200, 150), 2: (230, 150), 3: (200, 90)}
+          and {r["id"]: r["name"] for r in v["rooms"]} == {1: "Great Hall", 2: "Kitchen", 3: "Tower"},
+          f"with the rooms drawn at their places and names: {v['rooms']}")
+
+    since = len(seen)
+    c.send(pan)
+    try:
+        m = seen_or_next(c, viewed(lambda v, p: v["moved"] == 1), seen, since)
+        check(places(m) == {1: (230, 150), 2: (260, 150), 3: (230, 90)} and m["view"]["following"] is False,
+              f"a pan moves the rooms by it and stops following: {m['view']}")
+        since = len(seen)
+        c.send({**pan, "dx": 0, "zoom": 2, "x": 230, "y": 150, "seq": 2})
+        m = seen_or_next(c, viewed(lambda v, p: v["moved"] == 2), seen, since)
+        check(places(m).get(1) == (230, 150) and places(m).get(2) == (290, 150) and abs(m["view"]["zoom"] - 10) < 0.01
+              and abs(m["view"]["roomSize"] - 30) < 0.01, f"a zoom by 2 about room 1 doubles the rooms there: {m['view']}")
+        since = len(seen)
+        c.send({**pan, "dx": 0, "zoom": 0.001, "seq": 3})
+        m = seen_or_next(c, viewed(lambda v, p: v["moved"] == 3), seen, since)
+        check(abs(m["view"]["zoom"] - 30) < 0.01, f"a zoom out past maxZoom stops there: {m['view']}")
+        since = len(seen)
+        c.send({"t": "followPlayer", "map": "app"})
+        m = seen_or_next(c, viewed(lambda v, p: v["following"] and p.get(1) == (200, 150)), seen, since)
+        check(True, "followPlayer centres the map on the player and follows again")
+        since = len(seen)
+        c.send({**pan, "seq": 4})
+        seen_or_next(c, viewed(lambda v, p: v["moved"] == 4 and not v["following"]), seen, since)
+        c.send({"t": "runLua", "code": "centerview(2)"})
+        m = seen_or_next(c, viewed(lambda v, p: v["following"] and v["player"] == 2 and p.get(2) == (200, 150)), seen, since)
+        check(True, "the player's move to another room follows the player again")
+    except TimeoutError as e:
+        check(False, f"moveMap and followPlayer move the app's map: {e}")
+        stop_engine(proc)
+        return
+    for request, message in (({**pan, "seq": 0}, "seq must be a whole number from 1"), ({**pan, "zoom": -1}, "zoom must be above 0")):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"moveMap: {message}", f"moveMap with {message} is refused: {m}")
+
+    # A script's mapper is moved apart: its frames carry its own moved, and the app's map stays on the player
+    since = len(seen)
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    c.send({"t": "runLua", "code": 'testMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})'})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "map" and "view" in m and m["view"]["moved"] == 0, seen, since, timeout=15)
+        check(m["view"]["following"] is True and m["view"]["player"] == 2, f"the script's map comes with its view: {m['view']}")
+        since = len(seen)
+        c.send({**pan, "map": "mapper", "dy": 15, "seq": 5})
+        m = seen_or_next(c, lambda m: m["t"] == "map" and "view" in m and m["view"]["moved"] == 5, seen, since)
+        check(not m["view"]["following"], f"moveMap of the mapper moves the script's map: {m['view']}")
+    except TimeoutError as e:
+        check(False, f"moveMap of the mapper moves the script's map: {e}")
+    app = [m for m in seen if m["t"] == "appMap" and m["w"]]
+    check(app[-1]["view"]["following"] and app[-1]["view"]["moved"] == 4, f"and leaves the app's map as it was: {app[-1].get('view')}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

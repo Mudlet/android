@@ -202,7 +202,8 @@ def no_map(c):
     check(m == {"t": "appMap", "png": "", "w": 0, "h": 0, "viewOnly": True}, f"setMapScale is taken, and the app's map has nothing to draw: {m}")
     for request in ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "button": 1}, {"t": "setMapViewOnly", "viewOnly": False},
                     {"t": "appMapPointer", "type": "doubleClick", "x": 1, "y": 2, "button": 1}, {"t": "showRoom", "room": 1},
-                    {"t": "downloadMap"}, {"t": "cancelMapDownload"}):
+                    {"t": "moveMap", "map": "app", "dx": 10, "dy": -5, "zoom": 1.5, "x": 1, "y": 2, "seq": 1},
+                    {"t": "followPlayer", "map": "mapper"}, {"t": "downloadMap"}, {"t": "cancelMapDownload"}):
         m = c.ask(request, answers=("error",))
         check(m["message"] == f"{request['t']}: the stand-in engine has no map", f"{request['t']} is refused: {m}")
     for request, message in (({"t": "mapPointer", "type": "move", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
@@ -215,6 +216,14 @@ def no_map(c):
                              ({"t": "setMapViewOnly"}, "viewOnly must be true or false"),
                              ({"t": "appMapPointer", "type": "release", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
                              ({"t": "showRoom", "room": "1"}, "room must be a whole number"),
+                             ({"t": "moveMap", "map": "both", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 1}, "map must be app or mapper"),
+                             ({"t": "moveMap", "map": "app", "dx": "0", "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 1},
+                              "dx, dy, zoom, x and y must be numbers"),
+                             ({"t": "moveMap", "map": "app", "dx": 0, "dy": 0, "zoom": 1, "y": 0, "seq": 1}, "dx, dy, zoom, x and y must be numbers"),
+                             ({"t": "moveMap", "map": "app", "dx": 0, "dy": 0, "zoom": 0, "x": 0, "y": 0, "seq": 1}, "zoom must be above 0"),
+                             ({"t": "moveMap", "map": "mapper", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 0}, "seq must be a whole number from 1"),
+                             ({"t": "moveMap", "map": "mapper", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0}, "seq must be a whole number from 1"),
+                             ({"t": "followPlayer"}, "map must be app or mapper"),
                              ({"t": "findRooms", "text": " "}, "text must not be empty"),
                              ({"t": "setAppMapSize", "w": 0, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),
                              ({"t": "setAppMapSize", "w": 1.5, "h": 10, "scale": 1}, "w and h must be whole numbers above 0, or both 0"),

@@ -104,6 +104,19 @@ std::variant<PointerEvent, QString> pointerEvent(const QJsonObject& message, boo
     return event;
 }
 
+// nullopt for a map that is neither app nor mapper
+std::optional<IEngine::MapTarget> mapTarget(const QJsonObject& message)
+{
+    const QString map = message.value(QLatin1String("map")).toString();
+    if (map == QLatin1String("app")) {
+        return IEngine::MapTarget::app;
+    }
+    if (map == QLatin1String("mapper")) {
+        return IEngine::MapTarget::mapper;
+    }
+    return std::nullopt;
+}
+
 QString wireName(MapDownload::State state)
 {
     switch (state) {
@@ -495,6 +508,11 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("showRoom")) {
         const std::optional<int> room = wholeNumber(message.value(QLatin1String("room")));
         refuse(type, room ? mEngine->showRoom(*room) : QStringLiteral("room must be a whole number"));
+    } else if (type == QLatin1String("moveMap")) {
+        refuse(type, moveMap(message));
+    } else if (type == QLatin1String("followPlayer")) {
+        const std::optional<IEngine::MapTarget> map = mapTarget(message);
+        refuse(type, map ? mEngine->followPlayer(*map) : QStringLiteral("map must be app or mapper"));
     } else if (type == QLatin1String("downloadMap")) {
         refuse(type, mEngine->downloadMap());
     } else if (type == QLatin1String("cancelMapDownload")) {
@@ -678,6 +696,29 @@ QString SocketBridge::mapPointer(const QJsonObject& message)
         return *problem;
     }
     return mEngine->mapPointer(std::get<PointerEvent>(event));
+}
+
+QString SocketBridge::moveMap(const QJsonObject& message)
+{
+    const std::optional<IEngine::MapTarget> map = mapTarget(message);
+    if (!map) {
+        return QStringLiteral("map must be app or mapper");
+    }
+    const QJsonValue numbers[] = {
+            message.value(QLatin1String("dx")), message.value(QLatin1String("dy")), message.value(QLatin1String("zoom")), message.value(QLatin1String("x")), message.value(QLatin1String("y"))};
+    if (!std::all_of(std::begin(numbers), std::end(numbers), [](const QJsonValue& value) {
+            return value.isDouble();
+        })) {
+        return QStringLiteral("dx, dy, zoom, x and y must be numbers");
+    }
+    if (!(numbers[2].toDouble() > 0)) {
+        return QStringLiteral("zoom must be above 0");
+    }
+    const std::optional<int> seq = wholeNumber(message.value(QLatin1String("seq")), 1);
+    if (!seq) {
+        return QStringLiteral("seq must be a whole number from 1");
+    }
+    return mEngine->moveMap(*map, QPointF(numbers[0].toDouble(), numbers[1].toDouble()), numbers[2].toDouble(), QPointF(numbers[3].toDouble(), numbers[4].toDouble()), *seq);
 }
 
 QString SocketBridge::setAppMapSize(const QJsonObject& message)
@@ -1374,11 +1415,38 @@ void SocketBridge::mapDownload(const MapDownload& download)
 QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
 {
     const QByteArray base64 = frame.png.toBase64();
-    if (base64.size() + 1024 > qsizetype(maxFrameBytes)) {
-        qWarning("SocketBridge: a map at %dx%d as a PNG is too large for a frame", frame.size.width(), frame.size.height());
+    const QJsonObject view = frame.view ? mapViewMessage(*frame.view) : QJsonObject();
+    // The rooms' names can add tens of kilobytes to the PNG
+    const qsizetype viewBytes = view.isEmpty() ? 0 : QJsonDocument(view).toJson(QJsonDocument::Compact).size();
+    if (base64.size() + viewBytes + 1024 > qsizetype(maxFrameBytes)) {
+        qWarning("SocketBridge: a map at %dx%d as a PNG, with its view, is too large for a frame", frame.size.width(), frame.size.height());
         return {};
     }
-    return {{QStringLiteral("png"), QString::fromLatin1(base64)}, {QStringLiteral("w"), frame.size.width()}, {QStringLiteral("h"), frame.size.height()}, {QStringLiteral("viewOnly"), frame.viewOnly}};
+    QJsonObject message{
+            {QStringLiteral("png"), QString::fromLatin1(base64)}, {QStringLiteral("w"), frame.size.width()}, {QStringLiteral("h"), frame.size.height()}, {QStringLiteral("viewOnly"), frame.viewOnly}};
+    if (!view.isEmpty()) {
+        message.insert(QStringLiteral("view"), view);
+    }
+    return message;
+}
+
+QJsonObject SocketBridge::mapViewMessage(const MapViewInfo& view)
+{
+    QJsonArray rooms;
+    for (const MapRoomPlace& room : view.rooms) {
+        rooms.append(QJsonObject{{QStringLiteral("id"), room.id}, {QStringLiteral("x"), room.position.x()}, {QStringLiteral("y"), room.position.y()}, {QStringLiteral("name"), room.name}});
+    }
+    return {{QStringLiteral("area"), view.area},
+            {QStringLiteral("areaName"), view.areaName},
+            {QStringLiteral("level"), view.level},
+            {QStringLiteral("zoom"), view.zoom},
+            {QStringLiteral("minZoom"), view.minZoom},
+            {QStringLiteral("maxZoom"), view.maxZoom},
+            {QStringLiteral("following"), view.following},
+            {QStringLiteral("player"), view.playerRoom},
+            {QStringLiteral("roomSize"), view.roomSize},
+            {QStringLiteral("moved"), view.moved},
+            {QStringLiteral("rooms"), rooms}};
 }
 
 void SocketBridge::sendIfChanged(QJsonObject& kept, QJsonObject message)

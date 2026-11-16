@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Applies the changes the app needs from Mudlet and Mudlet does not have yet, scripts/mudlet-patches/*.patch, to a
 # Mudlet checkout, in name order. Each goes upstream to Mudlet/Mudlet, as its "Upstream:" line says, and is dropped
-# here once merged there. A patch already in the checkout, applied by an earlier run or merged by Mudlet, is left as it
-# is; one that applies neither way stops the build, as Mudlet has changed what it touches. scripts/build-libmudlet.sh
-# and scripts/build-libmudlet-desktop.sh run this first.
+# here once merged there. A patch already in the checkout, applied by an earlier run or merged by Mudlet, is in it
+# once afterwards; one that applies neither way stops the build, as Mudlet has changed what it touches.
+# scripts/build-libmudlet.sh and scripts/build-libmudlet-desktop.sh run this first.
 #
 # Usage: scripts/apply-mudlet-patches.sh <mudlet-source>
 set -euo pipefail
@@ -18,7 +18,17 @@ export GIT_CEILING_DIRECTORIES
 GIT_CEILING_DIRECTORIES=$(dirname "$src")
 
 shopt -s nullglob
-for patch in "$here"/mudlet-patches/*.patch; do
+patches=("$here"/mudlet-patches/*.patch)
+
+# A later patch can change lines an earlier one's context needs, so an earlier run's patches come off last first before
+# each is checked again in order
+for ((i = ${#patches[@]} - 1; i >= 0; i--)); do
+    if (cd "$src" && git apply --reverse --check "${patches[i]}" 2> /dev/null); then
+        (cd "$src" && git apply --reverse "${patches[i]}")
+    fi
+done
+
+for patch in "${patches[@]}"; do
     name=$(basename "$patch")
     if (cd "$src" && git apply --reverse --check "$patch" 2> /dev/null); then
         echo "Mudlet patch $name: already in $src"

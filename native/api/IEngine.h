@@ -111,6 +111,15 @@ public:
     virtual std::variant<RoomList, QString> findRooms(const QString& text) const = 0;
     // The app's map centred on that room, which it selects, until the player moves
     virtual QString showRoom(int room) = 0;
+    // Which map moveMap() and followPlayer() act on: the mapper window's (IFrontend::map()) or the app's own
+    // (IFrontend::appMap())
+    enum class MapTarget { mapper, app };
+    // A drag and a pinch on that map: what its last frame drew moved by pan, in the frame's pixels, then zoomed by zoom
+    // (above 0, 2 showing the rooms twice as large) about the point about of it; the frames that draw it carry seq as
+    // MapViewInfo::moved. It stops following the player where it leaves the player off the middle.
+    virtual QString moveMap(MapTarget map, const QPointF& pan, double zoom, const QPointF& about, qint64 seq) = 0;
+    // That map centred on the player's room, following the player again
+    virtual QString followPlayer(MapTarget map) = 0;
     // Downloads the map the game offered and loads it in place of the profile's, as IFrontend::mapDownload() follows
     virtual QString downloadMap() = 0;
     // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be

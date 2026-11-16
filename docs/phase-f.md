@@ -222,10 +222,12 @@ not yet sent also goes when the player leaves the field, before a tap on a label
 before a command, so that a script these run reads it, when the field goes (a turn of the screen), and again after the
 link drops. A script's new text replaces the field's, the player's unsent typing with it, as does making it read-only;
 the field tells one from the player's own text by `ScriptWindows.textBoxEdits`, which only the engine's change of the
-text moves, so a key typed as the last text went is kept. A `textBox` the engine sent before it had the player's
-latest text (its `typed` short of what the app sent) keeps the player's text. The app counts what it sent by the link's
-connection it went out on (`EngineLink.connection`), so typing sent on a new connection before the main thread sees
-the attach stays counted, as the engine counts it. A refusal's `textBox` puts back what Mudlet holds.
+text moves, so a key typed as the last text went is kept. It is replaced as the field is drawn, not in an effect a frame
+before the field's editor has it, where an edit of the keyboard's that changes the field (the composing region it sets
+on a word, or a key) would put the old text back, and a tap would send it. A `textBox` the engine sent before it had
+the player's latest text (its `typed` short of what the app sent) keeps the player's text. The app counts what it sent
+by the link's connection it went out on (`EngineLink.connection`), so typing sent on a new connection before the main
+thread sees the attach stays counted, as the engine counts it. A refusal's `textBox` puts back what Mudlet holds.
 
 ### Gauges
 

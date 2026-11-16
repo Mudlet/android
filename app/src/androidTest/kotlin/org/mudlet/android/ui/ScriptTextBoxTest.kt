@@ -41,7 +41,8 @@ import org.mudlet.android.protocol.Profile
  * The text boxes a profile's scripts make with createTextEdit() (docs/phase-f.md, "Text boxes"), against a fake engine:
  * what the player types reaches the engine as `setTextBoxText`, once, and is not taken back, a key right after a send
  * included, and before a tap on a label; a script's new text replaces the field's, even the text from before the
- * player typed, and one the engine sent before it had the player's typing does not; a read-only box cannot be typed
+ * player typed, and an edit of the keyboard's that changes the field does not put the old text back; one the engine
+ * sent before it had the player's typing does not replace it; a read-only box cannot be typed
  * in, and drops what was not sent; a refusal puts back what the engine holds; a removed box sends nothing; a small box
  * is touched within 48 dp; and each is read by its placeholder or its name.
  */
@@ -122,6 +123,36 @@ class ScriptTextBoxTest {
         // The engine has the player's text, so the script's text, though the field had it before, is a change
         session.textBox("notes", text = "first", placeholder = "Write here")
         awaitNode(field and hasText("first"))
+        assertNoTypingSent()
+    }
+
+    @Test
+    fun aKeyboardsEditAsAScriptsTextComesDoesNotPutBackTheOldText() {
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes", text = "first", placeholder = "Write here")
+        val field = field("Write here")
+        awaitNode(field and hasText("first"))
+        compose.onNode(field).performTextReplacement("the player's")
+        assertEquals("the player's", receiveTyping().getString("text"))
+
+        compose.mainClock.autoAdvance = false
+        try {
+            session.textBox("notes", text = "first", placeholder = "Write here")
+            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { EngineClient.front.windows.state.textBoxes["notes"]?.text == "first" } }
+            // Frame by frame, each followed by a key, which goes through the field's editor as the keyboard's edits
+            // do: none may find the player's old text there to put back. A key, as an edit that changed nothing would
+            // be dropped, as the same as what the field was drawn with
+            repeat(EDIT_FRAMES) {
+                compose.mainClock.advanceTimeByFrame()
+                compose.onNode(field).performTextInput("!")
+            }
+            compose.mainClock.advanceTimeBy(SETTLED_MS)
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        val typed = receiveTyping().getString("text")
+        assertTrue("the player's old text came back: $typed", typed.startsWith("first!"))
+        compose.onNode(field).assert(hasText(typed))
         assertNoTypingSent()
     }
 
@@ -326,6 +357,9 @@ class ScriptTextBoxTest {
         // Longer than the field waits, on the test's clock, for the player's typing to settle
         const val SETTLED_MS = 400L
         const val MAX_FRAMES = 100
+
+        // Enough frames for a script's text to have reached the field
+        const val EDIT_FRAMES = 5
         const val TIMEOUT_MS = 240_000L
     }
 }

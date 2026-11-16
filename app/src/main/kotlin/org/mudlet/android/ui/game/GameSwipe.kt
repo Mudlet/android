@@ -5,10 +5,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -18,12 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -123,9 +114,6 @@ class GameSwipe(private val scope: CoroutineScope) {
     }
 }
 
-// A release this fast is a fling, however short the drag
-private val FLING_VELOCITY = 500.dp
-
 /**
  * Takes a horizontal drag for [swipe], with the games a slide to the left and to the right brings ([leftward] and
  * [rightward]), which [switch] brings to the front; [onSwitched] follows each switch that happens. Only a drag past the
@@ -138,33 +126,7 @@ fun Modifier.gameSwipe(
     rightward: () -> String?,
     switch: (String) -> Boolean,
     onSwitched: () -> Unit,
-): Modifier = pointerInput(swipe) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val velocity = VelocityTracker()
-        velocity.addPointerInputChange(down)
-        val width = size.width.toFloat().coerceAtLeast(1f)
-        fun moved(share: Float) = swipe.drag(share, canLeft = leftward() != null, canRight = rightward() != null)
-        val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, overSlop ->
-            change.consume()
-            velocity.addPointerInputChange(change)
-            swipe.startDrag()
-            moved(overSlop / width)
-        } ?: return@awaitEachGesture
-        val lifted = horizontalDrag(start.id) { change ->
-            velocity.addPointerInputChange(change)
-            moved(change.positionChange().x / width)
-            change.consume()
-        }
-        if (lifted) {
-            val speed = velocity.calculateVelocity().x
-            val fling = if (abs(speed) >= FLING_VELOCITY.toPx()) sign(speed).toInt() else 0
-            swipe.release(fling, leftward(), rightward(), switch, onSwitched)
-        } else {
-            swipe.settle()
-        }
-    }
-}
+): Modifier = this
 
 /** The tick a switch by swipe gives. */
 @Composable

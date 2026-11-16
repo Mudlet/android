@@ -25,21 +25,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
@@ -153,7 +149,6 @@ private fun ProfileGameScreen(
     val index = games.indexOf(c)
     val previous = games.getOrNull(index - 1)?.name
     val next = if (index >= 0) games.getOrNull(index + 1)?.name else null
-    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val switchedText = stringResource(R.string.game_state, name, stateText)
     LaunchedEffect(Unit) { if (switched) Announcer.announce(switchedText, assertive = false) }
     val heard = remember { Last<KClass<out ConnectionState>>() }
@@ -204,15 +199,10 @@ private fun ProfileGameScreen(
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
                 // Both halves of the press, so the focused field types no "r" and the focus stays where it is
                 if (ctrlR && event.type == KeyEventType.KeyDown) historyOpen = true
-                if (ctrlTab && event.type == KeyEventType.KeyDown) {
-                    val forward = !event.isShiftPressed
-                    val target = if (forward) next else previous
-                    if (target != null && EngineClient.setFront(target)) swipe.arrive(left = forward != rtl)
-                }
                 ctrlR || ctrlTab
             },
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
                 // Drawn on under the map in front, which a predictive back gesture shrinks to show it, but neither read
                 // by TalkBack nor reached by a hardware keyboard's focus; the input line lets go of the keyboard
                 val covered = if (mapOpen) Modifier.clearAndSetSemantics {}.focusProperties { canFocus = false } else Modifier

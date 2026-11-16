@@ -5,12 +5,18 @@ import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.setContent
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -18,8 +24,11 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Before
@@ -47,7 +56,8 @@ class ListDetailTest {
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
         .around(compose)
 
-    private var scale by mutableFloatStateOf(1f)
+    private var scale = 1f
+    private var narrow by mutableStateOf(false)
     private lateinit var session: FakeEngine.Session
 
     @Before
@@ -59,7 +69,13 @@ class ListDetailTest {
             compose.activity.setContent {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
-                    MudletTheme { AppNavigation(onKillUi = {}) }
+                    // Narrowed as a window resized is: by its width, not its density. The outer Box loosens the
+                    // window's exact width, which a width of its own would otherwise be held to
+                    Box(Modifier.fillMaxSize()) {
+                        Box(if (narrow) Modifier.fillMaxHeight().width(COMPACT_DP.dp) else Modifier.fillMaxSize()) {
+                            MudletTheme { AppNavigation(onKillUi = {}) }
+                        }
+                    }
                 }
             }
         }
@@ -96,8 +112,8 @@ class ListDetailTest {
         activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
         editorShown()
 
-        compose.runOnUiThread { scale = 1f }
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.navigate_back))).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnUiThread { narrow = true }
+        waitFor("the editor on a screen of its own, with Back", hasContentDescription(string(R.string.navigate_back)))
         compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_host))).assertIsDisplayed()
         compose.onNode(hasText(string(R.string.profiles_title))).assertDoesNotExist()
 
@@ -131,14 +147,25 @@ class ListDetailTest {
     }
 
     private fun displayed(node: SemanticsMatcher) {
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("$node", node)
         compose.onNode(node).assertIsDisplayed()
+    }
+
+    // A wait that runs out says what the screen held instead
+    private fun waitFor(what: String, node: SemanticsMatcher) {
+        try {
+            compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
+        } catch (e: ComposeTimeoutException) {
+            val width = compose.onRoot().fetchSemanticsNode().size.width / (compose.activity.resources.displayMetrics.density * scale)
+            val tree = runCatching { compose.onRoot(useUnmergedTree = true).printToString() }.getOrElse { "$it" }
+            throw AssertionError("no $what within $WAIT_MS ms; the app $width dp wide at scale $scale; the tree:\n$tree", e)
+        }
     }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     private fun activate(label: SemanticsMatcher) {
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(label and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("$label", label and hasClickAction())
         compose.onNode(label and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
     }
 
@@ -147,6 +174,7 @@ class ListDetailTest {
         val OTHER = Profile("Other", "127.0.0.2", 4000, false, "", false)
         val PROFILES = listOf(GAME, OTHER)
         const val EXPANDED_DP = 960f
+        const val COMPACT_DP = 400
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 120_000L
     }

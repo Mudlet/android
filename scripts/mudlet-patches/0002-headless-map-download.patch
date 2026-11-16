@@ -1,0 +1,417 @@
+Headless: download the map the game offers, and hear how it ended
+
+A game offers its map with GMCP's Client.Map, which the GUI's mapper turns into a "Download from game" button, and
+TMap::downloadMap() then says how the download went only in the main console, which an app over THeadlessSession
+does not show. This adds THeadlessSession::offeredMapUrl() and downloadOfferedMap(), with offeredMapChanged as the
+game offers one and mapDownloadFinished once a download has ended, loaded or not with the console's message as the
+reason, after its mapProgressFinished. TMap gets signal_mapDownloadFinished(), sent once for each download it began,
+and downloadMap() answers whether it began one. Neither TMap::setMmpMapLocation()'s debug log nor the console's messages of a failed
+download show the user name and password a game can put in the URL any more.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+
+diff --git a/src/TMap.cpp b/src/TMap.cpp
+index 5442996..b2a18a1 100644
+--- a/src/TMap.cpp
++++ b/src/TMap.cpp
+@@ -73,6 +73,20 @@
+ using namespace std::chrono_literals;
+ 
+ namespace {
++// A reply's error text can name its URL, and with it the user name and password a game can put there
++QString withoutUserInfo(QString text, const QNetworkReply& reply)
++{
++    for (const QUrl& url : {reply.request().url(), reply.url()}) {
++        if (!url.userInfo().isEmpty()) {
++            const QString shown = url.toString(QUrl::RemoveUserInfo);
++            text.replace(url.toString(), shown);
++            text.replace(url.toString(QUrl::FullyEncoded), shown);
++            text.replace(url.toDisplayString(), shown);
++        }
++    }
++    return text;
++}
++
+ // An image label is painted scaled from its pixmap, so past this many pixels a
+ // bigger one only costs memory: at 30000 pixels square it is gigabytes.
+ constexpr qreal cMaxImageLabelPixels = 4096.0 * 4096.0;
+@@ -2895,12 +2909,12 @@ void TMap::pushErrorMessagesToFile(const QString title, const bool isACleanup)
+     mIsFileViewingRecommended = false;
+ }
+ 
+-void TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
++bool TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
+ {
+     const MapOperationScope operationScope(this);
+     Host* pHost = mpHost;
+     if (!pHost) {
+-        return;
++        return false;
+     }
+ 
+     // Incidentally this should address: https://bugs.launchpad.net/mudlet/+bug/852861
+@@ -2909,7 +2923,7 @@ void TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
+                                    "requested or is being imported from a local file - wait for that\n"
+                                    "operation to complete (if it cannot be canceled) before retrying!");
+         postMessage(warnMsg);
+-        return;
++        return false;
+     }
+ 
+     if (mMapProgressStandalone) {
+@@ -2918,10 +2932,11 @@ void TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
+                                    "export is already in progress - wait for that operation to complete\n"
+                                    "before retrying!");
+         postMessage(warnMsg);
+-        return;
++        return false;
+     }
+     mImportRunning = true;
+     // MUST clear this flag when done under ALL circumstances
++    mDownloadFailure.clear();
+ 
+     QUrl url;
+     if (remoteUrl.isEmpty()) {
+@@ -2939,10 +2954,11 @@ void TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
+                                   "%1\n"
+                                   "and the error message (may contain technical details) was:"
+                                   "\"%2\".")
+-                                       .arg(url.toString(), url.errorString());
++                                       .arg(url.toString(QUrl::RemoveUserInfo), url.errorString());
+         postMessage(errMsg);
+         mImportRunning = false;
+-        return;
++        emit signal_mapDownloadFinished(false, errMsg);
++        return true;
+     }
+ 
+     // Check to ensure we have a map directory to save the map files to.
+@@ -2956,7 +2972,8 @@ void TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
+                                        .arg(toProfileDirPathString);
+         pHost->postMessage(errMsg);
+         mImportRunning = false;
+-        return;
++        emit signal_mapDownloadFinished(false, errMsg);
++        return true;
+     }
+ 
+     if (localFileName.isEmpty()) {
+@@ -2986,6 +3003,7 @@ void TMap::downloadMap(const QString& remoteUrl, const QString& localFileName)
+ 
+     connect(mpNetworkReply, &QNetworkReply::downloadProgress, this, &TMap::slot_setDownloadProgress);
+     connect(mpNetworkReply, &QNetworkReply::errorOccurred, this, &TMap::slot_downloadError);
++    return true;
+ }
+ 
+ // Called from TLuaInterpreter::loadFile() or dlgProfilePreferences's "loadMap"
+@@ -3162,6 +3180,7 @@ void TMap::slot_downloadCancel()
+ {
+     const QString alertMsg = tr("[ ALERT ] - Map download was canceled, on user's request.");
+     postMessage(alertMsg);
++    mDownloadFailure = alertMsg;
+     clearTransferProgress();
+     if (mpNetworkReply) {
+         mpNetworkReply->abort(); // Will indirectly cause error() AND replyFinished signals to be sent
+@@ -3176,14 +3195,15 @@ void TMap::slot_downloadError(QNetworkReply::NetworkError error)
+ 
+     if (error != QNetworkReply::OperationCanceledError) {
+         // No point in reporting Cancel as that is handled elsewhere
+-        const QString errMsg = tr("[ ERROR ] - Map download encountered an error:\n%1").arg(mpNetworkReply->errorString());
++        const QString errMsg = tr("[ ERROR ] - Map download encountered an error:\n%1").arg(withoutUserInfo(mpNetworkReply->errorString(), *mpNetworkReply));
+         postMessage(errMsg);
++        mDownloadFailure = errMsg;
+     }
+ }
+ 
+ void TMap::slot_replyFinished(QNetworkReply* reply)
+ {
+-    auto cleanup = [this, reply]() {
++    auto finish = [this, reply](const bool loaded, const QString& reason) {
+         reply->deleteLater();
+         mpNetworkReply = nullptr;
+ 
+@@ -3195,6 +3215,8 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+         mExpectedFileSize = 0;
+         // We have finished with the XMLimporter so must clear the flag
+         mImportRunning = false;
++        mDownloadFailure.clear();
++        emit signal_mapDownloadFinished(loaded, reason);
+     };
+ 
+ 
+@@ -3207,7 +3229,7 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+         // for a failure, and slot_downloadCancel() for a cancel. Either way the
+         // reply has nothing to give, and writing that over the destination file
+         // and handing it to the map reader would cost the loaded map.
+-        cleanup();
++        finish(false, mDownloadFailure.isEmpty() ? withoutUserInfo(reply->errorString(), *reply) : mDownloadFailure);
+         return;
+     }
+     if (mpHost) {
+@@ -3219,7 +3241,7 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+     if (!writeFile.open(QFile::WriteOnly)) {
+         const QString alertMsg = tr("[ ALERT ] - Map download failed, unable to open destination file:\n%1.").arg(mLocalMapFileName);
+         postMessage(alertMsg);
+-        cleanup();
++        finish(false, alertMsg);
+         return;
+     }
+     // The QNetworkReply is Ok here:
+@@ -3227,20 +3249,20 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+     if (const QByteArray downloaded = reply->readAll(); writeFile.write(downloaded) != downloaded.size()) {
+         const QString alertMsg = tr("[ ALERT ] - Map download failed, unable to write destination file:\n%1.").arg(mLocalMapFileName);
+         postMessage(alertMsg);
+-        cleanup();
++        finish(false, alertMsg);
+         return;
+     }
+     if (!writeFile.commit()) {
+         const QString alertMsg = tr("[ ALERT ] - Map download failed, unable to save destination file:\n%1\nreason: %2").arg(mLocalMapFileName, writeFile.errorString());
+         postMessage(alertMsg);
+-        cleanup();
++        finish(false, alertMsg);
+         return;
+     }
+ 
+     Host* pHost = mpHost;
+     if (!pHost) {
+         qWarning() << "TMap::slot_replyFinished( QNetworkReply * ) ERROR - NULL Host pointer - something is really wrong!";
+-        cleanup();
++        finish(false, QString());
+         return;
+     }
+ 
+@@ -3262,7 +3284,7 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+         if (!readFile.open(QFile::OpenMode(QFile::ReadOnly | QFile::Text))) {
+             const QString alertMsg = tr("[ ERROR ] - Map download problem, unable to read destination file:\n%1.").arg(parsingFileName);
+             postMessage(alertMsg);
+-            cleanup();
++            finish(false, alertMsg);
+             return;
+         }
+ 
+@@ -3273,6 +3295,7 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+         readFile.close();
+     }
+ 
++    QString failure;
+     if (parsingWasSuccessful) {
+         TEvent mapDownloadEvent{};
+         mapDownloadEvent.mArgumentList.append(qsl("sysMapDownloadEvent"));
+@@ -3280,11 +3303,11 @@ void TMap::slot_replyFinished(QNetworkReply* reply)
+         pHost->raiseEvent(mapDownloadEvent);
+     } else {
+         // Failure in parse file...
+-        const QString alertMsg = tr("[ ERROR ] - Map download problem, failure in parsing destination file:\n%1.").arg(parsingFileName);
+-        postMessage(alertMsg);
++        failure = tr("[ ERROR ] - Map download problem, failure in parsing destination file:\n%1.").arg(parsingFileName);
++        postMessage(failure);
+     }
+     emit signal_mapDownloadEnded();
+-    cleanup();
++    finish(parsingWasSuccessful, failure);
+ }
+ 
+ void TMap::reportStringToProgressDialog(const QString text)
+@@ -3458,7 +3481,8 @@ void TMap::setMmpMapLocation(const QString& location)
+     }
+     mMmpMapLocation = location;
+ 
+-    qDebug() << "MMP map registered at" << mMmpMapLocation;
++    // Not the user name or password a game can put in it
++    qDebug() << "MMP map registered at" << QUrl(mMmpMapLocation).toString(QUrl::RemoveUserInfo);
+     emit signal_mmpMapLocationChanged();
+ }
+ 
+diff --git a/src/TMap.h b/src/TMap.h
+index dcb118d..6f183d7 100644
+--- a/src/TMap.h
++++ b/src/TMap.h
+@@ -100,6 +100,10 @@ signals:
+     void signal_mapLoaded(bool showPlayerArea);
+     void signal_mapperShowRequested();
+     void signal_mapDownloadEnded();
++    // A download that downloadMap() began has ended, once for each: loaded, or
++    // not, with the message the console was given saying why, which can be empty;
++    // after its progress has closed.
++    void signal_mapDownloadFinished(bool loaded, const QString& reason);
+     void signal_symbolCachesStale();
+     void signal_playerRoomStyleChanged();
+     void signal_areaListChanged();
+@@ -212,8 +216,10 @@ public:
+     void pushErrorMessagesToFile(QString, bool isACleanup = false);
+ 
+     // Downloads a map, then installs it via readXmlMapFile().
+-    // Protected from running twice by 'mImportRunning' flag
+-    void downloadMap(const QString& remoteUrl = QString(), const QString& localFileName = QString());
++    // Protected from running twice by 'mImportRunning' flag: false where it
++    // refused for that, or for an import or export running, which it says in the
++    // console; otherwise signal_mapDownloadFinished() follows.
++    bool downloadMap(const QString& remoteUrl = QString(), const QString& localFileName = QString());
+ 
+     // like 'downloadMap' but for local files:
+     bool importMap(QFile&, QString* errMsg = nullptr);
+@@ -638,6 +644,9 @@ private:
+     QString mLocalMapFileName;
+     int mExpectedFileSize = 0;
+     bool mImportRunning = false;
++    // Why the download running failed, as slot_downloadError() or
++    // slot_downloadCancel() said, for signal_mapDownloadFinished()
++    QString mDownloadFailure;
+ 
+     // Engine-side mirror of the frontend-owned dialog, which the engine can't
+     // read back. mMapProgressStandalone also serves as the "import/export already
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index cab647a..a1e5c66 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -857,6 +857,30 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                             }
+                         },
+                         Qt::QueuedConnection);
++                // After the close's own relay, so it follows mapProgressFinished
++                connect(
++                        pMap,
++                        &TMap::signal_mapDownloadFinished,
++                        &mMapProgressRelay,
++                        [this, run](const bool loaded, const QString& error) {
++                            if (run == mRun) {
++                                const QString profile = mProfileName;
++                                emit mapDownloadFinished(profile, loaded, error);
++                            }
++                        },
++                        Qt::QueuedConnection);
++                // Queued, as the game's message that offers it is being read
++                connect(
++                        pMap,
++                        &TMap::signal_mmpMapLocationChanged,
++                        this,
++                        [this, run]() {
++                            if (run == mRun) {
++                                const QString profile = mProfileName;
++                                emit offeredMapChanged(profile);
++                            }
++                        },
++                        Qt::QueuedConnection);
+                 // After the start's own relay, so it follows mapProgressStarted
+                 connect(
+                         pMap,
+@@ -1486,6 +1510,29 @@ bool THeadlessSession::cancelMapOperation()
+     return true;
+ }
+ 
++QString THeadlessSession::offeredMapUrl() const
++{
++    return mpHost ? mpHost->getMmpMapLocation() : QString();
++}
++
++bool THeadlessSession::downloadOfferedMap()
++{
++    if (!usable()) {
++        return false;
++    }
++    if (mpHost->getMmpMapLocation().isEmpty()) {
++        //: Error from a frontend with no window that was asked to download the map the game offers when the game has offered none
++        mErrorString = tr("The game has offered no map to download.");
++        return false;
++    }
++    if (!mpHost->mpMap->downloadMap()) {
++        //: Error from a frontend with no window that was asked to download the map the game offers while a map download, import or export runs
++        mErrorString = tr("A map download, import or export is running; wait for it to end.");
++        return false;
++    }
++    return true;
++}
++
+ namespace {
+ 
+ // The combinations TCommandLine::event() acts on without offering them to a binding, or for a keypad key, once
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 701da71..7a4a688 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -336,6 +336,14 @@ public:
+     // mapProgressCancelDisabled, and where submit() is refused, save that a JSON map that start() loads can be
+     // aborted from a handler of its mapProgressStarted.
+     bool cancelMapOperation();
++    // The map the game offers for download, as GMCP's Client.Map gives its URL, which may hold a user name and
++    // password; empty while it offers none, or with no profile open. offeredMapChanged follows each change.
++    QString offeredMapUrl() const;
++    // Downloads the map the game offers and loads it in place of the profile's, as the GUI's "Download from game"
++    // does: mapProgressStarted, mapProgressChanged and mapProgressFinished show it, cancelMapOperation() aborts it,
++    // and mapDownloadFinished says how it ended. False, with errorString() saying why, with no map offered, while a
++    // map download, import or export runs, and where submit() is refused.
++    bool downloadOfferedMap();
+     // A key pressed as on the GUI's input line, which offers it to the profile's key bindings where that line
+     // would: the first that matches runs, or each one when the profile runs them all. The key and modifiers are
+     // those of Qt's key event, which a binding must match exactly, so a key on the keypad carries
+@@ -1003,6 +1011,12 @@ signals:
+     // The map operation can no longer be aborted, as the GUI's dialog then drops its Abort: at once for an XML
+     // import, and for an export writing its file or a download that has arrived
+     void mapProgressCancelDisabled(const QString& profile);
++    // offeredMapUrl() changed, as the game offered a map; from the event loop
++    void offeredMapChanged(const QString& profile);
++    // A map download, whichever began it, ended: loaded, its rooms now the profile's map, or not, with error being
++    // the message the console was given, which can be empty and can hold the map's URL. From the event loop, after
++    // its mapProgressFinished, so long as shutdown() or a later start() has not let the profile go.
++    void mapDownloadFinished(const QString& profile, bool loaded, const QString& error);
+     // The map opened with no mapping script installed, where the GUI suggests one: the first time it opens
+     // once the profile has loaded, as the GUI asks. The profile marks it asked then, whether or not anything
+     // listens, and a save keeps that, so it never comes again for that profile. From the event loop, even once
+diff --git a/test/functional_tests/MapDownloadTest.cpp b/test/functional_tests/MapDownloadTest.cpp
+index 0dff77d..68a7d7f 100644
+--- a/test/functional_tests/MapDownloadTest.cpp
++++ b/test/functional_tests/MapDownloadTest.cpp
+@@ -937,6 +937,52 @@ private slots:
+         QVERIFY2(runDownload(mpMapServer->url(qsl("/map.xml"))), "the download after a canceled one was refused, so the import flag was left set");
+     }
+ 
++    // A frontend with no console of its own, such as an app over libmudlet, learns
++    // from signal_mapDownloadFinished() how each download it began ended, and from
++    // downloadMap()'s answer whether one began at all.
++    void test_eachDownloadEndsWithItsResult()
++    {
++        TMap* pMap = mpHost->mpMap.data();
++        QSignalSpy finishedSpy(pMap, &TMap::signal_mapDownloadFinished);
++        QSignalSpy closeSpy(pMap, &TMap::signal_mapProgressClose);
++
++        QVERIFY2(runDownload(mpMapServer->url(qsl("/map.xml"))), "the map download never finished");
++        QCOMPARE(finishedSpy.count(), 1);
++        QCOMPARE(finishedSpy.at(0).at(0).toBool(), true);
++        QCOMPARE(finishedSpy.at(0).at(1).toString(), QString());
++
++        finishedSpy.clear();
++        QVERIFY2(runDownload(mpMapServer->url(qsl("/nosuchmap.xml"))), "the failed map download never finished");
++        QCOMPARE(finishedSpy.count(), 1);
++        QCOMPARE(finishedSpy.at(0).at(0).toBool(), false);
++        QVERIFY2(finishedSpy.at(0).at(1).toString().contains(qsl("Map download encountered an error")), qPrintable(finishedSpy.at(0).at(1).toString()));
++
++        finishedSpy.clear();
++        pMap->downloadMap(qsl("%zz"));
++        QCOMPARE(finishedSpy.count(), 1);
++        QCOMPARE(finishedSpy.at(0).at(0).toBool(), false);
++        QVERIFY2(finishedSpy.at(0).at(1).toString().contains(qsl("invalid URL")), qPrintable(finishedSpy.at(0).at(1).toString()));
++
++        finishedSpy.clear();
++        closeSpy.clear();
++        QVERIFY(pMap->downloadMap(mpMapServer->url(qsl("/stalled.xml"))));
++        QVERIFY2(QTest::qWaitFor(
++                         [this]() {
++                             return mpMapServer->requestedPaths().contains(qsl("/stalled.xml"));
++                         },
++                         10s),
++                 "the download never reached the server");
++        // Refused, so no result of its own follows
++        QVERIFY(!pMap->downloadMap(mpMapServer->url(qsl("/map.xml"))));
++        QCOMPARE(finishedSpy.count(), 0);
++        pMap->slot_downloadCancel();
++        QCOMPARE(finishedSpy.count(), 1);
++        QCOMPARE(finishedSpy.at(0).at(0).toBool(), false);
++        QVERIFY2(finishedSpy.at(0).at(1).toString().contains(qsl("canceled, on user's request")), qPrintable(finishedSpy.at(0).at(1).toString()));
++        // After the progress closed, so a frontend has taken the progress down by then
++        QCOMPARE(closeSpy.count(), 1);
++    }
++
+     // Taking that exit is what leaves the profile's map where it was - in
+     // memory and on disk. Writing the aborted reply's nothing over the
+     // destination file and handing that to the reader, which clears the map

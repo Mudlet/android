@@ -298,7 +298,8 @@ defines. What the app needs of that API and Mudlet does not have yet is carried 
 checkout, skips one already in it and stops the build at one that no longer applies. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-is one: the app's own map and the room search (see "The map behind the text").
+are two: the app's own map and the room search (see "The map behind the text"), and downloading the map the game
+offers (see "Downloading the map").
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

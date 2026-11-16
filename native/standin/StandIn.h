@@ -29,6 +29,7 @@ public:
     QString openProfile(const QString& name, const QString& password, bool connect, bool alongside) override;
     QString closeProfile(const QString& name) override;
     IEngine* defaultSession() override;
+    bool restorePending() const override { return false; }
 
 private:
     struct OpenProfile

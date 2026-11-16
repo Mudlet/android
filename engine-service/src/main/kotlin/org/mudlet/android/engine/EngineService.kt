@@ -18,6 +18,10 @@ import org.qtproject.qt.android.QtServiceBase
  * QGuiApplication and a QLocalServer that the UI process connects to.
  */
 class EngineService : QtServiceBase() {
+    // The games the engine has open, as it last said; null until it has, as a restore may be opening one. Main thread
+    private var games: List<EngineNotifications.Game>? = null
+    private var destroyed = false
+
     override fun onCreate() {
         // Native main() reads these; Os.setenv is visible to getenv() in this process
         Os.setenv("MUDLET_ENGINE_SOCKET", EngineSocket.path(this), true)
@@ -59,7 +63,24 @@ class EngineService : QtServiceBase() {
         }
     }
 
+    /**
+     * The games the engine has open, from EngineNotifications.showProfiles, on the main thread. With none it leaves the
+     * foreground, and its notification goes, until one opens: only the UI opens one, and Android lets a service go
+     * back to the foreground while its app is shown.
+     */
+    fun showGames(games: List<EngineNotifications.Game>) {
+        // Posted from Qt's thread, which runs on while onDestroy stops Qt
+        if (destroyed) return
+        this.games = games
+        when {
+            games.isEmpty() -> leaveForeground()
+            EngineNotifications.engineShown -> EngineNotifications.refresh(this)
+            else -> goForeground()
+        }
+    }
+
     override fun onDestroy() {
+        destroyed = true
         EngineNotifications.engineShown = false
         // Only a stop gets here (stopService, or the notification's Quit), never a kill: the next engine restores nothing
         EngineSession.markStopped(this)
@@ -70,13 +91,15 @@ class EngineService : QtServiceBase() {
     // FOREGROUND_SERVICE_TYPE_SPECIAL_USE is an int inlined at compile time, and ServiceCompat masks it below API 34
     @SuppressLint("InlinedApi")
     private fun goForeground() {
+        // A start request must be answered with startForeground() all the same, even with no game open
+        val noGame = games?.isEmpty() == true
         try {
             // Service.startForeground with a type is API 29; ServiceCompat calls the two-argument one on API 28, and on
             // 29-33 drops the types those releases do not know, such as specialUse (API 34)
             ServiceCompat.startForeground(
                 this,
                 EngineNotifications.ENGINE_NOTIFICATION_ID,
-                EngineNotifications.engineNotification(this),
+                EngineNotifications.engineNotification(this, deferred = noGame),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
             )
             EngineNotifications.engineShown = true
@@ -87,6 +110,13 @@ class EngineService : QtServiceBase() {
                 Log.w(TAG, "startForeground failed", e)
             }
         }
+        if (noGame) leaveForeground()
+    }
+
+    private fun leaveForeground() {
+        if (!EngineNotifications.engineShown) return
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        EngineNotifications.engineShown = false
     }
 
     companion object {

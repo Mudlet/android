@@ -1,10 +1,12 @@
 package org.mudlet.android.engine
 
 import android.app.ActivityManager
+import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Process
+import android.service.notification.StatusBarNotification
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
@@ -19,9 +21,10 @@ import java.io.File
 
 /**
  * EngineService on a device, with the engine the APK was built with (libmudlet in CI's emulator job): it runs in its
- * own :engine process in the foreground, Qt comes up there and answers the socket handshake, a stop is not undone at
- * the next start while a killed engine brings its profile and connection back (docs/architecture.md, "Restoring the
- * session"), and the TLS backend's libraries load. native/tests/android_instrumented.py runs it.
+ * own :engine process, Qt comes up there and answers the socket handshake, it is in the foreground only while a game is
+ * open and files a game's tells under it, a stop is not undone at the next start while a killed engine brings its
+ * profile and connection back (docs/architecture.md, "Restoring the session"), and the TLS backend's libraries load.
+ * native/tests/android_instrumented.py runs it.
  */
 @RunWith(AndroidJUnit4::class)
 class EngineServiceTest {
@@ -34,6 +37,8 @@ class EngineServiceTest {
     @Before
     fun setUp() {
         stopEngine()
+        // The tells an earlier test had the engine post
+        context.getSystemService(NotificationManager::class.java).cancelAll()
         // Each test starts from a fresh install's files: no profile, no session to restore, no stop marker
         context.filesDir.listFiles()?.forEach { it.deleteRecursively() }
         game = FakeGame()
@@ -47,7 +52,7 @@ class EngineServiceTest {
     }
 
     @Test
-    fun runsInItsOwnProcessInTheForeground_andQtAnswersTheHandshake() {
+    fun runsInItsOwnProcess_andQtAnswersTheHandshake() {
         startEngine()
         val probe = attach()
         val hello = probe.attached()
@@ -59,9 +64,43 @@ class EngineServiceTest {
         assertEquals("android", probe.status("platform") { true })
         probe.status("qtStartMsAfterServiceOnCreate") { it.toLong() >= 0 }
 
-        val service = await("EngineService in the foreground") { engineService()?.takeIf { it.foreground } }
+        val service = await("EngineService running") { engineService() }
         assertEquals(engineProcess, service.process)
         assertEquals(hello.pid, service.pid)
+    }
+
+    @Test
+    fun itIsInTheForegroundOnlyWhileAGameIsOpen_withANotificationNamingIt() {
+        startEngine()
+        val probe = attach()
+        probe.attached()
+        await("EngineService out of the foreground with no game open, and its notification gone", probe = probe) {
+            engineService()?.takeIf { !it.foreground && engineNotification() == null }
+        }
+
+        connectToGame(probe)
+        val shown = await("EngineService in the foreground again, with its notification", probe = probe) {
+            engineNotification()?.takeIf { engineService()?.foreground == true }
+        }
+        assertEquals(
+            context.getString(R.string.engine_notification_title_profile, DEFAULT_PROFILE),
+            shown.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+        )
+    }
+
+    @Test
+    fun aTellIsFiledUnderItsGame() {
+        startEngine()
+        val probe = attach()
+        connectToGame(probe)
+        probe.send(Requests.runLua("showNotification(\"$TELL_TITLE\", \"ping\")", 1))
+        val tell = await("the tell's notification", probe = probe) { activeNotifications().firstOrNull { it.title() == TELL_TITLE } }
+        assertEquals(DEFAULT_PROFILE, tell.notification.extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString())
+        assertEquals(DEFAULT_PROFILE, tell.notification.group)
+        assertTrue(
+            "the game's tells have a summary to be bundled under",
+            activeNotifications().any { it.notification.group == DEFAULT_PROFILE && it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 },
+        )
     }
 
     @Test
@@ -72,10 +111,7 @@ class EngineServiceTest {
         assertEquals(1, game.accepted)
 
         // The engine notification's Quit action, as the user taps it
-        val notification = await("the engine's notification") {
-            context.getSystemService(NotificationManager::class.java).activeNotifications
-                .firstOrNull { it.id == EngineNotifications.ENGINE_NOTIFICATION_ID }
-        }
+        val notification = await("the engine's notification") { engineNotification() }
         notification.notification.actions.single { it.title.toString() == context.getString(R.string.engine_notification_quit) }.actionIntent.send()
         awaitEngineGone()
         assertTrue("onDestroy wrote the stop marker", File(EngineSession.stopMarkerPath(context)).exists())
@@ -136,8 +172,8 @@ class EngineServiceTest {
     private fun connectToGame(probe: EngineProbe) {
         probe.attached()
         probe.send(Requests.connect(FakeGame.HOST, game.port, false))
-        probe.status("profile", EngineProbe.ENGINE_START_MS) { it == "Android loaded" || it.startsWith("start failed") }
-            .let { assertEquals("Android loaded", it) }
+        probe.status("profile", EngineProbe.ENGINE_START_MS) { it == "$DEFAULT_PROFILE loaded" || it.startsWith("start failed") }
+            .let { assertEquals("$DEFAULT_PROFILE loaded", it) }
         probe.status("connection") { it == "connected" }
         probe.text { it == FakeGame.BANNER_TEXT }
     }
@@ -151,6 +187,12 @@ class EngineServiceTest {
         context.stopService(Intent(context, EngineService::class.java))
         awaitEngineGone()
     }
+
+    private fun activeNotifications(): List<StatusBarNotification> = context.getSystemService(NotificationManager::class.java).activeNotifications.toList()
+
+    private fun engineNotification() = activeNotifications().firstOrNull { it.id == EngineNotifications.ENGINE_NOTIFICATION_ID }
+
+    private fun StatusBarNotification.title() = notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
 
     private fun awaitEngineGone() = await("the $engineProcess process to end") { if (enginePid() == null) Unit else null }
 
@@ -176,6 +218,10 @@ class EngineServiceTest {
     private companion object {
         // How long a test waits to be sure something does not happen
         const val QUIET_MS = 3_000L
+
+        // The profile libmudlet opens for a connect with none open (MUDLET_PROFILE)
+        const val DEFAULT_PROFILE = "Android"
+        const val TELL_TITLE = "A tell for the test"
 
         // A new engine, then libmudlet's profile, then the connection
         const val RESTORE_MS = 180_000L

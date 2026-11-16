@@ -97,6 +97,12 @@ object EngineClient {
     // Set by setFront until an openProfiles names it the front, so one sent before the engine had it does not undo it
     private var requestedFront: String? = null
 
+    // A profile showProfile could not bring to the front yet, with what to do once it has, until the next openProfiles
+    private var wantedFront: Pair<String, () -> Unit>? = null
+
+    // Whether sessions is the engine's word on what is open: from its openProfiles until the link goes down
+    private var openProfilesKnown = false
+
     // The app's own lines that came while no profile was open, for the first to open
     private val heldMarkers = ArrayList<String>()
 
@@ -174,6 +180,7 @@ object EngineClient {
     fun detach() {
         if (!attached) return
         attached = false
+        openProfilesKnown = false
         link.stop()
         sessions.forEach(ProfileSession::stop)
         linkState = "detached (UI stopped)"
@@ -189,6 +196,20 @@ object EngineClient {
         requestedFront = session.name
         moveFront(session)
         return true
+    }
+
+    /**
+     * Brings the open profile [name] to the front, as a tap on one of its notifications asks, then calls [onShown].
+     * While the link is down, as when the tap started the UI, the engine's next list of open profiles decides: [onShown]
+     * is called then if [name] is open, and never if it is not.
+     */
+    fun showProfile(name: String, onShown: () -> Unit) {
+        wantedFront = null
+        if (setFront(name)) {
+            onShown()
+        } else if (!openProfilesKnown) {
+            wantedFront = name to onShown
+        }
     }
 
     /**
@@ -281,6 +302,7 @@ object EngineClient {
 
     // A session for each profile in [open], kept for one that stays open, and the front as the engine has it
     private fun onOpenProfiles(open: List<OpenProfile>) {
+        openProfilesKnown = true
         val kept = open.map { profile ->
             sessions.firstOrNull { it.name == profile.name }?.also { it.moveTo(profile.socket, attached) }
                 ?: ProfileSession(profile.name, profile.socket, app).also { if (attached) it.start() }
@@ -292,6 +314,10 @@ object EngineClient {
         val requested = requestedFront?.let { name -> kept.firstOrNull { it.name == name } }
         if (requested == null || requested === engineFront) requestedFront = null
         moveFront(requested ?: engineFront ?: kept.firstOrNull())
+        wantedFront?.let { (name, onShown) ->
+            wantedFront = null
+            if (setFront(name)) onShown()
+        }
     }
 
     // The engine's status restore tells, in the front profile's console, how bringing the profiles back went
@@ -410,6 +436,7 @@ object EngineClient {
 
         override fun onDetached(reason: String) {
             main.post {
+                openProfilesKnown = false
                 engineStatus.clear()
                 engineLosses++
                 lostAt = SystemClock.elapsedRealtime()

@@ -11,6 +11,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -71,8 +72,17 @@ private object Routes {
  * to tell games a screen reader is in use.
  */
 @Composable
-fun AppNavigation(onKillUi: () -> Unit) {
+fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
     val nav = rememberNavController()
+    // Each time a notification's tap brings its game to the front; at 0, none has
+    LaunchedEffect(gamesShown) {
+        if (gamesShown > 0) {
+            nav.navigate(Routes.GAME) {
+                popUpTo(Routes.PROFILES)
+                launchSingleTop = true
+            }
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         // Material's shared axis: forward slides in from the end, Back (and its predictive gesture) the other way
         val end = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1

@@ -2,10 +2,6 @@
 
 #include "THeadlessSession.h"
 
-#ifdef Q_OS_ANDROID
-#include "AndroidNotifier.h"
-#endif
-
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDataStream>
@@ -30,13 +26,6 @@
 #include <algorithm>
 
 namespace {
-
-void showProfileInNotification([[maybe_unused]] const QString& profile)
-{
-#ifdef Q_OS_ANDROID
-    AndroidNotifier::showProfile(profile);
-#endif
-}
 
 using ScriptWindow = THeadlessSession::ScriptWindow;
 using TextRun = THeadlessSession::TextRun;
@@ -521,7 +510,6 @@ void MudletEngine::connectSession()
     });
     connect(session, &THeadlessSession::profileLoaded, this, [this](const QString& profile) {
         mProfiles.markOpened(profile);
-        showProfileInNotification(profile);
         mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 loaded").arg(profile));
         mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
@@ -663,7 +651,6 @@ void MudletEngine::connectSession()
         }
         mState = State::idle;
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));
-        showProfileInNotification({});
         mKept = {};
         persist();
         mRestoring = false;
@@ -1150,7 +1137,6 @@ void MudletEngine::onShutdownFinished(bool saved, const QString& error)
         return;
     }
     mState = State::idle;
-    showProfileInNotification({});
     onProfileClosed();
     if (saved) {
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));

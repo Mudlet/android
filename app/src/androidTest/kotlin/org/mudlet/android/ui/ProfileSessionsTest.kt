@@ -155,6 +155,37 @@ class ProfileSessionsTest {
     }
 
     @Test
+    fun showProfileBringsAnOpenOneToTheFront_andWaitsForNoneTheEngineHasNotOpen() {
+        val shown = LinkedBlockingQueue<String>()
+        onMain { EngineClient.showProfile(ALPHA) { shown.add(ALPHA) } }
+        assertEquals(ALPHA, beta.receive("setFront").getString("name"))
+        assertEquals(ALPHA, shown.poll(10, TimeUnit.SECONDS))
+        onMain { assertEquals(ALPHA, EngineClient.front.name) }
+
+        onMain { EngineClient.showProfile("Gamma") { shown.add("Gamma") } }
+        // Not even once the engine has opened it
+        fake.engine.openAlongside("Gamma")
+        beta.openProfiles()
+        beta.assertNoRequest("setFront", QUIET_MS)
+        assertNull(shown.poll(QUIET_MS.toLong(), TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun showProfileWhileDetachedWaitsForTheEnginesListOnAttaching() {
+        val shown = LinkedBlockingQueue<String>()
+        onMain {
+            EngineClient.detach()
+            EngineClient.showProfile(ALPHA) { shown.add(ALPHA) }
+        }
+        assertNull(shown.poll(QUIET_MS.toLong(), TimeUnit.MILLISECONDS))
+        onMain { EngineClient.attach() }
+        val reattached = fake.engine.nextSession()
+        assertEquals(ALPHA, reattached.receive("setFront").getString("name"))
+        assertEquals(ALPHA, shown.poll(10, TimeUnit.SECONDS))
+        onMain { assertEquals(ALPHA, EngineClient.front.name) }
+    }
+
+    @Test
     fun aProfileThatClosesLosesItsSessionAndTheOtherTakesTheFront() {
         beta.line(1, "beta's last line")
         waitUntil("beta's line arrived") { EngineClient.session(BETA)?.lines?.isNotEmpty() == true }

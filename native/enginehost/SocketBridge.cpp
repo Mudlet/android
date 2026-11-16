@@ -1072,7 +1072,7 @@ void SocketBridge::notify(const QString& title, const QString& text)
 {
 #ifdef Q_OS_ANDROID
     // Posted here, not in the UI, so tells still arrive while the UI process is frozen or dead
-    AndroidNotifier::postTell(title, text);
+    AndroidNotifier::postTell(mProfileName, title, text);
 #endif
     sendNotify(title, text);
     if (mMirror) {

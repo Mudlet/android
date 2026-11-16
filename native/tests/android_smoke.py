@@ -6,11 +6,11 @@ in luaL_openlibs, passes every build-time check.
 It installs and launches the app, then drives the UI through the debug build's SmokeTestReceiver
 (app/src/debug) and checks, from what the UI holds and from the device:
   1. the UI starts the engine service, Qt comes up in the :engine process, and the UI attaches to it;
-  2. the service runs in the foreground in :engine;
+  2. the service runs in :engine, out of the foreground while no profile is open;
   3. connecting to fake_telnet.py on this host (10.0.2.2 from the emulator), as the profile list does, saves a
      profile, stores its password in the app's KeyStore-encrypted store and opens the profile with it: the profile
-     starts, Mudlet's Lua is up, with luaL_openlibs and Mudlet's own Lua files, and Mudlet's auto-login sends the
-     profile's login and then that password to the game, which logcat never shows;
+     starts, Mudlet's Lua is up, with luaL_openlibs and Mudlet's own Lua files, the service goes into the foreground,
+     and Mudlet's auto-login sends the profile's login and then that password to the game, which logcat never shows;
   4. the game's coloured lines reach the UI with their colours;
   5. a Lua trigger fires on a game line, cecho()s on it (a function from Mudlet's Lua files) and its
      showNotification() reaches the UI and is posted as an Android notification;
@@ -261,9 +261,9 @@ def run(dev, apk):
     ok(f"Qt up in {ENGINE_PROCESS} (pid {engine_pid}) {status['qtStartMsAfterAppOnCreate']} ms after "
        f"Application.onCreate, QPA {status.get('platform')}; the UI (pid {state['uiPid']}) is attached")
 
-    state = dev.wait("the engine service in the foreground in :engine",
-                     lambda s: "foreground=true" in s["fgs"] and f"process={ENGINE_PROCESS}" in s["fgs"], 30)
-    ok(f"foreground service: {state['fgs']}")
+    state = dev.wait("the engine service in :engine, out of the foreground with no profile open",
+                     lambda s: "foreground=false" in s["fgs"] and f"process={ENGINE_PROCESS}" in s["fgs"], 30)
+    ok(f"engine service: {state['fgs']}")
 
     step(f"connect to {HOST_FROM_EMULATOR}:{port} as the profile '{PROFILE}': it is saved with a stored password and "
          "opened, it starts, and the game's lines arrive")
@@ -294,6 +294,9 @@ def run(dev, apk):
     if listed != expected:
         raise SmokeFailure(f"the engine's profiles do not start with the one opened: {state['profiles']}")
     ok(f"the engine lists '{PROFILE}' first: {listed}")
+    state = dev.wait("the engine service in the foreground with the profile open",
+                     lambda s: "foreground=true" in s["fgs"] and f"process={ENGINE_PROCESS}" in s["fgs"], 30)
+    ok(f"foreground service: {state['fgs']}")
 
     step("Mudlet's auto-login sends the profile's login, then the password the app stored and read back")
     deadline = time.monotonic() + 30

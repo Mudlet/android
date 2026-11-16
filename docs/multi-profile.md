@@ -3,7 +3,8 @@
 Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 has landed
 protocol 15 and the stand-in engine runs several profiles; libmudlet still runs one at a time, refusing `alongside`. U1
 has the app attach to the control socket and to each open profile's socket, with a `ProfileSession` for each; it still
-opens one profile at a time and has no way to switch.
+opens one profile at a time and has no way to switch. N1 has the engine notification list the open games, files each
+game's tells under it, opens the game a tell's tap is about, and leaves the foreground with no game open.
 
 The aim: several profiles open at once, each with its own connection, and a profile button that lists them on a tap and
 moves to the next or the previous one on a horizontal swipe, as Firefox for Android does with its tabs.
@@ -129,9 +130,11 @@ there gets `error`, as a control request sent on a profile socket does.
 - **The restore.** `SessionStore` (`engine-session.json`) keeps every open profile, with its address, TLS and whether
   its connection is wanted, and the front. A restore reopens the front first, then the others 2 s apart. The limit of
   three restores in 10 minutes stays engine-wide. As now, a restored profile has no password.
-- **Notifications.** A tell gets its profile as `setSubText` and `setGroup()`, and its tap makes that profile the
-  front. The foreground notification reads "Mudlet: 3 games" with a line per game, and with one game looks as it does
-  today. `AndroidNotifier::showProfile` becomes `showProfiles(list)`.
+- **Notifications.** A tell gets its profile as `setSubText` and `setGroup()`, with a summary per profile, and its
+  tap makes that profile the front and shows the game screen. The foreground notification reads "Keeping 3 games
+  connected" with a line per game and its connection, and with one game looks as it did with one profile.
+  `ControlBridge` gives `AndroidNotifier::showProfiles` the open profiles as they change, for the stand-in and libmudlet
+  alike.
 
 ## Pull request plan
 

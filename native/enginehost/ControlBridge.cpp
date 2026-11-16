@@ -3,6 +3,10 @@
 #include "IEngine.h"
 #include "IEngineControl.h"
 
+#ifdef Q_OS_ANDROID
+#include "AndroidNotifier.h"
+#endif
+
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -37,6 +41,9 @@ ControlBridge::ControlBridge(QObject* parent)
     connect(&mChangeTimer, &QTimer::timeout, this, [this] {
         sendOpenProfiles(true);
     });
+    mNotificationTimer.setSingleShot(true);
+    mNotificationTimer.setInterval(0);
+    connect(&mNotificationTimer, &QTimer::timeout, this, &ControlBridge::showProfiles);
 }
 
 void ControlBridge::setEngineControl(IEngineControl* control)
@@ -53,6 +60,10 @@ bool ControlBridge::listen(const QString& path)
     // A restore can open a profile before this
     for (const OpenProfile& open : std::as_const(mOpen)) {
         listenFor(open.bridge);
+    }
+    // While a restore waits, the notification keeps saying the game is kept, until the restore opens it
+    if (!mOpen.isEmpty() || !mEngineControl || !mEngineControl->restorePending()) {
+        showProfilesLater();
     }
     return SocketBridge::listen(path);
 }
@@ -289,6 +300,7 @@ IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, P
     mOpen.append({bridge, state});
     setFront(mOpen.size() - 1);
     sendOpenProfiles(true);
+    showProfilesLater();
     return bridge;
 }
 
@@ -324,6 +336,7 @@ void ControlBridge::profileClosed(const QString& name)
     bridge->close();
     bridge->deleteLater();
     sendOpenProfiles(true);
+    showProfilesLater();
 }
 
 void ControlBridge::profileChanged(SocketBridge* profile, Change change)
@@ -340,6 +353,7 @@ void ControlBridge::profileChanged(SocketBridge* profile, Change change)
         return;
     case Change::connection:
         sendOpenProfiles(true);
+        showProfilesLater();
         return;
     case Change::attention:
         if (!std::exchange(open->attention, true)) {
@@ -381,4 +395,27 @@ QJsonObject ControlBridge::openProfilesMessage() const
                                     {QStringLiteral("front"), i == mFront}});
     }
     return {{QStringLiteral("t"), QStringLiteral("openProfiles")}, {QStringLiteral("profiles"), profiles}};
+}
+
+void ControlBridge::showProfilesLater()
+{
+    if (!mNotificationTimer.isActive()) {
+        mNotificationTimer.start();
+    }
+}
+
+void ControlBridge::showProfiles()
+{
+    std::pair<QStringList, QStringList> shown;
+    for (const OpenProfile& open : std::as_const(mOpen)) {
+        shown.first.append(open.bridge->profileName());
+        shown.second.append(open.bridge->connection());
+    }
+    if (mShown == shown) {
+        return;
+    }
+    mShown = shown;
+#ifdef Q_OS_ANDROID
+    AndroidNotifier::showProfiles(shown.first, shown.second);
+#endif
 }

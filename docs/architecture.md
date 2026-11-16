@@ -907,7 +907,16 @@ that attaches later is told too. The UI shows it as a marker line.
 ### Memory per profile
 Each profile libmudlet opens beside another adds its own Lua state, Mudlet's Lua files, console and map to `:engine`.
 The emulator smoke test opens three on one game and writes the engine's total PSS with one, two and three open to
-`memory.json` in its output (CI's artifact), and prints it. MEMORY_FIGURES
+`memory.json` in its output (CI's artifact), and prints it. On CI's x86_64 emulators (PR #92) each profile after the
+first added about 10 MB, against an engine of about 100 MB with one:
+
+| Emulator | One open | Two | Three | Each after the first |
+|---|---|---|---|---|
+| API 36 | 110,575 kB | 118,594 kB | 131,387 kB | about 10.4 MB |
+| API 28 | 98,907 kB | 107,173 kB | 118,547 kB | about 9.8 MB |
+
+So `ControlBridge::maxOpenProfiles` stays at 4: four profiles cost the engine about 30 MB more than one. A profile's
+scripts, packages and map add to this, so measure on a phone with real games before raising it.
 
 ## What building Mudlet on it costs
 - **The engine side is straightforward.** `libengine.so` would become

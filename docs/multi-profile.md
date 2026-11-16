@@ -97,8 +97,9 @@ there gets `error`, as a control request sent on a profile socket does.
   profile.
 - **Tap** opens a bottom sheet with a row per open profile: name, state, an unread badge ("99+" past 99), a bell for
   `attention` and a close button. "Open another game" at the foot goes to the profile list, where Connect sends
-  `openProfile` with `alongside`. At the cap it says "Close a game to open another (at most 4)". Start at 4; raise it
-  once memory is measured on a phone.
+  `openProfile` with `alongside`. At the cap it says "Close a game to open another (at most 4)". It is 4: the emulator
+  measures about 10 MB per profile after the first ([`architecture.md`](architecture.md), "Memory per profile"); raise
+  it once that is measured on a phone with real games.
 - **Swipe** on the button moves its label with the finger and cross-slides the console. Past 40% of the button's width,
   or on a fling, it commits with a haptic tick; at either end it rubber-bands, with no wrap-around. It mirrors in
   right-to-left layouts; a drag from the system's back-gesture inset belongs to the system. A hardware keyboard gets

@@ -267,7 +267,7 @@ object EngineClient {
         val added = profiles?.none { it.name == profile.name } == true
         profileRequest({ error ->
             // A game added here starts with the app's values of the settings Mudlet keeps with it
-            if (error == null && added) Settings.setAwaitsDefaults(profile.name, true)
+            if (error == null && added) Settings.setAwaitsDefaults(profile.name, false)
             onAnswer(error)
         }) { Requests.saveProfile(profile, it) }
     }

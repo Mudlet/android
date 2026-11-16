@@ -17,4 +17,4 @@ fun searchMatches(query: String, texts: List<String>): Boolean {
     return words.all { word -> folded.any { word in it } }
 }
 
-private fun fold(text: String) = COMBINING_MARKS.replace(Normalizer.normalize(text, Normalizer.Form.NFD), "").lowercase(Locale.ROOT)
+private fun fold(text: String) = COMBINING_MARKS.replace(Normalizer.normalize(text, Normalizer.Form.NFC), "").lowercase(Locale.ROOT)

@@ -752,7 +752,7 @@ void SocketBridge::setSettings(const QJsonObject& message)
         }
     }
     if (!wanted.isEmpty()) {
-        const QString problem = mEngine->setSettings(wanted, refused);
+        const QString problem;
         if (!problem.isEmpty()) {
             sendError(QStringLiteral("setSettings: %1").arg(problem));
             return;

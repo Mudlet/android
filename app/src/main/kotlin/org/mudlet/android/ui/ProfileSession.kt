@@ -293,7 +293,7 @@ class ProfileSession internal constructor(
 
     // A game just added in the app is given the app's values, which then are its own; any other is asked for its own
     private fun onLoaded() {
-        if (!Settings.awaitsDefaults(name)) return refreshSettings()
+        if (name.isEmpty()) return refreshSettings()
         val id = newRequestId()
         defaultsRequests.add(id)
         if (!sendSettings(Requests.setSettings(Settings.mudletSettings.associate { it.key to it.valueToMudlet() }, id))) defaultsRequests.remove(id)

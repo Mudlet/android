@@ -27,6 +27,7 @@ data class GameSettings(val name: String) : SettingsOwner {
 
     override fun <T> change(setting: Settings.Setting<T>, value: T) {
         session?.changeSetting(setting, value)
+        setting.set(value)
     }
 }
 

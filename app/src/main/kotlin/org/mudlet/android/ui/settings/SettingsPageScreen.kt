@@ -67,7 +67,7 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
         LaunchedEffect(Unit) { onBack() }
         return
     }
-    LaunchedEffect(page.game) { page.game?.let { EngineClient.session(it)?.refreshSettings() } }
+    LaunchedEffect(page.game) { page.game?.let { EngineClient.session(it) } }
     var highlight by remember(page) { mutableStateOf(page.highlight) }
     LaunchedEffect(page) {
         delay(HIGHLIGHT_MS)

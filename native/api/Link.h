@@ -5,7 +5,7 @@
 
 #include <optional>
 
-// What a link of the main console offers now, as THeadlessSession::Link has it
+// What a link of a console offers now, as THeadlessSession::Link has it
 struct Link
 {
     // An item of its menu; a separator has no label

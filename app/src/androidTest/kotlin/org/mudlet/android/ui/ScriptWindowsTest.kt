@@ -2,7 +2,9 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.os.Build
+import android.os.SystemClock
 import androidx.annotation.StringRes
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -10,6 +12,8 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -18,17 +22,22 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -39,8 +48,12 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.RUN_BOLD
+import org.mudlet.android.protocol.RUN_UNDERLINE
+import org.mudlet.android.ui.game.Announcer
 import kotlin.math.abs
 
 /**
@@ -85,9 +98,14 @@ class ScriptWindowsTest {
         compose.onNodeWithText("the main console").assertIsDisplayed()
     }
 
+    // The settings are stored and the Announcer lives as long as the process, so both would outlast the test
     @After
     fun automaticLayout() {
-        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.AUTO }
+        compose.runOnIdle {
+            ScriptWindowsClient.layoutMode = LayoutMode.AUTO
+            Settings.blankLines.reset()
+            Announcer.touchExplorationOverride = null
+        }
     }
 
     @Test
@@ -210,6 +228,165 @@ class ScriptWindowsTest {
         compose.onRoot().tryPerformAccessibilityChecks()
     }
 
+    @Test
+    fun aWindowsRowsAreReadAsTheirPlainTextNeverAloudAndBlankOnesAsTheSettingSays() {
+        showChat()
+        compose.runOnIdle { Announcer.touchExplorationOverride = true }
+        val before = announced()
+        windowRows("chat", "Red and bold, then plain" to listOf(listOf(0, 12, 1, -1, RUN_BOLD, 0)), "" to emptyList(), "below" to emptyList())
+        waitUntilDisplayed("Red and bold, then plain")
+        val shown = compose.onNode(hasText("Red and bold, then plain") and inChat).fetchSemanticsNode().config[SemanticsProperties.Text].single()
+        assertTrue("a row is read without its styles: ${shown.spanStyles}", shown.spanStyles.isEmpty() && shown.paragraphStyles.isEmpty())
+        // As the main console's lines are, the blank row is read as it is unless the setting says otherwise
+        compose.onNode(hasText("") and inChat).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.HideFromAccessibility))
+
+        compose.runOnIdle { Settings.blankLines.set(Settings.BlankLines.HIDE) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("") and inChat and isHidden).fetchSemanticsNodes().size == 1 }
+        compose.runOnIdle { Settings.blankLines.set(Settings.BlankLines.SPACE) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(" ") and inChat).fetchSemanticsNodes().size == 1 }
+        // A blank alone is nothing a screen reader can say, so the row is labelled with its name
+        compose.onNode(hasText(" ") and inChat).assert(hasContentDescription(string(R.string.console_blank_line_space)))
+        assertTrue("and still drawn, as the window's grid is the script's", displayed("below"))
+
+        // Well past the Announcer's wait for more lines: a window's rows are not read aloud
+        SystemClock.sleep(QUIET_MS)
+        assertEquals("no announcement of a window's rows", before, announced())
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aLinkInAWindowIsAskedAboutTappedAndOfferedToTalkBackByTheWindowsName() {
+        showChat()
+        windowRows("chat", "go: north" to listOf(listOf(0, 4, -1, -1, 0, 0), listOf(4, 5, -1, -1, RUN_UNDERLINE, 7)))
+        // The test's clock recomposes only while the test waits on Compose, so the row is drawn, and asks, first
+        waitUntilDisplayed("go: north")
+        val asked = session.receive("getLink")
+        assertEquals(7, asked.getInt("link"))
+        assertEquals("chat", asked.getString("window"))
+        session.send(linkMessage(7, "chat", "walk north", asked.get("id")))
+        val row = hasText("go: north") and inChat
+        val follow = string(R.string.console_link_follow, "walk north")
+        val openMenu = string(R.string.console_link_menu, "walk north")
+        compose.waitUntil(WAIT_MS) { actions(row).map { it.label } == listOf(follow, openMenu) }
+        compose.onRoot().tryPerformAccessibilityChecks()
+        // Once asked, it is not asked again as the row is drawn again with the answer
+        session.assertNoRequest("getLink", 1_000)
+
+        // TalkBack's action, and a tap on the link, follow it; a tap beside it does not
+        val onLink = characterCentre(row, 6)
+        val beside = characterCentre(row, 1)
+        runAction(row, follow)
+        assertFollowed(item = null)
+        compose.onNode(row).performTouchInput { click(onLink) }
+        assertFollowed(item = null)
+        compose.onNode(row).performTouchInput { click(beside) }
+        session.assertNoRequest("followLink", 1_000)
+        // Nor does one in the row's empty width past the link that ends it
+        compose.onNode(row).performTouchInput { click(Offset(width - 1f, centerY)) }
+        session.assertNoRequest("followLink", 1_000)
+
+        // A long press opens its menu, under its title; an item counts the separator before it, and a greyed-out one is off
+        compose.onNode(row).performTouchInput { longClick(onLink) }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Eat")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Ways").assertIsDisplayed()
+        compose.onNode(hasText("Drop") and hasClickAction()).assertIsNotEnabled()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        compose.onNode(hasText("Eat") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        assertFollowed(item = 2)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Eat")).fetchSemanticsNodes().isEmpty() }
+        // TalkBack's action opens it too
+        runAction(row, openMenu)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Look")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Look") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        assertFollowed(item = 0)
+    }
+
+    @Test
+    fun aWindowsNewTextAsksAboutItsLinksAgainAndAnOpenMenuStaysWhileItsRowHasTheLink() {
+        showChat()
+        val goNorth = "go: north" to listOf(listOf(0, 4, -1, -1, 0, 0), listOf(4, 5, -1, -1, RUN_UNDERLINE, 7))
+        windowRows("chat", goNorth)
+        waitUntilDisplayed("go: north")
+        session.send(linkMessage(7, "chat", "walk north", session.receive("getLink").get("id")))
+        val row = hasText("go: north") and inChat
+        val openMenu = string(R.string.console_link_menu, "walk north")
+        compose.waitUntil(WAIT_MS) { actions(row).any { it.label == openMenu } }
+        runAction(row, openMenu)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Look")).fetchSemanticsNodes().isNotEmpty() }
+
+        // A new row below the link's (which keeps its place) asks about it again, and the open menu shows the new answer
+        windowRows("chat", goNorth, "new line" to emptyList())
+        waitUntilDisplayed("new line")
+        val again = session.receive("getLink")
+        assertEquals(7, again.getInt("link"))
+        assertEquals("chat", again.getString("window"))
+        session.send(linkMessage(7, "chat", "walk north", again.get("id"), menuTitle = "Other ways"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Other ways")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText("Look") and hasClickAction()).assertIsDisplayed()
+        // and a row without it closes the menu
+        windowRows("chat", "gone" to emptyList(), "new line" to emptyList())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Look")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    private fun showChat() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        session.windows(listOf(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40)), full = true)
+    }
+
+    // In the chat window, and left out of what TalkBack reads
+    private val inChat get() = hasAnyAncestor(windowNamed("chat"))
+    private val isHidden = SemanticsMatcher.keyIsDefined(SemanticsProperties.HideFromAccessibility)
+
+    /** The rows of the console [window], each with its runs (docs/protocol.md, "Runs"). */
+    private fun windowRows(window: String, vararg rows: Pair<String, List<List<Int>>>) = session.send(
+        JSONObject().put("t", "windowText").put("window", window).put("lineCount", rows.size).put("first", 0).put(
+            "lines",
+            JSONArray(rows.map { (text, runs) -> JSONObject().put("text", text).put("runs", JSONArray(runs.map(::JSONArray))).put("prompt", false).put("wrapped", false) }),
+        ),
+    )
+
+    /** The answer to a getLink of [id]: a menu titled [menuTitle] of Look, a separator, Eat and a greyed-out Drop. */
+    private fun linkMessage(link: Int, window: String, tooltip: String, id: Any, menuTitle: String = "Ways") = JSONObject().put("t", "link").put("link", link)
+        .put("window", window).put("tooltip", tooltip).put("menu", true).put("menuTitle", menuTitle)
+        .put(
+            "items",
+            JSONArray(
+                listOf(
+                    JSONObject().put("label", "Look").put("enabled", true).put("separator", false),
+                    JSONObject().put("label", "").put("enabled", true).put("separator", true),
+                    JSONObject().put("label", "Eat").put("enabled", true).put("separator", false),
+                    JSONObject().put("label", "Drop").put("enabled", false).put("separator", false),
+                ),
+            ),
+        )
+        .put("spoiler", false).put("revealed", false).put("disabled", false).put("concealed", false).put("visited", false).put("selected", false)
+        .put("re", id)
+
+    private fun assertFollowed(item: Int?) {
+        val followed = session.receive("followLink")
+        assertEquals(7, followed.getInt("link"))
+        assertEquals("chat", followed.getString("window"))
+        assertEquals(item, if (followed.has("item")) followed.getInt("item") else null)
+    }
+
+    private fun actions(node: SemanticsMatcher) = compose.onNode(node).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
+
+    // TalkBack's action [label] of [node]: found from the test thread, as a semantics lookup waits for idle, and run on the main one
+    private fun runAction(node: SemanticsMatcher, label: String) {
+        val action = actions(node).single { it.label == label }
+        compose.runOnIdle { action.action() }
+    }
+
+    // Where the character [index] of the line [node] is drawn, in the line's own pixels
+    private fun characterCentre(node: SemanticsMatcher, index: Int): Offset {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNode(node).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().getBoundingBox(index).center
+    }
+
+    private fun announced() = compose.runOnIdle { Announcer.current?.serial ?: 0L }
+
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     private fun editableText(text: String) = SemanticsMatcher("EditableText = '$text'") {
@@ -254,6 +431,9 @@ class ScriptWindowsTest {
         // The app's character width is worked out here from the font's proportions, not measured
         const val TOLERANCE = 0.1f
         const val WAIT_MS = 10_000L
+
+        // Well past the Announcer's wait for more lines
+        const val QUIET_MS = 1_000L
         const val TIMEOUT_MS = 240_000L
     }
 }

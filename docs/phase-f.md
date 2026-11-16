@@ -125,8 +125,9 @@ image by path and size while the profile runs.
 | `mapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | `mapPointer()` |
 | `setMapViewOnly` | `viewOnly` | `setMapViewOnly()` |
 
-Links in windows extend version 5's `getLink` and `followLink` with a `window` field. As an older engine would follow
-the main console's link of that id, that change raises the version, in F1P.
+Links in windows extend version 5's `getLink` and `followLink` with a `window` field, which `link` echoes. As an older
+engine would follow the main console's link of that id, that change raised the version, to 12 (after F1P shipped
+without it).
 
 `setMainWindowSize` and version 4's `setScreenSize` both size the main window, and upstream keeps the later. Once
 F1P is in, the app sends only `setMainWindowSize`; Mudlet's grid from it is what NAWS tells the game, so the size is
@@ -170,9 +171,9 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
 They reuse the main console's renderer: the rows of `windowText` as `UiLine`s through `ansiText()`, in a `LazyColumn`
 the size of the window, with its `bg` and font scaled by `s`. Each window keeps the last 300 rows it was sent and asks
 `getWindowText` for older ones as the player scrolls back. Scrolling stays local; a script's `scrollTo()` arrives as
-`scrolledBackTo` and moves the list there. Links in them follow with the extended `followLink`. A console's own
-command line is an input line along its bottom, sending with `sendWindowCommandLine`. MXP frames draw as mini
-consoles; of their tabs only the page in front shows.
+`scrolledBackTo` and moves the list there. Links in them are asked about and followed with the extended `getLink` and
+`followLink` (version 12). A console's own command line is an input line along its bottom, sending with
+`sendWindowCommandLine`. MXP frames draw as mini consoles; of their tabs only the page in front shows.
 
 ### Labels
 
@@ -261,7 +262,7 @@ after Phase E's P5 (version 6). Versions are the next free one at the time; the 
 | PR | What | Version | Needs |
 |---|---|---|---|
 | F0 | This plan | - | - |
-| F1P | `windows`, `windowText`, `mainArea`, `windowCommandLine`; `setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine`; `window` on `getLink` and `followLink` | 7 | P5 |
+| F1P | `windows`, `windowText`, `mainArea`, `windowCommandLine`; `setMainWindowSize`, `getWindowText`, `placeUserWindow`, `closeUserWindow`, `sendWindowCommandLine` (`window` on `getLink` and `followLink` came later, in version 12) | 7 | P5 |
 | F1U | Fitted and stacked layouts, the window switcher, mini consoles, user windows and their command lines | - | F1P, U5, U7 |
 | F2P | `label`, `image`, `pointer`, `getImage` | 8 | F1P |
 | F2U | Labels: style sheet subset, images, movies, rich text, taps; the label semantics | - | F1U, F2P |

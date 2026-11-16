@@ -32,4 +32,6 @@ public:
     virtual IEngine* defaultSession() = 0;
     // Whether a restore is yet to reopen a profile the engine before this one had open
     virtual bool restorePending() const = 0;
+    // The open profile the player now looks at, as a desktop tab brought forward
+    virtual void setFront(const QString& name) = 0;
 };

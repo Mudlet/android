@@ -1,30 +1,28 @@
 #pragma once
 
-#include "IEngine.h"
 #include "IEngineControl.h"
 #include "IEngineHost.h"
-#include "IFrontend.h"
+#include "MudletProfile.h"
 #include "ProfileStore.h"
 #include "SessionStore.h"
 
-#include <QElapsedTimer>
 #include <QList>
 #include <QObject>
+#include <QPair>
+#include <QPointer>
 #include <QSize>
 #include <QStringList>
 #include <QTimer>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
-class QColor;
-class THeadlessSession;
-
-// libmudlet behind the same host protocol as the stand-in: one profile at a time in a THeadlessSession, started by
-// openProfile, on the first connect or Lua call, or at start-up to restore the one the engine before it ran when that
-// engine was killed; a second asked to open alongside is refused, as upstream allows one pool a process. Only
-// THeadlessSession's public API is used.
-class MudletEngine : public QObject, public IEngine, public IEngineControl
+// libmudlet behind the same host protocol as the stand-in: each open profile a MudletProfile, in a THeadlessSession of
+// its own that shares the process's pool of profiles (docs/multi-profile.md). Profiles start by openProfile, on a
+// version 13 UI's first connect or Lua call, or at start-up to restore those the engine before it ran when that engine
+// was killed. What is the whole engine's is here: the profiles' store, the app's state, the save and the restore.
+class MudletEngine : public QObject, public IEngineControl
 {
     Q_OBJECT
 
@@ -32,17 +30,6 @@ public:
     explicit MudletEngine(IEngineHost* host, int heartbeatMs = 30000, QObject* parent = nullptr);
     ~MudletEngine() override;
 
-    void connectTo(const QString& host, quint16 port, std::optional<bool> tls) override;
-    void send(const QString& line) override;
-    void sendHidden(const QString& line) override;
-    void dismissHidden() override;
-    QString complete(const QString& text, bool fromHistory) override;
-    QStringList history() const override;
-    void disconnectFromGame() override;
-    void runLua(const QString& code) override;
-    void setScreenSize(int columns, int rows) override;
-    QString link(const QString& window, int id, Link& link) const override;
-    QString followLink(const QString& window, int id, std::optional<int> item) override;
     void setAppState(bool active, bool minimized) override;
     void save() override;
     QList<Profile> profiles() const override { return mProfiles.profiles(); }
@@ -50,220 +37,93 @@ public:
     QString deleteProfile(const QString& name) override;
     QString openProfile(const QString& name, const QString& password, bool connect, bool alongside) override;
     QString closeProfile(const QString& name) override;
-    IEngine* defaultSession() override { return this; }
-    bool restorePending() const override { return mRestoreTimer.isActive(); }
-    QString setMainWindowSize(int width, int height) override;
-    std::optional<WindowText> windowText(const QString& window, int first, int count) const override;
-    QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) override;
-    QString closeUserWindow(const QString& name) override;
-    QString sendWindowCommandLine(const QString& name, const QString& text) override;
-    QString setTextBoxText(const QString& name, QString& text) override;
-    QString pointer(const QString& window, const PointerEvent& event) override;
-    std::variant<PngImage, QString> image(const QString& path, const QSize& size, std::optional<int> frame) const override;
-    QString pressButton(int id) override;
-    QString activateCommand(int id) override;
-    QString mapPointer(const PointerEvent& event) override;
-    QString setMapViewOnly(bool viewOnly) override;
-    QString setMapScale(double scale) override;
-    QString setAppMapSize(const QSize& size, double scale) override;
-    QString appMapPointer(const PointerEvent& event) override;
-    std::variant<RoomList, QString> findRooms(const QString& text) const override;
-    QString showRoom(int room) override;
-    QString downloadMap() override;
-    QString cancelMapDownload() override;
+    IEngine* defaultSession() override;
+    bool restorePending() const override;
+    void setFront(const QString& name) override;
 
 private:
-    // stopping: the profile closes, for the one in mPendingOpen to start
-    enum class State { idle, starting, started, stopping };
-    // A profile to start once the one running has closed. While there is one, connect, disconnect and Lua are for it.
-    struct PendingOpen
-    {
-        QString profile;
-        QString password;
-        bool connect = true;
-        // As SessionStore::Session's: empty, 0 and unset for the profile's own
-        QString host;
-        quint16 port = 0;
-        std::optional<bool> tls;
-        QStringList lua;
-        // The running profile starting again, as with a new login: it keeps its socket, which a close and open would not
-        bool again = false;
+    friend class MudletProfile;
 
-        SessionStore::Session kept() const { return {profile, host, port, connect, tls}; }
-    };
-    // The bottom line of the main console, which may still grow: the last line lineShown sent, which an echo() after
-    // deleteLine() or a command typed at a prompt continues, or what localText has written since its last line feed
-    struct OpenLine
+    // The UI's sizes as it last gave them, which a profile takes as it starts
+    struct UiSizes
     {
-        enum class Kind { none, shown, local };
-        Kind kind = Kind::none;
-        QString text;
-        QList<ColorRun> runs;
-        bool prompt = false;
+        QSize screen;
+        QSize mainWindow{0, 0};
+        double mapScale = 1;
+        QSize appMap{0, 0};
+        double appMapScale = 1;
     };
 
-    void connectSession();
-    // False, with status sendError, while no profile is running to take what the player types
-    bool takesInput();
-    void shutdownSession(bool alreadyClosing);
-    // Closes the running profile, then opens any pending one
-    void beginSwitch();
-    // The profile has closed: what it showed goes to the control socket again
-    void closed();
-    void onShutdownFinished(bool saved, const QString& error);
-    void openPending();
-    void keepPending();
-    void connectProfile();
-    void switchTo(PendingOpen open);
-    static QByteArray passwordDigest(const QString& password);
-    bool inUse(const QString& folder) const;
     void takeRestore();
-    void beginRestore();
-    void cancelRestore();
+    // The next profile the restore brings back, staggerMs after the one before it loaded
+    void restoreNext();
+    // The front profile's restore, or one after it, has begun loading and ended, or was called off before it began
+    void restoreEnded();
+    void cancelRestores();
     void restoreStatus(const QString& phase, const QString& detail = {});
     void persist();
-    QString restoreTarget() const;
-    bool profileReconnects() const;
-    void start(const QString& host, quint16 port, bool connect, std::optional<bool> tls, const QString& password = {});
-    void onStartFinished(int result, const QString& error);
-    void runNow(const QString& code);
+    bool inUse(const QString& folder) const;
+    MudletProfile* openNamed(const QString& name) const;
+    // A profile not yet started, for name: the idle one where it is free, else a new one
+    MudletProfile* freeProfile(const QString& name);
+    void openPending();
     void reportFont();
-    void applyScreenSize();
-    void applyAppActive();
-    void onSaveFinished(bool saved, const QString& error);
-    void reportConsoleColors(const QColor& foreground, const QColor& background);
     void onHeartbeat();
-    void flushCounters();
-    void markCountersDirty();
-    // Loaded, and not closing: the script windows' calls reach it
-    bool profileOpen() const { return mLoaded && mState != State::stopping; }
-    void onProfileClosed();
-    // The script windows, and with withText each console's last rows
-    void pushWindows(bool withText);
-    void pushWindowText(const QString& window);
-    void pushMainArea();
-    void pushButtonBars();
-    void pushCommands();
-    // The map drawn at the size of the mapper window, which is none while it does not show
-    void pushMap(const std::optional<QSize>& mapperSize);
-    // The map drawn at size, or none where it cannot be, with a warning unless size is empty
-    std::optional<MapFrame> drawMap(const QSize& size);
-    // The app's map drawn at the size the UI asked for, or none while no profile is open; nothing while it asks for none
-    void pushAppMap();
-    // The app's map at the size asked for, or none where it cannot be drawn, as for a map with no rooms, warned of
-    std::optional<MapFrame> drawAppMap();
-    void warnAppMapUndrawn(const QString& why);
-    // Whether the game offers a map, at url (none if empty), into mMapDownload; a download keeps the host it is from
-    void takeOfferedMap(const QString& url);
-    // mMapDownload in state, with no progress, cancelable only while downloading, and error only for a failure
-    void setMapDownloadState(MapDownload::State state, const QString& error = {});
-    // Mudlet's progress, while the UI's download runs, into mMapDownload, and pushed as pushMapDownloadProgress() does
-    void takeMapDownloadProgress(const QString& label, int value, int maximum, bool force);
-    // mMapDownload's progress, at most once a percent, as a download reports each piece that arrives; always with force
-    void pushMapDownloadProgress(bool force);
+    void applyAppActive();
+    // setActiveProfile() for the front profile, which raises sysProfileFocusChangeEvent, once it has started
+    void applyFront();
+    bool anyLoading() const;
+    bool loadingOther(const MudletProfile* profile) const;
+    // action, run once no profile of the pool loads, while owner lives
+    void later(QObject* owner, const std::function<void()>& action);
 
-    void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
-    void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
-    void onMainConsoleCleared();
-    void appendToOpen(const QString& text, const QList<ColorRun>& runs);
-    void commitCompleteLines(OpenLine::Kind remainder);
-    void commitOpen();
-    void scheduleTailSync();
-    void syncTail();
+    // What the profiles tell
+    void profileStarting(MudletProfile* profile);
+    void loadEnded(bool restoreStart);
+    void closeRefused();
+    void profileClosed(MudletProfile* profile);
+    void saveFinished(MudletProfile* profile, bool saved, const QString& error);
 
     IEngineHost* mHost;
-    // The running profile's, else the control socket's
-    IFrontend* mFrontend;
-    std::unique_ptr<THeadlessSession> mSession;
-    // The profile running, or the one the next start starts
-    QString mProfile;
-    // MUDLET_PROFILE, else Android: what connect and Lua start when nothing has named another
+    // MUDLET_PROFILE, else Android: what a version 13 UI's connect and Lua start when nothing has named another
     QString mDefaultProfile;
     QString mConfigDir;
     ProfileStore mProfiles;
-    std::optional<PendingOpen> mPendingOpen;
-    // What mKept was before a switch began, for a close that is refused
-    SessionStore::Session mKeptBeforeSwitch;
-    State mState = State::idle;
-    // closeProfile while the profile started: it closes once started
-    bool mCloseWhenStarted = false;
-    // The profile has loaded, since its start
-    bool mLoaded = false;
-    // The main window's size the UI gave, which each profile takes as it loads; empty for none, or once a profile refused it.
-    // While it is set, applyScreenSize() tells the game the UI's console without resizing the main window
-    QSize mMainWindowSize{0, 0};
-    // The size of the mapper window as pushMap() last had it: none while it did not show
-    std::optional<QSize> mMapSize;
-    // Device pixels to each of the mapper window's, as setMapScale() asked
-    double mMapScale = 1;
-    // The app's map as setAppMapSize() asked for it: empty for none
-    QSize mAppMapSize{0, 0};
-    double mAppMapScale = 1;
-    // Why the app's map was last not drawn, since it was last drawn: warned of once
-    QString mAppMapUndrawn;
-    // The map the game offers, and the download of it, as the engine knows it: progress within a percent of what was
-    // last sent is held back (pushMapDownloadProgress())
-    MapDownload mMapDownload;
-    // The URL being downloaded, as the game may offer another meanwhile: for its password to mask, never sent or logged
-    QString mMapDownloadUrl;
-    // The percentage of the download last sent, -1 while its size is unknown
-    int mMapDownloadPercent = -1;
-    // cancelMapDownload() stopped the download, so its end is a cancel rather than a failure
-    bool mMapDownloadCancelled = false;
-    // The TLS choice the profile was started with, unset when that start made none
-    std::optional<bool> mProfileTls;
-    // The login, and the password's digest, the profile was started with: THeadlessSession takes them only at a start
-    QString mStartedLogin;
-    QByteArray mStartedPassword;
-    // Its login or password changed while it ran: the password it starts again with at its next connect
-    std::optional<QString> mNewPassword;
-    bool mConnected = false;
-    // Lua (connects included) asked for while the profile starts, run once it has
-    QStringList mPendingLua;
-    QString mErrorPending;
+    // Starting, running or closing, in the order opened
+    QList<MudletProfile*> mOpen;
+    // Not started: what a version 13 UI's requests reach while no profile is open, and the front profile a restore is
+    // to bring back; null while neither is wanted
+    MudletProfile* mIdle = nullptr;
+    // The other profiles the restore brings back, in turn
+    QList<MudletProfile*> mRestoreQueue;
+    QTimer mRestoreChain;
+    // A profile to start once the others have closed, as openProfile asked without alongside. While there is one, a
+    // version 13 UI's connect, disconnect and Lua are for it.
+    std::optional<MudletProfile::Open> mPendingOpen;
+    // The profile the player looks at, and the one setActiveProfile() last brought forward
+    QString mFront;
+    QString mAppliedFront;
+    bool mFrontPending = false;
+    // Actions waiting for a load to end, which THeadlessSession refuses the pool's other calls during
+    QList<QPair<QPointer<QObject>, std::function<void()>>> mDeferred;
 
     std::unique_ptr<SessionStore> mStore;
-    // What a restart of the engine would bring back, and what was last written of it
-    SessionStore::Session mKept;
-    SessionStore::Session mSavedKept;
-    // The UI asked for a disconnect, so the disconnected that follows does not leave the connection wanted
-    bool mDisconnectRequested = false;
-    // From the restore's start until it has connected, or found it will not
-    bool mRestoring = false;
-    // Holds back a restore that is to wait before it connects
-    QTimer mRestoreTimer;
+    QList<SessionStore::Session> mSavedSessions;
+    QString mSavedFront;
     // The engine is stopping in order: nothing more is written for a restore
     bool mClosing = false;
 
-    OpenLine mOpen;
-    // localText's next piece starts with the line feed that ends the line it left open, which lineShown has
-    // since ended by sending a line below it
-    bool mDropLineFeed = false;
-    bool mTailSyncPending = false;
-    // What the frontend was last sent as the tail; its kind is not used
-    OpenLine mSentTail;
-
-    // The highest link id sent before this profile started, added to its ids, which count from 1 again, so that an id
-    // on an earlier profile's line, which the UI keeps, names none of this profile's links
-    int mLinkBase = 0;
+    UiSizes mUi;
+    // The highest link id sent on a main console, which a profile that starts counts its own from
     int mLinkTop = 0;
-
-    // The UI's last setScreenSize, given to each profile as it loads; empty until then
-    QSize mScreenSize;
-    // The UI's last setAppState active; true before the first, as in THeadlessSession
+    // The UI's last setAppState; active is true before the first, as in THeadlessSession
     bool mAppActive = true;
-    // A saveAsync() has not answered yet, which a shutdown would be refused for
-    bool mSaving = false;
+    bool mMinimized = false;
+    // The profile a saveAsync() was asked of, until it answers; a shutdown would be refused meanwhile
+    QPointer<MudletProfile> mSaver;
 
     QTimer mHeartbeat;
-    QTimer mCounterTimer;
-    qint64 mLinesReceived = 0;
-    qint64 mPromptsReceived = 0;
-    qint64 mLocalLines = 0;
-    qint64 mErrorLines = 0;
-    bool mCountersDirty = false;
     qint64 mLastHeartbeatMs = 0;
     qint64 mHeartbeatTicks = 0;
     qint64 mMaxHeartbeatGapMs = 0;
-    QElapsedTimer mStartClock;
 };

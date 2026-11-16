@@ -273,6 +273,9 @@ void ControlBridge::setFront(qsizetype index)
     SocketBridge* front = mOpen.at(index).bridge;
     front->setMirror(this);
     setEngine(front->engine());
+    if (mEngineControl) {
+        mEngineControl->setFront(front->profileName());
+    }
     // So the connection and the rest are the new front's; sent without re, as no request asked for them
     const QHash<QString, QString>& statuses = front->statuses();
     for (auto it = statuses.cbegin(); it != statuses.cend(); ++it) {
@@ -298,7 +301,10 @@ IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, P
     bridge->setEngine(session);
     listenFor(bridge);
     mOpen.append({bridge, state});
-    setFront(mOpen.size() - 1);
+    // A restore brings the front profile back first, and the others behind it
+    if (state != ProfileState::restoring || mFront < 0) {
+        setFront(mOpen.size() - 1);
+    }
     sendOpenProfiles(true);
     mNotificationTimer.start();
     return bridge;

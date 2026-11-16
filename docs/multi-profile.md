@@ -1,8 +1,9 @@
 # Several games at once
 
 Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 has landed
-protocol 15 and the stand-in engine runs several profiles; libmudlet still runs one at a time, refusing `alongside`. U1
-has the app attach to the control socket and to each open profile's socket, with a `ProfileSession` for each; it still
+protocol 15 and the stand-in engine runs several profiles. E1 has libmudlet run several, each in a `THeadlessSession`
+of its own sharing the pool (UP1, carried as `0007-headless-shared-pool.patch`), restored together. U1 has the app
+attach to the control socket and to each open profile's socket, with a `ProfileSession` for each; it still
 opens one profile at a time and has no way to switch. N1 has the engine notification list the open games, files each
 game's tells under it, opens the game a tell's tap is about, and leaves the foreground with no game open.
 
@@ -38,8 +39,8 @@ and its API. The upstream change (Mudlet/Mudlet, `src/headless/THeadlessSession.
    a session. `setWindowMinimized()` stays per session: each relays its own profile's `attentionRequested`.
 7. Optional: `setInFront()`. Until then Lua `setActiveProfile("<name>")` through `runLua()` does the same.
 
-What this costs: each extra profile adds its Lua state, mudlet-lua, console and map, estimated at 15-25 MB PSS and to
-be measured (E1 below). As on the desktop, `raiseGlobalEvent()` and synced modules work between profiles, a busy
+What this costs: each extra profile adds its Lua state, mudlet-lua, console and map, estimated at 15-25 MB PSS; the emulator
+smoke test measures it ([`architecture.md`](architecture.md), "Memory per profile"). As on the desktop, `raiseGlobalEvent()` and synced modules work between profiles, a busy
 script stalls every profile, and a kill takes them all; the restore brings them all back.
 
 **Rejected: one engine process per profile** (`EngineService1..N`, each with its own `:engineN` process). It needs no
@@ -52,9 +53,8 @@ upstream change and isolates a crash to one game, but:
 - N processes write one config dir (`Mudlet.ini`, `profile-order.json`), which needs cross-process locks.
 - `raiseGlobalEvent()` and module sync don't cross processes.
 
-With a socket per profile (below), the UI does not depend on which layout serves it. Until the upstream change is in the
-pinned Mudlet revision, libmudlet keeps one profile at a time and the stand-in engine runs several, so the protocol and
-the UI can land and be tested first.
+With a socket per profile (below), the UI does not depend on which layout serves it. The stand-in engine ran several
+profiles before libmudlet did, so the protocol and the UI landed and were tested first.
 
 ## Protocol (version 15)
 
@@ -75,7 +75,7 @@ New on the control socket:
 
 | Message | Dir | Fields | Meaning |
 |---|---|---|---|
-| `openProfile` | UI→E | `name`, `password`?, `connect`?, `alongside`?, `id`? | With `alongside`, starts the profile beside the others; one already open stays as it is. Answered by `openProfiles`, or `error` `openProfile: at most 4 open`, or from libmudlet before the upstream change `openProfile: one profile at a time`. Without it, the others close first, as in version 14. |
+| `openProfile` | UI→E | `name`, `password`?, `connect`?, `alongside`?, `id`? | With `alongside`, starts the profile beside the others; one already open stays as it is. Answered by `openProfiles`, or `error` `openProfile: at most 4 open`. Without it, the others close first, as in version 14. |
 | `closeProfile` | UI→E | `name`, `id`? | Saves and closes that profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles` or `error`. |
 | `setFront` | UI→E | `name` | The profile the player is looking at: raises `sysProfileFocusChangeEvent`, as a desktop tab change does. |
 | `markSeen` | UI→E | `name`, `seq` | The player has seen that profile's lines up to `seq`: clears `attention`, and `unread` counts from there. |
@@ -128,7 +128,8 @@ there gets `error`, as a control request sent on a profile socket does.
 - **Saving.** One `save()` writes every profile of the pool; status `save` on the control socket names any profile not
   saved.
 - **The restore.** `SessionStore` (`engine-session.json`) keeps every open profile, with its address, TLS and whether
-  its connection is wanted, and the front. A restore reopens the front first, then the others 2 s apart. The limit of
+  its connection is wanted, and the front. A restore reopens the front first, then each of the others 2 s after the one
+  before it has loaded, behind the front. The limit of
   three restores in 10 minutes stays engine-wide. As now, a restored profile has no password.
 - **Notifications.** A tell gets its profile as `setSubText` and `setGroup()`, with a summary per profile, and its
   tap makes that profile the front and shows the game screen. The foreground notification reads "Keeping 3 games

@@ -21,11 +21,12 @@ import org.mudlet.android.ui.UiLine
  *
  * cmd: state; start (the engine service); connect (--es host, --ei port; --ez tls, false if absent; --es profile,
  * "Android" if absent; --es login; --es password), which saves the profile, stores the password as the profile editor
- * does and opens the profile with the password read back, as the profile list's Connect does; lua (--es code); send
- * (--es text); kill (the :engine process, as the low-memory killer would). Every command answers with the UI's
+ * does and opens the profile with the password read back, as the profile list's Connect does; openAlongside (--es
+ * profile, --es host, --ei port), which saves that profile and opens it beside those open, where it becomes the front;
+ * lua (--es code); send (--es text); kill (the :engine process, as the low-memory killer would). Every command answers with the UI's
  * state as base64 JSON in the broadcast's result data: result code 0 if the command was carried out, 1 if not, with
  * "error" saying why. A connect's profile requests are answered later: "profileAnswer" in the state is "waiting", "ok"
- * or the engine's reason for refusing one.
+ * or the engine's reason for refusing one, and "open" lists each open profile with its status profile.
  */
 class SmokeTestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -44,6 +45,17 @@ class SmokeTestReceiver : BroadcastReceiver() {
                 val port = intent.getIntExtra("port", -1)
                 val tls = intent.getBooleanExtra("tls", false)
                 if (host == null || port <= 0) "connect needs --es host and --ei port" else connect(context, intent, host, port, tls)
+            }
+
+            "openAlongside" -> {
+                val name = intent.getStringExtra("profile")
+                val host = intent.getStringExtra("host")
+                val port = intent.getIntExtra("port", -1)
+                if (name == null || host == null || port <= 0) {
+                    "openAlongside needs --es profile, --es host and --ei port"
+                } else {
+                    openAlongside(Profile(name, host, port, false, "", false))
+                }
             }
 
             "lua" -> {
@@ -80,6 +92,18 @@ class SmokeTestReceiver : BroadcastReceiver() {
         return if (profileAnswer == "waiting") null else profileAnswer
     }
 
+    private fun openAlongside(profile: Profile): String? {
+        profileAnswer = "waiting"
+        EngineClient.saveProfile(profile) { error ->
+            if (error != null) {
+                profileAnswer = error
+            } else {
+                EngineClient.openProfileAlongside(profile.name) { profileAnswer = it ?: "ok" }
+            }
+        }
+        return if (profileAnswer == "waiting") null else profileAnswer
+    }
+
     // To the front profile, the one the connect opened
     private fun sendOrError(message: JSONObject): String? = notSentError(EngineClient.front.send(message))
 
@@ -104,6 +128,7 @@ class SmokeTestReceiver : BroadcastReceiver() {
             .put("tail", p.tail?.toJson() ?: JSONObject.NULL)
             .put("profiles", JSONArray(c.profiles.orEmpty().map { it.toJson() }))
             .put("profileAnswer", profileAnswer)
+            .put("open", JSONArray(c.sessions.map { JSONObject().put("name", it.name).put("profile", it.status["profile"].orEmpty()) }))
             .put("windows", windows())
     }
 

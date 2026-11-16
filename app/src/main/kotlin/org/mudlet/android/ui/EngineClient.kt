@@ -278,6 +278,10 @@ object EngineClient {
         onAnswer(error)
     }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
 
+    /** Opens and connects the profile [name] beside those open, where it becomes the front; the profile list does not offer this yet. */
+    fun openProfileAlongside(name: String, onAnswer: (error: String?) -> Unit) =
+        profileRequest(onAnswer) { Requests.openProfile(name, null, connect = true, alongside = true, id = it) }
+
     /** Saves [profile], then opens it if the engine took it. */
     fun saveAndOpenProfile(profile: Profile, password: String?, onAnswer: (error: String?) -> Unit) = saveProfile(profile) { error ->
         if (error != null) onAnswer(error) else openProfile(profile.name, password, onAnswer)

@@ -30,6 +30,8 @@ public:
     QString closeProfile(const QString& name) override;
     IEngine* defaultSession() override;
     bool restorePending() const override { return false; }
+    // The stand-in has no scripts to tell
+    void setFront(const QString&) override {}
 
 private:
     struct OpenProfile

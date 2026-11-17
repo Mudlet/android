@@ -160,8 +160,8 @@ class ScreenshotTest {
         val kept = hasSetTextAction() and hasText("look")
         session.commandLine("look")
         waitFor(kept)
+        // The send is not read from the game's socket: reading on to it would pass the map's size, read further on
         activate(hasContentDescription(string(R.string.input_send)))
-        session.receive("send")
         save("game-kept-$mode")
         session.commandLine("")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(kept).fetchSemanticsNodes().isEmpty() }

@@ -107,7 +107,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
     val dirty = draft != null
     var leaving by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
-    // Not a folder deleted with its Undo offered, which the library beside it still shows, as what moves in goes with it
+    // Without a folder deleted with its Undo offered, still listed while the library beside it is open: what moved in would go with it
     val listed = scripts.lists[key.kind].orEmpty().withoutHidden(key.kind, scripts.deleting)
     val targets = listed.firstOrNull { it.id == key.id }?.let { listed.moveTargets(key.kind, it) }.orEmpty()
     BackHandler(enabled = dirty) { leaving = true }

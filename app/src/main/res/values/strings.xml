@@ -1428,7 +1428,7 @@
     <!-- Design C. On the page that edits an alias's pattern -->
     <string name="design_c_when_alias_hint">An alias fires when a command you type matches its pattern.</string>
     <!-- Design C. On the page that edits a script's event handlers -->
-    <string name="design_c_when_script_hint">A script's code runs when the profile loads. Name events here to have Mudlet call the function of the script's name when one is raised.</string>
+    <string name="design_c_when_script_hint">A script\'s code runs when the profile loads. Name events here to have Mudlet call the function of the script\'s name when one is raised.</string>
     <!-- Design C. On the page that edits what an item does once it fires -->
     <string name="design_c_then_hint">What it sends to the game, as if you had typed it, and the Lua it runs.</string>
     <!-- Design C. On the page that edits an item's name and options -->

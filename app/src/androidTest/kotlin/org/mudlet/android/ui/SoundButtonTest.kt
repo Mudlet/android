@@ -34,6 +34,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
@@ -149,6 +150,10 @@ class SoundButtonTest {
         activate(scripts)
         assertEquals(mapOf(MUTE_SCRIPTS to true), values(session.receive("setSettings")))
         compose.onNode(scripts).assert(toggled(ToggleableState.On))
+        // Turned elsewhere, as by a script's setConfig or another game's page: the engine's word puts the page right
+        sounds(played = true, gameMuted = true)
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !EngineClient.front.setting(Settings.muteScripts) } }
+        compose.onNode(scripts).assert(toggled(ToggleableState.Off))
     }
 
     @Test

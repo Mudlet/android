@@ -157,6 +157,7 @@ internal fun ScriptLibraryScreen(
                     Icon(painterResource(R.drawable.ic_create_new_folder), stringResource(R.string.scripts_add_folder))
                 }
             }
+            ScriptHelpButton(kind)
         },
         snackbarHost = {
             ScriptNotices(scripts) { added -> if (added.folder) enter(added.key.kind, added.key.id) else onOpen(added.key) }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -69,6 +70,9 @@ private val itemWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 private const val CONSOLE_STRIP_LINES = 2
 
+// A trigger's patterns are one a line: the first two show under its name
+private const val SUMMARY_LINES = 2
+
 /** The plural name of each kind, as the library's chips show it. */
 @get:StringRes
 internal val ScriptItemKind.title: Int
@@ -76,6 +80,9 @@ internal val ScriptItemKind.title: Int
         ScriptItemKind.TRIGGER -> R.string.scripts_triggers
         ScriptItemKind.ALIAS -> R.string.scripts_aliases
         ScriptItemKind.SCRIPT -> R.string.scripts_scripts
+        ScriptItemKind.TIMER -> R.string.scripts_timers
+        ScriptItemKind.KEY -> R.string.scripts_keys
+        ScriptItemKind.BUTTON -> R.string.scripts_buttons
     }
 
 /** The name a new item of each kind starts with. */
@@ -85,14 +92,19 @@ internal val ScriptItemKind.newName: Int
         ScriptItemKind.TRIGGER -> R.string.scripts_new_trigger
         ScriptItemKind.ALIAS -> R.string.scripts_new_alias
         ScriptItemKind.SCRIPT -> R.string.scripts_new_script
+        ScriptItemKind.TIMER -> R.string.scripts_new_timer
+        ScriptItemKind.KEY -> R.string.scripts_new_key
+        ScriptItemKind.BUTTON -> R.string.scripts_new_button
     }
 
 /**
  * The script library of [game]: a search field, a chip for each kind, then the kind's items one folder at a time under
- * a breadcrumb, each with its switch. An item, or a folder's Edit, opens through [onOpen]; [selected] is the item shown
- * beside the library. New items go last in the folder shown, and open once made. A search lists the items of every
- * kind whose name it finds, with where each lives. At the foot, the last of the game's lines, [console] in [colors], go
- * back to the game as [onBack] does.
+ * a breadcrumb, each with what it matches, runs at or sends under its name, and its switch. An item, or a folder's Edit,
+ * opens through [onOpen]; [selected] is the item shown beside the library. An item with others in it (a trigger that
+ * others chain from, a timer with offset timers) is gone into as a folder is. New items go last in the folder shown,
+ * and open once made; among the buttons the top level takes toolbars, which the buttons go in. A search lists the items
+ * of every kind whose name or summary it finds, with where each lives. At the foot, the last of the game's lines,
+ * [console] in [colors], go back to the game as [onBack] does.
  */
 @Composable
 internal fun ScriptLibraryScreen(
@@ -116,11 +128,13 @@ internal fun ScriptLibraryScreen(
     val items = lists[kind]
     // A folder deleted, or gone with a new engine, leaves the library at the top level
     val folder = if (items != null && items.none { it.id == openFolder }) 0 else openFolder
-    val newItem = stringResource(kind.newName)
+    val shownIn = items?.firstOrNull { it.id == folder }
+    val adds = adds(kind, shownIn)
+    val newItem = stringResource(if (adds == Adds.TOOLBAR) R.string.scripts_new_toolbar else kind.newName)
     val newFolder = stringResource(R.string.scripts_new_folder)
     // Back leaves a search, then goes up a folder, before it leaves the library
     BackHandler(enabled = query.isNotBlank() || folder != 0) {
-        if (query.isNotBlank()) query = "" else openFolder = items?.firstOrNull { it.id == folder }?.parent ?: 0
+        if (query.isNotBlank()) query = "" else openFolder = shownIn?.parent ?: 0
     }
 
     fun enter(of: ScriptItemKind, id: Int) {
@@ -133,11 +147,12 @@ internal fun ScriptLibraryScreen(
         stringResource(R.string.scripts_title, game),
         onBack = onBack,
         actions = {
-            if (folder != 0) {
-                IconButton({ onOpen(ScriptItemKey(kind, folder)) }) { Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.scripts_edit_folder)) }
+            if (shownIn != null) {
+                val edit = if (shownIn.folder) stringResource(R.string.scripts_edit_folder) else stringResource(R.string.scripts_edit_item, shownIn.name)
+                IconButton({ onOpen(ScriptItemKey(kind, folder)) }) { Icon(painterResource(R.drawable.ic_edit), edit) }
             }
             // A new item goes after those listed, so not before they are
-            if (items != null) {
+            if (items != null && adds == Adds.ITEM_AND_FOLDER) {
                 IconButton({ scripts.add(kind, folder, folder = true, newFolder) }) {
                     Icon(painterResource(R.drawable.ic_create_new_folder), stringResource(R.string.scripts_add_folder))
                 }
@@ -147,12 +162,12 @@ internal fun ScriptLibraryScreen(
             ScriptNotices(scripts) { added -> if (added.folder) enter(added.key.kind, added.key.id) else onOpen(added.key) }
         },
         floatingActionButton = {
-            if (items != null) {
+            if (items != null && adds != Adds.NOTHING) {
                 ExtendedFloatingActionButton(
                     text = { Text(newItem) },
                     // The button's name for a screen reader: an extended button's text is not read
                     icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = newItem) },
-                    onClick = { scripts.add(kind, folder, folder = false, newItem) },
+                    onClick = { scripts.add(kind, folder, folder = adds == Adds.TOOLBAR, newItem) },
                 )
             }
         },
@@ -169,9 +184,7 @@ internal fun ScriptLibraryScreen(
                 item(key = "kinds") { KindChips(kind, lists) { enter(it, 0) } }
                 folderRows(kind, folder, items, selected, scripts, onEnter = { openFolder = it }, onOpen = onOpen)
             } else {
-                searchResults(query, lists, selected, scripts) { result ->
-                    if (result.item.folder) enter(result.kind, result.item.id) else onOpen(ScriptItemKey(result.kind, result.item.id))
-                }
+                searchResults(query, lists, selected, scripts, onEnter = ::enter, onOpen = onOpen)
             }
         }
     }
@@ -207,10 +220,10 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
     )
 }
 
-/** A chip for each kind, with how many items it has, folders aside, once listed. */
+/** A chip for each kind, with how many items it has, folders aside, once listed; on as many lines as they need, so all show. */
 @Composable
 private fun KindChips(kind: ScriptItemKind, lists: Map<ScriptItemKind, List<ScriptItemNode>?>, onKind: (ScriptItemKind) -> Unit) {
-    Row(itemWidth.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(itemWidth.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (k in ScriptItemKind.entries) {
             val name = stringResource(k.title)
             val count = lists[k]?.count { !it.folder }
@@ -246,7 +259,7 @@ private fun LazyListScope.folderRows(
     itemsIndexed(shown, key = { _, item -> "${kind.wire}/${item.id}" }) { i, item ->
         val key = ScriptItemKey(kind, item.id)
         ListSegment(i, shown.size, itemWidth, selected = key == selected) {
-            ItemRow(item, items.count { it.parent == item.id }, overline = null, scripts, key) { if (item.folder) onEnter(item.id) else onOpen(key) }
+            ItemRow(item, items.count { it.parent == item.id }, overline = null, scripts, key, onEnter = { onEnter(item.id) }, onOpen = { onOpen(key) })
         }
     }
 }
@@ -278,17 +291,26 @@ private fun Breadcrumb(kind: ScriptItemKind, path: List<ScriptItemNode>, onEnter
 }
 
 /**
- * An item's row: its name, marked while it has a draft not applied, then why it does not run, or how many items a
- * folder has, or that it is off or not running though on (in a folder that is off, or new and not applied yet), or the
- * package it came with; and its switch. A tap opens the item, or goes into the folder.
+ * An item's row: its name, marked while it has a draft not applied, then its summary (what it matches, its time, key or
+ * command), then its [rowStatus], and its switch. A tap opens the item through [onOpen], or goes into one that holds
+ * [children] others, or is a folder, through [onEnter].
  */
 @Composable
-private fun ItemRow(item: ScriptItemNode, children: Int, overline: String?, scripts: ScriptItemsClient, key: ScriptItemKey, onClick: () -> Unit) {
+private fun ItemRow(
+    item: ScriptItemNode,
+    children: Int,
+    overline: String?,
+    scripts: ScriptItemsClient,
+    key: ScriptItemKey,
+    onEnter: () -> Unit,
+    onOpen: () -> Unit,
+) {
     val name = item.name.ifEmpty { stringResource(R.string.scripts_unnamed) }
     val colors = MaterialTheme.colorScheme
+    val holds = item.holdsItems(children)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
-            .clickable(onClickLabel = stringResource(if (item.folder) R.string.scripts_open_folder else R.string.scripts_open_item), onClick = onClick)
+            .clickable(onClickLabel = stringResource(if (holds) R.string.scripts_open_folder else R.string.scripts_open_item), onClick = if (holds) onEnter else onOpen)
             .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -308,19 +330,27 @@ private fun ItemRow(item: ScriptItemNode, children: Int, overline: String?, scri
                     }
                 }
             }
-            val status = when {
-                item.error.isNotEmpty() -> stringResource(R.string.scripts_not_running, item.error)
-                item.folder -> pluralStringResource(R.plurals.scripts_folder_items, children, children)
-                !item.enabled -> stringResource(R.string.scripts_off)
-                !item.active -> stringResource(R.string.scripts_idle)
-                item.packageName.isNotEmpty() -> stringResource(R.string.scripts_from_package, item.packageName)
-                else -> null
+            if (!item.folder && item.summary.isNotEmpty()) {
+                Text(
+                    item.summary,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = colors.onSurfaceVariant,
+                    maxLines = SUMMARY_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
+            val status = item.rowStatus(children)
             if (status != null) {
                 Text(
-                    status,
+                    when (status) {
+                        is RowStatus.NotRunning -> stringResource(R.string.scripts_not_running, status.error)
+                        is RowStatus.Holds -> pluralStringResource(R.plurals.scripts_folder_items, status.items, status.items)
+                        RowStatus.Off -> stringResource(R.string.scripts_off)
+                        RowStatus.Idle -> stringResource(R.string.scripts_idle)
+                        is RowStatus.FromPackage -> stringResource(R.string.scripts_from_package, status.name)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (item.error.isNotEmpty()) colors.error else colors.onSurfaceVariant,
+                    color = if (status is RowStatus.NotRunning) colors.error else colors.onSurfaceVariant,
                     maxLines = 2,
                 )
             }
@@ -334,7 +364,8 @@ private fun LazyListScope.searchResults(
     lists: Map<ScriptItemKind, List<ScriptItemNode>?>,
     selected: ScriptItemKey?,
     scripts: ScriptItemsClient,
-    onPick: (ScriptSearchResult) -> Unit,
+    onEnter: (ScriptItemKind, Int) -> Unit,
+    onOpen: (ScriptItemKey) -> Unit,
 ) {
     val results = searchScripts(query, lists.mapValues { it.value.orEmpty() })
     if (results.isEmpty()) {
@@ -346,7 +377,7 @@ private fun LazyListScope.searchResults(
         val where = (listOf(stringResource(result.kind.title)) + result.folders.map { it.name }).joinToString(stringResource(R.string.scripts_path_separator))
         val children = lists[result.kind].orEmpty().count { it.parent == result.item.id }
         ListSegment(i, results.size, itemWidth, selected = key == selected) {
-            ItemRow(result.item, children, overline = where, scripts, key) { onPick(result) }
+            ItemRow(result.item, children, overline = where, scripts, key, onEnter = { onEnter(result.kind, result.item.id) }, onOpen = { onOpen(key) })
         }
     }
 }

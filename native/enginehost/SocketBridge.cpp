@@ -151,20 +151,22 @@ QString wireName(MapDownload::State state)
 
 std::optional<IEngine::ScriptItemKind> scriptItemKind(const QJsonObject& message)
 {
+    static constexpr std::pair<QLatin1StringView, IEngine::ScriptItemKind> kinds[]{{QLatin1StringView("trigger"), IEngine::ScriptItemKind::trigger},
+                                                                                   {QLatin1StringView("alias"), IEngine::ScriptItemKind::alias},
+                                                                                   {QLatin1StringView("script"), IEngine::ScriptItemKind::script},
+                                                                                   {QLatin1StringView("timer"), IEngine::ScriptItemKind::timer},
+                                                                                   {QLatin1StringView("key"), IEngine::ScriptItemKind::key},
+                                                                                   {QLatin1StringView("button"), IEngine::ScriptItemKind::button}};
     const QString kind = message.value(QLatin1String("kind")).toString();
-    if (kind == QLatin1String("trigger")) {
-        return IEngine::ScriptItemKind::trigger;
-    }
-    if (kind == QLatin1String("alias")) {
-        return IEngine::ScriptItemKind::alias;
-    }
-    if (kind == QLatin1String("script")) {
-        return IEngine::ScriptItemKind::script;
+    for (const auto& [name, value] : kinds) {
+        if (kind == name) {
+            return value;
+        }
     }
     return std::nullopt;
 }
 
-constexpr QLatin1StringView scriptItemKindProblem("kind must be trigger, alias or script");
+constexpr QLatin1StringView scriptItemKindProblem("kind must be trigger, alias, script, timer, key or button");
 
 // The kind and item a script item request names, or why it names none
 std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> scriptItemTarget(const QJsonObject& message)
@@ -1115,7 +1117,8 @@ void SocketBridge::scriptItems(const QJsonObject& message)
                                  {QStringLiteral("enabled"), item.enabled},
                                  {QStringLiteral("active"), item.active},
                                  {QStringLiteral("package"), item.package},
-                                 {QStringLiteral("error"), item.error}});
+                                 {QStringLiteral("error"), item.error},
+                                 {QStringLiteral("summary"), item.summary}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("scriptItems")}, {QStringLiteral("kind"), message.value(QLatin1String("kind"))}, {QStringLiteral("items"), items}});
 }

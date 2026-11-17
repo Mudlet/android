@@ -388,7 +388,7 @@ struct MapAreaInfo
     QString name;
 };
 
-// A trigger, alias or script of the profile, as the desktop's script editor lists it
+// A trigger, alias, script, timer, key or button of the profile, as the desktop's script editor lists it
 struct ScriptItemInfo
 {
     int id = 0;
@@ -404,6 +404,8 @@ struct ScriptItemInfo
     QString package;
     // Why it cannot run, as plain text
     QString error;
+    // What a list shows under the name, as plain text: its patterns, event handlers, time, key or command
+    QString summary;
 };
 
 // Everything the engine tells its host. Every method must be implementable

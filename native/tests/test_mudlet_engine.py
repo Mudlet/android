@@ -440,11 +440,12 @@ def secure_offer(plain_port):
     check(len(fake_telnet.ACCEPTED) == accepted + 1, "a no connects again to the same port")
     m = c.ask({"t": "getSettings", "keys": ["askTlsAvailable"]}, answers=("settings", "error"), collect=msgs)
     check(m.get("values") == {"askTlsAvailable": False}, f"and the profile no longer offers a secure connection: {m}")
+    since = len(msgs)
     c.send({"t": "send", "text": f"mssp {tls_port}"})
     c.wait_for(shown("MSSP sent"), collect=msgs)
-    later = seen_or_none(c, lambda m: m["t"] == "secureOffer" and m["offered"], msgs, len(msgs), timeout=3)
+    later = seen_or_none(c, lambda m: m["t"] == "secureOffer" and m["offered"], msgs, since, timeout=3)
     check(later is None, "the game's next offer is not passed on")
-    check(not any(f"port {tls_port} is available" in t for t in texts_of(msgs)), "nor told in the console")
+    check(not any(f"port {tls_port} is available" in t for t in texts_of(msgs[since:])), "nor told in the console")
 
     # Yes: the secure port, stored with TLS on and connected to
     c.ask({"t": "setSettings", "values": {"askTlsAvailable": True}}, answers=("settings", "error"), collect=msgs)
@@ -459,7 +460,8 @@ def secure_offer(plain_port):
           f"the profile list says the secure port, with TLS, unasked: {listed}")
     check("re" not in m, f"as no request's answer: {m}")
     wait_status(c, "connection", lambda v: v == "connected", msgs)
-    check([r for r, _ in fake_telnet.TLS_HANDSHAKES[handshakes:]] == ["ok"], f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
+    # "localhost" is dialled on IPv4 and IPv6 at once, and the socket that loses ends its handshake unfinished
+    check([r for r, _ in fake_telnet.TLS_HANDSHAKES[handshakes:]].count("ok") == 1, f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
     c.send({"t": "send", "text": "tls"})
     m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
     check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")

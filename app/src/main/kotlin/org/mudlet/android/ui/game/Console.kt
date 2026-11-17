@@ -169,7 +169,7 @@ fun Console(
                     LineLinks(spans, links::info, links::follow)
                 }
                 // The app's own markers are not the game's text: no trigger sees them
-                val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
+                val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.let { make -> { make(line.text) } } }
                 ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger)
             }
         }

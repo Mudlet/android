@@ -16,7 +16,7 @@ enum class WordRole {
     ;
 
     /** The role a tap on the word gives it next: fixed, captured, optional, and fixed again. */
-    fun next(): WordRole = entries[(ordinal + 1) % entries.size]
+    fun next(): WordRole = if (this == FIXED) CAPTURE else FIXED
 
     /** How [word] is written with this role, in a regex's own signs, which no language translates: `(word)`, `word?`. */
     fun shows(word: String): String = when (this) {
@@ -32,7 +32,7 @@ private val WORD = Regex("""[\p{L}\p{N}_]+(?:['’-][\p{L}\p{N}_]+)*""")
 private val ASCII_NUMBER = Regex("[0-9]+")
 private val ASCII_WORD = Regex("[A-Za-z0-9_]+")
 
-private const val REGEX_SPECIAL = """\^$.|?*+()[]{}"""
+private const val REGEX_SPECIAL = """\^$|?*+()[]{}"""
 
 /** [text] as a Perl regex that matches just it. */
 fun regexLiteral(text: String): String = buildString {
@@ -128,7 +128,7 @@ data class TriggerFromLine(val line: String, val roles: List<WordRole>, val whol
 
     private fun capture(word: String): String = when {
         wideCaptures -> "(.+)"
-        ASCII_NUMBER.matches(word) -> """(\d+)"""
+        ASCII_NUMBER.matches(word) -> """(\w+)"""
         ASCII_WORD.matches(word) -> """(\w+)"""
         else -> """(\S+)"""
     }

@@ -28,6 +28,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONArray
@@ -451,6 +452,38 @@ class ScriptLibraryTest {
     }
 
     @Test
+    fun theLuaFieldHasAllItsLinesAndThePageScrollsToTheCursorsLine() {
+        val code = (1..80).joinToString("\n") { "line$it = $it" }
+        openGreet(script = code)
+        waitFor(editor and hasText(code))
+        // The lines have no box of their own to scroll in: the field is as tall as they are, and the page scrolls them
+        val shown = compose.onNode(page).fetchSemanticsNode().size.height
+        assertTrue("the field is taller than what shows of the page", compose.onNode(editor).fetchSemanticsNode().size.height > shown)
+
+        compose.onNode(editor).performTextInput("-")
+        activate(apply)
+        val check = received("checkLua")
+        val save = received("editScriptItem")
+        session.send(JSONObject().put("t", "luaCheck").put("ok", false).put("line", 80).put("message", "unexpected symbol near '-'").put("re", check.get("id")))
+        session.send(fields("trigger", trigger(3, 0, "Greet").put("script", check.getString("code")), save))
+        items("trigger", triggers, received("scriptItems"))
+
+        // The last line shows when the page is within the field's own edge of its end
+        val edge = with(compose.density) { LUA_FIELD_EDGE.toPx() } + 1
+        fun lastLineShows() = compose.onNode(page).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].let { it.maxValue() - it.value() <= edge }
+        assertFalse("the cursor is on the first line", lastLineShows())
+        val goTo = hasText(string(R.string.lua_go_to_line)) and hasClickAction()
+        activate(goTo)
+        compose.waitUntil(WAIT_MS) { lastLineShows() }
+        // And again once the player has scrolled away from it, though the cursor is on it already
+        compose.waitForIdle()
+        compose.onNode(name).performScrollTo()
+        compose.waitUntil(WAIT_MS) { !lastLineShows() }
+        activate(goTo)
+        compose.waitUntil(WAIT_MS) { lastLineShows() }
+    }
+
+    @Test
     fun luaTypedAndNotAppliedIsKeptOrAskedAbout() {
         openGreet(script = "x = 1")
         waitFor(editor and hasText("x = 1"))
@@ -572,6 +605,9 @@ class ScriptLibraryTest {
         // Further than any page is long
         const val PAGE_END_PX = 100_000f
         const val WAIT_MS = 10_000L
+
+        // From the Lua field's last line to the end of its page
+        val LUA_FIELD_EDGE = 24.dp
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

@@ -221,13 +221,11 @@ fun InputLine(
         if (hadFocus) (if (hiddenInput) hiddenFocus else focus).requestFocus()
     }
     val keyboard = LocalSoftwareKeyboardController.current
-    // Read as the map comes or goes, before its search can take the focus
-    val focusedAsSwapped = remember(mapInFront) { focused }
     // Saved, as the map stays in front across a rotation
     var refocus by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(mapInFront) {
         if (mapInFront) {
-            if (!focusedAsSwapped) return@LaunchedEffect
+            if (!focused) return@LaunchedEffect
             refocus = true
             keyboard?.hide()
         } else if (refocus) {

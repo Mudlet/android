@@ -804,9 +804,8 @@ device shows, below the UI's debug hook:
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
   map in front the title bar, its search, the map, the input line and the row with the game pill, and nothing it
-  covers; the script
-  windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
-  screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
+  covers; the script windows: a mini console at its scaled place in the fitted and the stacked layout, the size the
+  game screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
   button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
   aloud, and a link in one asked about with `getLink` and the window's name and followed by a tap, its menu and
   TalkBack's actions; the labels: a label's text at its scaled place, a clickable one as a button whose click and tap reach the

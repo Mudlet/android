@@ -70,7 +70,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
      * An `appMap`'s frame as [decode] made it: its [bitmap] and [tones], null where there is none, and with [textBehind]
      * its [overText].
      */
-    class Decoded(val bitmap: ImageBitmap?, val tones: MapBehindText.Tones?, val overText: OverText? = null)
+    class Decoded(val bitmap: ImageBitmap?, val tones: MapBehindText.Tones?, val overText: OverText?)
 
     /**
      * A frame to draw over the console's text: its [ground], and the [frame] itself with the pixels of its background
@@ -397,15 +397,14 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         internal fun decode(message: EngineMessage.AppMap): Decoded {
             val bitmap = if (message.png.isEmpty()) null else BitmapFactory.decodeByteArray(message.png, 0, message.png.size)
             val tones = bitmap?.let { MapBehindText.tones(it.width, it.height) { y, row -> it.getPixels(row, 0, it.width, 0, y, it.width, 1) } }
-            val image = bitmap?.asImageBitmap()
-            return Decoded(image, tones, if (bitmap != null && image != null && textBehind) overText(bitmap, image) else null)
+            return Decoded(bitmap?.asImageBitmap(), tones, bitmap?.takeIf { textBehind }?.let(::overText))
         }
 
-        private fun overText(bitmap: Bitmap, image: ImageBitmap): OverText? {
+        private fun overText(bitmap: Bitmap): OverText? {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
             val ground = TextBehindMap.ground(pixels, bitmap.width, bitmap.height) ?: return null
-            val background = ground.background ?: return OverText(ground, image)
+            val background = ground.background ?: return OverText(ground, bitmap.asImageBitmap())
             TextBehindMap.cutOut(pixels, background)
             return OverText(ground, Bitmap.createBitmap(pixels, bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888).asImageBitmap())
         }

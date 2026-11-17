@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.scripts
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,16 +42,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.ScriptItemsClient
+import org.mudlet.android.ui.UiLine
+import org.mudlet.android.ui.ansiText
 import org.mudlet.android.ui.settings.MAX_WIDTH
 import org.mudlet.android.ui.settings.Overline
 
@@ -56,6 +65,8 @@ import org.mudlet.android.ui.settings.Overline
 const val SCRIPT_LIBRARY_TAG = "scriptLibrary"
 
 private val itemWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
+
+private const val CONSOLE_STRIP_LINES = 2
 
 /** The plural name of each kind, as the library's chips show it. */
 @get:StringRes
@@ -79,15 +90,25 @@ internal val ScriptItemKind.newName: Int
  * The script library of [game]: a search field, a chip for each kind, then the kind's items one folder at a time under
  * a breadcrumb, each with its switch. An item, or a folder's Edit, opens through [onOpen]; [selected] is the item shown
  * beside the library. New items go last in the folder shown, and open once made. A search lists the items of every
- * kind whose name it finds, with where each lives.
+ * kind whose name it finds, with where each lives. At the foot, the last of the game's lines, [console] in [colors], go
+ * back to the game as [onBack] does.
  */
 @Composable
-internal fun ScriptLibraryScreen(scripts: ScriptItemsClient, game: String, onBack: () -> Unit, onOpen: (ScriptItemKey) -> Unit, selected: ScriptItemKey? = null) {
+internal fun ScriptLibraryScreen(
+    scripts: ScriptItemsClient,
+    game: String,
+    onBack: () -> Unit,
+    onOpen: (ScriptItemKey) -> Unit,
+    selected: ScriptItemKey? = null,
+    console: () -> List<UiLine> = { emptyList() },
+    colors: ConsoleColors = ConsoleColors(),
+) {
     var kindWire by rememberSaveable { mutableStateOf(ScriptItemKind.TRIGGER.wire) }
     val kind = ScriptItemKind.fromWire(kindWire) ?: ScriptItemKind.TRIGGER
     var openFolder by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(Unit) { ScriptItemKind.entries.forEach(scripts::ask) }
+    // Asked again once the engine is back, as what was asked of the last link is not answered
+    LaunchedEffect(scripts.attaches) { ScriptItemKind.entries.forEach(scripts::ask) }
 
     val hidden = scripts.deleting
     val lists = ScriptItemKind.entries.associateWith { k -> scripts.lists[k]?.withoutHidden(hidden.filter { it.kind == k }.map { it.id }.toSet()) }
@@ -126,6 +147,7 @@ internal fun ScriptLibraryScreen(scripts: ScriptItemsClient, game: String, onBac
                 onClick = { scripts.add(kind, folder, folder = false, newItem) },
             )
         },
+        bottomBar = { ConsoleStrip(console, colors, onBack) },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).testTag(SCRIPT_LIBRARY_TAG),
@@ -254,7 +276,8 @@ private fun Breadcrumb(kind: ScriptItemKind, path: List<ScriptItemNode>, onEnter
 }
 
 /**
- * An item's row: its name, then why it does not run, or how many items a folder has, or that it is off, or the
+ * An item's row: its name, marked while it has a draft not applied, then why it does not run, or how many items a
+ * folder has, or that it is off or not running though on (in a folder that is off, or new and not applied yet), or the
  * package it came with; and its switch. A tap opens the item, or goes into the folder.
  */
 @Composable
@@ -270,11 +293,24 @@ private fun ItemRow(item: ScriptItemNode, children: Int, overline: String?, scri
         if (item.folder) Icon(painterResource(R.drawable.ic_folder), contentDescription = null, Modifier.padding(end = 16.dp), tint = colors.onSurfaceVariant)
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
             if (overline != null) Overline(overline)
-            Text(name, style = MaterialTheme.typography.bodyLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
+                if (key in scripts.drafts) {
+                    Surface(Modifier.padding(start = 8.dp), shape = MaterialTheme.shapes.extraSmall, color = colors.tertiaryContainer) {
+                        Text(
+                            stringResource(R.string.scripts_draft),
+                            Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            color = colors.onTertiaryContainer,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
             val status = when {
                 item.error.isNotEmpty() -> stringResource(R.string.scripts_not_running, item.error)
                 item.folder -> pluralStringResource(R.plurals.scripts_folder_items, children, children)
                 !item.enabled -> stringResource(R.string.scripts_off)
+                !item.active -> stringResource(R.string.scripts_idle)
                 item.packageName.isNotEmpty() -> stringResource(R.string.scripts_from_package, item.packageName)
                 else -> null
             }
@@ -309,6 +345,31 @@ private fun LazyListScope.searchResults(
         val children = lists[result.kind].orEmpty().count { it.parent == result.item.id }
         ListSegment(i, results.size, itemWidth, selected = key == selected) {
             ItemRow(result.item, children, overline = where, scripts, key) { onPick(result) }
+        }
+    }
+}
+
+/** The last of the game's lines, as the console shows them: the way back to the game, kept in sight. */
+@Composable
+private fun ConsoleStrip(console: () -> List<UiLine>, colors: ConsoleColors, onGame: () -> Unit) {
+    // Read here, so that a new line draws the strip again and not the library
+    val lines = console().takeLast(CONSOLE_STRIP_LINES)
+    if (lines.isEmpty()) return
+    Column(
+        Modifier.fillMaxWidth().background(colors.background)
+            .clickable(onClickLabel = stringResource(R.string.scripts_to_game), role = Role.Button, onClick = onGame)
+            .navigationBarsPadding().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        for (line in lines) {
+            Text(
+                ansiText(line, colors),
+                color = colors.foreground,
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

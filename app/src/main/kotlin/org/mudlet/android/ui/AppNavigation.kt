@@ -199,6 +199,8 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                             onBack = { nav.navigateUp() },
                             onOpen = { if (twoPane) open = it.encode() else nav.navigate(Routes.scriptItem(it)) { launchSingleTop = true } },
                             selected = open?.let(ScriptItemKey::decode),
+                            console = { front.lines },
+                            colors = ConsoleColors.of(front.status["consoleColors"]),
                         )
                     },
                     detailContent = { key ->

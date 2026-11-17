@@ -510,23 +510,28 @@ drawn by `ui/game/AppMap.kt`):
   time limit, so a stalled download runs until cancelled.
 
 ### The script library
-The game screen's title bar has a Scripts button that opens the front profile's script library
+The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
 (`ui/scripts/ScriptLibraryScreen.kt`), over the requests in `docs/protocol.md`, "Editing triggers, aliases and scripts",
 kept by `ScriptItemsClient`:
 - A chip for each kind (triggers, aliases, scripts) with how many items it has; the kind's items one folder at a time
   under a breadcrumb, each row with its name, then why it does not run (Mudlet's error), how many items a folder has,
-  that it is off or the package it came with, and a switch that sends `enableScriptItem`. A search finds names of every
-  kind, with the folders each is in. New items and folders go last in the folder shown, named as the desktop names
-  them, and a new item opens.
+  that it is off, that it is on but not running (in a folder that is off, or new and not applied yet) or the package it
+  came with, and a switch that sends `enableScriptItem`. A search finds names of every kind, with the folders each is
+  in. New items and folders go last in the folder shown; a new item opens, and a new folder is gone into. At the foot, the game's last two lines go back to the game.
 - An item's page (`ScriptItemScreen.kt`) edits its name, its Lua, and what its kind has: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
   an alias's pattern and what it sends; a script's event handlers. A colour pattern is shown, not edited. The edit is
-  a draft kept by `ScriptItemsClient`, so a rotation or a trip to the game keeps it, until Save sends `editScriptItem`,
-  whose snackbar offers Undo; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
+  a draft kept by `ScriptItemsClient` until Apply sends `editScriptItem`, whose snackbar offers Undo: a rotation keeps
+  it, and so does the page's Game button, which goes to the game to come back from, the library marking the item
+  "Draft" meanwhile; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
   `deleteScriptItem` once the snackbar goes or the library does.
 - On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
-  snackbar with its reason, in English as Mudlet gives it.
+  snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
+  reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.
+- Not yet: a search of patterns and Lua, and a row's pattern under its name (`scriptItems` lists no text of either), a
+  colour pattern's picker, moving an item to another folder (`moveScriptItem` is there for it), and timers, keys and
+  buttons.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the
@@ -1611,16 +1616,19 @@ Item 13 of the on-device checklist covers this.
 
 31. The script library, with the libmudlet APK: on the game screen, tap Scripts.
     - The triggers' chip shows how many there are; a folder opens with a breadcrumb back; a switch turns an item off
-      and its row says "Off", and the trigger no longer fires.
-    - Tap New trigger: its page opens. Add a pattern "You see", type `echo("seen\n")` as its Lua and Save: "seen" shows
-      after a line with "You see"; Undo puts back what it had. Type `if` as the Lua and Save: the page says why it is
+      and its row says "Off", and the trigger no longer fires. The game's last lines show at the foot, and a tap on
+      them goes back to the game.
+    - Tap New trigger: its page opens. Add a pattern "You see", type `echo("seen\n")` as its Lua and Apply: "seen" shows
+      after a line with "You see"; Undo puts back what it had. Type `if` as the Lua and Apply: the page says why it is
       not running, and the library's row does too.
-    - Change the name and press Back: a dialog asks to discard; Keep editing keeps the change. Delete: the item goes,
-      with Undo bringing it back; let the snackbar go and reopen the library: it is gone.
-    - Rotate on an item's page with a change not saved: the change is still there. On a tablet in landscape, an item
+    - Change the name and tap Game: the game shows; back in Scripts the item is marked "Draft" and its page has the
+      change. Press Back there: a dialog asks to discard; Keep editing keeps the change. Delete: the item goes, with
+      Undo bringing it back; let the snackbar go and reopen the library: it is gone.
+    - Rotate on an item's page with a change not applied: the change is still there. On a tablet in landscape, an item
       opens beside the library.
-    - With TalkBack on: each row reads its name and state, its switch is read by the item's name, a pattern's type
-      button reads "Pattern 1 type: Substring", and the move and remove buttons say which pattern.
+    - With TalkBack on: the title bar's button reads "Scripts of" and the game's name; each row reads its name and
+      state, its switch is read by the item's name, a pattern's type button reads "Pattern 1 type: Substring", and the
+      move and remove buttons say which pattern.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

@@ -123,7 +123,7 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("the password field")
         session.hiddenInput(false)
 
-        activate(hasContentDescription(string(R.string.scripts_open)))
+        activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
         val node = JSONObject().put("id", 1).put("parent", 0).put("name", "Greet").put("folder", false).put("enabled", false)
             .put("active", false).put("package", "").put("error", "")
         for (kind in listOf("trigger", "alias", "script")) {

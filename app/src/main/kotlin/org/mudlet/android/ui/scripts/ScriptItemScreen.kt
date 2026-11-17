@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -31,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -80,36 +82,32 @@ private val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 /**
  * The page of the item [key]: its name, what its kind has (a trigger's patterns and options, an alias's pattern and
  * command, a script's event handlers) and its Lua. What the player changes is a draft, kept by [scripts] until Apply
- * saves it as the desktop editor's save does, or the player discards it on leaving; why the item does not run shows at
- * the top. Delete hides it with Undo offered by the library, and goes [onBack]; [onGame] goes straight to the game.
+ * saves it as the desktop editor's save does: [onGame] goes to the game and keeps it, to come back to, and Back asks
+ * whether to discard it. Why the item does not run shows at the top. Delete hides it with Undo offered by the library,
+ * and goes [onBack].
  */
 @Composable
 internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, onBack: () -> Unit, onGame: () -> Unit) {
-    // Asked again each time, as a script may have changed it since; a draft stays over what comes
-    LaunchedEffect(key) { scripts.open(key) }
+    // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
+    LaunchedEffect(key, scripts.attaches) { scripts.open(key) }
     val saved = scripts.saved[key]
     val item = scripts.drafts[key] ?: saved
     val dirty = scripts.drafts[key]?.changedFrom(saved) == true
-    var leaving by remember { mutableStateOf<(() -> Unit)?>(null) }
-
-    fun leave(then: () -> Unit) {
-        if (dirty) leaving = then else then()
-    }
+    var leaving by remember { mutableStateOf(false) }
 
     fun change(changed: ScriptItem) {
         if (changed.changedFrom(saved)) scripts.drafts[key] = changed else scripts.drafts.remove(key)
     }
-    BackHandler(enabled = dirty) { leaving = onBack }
+    BackHandler(enabled = dirty) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
 
     MudletScaffold(
         name ?: stringResource(R.string.scripts_loading),
-        onBack = { leave(onBack) },
+        onBack = { if (dirty) leaving = true else onBack() },
         // Beside the library, the library's show them
         snackbarHost = { if (!LocalInDetailPane.current) ScriptNotices(scripts) {} },
         actions = {
-            IconButton({ leave(onGame) }) { Icon(painterResource(R.drawable.ic_videogame_asset), stringResource(R.string.scripts_back_to_game)) }
             if (item != null) {
                 IconButton({
                     scripts.deleteLater(key, name.orEmpty())
@@ -123,31 +121,39 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).testTag(SCRIPT_ITEM_TAG),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (item == null) {
-                    Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    Fields(item, saved?.node?.error.orEmpty(), ::change)
+                val refusal = scripts.unopened[key]
+                when {
+                    item != null -> Fields(item, saved?.node?.error.orEmpty(), ::change)
+                    refusal != null -> Text(stringResource(R.string.scripts_refused_open, refusal), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.error)
+                    else -> Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    Button({ scripts.apply(key) }, fieldWidth, enabled = dirty) { Text(stringResource(R.string.scripts_apply)) }
+                    Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val toGame = stringResource(R.string.scripts_back_to_game)
+                        OutlinedButton(onGame, Modifier.semantics { contentDescription = toGame }) {
+                            Icon(painterResource(R.drawable.ic_videogame_asset), contentDescription = null)
+                            Text(stringResource(R.string.game_title), Modifier.padding(start = 8.dp))
+                        }
+                        Button({ scripts.apply(key) }, Modifier.weight(1f), enabled = dirty) { Text(stringResource(R.string.scripts_apply)) }
+                    }
                 }
             }
         }
     }
 
-    leaving?.let { then ->
+    if (leaving) {
         AlertDialog(
-            onDismissRequest = { leaving = null },
+            onDismissRequest = { leaving = false },
             confirmButton = {
                 TextButton({
-                    leaving = null
+                    leaving = false
                     scripts.drafts.remove(key)
-                    then()
+                    onBack()
                 }) { Text(stringResource(R.string.scripts_discard)) }
             },
-            dismissButton = { TextButton({ leaving = null }) { Text(stringResource(R.string.scripts_keep_editing)) } },
+            dismissButton = { TextButton({ leaving = false }) { Text(stringResource(R.string.scripts_keep_editing)) } },
             title = { Text(stringResource(R.string.scripts_discard_title, name.orEmpty())) },
             text = { Text(stringResource(R.string.scripts_discard_text)) },
         )

@@ -19,19 +19,19 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
-import androidx.test.uiautomator.UiDevice
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -44,10 +44,12 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
 
 /**
  * The script library (docs/architecture.md, "The script library") against a fake engine: opened from the game's title
- * bar, it lists each kind one folder at a time, its switches switch items on and off, and its search finds names; an
- * item's page saves an edit with Undo, asks before leaving one unsaved, and deletes with Undo, sent only once the
- * library goes; and what the engine refuses is said. Controls are found by the labels TalkBack reads and activated through
- * their accessibility actions.
+ * bar, it lists each kind one folder at a time, its switches switch items on and off, its search finds names, its
+ * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
+ * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
+ * draft over a trip to the game, edits a trigger's patterns, an alias's command and a script's events, and deletes with
+ * Undo, sent only once the library goes; and what the engine refuses is said. Controls are found by the labels TalkBack
+ * reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLibraryTest {
@@ -65,6 +67,10 @@ class ScriptLibraryTest {
     private val library = hasTestTag(SCRIPT_LIBRARY_TAG)
     private val page = hasTestTag(SCRIPT_ITEM_TAG)
 
+    // An item page's name field and Apply button, once the activity's strings can be read
+    private val name by lazy { hasSetTextAction() and hasText(string(R.string.scripts_name)) }
+    private val apply by lazy { hasText(string(R.string.scripts_apply)) and hasClickAction() }
+
     // Combat/"You hit", then "Greet", as the engine lists them, depth first
     private val triggers = listOf(node(1, 0, "Combat", folder = true), node(2, 1, "You hit"), node(3, 0, "Greet"))
 
@@ -78,25 +84,30 @@ class ScriptLibraryTest {
         first.close()
         session = fake.engine.nextSession()
         session.clear()
-        session.synced(0)
+        session.line(1, CONSOLE_LINE)
+        session.synced(1)
         session.profiles(listOf(game), session.receive("listProfiles"))
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
         waitFor(hasText(string(R.string.game_title)))
-        activate(hasContentDescription(string(R.string.scripts_open)))
+        openTheLibraryFromTheGame()
+    }
+
+    private fun openTheLibraryFromTheGame() {
+        activate(hasContentDescription(string(R.string.scripts_open, game.name)))
         val asked = (1..3).map { session.receive("scriptItems") }
         assertEquals(listOf("trigger", "alias", "script"), asked.map { it.getString("kind") })
         items("trigger", triggers, asked[0])
         items("alias", listOf(node(1, 0, "kick")), asked[1])
-        items("script", emptyList(), asked[2])
+        items("script", listOf(node(1, 0, "On connect")), asked[2])
         waitFor(row("Greet"))
     }
 
     @Test
     fun theLibraryShowsAFolderAtATimeAndItsSwitchesSwitchItemsOnAndOff() {
         compose.onNode(row("You hit")).assertDoesNotExist()
-        compose.onNode(hasText("${string(R.string.scripts_triggers)} 2")).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_triggers), 2))).assertIsDisplayed()
         activate(row("Combat"))
         waitFor(row("You hit"))
         compose.onNode(row("Greet")).assertDoesNotExist()
@@ -130,21 +141,19 @@ class ScriptLibraryTest {
     }
 
     @Test
-    fun anEditIsSavedWithUndoAndLeavingOneUnsavedAsks() {
+    fun anEditIsAppliedWithUndoAndBackAsksBeforeDroppingOne() {
         openGreet()
-        val save = hasText(string(R.string.scripts_apply)) and hasClickAction()
-        compose.onNode(save).assertIsNotEnabled()
-        val name = hasSetTextAction() and hasText(string(R.string.scripts_name))
+        compose.onNode(apply).assertIsNotEnabled()
         compose.onNode(name).performTextClearance()
         compose.onNode(name).performTextInput("Wave")
-        compose.onNode(save).assertIsEnabled()
+        compose.onNode(apply).assertIsEnabled()
 
         // Back asks, and Keep editing keeps the draft
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        back()
         activate(hasText(string(R.string.scripts_keep_editing)) and hasClickAction())
         waitFor(hasText("Wave") and hasSetTextAction())
 
-        activate(save)
+        activate(apply)
         val edit = session.receive("editScriptItem")
         assertEquals(3, edit.getInt("item"))
         assertEquals("Wave", edit.getJSONObject("fields").getString("name"))
@@ -160,10 +169,126 @@ class ScriptLibraryTest {
         session.send(fields("trigger", trigger(3, 0, "Greet"), undo))
         waitFor(hasText("Greet") and hasSetTextAction())
         compose.onNode(name).performTextInput("!")
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasText(string(R.string.scripts_discard)) and hasClickAction())
         waitFor(library)
         session.assertNoRequest("editScriptItem", 1_000)
+        compose.onNode(row("Greet") and hasText(string(R.string.scripts_draft))).assertDoesNotExist()
+    }
+
+    @Test
+    fun aDraftIsKeptOverATripToTheGame() {
+        openGreet()
+        compose.onNode(name).performTextClearance()
+        compose.onNode(name).performTextInput("Wave")
+        activate(hasContentDescription(string(R.string.scripts_back_to_game)))
+        waitFor(hasText(string(R.string.game_title)))
+
+        // The library marks the item, under the name the engine has, and its page has the draft
+        openTheLibraryFromTheGame()
+        waitFor(row("Greet") and hasText(string(R.string.scripts_draft)))
+        openGreet(shown = "Wave")
+        compose.onNode(apply).assertIsEnabled()
+        session.assertNoRequest("editScriptItem", 500)
+
+        // The game's last line, at the library's foot, goes back to the game too
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText(string(R.string.scripts_discard)) and hasClickAction())
+        activate(hasText(CONSOLE_LINE))
+        waitFor(hasText(string(R.string.game_title)))
+    }
+
+    @Test
+    fun aNewItemOpensAndANewFolderIsGoneInto() {
+        activate(hasText(string(R.string.scripts_new_trigger)) and hasClickAction())
+        val add = session.receive("addScriptItem")
+        assertEquals("trigger", add.getString("kind"))
+        assertEquals(0, add.getInt("parent"))
+        assertEquals("after the folder and the trigger at the top level", 2, add.getInt("position"))
+        assertFalse(add.getBoolean("folder"))
+        assertEquals(string(R.string.scripts_new_trigger), add.getString("name"))
+        val made = trigger(9, 0, string(R.string.scripts_new_trigger)).put("active", false)
+        session.send(fields("trigger", made, add))
+        items("trigger", triggers + node(9, 0, string(R.string.scripts_new_trigger)).put("active", false), session.receive("scriptItems"))
+        assertEquals(9, session.receive("scriptItem").getInt("item"))
+        waitFor(hasText(string(R.string.scripts_new_trigger)) and hasSetTextAction() and hasAnyAncestor(page))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        // Switched on, but it runs only once applied
+        waitFor(row(string(R.string.scripts_new_trigger)) and hasText(string(R.string.scripts_idle)))
+
+        activate(hasContentDescription(string(R.string.scripts_add_folder)))
+        val folder = session.receive("addScriptItem")
+        assertTrue(folder.getBoolean("folder"))
+        assertEquals(3, folder.getInt("position"))
+        val folderName = string(R.string.scripts_new_folder)
+        session.send(fields("trigger", trigger(10, 0, folderName).put("folder", true), folder))
+        items("trigger", triggers + node(9, 0, string(R.string.scripts_new_trigger)) + node(10, 0, folderName, folder = true), session.receive("scriptItems"))
+        waitFor(hasText(string(R.string.scripts_folder_empty)))
+        compose.onNode(hasText(folderName) and !hasClickAction() and hasAnyAncestor(library)).assertIsDisplayed()
+
+        // What is made in a folder goes into it
+        activate(hasText(string(R.string.scripts_new_trigger)) and hasClickAction())
+        assertEquals(10, session.receive("addScriptItem").getInt("parent"))
+    }
+
+    @Test
+    fun aTriggersPatternsAreAddedTypedMovedAndRemoved() {
+        openGreet()
+        activate(hasText(string(R.string.scripts_add_pattern)) and hasClickAction())
+        val second = hasSetTextAction() and hasText(string(R.string.scripts_pattern, 2))
+        waitFor(second)
+        compose.onNode(second).performTextInput("^hi$")
+
+        activate(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_substring))))
+        waitFor(hasText(string(R.string.pattern_regex_description)))
+        // A colour pattern is made on the desktop for now
+        compose.onNode(hasText(string(R.string.pattern_color))).assertDoesNotExist()
+        activate(hasText(string(R.string.pattern_regex)) and hasClickAction())
+        waitFor(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_regex))))
+
+        activate(hasContentDescription(string(R.string.scripts_pattern_up, 2)))
+        waitFor(hasContentDescription(string(R.string.scripts_pattern_type_of, 1, string(R.string.pattern_regex))))
+        activate(hasContentDescription(string(R.string.scripts_pattern_remove, 2)))
+        compose.onNode(second).assertDoesNotExist()
+
+        activate(apply)
+        val patterns = session.receive("editScriptItem").getJSONObject("fields").getJSONArray("patterns")
+        assertEquals(1, patterns.length())
+        assertEquals("^hi$", patterns.getJSONObject(0).getString("text"))
+        assertEquals("regex", patterns.getJSONObject(0).getString("type"))
+    }
+
+    @Test
+    fun anAliasHasItsCommandAndAScriptItsEvents() {
+        activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_aliases), 1)) and hasClickAction())
+        activate(row("kick"))
+        val alias = node(1, 0, "kick").put("script", "").put("pattern", "^k$").put("command", "kick rat")
+        session.send(fields("alias", alias, session.receive("scriptItem")))
+        val command = hasSetTextAction() and hasText(string(R.string.scripts_alias_command))
+        waitFor(command and hasText("kick rat"))
+        compose.onNode(hasSetTextAction() and hasText("^k$")).assertIsDisplayed()
+        compose.onNode(command).performTextClearance()
+        compose.onNode(command).performTextInput("kick orc")
+        activate(apply)
+        val edit = session.receive("editScriptItem")
+        assertEquals("alias", edit.getString("kind"))
+        assertEquals("kick orc", edit.getJSONObject("fields").getString("command"))
+        assertEquals("^k$", edit.getJSONObject("fields").getString("pattern"))
+        session.send(fields("alias", JSONObject(alias.toString()).put("command", "kick orc"), edit))
+        waitFor(hasText(string(R.string.scripts_applied, "kick")))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_scripts), 1)) and hasClickAction())
+        activate(row("On connect"))
+        val script = node(1, 0, "On connect").put("script", "").put("eventHandlers", JSONArray().put("sysConnectionEvent"))
+        session.send(fields("script", script, session.receive("scriptItem")))
+        waitFor(hasText("sysConnectionEvent"))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_event_new))).performTextInput("sysDisconnectionEvent")
+        activate(hasContentDescription(string(R.string.scripts_event_add)))
+        activate(hasContentDescription(string(R.string.scripts_event_remove, "sysConnectionEvent")))
+        activate(apply)
+        val events = session.receive("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")
+        assertEquals(listOf("sysDisconnectionEvent"), (0 until events.length()).map(events::getString))
     }
 
     @Test
@@ -180,7 +305,7 @@ class ScriptLibraryTest {
         activate(hasContentDescription(string(R.string.scripts_delete, "Greet")))
         waitFor(hasText(string(R.string.scripts_deleted, "Greet")))
         // Leaving the library while the Undo is offered lets it go
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        back()
         waitFor(hasText(string(R.string.game_title)))
         val delete = session.receive("deleteScriptItem")
         assertEquals("trigger", delete.getString("kind"))
@@ -191,22 +316,35 @@ class ScriptLibraryTest {
     @Test
     fun whatTheEngineRefusesIsSaid() {
         openGreet()
-        val name = hasSetTextAction() and hasText(string(R.string.scripts_name))
         compose.onNode(name).performTextInput("!")
-        activate(hasText(string(R.string.scripts_apply)) and hasClickAction())
+        activate(apply)
         session.refuse(session.receive("editScriptItem"), "no such item")
         waitFor(hasText(string(R.string.scripts_refused_apply, "no such item")))
         // The draft is kept, to try again
-        compose.onNode(hasText(string(R.string.scripts_apply)) and hasClickAction()).assertIsEnabled()
+        compose.onNode(apply).assertIsEnabled()
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText(string(R.string.scripts_discard)) and hasClickAction())
+
+        // An item gone since it was listed says so on its page, and goes from the list
+        activate(row("Greet"))
+        session.refuse(session.receive("scriptItem"), "no such item")
+        waitFor(hasText(string(R.string.scripts_refused_open, "no such item")))
+        items("trigger", triggers.take(2), session.receive("scriptItems"))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(row("Combat"))
+        compose.onNode(row("Greet")).assertDoesNotExist()
     }
 
-    private fun openGreet() {
+    /** Opens Greet from the library; [shown] is the name its page shows, a draft's when it has one. */
+    private fun openGreet(shown: String = "Greet") {
         activate(row("Greet"))
         val open = session.receive("scriptItem")
         assertEquals(3, open.getInt("item"))
         session.send(fields("trigger", trigger(3, 0, "Greet"), open))
-        waitFor(hasText("Greet") and hasSetTextAction() and hasAnyAncestor(page))
+        waitFor(hasText(shown) and hasSetTextAction() and hasAnyAncestor(page))
     }
+
+    private fun back() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
 
     private fun node(id: Int, parent: Int, name: String, folder: Boolean = false, enabled: Boolean = true): JSONObject = JSONObject()
         .put("id", id).put("parent", parent).put("name", name).put("folder", folder).put("enabled", enabled).put("active", enabled)
@@ -236,18 +374,25 @@ class ScriptLibraryTest {
         for (i in roots.fetchSemanticsNodes().indices) roots[i].tryPerformAccessibilityChecks()
     }
 
-    /** What a double tap does under TalkBack: the node's accessibility click, after the checks on every window. */
+    /**
+     * What a double tap does under TalkBack: the node's accessibility click, after the checks on every window. What is
+     * in the library's list or an item's page is scrolled to first, as TalkBack does.
+     */
     private fun activate(label: SemanticsMatcher) {
-        waitFor(label and hasClickAction())
-        if (compose.onAllNodes(library).fetchSemanticsNodes().isNotEmpty() && compose.onAllNodes(label and hasAnyAncestor(library)).fetchSemanticsNodes().isNotEmpty()) {
-            compose.onNode(library).performScrollToNode(label)
+        val node = label and hasClickAction()
+        waitFor(node)
+        if (compose.onAllNodes(node and hasAnyAncestor(library)).fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNode(library).performScrollToNode(node)
+        } else if (compose.onAllNodes(node and hasAnyAncestor(page)).fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNode(node).performScrollTo()
         }
         checkAccessibility()
-        compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNode(node).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
     }
 
     private companion object {
         const val INSTANCE = "fake-scripts"
+        const val CONSOLE_LINE = "A rat bites you."
         const val WAIT_MS = 10_000L
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first

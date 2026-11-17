@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 19
+const val PROTOCOL_VERSION = 20
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -244,8 +244,52 @@ enum class MapPointerType(val wire: String) {
     WHEEL("wheel"),
 }
 
-/** A room of the map that findRooms found, with its area's name (docs/protocol.md, `rooms`); [id] is what Requests.showRoom takes. */
-data class RoomMatch(val id: Int, val name: String, val area: String)
+/** How findRooms' text matched a room's name (docs/protocol.md, `rooms`); one this client does not know is [CONTAINS]. */
+enum class RoomMatchKind(val wire: String) {
+    EXACT("exact"),
+    PREFIX("prefix"),
+    CONTAINS("contains"),
+
+    /** The text is the room's id, and its name does not hold it. */
+    ID("id"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String) = entries.firstOrNull { it.wire == wire } ?: CONTAINS
+    }
+}
+
+/**
+ * A room of the map that findRooms found (docs/protocol.md, `rooms`): its [area]'s id [areaId] and name, how the text
+ * matched it, and the fewest [steps] from the player's room to it, -1 for no way there. [id] is what Requests.showRoom takes.
+ */
+data class RoomMatch(
+    val id: Int,
+    val name: String,
+    val area: String,
+    val areaId: Int = 0,
+    val match: RoomMatchKind = RoomMatchKind.CONTAINS,
+    val steps: Int = -1,
+)
+
+/** A way out of a room: one of the twelve directions, "n" to "out", or a special exit's command, to the room [to]. */
+data class RoomExit(val direction: String, val to: Int, val toName: String, val locked: Boolean)
+
+/** A room of the map, as Requests.roomInfo asks for it (docs/protocol.md, `room`); [steps] as in [RoomMatch]. */
+data class RoomInfo(
+    val id: Int,
+    val name: String,
+    val areaId: Int,
+    val area: String,
+    val x: Int,
+    val y: Int,
+    val z: Int,
+    val steps: Int,
+    val exits: List<RoomExit>,
+)
+
+/** An area of the map that has rooms (docs/protocol.md, `areas`). */
+data class MapArea(val id: Int, val name: String)
 
 /** Which map [Requests.moveMap] and [Requests.followPlayer] act on: the mapper window's ([EngineMessage.Map]) or the app's own ([EngineMessage.AppMap]). */
 enum class MapTarget(val wire: String) {
@@ -260,7 +304,8 @@ data class MapRoomPlace(val id: Int, val x: Double, val y: Double, val name: Str
  * What a map frame laid out (docs/protocol.md, "Moving a map"): the [area] and [level] shown; [zoom], the rooms across
  * the frame's narrow side, which [Requests.moveMap] keeps within [minZoom] and [maxZoom] (the least shows the rooms
  * largest); whether it is [following] the [player]'s room (0 for none); a room's cell, [roomSize], in the frame's pixels;
- * the seq of the last moveMap it draws, [moved]; and the [rooms] drawn, at most 500, the nearest the middle.
+ * the seq of the last moveMap it draws, [moved]; the [rooms] drawn, at most 500, the nearest the middle; and the area's
+ * [levels] that have rooms, lowest first, which Requests.showMapLevel takes.
  */
 data class MapViewInfo(
     val area: Int,
@@ -274,6 +319,7 @@ data class MapViewInfo(
     val roomSize: Double,
     val moved: Int,
     val rooms: List<MapRoomPlace>,
+    val levels: List<Int> = emptyList(),
 )
 
 /** How the download of the map the game offers goes (docs/protocol.md, `mapDownload`); a state this client does not know is [NONE]. */
@@ -486,8 +532,14 @@ sealed interface EngineMessage {
      */
     data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null) : EngineMessage
 
-    /** The answer to findRooms for [text]: up to 100 [rooms], by name then id, and [more] when there were more. */
+    /** The answer to findRooms for [text]: up to 100 [rooms], best first, and [more] when there were more. */
     data class Rooms(val text: String, val rooms: List<RoomMatch>, val more: Boolean, val replyTo: Any?) : EngineMessage
+
+    /** The answer to Requests.roomInfo. */
+    data class Room(val room: RoomInfo, val replyTo: Any?) : EngineMessage
+
+    /** The answer to Requests.mapAreas: the map's areas that have rooms, by name. */
+    data class Areas(val areas: List<MapArea>, val replyTo: Any?) : EngineMessage
 
     /**
      * The answer to getSettings or setSettings: [values] by Lua's getConfig() keys, each a Boolean, a Double or a
@@ -676,6 +728,21 @@ object Requests {
     /** [map] centred on the player's room, following the player again. Answered only by an Error, when refused. */
     fun followPlayer(map: MapTarget): JSONObject = JSONObject().put("t", "followPlayer").put("map", map.wire)
 
+    /** [map] showing [level], one of [MapViewInfo.levels], of the area it drew, until the player moves. Answered only by an Error, when refused. */
+    fun showMapLevel(map: MapTarget, level: Int): JSONObject = JSONObject().put("t", "showMapLevel").put("map", map.wire).put("level", level)
+
+    /** [map] showing [area], following the player where they are in it. Answered only by an Error, when refused. */
+    fun showMapArea(map: MapTarget, area: Int): JSONObject = JSONObject().put("t", "showMapArea").put("map", map.wire).put("area", area)
+
+    /** Answered by [EngineMessage.Room] with [id] as its replyTo, or an Error: the room whose id is [room]. */
+    fun roomInfo(room: Int, id: Long): JSONObject = JSONObject().put("t", "roomInfo").put("room", room).put("id", id)
+
+    /** The player walked to [room], as a double tap on it does. Answered only by an Error, when refused. */
+    fun walkToRoom(room: Int): JSONObject = JSONObject().put("t", "walkToRoom").put("room", room)
+
+    /** Answered by [EngineMessage.Areas] with [id] as its replyTo, or an Error. */
+    fun mapAreas(id: Long): JSONObject = JSONObject().put("t", "mapAreas").put("id", id)
+
     /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
     fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
 
@@ -859,7 +926,9 @@ class FrameReader(input: InputStream) {
 
             "rooms" -> EngineMessage.Rooms(
                 o.optString("text"),
-                objects(o.optJSONArray("rooms")).map { RoomMatch(it.optInt("id"), it.optString("name"), it.optString("area")) },
+                objects(o.optJSONArray("rooms")).map {
+                    RoomMatch(it.optInt("id"), it.optString("name"), it.optString("area"), it.optInt("areaId"), RoomMatchKind.fromWire(it.optString("match")), it.optInt("steps", -1))
+                },
                 o.optBoolean("more"),
                 o.opt("re"),
             )
@@ -871,6 +940,23 @@ class FrameReader(input: InputStream) {
                 o.optJSONObject("refused")?.let { refused -> refused.keys().asSequence().associateWith { refused.optString(it) } }.orEmpty(),
                 o.opt("re"),
             )
+
+            "room" -> EngineMessage.Room(
+                RoomInfo(
+                    o.optInt("id"),
+                    o.optString("name"),
+                    o.optInt("areaId"),
+                    o.optString("area"),
+                    o.optInt("x"),
+                    o.optInt("y"),
+                    o.optInt("z"),
+                    o.optInt("steps", -1),
+                    objects(o.optJSONArray("exits")).map { RoomExit(it.optString("direction"), it.optInt("to"), it.optString("toName"), it.optBoolean("locked")) },
+                ),
+                o.opt("re"),
+            )
+
+            "areas" -> EngineMessage.Areas(objects(o.optJSONArray("areas")).map { MapArea(it.optInt("id"), it.optString("name")) }, o.opt("re"))
 
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),
@@ -1051,6 +1137,7 @@ class FrameReader(input: InputStream) {
             v.optDouble("roomSize", 0.0),
             v.optInt("moved"),
             objects(v.optJSONArray("rooms")).map { MapRoomPlace(it.optInt("id"), it.optDouble("x", 0.0), it.optDouble("y", 0.0), it.optString("name")) },
+            v.optJSONArray("levels")?.let { levels -> List(levels.length()) { levels.optInt(it) } }.orEmpty(),
         )
 
         private fun parseCommand(c: JSONObject) = AddonCommand(

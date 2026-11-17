@@ -33,15 +33,38 @@ object EngineMessages {
         .put("viewOnly", viewOnly).apply { if (view != null) put("view", view) }
 
     /**
-     * The `view` of a frame [w] by [h]: 20 rooms across its narrow side, the player's room 1 in its middle, which it
-     * follows unless [following] is false, having drawn the `moveMap` [moved], with [rooms] (id to its middle) drawn.
+     * The `view` of a frame [w] by [h]: 20 rooms across its narrow side of the area Castle's [level], of its [levels],
+     * the player's room [player] in its middle, which it follows unless [following] is false, having drawn the `moveMap`
+     * [moved], with [rooms] (id to its middle) drawn.
      */
-    fun mapView(w: Int, h: Int, following: Boolean = true, moved: Int = 0, rooms: Map<Int, Pair<Double, Double>> = mapOf(1 to (w / 2.0 to h / 2.0))): JSONObject {
+    fun mapView(
+        w: Int,
+        h: Int,
+        following: Boolean = true,
+        moved: Int = 0,
+        rooms: Map<Int, Pair<Double, Double>> = mapOf(1 to (w / 2.0 to h / 2.0)),
+        level: Int = 0,
+        levels: List<Int> = listOf(0),
+        player: Int = 1,
+    ): JSONObject {
         val list = JSONArray(rooms.map { (id, at) -> JSONObject().put("id", id).put("x", at.first).put("y", at.second).put("name", "Room $id") })
-        return JSONObject().put("area", 1).put("areaName", "Castle").put("level", 0).put("zoom", 20.0).put("minZoom", 3.0)
-            .put("maxZoom", 30.0).put("following", following).put("player", 1).put("roomSize", minOf(w, h) / 20.0).put("moved", moved)
-            .put("rooms", list)
+        return JSONObject().put("area", 1).put("areaName", "Castle").put("level", level).put("zoom", 20.0).put("minZoom", 3.0)
+            .put("maxZoom", 30.0).put("following", following).put("player", player).put("roomSize", minOf(w, h) / 20.0).put("moved", moved)
+            .put("rooms", list).put("levels", JSONArray(levels))
     }
+
+    /** The engine's `room`, the answer to [request]: room [id] of Castle, [steps] from the player's, with [exits]. */
+    fun room(request: JSONObject, id: Int, name: String, steps: Int, exits: List<JSONObject> = emptyList()): JSONObject = JSONObject().put("t", "room")
+        .put("id", id).put("name", name).put("areaId", 1).put("area", "Castle").put("x", 0).put("y", 0).put("z", 0).put("steps", steps)
+        .put("exits", JSONArray(exits)).put("re", request.get("id"))
+
+    /** An exit of a `room`: a direction ("n" to "out") or a special exit's command, to room [to]. */
+    fun exit(direction: String, to: Int, toName: String, locked: Boolean = false): JSONObject = JSONObject().put("direction", direction).put("to", to)
+        .put("toName", toName).put("locked", locked)
+
+    /** The engine's `areas`, the answer to [request]: id to name. */
+    fun areas(request: JSONObject, vararg areas: Pair<Int, String>): JSONObject = JSONObject().put("t", "areas")
+        .put("areas", JSONArray(areas.map { (id, name) -> JSONObject().put("id", id).put("name", name) })).put("re", request.get("id"))
 
     private fun whitePng(w: Int, h: Int): ByteArray {
         val out = ByteArrayOutputStream()

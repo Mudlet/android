@@ -690,11 +690,70 @@
     <string name="map_refused">Map: %1$s</string>
     <!-- The button, read by a screen reader, that hides that message -->
     <string name="map_refusal_dismiss">Dismiss</string>
+    <!-- The map's level shown, under its area's: a map's levels are its floors, %1$d the number Mudlet gives the level
+         (0 the ground, higher up, lower below) -->
+    <string name="map_level">Level %1$d</string>
+    <!-- The map's button, read by a screen reader, and TalkBack's action on the map, that shows the level above -->
+    <string name="map_level_up">Show the level above</string>
+    <!-- The map's button, read by a screen reader, and TalkBack's action on the map, that shows the level below -->
+    <string name="map_level_down">Show the level below</string>
+    <!-- The map's button that lists the map's areas to show another: %1$s is the name of the area it shows -->
+    <string name="map_area">Area: %1$s</string>
+    <!-- That list while the engine is still asked for the areas -->
+    <string name="map_areas_loading">Loading areas…</string>
+
+    <!-- The room the player tapped on a map, shown at its bottom until closed: its name, its area (%1$s) and number
+         (%2$d), how far it is, its exits, each a button that shows the room it leads to, and a button that walks
+         there -->
+    <string name="room_place">%1$s · room %2$d</string>
+    <!-- A room with no name, in place of its name; %1$d is its number -->
+    <string name="room_unnamed">Room %1$d</string>
+    <!-- How far the room tapped is: the player's character is in it -->
+    <string name="room_here">You are here</string>
+    <!-- How far the room tapped is: the map knows no way from the player's room to it, or the player's room is not known -->
+    <string name="room_no_way">No known way there</string>
+    <!-- How far the room tapped is, in moves from the player's room; %1$d is how many -->
+    <plurals name="room_steps">
+        <item quantity="one">%1$d step away</item>
+        <item quantity="other">%1$d steps away</item>
+    </plurals>
+    <!-- One of the room's exits: %1$s is the way, a direction (north) or a command the game takes (climb rope), %2$s the
+         name of the room it leads to -->
+    <string name="room_exit">%1$s: %2$s</string>
+    <!-- The same for an exit the map marks locked, which a walk does not take -->
+    <string name="room_exit_locked">%1$s: %2$s (locked)</string>
+    <!-- The button that walks the player's character to the room shown -->
+    <string name="room_walk">Walk here</string>
+    <!-- The button, read by a screen reader, that closes the room shown -->
+    <string name="room_close">Close the room</string>
+    <!-- The directions of a room's exits, as on a compass; up, down, in and out too -->
+    <string name="exit_north">north</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_northeast">northeast</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_northwest">northwest</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_east">east</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_west">west</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_south">south</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_southeast">southeast</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_southwest">southwest</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_up">up</string>
+    <!-- A direction of a room's exit -->
+    <string name="exit_down">down</string>
+    <!-- A direction of a room's exit: through a door or opening into somewhere -->
+    <string name="exit_in">in</string>
+    <!-- A direction of a room's exit: out of somewhere -->
+    <string name="exit_out">out</string>
 
     <!-- The game screen's own map, brought to the front over the game's text by a button in the title bar: the button,
          which TalkBack reads with its state (on while the map is in front), the search for rooms by name or number
-         above the map, and its results; each result is a room's name (%1$s), its area's name (%2$s) and its number
-         (%3$d) -->
+         above the map, and its results, each a room's name over its area's and its number -->
     <string name="app_map_show">Map</string>
     <!-- The button above the game screen's own map that opens the search for rooms -->
     <string name="app_map_search">Find a room</string>
@@ -702,8 +761,6 @@
     <string name="app_map_search_hint">Room name or number</string>
     <!-- The room search's button that starts the search -->
     <string name="app_map_search_go">Find</string>
-    <!-- A result of the room search: %1$s is the room's name, %2$s its area's name and %3$d its number -->
-    <string name="app_map_room">%1$s, %2$s (%3$d)</string>
     <!-- Shown while the room search runs -->
     <string name="app_map_searching">Finding rooms…</string>
     <!-- Shown when no room matches the search; %1$s is what the player typed -->
@@ -712,6 +769,21 @@
     <string name="app_map_more_rooms">More rooms match than are shown: try more of the name</string>
     <!-- The button, read by a screen reader, that closes the room search's results -->
     <string name="app_map_results_close">Close the results</string>
+    <!-- The head of the room search's results, read out as they come: how many rooms were found, %1$d -->
+    <plurals name="app_map_results_count">
+        <item quantity="one">%1$d room</item>
+        <item quantity="other">%1$d rooms</item>
+    </plurals>
+    <!-- The head of the room search's results when more rooms match than are shown; %1$d is how many are shown -->
+    <string name="app_map_results_many">%1$d+ rooms</string>
+    <!-- A result's second line: its area's name (%1$s) and the room's number (%2$d) -->
+    <string name="app_map_result_place">%1$s · room %2$d</string>
+    <!-- The same with how far the room is from the player's: %3$s is the distance, such as 3 steps away -->
+    <string name="app_map_result_place_steps">%1$s · room %2$d · %3$s</string>
+    <!-- A result's button, read by a screen reader, that walks the player's character to that room; %1$s is its name -->
+    <string name="app_map_walk_to">Walk to %1$s</string>
+    <!-- The filter of the room search's results by area: the choice that shows them all -->
+    <string name="app_map_all_areas">All areas</string>
 
     <!-- The download of the map the game offers, above the full-screen map, and in its middle while no map is drawn:
          %1$s is the host the game offers it from (such as mud.example.com); the progress bar's name for TalkBack; how

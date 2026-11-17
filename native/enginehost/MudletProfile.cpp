@@ -7,6 +7,7 @@
 #include <QCryptographicHash>
 #include <QEventLoop>
 #include <QFileInfo>
+#include <QHash>
 #include <QIcon>
 #include <QImage>
 #include <QImageReader>
@@ -1439,6 +1440,7 @@ std::optional<MapViewInfo> MudletProfile::mapView(MapTarget map) const
     for (const THeadlessSession::MapRoom& room : view->rooms) {
         info.rooms.append({room.id, room.position, room.name});
     }
+    info.levels = view->levels;
     return info;
 }
 
@@ -1685,16 +1687,42 @@ std::variant<RoomList, QString> MudletProfile::findRooms(const QString& text) co
     if (!loaded()) {
         return QStringLiteral("no profile running");
     }
-    QList<THeadlessSession::RoomMatch> found = mSession->findRooms(text);
-    std::sort(found.begin(), found.end(), [](const THeadlessSession::RoomMatch& a, const THeadlessSession::RoomMatch& b) {
+    bool isId = false;
+    const int id = text.trimmed().toInt(&isId);
+    QList<RoomMatch> found;
+    QHash<int, bool> inPlayerArea;
+    for (const THeadlessSession::RoomMatch& room : mSession->findRooms(text)) {
+        RoomMatch::Match match = RoomMatch::Match::contains;
+        if (room.name.compare(text, Qt::CaseInsensitive) == 0) {
+            match = RoomMatch::Match::exact;
+        } else if (room.name.startsWith(text, Qt::CaseInsensitive)) {
+            match = RoomMatch::Match::prefix;
+        } else if (isId && room.id == id && !room.name.contains(text, Qt::CaseInsensitive)) {
+            match = RoomMatch::Match::id;
+        }
+        found.append({room.id, room.name, room.areaId, room.areaName, match, room.steps});
+        inPlayerArea.insert(room.id, room.inPlayerArea);
+    }
+    // The room whose id the text is ranks as an exact name; one with no way there after those with one
+    const auto rank = [](const RoomMatch& room) {
+        return room.match == RoomMatch::Match::id ? 0 : static_cast<int>(room.match);
+    };
+    std::sort(found.begin(), found.end(), [&](const RoomMatch& a, const RoomMatch& b) {
+        if (rank(a) != rank(b)) {
+            return rank(a) < rank(b);
+        }
+        if (inPlayerArea.value(a.id) != inPlayerArea.value(b.id)) {
+            return inPlayerArea.value(a.id);
+        }
+        if (a.steps != b.steps) {
+            return b.steps < 0 || (a.steps >= 0 && a.steps < b.steps);
+        }
         const int byName = a.name.compare(b.name, Qt::CaseInsensitive);
         return byName != 0 ? byName < 0 : a.id < b.id;
     });
     RoomList list;
     list.more = found.size() > RoomList::maxRooms;
-    for (const THeadlessSession::RoomMatch& room : found.first(std::min<qsizetype>(found.size(), RoomList::maxRooms))) {
-        list.rooms.append({room.id, room.name, room.areaName});
-    }
+    list.rooms = found.first(std::min<qsizetype>(found.size(), RoomList::maxRooms));
     return list;
 }
 
@@ -1724,6 +1752,58 @@ QString MudletProfile::followPlayer(MapTarget map)
         return QStringLiteral("no profile running");
     }
     return mSession->followPlayerOnMap(sessionMap(map)) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::showMapLevel(MapTarget map, int level)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->showMapLevel(sessionMap(map), level) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::showMapArea(MapTarget map, int area)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->showMapArea(sessionMap(map), area) ? QString() : mSession->errorString();
+}
+
+std::variant<RoomDetails, QString> MudletProfile::roomInfo(int room) const
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    const std::optional<THeadlessSession::RoomInfo> info = mSession->roomInfo(room);
+    if (!info) {
+        return QStringLiteral("there is no room %1 in the map").arg(room);
+    }
+    RoomDetails details{info->id, info->name, info->areaId, info->areaName, info->x, info->y, info->z, info->steps, {}};
+    for (const THeadlessSession::RoomExit& exit : info->exits) {
+        details.exits.append({exit.direction, exit.to, exit.toName, exit.locked});
+    }
+    return details;
+}
+
+QString MudletProfile::walkToRoom(int room)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->walkToRoom(room) ? QString() : mSession->errorString();
+}
+
+std::variant<QList<MapAreaInfo>, QString> MudletProfile::mapAreas() const
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QList<MapAreaInfo> areas;
+    for (const THeadlessSession::MapArea& area : mSession->mapAreas()) {
+        areas.append({area.id, area.name});
+    }
+    return areas;
 }
 
 QString MudletProfile::downloadMap()

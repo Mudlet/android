@@ -280,6 +280,8 @@ struct MapViewInfo
     // The seq of the last IEngine::moveMap() on this map that the frame draws, 0 for none
     qint64 moved = 0;
     QList<MapRoomPlace> rooms;
+    // The levels of the area that have rooms, lowest first
+    QList<int> levels;
     bool operator==(const MapViewInfo&) const = default;
 };
 
@@ -297,20 +299,57 @@ struct MapFrame
     std::optional<MapViewInfo> view;
 };
 
-// A room of the map that IEngine::findRooms() found: its id, its name and its area's name
+// A room of the map that IEngine::findRooms() found: its id, its name, its area's id and name, how the text matched
+// it, and the fewest exits from the player's room to it, -1 for no way there
 struct RoomMatch
 {
+    // The name is the text, ignoring case, or starts with it, or holds it; or the text is the room's id
+    enum class Match { exact, prefix, contains, id };
     int id = 0;
     QString name;
+    int areaId = 0;
     QString area;
+    Match match = Match::contains;
+    int steps = -1;
 };
 
-// What IEngine::findRooms() found, by name then id; more when there were more than maxRooms
+// What IEngine::findRooms() found, best first (RoomMatch::Match in order, with id as exact, then the rooms in the
+// player's area, then the fewest steps, then by name and id); more when there were more than maxRooms
 struct RoomList
 {
     static constexpr int maxRooms = 100;
     QList<RoomMatch> rooms;
     bool more = false;
+};
+
+// A way out of a room: one of the twelve directions, "n" to "out", or a special exit's command
+struct RoomExitInfo
+{
+    QString direction;
+    int to = 0;
+    QString toName;
+    bool locked = false;
+};
+
+// A room of the map, as IEngine::roomInfo() gives it; steps as RoomMatch's
+struct RoomDetails
+{
+    int id = 0;
+    QString name;
+    int areaId = 0;
+    QString area;
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    int steps = -1;
+    QList<RoomExitInfo> exits;
+};
+
+// An area of the map that has rooms
+struct MapAreaInfo
+{
+    int id = 0;
+    QString name;
 };
 
 // Everything the engine tells its host. Every method must be implementable

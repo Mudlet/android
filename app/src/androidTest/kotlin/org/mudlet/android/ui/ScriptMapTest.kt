@@ -17,13 +17,16 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -45,7 +48,9 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.EngineMessages.exit
 import org.mudlet.android.ui.EngineMessages.mapView
+import org.mudlet.android.ui.EngineMessages.room
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import kotlin.math.min
@@ -54,8 +59,9 @@ import kotlin.math.min
  * The map (docs/architecture.md, "The map"), against a fake engine: the engine's frame drawn in the mapper window,
  * a tap and a double tap (not two taps apart) sent as `mapPointer` at the room nearest them or the point of the frame
  * under them, a drag and a pinch sent as `moveMap`, the zoom buttons and TalkBack's actions that do the same without a
- * gesture, the button that centres the map on the player, the switch between viewing and editing it, a refusal shown
- * until dismissed, a frame of another size not drawn, and openMapWidget()'s docked map as a page.
+ * gesture, the button that centres the map on the player, the switch between viewing and editing it, the room a tap
+ * picks with its exits and a walk there, TalkBack's moves between levels, a refusal shown until dismissed, a frame of
+ * another size not drawn, and openMapWidget()'s docked map as a page.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptMapTest {
@@ -423,6 +429,85 @@ class ScriptMapTest {
         assertPoint(400.0, 300.0, session.receive("mapPointer"))
     }
 
+    @Test
+    fun aTappedRoomIsShownWithHowFarItIsItsExitsAndAWalkThere() {
+        showMap(mapView(MAP_W, MAP_H, rooms = mapOf(1 to (200.0 to 150.0), 2 to (230.0 to 150.0))))
+        val map = drawnMap()
+        val drawn = bounds(map)
+        compose.onNode(map).performTouchInput { click(at(drawn, 230.0, 150.0)) }
+        assertPoint(230.0, 150.0, session.receive("mapPointer"))
+        val ask = session.receive("roomInfo")
+        assertEquals(2, ask.getInt("room"))
+        session.send(room(ask, 2, "Kitchen", steps = 1, exits = listOf(exit("w", 1, "Great Hall"), exit("climb rope", 6, "Loft", locked = true))))
+        val kitchen = hasText("Kitchen")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(kitchen).fetchSemanticsNodes().isNotEmpty() }
+        // Its name, area, number and distance read as one, as it comes
+        compose.onNode(kitchen).assertIsDisplayed()
+            .assert(hasText(string(R.string.room_place, "Castle", 2)))
+            .assert(hasText(compose.activity.resources.getQuantityString(R.plurals.room_steps, 1, 1)))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        val locked = hasText(string(R.string.room_exit_locked, "climb rope", "Loft")) and hasClickAction()
+        assertTrue("a special exit is named by its command, and marked locked", compose.onAllNodes(locked).fetchSemanticsNodes().isNotEmpty())
+
+        val walk = hasText(string(R.string.room_walk)) and hasClickAction()
+        compose.onNode(walk).performScrollTo()
+        activate(walk)
+        assertEquals(2, session.receive("walkToRoom").getInt("room"))
+
+        // An exit shows the room it leads to, which the player is in: no walk there
+        val west = hasText(string(R.string.room_exit, string(R.string.exit_west), "Great Hall")) and hasClickAction()
+        // performScrollTo scrolls only the nearest scroller, here the row of exits: the card is scrolled to that row first
+        compose.onNode(hasScrollAction() and hasAnyChild(west)).performScrollTo()
+        compose.onNode(west).performScrollTo()
+        activate(west)
+        val next = session.receive("roomInfo")
+        assertEquals(1, next.getInt("room"))
+        session.send(room(next, 1, "Great Hall", steps = 0))
+        val here = hasText(string(R.string.room_here))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(here).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(walk).assertIsNotEnabled()
+
+        // Once the player is in another room, it is asked for again, as its steps changed; an answer to an earlier ask,
+        // which the UI reads before that frame, is not shown over it
+        session.send(room(ask, 2, "Kitchen", steps = 1))
+        session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, rooms = mapOf(1 to (200.0 to 150.0), 2 to (230.0 to 150.0)), player = 2)))
+        assertEquals(1, session.receive("roomInfo").getInt("room"))
+        compose.onNode(here).assertIsDisplayed()
+
+        activate(hasContentDescription(string(R.string.room_close)))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(here).fetchSemanticsNodes().isEmpty() }
+        // A tap on no room shows none
+        compose.onNode(map).performTouchInput { click(at(drawn, 60.0, 60.0)) }
+        session.receive("mapPointer")
+        session.assertNoRequest("roomInfo", QUIET_MS)
+    }
+
+    @Test
+    fun talkBackShowsTheLevelsAboveAndBelowAndARefusedRoomIsSaidWithTheMap() {
+        showMap(mapView(MAP_W, MAP_H, level = 0, levels = listOf(-1, 0, 3)))
+        val map = drawnMap()
+        fun act(label: Int) {
+            val action = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(label) }
+            compose.runOnIdle { action.action() }
+        }
+        act(R.string.map_level_up)
+        val up = session.receive("showMapLevel")
+        assertEquals("mapper" to 3, up.getString("map") to up.getInt("level"))
+        act(R.string.map_level_down)
+        assertEquals(-1, session.receive("showMapLevel").getInt("level"))
+        // On the top level, none above
+        session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, following = false, level = 3, levels = listOf(-1, 0, 3))))
+        compose.waitUntil(WAIT_MS) {
+            compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions].none { it.label == string(R.string.map_level_up) }
+        }
+
+        // TalkBack's select is a tap on the room in the middle, which is shown; the engine's refusal of it is this map's
+        compose.onNode(map).performSemanticsAction(SemanticsActions.OnClick)
+        val ask = session.receive("roomInfo")
+        session.refuse(ask, "There is no room 1 in the map.")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "There is no room 1 in the map."))).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     private fun mapper() = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = MAP_W, h = MAP_H)
 
     // The mapper in the top right quarter of Mudlet's main window, and its map
@@ -514,5 +599,8 @@ class ScriptMapTest {
         const val DRAG_STEP = 10.0
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L
+
+        // Long enough for a request the UI would send to have come
+        const val QUIET_MS = 1_000
     }
 }

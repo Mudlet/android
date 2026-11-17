@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **19**.
+The current version is **20**.
 
 ## Transport
 
@@ -87,9 +87,14 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `setMapScale` | `scale` | Draws `map` from now on with `scale` device pixels to each of the mapper window's, a number from 1 to 8, so that it is as sharp as the UI shows it ("The map" below). libmudlet keeps it until the UI that asked goes, and draws at most 4096 pixels a side, at a smaller scale where that one would be larger. The stand-in takes it. |
 | `setAppMapSize` | `w`, `h`, `scale` | Asks for the app's own map, drawn at `w` by `h` of the map's pixels with `scale` device pixels to each, and sent as `appMap` whenever it changes ("The app's map" below); `w` and `h` 0 stop it. `w` and `h` are whole numbers, both above 0 or both 0; `scale` a number from 1 to 4. libmudlet keeps it for each profile that loads later, until the UI that asked goes, and refuses a map of more than 4096 device pixels a side. The stand-in takes it, and sends an `appMap` with nothing to draw. |
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
-| `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`. `text` must not be blank. |
+| `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`, best first. `text` must not be blank. |
 | `showRoom` | `room` | Centres the app's map on the room whose id is `room`, a whole number, and selects it, as a pan on the desktop's mapper does (`THeadlessSession::showRoomOnAppMap()`): it stays until the player moves or a script centres the map. |
 | `moveMap` | `map`, `dx`, `dy`, `zoom`, `x`, `y`, `seq` | A drag and a pinch on a map (`THeadlessSession::moveMapView()`, "Moving a map" below): `map` is `app` for `appMap` or `mapper` for `map`; what its last frame drew moves by `dx`, `dy` of its pixels, then zooms by `zoom`, a number above 0 (2 shows the rooms twice as large), about the point `x`, `y` of it. `seq` is a whole number from 1, which the UI counts up for each `moveMap`; the frames of that map drawn after it carry it in `view.moved`. |
+| `showMapLevel` | `map`, `level` | Shows another level, a whole number, of the area the map `map` (as in `moveMap`) drew last, about the same point, as the desktop mapper's level buttons do (`THeadlessSession::showMapLevel()`): until the player moves to another room or a `followPlayer`. A level is one of `view.levels`. |
+| `showMapArea` | `map`, `area` | Shows the area whose id is `area` on the map `map`, as picking it in the desktop mapper's area box does (`THeadlessSession::showMapArea()`): following the player where they are in it, else about the room nearest the middle of the level shown, or of its level with the most rooms, until the player moves to another room or a `followPlayer`. |
+| `roomInfo` | `room`, `id`? | Asks for a room of the map, whose id is `room` (`THeadlessSession::roomInfo()`), answered by `room`. |
+| `walkToRoom` | `room` | Walks the player to the room whose id is `room`, as a double-click on it on the desktop mapper does (`THeadlessSession::walkToRoom()`), with the profile's `doSpeedWalk()` or the shortest path by known exits. |
+| `mapAreas` | `id`? | Asks for the map's areas that have rooms (`THeadlessSession::mapAreas()`), answered by `areas`. |
 | `followPlayer` | `map` | Centres the map `map` (`app` or `mapper`, as in `moveMap`) on the player's room, following the player again (`THeadlessSession::followPlayerOnMap()`). |
 | `closeProfile` | `name`, `id`? | Saves and closes that open profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles`, or `error` (`closeProfile: "<name>" is not open`). |
 | `setFront` | `name` | The open profile the player is looking at: a UI that left out `profileSockets` sees it and its requests go to it. |
@@ -100,7 +105,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `settings` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -146,6 +151,14 @@ than `app` or `mapper`; `moveMap` for numbers that are not numbers, a `zoom` not
 1, and while the map drawn last shows no area; `followPlayer` while the map has no room for the player. The stand-in
 has no map and refuses both.
 
+`showMapLevel`, `showMapArea` and `walkToRoom` too are answered only when refused, and `roomInfo` by `room` or `error`,
+`mapAreas` by `areas` or `error`, as above. libmudlet refuses all five while no profile is open; `showMapLevel` and
+`showMapArea` as `moveMap` is, but `showMapArea` not while the map drawn last shows no area, as it can show one then,
+and for a `level` or `area` that is not a whole number; `showMapLevel` for a level the area has no rooms on, `showMapArea` for an area not in the
+map or with no rooms; `walkToRoom` and `roomInfo` for a `room` that is not a whole number or not in the map, and
+`walkToRoom` while the map has no room for the player. A walk that finds no path is not refused: Mudlet says so in the
+console, as on the desktop. The stand-in has no map and refuses all five.
+
 `downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
 while no profile is open; `downloadMap` while the game offers no map, and while the map downloads; `cancelMapDownload`
 while no map downloads, and once the map has arrived and is being loaded. A script's map import or export runs within
@@ -189,10 +202,12 @@ stand-in keeps the values it is given, with no meaning, so it reads back what a 
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. Only libmudlet sends it. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
-| `map` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
-| `appMap` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
+| `map` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. Only libmudlet sends it. |
+| `appMap` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `settings` | `values`, `refused`?, `re`? | The answer to `getSettings` or `setSettings`: `values` holds each key it asked for or set with the value the profile holds now, as `getConfig()` gives it with `true` for its second argument: true or false, a number, or a string, an option of several by its name (`showSentText` as `never`, `always` or `script`). A key the engine does not know is left out. `refused`, only after `setSettings`, holds each key not changed with why: `setConfig()`'s message, its Lua error for a value of the wrong type, or that the value was not true or false, a number or a string. |
-| `rooms` | `text`, `rooms`: `id`, `name`, `area`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, by name ignoring case, then id, each with its `id`, `name` and its area's name `area`. `more` is true when more rooms matched than were sent. |
+| `rooms` | `text`, `rooms`: `id`, `name`, `areaId`, `area`, `match`, `steps`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, each with its `id`, `name`, its area's id `areaId` and name `area`, how it matched in `match` (`exact` for a name that is the text ignoring case, `prefix` for one that starts with it, `contains`, or `id` for the room whose id the text is and whose name does not hold it) and `steps`, the fewest exits from the player's room to it by rooms and exits that are not locked, as the speedwalk goes (0 for the player's room, -1 for no way there or no room for the player). Best first: `exact` and `id`, then `prefix`, then `contains`; within each, the rooms in the player's area first, then by `steps` with -1 last, then by name ignoring case, then id. `more` is true when more rooms matched than were sent. |
+| `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `re`? | The answer to `roomInfo`: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`. |
+| `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
@@ -394,11 +409,13 @@ a Mudlet patch the app carries until Mudlet has it).
   `areaName`, the `level` (z) shown, `zoom`, how many rooms fit across the frame's narrow side, as Mudlet's zoom
   counts, and `minZoom` and `maxZoom`, the least and most of it a `moveMap` gives (the least shows the rooms largest).
   `following` is false while the map does not follow the player: after a `moveMap` that moved it off the player, a
-  `showRoom`, or a wheel turn off the middle, until the player moves to another room or a `followPlayer`. `player` is
+  `showRoom`, a `showMapLevel` or `showMapArea`, or a wheel turn off the middle, until the player moves to another
+  room or a `followPlayer`. `player` is
   the id of the player's room (0 for none), `roomSize` a room's cell in the frame's pixels, `moved` the `seq` of the
   last `moveMap` on this map the frame draws (0 for none since the profile loaded), and `rooms` the rooms of the area
   and level drawn in the frame or within a room of its edges, with each room's `id`, its middle at `x`, `y` in the
-  frame's pixels and its `name`: at most 500, the nearest the middle.
+  frame's pixels and its `name`: at most 500, the nearest the middle. `levels` are the levels of the area that have
+  rooms, lowest first, which `showMapLevel` takes.
 - A `moveMap` acts on what the last frame drew, as the UI shows it, and is drawn in the next one: the UI keeps showing
   the moves it sent, from the frame it has, until a frame's `moved` reaches them, and drops them when one is refused.
 - A pan, or a zoom about a point other than the middle, stops following the player, as the desktop's drag does; a
@@ -588,7 +605,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
   commands, as on attach, then the lines the UI has not had (with `clear` and `gap` as on attach, but without `replay`),
   then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
-  `getWindowText`, `image`, `rooms`, `settings`, and a `status` that carries `re`.
+  `getWindowText`, `image`, `rooms`, `room`, `areas`, `settings`, and a `status` that carries `re`.
 
 A `notify` sent while the UI lags is not sent again, but the engine has already posted the notification on Android;
 nor is a `commandLine`, a `windowCommandLine`, an `announce`, an `attention` or a `moveTypedLine`.
@@ -597,11 +614,13 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 19, which added a profile's settings (`getSettings`, `setSettings`, `settings`); version 18
-added moving a map by touch (`moveMap`, `followPlayer`, and `view` in `map` and `appMap`); version 16 added an MXP
-frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and `tabCurrent` in `windows`); version 15 added several
-profiles at once: a socket each, `profileSockets` and `profile` in
-`hello`, `alongside` in `openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
+As implemented in version 20, which added a room's details and the map's levels and areas (`roomInfo`, `room`,
+`walkToRoom`, `showMapLevel`, `showMapArea`, `mapAreas`, `areas`, `levels` in `view`, and `areaId`, `match` and
+`steps` in `rooms`, which come best first); version 19 added a profile's settings (`getSettings`, `setSettings`,
+`settings`); version 18 added moving a map by touch (`moveMap`, `followPlayer`, and `view` in `map` and `appMap`);
+version 16 added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and `tabCurrent` in `windows`);
+version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in `hello`, `alongside` in
+`openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
 the text boxes (`setTextBoxText`, `textBox`), and later `setMapScale`, which needs no new version as a UI does without
 it: an engine without it refuses it as unknown, the UI ignores that, and the map stays at the window's pixels; version
 13 added the map

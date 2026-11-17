@@ -150,7 +150,8 @@ internal fun ScriptLibraryScreen(
             if (items != null) {
                 ExtendedFloatingActionButton(
                     text = { Text(newItem) },
-                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                    // The button's name for a screen reader: an extended button's text is not read
+                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = newItem) },
                     onClick = { scripts.add(kind, folder, folder = false, newItem) },
                 )
             }

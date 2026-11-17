@@ -206,7 +206,7 @@ class ScriptLibraryTest {
 
     @Test
     fun aNewItemOpensAndANewFolderIsGoneInto() {
-        activate(hasText(string(R.string.scripts_new_trigger)) and hasClickAction())
+        activate(hasContentDescription(string(R.string.scripts_new_trigger)))
         val add = received("addScriptItem")
         assertEquals("trigger", add.getString("kind"))
         assertEquals(0, add.getInt("parent"))
@@ -233,7 +233,7 @@ class ScriptLibraryTest {
         compose.onNode(hasText(folderName) and !hasClickAction() and hasAnyAncestor(library)).assertIsDisplayed()
 
         // What is made in a folder goes into it
-        activate(hasText(string(R.string.scripts_new_trigger)) and hasClickAction())
+        activate(hasContentDescription(string(R.string.scripts_new_trigger)))
         assertEquals(10, received("addScriptItem").getInt("parent"))
     }
 

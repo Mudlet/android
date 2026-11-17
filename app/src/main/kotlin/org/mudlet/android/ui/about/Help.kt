@@ -21,7 +21,7 @@ object Help {
     /** The rest of desktop's Help menu, in its order, with its names */
     val COMMUNITY = listOf(
         HelpLink(R.string.help_videos, "https://www.mudlet.org/media/"),
-        HelpLink(R.string.help_discord, "https://www.mudlet.org/chat"),
+        HelpLink(R.string.help_discord, "https://www.mudlet.org/discord"),
         HelpLink(R.string.help_live_chat, "https://web.libera.chat/?channel=#mudlet"),
         HelpLink(R.string.help_forum, "https://forums.mudlet.org/"),
     )
@@ -32,7 +32,7 @@ object Help {
             ScriptItemKind.ALIAS -> R.string.help_introduction_aliases to "Aliases"
             ScriptItemKind.SCRIPT -> R.string.help_introduction_scripts to "Scripts"
             ScriptItemKind.TIMER -> R.string.help_introduction_timers to "Timers"
-            ScriptItemKind.KEY -> R.string.help_introduction_keys to "Keybindings"
+            ScriptItemKind.KEY -> R.string.help_introduction_keys to "Keys"
             ScriptItemKind.BUTTON -> R.string.help_introduction_buttons to "Buttons"
         }
         return HelpLink(label, "https://wiki.mudlet.org/w/Manual:Introduction#$anchor")

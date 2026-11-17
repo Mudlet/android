@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import java.io.File
 
 /**
  * The app's own settings, kept in SharedPreferences. Each one is Compose state, read and set on the main thread. A new
@@ -16,6 +17,9 @@ import androidx.core.content.edit
  */
 object Settings {
     private const val PREFS = "settings"
+
+    // Where the engine keeps each profile, in a directory of its name under the app's files (docs/architecture.md)
+    private const val PROFILES_DIR = "mudlet/profiles"
 
     private var prefs: SharedPreferences? = null
 
@@ -45,6 +49,12 @@ object Settings {
 
     /** Whether each line sent ends with a line feed alone rather than a carriage return and a line feed. */
     val unixLineEndings = BoolSetting("inputLineStrictUnixEndings", default = false, mudlet = true)
+
+    /**
+     * Desktop Mudlet's "Auto clear the input line after you sent text": off, the command sent stays on the input line,
+     * selected. Mudlet starts a profile with it off; the app starts a game with it on (docs/divergences.md).
+     */
+    val clearInputAfterSend = BoolSetting("autoClearInputLine", default = true, mudlet = true, mudletDefault = false)
 
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
@@ -102,6 +112,7 @@ object Settings {
         undoWrapWidth,
         showSentText,
         unixLineEndings,
+        clearInputAfterSend,
         offerSecureConnection,
         gmcp,
         msdp,
@@ -137,15 +148,29 @@ object Settings {
     // not add, such as one copied from desktop Mudlet, keeps its own from the start.
     private const val GAMES_AWAITING_DEFAULTS = "gamesAwaitingDefaults"
 
+    // The games that were there before the app had [clearInputAfterSend], by name: the app emptied the input line of
+    // each whatever its profile said, which its profile is made to say as it next loads
+    private const val GAMES_AWAITING_INPUT_CLEAR = "gamesAwaitingInputClear"
+
     /** Whether the game [name] is to be given the app's values of [mudletSettings] as it loads. */
-    fun awaitsDefaults(name: String): Boolean = prefs?.getStringSet(GAMES_AWAITING_DEFAULTS, null)?.contains(name) == true
+    fun awaitsDefaults(name: String): Boolean = name in games(GAMES_AWAITING_DEFAULTS)
 
     /** Marks the game [name] as to be given them, as when it is added, or not, once it has them or is deleted. */
-    fun setAwaitsDefaults(name: String, awaits: Boolean) {
+    fun setAwaitsDefaults(name: String, awaits: Boolean) = setGame(GAMES_AWAITING_DEFAULTS, name, awaits)
+
+    /** Whether the game [name], there before the input line could keep a sent command, is yet to be told to clear it. */
+    fun awaitsInputClear(name: String): Boolean = name in games(GAMES_AWAITING_INPUT_CLEAR)
+
+    /** Marks the game [name] as yet to be told, or not, once it is, has its own value or is deleted. */
+    fun setAwaitsInputClear(name: String, awaits: Boolean) = setGame(GAMES_AWAITING_INPUT_CLEAR, name, awaits)
+
+    private fun games(key: String): Set<String> = prefs?.getStringSet(key, null).orEmpty()
+
+    private fun setGame(key: String, name: String, among: Boolean) {
         val p = prefs ?: return
-        val games = p.getStringSet(GAMES_AWAITING_DEFAULTS, null).orEmpty()
-        if ((name in games) == awaits) return
-        p.edit { putStringSet(GAMES_AWAITING_DEFAULTS, if (awaits) games + name else games - name) }
+        val games = games(key)
+        if ((name in games) == among) return
+        p.edit { putStringSet(key, if (among) games + name else games - name) }
     }
 
     fun init(context: Context) {
@@ -153,6 +178,17 @@ object Settings {
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
         all.forEach { it.load(p) }
+        noteGamesBeforeInputClear(p, File(context.filesDir, PROFILES_DIR))
+    }
+
+    /**
+     * Once, as the app first runs with [clearInputAfterSend]: the games whose profiles are in [profiles] are those
+     * the app has emptied the input line of, and a game that comes later starts with its own value.
+     */
+    @VisibleForTesting
+    internal fun noteGamesBeforeInputClear(prefs: SharedPreferences, profiles: File) {
+        if (prefs.contains(GAMES_AWAITING_INPUT_CLEAR)) return
+        prefs.edit { putStringSet(GAMES_AWAITING_INPUT_CLEAR, profiles.list()?.toSet().orEmpty()) }
     }
 
     /** The values upstream Mudlet's `setConfig("blankLinesBehaviour", ...)` takes. */
@@ -171,9 +207,9 @@ object Settings {
 
     /**
      * One setting: [value] is the current one, [set] changes and stores it. A [mudlet] setting's [key] is also the
-     * name of the `getConfig()` and `setConfig()` key it has in Mudlet.
+     * name of the `getConfig()` and `setConfig()` key it has in Mudlet, which starts a profile with [mudletDefault].
      */
-    abstract class Setting<T>(val key: String, val default: T, val mudlet: Boolean = false) {
+    abstract class Setting<T>(val key: String, val default: T, val mudlet: Boolean = false, val mudletDefault: T = default) {
         var value by mutableStateOf(default)
             private set
 
@@ -193,8 +229,8 @@ object Settings {
         /** [value] as Mudlet's `setConfig()` takes it. */
         fun valueToMudlet(): Any = toMudlet(value)
 
-        /** Whether [value] is other than [default]. */
-        val changed get() = value != default
+        /** Whether [value] is other than what Mudlet starts a profile with. */
+        val differsFromMudlets get() = value != mudletDefault
 
         /** What `getConfig()` gave, or null for a value this setting cannot have. */
         abstract fun fromMudlet(v: Any): T?
@@ -223,7 +259,7 @@ object Settings {
         }
     }
 
-    class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false) : Setting<Boolean>(key, default, mudlet) {
+    class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false, mudletDefault: Boolean = default) : Setting<Boolean>(key, default, mudlet, mudletDefault) {
         override fun fromMudlet(v: Any) = v as? Boolean
 
         override fun read(prefs: SharedPreferences) = prefs.getBoolean(key, default)

@@ -336,6 +336,15 @@
     <!-- Words a player might search the settings for to find "Send lines with a plain line feed", besides the words
          of its name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_unix_line_endings_keywords">newline, line endings, Unix, enter, return</string>
+    <!-- A switch on a game's Input page, desktop Mudlet's "Auto clear the input line after you sent text": on, the
+         line the player types commands on is emptied after each one is sent -->
+    <string name="settings_clear_input">Clear the input line after sending</string>
+    <!-- Under "Clear the input line after sending", what happens with the switch off. "Send" is the input line's
+         button of that name. -->
+    <string name="settings_clear_input_hint">Off, the command you sent stays in the input line, selected: typing replaces it, and Send sends it again.</string>
+    <!-- Words a player might search the settings for to find "Clear the input line after sending", besides the words
+         of its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_clear_input_keywords">auto clear, keep, repeat, command line, select</string>
     <!-- A switch on a game's Connection page: ask the player whether to switch to a secure (encrypted) connection
          when the game says it has one -->
     <string name="settings_offer_secure">Offer a secure connection</string>
@@ -529,6 +538,9 @@
     <!-- Shown under the input line when a command could not be sent; the engine is the part of the app that runs the
          game's connection -->
     <string name="input_not_sent">Not sent: the app is not connected to the engine</string>
+    <!-- Read by a screen reader as the state of the input line, or of a script window's command line, while the
+         command just sent is still in it, kept there selected by the game's setting -->
+    <string name="input_kept">Sent. Typing replaces it</string>
     <!-- The button, also the Tab key, that completes the word being typed from the words the game sent -->
     <string name="input_complete">Complete the word</string>
     <!-- Shown under the input line when no word the game sent starts with what the player typed -->

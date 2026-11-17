@@ -172,7 +172,7 @@ class ProfileSession internal constructor(
     private val appLuaRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
     // The ids of the getSettings and setSettings requests not yet answered, and of the setSettings among them that give
-    // the game the app's values, which it has once that is answered
+    // the game the app's values (or the input line's clearing), which it has once that is answered
     private val settingsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
     private val defaultsRequests: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
@@ -247,9 +247,12 @@ class ProfileSession internal constructor(
         // A script the command runs reads what the player typed in the text boxes
         windows.flushTyping()
         if (!sendInput(Requests.send(line))) return false
-        val now = SystemClock.elapsedRealtime()
-        dropExpiredSends(now)
-        sendsAwaitingClear.addLast(now)
+        // Mudlet empties its line after a send only for a profile that has it cleared
+        if (setting(Settings.clearInputAfterSend)) {
+            val now = SystemClock.elapsedRealtime()
+            dropExpiredSends(now)
+            sendsAwaitingClear.addLast(now)
+        }
         if (line.isNotBlank()) history = listOf(line) + history.filter { it != line }
         return true
     }
@@ -359,20 +362,34 @@ class ProfileSession internal constructor(
     /** Whether this game's settings can be read and changed: once its profile has loaded. */
     val settingsAvailable: Boolean get() = status["profile"]?.endsWith(LOADED) == true
 
-    // Each game is asked for its settings as it loads, a game just added in the app first given its defaults
+    // Each game is asked for its settings as it loads, a game just added in the app first given its defaults, and one
+    // that was there before the input line could keep a sent command told to go on clearing it, as the app did
     private fun onLoaded() {
-        if (Settings.awaitsDefaults(name)) giveDefaults()
+        when {
+            Settings.awaitsDefaults(name) -> giveDefaults()
+            Settings.awaitsInputClear(name) -> give(mapOf(Settings.clearInputAfterSend.key to true))
+        }
         refreshSettings()
     }
 
-    // The app's values the player changed, which then are the game's own; for the rest the game keeps Mudlet's, some of
-    // which Mudlet picks for the game
+    // The app's values that are not what Mudlet starts a profile with, which then are the game's own: those the player
+    // changed, and the app's own default where that is another. For the rest the game keeps Mudlet's, some of which
+    // Mudlet picks for the game
     private fun giveDefaults() {
-        val changed = Settings.mudletSettings.filter { it.changed }
-        if (changed.isEmpty()) return Settings.setAwaitsDefaults(name, false)
+        val own = Settings.mudletSettings.filter { it.differsFromMudlets }
+        if (own.isEmpty()) given() else give(own.associate { it.key to it.valueToMudlet() })
+    }
+
+    // The game has [values] as its own once Mudlet answers
+    private fun give(values: Map<String, Any>) {
         val id = newRequestId()
         defaultsRequests.add(id)
-        if (!sendSettings(Requests.setSettings(changed.associate { it.key to it.valueToMudlet() }, id))) defaultsRequests.remove(id)
+        if (!sendSettings(Requests.setSettings(values, id))) defaultsRequests.remove(id)
+    }
+
+    private fun given() {
+        Settings.setAwaitsDefaults(name, false)
+        Settings.setAwaitsInputClear(name, false)
     }
 
     private fun sendSettings(request: JSONObject): Boolean {
@@ -388,7 +405,7 @@ class ProfileSession internal constructor(
         if (id == null || !settingsRequests.remove(id)) return
         settings.putAll(message.values)
         if (message.refused.isNotEmpty()) Log.w(TAG, "Mudlet did not take these settings: ${message.refused}")
-        if (defaultsRequests.remove(id)) Settings.setAwaitsDefaults(name, false)
+        if (defaultsRequests.remove(id)) given()
     }
 
     internal fun sendScreenSize(size: Pair<Int, Int>) {

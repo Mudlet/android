@@ -91,7 +91,7 @@ object MapBehindText {
      */
     fun alpha(foreground: Int, background: Int, tones: Tones = Tones.ANY): Float {
         // The background shows where the map is transparent, so it is among the colours weighed
-        val lightest = channels(tones.lightest, background, ::max)
+        val lightest = channels(Tones.ANY.lightest, background, ::max)
         val darkest = channels(tones.darkest, background, ::min)
         // In hundredths, down from the most: the colours blended spread from the background's as the alpha grows. The
         // two ends bound every colour between only while the text's luminance is not between them too, which up to

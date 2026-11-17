@@ -107,6 +107,29 @@ def wait_status(c, key, pred, msgs, timeout=30):
     return c.wait_for(lambda m: m["t"] == "status" and m["key"] == key and pred(m["value"]), timeout=timeout, collect=msgs)
 
 
+diag_lines = []
+diag_at = 0
+
+
+def map_diag(name):
+    """DIAG, not for merging: what the engine's draws since the last call came to."""
+    global diag_at
+    with open(LOG, errors="replace") as f:
+        f.seek(diag_at)
+        text = f.read()
+        diag_at = f.tell()
+    for kind in ("app", "mapper"):
+        rows = [dict(p.split("=") for p in l.split()[3:]) | {"size": l.split()[2]} for l in text.splitlines() if l.startswith(f"MAPDIAG {kind} ")]
+        if not rows:
+            continue
+        med = lambda key, some: sorted(int(r[key]) for r in some)[len(some) // 2] if some else 0
+        same = [r for r in rows if r["same_png"] == "1"]
+        nothing = [r for r in same if r["same_view"] == "1" and r["same_info"] == "1"]
+        diag_lines.append(f"{name:24} {kind:6} draws {len(rows):4}  same png {len(same):4}  whole frame the same {len(nothing):4}  "
+                          f"draw median {med('draw_us', rows):6} us  encode median {med('encode_us', rows):6} us  png median {med('png', rows):7} B  "
+                          f"sizes {sorted({r['size'] for r in rows})}")
+
+
 def main():
     port = fake_telnet.start_in_thread()
     checks = engine_basics
@@ -117,18 +140,23 @@ def main():
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
             checks()
+            map_diag(checks.__name__)
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
         check(False, f"stopped in {checks.__name__}: {e!r}")
         for proc in engines:
             if proc.poll() is None:
                 proc.kill()
+    print("\nMAPDIAG summary (draws of a map whose PNG, view and info are the last frame's over again were for nothing)")
+    for line in diag_lines:
+        print(line)
     if failures:
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
-            print(masked(f.read())[-4000:])
+            print("\n".join(l for l in masked(f.read()).splitlines() if not l.startswith("MAPDIAG"))[-4000:])
         sys.exit(1)
     print("\nall passed")
+    sys.exit("DIAG: red by design, so the summary is near the log's end")
 
 
 def engine_basics(port):

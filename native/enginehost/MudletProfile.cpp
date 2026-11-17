@@ -6,10 +6,12 @@
 
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QHash>
 #include <QIcon>
+#include <QMap>
 #include <QImage>
 #include <QImageReader>
 #include <QPainter>
@@ -18,6 +20,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <cstdio>
 #include <utility>
 
 namespace {
@@ -1357,6 +1360,44 @@ void MudletProfile::pushCommands()
     mFrontend->commands(commands);
 }
 
+// DIAG, not for merging: one line a draw, for the host test to count
+namespace {
+struct MapDiagLast
+{
+    QByteArray png;
+    std::optional<MapViewInfo> view;
+    QString info;
+};
+QString mapDiagInfo(const MapInfo& info)
+{
+    QString text = info.background + QString::number(info.backgroundAlpha);
+    for (const MapInfoLine& line : info.lines) {
+        text += QLatin1Char('|') + line.text + line.color + QString::number(line.bold) + QString::number(line.italic);
+    }
+    return text;
+}
+void mapDiag(const char* map, const void* profile, const MapFrame& frame, qint64 drawNs, qint64 encodeNs)
+{
+    static QMap<std::pair<const void*, QByteArray>, MapDiagLast> lasts;
+    MapDiagLast& last = lasts[{profile, QByteArray(map)}];
+    const QString info = mapDiagInfo(frame.info);
+    fprintf(stderr,
+            "MAPDIAG %s %dx%d png=%lld draw_us=%lld encode_us=%lld same_png=%d same_view=%d same_info=%d rooms=%lld\n",
+            map,
+            frame.size.width(),
+            frame.size.height(),
+            static_cast<long long>(frame.png.size()),
+            static_cast<long long>(drawNs / 1000),
+            static_cast<long long>(encodeNs / 1000),
+            frame.png == last.png,
+            frame.view == last.view,
+            info == last.info,
+            static_cast<long long>(frame.view ? frame.view->rooms.size() : 0));
+    fflush(stderr);
+    last = MapDiagLast{frame.png, frame.view, info};
+}
+} // namespace
+
 void MudletProfile::pushMap(const std::optional<QSize>& mapperSize)
 {
     mMapSize = mapperSize;
@@ -1382,9 +1423,12 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
     }
     image.setDevicePixelRatio(scale);
     image.fill(Qt::transparent);
+    QElapsedTimer diagTimer;
+    diagTimer.start();
     QPainter painter(&image);
     const bool drawn = mSession->renderMap(painter, size);
     painter.end();
+    const qint64 diagDraw = diagTimer.nsecsElapsed();
     if (!drawn) {
         qWarning("MudletEngine: the map was not drawn: %s", qPrintable(mSession->errorString()));
         return std::nullopt;
@@ -1394,7 +1438,10 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
         qWarning("MudletEngine: the map could not be made a PNG");
         return std::nullopt;
     }
-    return MapFrame{png, size, mSession->mapViewOnly(), mapView(MapTarget::mapper), mapInfo(MapTarget::mapper)};
+    const qint64 diagEncode = diagTimer.nsecsElapsed() - diagDraw;
+    MapFrame diagFrame{png, size, mSession->mapViewOnly(), mapView(MapTarget::mapper), mapInfo(MapTarget::mapper)};
+    mapDiag("mapper", this, diagFrame, diagDraw, diagEncode);
+    return diagFrame;
 }
 
 // Nothing while none is asked for: setAppMapSize() said so once
@@ -1416,9 +1463,12 @@ std::optional<MapFrame> MudletProfile::drawAppMap()
     }
     image.setDevicePixelRatio(mAppMapScale);
     image.fill(Qt::transparent);
+    QElapsedTimer diagTimer;
+    diagTimer.start();
     QPainter painter(&image);
     const bool drawn = mSession->renderAppMap(painter, mAppMapSize);
     painter.end();
+    const qint64 diagDraw = diagTimer.nsecsElapsed();
     if (!drawn) {
         warnAppMapUndrawn(mSession->errorString());
         return std::nullopt;
@@ -1429,7 +1479,10 @@ std::optional<MapFrame> MudletProfile::drawAppMap()
         return std::nullopt;
     }
     mAppMapUndrawn.clear();
-    return MapFrame{png, mAppMapSize, mSession->mapViewOnly(), mapView(MapTarget::app), mapInfo(MapTarget::app)};
+    const qint64 diagEncode = diagTimer.nsecsElapsed() - diagDraw;
+    MapFrame diagFrame{png, mAppMapSize, mSession->mapViewOnly(), mapView(MapTarget::app), mapInfo(MapTarget::app)};
+    mapDiag("app", this, diagFrame, diagDraw, diagEncode);
+    return diagFrame;
 }
 
 std::optional<MapViewInfo> MudletProfile::mapView(MapTarget map) const

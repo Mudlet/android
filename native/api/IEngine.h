@@ -169,4 +169,19 @@ public:
     // Changes them as Lua's setConfig() does, putting each key it does not take into refused with why; else why none
     // were changed
     virtual QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) = 0;
+    // The profile's triggers, aliases and scripts, as the desktop's script editor reads and changes them
+    // (THeadlessSession's scriptItems() and the rest); each gives why it did not where it did not
+    enum class ScriptItemKind { trigger, alias, script };
+    // Depth first, each folder before what is in it, in the editor's order
+    virtual std::variant<QList<ScriptItemInfo>, QString> scriptItems(ScriptItemKind kind) const = 0;
+    // All of an item's fields, by the names editScriptItem() takes
+    virtual std::variant<QVariantMap, QString> scriptItem(ScriptItemKind kind, int item) = 0;
+    // The new item's id: in the folder parent, or at the top level for 0, at position among the items shown there
+    virtual std::variant<int, QString> addScriptItem(ScriptItemKind kind, int parent, int position, bool folder, const QString& name) = 0;
+    // Sets the fields given, keeps the rest, and saves the item as the editor's save does; a compile error is no
+    // refusal, as scriptItem() then gives it
+    virtual QString editScriptItem(ScriptItemKind kind, int item, const QVariantMap& fields) = 0;
+    virtual QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) = 0;
+    virtual QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) = 0;
+    virtual QString deleteScriptItem(ScriptItemKind kind, int item) = 0;
 };

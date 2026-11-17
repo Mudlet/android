@@ -616,6 +616,123 @@ class ProtocolTest {
     }
 
     @Test
+    fun scriptItemsDecode() {
+        val list = FrameReader.parse(
+            JSONObject(
+                """{"t":"scriptItems","kind":"trigger","re":4,"items":[""" +
+                    """{"id":1,"parent":0,"name":"Combat","folder":true,"enabled":true,"active":true,"package":"generic_mapper","error":""},"junk",""" +
+                    """{"id":3,"parent":1,"name":"Hit","folder":false,"enabled":false,"active":false,"package":"","error":"bad pattern"}]}""",
+            ),
+        ) as EngineMessage.ScriptItems
+        assertEquals(
+            listOf(
+                ScriptItemNode(1, 0, "Combat", folder = true, enabled = true, active = true, packageName = "generic_mapper", error = ""),
+                ScriptItemNode(3, 1, "Hit", folder = false, enabled = false, active = false, packageName = "", error = "bad pattern"),
+            ),
+            list.items,
+        )
+        assertEquals(4, list.replyTo)
+    }
+
+    @Test
+    fun anItemOfEachKindDecodes() {
+        fun item(json: String) = (FrameReader.parse(JSONObject(json)) as EngineMessage.ScriptItemFields).item
+        val node = """"id":3,"parent":1,"name":"Hit","folder":false,"enabled":true,"active":true,"package":"","error":"","script":"send('kick')""""
+        assertEquals(
+            ScriptItem(
+                ScriptItemNode(3, 1, "Hit", folder = false, enabled = true, active = true, packageName = "", error = ""),
+                "send('kick')",
+                ScriptItemDetails.Trigger(
+                    patterns = listOf(TriggerPattern("^You hit (\\w+)$", TriggerPatternType.REGEX), TriggerPattern("1", TriggerPatternType.SPACER), TriggerPattern("x", TriggerPatternType.SUBSTRING)),
+                    command = "",
+                    lineDelta = 2,
+                    matchAll = true,
+                    filter = false,
+                    fireLength = 0,
+                    sound = false,
+                    soundFile = "",
+                    highlight = true,
+                    highlightFg = 0xFFFF0000.toInt(),
+                    highlightBg = null,
+                ),
+            ),
+            item(
+                """{"t":"scriptItem","kind":"trigger","fields":{$node,"patterns":[{"text":"^You hit (\\w+)$","type":"regex"},{"text":"1","type":"spacer"},""" +
+                    """{"text":"x","type":"later"}],"command":"","lineDelta":2,"matchAll":true,"filter":false,"fireLength":0,"sound":false,"soundFile":"",""" +
+                    """"highlight":true,"highlightFg":"#ff0000","highlightBg":""}}""",
+            ),
+        )
+        assertEquals(
+            ScriptItemDetails.Alias("^k (\\w+)$", "kick %1"),
+            item("""{"t":"scriptItem","kind":"alias","fields":{$node,"pattern":"^k (\\w+)$","command":"kick %1"}}""")?.details,
+        )
+        assertEquals(
+            ScriptItemDetails.Script(listOf("sysLoadEvent", "gmcp.Char")),
+            item("""{"t":"scriptItem","kind":"script","fields":{$node,"eventHandlers":["sysLoadEvent","gmcp.Char"]}}""")?.details,
+        )
+        assertNull(item("""{"t":"scriptItem","kind":"timer","fields":{$node}}"""))
+    }
+
+    @Test
+    fun theScriptItemRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "scriptItems", "kind" to "alias", "id" to 1L), Requests.scriptItems(ScriptItemKind.ALIAS, 1).toMap())
+        assertEquals(mapOf("t" to "scriptItem", "kind" to "script", "item" to 4, "id" to 2L), Requests.scriptItem(ScriptItemKind.SCRIPT, 4, 2).toMap())
+        assertEquals(
+            mapOf("t" to "addScriptItem", "kind" to "trigger", "parent" to 0, "position" to 2, "folder" to true, "name" to "Combat", "id" to 3L),
+            Requests.addScriptItem(ScriptItemKind.TRIGGER, 0, 2, true, "Combat", 3).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "enableScriptItem", "kind" to "trigger", "item" to 4, "enabled" to false, "id" to 5L),
+            Requests.enableScriptItem(ScriptItemKind.TRIGGER, 4, false, 5).toMap(),
+        )
+        assertEquals(
+            mapOf("t" to "moveScriptItem", "kind" to "alias", "item" to 4, "parent" to 1, "position" to 0),
+            Requests.moveScriptItem(ScriptItemKind.ALIAS, 4, 1, 0).toMap(),
+        )
+        assertEquals(mapOf("t" to "deleteScriptItem", "kind" to "script", "item" to 4), Requests.deleteScriptItem(ScriptItemKind.SCRIPT, 4).toMap())
+    }
+
+    @Test
+    fun anEditCarriesEveryFieldOfItsKind() {
+        val node = ScriptItemNode(4, 1, "Hit", folder = false, enabled = true, active = false, packageName = "", error = "")
+        val trigger = ScriptItemDetails.Trigger(
+            patterns = listOf(TriggerPattern("You hit", TriggerPatternType.START_OF_LINE)),
+            command = "cheer",
+            lineDelta = -1,
+            matchAll = false,
+            filter = true,
+            fireLength = 3,
+            sound = true,
+            soundFile = "hit.wav",
+            highlight = true,
+            highlightFg = 0xFF00FF7F.toInt(),
+            highlightBg = null,
+        )
+        assertEquals(
+            mapOf(
+                "t" to "editScriptItem",
+                "kind" to "trigger",
+                "item" to 4,
+                "id" to 6L,
+                "fields" to mapOf(
+                    "name" to "Hit", "script" to "", "patterns" to listOf(mapOf("text" to "You hit", "type" to "startOfLine")), "command" to "cheer",
+                    "lineDelta" to -1, "matchAll" to false, "filter" to true, "fireLength" to 3, "sound" to true, "soundFile" to "hit.wav",
+                    "highlight" to true, "highlightFg" to "#00ff7f", "highlightBg" to "",
+                ),
+            ),
+            Requests.editScriptItem(ScriptItem(node, "", trigger), 6).toMap(),
+        )
+        assertEquals(
+            mapOf("name" to "Hit", "script" to "echo(1)", "pattern" to "^k$", "command" to "kick"),
+            (Requests.editScriptItem(ScriptItem(node, "echo(1)", ScriptItemDetails.Alias("^k$", "kick")), 7).toMap()["fields"]),
+        )
+        assertEquals(
+            mapOf("name" to "Hit", "script" to "", "eventHandlers" to listOf("sysLoadEvent")),
+            (Requests.editScriptItem(ScriptItem(node, "", ScriptItemDetails.Script(listOf("sysLoadEvent"))), 8).toMap()["fields"]),
+        )
+    }
+
+    @Test
     fun theRoomRequestsCarryWhatTheEngineReads() {
         assertEquals(mapOf("t" to "showMapLevel", "map" to "app", "level" to -1), Requests.showMapLevel(MapTarget.APP, -1).toMap())
         assertEquals(mapOf("t" to "showMapArea", "map" to "mapper", "area" to 2), Requests.showMapArea(MapTarget.MAPPER, 2).toMap())

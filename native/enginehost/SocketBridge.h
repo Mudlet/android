@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 22;
+    static constexpr int protocolVersion = 23;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -134,6 +134,15 @@ protected:
     void addRoom(const QJsonObject& message);
     QString renameArea(const QJsonObject& message);
     void mapEnvs();
+    void scriptItems(const QJsonObject& message);
+    void scriptItem(const QJsonObject& message);
+    void addScriptItem(const QJsonObject& message);
+    void editScriptItem(const QJsonObject& message);
+    void enableScriptItem(const QJsonObject& message);
+    QString moveScriptItem(const QJsonObject& message);
+    QString deleteScriptItem(const QJsonObject& message);
+    // The item of message's kind, as the answer to request, or an error naming request
+    void sendScriptItem(const QString& request, const QJsonObject& message, int item);
     void getImage(const QJsonObject& message);
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
     void sendIfChanged(QJsonObject& kept, QJsonObject message);

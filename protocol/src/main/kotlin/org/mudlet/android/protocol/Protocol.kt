@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 22
+const val PROTOCOL_VERSION = 23
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -320,10 +320,104 @@ data class MapEnv(val env: Int, val color: Int)
 /** `#rrggbb` as an opaque ARGB colour; null for anything else. */
 fun rgbColor(text: String): Int? = if (text.length == 7 && text[0] == '#') text.substring(1).toIntOrNull(16)?.let { it or OPAQUE } else null
 
+/** An ARGB colour as `#rrggbb`, its alpha dropped; empty for null. */
+fun rgbText(color: Int?): String = if (color == null) "" else "#%06x".format(color and 0xFFFFFF)
+
 private const val OPAQUE = 0xFF000000.toInt()
 
 /** An area of the map that has rooms (docs/protocol.md, `areas`). */
 data class MapArea(val id: Int, val name: String)
+
+/** Which of the profile's items Requests.scriptItems and the rest act on, as the desktop's script editor groups them. */
+enum class ScriptItemKind(val wire: String) {
+    TRIGGER("trigger"),
+    ALIAS("alias"),
+    SCRIPT("script"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String) = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/**
+ * A trigger, alias or script as the desktop's script editor lists it (docs/protocol.md, `scriptItems`): the folder it is
+ * in, [parent] (0 for the top level), [enabled] as its switch shows it, [active] while it runs (switched on, compiled, and
+ * in folders that run), the package or module it came with, [packageName] (empty for the player's own), and [error], why
+ * it cannot run, or empty.
+ */
+data class ScriptItemNode(
+    val id: Int,
+    val parent: Int,
+    val name: String,
+    val folder: Boolean,
+    val enabled: Boolean,
+    val active: Boolean,
+    val packageName: String,
+    val error: String,
+)
+
+/** How a trigger's pattern matches, as the desktop editor's pattern types; one this client does not know is [SUBSTRING]. */
+enum class TriggerPatternType(val wire: String) {
+    SUBSTRING("substring"),
+    REGEX("regex"),
+    START_OF_LINE("startOfLine"),
+    EXACT("exact"),
+    LUA("lua"),
+
+    /** Its text is the number of lines. */
+    SPACER("spacer"),
+
+    /** Its text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`. */
+    COLOR("color"),
+    PROMPT("prompt"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String) = entries.firstOrNull { it.wire == wire } ?: SUBSTRING
+    }
+}
+
+data class TriggerPattern(val text: String, val type: TriggerPatternType)
+
+/** What an item has of its own kind, beside what every item has (docs/protocol.md, `scriptItem`). */
+sealed interface ScriptItemDetails {
+    val kind: ScriptItemKind
+
+    /**
+     * [lineDelta] is the lines its patterns may be spread over, -1 for a trigger of one line; [fireLength] the lines it
+     * stays open for; [highlightFg] and [highlightBg] opaque ARGB, null to keep the text's colour.
+     */
+    data class Trigger(
+        val patterns: List<TriggerPattern>,
+        val command: String,
+        val lineDelta: Int,
+        val matchAll: Boolean,
+        val filter: Boolean,
+        val fireLength: Int,
+        val sound: Boolean,
+        val soundFile: String,
+        val highlight: Boolean,
+        val highlightFg: Int?,
+        val highlightBg: Int?,
+    ) : ScriptItemDetails {
+        override val kind get() = ScriptItemKind.TRIGGER
+    }
+
+    /** [command] is what it sends in place of what was typed. */
+    data class Alias(val pattern: String, val command: String) : ScriptItemDetails {
+        override val kind get() = ScriptItemKind.ALIAS
+    }
+
+    data class Script(val eventHandlers: List<String>) : ScriptItemDetails {
+        override val kind get() = ScriptItemKind.SCRIPT
+    }
+}
+
+/** All of an item's fields, as Requests.scriptItem asks for them and Requests.editScriptItem saves them: [script] is its Lua. */
+data class ScriptItem(val node: ScriptItemNode, val script: String, val details: ScriptItemDetails) {
+    val kind get() = details.kind
+}
 
 /** Which map [Requests.moveMap] and [Requests.followPlayer] act on: the mapper window's ([EngineMessage.Map]) or the app's own ([EngineMessage.AppMap]). */
 enum class MapTarget(val wire: String) {
@@ -578,6 +672,15 @@ sealed interface EngineMessage {
     /** The answer to Requests.mapEnvs: the environments a room can be given, by number. */
     data class Envs(val envs: List<MapEnv>, val replyTo: Any?) : EngineMessage
 
+    /** The answer to Requests.scriptItems: the items depth first, each folder before what is in it, in the desktop editor's order. */
+    data class ScriptItems(val items: List<ScriptItemNode>, val replyTo: Any?) : EngineMessage
+
+    /**
+     * The answer to Requests.scriptItem and the changes that give an item, as it now is; null for an item of a kind this
+     * client does not know.
+     */
+    data class ScriptItemFields(val item: ScriptItem?, val replyTo: Any?) : EngineMessage
+
     /**
      * The answer to getSettings or setSettings: [values] by Lua's getConfig() keys, each a Boolean, a Double or a
      * String, as the profile holds it now, a key the engine does not know left out; [refused] the keys setSettings did
@@ -824,6 +927,60 @@ object Requests {
     /** Answered by [EngineMessage.Envs] with [id] as its replyTo, or an Error. */
     fun mapEnvs(id: Long): JSONObject = JSONObject().put("t", "mapEnvs").put("id", id)
 
+    /** Answered by [EngineMessage.ScriptItems] with [id] as its replyTo, or an Error: the profile's items of [kind]. */
+    fun scriptItems(kind: ScriptItemKind, id: Long): JSONObject = JSONObject().put("t", "scriptItems").put("kind", kind.wire).put("id", id)
+
+    /** Answered by [EngineMessage.ScriptItemFields] with [id] as its replyTo, or an Error: all the fields of the [kind] item [item]. */
+    fun scriptItem(kind: ScriptItemKind, item: Int, id: Long): JSONObject = JSONObject().put("t", "scriptItem").put("kind", kind.wire).put("item", item).put("id", id)
+
+    /**
+     * Answered by [EngineMessage.ScriptItemFields], the new item, with [id] as its replyTo, or an Error: an item of [kind], or a
+     * [folder], named [name], in the folder [parent] (0 for the top level) at [position] among the items there. It is
+     * switched on, but runs only from its first [editScriptItem].
+     */
+    fun addScriptItem(kind: ScriptItemKind, parent: Int, position: Int, folder: Boolean, name: String, id: Long): JSONObject = JSONObject()
+        .put("t", "addScriptItem").put("kind", kind.wire).put("parent", parent).put("position", position).put("folder", folder).put("name", name)
+        .put("id", id)
+
+    /**
+     * Answered by [EngineMessage.ScriptItemFields], the item as it now is, with [id] as its replyTo, or an Error: [item] saved
+     * as the desktop editor saves it. A compile error is no refusal: the answer's [ScriptItemNode.error] gives it.
+     */
+    fun editScriptItem(item: ScriptItem, id: Long): JSONObject {
+        val fields = JSONObject().put("name", item.node.name).put("script", item.script)
+        when (val details = item.details) {
+            is ScriptItemDetails.Trigger ->
+                fields
+                    .put("patterns", JSONArray(details.patterns.map { JSONObject().put("text", it.text).put("type", it.type.wire) }))
+                    .put("command", details.command)
+                    .put("lineDelta", details.lineDelta)
+                    .put("matchAll", details.matchAll)
+                    .put("filter", details.filter)
+                    .put("fireLength", details.fireLength)
+                    .put("sound", details.sound)
+                    .put("soundFile", details.soundFile)
+                    .put("highlight", details.highlight)
+                    .put("highlightFg", rgbText(details.highlightFg))
+                    .put("highlightBg", rgbText(details.highlightBg))
+
+            is ScriptItemDetails.Alias -> fields.put("pattern", details.pattern).put("command", details.command)
+
+            is ScriptItemDetails.Script -> fields.put("eventHandlers", JSONArray(details.eventHandlers))
+        }
+        return JSONObject().put("t", "editScriptItem").put("kind", item.kind.wire).put("item", item.node.id).put("fields", fields).put("id", id)
+    }
+
+    /** Answered by [EngineMessage.ScriptItemFields] with [id] as its replyTo, or an Error, as for one that does not compile: [item] switched on or off. */
+    fun enableScriptItem(kind: ScriptItemKind, item: Int, enabled: Boolean, id: Long): JSONObject = JSONObject()
+        .put("t", "enableScriptItem").put("kind", kind.wire).put("item", item).put("enabled", enabled).put("id", id)
+
+    /** [item] moved into the folder [parent] (0 for the top level) at [position] among the items there. Answered only by an Error, when refused. */
+    fun moveScriptItem(kind: ScriptItemKind, item: Int, parent: Int, position: Int): JSONObject = JSONObject()
+        .put("t", "moveScriptItem").put("kind", kind.wire).put("item", item).put("parent", parent).put("position", position)
+
+    /** [item] gone, and all in it for a folder. Answered only by an Error, when refused. */
+    fun deleteScriptItem(kind: ScriptItemKind, item: Int): JSONObject = JSONObject().put("t", "deleteScriptItem").put("kind", kind.wire).put("item", item)
+
     /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
     fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
 
@@ -1049,6 +1206,13 @@ class FrameReader(input: InputStream) {
                 o.opt("re"),
             )
 
+            "scriptItems" -> EngineMessage.ScriptItems(objects(o.optJSONArray("items")).map(::parseScriptItemNode), o.opt("re"))
+
+            "scriptItem" -> EngineMessage.ScriptItemFields(
+                o.optJSONObject("fields")?.let { fields -> ScriptItemKind.fromWire(o.optString("kind"))?.let { parseScriptItem(it, fields) } },
+                o.opt("re"),
+            )
+
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),
                 o.optString("host"),
@@ -1094,6 +1258,40 @@ class FrameReader(input: InputStream) {
         private fun optInt(o: JSONObject, key: String): Int? = if (o.has(key)) o.getInt(key) else null
 
         // A whole number as a Double too, so a setting reads the same however the engine wrote it
+        private fun parseScriptItemNode(i: JSONObject) = ScriptItemNode(
+            id = i.optInt("id"),
+            parent = i.optInt("parent"),
+            name = i.optString("name"),
+            folder = i.optBoolean("folder"),
+            enabled = i.optBoolean("enabled"),
+            active = i.optBoolean("active"),
+            packageName = i.optString("package"),
+            error = i.optString("error"),
+        )
+
+        private fun parseScriptItem(kind: ScriptItemKind, f: JSONObject): ScriptItem {
+            val details = when (kind) {
+                ScriptItemKind.TRIGGER -> ScriptItemDetails.Trigger(
+                    patterns = objects(f.optJSONArray("patterns")).map { TriggerPattern(it.optString("text"), TriggerPatternType.fromWire(it.optString("type"))) },
+                    command = f.optString("command"),
+                    lineDelta = f.optInt("lineDelta", -1),
+                    matchAll = f.optBoolean("matchAll"),
+                    filter = f.optBoolean("filter"),
+                    fireLength = f.optInt("fireLength"),
+                    sound = f.optBoolean("sound"),
+                    soundFile = f.optString("soundFile"),
+                    highlight = f.optBoolean("highlight"),
+                    highlightFg = rgbColor(f.optString("highlightFg")),
+                    highlightBg = rgbColor(f.optString("highlightBg")),
+                )
+
+                ScriptItemKind.ALIAS -> ScriptItemDetails.Alias(f.optString("pattern"), f.optString("command"))
+
+                ScriptItemKind.SCRIPT -> ScriptItemDetails.Script(parseStrings(f.optJSONArray("eventHandlers")))
+            }
+            return ScriptItem(parseScriptItemNode(f), f.optString("script"), details)
+        }
+
         private fun settingValue(value: Any?): Any? = when (value) {
             is Boolean, is String -> value
             is Number -> value.toDouble()

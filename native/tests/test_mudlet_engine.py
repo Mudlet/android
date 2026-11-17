@@ -115,7 +115,7 @@ def main():
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_moves, map_rooms, map_edits, map_download, profile_settings):
+                       map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -3482,6 +3482,210 @@ def profile_settings():
         saved = f.read()
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved,
           f"the changes are in the profile's save: {save}")
+
+
+def script_items():
+    """Triggers, aliases and scripts as the desktop's script editor edits them: scriptItems listing them as it does,
+    without the temporary ones; addScriptItem at a place among a folder's items; editScriptItem saving as its save does,
+    a trigger that does not compile switched off with its error, a trigger that runs, an alias given no name and one
+    that would call itself refused, a script run with its event handler; enableScriptItem, moveScriptItem and
+    deleteScriptItem; the edits kept by the save and read back once the profile is opened again; and the refusals."""
+    profile = "Script Items Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+
+    def ask(request):
+        return c.ask(request, answers=("scriptItems", "scriptItem", "error"), collect=seen)
+
+    requests = ({"t": "scriptItems", "kind": "trigger"}, {"t": "scriptItem", "kind": "trigger", "item": 1},
+                {"t": "addScriptItem", "kind": "trigger", "parent": 0, "position": 0, "folder": False, "name": "x"},
+                {"t": "editScriptItem", "kind": "trigger", "item": 1, "fields": {}},
+                {"t": "enableScriptItem", "kind": "trigger", "item": 1, "enabled": True},
+                {"t": "moveScriptItem", "kind": "trigger", "item": 1, "parent": 0, "position": 0},
+                {"t": "deleteScriptItem", "kind": "trigger", "item": 1})
+    for request in requests:
+        m = ask(request)
+        check(m.get("message") == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the script items' profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    def lua(code):
+        """Where in seen what the code shows starts."""
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        wait_status(c, "luaResult", lambda v: True, seen)
+        return since
+
+    def shown_after(since, text):
+        return [m["text"] for m in seen[since:] if m["t"] in ("line", "tail") and text in m["text"]]
+
+    def wait_text(text, since):
+        """The text of the first line since that holds text, waiting for one if none came yet."""
+        already = shown_after(since, text)
+        if already:
+            return already[0]
+        return c.wait_for(lambda m: m["t"] in ("line", "tail") and text in m["text"], timeout=10, collect=seen)["text"]
+
+    def add(kind, parent, position, name, folder=False):
+        return ask({"t": "addScriptItem", "kind": kind, "parent": parent, "position": position, "folder": folder, "name": name})
+
+    def edit(kind, item, **fields):
+        return ask({"t": "editScriptItem", "kind": kind, "item": item, "fields": fields})
+
+    def listed(kind):
+        return ask({"t": "scriptItems", "kind": kind}).get("items", [])
+
+    def children(kind, parent):
+        return [i["name"] for i in listed(kind) if i["parent"] == parent]
+
+    since = lua('permRegexTrigger("Lua made", "", {"^lua$"}, "") echo("temp " .. tempTrigger("zzz", "") .. "\\n")')
+    temp = int(re.search(r"temp (\d+)", wait_text("temp ", since)).group(1))
+    m = ask({"t": "scriptItems", "kind": "trigger"})
+    names = [i["name"] for i in m.get("items", [])]
+    check(m.get("kind") == "trigger" and "Lua made" in names and temp not in [i["id"] for i in m.get("items", [])],
+          f"scriptItems lists the triggers a script made, but not the temporary ones: {m}")
+    m = ask({"t": "scriptItem", "kind": "trigger", "item": temp})
+    check(m.get("message") == f"scriptItem: There is no item {temp} of that kind.", f"nor gives one: {m}")
+
+    m = add("trigger", 0, 9999, "Combat", folder=True)
+    fields = m.get("fields", {})
+    combat = fields.get("id")
+    check(m.get("t") == "scriptItem" and m.get("kind") == "trigger" and {k: fields.get(k) for k in (
+        "parent", "name", "folder", "enabled", "active", "package", "error", "script", "patterns", "lineDelta")} == {
+        "parent": 0, "name": "Combat", "folder": True, "enabled": True, "active": False, "package": "", "error": "",
+        "script": "", "patterns": [], "lineDelta": -1} and [i["name"] for i in listed("trigger")][-1:] == ["Combat"],
+        f"addScriptItem makes a folder past the end, switched on but not running until saved: {m}")
+    m = edit("trigger", combat)
+    check(m.get("fields", {}).get("active") is True, f"an edit that changes nothing saves it, and it runs: {m}")
+    hit = add("trigger", combat, 0, "Hit").get("fields", {}).get("id")
+    miss = add("trigger", combat, 0, "Miss").get("fields", {}).get("id")
+    dodge = add("trigger", combat, 1, "Dodge").get("fields", {}).get("id")
+    check(children("trigger", combat) == ["Miss", "Dodge", "Hit"], f"each at its place among the folder's items: {listed('trigger')}")
+    c.send({"t": "moveScriptItem", "kind": "trigger", "item": hit, "parent": combat, "position": 0})
+    c.send({"t": "moveScriptItem", "kind": "trigger", "item": miss, "parent": combat, "position": 99})
+    check(children("trigger", combat) == ["Hit", "Dodge", "Miss"], f"moveScriptItem moves them within it: {listed('trigger')}")
+    inner = add("trigger", combat, 99, "Inner", folder=True).get("fields", {}).get("id")
+    c.send({"t": "moveScriptItem", "kind": "trigger", "item": dodge, "parent": inner, "position": 0})
+    check(children("trigger", combat) == ["Hit", "Miss", "Inner"] and children("trigger", inner) == ["Dodge"],
+          f"and into another folder: {listed('trigger')}")
+    c.send({"t": "deleteScriptItem", "kind": "trigger", "item": inner})
+    check(children("trigger", combat) == ["Hit", "Miss"] and ask({"t": "scriptItem", "kind": "trigger", "item": dodge}).get("t") == "error",
+          f"deleteScriptItem deletes a folder with what is in it: {listed('trigger')}")
+
+    m = edit("trigger", hit, script="echo(")
+    fields = m.get("fields", {})
+    check(fields.get("error") and fields.get("enabled") is False and fields.get("active") is False,
+          f"a trigger saved with no patterns, and Lua that does not compile, is switched off with its error: {m}")
+    error = fields.get("error")
+    m = ask({"t": "enableScriptItem", "kind": "trigger", "item": hit, "enabled": True})
+    check(m.get("message") == f"enableScriptItem: {error}", f"and refused when switched on, with its error: {m}")
+    patterns = [{"text": "^You hit the (\\w+)$", "type": "regex"}, {"text": "1", "type": "spacer"}, {"text": "rat", "type": "substring"}]
+    m = edit("trigger", hit, script='echo("struck " .. matches[2] .. "\\n")', patterns=patterns[:1], highlight=True,
+             highlightFg="#FF0000", highlightBg="", lineDelta=3, fireLength=2)
+    fields = m.get("fields", {})
+    check({k: fields.get(k) for k in ("error", "enabled", "active", "patterns", "highlight", "highlightFg", "highlightBg",
+                                       "lineDelta", "fireLength")} == {
+        "error": "", "enabled": False, "active": False, "patterns": patterns[:1], "highlight": True, "highlightFg": "#ff0000",
+        "highlightBg": "", "lineDelta": -1, "fireLength": 2},
+        f"one that compiles keeps the fields given, -1 lines apart for one pattern, but stays off as it was switched off: {m}")
+    m = ask({"t": "enableScriptItem", "kind": "trigger", "item": hit, "enabled": True})
+    check((m.get("fields", {}).get("enabled"), m.get("fields", {}).get("active")) == (True, True), f"enableScriptItem switches it on: {m}")
+    wait_text("struck rat", lua('feedTriggers("You hit the rat\\n")'))
+    ask({"t": "enableScriptItem", "kind": "trigger", "item": hit, "enabled": False})
+    since = lua('feedTriggers("You hit the bat\\n") echo("all fed\\n")')
+    wait_text("all fed", since)
+    check(not shown_after(since, "struck bat"), f"and off, so it no longer fires: {seen[since:]}")
+    m = edit("trigger", miss, patterns=patterns, lineDelta=2)
+    fields = m.get("fields", {})
+    check((fields.get("patterns"), fields.get("lineDelta"), fields.get("active")) == (patterns, 2, True),
+          f"a new trigger of several patterns keeps its lines apart, and runs once saved: {m}")
+
+    alias = add("alias", 0, 9999, "").get("fields", {}).get("id")
+    m = edit("alias", alias, pattern="^k (\\w+)$", script='echo("kicked " .. matches[2] .. "\\n")')
+    fields = m.get("fields", {})
+    check((fields.get("name"), fields.get("pattern"), fields.get("active")) == ("^k (\\w+)$", "^k (\\w+)$", True),
+          f"an alias given no name takes its pattern, and runs once saved: {m}")
+    wait_text("kicked rat", lua('expandAlias("k rat", false)'))
+    m = edit("alias", alias, command="k again")
+    check(m.get("message") == "editScriptItem: The alias's replacement matches its own pattern, so it would call itself forever.",
+          f"an alias that would call itself is refused: {m}")
+    check(ask({"t": "scriptItem", "kind": "alias", "item": alias}).get("fields", {}).get("command") == "", "and left as it was")
+
+    script = add("script", 0, 9999, "onPing").get("fields", {}).get("id")
+    since = len(seen)
+    m = edit("script", script, eventHandlers=["testPing"],
+             script='function onPing(event) echo("pinged " .. event .. "\\n") end echo("script ran\\n")')
+    check(m.get("fields", {}).get("eventHandlers") == ["testPing"] and m.get("fields", {}).get("active") is True,
+          f"a script is saved with its event handlers: {m}")
+    wait_text("script ran", since)
+    wait_text("pinged testPing", lua('raiseEvent("testPing")'))
+    broken = add("script", 0, 9999, "Broken").get("fields", {}).get("id")
+    m = edit("script", broken, script="function (")
+    check(m.get("fields", {}).get("error") and m.get("fields", {}).get("active") is False,
+          f"a script that does not compile is saved with its error, and does not run: {m}")
+    c.send({"t": "deleteScriptItem", "kind": "script", "item": broken})
+
+    # The temporary trigger made above sits among the top level's items, between "Lua made" and "Combat"
+    last = add("trigger", 0, 9999, "Last").get("fields", {}).get("id")
+    top = children("trigger", 0)
+    between = add("trigger", 0, top.index("Last") if "Last" in top else 0, "Between").get("fields", {}).get("id")
+    check(children("trigger", 0)[-3:] == ["Combat", "Between", "Last"],
+          f"a place among the top level's items counts only those shown, not the temporary ones: {listed('trigger')}")
+    for item in (between, last):
+        c.send({"t": "deleteScriptItem", "kind": "trigger", "item": item})
+
+    for request, message in (
+            ({"t": "scriptItems", "kind": "timer"}, "kind must be trigger, alias or script"),
+            ({"t": "scriptItem", "kind": "alias", "item": 0}, "item must be a whole number from 1"),
+            ({"t": "scriptItem", "kind": "alias", "item": hit + 999}, f"There is no item {hit + 999} of that kind."),
+            ({"t": "addScriptItem", "kind": "trigger", "parent": -1, "position": 0, "folder": False, "name": "x"},
+             "parent must be a whole number from 0"),
+            ({"t": "addScriptItem", "kind": "trigger", "parent": 0, "position": 0, "folder": "no", "name": "x"},
+             "folder must be true or false"),
+            ({"t": "addScriptItem", "kind": "trigger", "parent": hit, "position": 0, "folder": False, "name": "x"},
+             f"There is no folder {hit} of that kind."),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": []}, "fields must be an object"),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": {"id": 3}}, '"id" is not a field of that kind that can be changed.'),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": {"pattern": "x"}}, '"pattern" is not a field of that kind that can be changed.'),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": {"name": 3}}, 'The value given for "name" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": {"lineDelta": -2}}, 'The value given for "lineDelta" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": {"highlightFg": "red"}}, 'The value given for "highlightFg" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "trigger", "item": hit, "fields": {"patterns": [{"text": "x", "type": "later"}]}},
+             'The value given for "patterns" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "script", "item": script, "fields": {"eventHandlers": "testPing"}},
+             'The value given for "eventHandlers" is not one it takes.'),
+            ({"t": "enableScriptItem", "kind": "trigger", "item": hit, "enabled": 1}, "enabled must be true or false"),
+            ({"t": "moveScriptItem", "kind": "trigger", "item": combat, "parent": combat, "position": 0},
+             "A folder cannot be moved into itself or into a folder inside it."),
+            ({"t": "moveScriptItem", "kind": "trigger", "item": miss, "parent": hit, "position": 0}, f"There is no folder {hit} of that kind."),
+            ({"t": "deleteScriptItem", "kind": "trigger", "item": temp}, f"There is no item {temp} of that kind.")):
+        m = ask(request)
+        check(m.get("message") == f"{request['t']}: {message}", f"{request['t']} is refused with {message}: {m}")
+    check(children("trigger", combat) == ["Hit", "Miss"], "and the refusals changed nothing")
+
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    triggers = {i["name"]: i for i in listed("trigger")}
+    combat = triggers.get("Combat", {}).get("id")
+    check(children("trigger", combat) == ["Hit", "Miss"] and triggers.get("Hit", {}).get("enabled") is False and triggers.get("Miss", {}).get("active") is True,
+          f"the save kept the triggers, in their order, each on or off: {triggers}")
+    m = ask({"t": "scriptItem", "kind": "trigger", "item": triggers.get("Miss", {}).get("id", 0)})
+    check((m.get("fields", {}).get("patterns"), m.get("fields", {}).get("lineDelta")) == (patterns, 2), f"with their fields: {m}")
+    scripts = [i["id"] for i in listed("script") if i["name"] == "onPing"]
+    m = ask({"t": "scriptItem", "kind": "script", "item": scripts[0] if scripts else 1})
+    check(m.get("fields", {}).get("eventHandlers") == ["testPing"], f"and the script its event handlers: {m}")
+    check([i["name"] for i in listed("alias")].count("^k (\\w+)$") == 1, "and the alias")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 if __name__ == "__main__":

@@ -366,6 +366,24 @@ struct MapAreaInfo
     QString name;
 };
 
+// A trigger, alias or script of the profile, as the desktop's script editor lists it
+struct ScriptItemInfo
+{
+    int id = 0;
+    // 0 for the top level
+    int parent = 0;
+    QString name;
+    bool folder = false;
+    // Switched on, whether or not it can run
+    bool enabled = false;
+    // Runs: switched on, compiled, and in folders that run
+    bool active = false;
+    // The package or module it came with; empty for the player's own
+    QString package;
+    // Why it cannot run, as plain text
+    QString error;
+};
+
 // Everything the engine tells its host. Every method must be implementable
 // over a byte stream, so arguments are plain values only.
 class IFrontend

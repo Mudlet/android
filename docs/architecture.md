@@ -524,7 +524,7 @@ checkout, skips one already in it and stops the build at one that no longer appl
 first, as a later patch may change the lines an earlier one is checked against. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are thirteen: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are fourteen: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
@@ -537,8 +537,10 @@ as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see
 a room's details, a walk to it, its area's levels, another area or level shown, and the room search ranked best first
 with each room's distance (`0012-headless-map-rooms.patch`), editing the map: a room's details, exits and place,
 a room added beside another or deleted, the player placed, an area renamed and the environments' colours listed
-(`0013-headless-map-edits.patch`), and following a link in a label as the GUI's click does (`followLabelLink()`,
-`0014-headless-label-links.patch`).
+(`0013-headless-map-edits.patch`), following a link in a label as the GUI's click does (`followLabelLink()`,
+`0014-headless-label-links.patch`), and the triggers, aliases and scripts listed, added, saved, switched on or off,
+moved and deleted as the desktop's script editor does (`0015-headless-script-items.patch`; see "Editing triggers,
+aliases and scripts" in [`protocol.md`](protocol.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

@@ -29,6 +29,18 @@ val ScriptItem.key: ScriptItemKey get() = ScriptItemKey(kind, node.id)
 /** The items in the folder [parent] (0 for the top level), in the order the engine listed them. */
 fun List<ScriptItemNode>.childrenOf(parent: Int): List<ScriptItemNode> = filter { it.parent == parent }
 
+/** These, [kind]'s items, without those of [hidden] (deleted, with their Undo offered) and what is in them. */
+fun List<ScriptItemNode>.withoutHidden(kind: ScriptItemKind, hidden: List<ScriptItemKey>): List<ScriptItemNode> {
+    val gone = hidden.filter { it.kind == kind }.mapTo(HashSet()) { it.id }
+    if (gone.isEmpty()) return this
+    // Depth first, so each folder comes before what is in it
+    return filter { item ->
+        val inGone = item.id in gone || item.parent in gone
+        if (inGone) gone.add(item.id)
+        !inGone
+    }
+}
+
 /** The folders from the top level down to [folder], [folder] last; empty for the top level or a folder not listed. */
 fun List<ScriptItemNode>.pathTo(folder: Int): List<ScriptItemNode> {
     val byId = associateBy { it.id }
@@ -94,6 +106,27 @@ fun adds(kind: ScriptItemKind, parent: ScriptItemNode?): Adds = when {
 
 /** The folder a package or module's items came in, which is at the top level: the items in it have its package too. */
 private val ScriptItemNode.packageFolder: Boolean get() = folder && parent == 0 && packageName.isNotEmpty()
+
+/**
+ * The folders [item] can be moved into among these, [kind]'s items as listed, in their order: null first for the top
+ * level. Not the folder it is in, nor itself or a folder inside it, as Mudlet refuses those; where [adds] takes only
+ * toolbars, only a folder; and none for a package's own folder, which its package keeps where it put it. Only folders
+ * take it, though the desktop editor also drops a trigger on another to chain it.
+ */
+fun List<ScriptItemNode>.moveTargets(kind: ScriptItemKind, item: ScriptItemNode): List<ScriptItemNode?> {
+    if (item.packageFolder) return emptyList()
+    val inside = hashSetOf(item.id)
+    // Depth first, so each folder comes before what is in it
+    for (node in this) if (node.parent in inside) inside.add(node.id)
+    return (listOf(null) + filter { it.folder }).filter { target ->
+        val id = target?.id ?: 0
+        id != item.parent && id !in inside && when (adds(kind, target)) {
+            Adds.ITEM_AND_FOLDER -> true
+            Adds.TOOLBAR -> item.folder
+            Adds.NOTHING -> false
+        }
+    }
+}
 
 /** An item a search found, with the folders it is in, the outermost first. */
 data class ScriptSearchResult(val kind: ScriptItemKind, val item: ScriptItemNode, val folders: List<ScriptItemNode>)

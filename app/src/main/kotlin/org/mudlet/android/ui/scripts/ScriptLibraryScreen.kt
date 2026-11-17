@@ -124,7 +124,7 @@ internal fun ScriptLibraryScreen(
     LaunchedEffect(scripts.attaches) { ScriptItemKind.entries.forEach(scripts::ask) }
 
     val hidden = scripts.deleting
-    val lists = ScriptItemKind.entries.associateWith { k -> scripts.lists[k]?.withoutHidden(hidden.filter { it.kind == k }.map { it.id }.toSet()) }
+    val lists = ScriptItemKind.entries.associateWith { k -> scripts.lists[k]?.withoutHidden(k, hidden) }
     val items = lists[kind]
     // A folder deleted, or gone with a new engine, leaves the library at the top level
     val folder = if (items != null && items.none { it.id == openFolder }) 0 else openFolder
@@ -187,18 +187,6 @@ internal fun ScriptLibraryScreen(
                 searchResults(query, lists, selected, scripts, onEnter = ::enter, onOpen = onOpen)
             }
         }
-    }
-}
-
-// The items left once those deleted, and what is in them, are hidden
-private fun List<ScriptItemNode>.withoutHidden(ids: Set<Int>): List<ScriptItemNode> {
-    if (ids.isEmpty()) return this
-    val gone = HashSet(ids)
-    // Depth first, so each folder comes before what is in it
-    return filter { item ->
-        val hidden = item.id in gone || item.parent in gone
-        if (hidden) gone.add(item.id)
-        !hidden
     }
 }
 

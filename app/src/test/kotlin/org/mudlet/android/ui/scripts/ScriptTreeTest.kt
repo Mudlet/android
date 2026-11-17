@@ -209,6 +209,31 @@ class ScriptTreeTest {
     }
 
     @Test
+    fun anItemMovesToAFolderNotWhereItIsNorIntoItself() {
+        fun targets(id: Int) = triggers.moveTargets(ScriptItemKind.TRIGGER, triggers.first { it.id == id }).map { it?.name }
+        assertEquals(listOf(null, "Combat"), targets(3))
+        assertEquals("nor into a folder inside it", emptyList<String?>(), targets(1))
+        assertEquals(listOf<String?>(null), targets(2))
+        assertEquals("folders only, not a trigger to chain from", listOf("Combat", "Hits"), targets(5))
+    }
+
+    @Test
+    fun aFolderDeletedWithItsUndoOfferedIsHiddenWithWhatIsInItAndTakesNoMove() {
+        val shown = triggers.withoutHidden(ScriptItemKind.TRIGGER, listOf(ScriptItemKey(ScriptItemKind.TRIGGER, 1), ScriptItemKey(ScriptItemKind.ALIAS, 5)))
+        assertEquals("another kind's id is not this kind's", listOf("Greet"), shown.map { it.name })
+        assertEquals(emptyList<ScriptItemNode?>(), shown.moveTargets(ScriptItemKind.TRIGGER, shown[0]))
+    }
+
+    @Test
+    fun aButtonMovesIntoAToolbarAndAFolderOfButtonsAnywhere() {
+        fun targets(id: Int) = buttons.moveTargets(ScriptItemKind.BUTTON, buttons.first { it.id == id }).map { it?.name }
+        assertEquals("a button only where buttons are drawn", listOf("Bar", "More", "Spells"), targets(5))
+        assertEquals("a menu becomes a toolbar where toolbars go", listOf(null, "ui-pack", "Bar", "More"), targets(6))
+        assertEquals(listOf("Bar", "More", "Mine", "Spells"), targets(7))
+        assertEquals("a package's own folder stays", emptyList<String?>(), targets(1))
+    }
+
+    @Test
     fun anItemWithOthersInItIsGoneIntoAsAFolderIs() {
         assertTrue(triggers[0].holdsItems(0))
         assertTrue("a trigger others chain from", triggers[4].holdsItems(2))

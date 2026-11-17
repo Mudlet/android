@@ -63,7 +63,8 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     fun luaProblem(key: ScriptItemKey): LuaProblem? = problems[key]?.problem
 
     private sealed interface Pending {
-        data class List(val kind: ScriptItemKind) : Pending
+        /** A scriptItems; [afterMove] when it follows a moveScriptItem, whose [ScriptNotice.Moved] it then tells. */
+        data class List(val kind: ScriptItemKind, val afterMove: Boolean = false) : Pending
 
         data class Item(val key: ScriptItemKey) : Pending
 
@@ -82,6 +83,10 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     }
 
     private val pending = HashMap<Long, Pending>()
+
+    // What the last move sent is to say once the list after it comes, unless the engine refuses it first, as it
+    // answers in order: a moveScriptItem is answered only when refused, and with no id
+    private var moving: ScriptNotice.Moved? = null
 
     /** Asks for [kind]'s items. False as for [ProfileSession.send]. */
     fun ask(kind: ScriptItemKind): Boolean = request(Pending.List(kind)) { Requests.scriptItems(kind, it) }
@@ -149,6 +154,23 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         return ask(key.kind)
     }
 
+    /**
+     * Moves [key] last into the folder [parent], 0 for the top level, as a drag in the desktop editor does, and asks for
+     * its kind's items again; [notices] then has [ScriptNotice.Moved], or the engine's refusal. False as for
+     * [ProfileSession.send].
+     */
+    fun move(key: ScriptItemKey, parent: Int): Boolean {
+        val items = listed[key.kind].orEmpty()
+        val position = items.count { it.parent == parent && it.id != key.id }
+        if (!send(Requests.moveScriptItem(key.kind, key.id, parent, position))) {
+            tell(ScriptNotice.NotSent)
+            return false
+        }
+        val name = items.firstOrNull { it.id == key.id }?.name.orEmpty()
+        moving = ScriptNotice.Moved(name, if (parent == 0) null else items.firstOrNull { it.id == parent }?.name.orEmpty())
+        return request(Pending.List(key.kind, afterMove = true)) { Requests.scriptItems(key.kind, it) }
+    }
+
     /** Hides [key] from the lists, with [ScriptNotice.Deleted] offering Undo; it is deleted at [commitDelete]. */
     fun deleteLater(key: ScriptItemKey, name: String) {
         if (key !in hidden) hidden.add(key)
@@ -197,6 +219,10 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     fun onItems(message: EngineMessage.ScriptItems): Boolean {
         val asked = pending.remove(message.replyTo.asId()) as? Pending.List ?: return false
         listed[asked.kind] = message.items
+        if (asked.afterMove) {
+            moving?.let(::tell)
+            moving = null
+        }
         return true
     }
 
@@ -266,6 +292,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
      * for an item it would not open, whose kind's items are asked for again, as it is likely gone from them.
      */
     fun onRefused(request: String, reason: String, replyTo: Any?) {
+        if (request == "moveScriptItem") moving = null
         val asked = pending.remove(replyTo.asId())
         if (asked is Pending.Item) {
             opened.remove(asked.key)
@@ -286,6 +313,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** What the last link did not answer is not answered; a new engine instance loaded the profile again, with new ids. */
     fun onAttached(sameInstance: Boolean) {
         pending.clear()
+        moving = null
         if (!sameInstance) {
             listed.clear()
             opened.clear()
@@ -315,6 +343,9 @@ internal sealed interface ScriptNotice {
 
     /** A new item or folder, [key], to open. */
     data class Added(val key: ScriptItemKey, val folder: Boolean) : ScriptNotice
+
+    /** The item named [name] moved into the folder named [into], null for the top level. */
+    data class Moved(val name: String, val into: String?) : ScriptNotice
 
     /** [key], named [name], hidden until its Undo times out. */
     data class Deleted(val key: ScriptItemKey, val name: String) : ScriptNotice

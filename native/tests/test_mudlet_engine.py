@@ -4132,6 +4132,11 @@ def sounds():
     wait_status(c, "luaResult", lambda v: True, seen)
     c.ask({"t": "getSettings", "keys": ["muteMediaAPI"]}, answers=("settings", "error"), collect=seen)
     check(not [m for m in seen[since:] if m["t"] == "sounds"], "only the first sound is news")
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    again = c.wait_for(lambda m: m["t"] == "sounds", collect=seen)
+    check(again == played, f"a UI that attaches again is told a sound has played: {again}")
 
     m = c.ask({"t": "setSettings", "values": {"muteMediaAPI": True, "muteMediaGame": True}}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == {"muteMediaAPI": True, "muteMediaGame": True} and "refused" not in m, f"setSettings mutes both: {m}")

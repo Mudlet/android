@@ -68,8 +68,8 @@ Each `emulator (API 28)` and `emulator (API 36)` job uploads `emulator-tests-api
   `ANDROID_NDK_ROOT` were given. `stacks-<name>.txt`: the threads of a process that hung.
 - `screenshot.png`, `before-kill.png`, `instrumented-screenshot.png`, `ui-state.json`, `memory.json`.
 - `screenshots/`: what `ScreenshotTest` took (the profile list, the game screen, settings, the map in front, a trigger's
-  page, light and dark), on API 31 and later, so only from the API 36 job in CI. These are the before and after shots for a pull
-  request that changes how the app looks: take them from the base's run and the branch's.
+  page, light and dark), on API 31 and later, so only from the API 36 job in CI. These are the before and after shots
+  for a pull request that changes how the app looks: take them from the base's run and the branch's.
 
 ## Symbolising a crash from a CI run
 

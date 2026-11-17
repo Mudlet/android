@@ -184,6 +184,7 @@ class SelfTestScreenTest {
 class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalResource() {
     lateinit var engine: FakeEngine
     private lateinit var previous: (String) -> org.mudlet.android.protocol.Transport
+    private lateinit var previousStoppedByAndroid: () -> Boolean
 
     override fun before() {
         EngineClient.init(InstrumentationRegistry.getInstrumentation().targetContext)
@@ -192,10 +193,14 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         engine = FakeEngine(open)
         previous = EngineClient.connector
         EngineClient.connector = engine::connect
+        // A test's restore status is not Android stopping the engine, unless the test says so
+        previousStoppedByAndroid = EngineClient.stoppedByAndroid
+        EngineClient.stoppedByAndroid = { false }
     }
 
     override fun after() {
         EngineClient.connector = previous
+        EngineClient.stoppedByAndroid = previousStoppedByAndroid
         engine.close()
     }
 }

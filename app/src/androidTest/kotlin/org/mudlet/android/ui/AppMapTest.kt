@@ -146,7 +146,7 @@ class AppMapTest {
         assertBackground(Color.Black)
 
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
-        // White rooms behind the default grey on black, as faint as keeps it readable: 30% of white
+        // White rooms behind the default grey on black, as faint as keeps it readable: about 30% of white
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
         val pixel = backgroundPixel()
         assertTrue("the map is grey behind the text: $pixel", abs(pixel.green - pixel.red) < 0.02f && abs(pixel.blue - pixel.red) < 0.02f)
@@ -236,6 +236,20 @@ class AppMapTest {
         session.status("consoleColors", "#000080 #000000")
         assertNone(lastRequest("setAppMapSize"))
         assertBackground(Color.Black)
+    }
+
+    @Test
+    fun aDarkMapShowsMoreStronglyThanALightOne() {
+        val size = lastRequest("setAppMapSize", readPast = true)
+        // Mudlet's default room colour, DarkGreen, all over the frame: far darker than white, so as strong as it goes
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale"), colour = DARK_GREEN))
+        val green = Color(DARK_GREEN).green
+        val strong = MapBehindText.MAX_ALPHA * green
+        assertTrue("stronger than white's 30%: $strong", strong > 0.3f * green + 0.05f)
+        compose.waitUntil(WAIT_MS) { abs(backgroundPixel().green - strong) < 0.02f }
+        // A white frame after it: as faint as white needs
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
+        compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - MapBehindText.alpha(0xC0C0C0, 0x000000)) < 0.02f }
     }
 
     @Test
@@ -1099,6 +1113,10 @@ class AppMapTest {
 
         // Pixels in from the console's bottom right corner, clear of the frame's edge, which may round off a pixel
         const val BACKGROUND_INSET = 8
+
+        // Qt's DarkGreen, Mudlet's map's default room colour
+        const val DARK_GREEN = 0xFF008000.toInt()
+
         const val QUIET_MS = 500
         const val WAIT_MS = 10_000L
 

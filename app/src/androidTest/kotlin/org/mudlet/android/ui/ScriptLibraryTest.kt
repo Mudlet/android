@@ -323,8 +323,10 @@ class ScriptLibraryTest {
         compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_event_new))).performTextInput("sysDisconnectionEvent")
         activate(hasContentDescription(string(R.string.scripts_event_add)))
         activate(hasContentDescription(string(R.string.scripts_event_remove, "sysConnectionEvent")))
-        // To the page's end: with the keyboard up, the accessibility checks once found a strip 6 px tall and as wide as
-        // a field at the foot of what showed, with no label, as the top of a field cut off there would be
+        // To the page's end, so that the empty Lua field is not cut off at the foot of what shows: Material's outlined
+        // field has 8 dp over its outline, and an empty one is named to accessibility services only by its label, a
+        // child that is left out while it is scrolled out of sight (Compose gives the field's own node its text, which
+        // is empty). With only that strip showing, the checks find an edit box with no name, as TalkBack would
         compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_lua))).performScrollTo()
         activate(apply)
         val events = received("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")

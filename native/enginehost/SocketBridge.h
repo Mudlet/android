@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 31;
+    static constexpr int protocolVersion = 32;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -83,6 +83,7 @@ public:
     void map(const std::optional<MapFrame>& frame) override;
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
+    void mapFile(const MapFile& file) override;
     void sounds(const Sounds& sounds) override;
     void packagesChanged() override;
     void packageInstalled(const QString& path, PackageInstallResult result, const QString& error) override;
@@ -103,6 +104,8 @@ protected:
     void onNewConnection();
     void onReadyRead();
     void onBytesWritten();
+    // Whether a cancelMapFile has come on this socket, which it takes out of the frames still to be handled
+    bool mapFileCancelAsked();
     void handleMessage(const QJsonObject& message);
     // True once the request is answered here: one for the whole engine, or a refusal of a request sent on the wrong
     // socket; false to pass it to the profile
@@ -204,6 +207,7 @@ protected:
     bool mClientLagging = false;
     qint64 mLastSentSeq = 0;
     QByteArray mReadBuffer;
+    bool mPeekingForCancel = false;
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;

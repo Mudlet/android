@@ -98,6 +98,8 @@ public:
     QString downloadMap() override;
     QString cancelMapDownload() override;
     QString answerSecureOffer(bool accept) override;
+    QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
+    QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
     QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) override;
     std::variant<QList<ScriptItemInfo>, QString> scriptItems(ScriptItemKind kind) const override;
@@ -233,6 +235,10 @@ private:
     void takeMapDownloadProgress(const QString& label, int value, int maximum, bool force);
     // mMapDownload's progress, at most once a percent, as a download reports each piece that arrives; always with force
     void pushMapDownloadProgress(bool force);
+    // loadMapFile() and saveMapFile(): the map file loaded or saved within the call, told as mapFile() frames
+    QString runMapFile(MapFile::Operation operation, const QString& path, const std::function<bool()>& cancelAsked);
+    // Mudlet's progress, while a map file runs, into mMapFile and told; asks the UI's bridge whether to stop it
+    void takeMapFileProgress(const QString& label, int value, int maximum, bool cancelable);
 
     void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
@@ -298,6 +304,17 @@ private:
     // The download's own progress has started: Mudlet's progress before then is the end of a map import or export a
     // script began
     bool mMapDownloadProgressStarted = false;
+    struct RunningMapFile
+    {
+        MapFile file;
+        std::function<bool()> cancelAsked;
+        // cancelAsked() said to stop it and Mudlet was asked to, so a failure is a cancel
+        bool cancelled = false;
+        // It is Mudlet's JSON map, whose progress can stop it
+        bool json = false;
+    };
+    // The map file being loaded or saved, within loadMapFile() or saveMapFile(); none otherwise
+    std::optional<RunningMapFile> mMapFile;
     // The TLS choice the running profile connects with: the one it was started with, unset when that start made
     // none, then the one of a saved profile once Mudlet has taken it
     std::optional<bool> mProfileTls;

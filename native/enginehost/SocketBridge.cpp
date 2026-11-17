@@ -164,6 +164,32 @@ QString wireName(PackageInstallResult result)
     return {};
 }
 
+QString wireName(MapFile::Operation operation)
+{
+    switch (operation) {
+    case MapFile::Operation::load:
+        return QStringLiteral("load");
+    case MapFile::Operation::save:
+        return QStringLiteral("save");
+    }
+    return {};
+}
+
+QString wireName(MapFile::State state)
+{
+    switch (state) {
+    case MapFile::State::running:
+        return QStringLiteral("running");
+    case MapFile::State::done:
+        return QStringLiteral("done");
+    case MapFile::State::failed:
+        return QStringLiteral("failed");
+    case MapFile::State::cancelled:
+        return QStringLiteral("cancelled");
+    }
+    return {};
+}
+
 std::optional<IEngine::ScriptItemKind> scriptItemKind(const QJsonObject& message)
 {
     static constexpr std::pair<QLatin1StringView, IEngine::ScriptItemKind> kinds[]{{QLatin1StringView("trigger"), IEngine::ScriptItemKind::trigger},
@@ -334,7 +360,8 @@ void SocketBridge::forgetClient()
 
 void SocketBridge::onReadyRead()
 {
-    if (!mClient) {
+    // The frames read while a map file is loaded or saved wait for the request being handled to end
+    if (!mClient || mPeekingForCancel) {
         return;
     }
     mReadBuffer.append(mClient->readAll());
@@ -359,6 +386,35 @@ void SocketBridge::onReadyRead()
             return;
         }
     }
+}
+
+bool SocketBridge::mapFileCancelAsked()
+{
+    if (!mClient) {
+        return false;
+    }
+    // Mudlet holds the main thread for the whole load or save, so the socket is read here, at each step of its progress
+    mPeekingForCancel = true;
+    mClient->waitForReadyRead(0);
+    mPeekingForCancel = false;
+    if (!mClient) {
+        return false;
+    }
+    mReadBuffer.append(mClient->readAll());
+    qsizetype at = 0;
+    while (mReadBuffer.size() - at >= 4) {
+        const quint32 length = qFromBigEndian<quint32>(mReadBuffer.constData() + at);
+        if (length > maxFrameBytes || mReadBuffer.size() - at < qsizetype(4 + length)) {
+            return false;
+        }
+        const QJsonObject frame = QJsonDocument::fromJson(mReadBuffer.mid(at + 4, length)).object();
+        if (frame.value(QLatin1String("t")).toString() == QLatin1String("cancelMapFile")) {
+            mReadBuffer.remove(at, 4 + length);
+            return true;
+        }
+        at += 4 + length;
+    }
+    return false;
 }
 
 void SocketBridge::onBytesWritten()
@@ -625,6 +681,15 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("answerSecureOffer")) {
         const QJsonValue accept = message.value(QLatin1String("accept"));
         refuse(type, accept.isBool() ? mEngine->answerSecureOffer(accept.toBool()) : QStringLiteral("accept must be true or false"));
+    } else if (type == QLatin1String("loadMapFile") || type == QLatin1String("saveMapFile")) {
+        const QString path = message.value(QLatin1String("path")).toString();
+        const auto cancelAsked = [this] {
+            return mapFileCancelAsked();
+        };
+        refuse(type, type == QLatin1String("loadMapFile") ? mEngine->loadMapFile(path, cancelAsked) : mEngine->saveMapFile(path, cancelAsked));
+    } else if (type == QLatin1String("cancelMapFile")) {
+        // One that came while a load or save ran was taken by mapFileCancelAsked()
+        refuse(type, QStringLiteral("no map file is being loaded or saved that can be cancelled"));
     } else if (type == QLatin1String("scriptItems")) {
         scriptItems(message);
     } else if (type == QLatin1String("scriptItem")) {
@@ -2135,6 +2200,25 @@ void SocketBridge::mapDownload(const MapDownload& download)
                    {QStringLiteral("maximum"), download.maximum},
                    {QStringLiteral("cancelable"), download.cancelable},
                    {QStringLiteral("error"), download.error}});
+}
+
+void SocketBridge::mapFile(const MapFile& file)
+{
+    if (mMirror) {
+        mMirror->mapFile(file);
+    }
+    sendFrame({{QStringLiteral("t"), QStringLiteral("mapFile")},
+               {QStringLiteral("op"), wireName(file.operation)},
+               {QStringLiteral("state"), wireName(file.state)},
+               {QStringLiteral("label"), file.label},
+               {QStringLiteral("value"), file.value},
+               {QStringLiteral("maximum"), file.maximum},
+               {QStringLiteral("cancelable"), file.cancelable},
+               {QStringLiteral("error"), file.error}});
+    // Sent while Mudlet holds the main thread, which would otherwise write it only once the load or save has ended
+    if (mClient) {
+        mClient->flush();
+    }
 }
 
 void SocketBridge::sounds(const Sounds& sounds)

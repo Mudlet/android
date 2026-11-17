@@ -69,7 +69,7 @@ class EngineClientTest {
     @Test
     fun aLinkMovedToAnotherSocketIsNotSaidToBeAttachedBeforeItIs() {
         waitUntil("the profile's link attached") { EngineClient.front.linkState.startsWith("attached") }
-        // Read in the same main-thread task as the move, so that no later attach or failure can have been posted yet
+        // Read in the main-thread task that moves it, before any attach or failure the link posts can run
         val state = onMain {
             EngineClient.front.moveTo(fake.engine.unservedPath, running = true)
             EngineClient.front.linkState

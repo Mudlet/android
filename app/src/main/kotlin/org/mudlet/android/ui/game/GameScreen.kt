@@ -68,7 +68,8 @@ import kotlin.reflect.KClass
  * again, and for the game switched to: with the setting, the map is faint behind the text ([BackgroundMap]) and the
  * text faint behind the map in front ([textBehindMap]); without it there is no map behind the text and the map in front
  * covers the console. The input line and the row stay below the map in front, to type and pick commands in. The title
- * bar's scripts button opens the profile's script library ([onOpenScripts]).
+ * bar's scripts button opens the profile's script library ([onOpenScripts]), and a long press on a line of the console
+ * offers to make a trigger from it ([onMakeTrigger], with the line's text).
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
@@ -78,7 +79,7 @@ import kotlin.reflect.KClass
  * first, so Mudlet's retries after a drop are not each read out.
  */
 @Composable
-fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: () -> Unit) {
+fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: () -> Unit, onMakeTrigger: (String) -> Unit) {
     val front = EngineClient.front
     val kept = rememberSaveableStateHolder()
     val open = EngineClient.sessions.map { it.name }
@@ -101,7 +102,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: ()
     // Not the profile's either: a slide carries on across the switch it makes
     val scope = rememberCoroutineScope()
     val swipe = remember { GameSwipe(scope) }
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts) }
+    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onMakeTrigger) }
 }
 
 // What a composition last saw, which changing does not compose again
@@ -119,6 +120,7 @@ private fun ProfileGameScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenScripts: () -> Unit,
+    onMakeTrigger: (String) -> Unit,
 ) {
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
@@ -249,6 +251,7 @@ private fun ProfileGameScreen(
                             onTextSize = Settings.textSize::set,
                             onScreenSize = EngineClient::setScreenSize,
                             consoleModifier,
+                            onMakeTrigger,
                         ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {

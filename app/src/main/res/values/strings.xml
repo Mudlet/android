@@ -679,6 +679,12 @@
     <string name="console_link_menu">Menu of link: %1$s</string>
     <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: opens a page that makes a trigger matching the line -->
     <string name="console_make_trigger">Make a trigger from this line</string>
+    <!-- How TalkBack's actions name a link of the main console that has been followed, as desktop Mudlet's screen
+         reader announcement does: %1$s is the link's tool tip or text -->
+    <string name="console_link_visited">%1$s, visited</string>
+    <!-- How TalkBack's actions name a link of the main console that is the one chosen in its group of links, as desktop
+         Mudlet's screen reader announcement does: %1$s is the link's tool tip or text, maybe already with ", visited" -->
+    <string name="console_link_selected">%1$s, selected</string>
     <!-- What TalkBack reads for a blank line of a mini console or user window with "Blank lines from the game" on
          "Replace them with a space": the name of the space character -->
     <string name="console_blank_line_space">Space</string>

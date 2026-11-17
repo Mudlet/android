@@ -234,8 +234,8 @@ private fun ProfileGameScreen(
                     } else {
                         Modifier.background(textBehind.ground).graphicsLayer { alpha = textBehind.alpha().let { it + (1f - it) * backProgress } }
                     }
-                    // One map on the screen: none behind the text while a script's mapper window is drawn, or while the
-                    // map is in front
+                    // One map on the screen: none behind the text while a script's mapper window is drawn, nor drawn
+                    // there while the map is in front
                     ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered).then(faint)) { consoleModifier, mapperDrawn ->
                         Console(
                             c.lines,
@@ -246,7 +246,7 @@ private fun ProfileGameScreen(
                             onTextSize = Settings.textSize::set,
                             onScreenSize = EngineClient::setScreenSize,
                             consoleModifier,
-                        ) { if (behind && !mapperDrawn && !mapOpen) BackgroundMap(colors) }
+                        ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {
                         FullScreenMap(

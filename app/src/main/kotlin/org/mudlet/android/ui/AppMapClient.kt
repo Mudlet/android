@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
@@ -23,18 +24,19 @@ import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.MapSource
 import java.util.EnumMap
+import java.util.concurrent.Executors
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
  * The app's own map (docs/architecture.md, "The map behind the text"), apart from any a script opens: the engine draws
- * it at the size the game screen shows it at, behind the console or full screen, while it shows it, and searches its
+ * it at the size the game screen has it at, behind the console or in front, while it is up, and searches its
  * rooms, and downloads the map the game offers (docs/architecture.md, "Downloading the map"). Each [ProfileSession] has
  * one, and only the front profile's is drawn. Main thread only, as the session's state; its [ScriptWindowsClient] hands
  * it the engine's refusals and each attach.
  */
 internal class AppMapClient internal constructor(private val session: ProfileSession) : MapSource {
-    /** What shows the map: each asks for it at its own size, and the full-screen map's wins while it is open. */
+    /** What has the map: each asks for it at its own size, and the full-screen map's wins while it is open. */
     enum class Owner { BACKGROUND, FULL_SCREEN }
 
     /** The map at [w] by [h] of its pixels, which are dp, drawn at [scale] device pixels to each: `setAppMapSize`'s fields. */
@@ -68,7 +70,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
 
     /**
      * An `appMap`'s frame as [decode] made it: its [bitmap] and [tones], null where there is none, and with [textBehind]
-     * its [overText].
+     * its [overText], which is made after it has come while only [cutOutAhead] wants it.
      */
     class Decoded(val bitmap: ImageBitmap?, val tones: MapBehindText.Tones?, val overText: OverText?)
 
@@ -86,7 +88,10 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     var tones by mutableStateOf<MapBehindText.Tones?>(null)
         private set
 
-    /** [map]'s frame made to draw over the text, while [textBehind] wants it; null while it does not, or there is none. */
+    /**
+     * [map]'s frame made to draw over the text, while [textBehind] or [cutOutAhead] wants it; null while neither does,
+     * there is none, or it is not cut out yet.
+     */
     var overText by mutableStateOf<OverText?>(null)
         private set
 
@@ -146,10 +151,16 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     private var askedViewOnly = false
     private var askedRooms = false
 
-    // Asks for the map at the size of what shows it, the full-screen map before the background; for none while the
-    // profile is not the front, as only the front's is drawn
+    // Asks for the map at the size of what has it, the full-screen map before the background; for none while the
+    // profile is not the front, as only the front's is drawn. Nothing is asked while the one of them that counts has no
+    // size yet: the engine would draw the map at the other's size first, or let go of the one it has
     internal fun update() {
-        val size = if (session !== EngineClient.front) Size.NONE else wanted[Owner.FULL_SCREEN] ?: wanted[Owner.BACKGROUND] ?: Size.NONE
+        val owner = if (Owner.FULL_SCREEN in wanted) Owner.FULL_SCREEN else Owner.BACKGROUND
+        val size = when {
+            session !== EngineClient.front -> Size.NONE
+            owner in wanted -> wanted[owner] ?: return
+            else -> Size.NONE
+        }
         if (size == sent) return
         sent = if (session.send(Requests.setAppMapSize(size.w, size.h, size.scale))) size else null
     }
@@ -167,6 +178,20 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         map = ScriptWindowsClient.MapImage(frame.bitmap, message.w, message.h, message.viewOnly)
         mover.onFrame(message.view)
         rooms.onFrame(message.view)
+        cutOut()
+    }
+
+    // While [cutOutAhead], makes [overText] of [map]'s frame where it came without one, on a thread of its own: the
+    // reader's has the game's text to read, and the frame is drawn behind the text as it came meanwhile
+    private fun cutOut() {
+        val frame = map?.bitmap ?: return
+        if (!cutOutAhead || overText != null) return
+        cutter.execute {
+            // Frames can come faster than they are cut out, and only the last is drawn
+            if (map?.bitmap !== frame) return@execute
+            val made = overText(frame.asAndroidBitmap())
+            session.post { if (map?.bitmap === frame) overText = made }
+        }
     }
 
     /** The engine's answer to [findRooms] or [findDestinations]; one to an earlier search is not shown. */
@@ -368,11 +393,19 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             error = "",
         )
 
-        // What shows the map, whichever profile is the front: the game screen's, which the front's map follows
-        private val wanted = EnumMap<Owner, Size>(Owner::class.java)
+        // What has the map, whichever profile is the front: the game screen's, which the front's map follows
+        private val wanted = EnumMap<Owner, Size?>(Owner::class.java)
 
-        /** [owner] shows the front profile's map at [size] until [hide]. */
-        fun show(owner: Owner, size: Size) {
+        // One thread, under the others: a cut-out ahead of the swap is worth no stutter of what is on the screen
+        private val cutter = Executors.newSingleThreadExecutor {
+            Thread(it, "AppMapCutOut").apply {
+                isDaemon = true
+                priority = Thread.MIN_PRIORITY
+            }
+        }
+
+        /** [owner] has the front profile's map at [size] until [hide]; null until it knows its size (see [update]). */
+        fun show(owner: Owner, size: Size?) {
             wanted[owner] = size
             EngineClient.front.appMap.update()
         }
@@ -388,6 +421,17 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
          */
         @Volatile
         var textBehind = false
+
+        /**
+         * Whether the map in front would show the text behind it, while it is behind the text itself: the front profile's
+         * frame is then cut out ahead of the swap, so the map comes to the front with the text behind it at once, not
+         * once the engine has drawn it anew. Main thread only.
+         */
+        var cutOutAhead = false
+            set(value) {
+                field = value
+                if (value) EngineClient.front.appMap.cutOut()
+            }
 
         /**
          * [message]'s PNG, decoded off the main thread, and its colours sampled there too, and cut out while

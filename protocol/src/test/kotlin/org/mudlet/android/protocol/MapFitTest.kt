@@ -15,6 +15,35 @@ class MapFitTest {
     }
 
     @Test
+    fun aFrameDrawnForAnotherSizeIsShownAsTheEngineWillDrawTheMapAtThisOne() {
+        // The frame behind the text, 360 by 580, under the map in front's search, 1080 by 1500 pixels: the shorter side of
+        // both is across, so the rooms stay 3 pixels to each of theirs, about the same middle, 120 cut off above and below
+        val taller = MapFit(360, 580, PxRect(0f, 100f, 1080f, 1500f), asRedrawn = true)
+        assertEquals(3f, taller.scale)
+        assertEquals(PxRect(0f, -20f, 1080f, 1740f), taller.drawn)
+        assertEquals(MapPoint(180.0, 290.0), taller.toFrame(540f, 850f))
+        // Fitted whole it would be smaller, and jump as the next frame comes
+        assertEquals(1500f / 580, MapFit(360, 580, PxRect(0f, 100f, 1080f, 1500f)).scale)
+
+        // And back behind the text, the frame of the map in front is short of the console's top and bottom
+        val shorter = MapFit(360, 500, PxRect(0f, 0f, 1080f, 1740f), asRedrawn = true)
+        assertEquals(3f, shorter.scale)
+        assertEquals(PxRect(0f, 120f, 1080f, 1500f), shorter.drawn)
+        assertNull(shorter.toFrame(540f, 60f))
+
+        // Above a keyboard the box is wider than tall: Mudlet sizes the rooms by its height then
+        val wide = MapFit(360, 580, PxRect(0f, 0f, 1080f, 540f), asRedrawn = true)
+        assertEquals(1.5f, wide.scale)
+        assertEquals(PxRect(270f, -165f, 540f, 870f), wide.drawn)
+
+        // A frame drawn for this box is where fitting it whole has it
+        val same = MapFit(360, 580, PxRect(0f, 0f, 1080f, 1740f), asRedrawn = true)
+        assertEquals(MapFit(360, 580, PxRect(0f, 0f, 1080f, 1740f)).drawn, same.drawn)
+        assertEquals(0f, MapFit(0, 580, PxRect(0f, 0f, 1080f, 1740f), asRedrawn = true).scale)
+        assertEquals(0f, MapFit(360, 580, PxRect(0f, 0f, 1080f, 0f), asRedrawn = true).scale)
+    }
+
+    @Test
     fun theMapIsAskedForAtTheScaleItIsDrawnAtWithinWhatTheEngineTakes() {
         assertEquals(3.0, MapFit(200, 100, PxRect(50f, 20f, 600f, 400f)).renderScale, 0.0)
         // A small mapper filling a phone's pane: drawn 6.17 times larger

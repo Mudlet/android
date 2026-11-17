@@ -53,6 +53,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -77,13 +78,15 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * The app's own map (docs/architecture.md, "The map behind the text"), against a fake engine: asked for at the
- * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; let go when the
- * setting is off or a script's mapper window shows the map; brought to the front by the title bar's button, over the
- * input line and the quick bar, where a tap selects, a double tap walks, a drag moves it, the buttons zoom and TalkBack's
- * actions do the same, and Back sends it back, following the player again; the bar under it that shows another area or
+ * console's size and drawn faintly behind its text, which TalkBack reads and touches reach as before; not drawn there
+ * with the setting off, and let go while a script's mapper window shows the map; brought to the front by the title bar's
+ * button, with the frame the engine drew last and without letting go of the map, over the input line and the quick bar,
+ * where a tap selects, a double tap walks, a drag moves it, the buttons zoom and TalkBack's actions do the same, and
+ * Back sends it back, following the player again; the bar under it that shows another area or
  * level; the room search, whose results say how many, filter by area, centre the map on a room and walk there; and the
  * download of the map the game offers.
  */
@@ -167,13 +170,16 @@ class AppMapTest {
         val size = lastRequest("setAppMapSize", readPast = true)
         assertTrue("asked for at $size", size.getInt("w") > 0)
         compose.runOnIdle { Settings.mapBehindText.set(false) }
-        assertNone(lastRequest("setAppMapSize", "the setting off lets go of the map behind the text"))
-        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
+        // Not drawn, but still asked for: the map in front has the engine's last frame the moment it opens
         noRequest("setAppMapSize")
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
+        waitFor("the frame comes") { EngineClient.front.appMap.map != null }
         assertBackground(Color.Black)
 
+        // On again, the frame that came meanwhile is drawn, and no other asked for
         compose.runOnIdle { Settings.mapBehindText.set(true) }
-        assertEquals(size.toString(), lastRequest("setAppMapSize").toString())
+        compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
+        noRequest("setAppMapSize")
 
         // A Geyser.Mapper shows the map: one map on the screen
         val mapper = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = 400, h = 300)
@@ -216,11 +222,15 @@ class AppMapTest {
         activate(row)
         compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.runOnIdle { assertFalse(Settings.mapBehindText.value) }
-        // Back on the game screen, past the settings, no map is asked for
+        // Back on the game screen, past the settings, the map is asked for, for the map in front, and not drawn
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("the main console")).fetchSemanticsNodes().isNotEmpty() }
-        assertNone(lastRequest("setAppMapSize"))
+        val size = lastRequest("setAppMapSize")
+        assertTrue("asked for at $size", size.getInt("w") > 0)
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")))
+        waitFor("the frame comes") { EngineClient.front.appMap.map != null }
+        assertBackground(Color.Black)
     }
 
     @Test
@@ -233,10 +243,10 @@ class AppMapTest {
         val dim = MapBehindText.alpha(0x808080, 0x000000)
         assertTrue("fainter than 30%: $dim", dim > 0f && dim < 0.25f)
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - dim) < 0.03f }
-        // Text too faint on its own background already: no map at all, nor any asked for
+        // Text too faint on its own background already: no map at all behind it
         session.status("consoleColors", "#000080 #000000")
-        assertNone(lastRequest("setAppMapSize"))
-        assertBackground(Color.Black)
+        compose.waitUntil(WAIT_MS) { backgroundPixel() == Color.Black }
+        noRequest("setAppMapSize")
     }
 
     @Test
@@ -324,6 +334,76 @@ class AppMapTest {
         compose.onNode(hasText("the main console")).assertIsDisplayed()
         assertEquals(behind.toString(), lastRequest("setAppMapSize").toString())
     }
+
+    @Test
+    fun theMapComesToTheFrontWithTheFrameTheEngineDrewLastAndIsNotLetGoOnTheSwap() {
+        val behind = lastRequest("setAppMapSize", readPast = true)
+        val w = behind.getInt("w").toDouble()
+        val h = behind.getInt("h").toDouble()
+        session.send(appMap(behind.getInt("w"), behind.getInt("h"), scale = behind.getDouble("scale"), colour = android.graphics.Color.BLACK, rooms = DARK_GREEN))
+        waitFor("the frame comes") { EngineClient.front.appMap.map != null }
+
+        // With no word from the engine, the frame it drew for behind the text is in front, as large as it was and its
+        // middle in the map's: its squares are a tenth of its narrow side across, with as much between them
+        var before = session.received.size
+        activate(button)
+        val map = drawnMap()
+        val side = min(w, h) / 10
+        val row = side * (1.5 + 2 * ((h / 2 / side - 1.5) / 2).roundToInt())
+        assertEquals("inside the first room of the row in the middle. ${screen()}", Color(DARK_GREEN), pixelOf(map, atRedrawn(bounds(map), w, h, side * (1 + ROOM_EDGE), row)))
+        assertEquals("left of that room. ${screen()}", Color.Black, pixelOf(map, atRedrawn(bounds(map), w, h, side * (1 - ROOM_EDGE), row)))
+        // At 0 by 0 the engine deletes its map and draws the next from nothing
+        val front = lastRequest("setAppMapSize", "the map in front is asked for at its own size")
+        assertEquals("only the size in front is asked for", listOf(front.toString()), mapSizesSince(before))
+        assertTrue("asked for at $front", front.getInt("w") > 0 && front.getInt("h") < behind.getInt("h"))
+
+        before = session.received.size
+        activate(button)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(map).fetchSemanticsNodes().isEmpty() }
+        lastRequest("setAppMapSize", "the map behind the text is asked for again")
+        assertEquals("only the console's size is asked for", listOf(behind.toString()), mapSizesSince(before))
+    }
+
+    @Test
+    fun theTextIsBehindTheMapFromTheMomentItComesToTheFront() {
+        for (seq in 2L..LINES) session.line(seq, "M".repeat(LINE_LENGTH))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("M".repeat(LINE_LENGTH))).fetchSemanticsNodes().isNotEmpty() }
+        val behind = lastRequest("setAppMapSize", readPast = true)
+        session.send(appMap(behind.getInt("w"), behind.getInt("h"), scale = behind.getDouble("scale"), colour = android.graphics.Color.BLACK, rooms = DARK_GREEN))
+        waitFor("the frame behind the text is cut out ahead of the swap") { EngineClient.front.appMap.overText != null }
+
+        // With no word from the engine: the frame drawn for behind the text shows the text behind it
+        activate(button)
+        val map = drawnMap()
+        val faintest = TextBehindMap.alpha(TextBehindMap.Ground(0x000000, listOf(DARK_GREEN and 0xFFFFFF)), 0xC0C0C0, 0x000000) * (0xC0 / 255f)
+        waitFor("the text shows behind the map, no stronger than $faintest") {
+            val greys = greys(map)
+            greys.isNotEmpty() && greys.max() <= faintest + GREY_TOLERANCE
+        }
+    }
+
+    @Test
+    fun withTheKeyboardUpTheMapInFrontIsAskedForOnceAtTheSizeItHasWithTheKeyboardGone() {
+        val input = hasSetTextAction() and hasText(string(R.string.input_label))
+        withScreen { compose.onNode(input).performSemanticsAction(SemanticsActions.RequestFocus) }
+        keyboardUp()
+        assumeTrue("a keyboard on the screen", keyboardShown())
+        val short = lastRequest("setAppMapSize", "the map behind the text is asked for above the keyboard", readPast = true)
+
+        val before = session.received.size
+        activate(button)
+        waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the input line's keyboard goes") { !keyboardShown() }
+        val front = lastRequest("setAppMapSize", "the map in front is asked for")
+        compose.waitForIdle()
+        // Not above the keyboard first and again as it goes, each of which the engine would draw
+        assertEquals("asked for once", listOf(front.toString()), mapSizesSince(before))
+        assertEquals("h of $front, the map's with the keyboard gone", bounds(mapShown()).height / compose.density.density, front.getInt("h").toFloat(), 1f)
+        assertTrue("taller than above the keyboard, $short: $front", front.getInt("h") > short.getInt("h"))
+    }
+
+    // Each `setAppMapSize` the UI sent after the first [before] of what the test read from it
+    private fun mapSizesSince(before: Int): List<String> = session.received.drop(before).filter { it.optString("t") == "setAppMapSize" }.map { it.toString() }
 
     @Test
     fun theMapInFrontLeavesTheInputLineToTypeInWithoutOpeningTheKeyboardAndItsFocusIsKept() {
@@ -1133,6 +1213,15 @@ class AppMapTest {
         return Offset((left + x * scale).toFloat(), (top + y * scale).toFloat())
     }
 
+    /**
+     * Where the point [x], [y] of a [w] by [h] frame the engine drew for another size is in the map's node of [bounds]:
+     * as the engine will draw the map there, scaled by the shorter sides of the two, centred.
+     */
+    private fun atRedrawn(bounds: Rect, w: Double, h: Double, x: Double, y: Double): Offset {
+        val scale = min(bounds.width, bounds.height) / min(w, h)
+        return Offset(((bounds.width - w * scale) / 2 + x * scale).toFloat(), ((bounds.height - h * scale) / 2 + y * scale).toFloat())
+    }
+
     private fun assertPoint(x: Double, y: Double, event: JSONObject) {
         assertEquals("x of $event", x, event.getDouble("x"), POINTS)
         assertEquals("y of $event", y, event.getDouble("y"), POINTS)
@@ -1193,6 +1282,9 @@ class AppMapTest {
         // The console's lines under the map in front, and how long each is
         const val LINES = 60L
         const val LINE_LENGTH = 40
+
+        // How far in from a room's edge, in its sides, a pixel is taken for the room's or its gap's
+        const val ROOM_EDGE = 0.125
 
         // How far from grey, and from black, the screen's pixels may round
         const val GREY_TOLERANCE = 0.02f

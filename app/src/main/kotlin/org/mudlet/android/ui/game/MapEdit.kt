@@ -1,14 +1,18 @@
 package org.mudlet.android.ui.game
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -32,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +50,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -52,16 +58,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.protocol.MapEnv
 import org.mudlet.android.protocol.RoomEdit
 import org.mudlet.android.protocol.RoomExit
 import org.mudlet.android.protocol.RoomInfo
+import org.mudlet.android.protocol.RoomMatch
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MapRooms
 
@@ -91,6 +100,14 @@ private val STEPS = mapOf(
 )
 
 private val SWATCH = 48.dp
+
+// The plus or lock under an exit's way, and the border of the way picked
+private val EXIT_MARK = 14.dp
+private val CHOSEN_BORDER = 3.dp
+
+// How long the typing of a room's name pauses before it is looked for, and how many of the rooms found are listed
+private const val DESTINATION_SEARCH_DELAY_MS = 300L
+private const val DESTINATIONS_SHOWN = 5
 
 private enum class RoomDialog { PROPERTIES, EXITS, ADD, MOVE, AREA, DELETE }
 
@@ -248,50 +265,82 @@ private fun CheckRow(checked: Boolean, label: String, onChange: (Boolean) -> Uni
     }
 }
 
-/**
- * [ways] laid out as a compass, each a button that calls [onPick]: [chosen] marked, those not [enabled] greyed, and
- * each read with [state].
- */
+// [ways] laid out as a compass, each [cell] an equal share of its row
 @Composable
-private fun DirectionGrid(ways: List<List<String?>>, onPick: (String) -> Unit, chosen: String? = null, enabled: (String) -> Boolean = { true }, state: @Composable (String) -> String? = { null }) {
+private fun CompassRows(ways: List<List<String?>>, cell: @Composable RowScope.(String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ways.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                row.forEach { way ->
-                    if (way == null) {
-                        Spacer(Modifier.weight(1f))
-                        return@forEach
-                    }
-                    val read = state(way)
-                    val cell = Modifier.weight(1f).heightIn(min = 48.dp).semantics {
-                        selected = way == chosen
-                        read?.let { stateDescription = it }
-                    }
-                    val padding = PaddingValues(4.dp)
-                    val label: @Composable () -> Unit = {
-                        Text(exitWay(way), textAlign = TextAlign.Center, fontWeight = if (read != null) FontWeight.Bold else null)
-                    }
-                    if (way == chosen) {
-                        FilledTonalButton({ onPick(way) }, cell, enabled = enabled(way), contentPadding = padding) { label() }
-                    } else {
-                        OutlinedButton({ onPick(way) }, cell, enabled = enabled(way), contentPadding = padding) { label() }
-                    }
-                }
+                row.forEach { way -> if (way == null) Spacer(Modifier.weight(1f)) else cell(way) }
             }
         }
     }
 }
 
-// An exit in words, as the room card shows it
+/** [ways] laid out as a compass, each a button that calls [onPick], those not [enabled] greyed. */
 @Composable
-private fun exitText(exit: RoomExit): String {
-    val name = exit.toName.ifEmpty { stringResource(R.string.room_unnamed, exit.to) }
-    return stringResource(if (exit.locked) R.string.room_exit_locked else R.string.room_exit, exitWay(exit.direction), name)
+private fun DirectionGrid(ways: List<List<String?>>, onPick: (String) -> Unit, enabled: (String) -> Boolean = { true }) {
+    CompassRows(ways) { way ->
+        OutlinedButton({ onPick(way) }, Modifier.weight(1f).heightIn(min = 48.dp), enabled = enabled(way), contentPadding = PaddingValues(4.dp)) {
+            Text(exitWay(way), textAlign = TextAlign.Center)
+        }
+    }
 }
 
 /**
- * The room's exits by way: one picked leads to a room given by its number, or tapped on the map next, either with the
- * exit back too, and an exit there is locked, unlocked or removed. Each closes it, so a refusal shows on the map.
+ * The room's [exits] by way as a compass, each a button that calls [onPick]. A way with an exit is filled, with the
+ * room it leads to under it, after a lock where locked; one with none is outlined, with a plus under it: they differ
+ * by more than colour, and TalkBack reads where each leads or that it has none. [chosen] has a thicker border.
+ */
+@Composable
+private fun ExitGrid(exits: Map<String, RoomExit>, chosen: String?, onPick: (String) -> Unit) {
+    CompassRows(EXIT_WAYS) { way ->
+        val exit = exits[way]
+        val picked = way == chosen
+        val reading = exit?.let { exitReading(it) } ?: stringResource(R.string.room_edit_no_exit_reading, exitWay(way))
+        val cell = Modifier.weight(1f).heightIn(min = 48.dp).semantics {
+            selected = picked
+            contentDescription = reading
+        }
+        val padding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+        val colors = MaterialTheme.colorScheme
+        val content: @Composable ColumnScope.() -> Unit = {
+            Text(exitWay(way), textAlign = TextAlign.Center, fontWeight = if (exit != null) FontWeight.Bold else null)
+            if (exit == null) {
+                Icon(painterResource(R.drawable.ic_add), null, Modifier.size(EXIT_MARK))
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (exit.locked) Icon(painterResource(R.drawable.ic_lock), null, Modifier.size(EXIT_MARK))
+                    Text(destinationName(exit), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        if (exit != null) {
+            val border = if (picked) BorderStroke(CHOSEN_BORDER, colors.primary) else null
+            FilledTonalButton({ onPick(way) }, cell, border = border, contentPadding = padding) { Column(horizontalAlignment = Alignment.CenterHorizontally, content = content) }
+        } else {
+            val border = if (picked) BorderStroke(CHOSEN_BORDER, colors.primary) else BorderStroke(1.dp, colors.outline)
+            OutlinedButton({ onPick(way) }, cell, border = border, contentPadding = padding) { Column(horizontalAlignment = Alignment.CenterHorizontally, content = content) }
+        }
+    }
+}
+
+// The room an exit leads to, by name, or by number where it has none
+@Composable
+private fun destinationName(exit: RoomExit): String = exit.toName.ifEmpty { stringResource(R.string.room_unnamed, exit.to) }
+
+// An exit in words, as the room card shows it
+@Composable
+private fun exitText(exit: RoomExit): String = stringResource(if (exit.locked) R.string.room_exit_locked else R.string.room_exit, exitWay(exit.direction), destinationName(exit))
+
+// An exit as TalkBack reads its button: its way, whether locked, and where it leads
+@Composable
+private fun exitReading(exit: RoomExit): String = stringResource(if (exit.locked) R.string.room_edit_exit_reading_locked else R.string.room_edit_exit_reading, exitWay(exit.direction), destinationName(exit))
+
+/**
+ * The room's exits by way: one picked leads to a room given by its number or found by its name, or tapped on the map
+ * next, either with the exit back too, and an exit there is locked, unlocked or removed. Each closes it, so a refusal
+ * shows on the map.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -299,8 +348,9 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
     val exits = info.exits.associateBy { it.direction }
     var way by remember { mutableStateOf<String?>(null) }
     var to by remember { mutableStateOf("") }
+    var found by remember { mutableStateOf<RoomMatch?>(null) }
     var bothWays by remember { mutableStateOf(true) }
-    val toRoom = to.toIntOrNull()?.takeIf { it > 0 }
+    val toRoom = to.trim().toIntOrNull()?.takeIf { it > 0 }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
@@ -308,15 +358,11 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
         title = { Text(stringResource(R.string.room_edit_exits_title, roomName(info))) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DirectionGrid(
-                    EXIT_WAYS,
-                    {
-                        way = it
-                        to = exits[it]?.to?.toString().orEmpty()
-                    },
-                    chosen = way,
-                    state = { exits[it]?.let { exit -> exitText(exit) } },
-                )
+                ExitGrid(exits, way) {
+                    way = it
+                    to = exits[it]?.to?.toString().orEmpty()
+                    found = null
+                }
                 way?.let { picked ->
                     val exit = exits[picked]
                     Text(
@@ -324,13 +370,12 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
                         Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    OutlinedTextField(
-                        to,
-                        { to = it.filter(Char::isDigit) },
-                        label = { Text(stringResource(R.string.room_edit_exit_to)) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                    )
+                    val known = found?.takeIf { it.id == toRoom }?.let { stringResource(R.string.room_edit_exit_to_found, it.name, it.area) }
+                        ?: exit?.takeIf { it.to == toRoom && it.toName.isNotEmpty() }?.toName
+                    DestinationField(to, known) { text, match ->
+                        to = text
+                        found = match
+                    }
                     CheckRow(bothWays, stringResource(R.string.room_edit_both_ways)) { bothWays = it }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton({ if (toRoom != null && rooms.setExit(info.id, picked, toRoom, bothWays)) onDismiss() }, enabled = toRoom != null) {
@@ -351,6 +396,68 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
             }
         },
     )
+}
+
+/**
+ * The room an exit leads to: [to] is its number, or part of its name, which lists the first rooms findRooms finds for
+ * it once the typing pauses ([AppMapClient.findDestinations]); a tap on one puts its number in. [known] is the name of
+ * the room [to]'s number is, where known. Each change goes to [onChange], with the room picked from the list, if any.
+ */
+@Composable
+private fun DestinationField(to: String, known: String?, onChange: (String, RoomMatch?) -> Unit) {
+    val appMap = EngineClient.front.appMap
+    val query = to.trim()
+    val byName = query.isNotEmpty() && !query.all(Char::isDigit)
+    // The last rooms found stay listed while the player types, until the pause sends the next search
+    LaunchedEffect(query, appMap) {
+        if (!byName) {
+            appMap.closeDestinations()
+            return@LaunchedEffect
+        }
+        delay(DESTINATION_SEARCH_DELAY_MS)
+        appMap.findDestinations(query)
+    }
+    DisposableEffect(appMap) { onDispose(appMap::closeDestinations) }
+    OutlinedTextField(
+        to,
+        { onChange(it, null) },
+        Modifier.fillMaxWidth(),
+        label = { Text(stringResource(R.string.room_edit_exit_to)) },
+        placeholder = { Text(stringResource(R.string.room_edit_exit_to_hint)) },
+        supportingText = if (known != null) {
+            { Text(known) }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        singleLine = true,
+    )
+    val search = appMap.destinations?.takeIf { byName } ?: return
+    val rooms = search.rooms
+    val status = when {
+        search.refusal != null -> stringResource(R.string.map_refused, search.refusal)
+        rooms == null -> stringResource(R.string.app_map_searching)
+        rooms.isEmpty() -> stringResource(R.string.app_map_no_rooms, search.text)
+        search.more -> stringResource(R.string.app_map_results_many, rooms.size)
+        else -> pluralStringResource(R.plurals.app_map_results_count, rooms.size, rooms.size)
+    }
+    Text(status, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelLarge)
+    rooms.orEmpty().take(DESTINATIONS_SHOWN).forEach { room ->
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button) { onChange(room.id.toString(), room) }.padding(vertical = 4.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(room.name.ifEmpty { stringResource(R.string.room_unnamed, room.id) }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.app_map_result_place, room.area, room.id),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    if (search.more || (rooms?.size ?: 0) > DESTINATIONS_SHOWN) {
+        Text(stringResource(R.string.app_map_more_rooms), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /** A new room beside this one, a way no exit goes yet; the new room shows once the engine makes it. */

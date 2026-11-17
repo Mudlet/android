@@ -10,12 +10,15 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -41,11 +44,13 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
 
 /**
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
  * settings (the hub, a search and four pages, and in light mode the hub and a page side by side on a tablet), the
- * map in front with a downloaded map and dragged off the player, and the game sheet with two games open, light and
+ * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
+ * part of a name, and the game sheet with two games open, light and
  * dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
@@ -158,6 +163,26 @@ class ScreenshotTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_follow))).fetchSemanticsNodes().isNotEmpty() }
         save("map-moved-$mode")
 
+        // Edited, a room's exits, those it has naming where they lead, and the rooms found by part of a name for one
+        session.send(appMap(size, roomName = ROOM_NAME, view = EngineMessages.mapView(size.getInt("w"), size.getInt("h")), viewOnly = false))
+        compose.runOnIdle { EngineClient.front.appMap.rooms.ask(1) }
+        session.send(EngineMessages.room(session.receive("roomInfo"), 1, "The Crossroads", steps = 0, exits = EXITS))
+        activate(hasText(string(R.string.room_edit_exits)))
+        waitFor(hasText(string(R.string.exit_up)) and hasAnyAncestor(isDialog()))
+        save("exits-$mode")
+        activate(hasText(string(R.string.exit_up)) and hasAnyAncestor(isDialog()))
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextInput("hall")
+        // Asked once the typing pauses, which the test's clock lets pass only while the test waits on Compose
+        val find = CompletableFuture.supplyAsync { session.receive("findRooms") }
+        compose.waitUntil(WAIT_MS) { find.isDone }
+        session.send(EngineMessages.rooms(find.get(), "hall", listOf(Triple(8, "Guild hall", "Village"), Triple(9, "Hall of heroes", "Keep"), Triple(10, "Town hall", "Village"))))
+        val found = hasText("Town hall") and hasAnyAncestor(isDialog())
+        waitFor(found)
+        compose.onNode(found).performScrollTo()
+        save("exits-find-$mode")
+        activate(hasText(string(R.string.room_edit_cancel)) and hasAnyAncestor(isDialog()))
+        compose.runOnIdle { EngineClient.front.appMap.rooms.close() }
+
         activate(hasContentDescription(string(R.string.app_map_show)))
 
         fake.engine.openAlongside(PROFILES[1].name)
@@ -216,12 +241,12 @@ class ScreenshotTest {
         File(dir, "$name.png").outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    private fun appMap(size: JSONObject, roomName: String? = null, view: JSONObject? = null): JSONObject {
+    private fun appMap(size: JSONObject, roomName: String? = null, view: JSONObject? = null, viewOnly: Boolean = true): JSONObject {
         val w = size.getInt("w")
         val h = size.getInt("h")
         val scale = size.getDouble("scale")
         return JSONObject().put("t", "appMap").put("png", Base64.getEncoder().encodeToString(mapPng((w * scale).toInt(), (h * scale).toInt(), roomName, scale.toFloat())))
-            .put("w", w).put("h", h).put("viewOnly", true).apply { if (view != null) put("view", view) }
+            .put("w", w).put("h", h).put("viewOnly", viewOnly).apply { if (view != null) put("view", view) }
     }
 
     // A grid of rooms joined by exits, in Mudlet's default room colours on its black map background, the player's in the
@@ -315,6 +340,13 @@ class ScreenshotTest {
 
         // A line in one colour of the ANSI palette, as a run (docs/protocol.md, "Runs"): start, length, fg, bg, attributes
         fun coloured(text: String, fg: Int, bold: Boolean = false): Pair<String, List<List<Int>>> = text to listOf(listOf(0, text.length, fg, -1, if (bold) RUN_BOLD else 0))
+
+        val EXITS = listOf(
+            EngineMessages.exit("n", 2, "Under the old oak", locked = true),
+            EngineMessages.exit("e", 3, "Market square"),
+            EngineMessages.exit("s", 4, "Mill road"),
+            EngineMessages.exit("w", 5, "Village gate"),
+        )
 
         const val ROOM_NAME = "A weapons vault / 56721 (Nu Second Circle of)"
 

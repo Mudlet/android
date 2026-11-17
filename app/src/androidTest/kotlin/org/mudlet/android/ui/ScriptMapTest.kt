@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
@@ -689,6 +690,123 @@ class ScriptMapTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(added).fetchSemanticsNodes().isEmpty() }
     }
 
+    @Test
+    fun diagExitsDialogTouchTargets() {
+        val rooms = mapOf(1 to (200.0 to 150.0), 2 to (230.0 to 150.0))
+        session.windows(listOf(mapper()), full = true)
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms)))
+        val map = drawnMap()
+        val drawn = bounds(map)
+        compose.onNode(map).performTouchInput { click(at(drawn, 230.0, 150.0)) }
+        val ask = session.receive("roomInfo")
+        session.send(room(ask, 2, "Kitchen", steps = 1, exits = listOf(exit("n", 5, "Tower"), exit("w", 1, "Great Hall"))))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Kitchen")).fetchSemanticsNodes().isNotEmpty() }
+        val out = StringBuilder()
+        var fails = 0
+        var passDumped = false
+        val cancel = hasText(string(R.string.room_edit_cancel)) and hasClickAction() and hasAnyAncestor(isDialog())
+        val pick = hasText(string(R.string.room_edit_exit_pick)) and hasClickAction() and hasAnyAncestor(isDialog())
+        repeat(DIAG_ROUNDS) { i ->
+            val typed = i % 3 == 1
+            val settle = i % 3 == 2
+            val r = runCatching {
+                if (typed) {
+                    tapInCard(R.string.room_edit_exits)
+                    activateInDialog(hasText(string(R.string.exit_north)))
+                    field(R.string.room_edit_exit_to).performTextReplacement("7")
+                    compose.onNode(cancel).performSemanticsAction(SemanticsActions.OnClick)
+                    compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+                }
+                tapInCard(R.string.room_edit_exits)
+                activateInDialog(hasText(string(R.string.exit_east)))
+                compose.waitUntil(WAIT_MS) { compose.onAllNodes(pick).fetchSemanticsNodes().isNotEmpty() }
+                if (settle) {
+                    Thread.sleep(1_000)
+                    compose.waitForIdle()
+                }
+                val before = diagDump()
+                val check = runCatching { compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks() }
+                if (check.isFailure) {
+                    fails++
+                    if (fails <= 2) {
+                        out.append("\n#$i typed=$typed settle=$settle FAIL ${check.exceptionOrNull()?.message?.lineSequence()?.drop(1)?.joinToString(" | ")?.take(260)}\n BEFORE $before")
+                        Thread.sleep(1_000)
+                        compose.waitForIdle()
+                        val again = runCatching { compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks() }
+                        out.append("\n AFTER1s recheck=${if (again.isSuccess) "pass" else "FAIL"} ${diagDump()}")
+                    } else {
+                        out.append("\n#$i typed=$typed settle=$settle FAIL")
+                    }
+                } else if (!passDumped) {
+                    passDumped = true
+                    out.append("\n#$i typed=$typed settle=$settle pass $before")
+                }
+                compose.onNode(cancel).performSemanticsAction(SemanticsActions.OnClick)
+                compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+            }
+            r.exceptionOrNull()?.let {
+                out.append("\n#$i typed=$typed ERR ${it.javaClass.simpleName}: ${it.message?.take(200)}")
+                runCatching { compose.onNode(cancel).performSemanticsAction(SemanticsActions.OnClick) }
+                runCatching { compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() } }
+            }
+        }
+        throw AssertionError("DIAG fails=$fails/$DIAG_ROUNDS$out".take(3800))
+    }
+
+    private fun diagDump(): String {
+        val b = StringBuilder()
+        compose.runOnIdle {
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.view.inspector.WindowInspector.getGlobalWindowViews().forEach { v ->
+                    val loc = IntArray(2).also { v.getLocationOnScreen(it) }
+                    val ins = v.rootWindowInsets
+                    val ime = ins?.getInsets(android.view.WindowInsets.Type.ime())
+                    val bars = ins?.getInsets(android.view.WindowInsets.Type.systemBars())
+                    b.append("[win ${v.javaClass.simpleName} at ${loc[0]},${loc[1]} ${v.width}x${v.height} lpH=${(v.layoutParams as? android.view.WindowManager.LayoutParams)?.height} ime=${ime?.bottom} bars=${bars?.top}/${bars?.bottom} imeVis=${ins?.isVisible(android.view.WindowInsets.Type.ime())} layoutReq=${v.isLayoutRequested}]")
+                }
+            }
+        }
+        val dialogNodes = compose.onAllNodes(hasAnyAncestor(isDialog()), useUnmergedTree = true).fetchSemanticsNodes()
+        val root = compose.onAllNodes(isRoot()).onLast().fetchSemanticsNode()
+        b.append(" root=${root.boundsInRoot.r()} rootWin=${root.boundsInWindow.r()}")
+        val labels = setOf(
+            string(R.string.room_edit_exit_pick),
+            string(R.string.room_edit_exit_set),
+            string(R.string.room_edit_cancel),
+            string(R.string.room_edit_both_ways),
+        )
+        compose.runOnIdle {
+            val provider = diagComposeView()?.accessibilityNodeProvider
+            dialogNodes.forEach { n ->
+                val scroll = n.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)
+                val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString()
+                val wanted = scroll != null || text in labels
+                if (!wanted) return@forEach
+                val c = n.layoutInfo.coordinates
+                val unclipped = Rect(c.positionInRoot(), androidx.compose.ui.geometry.Size(c.size.width.toFloat(), c.size.height.toFloat()))
+                val info = provider?.createAccessibilityNodeInfo(n.id)
+                val screen = android.graphics.Rect().also { info?.getBoundsInScreen(it) }
+                b.append(" {${text ?: "scroll"}#${n.id} root=${n.boundsInRoot.r()} unclip=${unclipped.r()} ani=${screen.toShortString()} vis=${info?.isVisibleToUser}")
+                if (scroll != null) b.append(" v=${scroll.value()}/${scroll.maxValue()}")
+                b.append("}")
+            }
+        }
+        return b.toString()
+    }
+
+    private fun Rect.r() = "[${left.toInt()},${top.toInt()}][${right.toInt()},${bottom.toInt()}]"
+
+    private fun diagComposeView(): android.view.View? {
+        if (Build.VERSION.SDK_INT < 30) return null
+        val views = android.view.inspector.WindowInspector.getGlobalWindowViews()
+        fun find(v: android.view.View): android.view.View? {
+            if (v.javaClass.simpleName == "AndroidComposeView") return v
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) find(v.getChildAt(i))?.let { return it }
+            return null
+        }
+        return views.lastOrNull()?.let { find(it) }
+    }
+
     private fun mapper() = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = MAP_W, h = MAP_H)
 
     // A button of the room picked, scrolled to in its card
@@ -865,6 +983,7 @@ class ScriptMapTest {
         const val CLEAR_STEP = 2f
 
         const val WAIT_MS = 10_000L
+        const val DIAG_ROUNDS = 24
         const val TIMEOUT_MS = 240_000L
 
         // Long enough for a request the UI would send to have come

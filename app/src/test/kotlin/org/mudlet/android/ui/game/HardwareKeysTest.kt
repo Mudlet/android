@@ -25,7 +25,7 @@ class HardwareKeysTest {
     @Test
     fun functionKeysAndModifiers() {
         assertEquals(KeyBinding(0x01000030, 0), HardwareKeys.of(KeyEvent.KEYCODE_F1, 0, 0))
-        assertEquals(KeyBinding(0x0100003b, KeyModifier.CONTROL.bit or KeyModifier.ALT.bit), HardwareKeys.of(KeyEvent.KEYCODE_F12, KeyEvent.META_CTRL_ON or KeyEvent.META_ALT_ON, 0))
+        assertEquals(KeyBinding(0x0100003b, KeyModifier.CONTROL.bit or KeyModifier.ALT.bit), HardwareKeys.of(KeyEvent.KEYCODE_F12, KeyEvent.META_CTRL_ON or KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON, 0))
         assertEquals(KeyBinding(0x01000030, KeyModifier.META.bit or shift), HardwareKeys.of(KeyEvent.KEYCODE_F1, KeyEvent.META_META_ON or KeyEvent.META_SHIFT_ON, 0))
     }
 
@@ -35,6 +35,7 @@ class HardwareKeysTest {
         assertEquals(KeyBinding('A'.code, shift), HardwareKeys.of(KeyEvent.KEYCODE_A, KeyEvent.META_SHIFT_ON, 'A'.code))
         assertEquals("Shift+1 is Qt's Exclam", KeyBinding('!'.code, shift), HardwareKeys.of(KeyEvent.KEYCODE_1, KeyEvent.META_SHIFT_ON, '!'.code))
         assertEquals(KeyBinding('A'.code, KeyModifier.CONTROL.bit), HardwareKeys.of(KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON, 'a'.code))
+        assertEquals("AltGr+E is no Alt", KeyBinding('E'.code, 0), HardwareKeys.of(KeyEvent.KEYCODE_E, KeyEvent.META_ALT_ON or KeyEvent.META_ALT_RIGHT_ON, 'e'.code))
         assertEquals(KeyBinding(' '.code, 0), HardwareKeys.of(KeyEvent.KEYCODE_SPACE, 0, ' '.code))
     }
 

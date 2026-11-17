@@ -74,7 +74,8 @@ internal object HardwareKeys {
         var modifiers = 0
         if (metaState and KeyEvent.META_SHIFT_ON != 0) modifiers = modifiers or KeyModifier.SHIFT.bit
         if (metaState and KeyEvent.META_CTRL_ON != 0) modifiers = modifiers or KeyModifier.CONTROL.bit
-        if (metaState and KeyEvent.META_ALT_ON != 0) modifiers = modifiers or KeyModifier.ALT.bit
+        // The right Alt is AltGr on most layouts, which Qt does not give as Alt
+        if (metaState and KeyEvent.META_ALT_LEFT_ON != 0) modifiers = modifiers or KeyModifier.ALT.bit
         if (metaState and KeyEvent.META_META_ON != 0) modifiers = modifiers or KeyModifier.META.bit
         val keypad = modifiers or KeyModifier.KEYPAD.bit
         return when (keyCode) {

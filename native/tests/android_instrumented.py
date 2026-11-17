@@ -166,13 +166,9 @@ def run(dev, args):
     failures = []
     install(args.app)
     install(args.app_tests)
-    failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
-                           480, "-e", "class", PERMISSION_TEST)
-    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 720, "-e", "notClass", PERMISSION_TEST)
-    pull_screenshots(dev)
-    install(args.engine_tests, "-g")
-    failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
-                           1320)
+    # Diagnostic branch: only the classes the diagnosis is about
+    failures += instrument(dev, "app", APP_TESTS, APP, "the client-race diagnosis", 720, "-e", "class",
+                           "org.mudlet.android.ui.EngineClientTest,org.mudlet.android.ui.ClientRaceDiagTest")
     return failures
 
 

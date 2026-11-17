@@ -5,10 +5,24 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+
+/** Diagnostic only: what the links' stopped threads did. */
+object LinkTrace {
+    /** When stop() last cleared a link's running flag. */
+    val stoppedAt = AtomicLong()
+
+    /** For each thread that connected and then found itself stopped: how long after [stoppedAt] it looked, in ns. */
+    val lateNs = ConcurrentLinkedQueue<Long>()
+
+    /** How many threads attached (set the writer, called onAttached) although stopped. */
+    val deadAttaches = AtomicInteger()
+}
 
 interface Transport {
     val input: InputStream
@@ -76,6 +90,7 @@ class EngineLink(
     @Synchronized
     fun stop() {
         running = false
+        LinkTrace.stoppedAt.set(System.nanoTime())
         transport?.close()
         thread?.interrupt()
         thread = null
@@ -137,6 +152,7 @@ class EngineLink(
                 continue
             }
             if (!live(g)) {
+                LinkTrace.lateNs.add(System.nanoTime() - LinkTrace.stoppedAt.get())
                 t.close()
                 break
             }
@@ -157,6 +173,7 @@ class EngineLink(
                     connection++
                     writer = w
                 }
+                if (!live(g)) LinkTrace.deadAttaches.incrementAndGet()
                 listener.onAttached(first, same)
                 while (live(g)) {
                     val m = reader.read()

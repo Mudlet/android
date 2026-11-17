@@ -17,6 +17,7 @@ import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
@@ -125,6 +126,9 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         game.stop()
     }
 
+    /** Diagnostic only: how many connections the open profile [name]'s socket took, how many said hello, how many were greeted. */
+    fun stats(name: String): IntArray = server(name).let { intArrayOf(it.accepts.get(), it.hellos.get(), it.greeted.get()) }
+
     private fun server(name: String): Server = synchronized(games) { games.firstOrNull { it.profile == name } } ?: throw AssertionError("the fake engine has no profile $name open")
 
     private fun localSocket(path: String): LocalSocket {
@@ -152,6 +156,10 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         @Volatile var attention = false
 
+        val accepts = AtomicInteger()
+        val hellos = AtomicInteger()
+        val greeted = AtomicInteger()
+
         init {
             thread(name = "fake-engine-${profile ?: "control"}", isDaemon = true) {
                 while (true) {
@@ -164,8 +172,13 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
                         accepted.close()
                         break
                     }
+                    accepts.incrementAndGet()
                     try {
-                        val connection = Connection(accepted, instance, profile, ::greet)
+                        val connection = Connection(accepted, instance, profile) {
+                            hellos.incrementAndGet()
+                            greet(it)
+                        }
+                        greeted.incrementAndGet()
                         live.add(connection)
                         attached.add(connection)
                     } catch (_: IOException) {

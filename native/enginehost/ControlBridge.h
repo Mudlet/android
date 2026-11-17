@@ -29,8 +29,9 @@ public:
     void setEngineControl(IEngineControl* control);
     bool listen(const QString& path);
 
-    IFrontend* profileOpened(const QString& name, IEngine* session, ProfileState state) override;
+    IFrontend* profileOpened(const QString& name, IEngine* session, ProfileState state, bool passwordGiven) override;
     void profileState(const QString& name, ProfileState state) override;
+    void profilePasswordGiven(const QString& name, bool given) override;
     void profileClosed(const QString& name) override;
     void engineStatus(const QString& key, const QString& value) override;
     IFrontend* controlFrontend() override { return this; }
@@ -44,6 +45,8 @@ private:
     {
         SocketBridge* bridge = nullptr;
         ProfileState state = ProfileState::starting;
+        // It holds a password given for this run: a restored one has none until the UI gives it again
+        bool passwordGiven = false;
         // The last line the player has seen, as markSeen gave it
         qint64 seenSeq = 0;
         bool attention = false;

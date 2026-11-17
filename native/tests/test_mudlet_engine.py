@@ -354,7 +354,7 @@ def tls_checks(plain_port):
     # The profile keeps the TLS it started with
     c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": False})
     m = wait_status(c, "connection", lambda v: v.startswith("error:"), [], timeout=10)
-    check("started with TLS" in m["value"], f"a connect without TLS is refused: {m['value']}")
+    check("connects with TLS" in m["value"], f"a connect without TLS is refused: {m['value']}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
@@ -427,6 +427,7 @@ def profile_requests(port):
           "connect connects the open profile, without a switch")
     several_profiles(c, port)
     running_profile_login(port)
+    running_profile_details(port)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     check(password not in open(LOG, errors="replace").read(), "nor did it log the password on its way out")
@@ -684,6 +685,132 @@ def running_profile_login(port):
 
     for password in (first, second, third):
         profile_checks.password_kept_out(check, password, seen + listed, LOG)
+    beta.close()
+    ctl.close()
+
+
+def running_profile_details(port):
+    """The open profile "Beta", connected to the game at port with a password given and automatic reconnect on, as the
+    player changes its other details in the editor: saveProfile hands the running profile its address, its TLS choice
+    and whether it reconnects by itself, and the next connection is made with them, the one Mudlet makes by itself
+    included. It never closes for any. Before that, openProfiles tells whether it holds a password, and handing it
+    one leaves the list of profiles in its order."""
+    second = fake_telnet.start_in_thread(banner=b"The second game\r\n")
+    tls_port = fake_telnet.start_in_thread(tls=self_signed_context())
+    connected_at = time.monotonic()
+    ctl = Client(SOCK, profile_sockets=True)
+    seen = []
+    listed = []
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=listed)
+
+    def ask(msg):
+        return ctl.ask(msg, timeout=30, collect=listed, answers=("profiles", "openProfiles", "error"))
+
+    def entry(m):
+        """What an openProfiles frame says of Beta."""
+        return next((p for p in m.get("profiles", []) if p["name"] == "Beta"), {})
+
+    def give_password(password):
+        given = {} if password is None else {"password": password}
+        return entry(ask({"t": "openProfile", "name": "Beta", "connect": False, "alongside": True, **given}))
+
+    def save(**changed):
+        details = {**profile_checks.profile("Beta", port, login="beta-hero-3", auto_reconnect=True), **changed}
+        return ask({"t": "saveProfile", **details})["t"] == "profiles"
+
+    def takes(pred, timeout=20):
+        """The next frame Beta is sent that pred takes, or None when the timeout comes first."""
+        try:
+            return beta.wait_for(pred, timeout=timeout, collect=seen)
+        except TimeoutError:
+            return None
+
+    def shows(text):
+        return lambda m: m["t"] in ("line", "tail") and text in m["text"]
+
+    def connection(*values):
+        """A connection status that is one of values, or an error."""
+        return lambda m: m["t"] == "status" and m["key"] == "connection" and (m["value"] in values or m["value"].startswith("error"))
+
+    def lose_connection():
+        """The game ends a connection that lasted the five seconds after which Mudlet makes it again by itself."""
+        takes(lambda m: False, connected_at + 5.5 - time.monotonic())
+        beta.send({"t": "send", "text": "quit"})
+        return len(seen)
+
+    def statuses(since):
+        return [(m["key"], m["value"]) for m in seen[since:] if m["t"] == "status" and m["key"] in ("profile", "connection")]
+
+    told = [m for m in listed if m["t"] == "openProfiles"]
+    beta = Client(entry(told[-1])["socket"])
+    beta.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(entry(told[-1]).get("passwordGiven") is True, f"openProfiles says the profile holds a password: {entry(told[-1])}")
+    took = give_password(None)
+    check(took.get("passwordGiven") is False, f"and that it holds none once that is withdrawn: {took}")
+    password = "pw-fourth-Hm6-never-logged"
+    took = give_password(password)
+    check(took.get("passwordGiven") is True, f"and that it holds the one it is given: {took}")
+
+    # A new profile comes first in the list, where the one opened last is
+    order = profile_checks.names(ask({"t": "saveProfile", **profile_checks.profile("Delta", port)}))
+    give_password(password)
+    after = profile_checks.names(ask({"t": "listProfiles"}))
+    check(order[:1] == ["Delta"] and after == order, f"a password handed to the running profile leaves the list's order: {after}")
+    ask({"t": "deleteProfile", "name": "Delta"})
+
+    saved = save(port=second)
+    mark = lose_connection()
+    check(saved and takes(shows("The second game")) is not None,
+          f"Mudlet's automatic reconnect goes to the port saved for the profile while it was connected: {statuses(mark)}")
+    connected_at = time.monotonic()
+
+    saved = save(port=second, autoReconnect=False)
+    mark = lose_connection()
+    lost = takes(connection("disconnected"))
+    again = takes(connection("connecting"), timeout=4)
+    check(saved and lost is not None and again is None,
+          f"with the automatic reconnect saved off, a lost connection is not made again: {statuses(mark)}")
+
+    saved = save()
+    mark = len(seen)
+    beta.send({"t": "runLua", "code": "reconnect()"})
+    check(saved and takes(shows("Red bold normal green")) is not None,
+          f"Lua's reconnect() goes to the port saved for the profile while it was disconnected: {statuses(mark)}")
+    connected_at = time.monotonic()
+    mark = lose_connection()
+    takes(connection("disconnected"))
+    again = takes(connection("connected"))
+    check(again is not None and again["value"] == "connected",
+          f"with the automatic reconnect saved on again, a lost connection is made again: {statuses(mark)}")
+
+    # A secure connection needs the server's name, as its certificate names it
+    beta.send({"t": "disconnect"})
+    takes(connection("disconnected"))
+    saved = save(host="localhost", port=tls_port, tls=True, autoReconnect=False)
+    mark = len(seen)
+    beta.send({"t": "connect", "host": "localhost", "port": tls_port, "tls": True})
+    ended = takes(lambda m: shows("self-signed")(m) or connection()(m), timeout=30)
+    check(saved and ended is not None and ended["t"] != "status",
+          "with TLS saved on, the next connect is made over TLS, which ends at the game's self-signed certificate: "
+          f"{statuses(mark)}")
+
+    saved = save(port=tls_port, tls=True, autoReconnect=False)
+    beta.send({"t": "connect", "host": "127.0.0.1", "port": tls_port, "tls": True})
+    refused = (takes(connection("connecting")) or {}).get("value", "")
+    check(saved and "Mudlet refused the address saved for the profile" in refused and "IP address" in refused,
+          f"an address Mudlet refuses, as TLS to an IP address, is stored, and the running profile's connect says why: {refused}")
+
+    saved = save(autoReconnect=False)
+    mark = len(seen)
+    beta.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": False})
+    up = takes(connection("connected"))
+    beta.send({"t": "send", "text": "tls"})
+    check(saved and up is not None and up["value"] == "connected" and takes(shows("TLS: none")) is not None,
+          f"with TLS saved off again, the next connect is made in the clear: {statuses(mark)}")
+
+    closes = [value for key, value in statuses(0) if key == "profile" and value.startswith("Beta clos")]
+    check(not closes, f"the profile never closed for any of them: {closes}")
+    profile_checks.password_kept_out(check, password, seen + listed, LOG)
     beta.close()
     ctl.close()
 

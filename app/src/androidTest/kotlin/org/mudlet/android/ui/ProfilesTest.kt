@@ -193,6 +193,36 @@ class ProfilesTest {
     }
 
     @Test
+    fun givesAGameTheEngineHoldsNoPasswordForItsStoredOneOnce() {
+        assertTrue(passwords.set("Alpha", "alpha secret"))
+        listed(ALPHA, BETA)
+        // As an engine started after the last was killed brings its games back: it kept no password
+        fake.engine.openAlongside("Alpha")
+        fake.engine.openAlongside("Beta")
+        fake.engine.passwordGiven("Alpha", false)
+        fake.engine.passwordGiven("Beta", false)
+        engine.openProfiles()
+        val given = engine.receive("openProfile")
+        assertEquals("Alpha", given.getString("name"))
+        assertEquals("alpha secret", given.getString("password"))
+        assertFalse("the game is not connected for it", given.getBoolean("connect"))
+        assertTrue("nor the other games closed", given.getBoolean("alongside"))
+
+        // Not again while the engine has yet to say it holds one, and nothing for Beta, which has none stored
+        engine.openProfiles()
+        engine.assertNoRequest("openProfile", 1000)
+
+        fake.engine.passwordGiven("Alpha", true)
+        engine.openProfiles()
+        engine.assertNoRequest("openProfile", 1000)
+
+        // Lost again, as by the next engine, it is given again
+        fake.engine.passwordGiven("Alpha", false)
+        engine.openProfiles()
+        assertEquals("alpha secret", engine.receive("openProfile").getString("password"))
+    }
+
+    @Test
     fun deletesOnlyOnceConfirmed() {
         assertTrue(passwords.set("Alpha", "alpha secret"))
         compose.runOnIdle { Settings.setAwaitsDefaults("Alpha", true) }

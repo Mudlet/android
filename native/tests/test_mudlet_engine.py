@@ -645,6 +645,11 @@ def bridge_refusals():
     proc, c = start_engine("Bridge Test")
     msgs = []
     c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    # libmudlet opens no profile until it is given a game or told to open one
+    m = c.ask(dict(profile_checks.profile("Bridge Test", 1), t="saveProfile"))
+    check(m["t"] == "profiles", f"saveProfile: {m}")
+    c.send({"t": "openProfile", "name": "Bridge Test", "connect": False})
+    wait_status(c, "profile", lambda v: v == "Bridge Test loaded", msgs, timeout=60)
     check(not [m for m in msgs if m["t"] == "openProfiles"], "a UI that leaves out profileSockets is not told of the open profiles")
 
     # A new connection replaces c, so c is attached again after it

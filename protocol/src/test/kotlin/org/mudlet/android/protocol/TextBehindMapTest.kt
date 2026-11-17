@@ -169,6 +169,15 @@ class TextBehindMapTest {
     }
 
     @Test
+    fun aFrameOfManyColoursKeepsEachOfThem() {
+        // More than the colours' table starts with room for, and apart in one channel alone, as a map's colours often are
+        val colours = List(200) { 0x400000 + 0x100 * it }
+        val frame = Frame(20 * 16 + 4, 10 * 16 + 4, OPAQUE)
+        colours.forEachIndexed { i, colour -> frame.rect(4 + i % 20 * 16, 4 + i / 20 * 16, 12, 12, OPAQUE or colour) }
+        assertEquals(colours, frame.ground()!!.solid)
+    }
+
+    @Test
     fun theCutOutClearsTheBackgroundAlone() {
         val pixels = intArrayOf(OPAQUE or 0x102030, OPAQUE or 0x102031, 0x7F102030, OPAQUE or LIGHT_GRAY, OPAQUE or 0x102030)
         TextBehindMap.cutOut(pixels, 0x102030)

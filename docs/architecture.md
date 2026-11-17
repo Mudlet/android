@@ -439,14 +439,14 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   `MapBehindText`), up to the same 54%. `MapBehindText`'s tones do not serve here: they leave out thin exit lines and
   take in the background, while this needs each drawn colour against the ground. The colours are found off the main
   thread, as the frame is decoded while the map is in front, and ahead of the swap while it is behind the text (below):
-  the colour of at least 64 pixels that have it on both sides along a row, a column or a diagonal, so a line a pixel wide counts, but not an antialiased edge, a pixel
-  between the background and the colour beside it across the line, which is seen as part of what it edges. A colour
-  already below 3:1 against the ground is not weighed, as no alpha could give it that. Mudlet's default map (dark green
-  and cyan rooms, grey exits, on black) shows the default grey text at 19%, held down by the dark green; white rooms
-  leave it to the grey exits, at 54%; rooms barely at 3:1 leave none. It eases in and drops at once as
-  the map behind the text does, comes back to full with a predictive back gesture, and is none until a cut-out frame has
-  come.
-  Text the game colours, and the script windows, are not weighed, as for the map behind the text.
+  the colour of at least 64 pixels that have it on both sides along a row, a column or a diagonal, so a line a pixel
+  wide counts, but not an antialiased edge, a pixel between the background and the colour beside it across the line,
+  which is seen as part of what it edges. A colour already below 3:1 against the ground is not weighed, as no alpha
+  could give it that. Mudlet's default map (dark green and cyan rooms, grey exits, on black) shows the default grey text
+  at 19%, held down by the dark green; white rooms leave it to the grey exits, at 54%; rooms barely at 3:1 leave none.
+  It eases in and drops at once as the map behind the text does, comes back to full with a predictive back gesture, and
+  is none until a cut-out frame has come. Text the game colours, and the script windows, are not weighed, as for the map
+  behind the text.
 - The search sends `findRooms`, from its button or the keyboard's Search key, and puts the keyboard away, as on a
   small screen it leaves the results no room. The engine sends the best first: the name the text, then names that
   begin with it, then those that hold it, and within each the rooms of the player's area, then the nearest. The
@@ -1539,6 +1539,9 @@ Item 13 of the on-device checklist covers this.
       still in front, as are History and the pinned commands. Back and the button again send it back, and a keyboard
       that went with the swap comes back; a predictive back gesture shrinks the map as it goes, and a cancelled one
       leaves it as it was.
+    - The swap is at once both ways, with the setting on and off and with the keyboard open: the map is never blank,
+      and neither moves nor changes size when the engine's frame for its new size comes; with the setting on the text
+      is behind the map from the first.
     - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,
       the field, its results and the map read as the mapper window's does, then the input line, and the console under
       it is not read, though new lines are still said.

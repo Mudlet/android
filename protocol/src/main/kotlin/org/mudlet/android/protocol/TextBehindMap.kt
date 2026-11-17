@@ -174,7 +174,8 @@ object TextBehindMap {
         fun add(colour: Int, count: Int) {
             // At most half full, so a colour's place is found in a step or two
             if (2 * used >= colours.size) {
-                val (oldColours, oldCounts) = colours to counts
+                val oldColours = colours
+                val oldCounts = counts
                 colours = IntArray(2 * oldColours.size)
                 counts = IntArray(2 * oldCounts.size)
                 for (i in oldColours.indices) if (oldCounts[i] > 0) put(oldColours[i], oldCounts[i])

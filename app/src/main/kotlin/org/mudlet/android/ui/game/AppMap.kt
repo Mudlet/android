@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -184,7 +185,7 @@ internal fun textBehindMap(appMap: AppMapClient, colors: ConsoleColors): TextBeh
     val ground = appMap.overText?.ground
     val target = remember(colors, ground) { TextBehindMap.alpha(ground, foreground, background, CONSOLE_BACKGROUND.toArgb() and 0xFFFFFF) }
     val alpha = remember { Animatable(target) }
-    // As BackgroundMap's: fainter at once, and the draw takes the lower until the effect has snapped
+    // As FaintMap's: fainter at once, and the draw takes the lower until the effect has snapped
     LaunchedEffect(target) { if (target < alpha.value) alpha.snapTo(target) else alpha.animateTo(target) }
     val under = ground?.background?.let { Color(0xFF shl 24 or it) } ?: colors.background
     return TextBehind(under) { minOf(alpha.value, target) }
@@ -255,10 +256,9 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             val viewOnly = map?.viewOnly ?: true
             // As the map comes to the front the input line lets its keyboard go (InputLine), which the keyboard says only
             // some frames on: the map would be laid out, and asked for, above the keyboard first
-            var keyboardGoes by remember { mutableStateOf(true) }
-            LaunchedEffect(Unit) {
+            val keyboardGoes by produceState(true) {
                 delay(KEYBOARD_GOES_MS)
-                keyboardGoes = false
+                value = false
             }
             // The buttons are beside the search, not over the map, where they would hide the room's name the engine
             // draws along its top

@@ -47,8 +47,8 @@ import org.mudlet.android.protocol.Profile
 
 /**
  * The input line's engine features against a fake engine: the masked field while the game hides input, the engine's
- * history, a line a script sets, completion, why the engine could not send, and the command sent kept on the line in
- * a game that keeps it. Controls are found by the labels TalkBack reads and activated through their accessibility
+ * history, a command it brings back selected whole or not as the game's "Highlight history" says, a line a script sets,
+ * completion, why the engine could not send, and the command sent kept on the line in a game that keeps it. Controls are found by the labels TalkBack reads and activated through their accessibility
  * actions.
  */
 @RunWith(AndroidJUnit4::class)
@@ -129,6 +129,28 @@ class InputLineTest {
         compose.onNode(input).assert(editableText("draft"))
         previous()
         compose.onNode(input).assert(editableText("north"))
+    }
+
+    @Test
+    fun aCommandBroughtBackFromTheHistoryIsSelectedWholeUnlessTheGameSaysNot() {
+        session.history(listOf("north", "look"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.history } == listOf("north", "look") }
+        // Mudlet's default, which the app's is too until the game gives its own
+        previous()
+        // As for a kept command, TalkBack is told of a cursor at the end, and of the line's state
+        compose.onNode(input).assert(editableText("north")).assert(recalledState)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(5)))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        compose.onNode(input).performTextInput("s")
+        compose.onNode(input).assert(editableText("s")).assert(!recalledState)
+
+        session.status("profile", "Unhighlighted history loaded")
+        session.settings(mapOf(Settings.highlightHistory.key to false), session.receive("getSettings").getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !EngineClient.front.setting(Settings.highlightHistory) } }
+        previous()
+        compose.onNode(input).assert(editableText("look")).assert(!recalledState)
+        compose.onNode(input).performTextInput("s")
+        compose.onNode(input).assert(editableText("looks"))
     }
 
     @Test
@@ -278,6 +300,8 @@ class InputLineTest {
 
     // What TalkBack reads of a line whose sent command is still on it
     private val keptState get() = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.input_kept))
+
+    private val recalledState get() = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.input_recalled))
 
     // The game's profile loads with desktop Mudlet's "Auto clear the input line after you sent text" off. The name is
     // its own, so the commands sent here are suggested to no other test

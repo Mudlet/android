@@ -20,25 +20,32 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -47,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -125,6 +133,7 @@ private fun EntryRows(entry: SettingEntry, owner: SettingsOwner) {
         is SettingEntry.Choice<*> -> ChoiceRows(entry, owner)
         is SettingEntry.Number -> NumberRows(entry, owner)
         is SettingEntry.Pick -> PickRow(entry, owner)
+        is SettingEntry.Typed -> TypedRow(entry, owner)
     }
 }
 
@@ -169,6 +178,30 @@ private fun ChoiceRows(entry: SettingEntry.Choice<*>, owner: SettingsOwner) {
             }
         }
     }
+}
+
+/** A field for the text, which changes the setting as it loses the focus, as Done is pressed or as the page closes. */
+@Composable
+private fun TypedRow(entry: SettingEntry.Typed, owner: SettingsOwner) {
+    val value = owner.value(entry.setting)
+    // Not sent on each key: the engine's answer to one change could land between two keys and undo the second
+    var draft by rememberSaveable(value) { mutableStateOf(value) }
+    val focusManager = LocalFocusManager.current
+    // The value read as it is done with: the focus going and the page closing can both come before a recomposition
+    val done by rememberUpdatedState {
+        if (draft != owner.value(entry.setting)) owner.change(entry.setting, draft)
+    }
+    DisposableEffect(Unit) { onDispose { done() } }
+    OutlinedTextField(
+        draft,
+        { draft = it },
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).onFocusChanged { if (!it.isFocused) done() },
+        label = { Text(stringResource(entry.label)) },
+        supportingText = entry.hint?.let { { Text(stringResource(it)) } },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+    )
 }
 
 /** A choice's label, or the choice itself for one the app has no label for, such as a name a newer Mudlet added. */

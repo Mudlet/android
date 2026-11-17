@@ -356,6 +356,30 @@
     <!-- Words a player might search the settings for to find "Clear the input line after sending", besides the words
          of its name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_clear_input_keywords">auto clear, keep, repeat, command line, select</string>
+    <!-- A text field on a game's Input page, as desktop Mudlet's preferences have it: the text that splits a line the
+         player sends into several commands, ";;" unless changed -->
+    <string name="settings_command_separator">Command separator</string>
+    <!-- Under "Command separator". Keep ";;" and the example as they are: the player types them exactly. -->
+    <string name="settings_command_separator_hint">A line you send is split into commands here: with ;; between them, "north;;look" sends north, then look. Leave it empty to send each line as it is.</string>
+    <!-- Words a player might search the settings for to find "Command separator", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_command_separator_keywords">split, several commands, semicolon, delimiter, stack</string>
+    <!-- A switch on a game's Input page, as desktop Mudlet's preferences have it: a command brought back from the
+         history with the up and down buttons is selected -->
+    <string name="settings_highlight_history">Highlight history</string>
+    <!-- Under "Highlight history" -->
+    <string name="settings_highlight_history_hint">A command you bring back from the history is selected, so typing replaces it.</string>
+    <!-- Words a player might search the settings for to find "Highlight history", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_highlight_history_keywords">select, previous commands, up arrow, recall</string>
+    <!-- A switch on a game's Input page, as desktop Mudlet's preferences have it: when the game hides what the player
+         types, as for a password, it is typed into the ordinary input line instead of a hidden password field -->
+    <string name="settings_show_passwords">Show passwords as you type them</string>
+    <!-- Under "Show passwords as you type them" -->
+    <string name="settings_show_passwords_hint">Passwords are typed into the input line, where they are shown and kept in the history. Turn this on for a game that hides everything you type, not only passwords.</string>
+    <!-- Words a player might search the settings for to find "Show passwords as you type them", besides the words of
+         its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_show_passwords_keywords">password, masking, hidden characters, echo</string>
     <!-- A switch on a game's Connection page: ask the player whether to switch to a secure (encrypted) connection
          when the game says it has one -->
     <string name="settings_offer_secure">Offer a secure connection</string>
@@ -708,6 +732,9 @@
     <!-- Read by a screen reader as the state of the input line, or of a script window's command line, while the
          command just sent is still in it, kept there selected by the game's setting -->
     <string name="input_kept">Sent. Typing replaces it</string>
+    <!-- Read by a screen reader as the state of the input line while a command brought back from the history with the
+         up and down buttons is in it, selected by the game's "Highlight history" setting -->
+    <string name="input_recalled">Selected. Typing replaces it</string>
     <!-- The button, also the Tab key, that completes the word being typed from the words the game sent -->
     <string name="input_complete">Complete the word</string>
     <!-- Shown under the input line when no word the game sent starts with what the player typed -->

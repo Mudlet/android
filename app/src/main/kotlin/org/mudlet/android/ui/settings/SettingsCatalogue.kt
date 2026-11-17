@@ -83,6 +83,9 @@ sealed class SettingEntry(
         fun choose(owner: SettingsOwner, index: Int) = owner.change(setting, setting.entries[index])
     }
 
+    /** Some text typed in, such as the command separator, which changes as the field is left or its Done key pressed. */
+    class Typed(category: SettingsCategory, override val setting: Settings.TextSetting, label: Int, hint: Int, keywords: Int) : SettingEntry(category, label, hint, keywords)
+
     /**
      * One of many [choices], such as Mudlet's names for something: a row with the current one, which opens the list to
      * pick from. [choiceLabel] is a choice's label, or null for one the app has none for, which shows as it is.
@@ -182,6 +185,27 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_clear_input,
             R.string.settings_clear_input_hint,
             R.string.settings_clear_input_keywords,
+        ),
+        SettingEntry.Typed(
+            SettingsCategory.INPUT,
+            Settings.commandSeparator,
+            R.string.settings_command_separator,
+            R.string.settings_command_separator_hint,
+            R.string.settings_command_separator_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.INPUT,
+            Settings.highlightHistory,
+            R.string.settings_highlight_history,
+            R.string.settings_highlight_history_hint,
+            R.string.settings_highlight_history_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.INPUT,
+            Settings.showPasswords,
+            R.string.settings_show_passwords,
+            R.string.settings_show_passwords_hint,
+            R.string.settings_show_passwords_keywords,
         ),
         SettingEntry.Pick(
             SettingsCategory.CONNECTION,

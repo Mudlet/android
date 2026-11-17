@@ -25,6 +25,7 @@ import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -343,6 +344,38 @@ class ScreenReaderTest {
         compose.onNode(hasText(string(R.string.settings_choice_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
         session.assertNoRequest("setSettings", 500)
+    }
+
+    @Test
+    fun theInputPageTakesTheCommandSeparatorAsTheFieldIsDoneWithAndTurnsItsSwitches() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_input)), scroll = true)
+        val mudlets = mapOf("commandSeparator" to ";;", "highlightHistory" to true, "disablePasswordMasking" to false)
+        session.settings(mudlets, session.receive("getSettings").getLong("id"))
+        activate(hasText(string(R.string.settings_highlight_history)), scroll = true)
+        assertEquals(mapOf("highlightHistory" to false), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_show_passwords)), scroll = true)
+        assertEquals(mapOf("disablePasswordMasking" to true), values(session.receive("setSettings")))
+        val field = hasSetTextAction() and hasText(string(R.string.settings_command_separator))
+        compose.onNode(field).performScrollTo().assert(hasText(";;"))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        compose.onNode(field).performTextClearance()
+        compose.onNode(field).performTextInput("|")
+        session.assertNoRequest("setSettings", 500)
+        compose.onNode(field).performImeAction()
+        assertEquals(mapOf("commandSeparator" to "|"), values(session.receive("setSettings")))
+        // None splits nothing, as desktop Mudlet's blank field
+        compose.onNode(field).performTextClearance()
+        compose.onNode(field).performImeAction()
+        assertEquals(mapOf("commandSeparator" to ""), values(session.receive("setSettings")))
+        session.assertNoRequest("setSettings", 500)
+        // Typed and left by Back, with no Done, it is still taken
+        compose.onNode(field).performTextInput("&&")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        assertEquals(mapOf("commandSeparator" to "&&"), values(session.receive("setSettings")))
+
+        compose.runOnIdle { assertEquals("new games keep Mudlet's", ";;", Settings.commandSeparator.value) }
     }
 
     @Test

@@ -54,6 +54,15 @@ object Settings {
      */
     val clearInputAfterSend = BoolSetting("autoClearInputLine", default = true, mudlet = true, mudletDefault = false)
 
+    /** The text a sent line is split into commands at, as Mudlet's ";;"; none splits nothing. */
+    val commandSeparator = TextSetting("commandSeparator", default = ";;", mudlet = true, blankAllowed = true)
+
+    /** Whether a command brought back from the history is selected whole, so what is typed next replaces it. */
+    val highlightHistory = BoolSetting("highlightHistory", default = true, mudlet = true)
+
+    /** "Show passwords as you type them": no masked field when the game hides what is typed, as some hide everything. */
+    val showPasswords = BoolSetting("disablePasswordMasking", default = false, mudlet = true)
+
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
 
@@ -119,6 +128,9 @@ object Settings {
         showSentText,
         unixLineEndings,
         clearInputAfterSend,
+        commandSeparator,
+        highlightHistory,
+        showPasswords,
         offerSecureConnection,
         serverEncoding,
         gmcp,
@@ -301,11 +313,11 @@ object Settings {
         }
     }
 
-    /** A name, such as one of Mudlet's for an option of many; a blank one is taken as [default]. */
-    class TextSetting(key: String, default: String, mudlet: Boolean = false) : Setting<String>(key, default, mudlet) {
-        override fun normalise(v: String) = v.ifBlank { default }
+    /** Some text, such as one of Mudlet's names for an option of many; a blank one is taken as [default] unless [blankAllowed]. */
+    class TextSetting(key: String, default: String, mudlet: Boolean = false, private val blankAllowed: Boolean = false) : Setting<String>(key, default, mudlet) {
+        override fun normalise(v: String) = if (blankAllowed) v else v.ifBlank { default }
 
-        override fun fromMudlet(v: Any) = (v as? String)?.takeIf { it.isNotBlank() }
+        override fun fromMudlet(v: Any) = (v as? String)?.takeIf { blankAllowed || it.isNotBlank() }
 
         override fun read(prefs: SharedPreferences) = prefs.getString(key, null) ?: default
 

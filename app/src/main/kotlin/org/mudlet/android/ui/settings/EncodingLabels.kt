@@ -5,7 +5,7 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.ServerEncodings
 
 /** The name desktop Mudlet's preferences show for each of [ServerEncodings.names], by Mudlet's name for it. */
-internal val encodingLabels: Map<String, @StringRes Int> = mapOf(
+internal val encodingLabels: Map<String, Int> = mapOf(
     "ASCII" to R.string.settings_encoding_ascii,
     "UTF-8" to R.string.settings_encoding_utf_8,
     "EUC-KR" to R.string.settings_encoding_euc_kr,

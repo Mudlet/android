@@ -45,7 +45,7 @@ import kotlin.math.abs
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, new and at a profile's Export, the settings with the list of server data encodings, the game screen, with the connection chip's states and the password field, the script library,
+ * editor, new and at a profile's Export, the settings with the list of server data encodings and the Input page, the game screen, with the connection chip's states and the password field, the script library,
  * and a trigger's page, with its Lua being typed, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
@@ -110,6 +110,11 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("the list of server data encodings", choices)
         compose.onNode(hasText(string(R.string.settings_choice_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(choices).fetchSemanticsNodes().isEmpty() }
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_input)))
+        activate(hasText(string(R.string.settings_input)))
+        waitFor(hasText(string(R.string.settings_command_separator)))
+        assertTextFits("the Input page, with the command separator")
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))

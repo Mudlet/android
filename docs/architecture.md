@@ -703,7 +703,8 @@ changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-l
 TLS choice and automatic reconnect changed for the connections after the one that is open (`setAddress()`,
 `setAutoReconnect()`, `0019-headless-connection-change.patch`), and the timers,
 keys and buttons edited as the triggers are, with what each item's row shows under its name
-(`0020-headless-script-items-more.patch`).
+(`0020-headless-script-items-more.patch`), and the error console's entries, each with the item that raised it
+(`0023-headless-error-console-entries.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -108,6 +109,8 @@ public:
     std::variant<QList<PackageInfo>, QString> packages() const override;
     QString installPackage(const QString& path) override;
     QString uninstallPackage(const QString& name) override;
+    QList<ErrorConsoleEntry> errorConsole() const override;
+    void clearErrorConsole() override;
 
     const QString& name() const { return mProfile; }
     // While it has not started: what a later connect or Lua starts
@@ -300,6 +303,9 @@ private:
     // Lua (connects included) asked for while the profile starts, run once it has
     QStringList mPendingLua;
     QString mErrorPending;
+    std::deque<ErrorConsoleEntry> mErrorConsole;
+    qint64 mErrorConsoleCount = 0;
+    qsizetype mErrorConsoleChars = 0;
 
     // What a restart of the engine would bring back of this profile while it runs, or awaits its restore
     SessionStore::Session mKept;

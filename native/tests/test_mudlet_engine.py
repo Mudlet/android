@@ -117,7 +117,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds,
-                       packages):
+                       packages, error_console):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -4270,6 +4270,120 @@ def packages():
     for kind, field in (("installPackage", "path"), ("uninstallPackage", "name")):
         m = ask({"t": kind, field: ""})
         check(m.get("message") == f"{kind}: {field} must not be empty", f"{kind} with no {field} is refused: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def error_console():
+    """The error console as desktop Mudlet's editor shows it, entry by entry: a trigger's or an alias's Lua error with
+    the item and the line, an event handler's with the script it is in, found by the chunk's name even when Lua cut it,
+    and none for a name two scripts share; Lua run from the UI and a temporary trigger's with no item, a debugc(); all of
+    them again to a UI that attaches, clearErrorConsole emptying it, and how much it keeps."""
+    profile = "Error Console Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    def ask(request):
+        return c.ask(request, answers=("scriptItem", "error"), collect=seen)
+
+    def entries_after(code):
+        """The entries the error console adds as the code runs, waiting for the first."""
+        since = len(seen)
+        c.send({"t": "runLua", "code": code})
+        wait_status(c, "luaResult", lambda v: True, seen)
+        # An entry is sent as Mudlet writes it, before the status that ends the run
+        return [e for m in seen[since:] if m["t"] == "errorConsole" and not m["full"] for e in m["entries"]]
+
+    trigger = ask({"t": "addScriptItem", "kind": "trigger", "parent": 0, "position": 0, "folder": False, "name": "Bad trigger"})
+    trigger = trigger.get("fields", {}).get("id")
+    ask({"t": "editScriptItem", "kind": "trigger", "item": trigger, "fields": {
+        "patterns": [{"text": "hit me", "type": "substring"}], "script": "local mob = nil\nmob.hp = 1"}})
+    entries = entries_after('feedTriggers("hit me\\n")')
+    check(len(entries) == 1 and {k: entries[0].get(k) for k in ("debug", "object", "function", "event", "kind", "item", "line")} == {
+        "debug": False, "object": "Bad trigger", "function": f"Trigger{trigger}", "event": "", "kind": "trigger",
+        "item": trigger, "line": 2} and "attempt to index local 'mob'" in entries[0].get("message", "")
+          and entries[0].get("n") == 1 and entries[0].get("at", 0) > 0,
+          f"a trigger's Lua error names the trigger and the line: {entries}")
+
+    # Mudlet calls the function named as the script for each of its events
+    script = ask({"t": "addScriptItem", "kind": "script", "parent": 0, "position": 0, "folder": False, "name": "onBad"})
+    script = script.get("fields", {}).get("id")
+    ask({"t": "editScriptItem", "kind": "script", "item": script, "fields": {
+        "eventHandlers": ["badEvent"], "script": "function onBad()\n  error(\"handler boom\")\nend"}})
+    entries = entries_after('raiseEvent("badEvent")')
+    check([(e.get("kind"), e.get("item"), e.get("line"), e.get("function")) for e in entries] == [("script", script, 2, "onBad")]
+          and "handler boom" in entries[0].get("message", ""),
+          f"an event handler's names the script it is in, by its chunk's name: {entries}")
+
+    entries = entries_after('error("ui boom")')
+    check([(e.get("kind"), e.get("item"), e.get("line")) for e in entries] == [("", 0, 0)] and "ui boom" in entries[0].get("message", ""),
+          f"Lua run from the UI names no item: {entries}")
+    entries = entries_after('tempTrigger("temp hit", function() error("temp boom") end) feedTriggers("temp hit\\n")')
+    check([(e.get("kind"), e.get("item")) for e in entries] == [("", 0)] and "temp boom" in entries[0].get("message", ""),
+          f"nor does a temporary trigger, which the editor does not show: {entries}")
+    entries = entries_after('debugc("just saying")')
+    check([(e.get("debug"), e.get("message"), e.get("item")) for e in entries] == [(True, "just saying", 0)],
+          f"a debugc() is an entry too, as on the desktop: {entries}")
+
+    alias = ask({"t": "addScriptItem", "kind": "alias", "parent": 0, "position": 0, "folder": False, "name": "Bad alias"})
+    alias = alias.get("fields", {}).get("id")
+    ask({"t": "editScriptItem", "kind": "alias", "item": alias, "fields": {"pattern": "^boom$", "script": "\nlocal t = nil\nt.x = 1"}})
+    entries = entries_after('expandAlias("boom")')
+    check([(e.get("kind"), e.get("item"), e.get("line"), e.get("function")) for e in entries] == [("alias", alias, 3, f"Alias{alias}")],
+          f"an alias's names the alias and the line: {entries}")
+
+    # Lua cuts a chunk's name to fit LUA_IDSIZE (60 bytes with its [string ""]), so this one is known by how it starts
+    long = "onAVeryLongEventHandlerNameThatLuaCutsShortInItsChunkName"
+    script = ask({"t": "addScriptItem", "kind": "script", "parent": 0, "position": 0, "folder": False, "name": long})
+    script = script.get("fields", {}).get("id")
+    ask({"t": "editScriptItem", "kind": "script", "item": script, "fields": {
+        "eventHandlers": ["longEvent"], "script": f"function {long}()\n  error(\"long boom\")\nend"}})
+    entries = entries_after('raiseEvent("longEvent")')
+    check([(e.get("kind"), e.get("item"), e.get("line")) for e in entries] == [("script", script, 2)] and "...\"]:2:" in entries[0].get("message", ""),
+          f"a script whose chunk's name Lua cut is found by how it starts: {entries}")
+
+    for _ in range(2):
+        twin = ask({"t": "addScriptItem", "kind": "script", "parent": 0, "position": 0, "folder": False, "name": "onTwin"})
+        ask({"t": "editScriptItem", "kind": "script", "item": twin.get("fields", {}).get("id"), "fields": {
+            "eventHandlers": ["twinEvent"], "script": "function onTwin()\n  error(\"twin boom\")\nend"}})
+    entries = entries_after('raiseEvent("twinEvent")')
+    check(entries and all((e.get("kind"), e.get("item"), e.get("line")) == ("", 0, 0) for e in entries),
+          f"but a chunk's name that two scripts share names neither: {entries}")
+    count = entries[-1].get("n", 0)
+
+    c.close()
+    c = Client(SOCK)
+    again = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=again)
+    full = [m for m in again if m["t"] == "errorConsole"]
+    check(len(full) == 1 and full[0]["full"] and [e.get("n") for e in full[0]["entries"]] == list(range(1, count + 1)),
+          f"a UI that attaches gets every entry, oldest first: {full}")
+    c.send({"t": "clearErrorConsole"})
+    m = c.wait_for(lambda m: m["t"] == "errorConsole", timeout=5)
+    check(m["full"] and m["entries"] == [], f"clearErrorConsole empties it: {m}")
+    c.close()
+    c = Client(SOCK)
+    again = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=again)
+    check([m["entries"] for m in again if m["t"] == "errorConsole"] == [[]], f"and it stays empty: {again}")
+
+    # One message carries them all to a UI that attaches, so it must stay under the protocol's largest frame
+    entries = entries_after('debugc(string.rep("y", 12000))')
+    check([len(e.get("message", "")) for e in entries] == [10001] and entries[0]["message"].endswith("…"),
+          f"a long text is cut: {[len(e.get('message', '')) for e in entries]}")
+    entries_after('for i = 1, 120 do debugc(string.rep("z", 10000)) end')
+    c.close()
+    c = Client(SOCK)
+    again = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=again)
+    full = [m["entries"] for m in again if m["t"] == "errorConsole"]
+    check(len(full) == 1 and [e.get("n") for e in full[0]] == list(range(count + 22, count + 122)),
+          f"and the oldest go once the texts pass a million characters: {[[e.get('n') for e in f] for f in full]}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

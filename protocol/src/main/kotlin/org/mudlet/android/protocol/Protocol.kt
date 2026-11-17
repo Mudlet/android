@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 28
+const val PROTOCOL_VERSION = 29
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -647,6 +647,26 @@ data class AddonCommand(
     val pulse: Boolean,
 )
 
+/**
+ * An entry of the profile's error console, as desktop Mudlet's editor shows it: a Lua error, a printError() or, for
+ * [debug], a debugc(). [obj] and [function] are what the console names in green (an item's name and its Lua function),
+ * or [event] the event whose handler raised it. [kind] and [item] are the item that raised it, null and 0 together where
+ * the engine knows of none the script editor shows; [line] the line of its Lua the message names, 0 for none. [n] counts the
+ * profile's entries from 1; [at] is when, in ms since the epoch.
+ */
+data class ErrorConsoleEntry(
+    val n: Long,
+    val at: Long,
+    val debug: Boolean,
+    val obj: String,
+    val function: String,
+    val event: String,
+    val message: String,
+    val kind: ScriptItemKind?,
+    val item: Int,
+    val line: Int,
+)
+
 /** A row of a script window's console: [runs] as [EngineMessage.Line]'s, but a bg of -1 is the window's bg. */
 data class WindowRow(val text: String, val runs: IntArray, val prompt: Boolean, val wrapped: Boolean)
 
@@ -792,6 +812,9 @@ sealed interface EngineMessage {
 
     /** The answer to Requests.installPackage for the file at [path]; [error] says why for all but [PackageInstallResult.INSTALLED]. */
     data class PackageInstalled(val path: String, val result: PackageInstallResult, val error: String) : EngineMessage
+
+    /** The error console's [entries], oldest first: all it holds when [full], else ones to add to those already had. */
+    data class ErrorConsole(val entries: List<ErrorConsoleEntry>, val full: Boolean) : EngineMessage
 
     /** The answer to Requests.checkLua: [problem] is null for code that compiles. */
     data class LuaCheck(val problem: LuaProblem?, val replyTo: Any?) : EngineMessage
@@ -1133,6 +1156,9 @@ object Requests {
     /** Answered by [EngineMessage.LuaCheck] with [id] as its replyTo, or an Error: whether [code] compiles as Lua; it is not run. */
     fun checkLua(code: String, id: Long): JSONObject = JSONObject().put("t", "checkLua").put("code", code).put("id", id)
 
+    /** Empties the profile's error console, which an [EngineMessage.ErrorConsole] with no entries follows. */
+    fun clearErrorConsole(): JSONObject = JSONObject().put("t", "clearErrorConsole")
+
     /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
     fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
 
@@ -1414,6 +1440,8 @@ class FrameReader(input: InputStream) {
                 o.optString("error"),
             )
 
+            "errorConsole" -> EngineMessage.ErrorConsole(objects(o.optJSONArray("entries")).map(::parseErrorConsoleEntry), o.optBoolean("full"))
+
             "luaCheck" -> EngineMessage.LuaCheck(if (o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))
 
             "mapDownload" -> EngineMessage.MapDownload(
@@ -1475,6 +1503,24 @@ class FrameReader(input: InputStream) {
             error = i.optString("error"),
             summary = i.optString("summary"),
         )
+
+        private fun parseErrorConsoleEntry(e: JSONObject): ErrorConsoleEntry {
+            val item = e.optInt("item")
+            // An item of a kind this client does not know cannot be gone to
+            val kind = ScriptItemKind.fromWire(e.optString("kind")).takeIf { item > 0 }
+            return ErrorConsoleEntry(
+                n = e.optLong("n"),
+                at = e.optLong("at"),
+                debug = e.optBoolean("debug"),
+                obj = e.optString("object"),
+                function = e.optString("function"),
+                event = e.optString("event"),
+                message = e.optString("message"),
+                kind = kind,
+                item = if (kind == null) 0 else item,
+                line = e.optInt("line"),
+            )
+        }
 
         private fun parseScriptItem(kind: ScriptItemKind, f: JSONObject): ScriptItem {
             val details = when (kind) {

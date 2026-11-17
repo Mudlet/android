@@ -442,6 +442,36 @@ THeadlessSession::ScriptItemKind sessionKind(const IEngine::ScriptItemKind kind)
     return THeadlessSession::ScriptItemKind::button;
 }
 
+QString cut(const QString& text)
+{
+    return text.size() > IEngine::maxErrorConsoleText ? text.left(IEngine::maxErrorConsoleText) + QChar(0x2026) : text;
+}
+
+qsizetype chars(const ErrorConsoleEntry& entry)
+{
+    return entry.object.size() + entry.function.size() + entry.event.size() + entry.message.size();
+}
+
+// As the protocol names them
+QString kindName(const THeadlessSession::ScriptItemKind kind)
+{
+    switch (kind) {
+    case THeadlessSession::ScriptItemKind::trigger:
+        return QStringLiteral("trigger");
+    case THeadlessSession::ScriptItemKind::alias:
+        return QStringLiteral("alias");
+    case THeadlessSession::ScriptItemKind::script:
+        return QStringLiteral("script");
+    case THeadlessSession::ScriptItemKind::timer:
+        return QStringLiteral("timer");
+    case THeadlessSession::ScriptItemKind::key:
+        return QStringLiteral("key");
+    case THeadlessSession::ScriptItemKind::button:
+        break;
+    }
+    return QStringLiteral("button");
+}
+
 } // namespace
 
 MudletProfile::MudletProfile(MudletEngine& engine, const QString& profile)
@@ -538,6 +568,21 @@ void MudletProfile::connectSession()
                 mFrontend->status(QStringLiteral("luaError"), line);
             }
         }
+    });
+    connect(session, &THeadlessSession::errorConsoleEntry, this, [this](const QString&, const THeadlessSession::ErrorConsoleEntry& entry) {
+        ErrorConsoleEntry kept{++mErrorConsoleCount, entry.msecs, entry.debug, cut(entry.object), cut(entry.function), cut(entry.event), cut(entry.message)};
+        if (entry.id) {
+            kept.kind = kindName(entry.kind);
+            kept.item = entry.id;
+            kept.line = entry.line;
+        }
+        mErrorConsole.push_back(kept);
+        mErrorConsoleChars += chars(kept);
+        while (std::ssize(mErrorConsole) > maxErrorConsoleEntries || mErrorConsoleChars > maxErrorConsoleChars) {
+            mErrorConsoleChars -= chars(mErrorConsole.front());
+            mErrorConsole.pop_front();
+        }
+        mFrontend->errorConsoleEntry(kept);
     });
     connect(session, &THeadlessSession::notificationRequested, this, [this](const QString&, const QString& title, const QString& text) {
         mFrontend->notify(title, text);
@@ -2179,6 +2224,18 @@ std::optional<IEngine::LuaProblem> MudletProfile::checkLua(const QString& code) 
 {
     const std::optional<THeadlessSession::LuaProblem> problem = THeadlessSession::checkLua(code);
     return problem ? std::optional<LuaProblem>(LuaProblem{problem->line, problem->message}) : std::nullopt;
+}
+
+QList<ErrorConsoleEntry> MudletProfile::errorConsole() const
+{
+    return {mErrorConsole.cbegin(), mErrorConsole.cend()};
+}
+
+void MudletProfile::clearErrorConsole()
+{
+    mErrorConsole.clear();
+    mErrorConsoleChars = 0;
+    mFrontend->errorConsoleCleared();
 }
 
 void MudletProfile::takeOfferedMap(const QString& url)

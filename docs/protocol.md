@@ -744,8 +744,7 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 As implemented in version 26, which added timers, keys and buttons to the script items (`timer`, `key` and `button`
 for `kind`) and `summary` to `scriptItems`; version 26 added whether an open profile was given a password
 (`passwordGiven` in `openProfiles`); version 25 added checking that Lua compiles (`checkLua`, `luaCheck`);
-version 24 took the
-map info box out of the map's picture and sends it as text (`info` in
+version 24 took the map info box out of the map's picture and sends it as text (`info` in
 `map` and `appMap`); version 23 added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,
 `addScriptItem`, `editScriptItem`, `enableScriptItem`, `moveScriptItem`, `deleteScriptItem`); version 22 added
 following a label's link (`followLabelLink`); version 21 added editing

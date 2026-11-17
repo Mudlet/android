@@ -78,7 +78,7 @@ fun ScriptItemNode.rowStatus(children: Int): RowStatus? = when {
 enum class Adds {
     ITEM_AND_FOLDER,
 
-    /** At the buttons' top level, where a folder is a toolbar and a button outside one is never drawn. */
+    /** At the buttons' top level and in a package's folder, where a folder is a toolbar and a button outside one is never drawn. */
     TOOLBAR,
 
     /** Inside an item that is not a folder: Mudlet's add takes only a folder to add to. */
@@ -88,9 +88,12 @@ enum class Adds {
 /** What can be added to [parent], null for the top level, among the items of [kind]. */
 fun adds(kind: ScriptItemKind, parent: ScriptItemNode?): Adds = when {
     parent != null && !parent.folder -> Adds.NOTHING
-    kind == ScriptItemKind.BUTTON && parent == null -> Adds.TOOLBAR
+    kind == ScriptItemKind.BUTTON && (parent == null || parent.packageFolder) -> Adds.TOOLBAR
     else -> Adds.ITEM_AND_FOLDER
 }
+
+/** The folder a package or module's items came in, which is at the top level: the items in it have its package too. */
+private val ScriptItemNode.packageFolder: Boolean get() = folder && parent == 0 && packageName.isNotEmpty()
 
 /** An item a search found, with the folders it is in, the outermost first. */
 data class ScriptSearchResult(val kind: ScriptItemKind, val item: ScriptItemNode, val folders: List<ScriptItemNode>)
@@ -184,14 +187,11 @@ enum class ButtonPart {
 }
 
 /** What [node] is among these, the buttons as listed. Until its folder is listed, a folder inside another is taken for a menu. */
-fun List<ScriptItemNode>.buttonPart(node: ScriptItemNode): ButtonPart {
-    fun ScriptItemNode.packageFolder() = folder && parent == 0 && packageName.isNotEmpty()
-    return when {
-        !node.folder -> ButtonPart.BUTTON
-        node.packageFolder() -> ButtonPart.PACKAGE
-        node.parent == 0 || firstOrNull { it.id == node.parent }?.packageFolder() == true -> ButtonPart.TOOLBAR
-        else -> ButtonPart.MENU
-    }
+fun List<ScriptItemNode>.buttonPart(node: ScriptItemNode): ButtonPart = when {
+    !node.folder -> ButtonPart.BUTTON
+    node.packageFolder -> ButtonPart.PACKAGE
+    node.parent == 0 || firstOrNull { it.id == node.parent }?.packageFolder == true -> ButtonPart.TOOLBAR
+    else -> ButtonPart.MENU
 }
 
 /** The keys a key binding is picked from on a phone, by their Qt::Key codes: those named, F1 to F12, digits, letters, then the number pad's signs. */

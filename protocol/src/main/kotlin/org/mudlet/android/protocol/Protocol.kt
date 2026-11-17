@@ -459,7 +459,7 @@ sealed interface ScriptItemDetails {
     /**
      * [commandDown] is what it sends when pressed and [commandUp] what a [pushDown] button sends when released; [css]
      * its style sheet. [location], [vertical] and [columns], from 1, mean something for a toolbar, a folder at the top
-     * level, and are what its [ButtonBar] then has.
+     * level or in the folder a package's buttons came in, and are what its [ButtonBar] then has.
      */
     data class Button(
         val commandDown: String,

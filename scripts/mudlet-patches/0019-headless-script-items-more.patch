@@ -26,7 +26,7 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 18e5e6a..8ccd263 100644
+index 18e5e6a..1119d01 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
 @@ -1747,17 +1747,20 @@ the globals changes nothing. They are false, reading or changing nothing, where
@@ -57,7 +57,7 @@ index 18e5e6a..8ccd263 100644
  
  - a trigger's `patterns`, each a map of `text` and `type`, one of `substring`, `regex`, `startOfLine`,
    `exact`, `lua`, `spacer` (its text the number of lines), `color` (its text as the profile keeps it,
-@@ -1766,23 +1769,39 @@ getter, so it may be called from any handler. `scriptItem()` gives all of one it
+@@ -1766,23 +1769,40 @@ getter, so it may be called from any handler. `scriptItem()` gives all of one it
    `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`,
    `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour;
  - an alias's `pattern` and `command`;
@@ -69,9 +69,10 @@ index 18e5e6a..8ccd263 100644
 +  `Qt::KeyboardModifiers` held with it, as a number; and `keyName`, which is only read: the two as the
 +  editor writes them, as "control + F1", or empty with no key;
 +- a button's `commandDown`, which it sends when pressed, `commandUp`, which a push-down button sends
-+  when released, and `pushDown`; and what the editor asks for a toolbar, a folder at the top level:
-+  `location`, one of `top`, `left`, `right` and `floating`, `orientation`, `horizontal` or
-+  `vertical`, `columns`, from 1, and `css`, its style sheet, which a button has too.
++  when released, and `pushDown`; and what the editor asks for a toolbar, a folder at the top level or
++  in the folder a package's buttons came in: `location`, one of `top`, `left`, `right` and `floating`,
++  `orientation`, `horizontal` or `vertical`, `columns`, from 1, and `css`, its style sheet, which a
++  button has too.
  
  `addScriptItem()` makes an item or a folder as the editor's add does: switched on, but not running
 -until its first `editScriptItem()`, at a place among the items the editor shows in that folder.
@@ -178,7 +179,7 @@ index 8820d42..94bafe8 100644
      // Switched on or off, as the editor's checkbox does: an item that cannot compile is left off, false with its error.
      bool setScriptItemEnabled(ScriptItemKind kind, int id, bool enabled);
 diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
-index 106fc74..1118dbe 100644
+index 106fc74..0920fef 100644
 --- a/src/headless/THeadlessSessionScripts.cpp
 +++ b/src/headless/THeadlessSessionScripts.cpp
 @@ -19,13 +19,19 @@
@@ -773,29 +774,29 @@ index 106fc74..1118dbe 100644
          return true;
      });
  }
-@@ -633,15 +971,14 @@ bool THeadlessSession::setScriptItemEnabled(const ScriptItemKind kind, const int
+@@ -633,13 +971,15 @@ bool THeadlessSession::setScriptItemEnabled(const ScriptItemKind kind, const int
              mErrorString = noItem(id);
              return false;
          }
 -        pItem->setIsActive(enabled);
 -        if (!pItem->state()) {
 +        switchItem(pItem, enabled);
-+        const bool compiled = pItem->state();
-+        if (!compiled) {
++        const bool runnable = pItem->state();
++        if (!runnable) {
              pItem->setIsActive(false);
 -            if (enabled) {
 -                mErrorString = errorOf(pItem);
 -                return false;
 -            }
-+            mErrorString = errorOf(pItem);
-         }
--        return true;
++        }
 +        redrawBars<T>(*mpHost);
-+        return compiled || !enabled;
++        if (enabled && !runnable) {
++            mErrorString = errorOf(pItem);
++            return false;
+         }
+         return true;
      });
- }
- 
-@@ -673,6 +1010,7 @@ bool THeadlessSession::moveScriptItem(const ScriptItemKind kind, const int id, c
+@@ -673,6 +1013,7 @@ bool THeadlessSession::moveScriptItem(const ScriptItemKind kind, const int id, c
              }
          }
          reParent(*mpHost, pItem, parent, unitPosition<T>(*mpHost, pParent, pItem, position));
@@ -803,7 +804,7 @@ index 106fc74..1118dbe 100644
          return true;
      });
  }
-@@ -690,6 +1028,7 @@ bool THeadlessSession::deleteScriptItem(const ScriptItemKind kind, const int id)
+@@ -690,6 +1031,7 @@ bool THeadlessSession::deleteScriptItem(const ScriptItemKind kind, const int id)
              return false;
          }
          delete pItem;

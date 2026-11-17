@@ -125,8 +125,11 @@ fun Console(
     // linesAdded when the player scrolled away from the bottom: the lines since then are new to them
     var seenUpTo by rememberSaveable { mutableLongStateOf(linesAdded) }
     val latestLinesAdded by rememberUpdatedState(linesAdded)
-    val itemCount = lines.size + if (tail != null) 1 else 0
-    val firstLine = linesAdded - lines.size
+    // Read once: the measure pass calls the key lambda after the lines may have changed, and a live size there gives
+    // two items the tail's key
+    val lineCount = lines.size
+    val itemCount = lineCount + if (tail != null) 1 else 0
+    val firstLine = linesAdded - lineCount
 
     // Applied before the layout that shows the new lines, so that layout already ends at the bottom and never looks
     // like a scroll away from it
@@ -161,11 +164,11 @@ fun Console(
             contentPadding = PaddingValues(horizontal = CONSOLE_SIDE_PADDING),
         ) {
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
-            items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
-                val line = if (i < lines.size) lines[i] else tail ?: return@items
+            items(itemCount, key = { i -> if (i < lineCount) firstLine + i else TAIL_KEY }) { i ->
+                val line = if (i < lineCount) lines.getOrNull(i) ?: return@items else tail ?: return@items
                 val spans = remember(line) { linkSpans(line.runs, line.text.length) }
                 // A line from before a new engine instance names links that instance does not hold; the tail is its own
-                val held = links?.takeIf { spans.isNotEmpty() && (i >= lines.size || firstLine + i >= it.firstLine) }
+                val held = links?.takeIf { spans.isNotEmpty() && (i >= lineCount || firstLine + i >= it.firstLine) }
                 // Read here, so a new answer draws the line again in the link's new look
                 val answers = held?.let { l -> spans.map { l.info(it.link) } }.orEmpty()
                 val text = remember(line, colors, answers) { ansiText(held?.let { line.paintedAs(it::info) } ?: line, colors) }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -115,7 +116,8 @@ internal val ScriptItemKind.newName: Int
  * others chain from, a timer with offset timers) is gone into as a folder is. New items go last in the folder shown,
  * and open once made; among the buttons the top level, as a package's folder, takes toolbars, which the buttons go
  * in ([adds]). A search lists the items of every kind it finds the text in, with where each lives and, under it, the
- * first places the engine found it, by the desktop editor's options, each a chip. At the foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does.
+ * first places the engine found it, by the desktop editor's options, each a chip. At the foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does. [actions] go first in
+ * the title bar.
  */
 @Composable
 internal fun ScriptLibraryScreen(
@@ -126,6 +128,7 @@ internal fun ScriptLibraryScreen(
     selected: ScriptItemKey? = null,
     console: () -> List<UiLine> = { emptyList() },
     colors: ConsoleColors = ConsoleColors(),
+    actions: @Composable RowScope.() -> Unit = {},
 ) {
     var kindWire by rememberSaveable { mutableStateOf(ScriptItemKind.TRIGGER.wire) }
     val kind = ScriptItemKind.fromWire(kindWire) ?: ScriptItemKind.TRIGGER
@@ -166,6 +169,7 @@ internal fun ScriptLibraryScreen(
         stringResource(R.string.scripts_title, game),
         onBack = onBack,
         actions = {
+            actions()
             if (shownIn != null) {
                 val edit = if (shownIn.folder) stringResource(R.string.scripts_edit_folder) else stringResource(R.string.scripts_edit_item, shownIn.name)
                 IconButton({ onOpen(ScriptItemKey(kind, folder)) }) { Icon(painterResource(R.drawable.ic_edit), edit) }

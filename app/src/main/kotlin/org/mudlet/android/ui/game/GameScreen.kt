@@ -60,6 +60,7 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.ScriptWindowsClient
+import org.mudlet.android.ui.errors.ErrorCountBadge
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -218,7 +219,9 @@ private fun ProfileGameScreen(
         topBar = {
             MudletTopBar(stringResource(R.string.game_title), onBack) {
                 ScriptCommandsButton()
-                IconButton(onOpenScripts) { Icon(painterResource(R.drawable.ic_auto_fix_high), stringResource(R.string.scripts_open, c.name)) }
+                IconButton(onOpenScripts) {
+                    ErrorCountBadge(c.errors.unseen, stringResource(R.string.scripts_open, c.name)) { Icon(painterResource(R.drawable.ic_auto_fix_high), it) }
+                }
                 MapButton(mapOpen, onMapOpen)
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))

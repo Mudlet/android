@@ -37,6 +37,8 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.about.AboutScreen
 import org.mudlet.android.ui.about.LicenceScreen
+import org.mudlet.android.ui.errors.ErrorConsoleButton
+import org.mudlet.android.ui.errors.ErrorConsoleScreen
 import org.mudlet.android.ui.game.AnnouncementRegion
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
@@ -75,6 +77,7 @@ private object Routes {
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
     const val TRIGGER_FROM_LINE = "triggerFromLine/{line}"
+    const val ERRORS = "errors"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
@@ -215,7 +218,9 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                             selected = open?.let(ScriptItemKey::decode),
                             console = { front.lines },
                             colors = ConsoleColors.of(front.status["consoleColors"]),
-                        )
+                        ) {
+                            ErrorConsoleButton(front.errors) { nav.navigate(Routes.ERRORS) { launchSingleTop = true } }
+                        }
                     },
                     detailContent = { key ->
                         ScriptItemKey.decode(key)?.let {
@@ -223,6 +228,14 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                         }
                     },
                     empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
+                )
+            }
+            composable(Routes.ERRORS) { entry ->
+                ErrorConsoleScreen(
+                    EngineClient.front.errors,
+                    EngineClient.front.name,
+                    onBack = entry.whileShown { nav.navigateUp() },
+                    onOpen = { key -> nav.navigate(Routes.scriptItem(key)) { launchSingleTop = true } },
                 )
             }
             composable(Routes.SCRIPT_ITEM, listOf(navArgument("key") { type = NavType.StringType })) { entry ->

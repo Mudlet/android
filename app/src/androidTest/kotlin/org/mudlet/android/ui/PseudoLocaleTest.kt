@@ -165,6 +165,8 @@ class PseudoLocaleTest(private val locale: String) {
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.scripts_off)))
 
+        // The fields have text: an empty one whose top alone shows at the page's foot has no name for the checks
+        // (docs/roadmap.md, "A known gap, the toolkit's")
         fun open(kind: String, fields: JSONObject) {
             compose.waitForIdle()
             val ask = session.receive("scriptItem")
@@ -172,7 +174,7 @@ class PseudoLocaleTest(private val locale: String) {
         }
         activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_timers), 1)))
         activate(hasText("Greet"))
-        open("timer", JSONObject(node.toString()).put("command", "").put("time", 3_723_004).put("offset", true))
+        open("timer", JSONObject(node.toString()).put("command", "look").put("time", 3_723_004).put("offset", true))
         waitFor(hasText(string(R.string.scripts_timer_offset)))
         assertTextFits("a timer's page")
         assertAtStart("the time's heading", hasText(string(R.string.scripts_timer_after)))
@@ -180,13 +182,13 @@ class PseudoLocaleTest(private val locale: String) {
 
         activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_keys), 1)))
         activate(hasText("Greet"))
-        open("key", JSONObject(node.toString()).put("command", "").put("key", 0x38).put("modifiers", 0x20000000).put("keyName", "keypad + 8"))
+        open("key", JSONObject(node.toString()).put("command", "north").put("key", 0x38).put("modifiers", 0x20000000).put("keyName", "keypad + 8"))
         waitFor(hasText(string(R.string.scripts_key_note)))
         assertTextFits("a key's page")
         activate(hasContentDescription(string(R.string.navigate_back)))
 
-        val button = JSONObject(node.toString()).put("commandDown", "").put("commandUp", "").put("pushDown", true).put("location", "top")
-            .put("orientation", "horizontal").put("columns", 1).put("css", "")
+        val button = JSONObject(node.toString()).put("commandDown", "wield sword").put("commandUp", "remove sword").put("pushDown", true).put("location", "top")
+            .put("orientation", "horizontal").put("columns", 1).put("css", "color: red;")
         activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_buttons), 1)))
         activate(hasText("Bar"))
         activate(hasContentDescription(string(R.string.scripts_edit_folder)))

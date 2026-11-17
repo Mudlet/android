@@ -107,6 +107,15 @@ Requirements for every Phase E pull request, not only the screen-reader one:
   accessibility action.
 - Focus order is console, then input line, then the buttons; after a send, focus stays on the input line.
 
+A known gap, the toolkit's: an empty text field with a label (Material 3's `OutlinedTextField`: the profile editor's,
+the settings' and the script library's) is named to TalkBack only by its label, a child of the field, since Compose
+gives the field's own accessibility node its text, which is empty. The field has 8 dp over its outline, above the
+label; while only that strip shows at the foot of a scrolling page, the label is left out with what is out of sight,
+and the field is an edit box with no name. The Accessibility Test Framework finds it there (`SpeakableTextPresentCheck`),
+which is why `ScriptLibraryTest` checks a script's page at its end. Compose's `hintText` semantics, which reaches
+TalkBack as the field's hint, is not in the Compose BOM the app is pinned to (1.10); once it is, set it to the label on
+every labelled field, and drop that scroll from the test.
+
 The screen-reader pull request adds:
 
 - new game lines announced as they arrive while TalkBack is on and `announceIncomingText` holds, coalesced so a burst
@@ -125,8 +134,8 @@ The screen-reader pull request adds:
 - The 2D map's screen (`map`, `mapPointer`, version 10), part of Phase F: the game screen draws it, and its touches;
   and the app's own map behind the text and in front, with a room search (`appMap`, `findRooms`, version 11); it
   also downloads the map the game offers (`mapDownload`, version 13).
-- A script editor for timers, keys and buttons, the Lua editor's autocomplete and checks, and a trigger made from a
-  console line. The script library edits triggers, aliases and scripts (architecture.md, "The script library").
+- A script editor for timers, keys and buttons, and a trigger made from a console line. The script library edits
+  triggers, aliases and scripts, with a Lua editor (architecture.md, "The script library").
 - A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
 - More than one profile at once, with a profile switcher: upstream allows one profile pool per process, so it needs
   upstream work; the plan and its pull requests are in [`multi-profile.md`](multi-profile.md).

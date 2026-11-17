@@ -16,10 +16,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
@@ -40,9 +42,12 @@ import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
+import org.mudlet.android.ui.scripts.LUA_FUNCTIONS_ASSET
+import org.mudlet.android.ui.scripts.LuaEditorScreen
 import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.ScriptItemScreen
 import org.mudlet.android.ui.scripts.ScriptLibraryScreen
+import org.mudlet.android.ui.scripts.parseLuaFunctions
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsPage
 import org.mudlet.android.ui.settings.SettingsPageScreen
@@ -66,6 +71,7 @@ private object Routes {
     const val LICENCE = "licence/{id}"
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
+    const val SCRIPT_CODE = "scriptCode/{key}"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
@@ -76,6 +82,8 @@ private object Routes {
     fun settingsPage(page: SettingsPage) = "settingsPage/${Uri.encode(page.encode())}"
 
     fun scriptItem(key: ScriptItemKey) = "scriptItem/${Uri.encode(key.encode())}"
+
+    fun scriptCode(key: ScriptItemKey) = "scriptCode/${Uri.encode(key.encode())}"
 }
 
 /**
@@ -204,7 +212,9 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                         )
                     },
                     detailContent = { key ->
-                        ScriptItemKey.decode(key)?.let { ScriptItemScreen(front.scripts, it, onBack = { if (open == key) open = null }, onGame = toGame) }
+                        ScriptItemKey.decode(key)?.let {
+                            ScriptItemScreen(front.scripts, it, onBack = { if (open == key) open = null }, onGame = toGame, onEditCode = { nav.navigate(Routes.scriptCode(it)) { launchSingleTop = true } })
+                        }
                     },
                     empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
                 )
@@ -213,10 +223,23 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
                 val back = entry.whileShown { nav.navigateUp() }
                 if (key != null) {
-                    ScriptItemScreen(EngineClient.front.scripts, key, onBack = back, onGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) })
+                    ScriptItemScreen(
+                        EngineClient.front.scripts,
+                        key,
+                        onBack = back,
+                        onGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) },
+                        onEditCode = entry.whileShown { nav.navigate(Routes.scriptCode(key)) { launchSingleTop = true } },
+                    )
                 } else {
                     LaunchedEffect(Unit) { back() }
                 }
+            }
+            composable(Routes.SCRIPT_CODE, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
+                val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
+                val back = entry.whileShown { nav.navigateUp() }
+                val assets = LocalContext.current.assets
+                val functions = remember { runCatching { assets.open(LUA_FUNCTIONS_ASSET).bufferedReader().use { it.readText() } }.map(::parseLuaFunctions).getOrDefault(emptyList()) }
+                if (key != null) LuaEditorScreen(EngineClient.front.scripts, key, functions, onBack = back) else LaunchedEffect(Unit) { back() }
             }
             val game = navArgument("game") {
                 type = NavType.StringType

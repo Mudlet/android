@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **24**.
+The current version is **25**.
 
 ## Transport
 
@@ -117,11 +117,12 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `enableScriptItem` | `kind`, `item`, `enabled`, `id`? | Switches the item on or off, as the desktop editor's checkbox does (`THeadlessSession::setScriptItemEnabled()`). Answered by `scriptItem`. |
 | `moveScriptItem` | `kind`, `item`, `parent`, `position` | Moves the item into the folder whose id is `parent`, or to the top level for 0, at `position` among the items shown there, as a drag in the desktop editor does (`THeadlessSession::moveScriptItem()`). |
 | `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
+| `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, as a script editor checks what is typed (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `luaCheck` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -203,6 +204,9 @@ trigger, alias or event handler runs; `editScriptItem` for a field not of that k
 own `pattern`, which would call itself forever; `enableScriptItem` for an item that does not compile, which it leaves
 off, with its error; `moveScriptItem` for a folder moved into itself or a folder inside it.
 
+`checkLua` is answered by `luaCheck`, or by `error` for a `code` that is not a string. Code that does not compile is
+no refusal: `luaCheck` says what is wrong with it.
+
 ### Engine to UI
 
 | Message | Fields | Meaning |
@@ -242,6 +246,7 @@ off, with its error; `moveScriptItem` for a folder moved into itself or a folder
 | `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `symbol`, `env`, `color`, `weight`, `locked`; `re`? | The answer to `roomInfo` and the edits that give a room: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`; then what `editRoom` sets: its `symbol`, environment `env` and the colour that draws it `color`, as `#rrggbb`, its `weight` and whether it is `locked`. |
 | `scriptItems` | `kind`, `items`: `id`, `parent`, `name`, `folder`, `enabled`, `active`, `package`, `error`; `re`? | The answer to `scriptItems`: the `kind` asked for, and its `items` depth first, each folder before what is in it, in the desktop editor's order; each with its `id`, the id of the folder it is in, `parent` (0 for the top level), its `name`, whether it is a `folder`, `enabled` (switched on, as the editor's checkbox shows it), `active` (switched on, compiled, and in folders that run), the `package` or module it came with (empty for the player's own) and `error`, why it cannot run, as plain text, or empty. The temporary items scripts make are left out, as the editor leaves them. |
 | `scriptItem` | `kind`, `fields`, `re`? | The answer to `scriptItem` and the changes that give an item: its `kind` and its `fields`, an object of what `scriptItems` gives of it, `script`, its Lua, and those of its kind: a trigger's `patterns`, each with its `text` and its `type` (`substring`, `regex`, `startOfLine`, `exact`, `lua`, `spacer`, whose text is the number of lines, `color`, whose text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`, or `prompt`), `command`, `lineDelta` (the lines a trigger's patterns may be spread over, -1 for a trigger of one line), `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`, `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour; an alias's `pattern` and `command`; a script's `eventHandlers`, a list of event names. |
+| `luaCheck` | `ok`, `line`?, `message`?; `re`? | The answer to `checkLua`: `ok` when the code compiles; else `line`, the line Lua names, from 1, or 0 where it names none, and `message`, what Lua says is wrong, in English. |
 | `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
 | `envs` | `envs`: `env`, `color`; `re`? | The answer to `mapEnvs`: the environments the map gives a colour of its own, by number, as Mudlet's room colour dialog lists them (the profile's sixteen colours as 257 to 272, and those a script or the player added), each with the colour it draws rooms in as `#rrggbb`. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. |
@@ -713,7 +718,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 24, which took the map info box out of the map's picture and sends it as text (`info` in
+As implemented in version 25, which added checking that Lua compiles (`checkLua`, `luaCheck`); version 24 took the
+map info box out of the map's picture and sends it as text (`info` in
 `map` and `appMap`); version 23 added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,
 `addScriptItem`, `editScriptItem`, `enableScriptItem`, `moveScriptItem`, `deleteScriptItem`); version 22 added
 following a label's link (`followLabelLink`); version 21 added editing

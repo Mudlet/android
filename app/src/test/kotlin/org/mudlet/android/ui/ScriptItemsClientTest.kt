@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.LuaProblem
 import org.mudlet.android.protocol.ScriptItem
 import org.mudlet.android.protocol.ScriptItemDetails
 import org.mudlet.android.protocol.ScriptItemKind
@@ -215,6 +216,22 @@ class ScriptItemsClientTest {
 
         scripts.open(key)
         assertNull("asked again", scripts.unopened[key])
+    }
+
+    @Test
+    fun aLuaCheckIsKeptWithTheCodeItChecked() {
+        assertTrue(scripts.checkLua("x = = 1"))
+        val check = take("checkLua")
+        assertEquals("x = = 1", check.getString("code"))
+        assertNull(scripts.luaCheck)
+        val problem = LuaProblem(1, "unexpected symbol near '='")
+        assertTrue(scripts.onLuaCheck(EngineMessage.LuaCheck(problem, check.getLong("id"))))
+        assertEquals(LuaChecked("x = = 1", problem), scripts.luaCheck)
+        assertFalse("answered once", scripts.onLuaCheck(EngineMessage.LuaCheck(null, check.getLong("id"))))
+
+        attached = false
+        assertFalse(scripts.checkLua("x = 1"))
+        assertTrue("it is asked as the player types, so one that cannot be sent is not said", scripts.notices.isEmpty())
     }
 
     @Test

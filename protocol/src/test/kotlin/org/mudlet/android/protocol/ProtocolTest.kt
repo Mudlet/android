@@ -616,6 +616,25 @@ class ProtocolTest {
     }
 
     @Test
+    fun aLuaCheckDecodes() {
+        fun check(json: String) = FrameReader.parse(JSONObject(json)) as EngineMessage.LuaCheck
+        assertEquals(EngineMessage.LuaCheck(null, 7), check("""{"t":"luaCheck","ok":true,"re":7}"""))
+        assertEquals(
+            EngineMessage.LuaCheck(LuaProblem(6, "')' expected (to close '(' at line 5) near 'end'"), 8),
+            check("""{"t":"luaCheck","ok":false,"line":6,"message":"')' expected (to close '(' at line 5) near 'end'","re":8}"""),
+        )
+        assertEquals("no line named", LuaProblem(0, "not enough memory"), check("""{"t":"luaCheck","ok":false,"message":"not enough memory"}""").problem)
+    }
+
+    @Test
+    fun aLuaCheckCarriesTheCodeAsItIs() {
+        val request = Requests.checkLua("if x then\n  send(\"hi\")\nend", 9)
+        assertEquals("checkLua", request.getString("t"))
+        assertEquals("if x then\n  send(\"hi\")\nend", request.getString("code"))
+        assertEquals(9L, request.getLong("id"))
+    }
+
+    @Test
     fun scriptItemsDecode() {
         val list = FrameReader.parse(
             JSONObject(

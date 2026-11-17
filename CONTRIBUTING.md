@@ -161,8 +161,9 @@ conflict left in any text file (`<<<<<<< `, `=======`, `>>>>>>> `). The vendored
 `scripts/mudlet-patches/*.patch` lacks the `Upstream:` line before its diff: `Upstream: Mudlet/Mudlet#<number>`, or
 `Upstream: not opened yet`, which the check prints. The games check fails when `app/src/main/assets/games` is not
 what `scripts/sync-mudlet-games.py` makes from Mudlet's `src/TGameDetails.h` and logos at the commit `games.json`
-pins. To take in Mudlet's newer games, run the script on a Mudlet checkout of the commit to take them from
-(`scripts/sync-mudlet-games.py ../Mudlet`, with Pillow), which becomes the new pin.
+pins, or `app/src/main/assets/lua/functions.json` not what it makes from Mudlet's `src/lua-function-list.json` at that
+commit. To take in Mudlet's newer games and Lua functions, run the script on a Mudlet checkout of the commit to take
+them from (`scripts/sync-mudlet-games.py ../Mudlet`, with Pillow), which becomes the new pin.
 
 ## Ground rules
 

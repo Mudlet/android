@@ -2044,6 +2044,12 @@ QString MudletProfile::deleteScriptItem(ScriptItemKind kind, int item)
     return mSession->deleteScriptItem(sessionKind(kind), item) ? QString() : mSession->errorString();
 }
 
+std::optional<IEngine::LuaProblem> MudletProfile::checkLua(const QString& code) const
+{
+    const std::optional<THeadlessSession::LuaProblem> problem = THeadlessSession::checkLua(code);
+    return problem ? std::optional<LuaProblem>(LuaProblem{problem->line, problem->message}) : std::nullopt;
+}
+
 void MudletProfile::takeOfferedMap(const QString& url)
 {
     mMapDownload.offered = !url.isEmpty();

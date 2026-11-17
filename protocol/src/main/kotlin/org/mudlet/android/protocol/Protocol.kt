@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 24
+const val PROTOCOL_VERSION = 25
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -423,6 +423,9 @@ sealed interface ScriptItemDetails {
     }
 }
 
+/** What is wrong with Lua that does not compile: the [line] Lua names, from 1, or 0 where it names none, and its [message], in English. */
+data class LuaProblem(val line: Int, val message: String)
+
 /** All of an item's fields, as Requests.scriptItem asks for them and Requests.editScriptItem saves them: [script] is its Lua. */
 data class ScriptItem(val node: ScriptItemNode, val script: String, val details: ScriptItemDetails) {
     val kind get() = details.kind
@@ -702,6 +705,9 @@ sealed interface EngineMessage {
      * client does not know.
      */
     data class ScriptItemFields(val item: ScriptItem?, val replyTo: Any?) : EngineMessage
+
+    /** The answer to Requests.checkLua: [problem] is null for code that compiles. */
+    data class LuaCheck(val problem: LuaProblem?, val replyTo: Any?) : EngineMessage
 
     /**
      * The answer to getSettings or setSettings: [values] by Lua's getConfig() keys, each a Boolean, a Double or a
@@ -1003,6 +1009,9 @@ object Requests {
     /** [item] gone, and all in it for a folder. Answered only by an Error, when refused. */
     fun deleteScriptItem(kind: ScriptItemKind, item: Int): JSONObject = JSONObject().put("t", "deleteScriptItem").put("kind", kind.wire).put("item", item)
 
+    /** Answered by [EngineMessage.LuaCheck] with [id] as its replyTo, or an Error: whether [code] compiles as Lua; it is not run. */
+    fun checkLua(code: String, id: Long): JSONObject = JSONObject().put("t", "checkLua").put("code", code).put("id", id)
+
     /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
     fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
 
@@ -1261,6 +1270,8 @@ class FrameReader(input: InputStream) {
                 o.optJSONObject("fields")?.let { fields -> ScriptItemKind.fromWire(o.optString("kind"))?.let { parseScriptItem(it, fields) } },
                 o.opt("re"),
             )
+
+            "luaCheck" -> EngineMessage.LuaCheck(if (o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))
 
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),

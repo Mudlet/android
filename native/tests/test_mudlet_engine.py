@@ -3563,7 +3563,8 @@ def profile_settings():
 
 
 def script_items():
-    """Triggers, aliases and scripts as the desktop's script editor edits them: scriptItems listing them as it does,
+    """Triggers, aliases and scripts as the desktop's script editor edits them: checkLua saying whether Lua compiles,
+    and where it does not, without running it; scriptItems listing them as it does,
     without the temporary ones; addScriptItem at a place among a folder's items; editScriptItem saving as its save does,
     a trigger that does not compile switched off with its error, a trigger that runs, an alias given no name and one
     that would call itself refused, a script run with its event handler; enableScriptItem, moveScriptItem and
@@ -3574,7 +3575,15 @@ def script_items():
     c.wait_for(lambda m: m["t"] == "synced", collect=seen)
 
     def ask(request):
-        return c.ask(request, answers=("scriptItems", "scriptItem", "error"), collect=seen)
+        return c.ask(request, answers=("scriptItems", "scriptItem", "luaCheck", "error"), collect=seen)
+
+    m = ask({"t": "checkLua", "code": "local mob = matches[2]\nif mob then\n  send(\"kill \" .. mob)\nend"})
+    check((m["t"], m.get("ok")) == ("luaCheck", True) and "line" not in m, f"Lua that compiles checks out, with no profile open: {m}")
+    m = ask({"t": "checkLua", "code": "local mob = matches[2]\nif mob then\n  send(\"kill \" .. mob\nend"})
+    check((m.get("ok"), m.get("line"), m.get("message")) == (False, 4, "')' expected (to close '(' at line 3) near 'end'"),
+          f"Lua that does not compile gives the line and what Lua says: {m}")
+    m = ask({"t": "checkLua", "code": 7})
+    check(m.get("message") == "checkLua: code must be a string", f"checkLua of what is no string is refused: {m}")
 
     requests = ({"t": "scriptItems", "kind": "trigger"}, {"t": "scriptItem", "kind": "trigger", "item": 1},
                 {"t": "addScriptItem", "kind": "trigger", "parent": 0, "position": 0, "folder": False, "name": "x"},
@@ -3619,6 +3628,11 @@ def script_items():
 
     def children(kind, parent):
         return [i["name"] for i in listed(kind) if i["parent"] == parent]
+
+    m = ask({"t": "checkLua", "code": 'checked = true echo("checkLua ran this\\n")'})
+    check(m.get("ok") is True, f"Lua is checked with a profile open too: {m}")
+    since = lua('echo("checked is " .. tostring(checked) .. "\\n")')
+    check("checked is nil" in wait_text("checked is ", since) and not shown_after(0, "checkLua ran this"), "and what is checked is not run")
 
     since = lua('permRegexTrigger("Lua made", "", {"^lua$"}, "") echo("temp " .. tempTrigger("zzz", "") .. "\\n")')
     temp = int(re.search(r"temp (\d+)", wait_text("temp ", since)).group(1))

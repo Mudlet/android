@@ -102,6 +102,7 @@ public:
     QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) override;
     QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) override;
     QString deleteScriptItem(ScriptItemKind kind, int item) override;
+    std::optional<LuaProblem> checkLua(const QString& code) const override;
 
     const QString& name() const { return mProfile; }
     // While it has not started: what a later connect or Lua starts

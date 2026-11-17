@@ -1,0 +1,83 @@
+Let a frontend check that Lua compiles without running it
+
+An editor with no dlgTriggerEditor can say what is wrong with a script only by saving it, which runs it. A phone's
+editor checks as the player types, so it needs the compile alone.
+
+- THeadlessSession::checkLua() compiles code as Lua 5.1 in a state of its own and gives nothing for code that
+  compiles, else the line Lua names and its message. It runs nothing, needs no profile and touches none.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (script_items: code that compiles, a syntax error with
+its line, and that nothing ran). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index b3147f5..e0f0260 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1776,6 +1776,11 @@ refused, while a trigger, alias or event handler runs (as one does that waits on
+ for an id not of that kind, a parent that is not a folder, a field not of that kind or a value of the
+ wrong type. What they change is written with the profile's next save, as the GUI's editor's is.
+ 
++`checkLua()` compiles Lua without running it, for an editor to say what is wrong as a script is
++typed: nothing for code that compiles, else the line Lua names (0 where it names none) and its
++message. It compiles in a Lua state of its own, so it needs no profile and touches none, and
++finds what the save would: Lua 5.1's syntax errors.
++
+ ## Embedding it: commands and buttons that scripts add
+ 
+ `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 0459f7e..197138e 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -916,6 +916,17 @@ public:
+     bool moveScriptItem(ScriptItemKind kind, int id, int parent, int position);
+     // The item gone, and all in it for a folder, as the editor's delete does
+     bool deleteScriptItem(ScriptItemKind kind, int id);
++    // What is wrong with Lua that does not compile: the line Lua names, from 1, or 0 where it names none, and its
++    // message without the chunk's name and line before it
++    struct LuaProblem
++    {
++        int line = 0;
++        QString message;
++    };
++    // Compiles code as Lua 5.1, without running it and in a state of its own, so that no profile need be open and none
++    // is touched: nothing for code that compiles, as the editor's save would find it, else what Lua says is wrong.
++    // For an editor to check a script as it is typed.
++    static std::optional<LuaProblem> checkLua(const QString& code);
+     // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
+     // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
+     // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
+diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
+index bad7742..106fc74 100644
+--- a/src/headless/THeadlessSessionScripts.cpp
++++ b/src/headless/THeadlessSessionScripts.cpp
+@@ -525,6 +525,25 @@ bool THeadlessSession::scriptItem(const ScriptItemKind kind, const int id, QVari
+     });
+ }
+ 
++std::optional<THeadlessSession::LuaProblem> THeadlessSession::checkLua(const QString& code)
++{
++    lua_State* L = luaL_newstate();
++    if (!L) {
++        return LuaProblem{0, qsl("not enough memory")};
++    }
++    std::optional<LuaProblem> problem;
++    const QByteArray utf8 = code.toUtf8();
++    // "=code" names the chunk as is, so a message starts "code:<line>: "
++    if (luaL_loadbuffer(L, utf8.constData(), utf8.size(), "=code") != 0) {
++        const QString message = lua_isstring(L, -1) ? QString::fromUtf8(lua_tostring(L, -1)) : qsl("it does not compile");
++        static const QRegularExpression where(qsl("^code:(\\d+): "));
++        const QRegularExpressionMatch match = where.match(message);
++        problem = match.hasMatch() ? LuaProblem{match.captured(1).toInt(), message.mid(match.capturedLength())} : LuaProblem{0, message};
++    }
++    lua_close(L);
++    return problem;
++}
++
+ bool THeadlessSession::scriptItemsWritable()
+ {
+     if (!usable()) {

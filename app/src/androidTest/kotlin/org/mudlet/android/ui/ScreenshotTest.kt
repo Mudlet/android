@@ -48,8 +48,8 @@ import java.util.concurrent.CompletableFuture
 
 /**
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
- * settings (the hub, a search and six pages, one as a change says it waits for the next connection, and in light mode
- * the hub and a page side by side on a tablet), the
+ * settings (the hub, a search and seven pages, one as a change says it waits for the next connection, and in light
+ * mode the hub and a page side by side on a tablet), the input line keeping the command sent, the
  * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
  * part of a name, and the game sheet with two games open, light and dark, against a fake engine, for a pull request
  * that changes how they look. Each is saved in the app's
@@ -149,7 +149,23 @@ class ScreenshotTest {
         waitFor(hasText(string(R.string.settings_accept_any_certificate)))
         save("settings-security-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_input)))
+        activate(hasText(string(R.string.settings_input)))
+        waitFor(hasText(string(R.string.settings_clear_input)))
+        save("settings-input-$mode")
+        // With the switch off, the command sent stays on the game's input line, selected
+        activate(hasText(string(R.string.settings_clear_input)))
         activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        val kept = hasSetTextAction() and hasText("look")
+        session.commandLine("look")
+        waitFor(kept)
+        activate(hasContentDescription(string(R.string.input_send)))
+        session.receive("send")
+        save("game-kept-$mode")
+        session.commandLine("")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(kept).fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle { EngineClient.front.settings.remove(Settings.clearInputAfterSend.key) }
 
         activate(hasContentDescription(string(R.string.app_map_show)))
         // The game's map, downloaded before this UI came, as after the app restarted

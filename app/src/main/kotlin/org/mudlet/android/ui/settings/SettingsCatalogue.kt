@@ -162,6 +162,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_unix_line_endings_keywords,
         ),
         SettingEntry.Switch(
+            SettingsCategory.INPUT,
+            Settings.clearInputAfterSend,
+            R.string.settings_clear_input,
+            R.string.settings_clear_input_hint,
+            R.string.settings_clear_input_keywords,
+        ),
+        SettingEntry.Switch(
             SettingsCategory.CONNECTION,
             Settings.offerSecureConnection,
             R.string.settings_offer_secure,

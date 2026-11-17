@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.textSelectionRange
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -115,6 +116,10 @@ private class Placed {
  * the line puts it on the line, without sending it; TalkBack reads it after the typed text. While input is hidden
  * there is no ghost text.
  *
+ * A line that was sent is emptied, or with [clearAfterSend] off it stays, selected whole, as desktop Mudlet's does:
+ * typing replaces it, Send sends it again and the up button goes to the command before it. While it stays so,
+ * TalkBack is told its state in place of the selection ([keptCommand]).
+ *
  * As the map comes to the front, [mapInFront], the keyboard goes down so the map has the room, but the line keeps the
  * focus: a hardware keyboard still types in it and a tap opens the keyboard again. As the map goes back, the line takes
  * the keyboard back if it had it. With [focusOnStart] (as another game comes to the front), the line takes the focus when
@@ -139,6 +144,7 @@ fun InputLine(
     onFocusTaken: () -> Unit = {},
     mapInFront: Boolean = false,
     focusOnStart: Boolean = false,
+    clearAfterSend: Boolean = true,
 ) {
     // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
     // keyboard sends before the next frame, which a value and onValueChange field would apply to the old text
@@ -146,6 +152,8 @@ fun InputLine(
     val secret = remember { TextFieldState() }
     var at by rememberSaveable(stateSaver = HistoryPosition.Saver) { mutableStateOf(HistoryPosition()) }
     var notice by rememberSaveable { mutableStateOf<Notice?>(null) }
+    // The line as it was sent and kept
+    var kept by rememberSaveable { mutableStateOf<String?>(null) }
     var focused by remember { mutableStateOf(false) }
     // Counts the sends, so that sending an empty line, which leaves the line as it was, still asks for suggestions
     var sends by remember { mutableIntStateOf(0) }
@@ -161,6 +169,13 @@ fun InputLine(
             selection = TextRange(cursor.coerceIn(0, line.length))
         }
         notice = null
+        kept = null
+    }
+
+    // Whether the line is the one kept, still selected whole: what is typed next replaces it
+    fun keptWhole(): Boolean {
+        val typed = text.text
+        return kept != null && typed.toString() == kept && text.selection == TextRange(0, typed.length)
     }
 
     fun move(moved: HistoryPosition) {
@@ -168,13 +183,26 @@ fun InputLine(
         show(moved.shown(history))
     }
 
+    // A kept line is the history's newest already, so the way back from it starts at the command before
+    fun back() {
+        val typed = text.text.toString()
+        val from = if (!at.canGoForward && typed == kept && typed == history.firstOrNull()) HistoryPosition(0) else at
+        move(from.back(history, typed))
+    }
+
     fun submit() {
-        val sent = onSend(text.text.toString())
+        val line = text.text.toString()
+        val sent = onSend(line)
         notice = if (sent) null else Notice.NOT_SENT
-        if (sent) {
-            at = HistoryPosition()
+        if (!sent) return
+        at = HistoryPosition()
+        sends++
+        if (clearAfterSend || line.isEmpty()) {
             text.clearText()
-            sends++
+            kept = null
+        } else {
+            text.edit { selection = TextRange(0, length) }
+            kept = line
         }
     }
 
@@ -219,6 +247,8 @@ fun InputLine(
         if (!hiddenInput) secret.clearText()
         notice = null
         if (hadFocus) (if (hiddenInput) hiddenFocus else focus).requestFocus()
+        // A field's selection goes with its focus, as the kept line's did when the masked field took its place
+        if (!hiddenInput && text.text.toString() == kept) text.edit { selection = TextRange(0, length) }
     }
     val keyboard = LocalSoftwareKeyboardController.current
     // Saved, as the map stays in front across a rotation
@@ -267,6 +297,7 @@ fun InputLine(
     val accepted = ghost?.let { line + it }
     val acceptLabel = accepted?.let { stringResource(R.string.input_accept_suggestion, it) }
     val suggestionState = accepted?.let { stringResource(R.string.input_suggestion, it) }
+    val keptState = stringResource(R.string.input_kept)
 
     Row(modifier.semantics { isTraversalGroup = true }, verticalAlignment = Alignment.CenterVertically) {
         if (hiddenInput) {
@@ -294,7 +325,7 @@ fun InputLine(
         } else {
             OutlinedTextField(
                 state = text,
-                modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).semantics {
+                modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).keptCommand(keptWhole(), line.length, keptState).semantics {
                     if (acceptLabel == null || suggestionState == null) return@semantics
                     // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
                     editableText = AnnotatedString(line)
@@ -318,7 +349,7 @@ fun InputLine(
                     // Right takes the ghost, which is only there with the cursor at the end, where it does nothing else
                     when {
                         tab -> complete()
-                        event.key == Key.DirectionUp && at.canGoBack(history) -> move(at.back(history, text.text.toString()))
+                        event.key == Key.DirectionUp && at.canGoBack(history) -> back()
                         event.key == Key.DirectionDown && at.canGoForward -> move(at.forward())
                         event.key == Key.DirectionRight && ghost != null -> accept()
                         else -> return@onPreviewKeyEvent false
@@ -344,7 +375,7 @@ fun InputLine(
                 onKeyboardAction = { submit() },
                 lineLimits = TextFieldLineLimits.SingleLine,
             )
-            IconButton({ move(at.back(history, text.text.toString())) }, enabled = at.canGoBack(history)) {
+            IconButton(::back, enabled = at.canGoBack(history)) {
                 Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
             }
             IconButton({ move(at.forward()) }, enabled = at.canGoForward) {
@@ -357,5 +388,19 @@ fun InputLine(
                 Icon(painterResource(R.drawable.ic_send), stringResource(R.string.input_send))
             }
         }
+    }
+}
+
+/**
+ * What TalkBack is told of a command line whose sent command is [kept], selected whole: its [state], and a cursor at
+ * the end of its [length]. TalkBack reads out a selection as it changes, so told of this one it would read the
+ * command again after every send, as if it had been typed anew.
+ */
+internal fun Modifier.keptCommand(kept: Boolean, length: Int, state: String): Modifier = if (!kept) {
+    this
+} else {
+    semantics {
+        textSelectionRange = TextRange(length)
+        stateDescription = state
     }
 }

@@ -79,6 +79,7 @@ class ProfilesTest {
         (listOf(ALPHA, BETA, GAMMA).map { it.name } + listOf(ACHAEA, STICKMUD)).forEach {
             passwords.forget(it)
             Settings.setAwaitsDefaults(it, false)
+            Settings.setAwaitsInputClear(it, false)
         }
     }
 
@@ -225,7 +226,10 @@ class ProfilesTest {
     @Test
     fun deletesOnlyOnceConfirmed() {
         assertTrue(passwords.set("Alpha", "alpha secret"))
-        compose.runOnIdle { Settings.setAwaitsDefaults("Alpha", true) }
+        compose.runOnIdle {
+            Settings.setAwaitsDefaults("Alpha", true)
+            Settings.setAwaitsInputClear("Alpha", true)
+        }
         listed(ALPHA, BETA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
 
@@ -246,6 +250,7 @@ class ProfilesTest {
         compose.runOnIdle {
             assertFalse("its password goes with it", passwords.has("Alpha"))
             assertFalse("a new game of its name will be given the settings when added", Settings.awaitsDefaults("Alpha"))
+            assertFalse("and is not one from before the input line could keep a command", Settings.awaitsInputClear("Alpha"))
         }
     }
 

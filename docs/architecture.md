@@ -215,6 +215,17 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   Accessibility"), chips narrow it to one game, the new games or the app, a switch turns where it is found and any
   other opens its page at the setting, tinted for a moment.
 - On an expanded screen a page opens beside the hub (`ListDetail`); a game's page closes once the game does.
+- "Clear the input line after sending", on the Input page, is desktop Mudlet's "Auto clear the input line after you
+  sent text" (`autoClearInputLine`). Off, `InputLine` leaves the command sent on the line, selected whole, as
+  `TCommandLine` does: typing replaces it, Send sends it again, and the up button goes to the command before it. A
+  script window's command line keeps its own the same way. TalkBack reads a selection as it changes, which would be
+  the command again after every send, so it is given the line's state ("Sent. Typing replaces it") and a cursor at
+  the end in the selection's place (`keptCommand`). Mudlet starts a profile with the setting off and the app starts a
+  game with it on ([`divergences.md`](divergences.md)), so it is among the values a game added in the app is given
+  whatever the player changed (`Setting.mudletDefault`). The app emptied every game's line before it had the setting,
+  so the games there the first time it runs with it (`Settings.noteGamesBeforeInputClear`, by their profiles'
+  directories) are each told once, as they next load, to go on clearing theirs; a profile copied in later keeps its
+  own.
 
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
@@ -904,7 +915,7 @@ device shows, below the UI's debug hook:
   from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
   announcement, `announce`, each console line as its plain text) and the settings: a game added in the app given
-  the app's values the player changed (`setSettings`), none if none were, and any other keeping its own (`getSettings`), read again as a page opens and changed there
+  the app's values the player changed and the input line's clearing (`setSettings`), a game from before the app could keep a sent command told once to go on clearing its line, and any other keeping its own (`getSettings`), read again as a page opens and changed there
   alone, a search's switches
   for the game and for new games, the Input, Connection, Security and Advanced pages' changes, a game's number sent once a slide, and a setting read as the game connects saying once, while it is connected, that it waits for the next connection; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
@@ -1543,6 +1554,11 @@ Item 13 of the on-device checklist covers this.
       when nothing matches.
     - `lua printCmdLine("say hi")` puts "say hi" on the line. Type a command and start the next one at once: what
       was typed is not wiped when the game answers.
+    - On the game's Input page turn "Clear the input line after sending" off, then send `look`: it stays on the line,
+      selected. Send sends it again; a letter typed replaces it; the up button gives the command before it. A script
+      window's command line keeps its command too. With TalkBack on, the line reads "Sent. Typing replaces it" after
+      the first send and nothing more for each send after. `lua echo(tostring(getConfig("autoClearInputLine")))` says
+      `false`. Turn it on again: the line empties after each send, as it does in a game just added.
     - Disconnect, then send a command: "Not sent: ..." shows over the foot of the console, above the keyboard, and
       TalkBack reads it without moving focus.
 17. About and licences, with TalkBack on.

@@ -3694,8 +3694,9 @@ def map_download():
 def profile_settings():
     """A profile's settings by getConfig()'s keys: getSettings reading them as getConfig() gives them, an option by its
     name, whatever a script has put in getConfig's place; setSettings changing them as setConfig() does and answering
-    with what the profile now holds and what it refused, with why; the change in the profile's save; and both refused
-    while no profile is open."""
+    with what the profile now holds and what it refused, with why; autoClearInputLine, which Mudlet starts off, deciding
+    whether a send empties the input line; the change in the profile's save; and both refused while no profile is
+    open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -3727,6 +3728,23 @@ def profile_settings():
           and refused.get("announceIncomingText"), f"and what it refused, with why: {refused}")
     m = c.ask({"t": "getSettings", "keys": ["blankLinesBehaviour"]}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == {"blankLinesBehaviour": "hide"}, f"getSettings reads the change back: {m}")
+
+    def emptied_by_a_send():
+        """The commandLine frames a send gives, up to the answer to a request made after it."""
+        since = len(seen)
+        c.send({"t": "send", "text": "look"})
+        c.ask({"t": "getSettings", "keys": ["autoClearInputLine"]}, answers=("settings", "error"), collect=seen)
+        return [x["text"] for x in seen[since:] if x["t"] == "commandLine"]
+
+    m = c.ask({"t": "getSettings", "keys": ["autoClearInputLine"]}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"autoClearInputLine": False}, f"Mudlet starts a profile keeping the line it sent: {m}")
+    emptied = emptied_by_a_send()
+    check(emptied == [], f"a profile that keeps the line it sent empties nothing after a send: {emptied}")
+    m = c.ask({"t": "setSettings", "values": {"autoClearInputLine": True}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"autoClearInputLine": True} and "refused" not in m, f"autoClearInputLine changes: {m}")
+    emptied = emptied_by_a_send()
+    check(emptied == [""], f"a profile that clears the line empties it after each send: {emptied}")
+
     wanted = {"sslIgnoreExpired": True, "sslIgnoreSelfSigned": True, "sslIgnoreAll": True, "acceptServerGUI": False,
               "acceptServerMedia": False, "echoLuaErrors": True}
     m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
@@ -3736,7 +3754,8 @@ def profile_settings():
     save = newest_save(profile)[0]
     with open(save, errors="replace") if save else open(os.devnull) as f:
         saved = f.read()
-    check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved,
+    check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
+          and 'autoClearCommandLineAfterSend="yes"' in saved,
           f"the changes are in the profile's save: {save}")
 
 

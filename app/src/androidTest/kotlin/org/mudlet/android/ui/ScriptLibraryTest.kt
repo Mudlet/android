@@ -350,6 +350,61 @@ class ScriptLibraryTest {
         items("trigger", triggers.take(2), received("scriptItems"))
     }
 
+    // What the accessibility checks find as the page is scrolled a little at a time, with the nodes at each finding's bounds
+    private fun scanPage(): String {
+        val found = LinkedHashMap<String, String>()
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -20000f) }
+        var steps = 0
+        while (steps < 500 && found.size < 5) {
+            compose.waitForIdle()
+            val roots = compose.onAllNodes(isRoot())
+            for (i in roots.fetchSemanticsNodes().indices) {
+                try {
+                    roots[i].tryPerformAccessibilityChecks()
+                } catch (e: Throwable) {
+                    val message = e.message.orEmpty().replace("\n", " ")
+                    for (finding in Regex("View with bounds: \\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]: ([^.]*)").findAll(message)) {
+                        val (l, t, r, b, what) = finding.destructured
+                        val key = what.take(60) + " w=" + (r.toInt() - l.toInt())
+                        if (key in found) continue
+                        fun near(node: androidx.compose.ui.semantics.SemanticsNode) = kotlin.math.abs(node.boundsInWindow.top - t.toFloat()) <= 3f && kotlin.math.abs(node.boundsInWindow.bottom - b.toFloat()) <= 3f
+                        fun show(node: androidx.compose.ui.semantics.SemanticsNode) = "${node.boundsInWindow} unclipped=${node.size} at=${node.positionInWindow} merging=${node.config.isMergingSemanticsOfDescendants} ${node.config} kids=${node.children.map { it.config.toString().take(120) }}"
+                        val unmerged = compose.onAllNodes(SemanticsMatcher("any") { true }, useUnmergedTree = true).fetchSemanticsNodes().filter(::near).joinToString(" ## ", transform = ::show)
+                        val merged = compose.onAllNodes(SemanticsMatcher("any") { true }).fetchSemanticsNodes().filter(::near).joinToString(" ## ", transform = ::show)
+                        found[key] = "step $steps [$l,$t][$r,$b] $what UNMERGED: $unmerged MERGED: $merged"
+                    }
+                }
+            }
+            if (!compose.onNode(page).fetchSemanticsNode().config.contains(SemanticsActions.ScrollBy)) break
+            var moved = false
+            compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { moved = it(0f, 2f) }
+            if (!moved) break
+            steps++
+        }
+        return "steps=$steps findings=${found.size}: " + found.values.joinToString(" @@ ")
+    }
+
+    @Test
+    fun diagScanAScriptsPageWithTheKeyboardUp() {
+        activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_scripts), 1)) and hasClickAction())
+        activate(row("On connect"))
+        val script = node(1, 0, "On connect").put("script", "").put("eventHandlers", JSONArray().put("sysConnectionEvent"))
+        session.send(fields("script", script, received("scriptItem")))
+        waitFor(hasText("sysConnectionEvent"))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_event_new))).performTextInput("sysDisconnectionEvent")
+        compose.onNode(hasContentDescription(string(R.string.scripts_event_add))).performSemanticsAction(SemanticsActions.OnClick)
+        throw AssertionError("DIAG script page: " + scanPage())
+    }
+
+    @Test
+    fun diagScanATriggersPage() {
+        openGreet()
+        compose.onNode(hasText(string(R.string.scripts_match_all)) and hasClickAction()).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNode(hasText(string(R.string.scripts_highlight)) and hasClickAction()).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        compose.onNode(hasText(string(R.string.scripts_sound)) and hasClickAction()).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+        throw AssertionError("DIAG trigger page: " + scanPage())
+    }
+
     @Test
     fun whatTheEngineRefusesIsSaid() {
         openGreet()

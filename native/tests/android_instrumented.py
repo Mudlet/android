@@ -211,7 +211,7 @@ def main():
             for failure in failures:
                 lines = failure.splitlines()
                 frames = [line.strip()[3:] for line in lines if re.search(r"org\.mudlet\.android\.ui\.\w+Test\.\w+\(\w+\.kt:\d+\)", line)]
-                brief.append((lines[0][:3300] + " | " + " ".join(lines[1:3])[:420] + " @ " + (frames[-1] if frames else ""))
+                brief.append((lines[0][:14000] + " | " + " ".join(lines[1:3])[:420] + " @ " + (frames[-1] if frames else ""))
                              .replace("%", "%25").replace("\r", " "))
             for line in brief:
                 print("::error title=Failed tests::" + line, flush=True)

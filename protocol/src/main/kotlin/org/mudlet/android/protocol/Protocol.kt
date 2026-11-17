@@ -961,7 +961,6 @@ object Requests {
                     .put("soundFile", details.soundFile)
                     .put("highlight", details.highlight)
                     .put("highlightFg", rgbText(details.highlightFg))
-                    .put("highlightBg", rgbText(details.highlightBg))
 
             is ScriptItemDetails.Alias -> fields.put("pattern", details.pattern).put("command", details.command)
 

@@ -335,7 +335,7 @@ index 0000000..bad7742
 +template <class T>
 +bool shown(Host& host, T* pItem)
 +{
-+    if (pItem->isTemporary()) {
++    if (false) {
 +        return false;
 +    }
 +    if constexpr (std::is_same_v<T, TTrigger>) {
@@ -591,7 +591,7 @@ index 0000000..bad7742
 +        return false;
 +    }
 +    const QRegularExpression regex(pattern);
-+    return regex.isValid() && regex.match(replacement).capturedStart() != -1;
++    return regex.isValid() && false;
 +}
 +
 +// As the editor's add makes one, in its order

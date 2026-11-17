@@ -99,7 +99,8 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
     val item = draft ?: saved
     val dirty = draft != null
     var leaving by remember { mutableStateOf(false) }
-    BackHandler(enabled = dirty) { leaving = true }
+    val asks = dirty && draft?.script == saved?.script
+    BackHandler(enabled = asks) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
     val lua = rememberLuaFieldState(scripts, key, functions)
@@ -108,7 +109,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
 
     MudletScaffold(
         name ?: stringResource(R.string.scripts_loading),
-        onBack = { if (dirty) leaving = true else onBack() },
+        onBack = { if (asks) leaving = true else onBack() },
         // Beside the library, the library's show them
         snackbarHost = { if (!LocalInDetailPane.current) ScriptNotices(scripts) {} },
         actions = {
@@ -129,6 +130,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
                 when {
                     item != null -> {
                         Fields(item, saved?.node?.error.orEmpty(), scripts::edit)
+                        SectionHeader(stringResource(R.string.scripts_lua), fieldWidth)
                         LuaField(lua, scroll, luaFocus, fieldWidth.padding(vertical = 16.dp))
                     }
 

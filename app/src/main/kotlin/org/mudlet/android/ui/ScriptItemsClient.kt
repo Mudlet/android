@@ -88,7 +88,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** [changed] is what the player has made of its item: its draft, or none when it is as [saved] has the item. */
     fun edit(changed: ScriptItem) {
         if (changed.changedFrom(opened[changed.key])) edited[changed.key] = changed else edited.remove(changed.key)
-        dropStaleProblem(changed.key)
+        request(Pending.Check(changed.key, changed.script), quiet = true) { Requests.checkLua(changed.script, it) }
     }
 
     /** Drops [key]'s draft. */
@@ -105,7 +105,6 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     fun apply(key: ScriptItemKey): Boolean {
         val draft = edited[key] ?: return false
         // Quietly: when the check cannot be sent neither can the save after it, which says so
-        request(Pending.Check(key, draft.script), quiet = true) { Requests.checkLua(draft.script, it) }
         return request(Pending.Apply(key, draft, opened[key])) { Requests.editScriptItem(draft, it) }
     }
 

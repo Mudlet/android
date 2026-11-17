@@ -108,7 +108,7 @@ internal class LuaFieldState(
     fun complete(function: LuaFunction) = value.let { show(complete(it.text, it.selection.start, function)) }
 
     /** Puts the cursor at the start of line [line], from 1. */
-    fun goTo(line: Int) = value.let { show(it.copy(selection = TextRange(lineStart(it.text, line)))) }
+    fun goTo(line: Int) = value.let { show(it.copy(selection = TextRange(lineStart(it.text, line + 1)))) }
 
     private fun show(edit: LuaEdit) = show(TextFieldValue(edit.text, TextRange(edit.cursor)))
 

@@ -78,17 +78,22 @@ filled in from what the app really does.
 Mudlet/Mudlet): a tagged release beside the nightly PTB, the same version numbers.
 
 **What exists.** `ptb.yml` builds, signs and uploads the PTB AAB, with R8, size budgets, the smoke test, the source
-bundle and the native symbols Play uses for crash reports (`docs/ptb.md`). `docs/store-listing.md` and
-`docs/privacy-policy.md` are drafts. The first PTB upload failed because the Play app does not exist yet (run
-44164830301). No engine or protocol work.
+bundle and the native symbols Play uses for crash reports (`docs/ptb.md`). `release.yml` (#153) does the same for the
+stable app from a tag `android-v<version>`, through the build both share (`release-build.yml`), and is a dry run
+everywhere else; `docs/release.md` has its steps and the one-time Play setup only the maintainers can do. It builds a
+pinned Mudlet `development` commit (`scripts/release-mudlet-ref.txt`), not a release tag: Mudlet 5.1.1 has no
+headless engine. `docs/store-listing.md` has both listings' text and Play forms, and `docs/privacy-policy.md` covers
+both apps. The first PTB upload failed because the Play app does not exist yet (run 44164830301). No engine or
+protocol work.
 
 **Pull requests.**
-1. `release.yml`: on a tag `android-v*` (or by hand), build from Mudlet's release tag, not `development`, sign with the
+1. Done (#153, with the open testing track by default and a pinned Mudlet commit, as "What exists" says).
+   `release.yml`: on a tag `android-v*` (or by hand), build from Mudlet's release tag, not `development`, sign with the
    stable upload key, upload the AAB to Play's internal track, and attach APKs and the source bundle to a GitHub
    release. Reuses `build-release.sh` and the PTB's jobs; dry run on every other branch, as the PTB does. Version: name
    from the tag, code from the same date scheme as the PTB so the two never clash.
-2. A short `docs/release.md`: how to cut a release, promote internal to production with a staged rollout, roll back,
-   and the one-time Play setup for the stable app (a copy of the PTB's steps with the stable names).
+2. Done (#153). A short `docs/release.md`: how to cut a release, promote internal to production with a staged rollout,
+   roll back, and the one-time Play setup for the stable app (a copy of the PTB's steps with the stable names).
 3. Store listing and privacy policy final text once the user answers the questions below; Data safety answers checked
    against lanes 3 and 5 (backup, problem reports) before they land.
 4. For GitHub APK installs of the PTB: a "newer PTB available" notice, only

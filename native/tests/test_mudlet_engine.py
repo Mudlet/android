@@ -117,6 +117,7 @@ def main():
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
             checks()
+        secure_offer(port)
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
         check(False, f"stopped in {checks.__name__}: {e!r}")
@@ -382,6 +383,91 @@ def tls_checks(plain_port):
     m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
     check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")
     check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed", "ok"], f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def secure_offer(plain_port):
+    """The game's offer of its secure port (MSSP's TLS), passed on as secureOffer and answered with answerSecureOffer as
+    desktop Mudlet's question is: refused with no offer, lapsing with its connection, a no reconnecting where it was and
+    stopping the asking, a yes storing the secure port with TLS on, as the profile list then says, and connecting
+    there."""
+    tls_port = fake_telnet.start_in_thread(tls=self_signed_context())
+    handshakes = len(fake_telnet.TLS_HANDSHAKES)
+    profile = "Secure Offer"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "secureOffer", "offered": False} in seen, f"an attach is told no offer waits: {[m for m in seen if m['t'] == 'secureOffer']}")
+    c.ask({"t": "saveProfile", "name": profile, "host": "localhost", "port": plain_port, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    m = c.ask({"t": "answerSecureOffer", "accept": True}, answers=("error",), collect=seen)
+    check(m["message"] == "answerSecureOffer: the game has offered no secure port to answer", f"no offer, no answer: {m}")
+    m = c.ask({"t": "answerSecureOffer", "accept": "yes"}, answers=("error",), collect=seen)
+    check(m["message"] == "answerSecureOffer: accept must be true or false", f"accept is a boolean: {m}")
+    # The fake game's certificate is its own
+    c.ask({"t": "setSettings", "values": {"sslIgnoreSelfSigned": True}}, answers=("settings", "error"), collect=seen)
+
+    def offered(msgs):
+        c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": False})
+        wait_status(c, "connection", lambda v: v == "connected", msgs)
+        c.send({"t": "send", "text": f"mssp {tls_port}"})
+        c.wait_for(lambda m: m["t"] == "secureOffer" and m["offered"], timeout=10, collect=msgs)
+
+    msgs = []
+    offered(msgs)
+    check(any(f"secure connection on port {tls_port} is available" in t for t in texts_of(msgs)),
+          f"Mudlet's console says so too: {texts_of(msgs)[-3:]}")
+    msgs = []
+    c.send({"t": "disconnect"})
+    c.wait_for(lambda m: m["t"] == "secureOffer" and not m["offered"], timeout=10, collect=msgs)
+    m = c.ask({"t": "answerSecureOffer", "accept": True}, answers=("error",), collect=msgs)
+    check("no secure port" in m["message"], f"the offer lapses with its connection: {m}")
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs)
+
+    # No: connects again where it was, and asks no more
+    msgs = []
+    offered(msgs)
+    accepted = len(fake_telnet.ACCEPTED)
+    c.send({"t": "answerSecureOffer", "accept": False})
+    c.wait_for(lambda m: m["t"] == "secureOffer" and not m["offered"], timeout=10, collect=msgs)
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    check(len(fake_telnet.ACCEPTED) == accepted + 1, "a no connects again to the same port")
+    m = c.ask({"t": "getSettings", "keys": ["askTlsAvailable"]}, answers=("settings", "error"), collect=msgs)
+    check(m.get("values") == {"askTlsAvailable": False}, f"and the profile no longer offers a secure connection: {m}")
+    c.send({"t": "send", "text": f"mssp {tls_port}"})
+    c.wait_for(shown("MSSP sent"), collect=msgs)
+    later = seen_or_none(c, lambda m: m["t"] == "secureOffer" and m["offered"], msgs, len(msgs), timeout=3)
+    check(later is None, "the game's next offer is not passed on")
+    check(not any(f"port {tls_port} is available" in t for t in texts_of(msgs)), "nor told in the console")
+
+    # Yes: the secure port, stored with TLS on and connected to
+    c.ask({"t": "setSettings", "values": {"askTlsAvailable": True}}, answers=("settings", "error"), collect=msgs)
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs)
+    msgs = []
+    offered(msgs)
+    c.send({"t": "answerSecureOffer", "accept": True})
+    m = c.wait_for(lambda m: m["t"] == "profiles", timeout=10, collect=msgs)
+    listed = [p for p in m["profiles"] if p["name"] == profile]
+    check(listed and listed[0]["port"] == tls_port and listed[0]["tls"] is True,
+          f"the profile list says the secure port, with TLS, unasked: {listed}")
+    check("re" not in m, f"as no request's answer: {m}")
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    check([r for r, _ in fake_telnet.TLS_HANDSHAKES[handshakes:]] == ["ok"], f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
+    c.send({"t": "send", "text": "tls"})
+    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
+    check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")
+    items = {item: mudlet_item(profile, item) for item in ("url", "port", "ssl_tsl")}
+    check(items == {"url": "localhost", "port": str(tls_port), "ssl_tsl": "2"}, f"stored as the connection dialog stores it: {items}")
+    # The UI's next connect, with what the list now says, is taken
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs)
+    c.send({"t": "connect", "host": "localhost", "port": tls_port, "tls": True})
+    m = wait_status(c, "connection", lambda v: v == "connected" or v.startswith("error:"), msgs)
+    check(m["value"] == "connected", f"a connect with the secure port and TLS is taken: {m['value']}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

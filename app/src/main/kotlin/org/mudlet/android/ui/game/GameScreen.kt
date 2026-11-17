@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -330,6 +333,26 @@ private fun ProfileGameScreen(
             onClose = ::close,
             onOpenAnother = onBack,
             onDismiss = { gamesOpen = false },
+        )
+    }
+    LaunchedEffect(c.secureOfferRefusal) {
+        val reason = c.secureOfferRefusal ?: return@LaunchedEffect
+        c.secureOfferRefusalShown()
+        snackbars.showSnackbar(resources.getString(R.string.secure_offer_refused, reason), withDismissAction = true)
+    }
+    if (c.secureOffer && !c.secureOfferPutOff) {
+        fun answer(accept: Boolean) {
+            if (!c.answerSecureOffer(accept)) {
+                scope.launch { snackbars.showSnackbar(resources.getString(R.string.secure_offer_refused, resources.getString(R.string.profiles_error_not_attached)), withDismissAction = true) }
+            }
+        }
+        // Back is "not now": desktop has only Yes and No, and No turns the offer off for good
+        AlertDialog(
+            onDismissRequest = c::putOffSecureOffer,
+            confirmButton = { TextButton({ answer(true) }) { Text(stringResource(R.string.secure_offer_accept)) } },
+            dismissButton = { TextButton({ answer(false) }) { Text(stringResource(R.string.secure_offer_decline)) } },
+            title = { Text(stringResource(R.string.secure_offer_title)) },
+            text = { Text(stringResource(R.string.secure_offer_text)) },
         )
     }
 }

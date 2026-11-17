@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 30
+const val PROTOCOL_VERSION = 31
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -684,6 +684,28 @@ data class ErrorConsoleEntry(
     val line: Int,
 )
 
+/** A key and its [modifiers] as Qt's key event gives them, [KeyModifier]'s bits (docs/protocol.md, `keyBindings`). */
+data class KeyBinding(val key: Int, val modifiers: Int)
+
+/** What came of a Requests.pressKey (docs/protocol.md, `keyPressed`); one this client does not know is [NO_BINDING]. */
+enum class KeyPressResult(val wire: String) {
+    BINDING_RAN("bindingRan"),
+
+    /** The key is the shortcut of an [AddonCommand], which ran. */
+    COMMAND_RAN("commandRan"),
+
+    /** No binding took it, so the UI handles the key as its input line does. */
+    NO_BINDING("noBinding"),
+
+    /** Mudlet's input line keeps it for itself, so the UI handles it as its input line does. */
+    KEY_KEPT("keyKept"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String) = entries.firstOrNull { it.wire == wire } ?: NO_BINDING
+    }
+}
+
 /** A row of a script window's console: [runs] as [EngineMessage.Line]'s, but a bg of -1 is the window's bg. */
 data class WindowRow(val text: String, val runs: IntArray, val prompt: Boolean, val wrapped: Boolean)
 
@@ -789,6 +811,12 @@ sealed interface EngineMessage {
 
     /** The commands the profile's packages added, whole; empty with no profile open. */
     data class Commands(val commands: List<AddonCommand>) : EngineMessage
+
+    /** The keys whose press goes to a key binding of the profile now, each once; empty with no profile open. */
+    data class KeyBindings(val keys: List<KeyBinding>) : EngineMessage
+
+    /** The answer to Requests.pressKey. */
+    data class KeyPressed(val result: KeyPressResult, val replyTo: Any?) : EngineMessage
 
     /**
      * The 2D map as the mapper window shows it, drawn again: [png] is a PNG of [w] by [h] pixels, the window's size,
@@ -994,6 +1022,14 @@ object Requests {
 
     /** A click on the [AddonCommand] [command]. Answered only by an Error, when refused. */
     fun activateCommand(command: Int): JSONObject = JSONObject().put("t", "activateCommand").put("command", command)
+
+    /**
+     * A key pressed on the input line, [key] and [modifiers] as Qt's key event gives them, and [text] what it typed,
+     * null where unknown: a binding of it runs. Answered by [EngineMessage.KeyPressed] with [id] as its replyTo, or an Error.
+     */
+    fun pressKey(key: Int, modifiers: Int, text: String?, id: Long): JSONObject = JSONObject().put("t", "pressKey").put("key", key).put("modifiers", modifiers).put("id", id).apply {
+        if (text != null) put("text", text)
+    }
 
     /**
      * What the pointer did at [x], [y] in the pixels of the last [EngineMessage.Map]: [button] as POINTER_*, with
@@ -1397,6 +1433,10 @@ class FrameReader(input: InputStream) {
             "buttonBars" -> EngineMessage.ButtonBars(objects(o.optJSONArray("bars")).mapNotNull(::parseButtonBar))
 
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
+
+            "keyBindings" -> EngineMessage.KeyBindings(objects(o.optJSONArray("keys")).map { KeyBinding(it.optInt("key"), it.optInt("modifiers")) })
+
+            "keyPressed" -> EngineMessage.KeyPressed(KeyPressResult.fromWire(o.optString("result")), o.opt("re"))
 
             "map" -> EngineMessage.Map(
                 png ?: decodeBase64(o.optString("png")),

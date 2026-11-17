@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds,
-                       packages, error_console):
+                       packages, error_console, key_bindings):
             checks()
         checks = secure_offer
         checks(port)
@@ -4552,6 +4552,98 @@ def error_console():
     full = [m["entries"] for m in again if m["t"] == "errorConsole"]
     check(len(full) == 1 and [e.get("n") for e in full[0]] == list(range(count + 22, count + 122)),
           f"and the oldest go once the texts pass a million characters: {[[e.get('n') for e in f] for f in full]}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+KP, F1, RETURN, KEY_8, KEY_2 = 0x20000000, 0x01000030, 0x01000004, 0x38, 0x32
+
+
+def key_bindings():
+    """keyBindings, the combinations the profile's key bindings take, and pressKey: a tempKey() on keypad 8 sending
+    north, a binding on F1 and one in a folder, but not one on Return, which the input line keeps; each change told    once, by a folder switched off and on, killKey(), enableScriptItem and the game hiding what is typed; a key press
+    running a binding, kept by the line, or taken by none; and the list again for a UI that attaches."""
+    game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
+    proc, c = start_engine("Key Test")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "keyBindings", "keys": []} in seen, "with no profile open, a UI that attaches is told of no key bindings")
+    m = c.ask({"t": "pressKey", "key": KEY_8}, answers=("error",), collect=seen)
+    check(m["message"] == "pressKey: no profile running", f"pressKey with no profile open is refused: {m}")
+    for request, message in [({"key": -1}, "pressKey: key must be a whole number from 0"),
+                             ({"key": 1.5}, "pressKey: key must be a whole number from 0"),
+                             ({}, "pressKey: key must be a whole number from 0"),
+                             ({"key": KEY_8, "modifiers": "Keypad"}, "pressKey: modifiers must be a whole number from 0"),
+                             ({"key": KEY_8, "text": 8}, "pressKey: text must be a string")]:
+        m = c.ask(dict(request, t="pressKey"), answers=("error",), collect=seen)
+        check(m["message"] == message, f"pressKey {request} is refused: {m}")
+
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+
+    def keys_are(*combinations):
+        expected = [{"key": key, "modifiers": modifiers} for modifiers, key in combinations]
+        return lambda m: m["t"] == "keyBindings" and m["keys"] == expected
+
+    def told(since):
+        return [m for m in seen[since:] if m["t"] == "keyBindings"]
+
+    def change(code, *combinations, what):
+        """code is Lua to run, or a request to send."""
+        since = len(seen)
+        c.send(code if isinstance(code, dict) else {"t": "runLua", "code": code})
+        m = seen_or_none(c, keys_are(*combinations), seen, since)
+        # Anything the turn changed again would follow on the next pass of the event loop
+        c.ask({"t": "runLua", "code": "return 1"}, answers=("status", "error"), collect=seen)
+        check(m is not None and len(told(since)) == 1, f"{what}: {[t['keys'] for t in told(since)]}")
+
+    change("\n".join([
+        'north = tempKey(mudlet.keymodifier.Keypad, mudlet.key["8"], [[send("north")]])',
+        'tempKey(mudlet.key.F1, [[send("help")]])',
+        'tempKey(mudlet.key.Return, [[send("never")]])',
+        'permGroup("Moves", "key")',
+        'permKey("South", "Moves", mudlet.keymodifier.Keypad, mudlet.key["2"], [[send("south")]])',
+    ]), (0, F1), (KP, KEY_2), (KP, KEY_8),
+        what="tempKey() and permKey() are told once, sorted, without Return, which the input line keeps")
+
+    for request, result, sends in [({"key": KEY_8, "modifiers": KP, "text": "8"}, "bindingRan", "north"),
+                                   ({"key": F1}, "bindingRan", "help"),
+                                   ({"key": RETURN}, "keyKept", None),
+                                   ({"key": 0x5A, "modifiers": 0x04000000}, "noBinding", None)]:
+        sent = len(fake_telnet.RECEIVED)
+        m = c.ask(dict(request, t="pressKey"), answers=("keyPressed", "error"), collect=seen)
+        check(m["t"] == "keyPressed" and m["result"] == result and "re" in m, f"pressKey {request} gives {result}: {m}")
+        if sends:
+            got = received_after(sent, sends)
+            check(sends in got, f"and its binding sends {sends}: {got}")
+
+    change('disableKey("Moves")', (0, F1), (KP, KEY_8), what="a folder switched off takes its bindings from the list")
+    change('enableKey("Moves")', (0, F1), (KP, KEY_2), (KP, KEY_8), what="and switched on gives them back")
+    change("killKey(tostring(north))", (0, F1), (KP, KEY_2), what="killKey() takes a binding from the list")
+    items = c.ask({"t": "scriptItems", "kind": "key"}, answers=("scriptItems", "error"), collect=seen).get("items", [])
+    south = next((i["id"] for i in items if i["name"] == "South"), None)
+    check(south is not None, f"scriptItems lists the key South: {items}")
+    for enabled, combinations in ((False, [(0, F1)]), (True, [(0, F1), (KP, KEY_2)])):
+        change({"t": "enableScriptItem", "kind": "key", "item": south, "enabled": enabled}, *combinations,
+               what=f"enableScriptItem switching a key {'on' if enabled else 'off'}, as the editor does, is told once")
+
+    since = len(seen)
+    c.send({"t": "send", "text": "password"})
+    m = seen_or_none(c, keys_are((0, F1)), seen, since, timeout=10)
+    check(m is not None, "while the game hides what is typed, the hidden-input box keeps keypad 2, which types a digit")
+    m = c.ask({"t": "pressKey", "key": KEY_2, "modifiers": KP}, answers=("keyPressed", "error"), collect=seen)
+    check(m["result"] == "keyKept", f"and pressKey says so: {m}")
+    since = len(seen)
+    c.send({"t": "sendHidden", "text": "pw-Key5-never-logged"})
+    m = seen_or_none(c, keys_are((0, F1), (KP, KEY_2)), seen, since, timeout=10)
+    check(m is not None, "the game showing what is typed again gives it back")
+
+    keys = last_of(seen, "keyBindings")
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    check(last_of(msgs, "keyBindings") == keys, "a UI that attaches gets the key bindings as they are")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

@@ -72,6 +72,7 @@ public:
     std::variant<PngImage, QString> image(const QString& path, const QSize& size, std::optional<int> frame) const override;
     QString pressButton(int id) override;
     QString activateCommand(int id) override;
+    std::variant<KeyPress, QString> pressKey(int key, int modifiers, const std::optional<QString>& text) override;
     QString mapPointer(const PointerEvent& event) override;
     QString setMapViewOnly(bool viewOnly) override;
     QString setMapScale(double scale) override;
@@ -210,6 +211,7 @@ private:
     void pushMainArea();
     void pushButtonBars();
     void pushCommands();
+    void pushKeyBindings();
     // The map drawn at the size of the mapper window, which is none while it does not show
     void pushMap(const std::optional<QSize>& mapperSize);
     // The map drawn at size, or none where it cannot be, with a warning unless size is empty

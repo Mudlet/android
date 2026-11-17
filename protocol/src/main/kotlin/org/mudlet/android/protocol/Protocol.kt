@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 23
+const val PROTOCOL_VERSION = 24
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -429,6 +429,19 @@ enum class MapTarget(val wire: String) {
 data class MapRoomPlace(val id: Int, val x: Double, val y: Double, val name: String)
 
 /**
+ * A contributor's part of the map info box (docs/protocol.md, "The map info"): its [text], whether it is [bold] and
+ * [italic], and its [color], opaque ARGB, null where the engine gave none.
+ */
+data class MapInfoLine(val text: String, val bold: Boolean, val italic: Boolean, val color: Int?)
+
+/**
+ * The map info box of a map frame, which the engine leaves out of the picture for the UI to show as text: the [lines]
+ * of the contributors the profile has on, in the box's order, never empty, over its [background], ARGB, transparent
+ * where the engine gave no colour.
+ */
+data class MapInfo(val lines: List<MapInfoLine>, val background: Int)
+
+/**
  * What a map frame laid out (docs/protocol.md, "Moving a map"): the [area] and [level] shown; [zoom], the rooms across
  * the frame's narrow side, which [Requests.moveMap] keeps within [minZoom] and [maxZoom] (the least shows the rooms
  * largest); whether it is [following] the [player]'s room (0 for none); a room's cell, [roomSize], in the frame's pixels;
@@ -647,18 +660,18 @@ sealed interface EngineMessage {
     /**
      * The 2D map as the mapper window shows it, drawn again: [png] is a PNG of [w] by [h] pixels, the window's size,
      * times the scale [Requests.setMapScale] asked for, empty if it did not decode; [viewOnly] while the map is viewed, not edited; [view] what
-     * it laid out, null where it showed no area. Drawn over the mapper only while [w] and [h] are its size; none comes while the mapper hides or
-     * has no size.
+     * it laid out, null where it showed no area; [info] its map info box, null with none to show. Drawn over the mapper only while [w] and [h]
+     * are its size; none comes while the mapper hides or has no size.
      */
-    data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null) : EngineMessage
+    data class Map(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null, val info: MapInfo? = null) : EngineMessage
 
     /**
      * The app's own map (Requests.setAppMapSize), drawn again: [png] is a PNG of [w] by [h] of the map's pixels, at the
-     * scale asked for, empty if it did not decode; [viewOnly] and [view] as for [Map]. [w] and [h] are 0, and [png] empty, while
+     * scale asked for, empty if it did not decode; [viewOnly], [view] and [info] as for [Map]. [w] and [h] are 0, and [png] empty, while
      * there is nothing to draw, as with no profile open or a map with no rooms. Sent only while asked for: the engine
      * forgets the size when the UI goes, so one that attaches is sent none until it asks again.
      */
-    data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null) : EngineMessage
+    data class AppMap(val png: ByteArray, val w: Int, val h: Int, val viewOnly: Boolean, val view: MapViewInfo? = null, val info: MapInfo? = null) : EngineMessage
 
     /** The answer to findRooms for [text]: up to 100 [rooms], best first, and [more] when there were more. */
     data class Rooms(val text: String, val rooms: List<RoomMatch>, val more: Boolean, val replyTo: Any?) : EngineMessage
@@ -1158,9 +1171,23 @@ class FrameReader(input: InputStream) {
 
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
 
-            "map" -> EngineMessage.Map(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true), o.optJSONObject("view")?.let(::parseMapView))
+            "map" -> EngineMessage.Map(
+                decodeBase64(o.optString("png")),
+                o.optInt("w"),
+                o.optInt("h"),
+                o.optBoolean("viewOnly", true),
+                o.optJSONObject("view")?.let(::parseMapView),
+                o.optJSONObject("info")?.let(::parseMapInfo),
+            )
 
-            "appMap" -> EngineMessage.AppMap(decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.optBoolean("viewOnly", true), o.optJSONObject("view")?.let(::parseMapView))
+            "appMap" -> EngineMessage.AppMap(
+                decodeBase64(o.optString("png")),
+                o.optInt("w"),
+                o.optInt("h"),
+                o.optBoolean("viewOnly", true),
+                o.optJSONObject("view")?.let(::parseMapView),
+                o.optJSONObject("info")?.let(::parseMapInfo),
+            )
 
             "rooms" -> EngineMessage.Rooms(
                 o.optString("text"),
@@ -1413,6 +1440,15 @@ class FrameReader(input: InputStream) {
             menu = b.optBoolean("menu"),
             children = objects(b.optJSONArray("children")).map(::parseButton),
         )
+
+        private fun parseMapInfo(i: JSONObject): MapInfo? {
+            val lines = objects(i.optJSONArray("lines")).map { MapInfoLine(it.optString("text"), it.optBoolean("bold"), it.optBoolean("italic"), rgbColor(it.optString("color"))) }
+            if (lines.isEmpty()) return null
+            val alpha = i.optInt("bgAlpha", 255).coerceIn(0, 255)
+            // A box with no colour of its own is not drawn: the lines are, over the map
+            val background = rgbColor(i.optString("bg"))?.let { (it and 0xFFFFFF) or (alpha shl 24) } ?: 0
+            return MapInfo(lines, background)
+        }
 
         private fun parseMapView(v: JSONObject) = MapViewInfo(
             v.optInt("area"),

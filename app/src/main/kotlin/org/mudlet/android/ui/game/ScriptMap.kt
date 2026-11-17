@@ -89,6 +89,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.protocol.MapFit
+import org.mudlet.android.protocol.MapInfo
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.MapRoomPlace
@@ -146,6 +147,9 @@ private val FOLLOW_SPACE = 48.dp + FOLLOW_PADDING * 2
 private val PLACE_BAR_LEAST_HEIGHT = 144.dp
 private val CONTROLS_SPACE = 48.dp + CONTROLS_PADDING * 2
 private const val ROOM_CARD_FRACTION = 0.5f
+
+// The most of the map's height its info takes, so that a script's long one leaves the map in sight
+private const val INFO_FRACTION = 0.4f
 
 // TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
 private const val MIN_FIT_SCALE = 0.01f
@@ -217,6 +221,7 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
         fit,
         viewOnly = map?.viewOnly ?: true,
         drawn = map != null,
+        info = map?.info,
         modifier = modifier.background(CONSOLE_BACKGROUND).semantics {
             isTraversalGroup = true
             traversalIndex = WINDOWS_TRAVERSAL_INDEX
@@ -229,13 +234,23 @@ internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
  * and moved at once by what the player's touches moved it by until the engine draws that ([MapMover]). A tap selects
  * the room nearest it and shows it ([RoomCard]), a double tap walks there, a drag pans the map and glides on when
  * flung, a pinch zooms about the fingers and a double tap that drags zooms about it, each sent to [source]. In its
- * corner, with [controls], are its [MapButtons]; at its bottom why the engine refused a request, the area and level shown
- * ([MapPlaceBar]) beside a button that centres it on the player while it does not follow them, and the room picked.
+ * corner, with [controls], are its [MapButtons]; at its top the frame's map info, [info] ([MapInfoBox]); at its bottom why
+ * the engine refused a request, the area and level shown ([MapPlaceBar]) beside a button that centres it on the player
+ * while it does not follow them, and the room picked.
  * TalkBack reads it as the map, viewed or edited and whether it follows the player, whose actions select or walk to the
  * room in its middle, zoom, move it, show the level above or below and centre it on the player.
  */
 @Composable
-internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier, controls: Boolean = true) {
+internal fun MapView(
+    source: MapSource,
+    frame: ImageBitmap?,
+    fit: MapFit,
+    viewOnly: Boolean,
+    drawn: Boolean,
+    modifier: Modifier = Modifier,
+    controls: Boolean = true,
+    info: MapInfo? = null,
+) {
     val touchable = frame != null && EngineClient.enginePid > 0
     val currentFit by rememberUpdatedState(fit.takeIf { touchable })
     val editing by rememberUpdatedState(touchable && !viewOnly)
@@ -291,6 +306,10 @@ internal fun MapView(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOn
         ) {
             if (frame != null) drawFrame(frame, fit, shift = mover.shift)
             roomDrag?.let { drawRoomGhost(it, fit, mover, ghost) }
+        }
+        if (frame != null && info != null) {
+            // Under the buttons' row, which it would otherwise share the top of a narrow map with
+            MapInfoBox(info, Modifier.align(Alignment.TopStart).padding(top = if (controls) CONTROLS_SPACE else 0.dp).heightIn(max = maxHeight * INFO_FRACTION))
         }
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
         val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }

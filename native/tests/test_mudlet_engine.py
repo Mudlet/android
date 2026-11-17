@@ -115,7 +115,7 @@ def main():
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
+                       map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -2672,6 +2672,69 @@ def app_map():
     check(m == empty, f"0 by 0 stops the app's map: {m}")
     m = c.ask({"t": "appMapPointer", "type": "press", "x": 1, "y": 1, "button": 1}, answers=("error",), collect=seen)
     check(m["message"].startswith("appMapPointer: The app's map has not been drawn yet"), f"and lets its view go: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def map_info():
+    """The map info box as text, left out of the picture: the built-in Short contributor's part in the app's map, with the
+    map's own text colour and the box's colour; a script's registerMapInfo() after it, bold, italic and in its colour,
+    in a frame whose picture is as before; disableMapInfo() and setConfig("mapInfoColor"); no info with no contributor
+    on but one that gives no text; and the same in a script's mapper."""
+    profile = "Map Info Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the map info's profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 300, "scale": 1})
+    short = {"text": "Great Hall / 1 (Info Area)\n", "bold": False, "italic": False, "color": "#ffffff"}
+    script = {"text": "room 1", "bold": True, "italic": True, "color": "#ff8000"}
+    grey = {"bg": "#969696", "bgAlpha": 120}
+    blue = {"bg": "#0a141e", "bgAlpha": 200}
+
+    def frame_after(code, info, what, t="appMap"):
+        """The first frame after the Lua whose info is that, None for a frame with none; failing that, the last frame
+        there was, if any, for what else is checked of it."""
+        since = len(seen)
+        c.send({"t": "runLua", "code": "\n".join(code)})
+        try:
+            m = seen_or_next(c, lambda m: m["t"] == t and m["w"] and m.get("info") == info, seen, since, timeout=15)
+        except TimeoutError:
+            frames = [m for m in seen[since:] if m["t"] == t and m["w"]]
+            check(False, f"{what}: the frames since had {[m.get('info', 'no info') for m in frames]}")
+            return frames[-1] if frames else None
+        check(True, what)
+        return m
+
+    # The box the desktop paints starts 10 pixels in and down: there the picture is the map's background, as in a
+    # corner the box never reaches
+    def unpainted(m):
+        png = base64.b64decode(m["png"])
+        return png_size(png) == (400, 300) and png_pixel(png, 15, 15) == png_pixel(png, 15, 285)
+
+    first = frame_after(['local area = addAreaName("Info Area")', "addRoom(1)", "setRoomArea(1, area)", "setRoomCoordinates(1, 0, 0, 0)",
+                         'setRoomName(1, "Great Hall")', "centerview(1)", "updateMap()"],
+                        {"lines": [short], **grey}, "a new profile's map info is the Short contributor's part, in the map's text colour over the box's")
+    if first is None:
+        stop_engine(proc)
+        return
+    check(unpainted(first), "the app's map has no box painted into its picture")
+    both = frame_after(['registerMapInfo("Test", function(room) return "room " .. room, true, true, 255, 128, 0 end)',
+                     'enableMapInfo("Test")'],
+                    {"lines": [short, script], **grey}, "a script's registerMapInfo() comes after it, bold, italic and in its colour")
+    m = frame_after(['disableMapInfo("Short")'], {"lines": [script], **grey}, "disableMapInfo() takes a contributor's part out")
+    check(None not in (both, m) and m["png"] == both["png"], "in a frame whose picture is as before")
+    frame_after(['setConfig("mapInfoColor", {10, 20, 30, 200})'], {"lines": [script], **blue}, 'setConfig("mapInfoColor") sets the box\'s colour and alpha')
+    frame_after(['registerMapInfo("Silent", function() return "" end)', 'enableMapInfo("Silent")', 'disableMapInfo("Test")'], None,
+                "with no contributor on but one that says nothing a frame has no info")
+    m = frame_after(['enableMapInfo("Short")', 'testMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})'],
+                    {"lines": [short], **blue}, "a script's mapper has the map info too", t="map")
+    check(m is not None and unpainted(m), "and no box painted into its picture")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

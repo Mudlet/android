@@ -17,6 +17,7 @@ import org.mudlet.android.protocol.ButtonBar
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LabelLink
 import org.mudlet.android.protocol.LayoutMode
+import org.mudlet.android.protocol.MapInfo
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
 import org.mudlet.android.protocol.MapTarget
@@ -90,9 +91,9 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     /**
      * A `map` or `appMap` frame: [w] by [h] its size in the map's pixels, and [bitmap] its PNG, null if that did not
      * decode, larger by the scale asked for with [setMapScale] or `setAppMapSize`; [viewOnly] false while the map is
-     * edited.
+     * edited; [info] its map info box, which the picture leaves out, null with none.
      */
-    class MapImage(val bitmap: ImageBitmap?, val w: Int, val h: Int, val viewOnly: Boolean)
+    class MapImage(val bitmap: ImageBitmap?, val w: Int, val h: Int, val viewOnly: Boolean, val info: MapInfo? = null)
 
     /** The images the engine sent, by what was asked; one not there yet is asked for with [requestImage]. */
     val images = mutableStateMapOf<ImageRequest, ImageBitmap>()
@@ -131,7 +132,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     /** A new `map`, with what [decode] made of it. */
     internal fun onMap(message: EngineMessage.Map, bitmap: ImageBitmap?) {
         if (bitmap == null) Log.w(TAG, "the engine's map, ${message.w} by ${message.h}, did not decode")
-        map = MapImage(bitmap, message.w, message.h, message.viewOnly)
+        map = MapImage(bitmap, message.w, message.h, message.viewOnly, message.info)
         mapMover.onFrame(message.view)
         mapRooms.onFrame(message.view)
     }

@@ -248,6 +248,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                             drawn,
                             modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
                             controls = false,
+                            info = map?.info,
                         )
                         if (offerInMap) {
                             Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {

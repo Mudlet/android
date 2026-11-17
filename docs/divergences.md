@@ -23,6 +23,17 @@ they did not make it (`0001-headless-app-map.patch`; `docs/architecture.md`, "Th
 main window always offers its mapper; a phone has no room for that window beside the console, and a player should not
 need a script to see the map.
 
+## The map info box
+
+The map info (the built-in `Short` and `Full`, and a script's `registerMapInfo()`) is text the app lays over the map,
+not part of the map's picture: in the app's font at Android's font scale, wrapped to the map's width, with a line
+break at a part's end trimmed and a part of nothing but space left out, at most two fifths of the map's height, and
+not shown on the map behind the text. The parts, their order, colours, bold and italic and the box's colour are the
+desktop's, and scripts see no difference (`0016-headless-map-info.patch`; `docs/architecture.md`, "The map info"). The
+desktop paints the box into the map in the profile's display font. Painted into a picture on a phone it cannot be
+read by TalkBack, does not follow the player's font size, and moves and scales with the picture under a finger until
+the engine's next frame.
+
 ## Saving when the app leaves the front
 
 When the app goes to the background, the open profiles are saved as Mudlet saves them at a close, but with no

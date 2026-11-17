@@ -207,6 +207,7 @@ private:
     void warnAppMapUndrawn(const QString& why);
     // What the last frame of that map laid out; none where it showed no area
     std::optional<MapViewInfo> mapView(MapTarget map) const;
+    MapInfo mapInfo(MapTarget map) const;
     // Whether the game offers a map, at url (none if empty), into mMapDownload; a download keeps the host it is from
     void takeOfferedMap(const QString& url);
     // mMapDownload in state, with no progress, cancelable only while downloading, and error only for a failure

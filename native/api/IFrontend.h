@@ -285,6 +285,24 @@ struct MapViewInfo
     bool operator==(const MapViewInfo&) const = default;
 };
 
+// A contributor's part of the map info box (THeadlessSession::mapInfo()), its colour as #rrggbb
+struct MapInfoLine
+{
+    QString text;
+    bool bold = false;
+    bool italic = false;
+    QString color;
+};
+
+// The map info box of a map frame, which the frame's picture leaves out for the UI to show as text: no box with no
+// lines; its background as #rrggbb, with its alpha from 0 to 255
+struct MapInfo
+{
+    QList<MapInfoLine> lines;
+    QString background;
+    int backgroundAlpha = 255;
+};
+
 // The profile's 2D map as its mapper window shows it, its size the window's in pixels, so that a point of it is a
 // point of the window, with the PNG at that size times IEngine::setMapScale()'s scale; or the app's own map, whose
 // size is in the map's pixels as IEngine::setAppMapSize() asked for it, with the PNG at that size times the scale
@@ -297,6 +315,7 @@ struct MapFrame
     bool viewOnly = true;
     // None where the frame showed no area
     std::optional<MapViewInfo> view;
+    MapInfo info;
 };
 
 // A room of the map that IEngine::findRooms() found: its id, its name, its area's id and name, how the text matched

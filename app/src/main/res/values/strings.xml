@@ -667,6 +667,10 @@
     <string name="map_title">Map</string>
     <!-- What a screen reader reads for the map a game's scripts open, once it is drawn -->
     <string name="map_description">Map of the game</string>
+    <!-- What a screen reader reads for the text shown over the top of the map, which says where the player is: the
+         room's name and number and its area, and whatever a game's scripts add (%1$s, in the game's or the script's
+         own words) -->
+    <string name="map_info">Map info: %1$s</string>
     <!-- What a screen reader reads for the map a game's scripts open, before it is drawn -->
     <string name="map_not_drawn">Map, not drawn yet</string>
     <!-- The state of the map a game's scripts open, read by a screen reader: the player can look at it, not change it

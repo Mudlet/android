@@ -1896,10 +1896,13 @@ QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
 {
     const QByteArray base64 = frame.png.toBase64();
     const QJsonObject view = frame.view ? mapViewMessage(*frame.view) : QJsonObject();
-    // The rooms' names can add tens of kilobytes to the PNG
-    const qsizetype viewBytes = view.isEmpty() ? 0 : QJsonDocument(view).toJson(QJsonDocument::Compact).size();
-    if (base64.size() + viewBytes + 1024 > qsizetype(maxFrameBytes)) {
-        qWarning("SocketBridge: a map at %dx%d as a PNG, with its view, is too large for a frame", frame.size.width(), frame.size.height());
+    const QJsonObject info = frame.info.lines.isEmpty() ? QJsonObject() : mapInfoMessage(frame.info);
+    // The rooms' names can add tens of kilobytes to the PNG, and a script's map info any length
+    const auto bytes = [](const QJsonObject& part) {
+        return part.isEmpty() ? 0 : QJsonDocument(part).toJson(QJsonDocument::Compact).size();
+    };
+    if (base64.size() + bytes(view) + bytes(info) + 1024 > qsizetype(maxFrameBytes)) {
+        qWarning("SocketBridge: a map at %dx%d as a PNG, with its view and info, is too large for a frame", frame.size.width(), frame.size.height());
         return {};
     }
     QJsonObject message{
@@ -1907,7 +1910,19 @@ QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
     if (!view.isEmpty()) {
         message.insert(QStringLiteral("view"), view);
     }
+    if (!info.isEmpty()) {
+        message.insert(QStringLiteral("info"), info);
+    }
     return message;
+}
+
+QJsonObject SocketBridge::mapInfoMessage(const MapInfo& info)
+{
+    QJsonArray lines;
+    for (const MapInfoLine& line : info.lines) {
+        lines.append(QJsonObject{{QStringLiteral("text"), line.text}, {QStringLiteral("bold"), line.bold}, {QStringLiteral("italic"), line.italic}, {QStringLiteral("color"), line.color}});
+    }
+    return {{QStringLiteral("lines"), lines}, {QStringLiteral("bg"), info.background}, {QStringLiteral("bgAlpha"), info.backgroundAlpha}};
 }
 
 QJsonObject SocketBridge::mapViewMessage(const MapViewInfo& view)

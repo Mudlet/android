@@ -763,6 +763,30 @@ class ProtocolTest {
     }
 
     @Test
+    fun aMapsInfoDecodes() {
+        val frame = """"png":"","w":400,"h":300,"viewOnly":true"""
+        val info = """{"lines":[{"text":"Great Hall / 7 (Castle)\n","bold":false,"italic":false,"color":"#ffffff"},"junk",""" +
+            """{"text":"HP 12","bold":true,"italic":true,"color":"#ff8000"},{"text":"plain"}],"bg":"#969696","bgAlpha":120}"""
+        val expected = MapInfo(
+            listOf(
+                MapInfoLine("Great Hall / 7 (Castle)\n", false, false, 0xFFFFFFFF.toInt()),
+                MapInfoLine("HP 12", true, true, 0xFFFF8000.toInt()),
+                MapInfoLine("plain", false, false, null),
+            ),
+            0x78969696,
+        )
+        assertEquals(expected, (FrameReader.parse(JSONObject("""{"t":"map",$frame,"info":$info}""")) as EngineMessage.Map).info)
+        assertEquals(expected, (FrameReader.parse(JSONObject("""{"t":"appMap",$frame,"info":$info}""")) as EngineMessage.AppMap).info)
+        // With no box drawn: none sent, none of its lines, and one whose colour is not a colour
+        assertEquals(null, (FrameReader.parse(JSONObject("""{"t":"appMap",$frame}""")) as EngineMessage.AppMap).info)
+        assertEquals(null, (FrameReader.parse(JSONObject("""{"t":"appMap",$frame,"info":{"lines":[],"bg":"#969696","bgAlpha":120}}""")) as EngineMessage.AppMap).info)
+        val unpainted = FrameReader.parse(JSONObject("""{"t":"map",$frame,"info":{"lines":[{"text":"x"}],"bg":"grey","bgAlpha":999}}""")) as EngineMessage.Map
+        assertEquals(MapInfo(listOf(MapInfoLine("x", false, false, null)), 0), unpainted.info)
+        val opaque = FrameReader.parse(JSONObject("""{"t":"map",$frame,"info":{"lines":[{"text":"x"}],"bg":"#102030","bgAlpha":999}}""")) as EngineMessage.Map
+        assertEquals(0xFF102030.toInt(), opaque.info?.background)
+    }
+
+    @Test
     fun theMapMovesCarryWhatTheEngineReads() {
         assertEquals(
             mapOf("t" to "moveMap", "map" to "app", "dx" to 1.5, "dy" to -2.0, "zoom" to 1.25, "x" to 10.0, "y" to 20.0, "seq" to 3),

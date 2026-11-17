@@ -128,29 +128,8 @@ The screen-reader pull request adds:
 
 ## Deliberately later
 
-- **Phase F, what scripts draw:** mini consoles, user windows, labels, Geyser gauges and buttons (`scriptWindows()`,
-  `windowLines()`, `labelContent()`, `pointer()`), button bars (`buttonBars()`), commands packages add
-  (`addonCommands()`). Many games' GUI packages need these. Planned in [`phase-f.md`](phase-f.md).
-- The 2D map's screen (`map`, `mapPointer`, version 10), part of Phase F: the game screen draws it, and its touches;
-  and the app's own map behind the text and in front, with a room search (`appMap`, `findRooms`, version 11); it
-  also downloads the map the game offers (`mapDownload`, version 13).
-- A trigger made from a console line, and a keyboard's keys passed on to the profile's key bindings. The script
-  library edits triggers, aliases, scripts, timers, keys and buttons, with a Lua editor (architecture.md, "The script
-  library").
-- A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
-- More than one profile at once, with a profile switcher: upstream allows one profile pool per process, so it needs
-  upstream work; the plan and its pull requests are in [`multi-profile.md`](multi-profile.md).
-- The game's secure-port offer (`secureConnectionOffered`), the dialogs for a bad TLS certificate, a proxy, logging,
-  replays, the debug console, the error console as a screen, spell-check, Discord, IRC.
-- Tablets' and Chromebooks' layouts beyond what a resizable phone layout gives, hardware keyboard bindings
-  (`pressKey()`), a custom key bar.
-- A Baseline Profile of the app's own start-up and game screen. The release already carries the profiles Compose and
-  AndroidX ship, which AGP merges into the APKs and the AAB (`ptb.yml` checks that they are there). One for the app's
-  code needs a `:baselineprofile` test module (the `androidx.baselineprofile` plugin, which adds build types beside
-  `smoke`), an x86_64 release build with the engine staged, and an emulator job whose generator reaches the game screen
-  through the profile editor against `fake_telnet.py`: another emulator job of about 40 minutes, and a generator to
-  change with each game screen pull request (U4 to U8). Worth it once the game screen settles and start-up is measured
-  on a phone.
+What Phase E left for later, and everything else the app still needs, is planned lane by lane in
+[`plan.md`](plan.md), with a status table of the lanes and their pull requests.
 
 ## Protocol changes
 

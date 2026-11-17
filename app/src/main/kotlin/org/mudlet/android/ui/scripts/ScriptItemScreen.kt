@@ -359,7 +359,7 @@ private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit,
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheet,
-        // No handle: its full-width target is shorter than 48 dp, and the close button and Back do what it offers
+        // No handle: its touch target is narrower than 48 dp, and the close button and Back do what it offers
         dragHandle = null,
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, top = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {

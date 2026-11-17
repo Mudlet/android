@@ -40,10 +40,10 @@ private val GROUP_TITLES = mapOf(
 /**
  * The app's version and engine, where the source of both is, how Qt's LGPL is met, and the licence of everything
  * the APK bundles (docs/licences.md); a component opens its licence texts through [onOpenComponent]. [selected] is the
- * component whose licence is open beside the list, if one is.
+ * component whose licence is open beside the list, if one is. [onReportProblem] opens the problem report screen.
  */
 @Composable
-fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selected: String? = null) {
+fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selected: String? = null, onReportProblem: () -> Unit) {
     val engine = engineInfo()
     val licences = rememberLicences()
     val context = LocalContext.current
@@ -62,6 +62,7 @@ fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selec
                         stringResource(R.string.about_engine_commit, engine.commit.take(12))
                     },
                 )
+                LinkButton(stringResource(R.string.about_report), onReportProblem)
             }
             item {
                 Heading(stringResource(R.string.about_free_software_heading))

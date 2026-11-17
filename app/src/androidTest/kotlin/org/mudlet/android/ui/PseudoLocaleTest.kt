@@ -216,6 +216,16 @@ class PseudoLocaleTest(private val locale: String) {
 
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))
+
+        activate(hasContentDescription(string(R.string.about_title)))
+        waitFor(hasText(string(R.string.about_report)))
+        activate(hasText(string(R.string.about_report)))
+        waitFor(hasText(string(R.string.report_contents_heading)))
+        assertTextFits("the problem report")
+        assertAtStart("the problem report's heading", hasText(string(R.string.report_contents_heading)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.profiles_title)))
     }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)

@@ -12,11 +12,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -46,12 +52,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
@@ -101,24 +108,46 @@ private const val RESULTS_FRACTION = 0.75f
 // The results are filtered by area once they are in at least this many
 private const val FILTER_LEAST_AREAS = 3
 
-// The keyboard and the window resize the map in many small steps: only where it comes to rest is drawn anew
+// A window that is resized, and a keyboard that does not say where it is going, resize the map in many small steps:
+// only where it comes to rest is drawn anew
 private const val MAP_SIZE_SETTLE_MS = 200L
+
+// How long the map in front takes the keyboard for gone as it opens: longer than the keyboard takes to go
+private const val KEYBOARD_GOES_MS = 500L
 
 // How long the full-screen map says the map loaded, once it is shown
 private const val LOADED_SHOWN_MS = 5_000L
 
 /**
  * The app's map behind the main console's text (docs/architecture.md, "The map behind the text"), filling the console
- * and following the player: as strong as keeps text in [colors] readable over the colours of its frame ([MapBehindText]),
- * easing up to a stronger frame's, and none where even the console's own background leaves the text too faint. It
- * takes no touches, which go to the console's text, and TalkBack does not read it, as the full-screen map is there to
- * be read.
+ * and following the player. The engine is asked for it at the console's size for as long as this is on the screen, drawn
+ * or not, so the map in front has the engine's last frame to show the moment it opens ([FullScreenMap]), and with
+ * [behind], the setting, that frame is cut out for it by then ([AppMapClient.cutOutAhead]). It is drawn with [behind]
+ * while the map is not [inFront] ([FaintMap]).
  */
 @Composable
-internal fun BoxScope.BackgroundMap(colors: ConsoleColors) {
+internal fun BoxScope.BackgroundMap(colors: ConsoleColors, behind: Boolean, inFront: Boolean) {
+    DisposableEffect(behind) {
+        AppMapClient.cutOutAhead = behind
+        onDispose { AppMapClient.cutOutAhead = false }
+    }
+    MapBox(Modifier.matchParentSize()) { size ->
+        AskForMap(AppMapClient.Owner.BACKGROUND, size)
+        if (behind && !inFront) FaintMap(colors, size)
+    }
+}
+
+/**
+ * The frame of the app's map behind the console's text, laid out as the engine will draw the map for [box] ([MapFit]):
+ * as strong as keeps text in [colors] readable over the colours of its frame ([MapBehindText]), easing up to a stronger
+ * frame's, and none where even the console's own background leaves the text too faint. It takes no touches, which go to
+ * the console's text, and TalkBack does not read it, as the map in front is there to be read.
+ */
+@Composable
+private fun FaintMap(colors: ConsoleColors, box: IntSize) {
     val foreground = colors.foreground.toArgb() and 0xFFFFFF
     val background = colors.background.toArgb() and 0xFFFFFF
-    // Over a map of any colour: before a frame has come, and so that colours which leave the map no room ask for none
+    // Over a map of any colour: before a frame has come, and so that colours which leave the map no room draw none
     val anyMap = remember(colors) { MapBehindText.alpha(foreground, background) }
     if (anyMap <= 0f) return
     val appMap = EngineClient.front.appMap
@@ -128,13 +157,13 @@ internal fun BoxScope.BackgroundMap(colors: ConsoleColors) {
     // Fainter at once, as easing down would leave the text too faint over the new frame for a moment; the draw takes the
     // lower too, as the effect snaps only after the new frame's first draw
     LaunchedEffect(target) { if (target < alpha.value) alpha.snapTo(target) else alpha.animateTo(target) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    AskForMap(AppMapClient.Owner.BACKGROUND, size)
     val map = appMap.map
-    Canvas(Modifier.matchParentSize().onSizeChanged { size = it }.clearAndSetSemantics {}) {
+    // Clipped, as a frame drawn for a larger box is larger than this one
+    Canvas(Modifier.fillMaxSize().clipToBounds().clearAndSetSemantics {}) {
         val drawn = map ?: return@Canvas
         val frame = drawn.bitmap ?: return@Canvas
-        drawFrame(frame, MapFit(drawn.w, drawn.h, PxRect(0f, 0f, this.size.width, this.size.height)), minOf(alpha.value, target))
+        val fit = MapFit(drawn.w, drawn.h, PxRect(0f, 0f, box.width.toFloat(), box.height.toFloat()), asRedrawn = true)
+        drawFrame(frame, fit, minOf(alpha.value, target))
     }
 }
 
@@ -144,8 +173,9 @@ internal class TextBehind(val ground: Color, val alpha: () -> Float)
 /**
  * How the main console shows behind the app's map in front (docs/architecture.md, "The map behind the text"): as
  * strongly as keeps the map's rooms and exits at 3:1 against text in [colors] ([TextBehindMap]), over the map's own
- * background colour, which [FullScreenMap] cuts out of its frame. Easing up to a frame that allows more, at once down to
- * one that allows less, and none before a cut-out frame has come.
+ * background colour, which [FullScreenMap] cuts out of its frame. From the first, that strongly, where the frame was cut
+ * out ahead ([BackgroundMap]); then easing up to a frame that allows more, at once down to one that allows less, and
+ * none before a cut-out frame has come.
  */
 @Composable
 internal fun textBehindMap(appMap: AppMapClient, colors: ConsoleColors): TextBehind {
@@ -171,7 +201,8 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
 /**
  * The app's map in front, where [modifier] puts it: a search for rooms by name or number beside the map's buttons, its
  * results right under it ([RoomResults]), and the download of the map the game offers ([MapDownloadBar]), over the map
- * as [MapView] draws it, which a tap selects in and a double tap walks on; with no map drawn, the offer is in its middle
+ * as [MapView] draws it, which a tap selects in and a double tap walks on, from the first with the frame the engine drew
+ * last, laid out as it will draw the map for here ([MapFit]); with no map drawn, the offer is in its middle
  * ([MapOffer]), or in the bar while a search's results or a refusal would be where it is. Back closes the results, then
  * the room picked, then calls [onClose], after the map shrinks with a predictive back gesture, whose progress goes to
  * [onBackProgress]. It takes the touches on what is under it. With [textBehind] the map is drawn with its background cut
@@ -222,14 +253,20 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             val map = appMap.map
             val drawn = map != null
             val viewOnly = map?.viewOnly ?: true
-            var size by remember { mutableStateOf(IntSize.Zero) }
-            // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
-            val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
+            // As the map comes to the front the input line lets its keyboard go (InputLine), which the keyboard says only
+            // some frames on: the map would be laid out, and asked for, above the keyboard first
+            var keyboardGoes by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                delay(KEYBOARD_GOES_MS)
+                keyboardGoes = false
+            }
             // The buttons are beside the search, not over the map, where they would hide the room's name the engine
             // draws along its top
             Row(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
-                MapButtons(appMap, map?.bitmap, fit, viewOnly, drawn)
+                // They zoom about the frame's middle, wherever it is drawn
+                val frameOnly = remember(map?.w, map?.h) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, 0f, 0f)) }
+                MapButtons(appMap, map?.bitmap, frameOnly, viewOnly, drawn)
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.matchParentSize()) {
@@ -238,7 +275,11 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                     // TalkBack. With a map drawn, none: the map is there
                     val offerInMap = !drawn && !resultsShown && appMap.refusal == null
                     MapDownloadBar(offerHere = !drawn && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                    MapBox(Modifier.weight(1f).fillMaxWidth(), keyboardGoes) { size ->
+                        // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
+                        val fit = remember(map?.w, map?.h, size) {
+                            MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat()), asRedrawn = true)
+                        }
                         AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
                         MapView(
                             appMap,
@@ -246,12 +287,12 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                             fit,
                             viewOnly,
                             drawn,
-                            modifier = Modifier.fillMaxSize().onSizeChanged { size = it },
+                            modifier = Modifier.fillMaxSize(),
                             controls = false,
                             info = map?.info,
                         )
                         if (offerInMap) {
-                            Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 MapOffer(Modifier.padding(16.dp))
                             }
                         }
@@ -269,11 +310,16 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
     }
 }
 
-// [owner] asks for the map at [size] of the screen, once it has held for a moment, until it leaves the screen
+// [owner] has the map until it leaves the screen, and asks for it at [size] of the screen, once that has held for a moment
 @Composable
 private fun AskForMap(owner: AppMapClient.Owner, size: IntSize) {
     val density = LocalDensity.current.density
     var asked by remember { mutableStateOf(false) }
+    // From before it knows its size, so the engine is not asked for the map at another's size first
+    DisposableEffect(owner) {
+        AppMapClient.show(owner, null)
+        onDispose { AppMapClient.hide(owner) }
+    }
     LaunchedEffect(owner, size, density) {
         if (size == IntSize.Zero) return@LaunchedEffect
         // The first at once, so the map comes as soon as it can
@@ -281,7 +327,27 @@ private fun AskForMap(owner: AppMapClient.Owner, size: IntSize) {
         AppMapClient.show(owner, AppMapClient.Size.of(size.width, size.height, density))
         asked = true
     }
-    DisposableEffect(owner) { onDispose { AppMapClient.hide(owner) } }
+}
+
+/**
+ * A box for a map that ends above the keyboard: [content], each part of which fills it, is told the size the box has
+ * once the keyboard is where it is going, or, with [keyboardGoes], gone. A map laid out and asked for at that size stays
+ * still while the keyboard slides, and is drawn anew once for it, not at each step. The content is composed as the box
+ * is measured: it has the size for its first frame, and the box's size and the keyboard's are of the same frame.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MapBox(modifier: Modifier, keyboardGoes: Boolean = false, content: @Composable (IntSize) -> Unit) {
+    // What the game screen's `imePadding` takes: its scaffold has taken its bars' part already
+    val bars = WindowInsets.systemBars
+    val keyboard = WindowInsets.ime.exclude(bars)
+    val keyboardAtRest = WindowInsets.imeAnimationTarget.exclude(bars)
+    SubcomposeLayout(modifier) { constraints ->
+        val leaves = keyboard.getBottom(this) - if (keyboardGoes) 0 else keyboardAtRest.getBottom(this)
+        val atRest = IntSize(constraints.maxWidth, (constraints.maxHeight + leaves).coerceAtLeast(0))
+        val placeables = subcompose(Unit) { content(atRest) }.map { it.measure(constraints) }
+        layout(constraints.maxWidth, constraints.maxHeight) { placeables.forEach { it.place(0, 0) } }
+    }
 }
 
 /** The room search's field: Enter, or its button, asks the engine for the rooms whose name holds the text, or whose number it is. */

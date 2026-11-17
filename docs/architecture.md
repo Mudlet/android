@@ -430,8 +430,8 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   line in Mudlet's default LightGray, still keeps the 3:1 WCAG asks of large text and graphics. Behind the default grey
   on black, Achaea's map in Mudlet's default colours (dark green and cyan rooms, grey exits) shows at 41% to 54%, as its
   grey room-name box and exits take more or less of the frame, a frame with white rooms in it at 31%; dimmer text or a
-  light background gets less, and text already below 4.5:1 none, nor is the map asked for. A stronger frame's alpha
-  eases in, a fainter one's at once. Before the first frame the map is weighed as any colour at all. The console's
+  light background gets less, and text already below 4.5:1 none. A stronger frame's alpha eases in, a fainter one's at
+  once. Before the first frame the map is weighed as any colour at all. The console's
   colours, ANSI ones included, are not changed; text the game colours is not weighed, so a dim colour of the game's
   reads less well over the map. It takes no touches, which reach the text as before, and TalkBack does not read it.
 - In front: the title bar's map button, a toggle read as "Map" with its state, swaps the map and the text. The map takes
@@ -454,14 +454,15 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   alpha is the most at which every colour the map draws its rooms and exits in keeps WCAG 1.4.11's 3:1 against every
   colour between the console's text and backgrounds blended over that ground (`TextBehindMap` in `:protocol`, beside
   `MapBehindText`), up to the same 54%. `MapBehindText`'s tones do not serve here: they leave out thin exit lines and
-  take in the background, while this needs each drawn colour against the ground. The colours are found as the frame is
-  decoded, off the main thread, and only while the text is behind the map: the colour of at least 64 pixels that have it
-  on both sides along a row, a column or a diagonal, so a line a pixel wide counts, but not an antialiased edge, a pixel
+  take in the background, while this needs each drawn colour against the ground. The colours are found off the main
+  thread, as the frame is decoded while the map is in front, and ahead of the swap while it is behind the text (below):
+  the colour of at least 64 pixels that have it on both sides along a row, a column or a diagonal, so a line a pixel wide counts, but not an antialiased edge, a pixel
   between the background and the colour beside it across the line, which is seen as part of what it edges. A colour
   already below 3:1 against the ground is not weighed, as no alpha could give it that. Mudlet's default map (dark green
   and cyan rooms, grey exits, on black) shows the default grey text at 19%, held down by the dark green; white rooms
   leave it to the grey exits, at 54%; rooms barely at 3:1 leave none. It eases in and drops at once as
-  `BackgroundMap` does, comes back to full with a predictive back gesture, and is none until a cut-out frame has come.
+  the map behind the text does, comes back to full with a predictive back gesture, and is none until a cut-out frame has
+  come.
   Text the game colours, and the script windows, are not weighed, as for the map behind the text.
 - The search sends `findRooms`, from its button or the keyboard's Search key, and puts the keyboard away, as on a
   small screen it leaves the results no room. The engine sends the best first: the name the text, then names that
@@ -475,10 +476,28 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   results but keeping the field's text. Its walk button, "Walk to <room>", sends `walkToRoom` and closes them, off
   where there is no known way or the player is there. Where they are in three areas or more, chips filter them by
   area (`roomAreas`). Back closes them, then the room shown, before it sends the map back.
-- The UI asks for the map (`setAppMapSize`) at the size it shows it, in dp at the screen's density, only while it
-  shows it: the map in front's size while it is open, else the console's while the map is behind the text, else
-  0 by 0. A size that changes as the keyboard moves is sent once it has held for 200 ms. It asks again at each attach,
-  as the engine stops drawing the map when its UI goes (in the background too) and forgets the size.
+- The UI asks for the map (`setAppMapSize`) in dp at the screen's density: at the map in front's size while it is
+  open, else at the console's for as long as the game screen is up and no script's mapper is drawn, whether or not the
+  map is drawn behind the text (the setting off, or colours that leave it no room), else 0 by 0. So the engine has drawn
+  the map when the button is tapped, at the cost of drawing it as the player moves with the setting off too. It asks
+  again at each attach, as the engine stops drawing the map when its UI goes (in the background too) and forgets the
+  size.
+- The swap waits for nothing. At 0 by 0 the engine deletes its view and sends an empty frame, and draws the next one
+  from nothing, so the map is not let go between the two: the one that comes on the screen holds the request until it
+  knows its size (`AppMapClient.show` with no size), and asks at once. Until the engine's frame for the new size comes,
+  the last one is drawn as the engine will draw the map there (`MapFit`'s `asRedrawn`): Mudlet sizes rooms by the
+  shorter side of what it draws in and keeps the map's middle in its middle, so the frame is scaled by the shorter sides
+  of the two and centred, cut off or short at the edges, and the map neither moves nor changes size when the new frame
+  comes. While the map is behind the text its frame is cut out for the text behind the map too, on a thread of its own
+  below the others (`AppMapClient.cutOutAhead`), so the text is behind the map from its first frame in front. Finding a
+  frame's colours makes no object for each pixel (`TextBehindMap.ground`): for a frame of 1080 by 1740 on the host's
+  JVM, 133 KB and 12 to 16 ms where it was 36 to 50 MB and 24 to 37 ms with only the first JIT compiler, which removes
+  no allocation, and 7 to 9 ms where it was 8 to 12 ms with both.
+- The keyboard moves the map's box at each frame of its animation. The map is laid out, and asked for, at the size the
+  box has once the keyboard is where it is going (`MapBox`, from `WindowInsets.imeAnimationTarget`), so it stays still
+  while the keyboard slides and is drawn anew once. As the map comes to the front the input line lets its keyboard go,
+  which the keyboard says only some frames later: for half a second the map in front takes it for gone. Any other
+  change of size is sent once it has held for 200 ms.
 - With a script's mapper: the app's map is a view of its own, with its own centre and selection; zoom is the area's,
   so shared, as between two maps on the desktop, and so is viewing or editing. So that one map shows on the screen,
   none is drawn behind the text while a mapper window (`Geyser.Mapper`, openMapWidget()'s dock) is on the screen:

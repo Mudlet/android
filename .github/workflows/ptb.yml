@@ -523,7 +523,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
-          key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64
+          key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64-v2
 
       - name: Smoke test on the emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -539,8 +539,21 @@ jobs:
             python3 native/tests/android_smoke.py --apk smoke-apk/app-x86_64-smoke.apk --out smoke-test
             --package org.mudlet.mudlet.ptb --symbols engine-x86_64/libs/x86_64
 
-      - name: Save the system image
+      # A failed download still leaves the image's directory behind, which would otherwise be cached and restored
+      - name: Check the system image installed
+        id: image-installed
         if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}
+        env:
+          IMAGE_DIR: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
+        run: |
+          if [ -s "$IMAGE_DIR/package.xml" ] && [ -s "$IMAGE_DIR/system.img" ]; then
+            echo "installed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::$IMAGE_DIR lacks package.xml or system.img: the image did not install, so it is not cached"
+          fi
+
+      - name: Save the system image
+        if: ${{ !cancelled() && steps.image-installed.outputs.installed == 'true' }}
         uses: actions/cache/save@v6
         with:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64

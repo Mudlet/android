@@ -284,7 +284,8 @@ What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which
 - `movie` is the file `setMovie()` gave it, shown in place of the text. `moviePaused` is true once `pauseMovie()`
   paused it or it played to its end, `movieFrame` the frame it then shows (-1 while it plays), `movieSpeed` its
   speed in percent, and `movieW` and `movieH` the size `scaleMovie()` gave it, absent for the file's own.
-- `toolTip` is the label's tool tip. With `clickThrough` true the pointer passes through it to what is under it.
+- `toolTip` is the label's tool tip. With `clickThrough` true the pointer passes through it to what is under it, and
+  the UI follows none of its links, as Mudlet's label then takes no clicks or keys on its text.
 - `accessibleName` is what a screen reader says for it, and `accessibleButton` is true once it has a click or release
   callback, so a screen reader is told it is a button.
 - `liveRegion` is `polite` or `assertive` once `setLabelLiveRegion()` asked for its changes to be announced, as ARIA's

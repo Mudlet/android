@@ -1,5 +1,6 @@
 package org.mudlet.android.protocol
 
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -19,6 +20,18 @@ class LabelLinkTest {
         // Trimmed as Qt trims, as the engine reads the scheme: U+0085 is whitespace to Qt, U+001C is not
         assertEquals(LabelLink.Web("https://x"), LabelLink.of("\u0085https://x"))
         assertEquals(LabelLink.Engine("\u001chttps://x"), LabelLink.of("\u001chttps://x"))
+    }
+
+    @Test
+    fun aClickThroughLabelsLinksAreNotFollowed() {
+        fun label(clickThrough: Boolean?): LabelContent {
+            val wire = JSONObject().put("t", "label").put("name", "nav").put("text", "<a href=\"send:north\">north</a>")
+            return (FrameReader.parse(wire.putOpt("clickThrough", clickThrough)) as EngineMessage.Label).label
+        }
+        assertTrue(label(clickThrough = false).linksFollowable)
+        assertTrue(label(clickThrough = null).linksFollowable)
+        // As on the desktop, where the mouse passes through it to what is under it, and its links are out of reach
+        assertFalse(label(clickThrough = true).linksFollowable)
     }
 
     @Test

@@ -25,6 +25,7 @@ import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.packages.pickedPackage
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
@@ -178,6 +179,9 @@ class ProfileSession internal constructor(
 
     /** Its triggers, aliases, scripts, timers, keys and buttons, as the script library shows and edits them. */
     internal val scripts = ScriptItemsClient(::newRequestId, ::send)
+
+    /** Its packages, as the package manager shows them; a picked file's copy goes once the engine has installed it. */
+    internal val packages = PackagesClient(::newRequestId, ::send) { path -> pickedPackage(app, path)?.deleteRecursively() }
 
     /** The text sizes the player pinched this profile's script consoles to. */
     internal val consoleZoom = ConsoleZoomClient(name, ::prefs, ::runAppLua)
@@ -574,6 +578,7 @@ class ProfileSession internal constructor(
                 windows.onAttached(sameInstance, connection)
                 links.onAttached(sameInstance, linesAdded)
                 scripts.onAttached(sameInstance)
+                packages.onAttached(sameInstance)
             }
         }
 
@@ -690,6 +695,12 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ScriptSearch -> post { scripts.onSearch(message) }
 
+                is EngineMessage.Packages -> post { packages.onPackages(message) }
+
+                EngineMessage.PackagesChanged -> post { packages.onChanged() }
+
+                is EngineMessage.PackageInstalled -> post { packages.onInstalled(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }
@@ -721,6 +732,8 @@ class ProfileSession internal constructor(
                         secureOfferRefusal = reason
                     } else if (request in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(request, reason, message.replyTo)
+                    } else if (request in PackagesClient.REQUESTS) {
+                        packages.onRefused(request, reason, message.replyTo)
                     } else if (!links.onError(message)) {
                         windows.onError(message)
                     }

@@ -99,6 +99,12 @@ its own package. The engine's profiles take a port from 1 to 65535 (`ControlBrid
 connects when it opens one, so the tutorial would take a profile kind and an offline open of its own, for a lesson
 that points at the desktop's menus and windows, which the app does not have.
 
+## Removing a package asks first
+
+The package manager asks before it removes a package (`docs/architecture.md`, "The package manager"); the desktop's
+Remove removes the packages selected at once. On a phone a tap meant to expand a package's description lands near its
+Remove button, and what a removal takes, the package's items and files, does not come back.
+
 ## Labels and TalkBack
 
 - A label's cursor shape is not drawn: a touch screen has no pointer to shape (`docs/phase-f.md`, `label`).

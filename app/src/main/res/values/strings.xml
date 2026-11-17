@@ -1425,6 +1425,60 @@
     <!-- The game screen's title bar button, read by a screen reader, that opens a profile's triggers, aliases and
          scripts; %1$s is the profile's name, such as "Achaea" -->
     <string name="scripts_open">Scripts of %1$s</string>
+    <!-- The game screen's title bar button that opens the package manager, which lists, installs and removes the
+         profile's packages; %1$s is the profile's name, such as "Achaea" -->
+    <string name="packages_open">Packages of %1$s</string>
+    <!-- The package manager's title; %1$s is the profile's name, such as "Achaea" -->
+    <string name="packages_title">Packages of %1$s</string>
+    <!-- The package manager's button that installs a package file picked with the system's file picker -->
+    <string name="packages_install_file">Install from a file</string>
+    <!-- The package manager's button, and the title of its dialog, that installs a package downloaded from a web address -->
+    <string name="packages_install_url">Install from a URL</string>
+    <!-- The label of the field for the web address of the package to install -->
+    <string name="packages_url">Package URL</string>
+    <!-- The button of the URL dialog that installs the package -->
+    <string name="packages_install">Install</string>
+    <!-- Closes a package manager dialog without doing anything -->
+    <string name="packages_cancel">Cancel</string>
+    <!-- Shown in the package manager until the engine has listed the packages -->
+    <string name="packages_loading">Loading the packages…</string>
+    <!-- Shown in the package manager when the profile has no packages -->
+    <string name="packages_none">No packages are installed.</string>
+    <!-- A package being installed, above a progress bar; %1$s is its file name, such as "generic_mapper.mpackage" -->
+    <string name="packages_installing">Installing %1$s</string>
+    <!-- A package's version, after its name; %1$s is the version the package gives, such as "1.2" -->
+    <string name="packages_version">version %1$s</string>
+    <!-- A package's author, after its version; %1$s is the author the package gives -->
+    <string name="packages_author">by %1$s</string>
+    <!-- What TalkBack says of a package whose whole description is shown; a tap shows only its start -->
+    <string name="packages_expanded">Description shown</string>
+    <!-- What TalkBack says of a package whose description is cut short; a tap shows all of it -->
+    <string name="packages_collapsed">Description cut short</string>
+    <!-- The button that removes a package; %1$s is the package's name -->
+    <string name="packages_remove_named">Remove %1$s</string>
+    <!-- The title of the dialog that asks before a package is removed; %1$s is the package's name -->
+    <string name="packages_remove_title">Remove %1$s?</string>
+    <!-- The text of the dialog that asks before a package is removed -->
+    <string name="packages_remove_text">Its triggers, aliases, scripts, timers, keys and buttons go with it, and so do the files it brought.</string>
+    <!-- The dialog's button that removes the package -->
+    <string name="packages_remove">Remove</string>
+    <!-- Shown when the file picked to install could not be read -->
+    <string name="packages_unreadable">The picked file could not be read.</string>
+    <!-- Shown once a package is installed; %1$s is its file name -->
+    <string name="packages_installed">Installed %1$s</string>
+    <!-- Shown when a package installed but some of its scripts did not compile; %1$s is its file name, %2$s the
+         engine's reason, in English -->
+    <string name="packages_installed_with_errors">Installed %1$s, with errors: %2$s</string>
+    <!-- Shown when the package picked is already installed; %1$s is its file name -->
+    <string name="packages_already_installed">%1$s is already installed.</string>
+    <!-- Shown when a package could not be installed; %1$s is its file name, %2$s the engine's reason, in English -->
+    <string name="packages_install_failed">Could not install %1$s: %2$s</string>
+    <!-- Shown when the engine refused to install a package; %1$s is its reason, in English -->
+    <string name="packages_refused_install">Could not install the package: %1$s</string>
+    <!-- Shown when the engine refused to remove a package; %1$s is its reason, in English -->
+    <string name="packages_refused_remove">Could not remove the package: %1$s</string>
+    <!-- Shown when the engine refused to list the packages; %1$s is its reason, in English -->
+    <string name="packages_refused_list">Could not list the packages: %1$s</string>
     <!-- The script library's title; %1$s is the profile's name, such as "Achaea" -->
     <string name="scripts_title">Scripts: %1$s</string>
     <!-- The script library's chip for its triggers: what reacts to lines from the game, as Mudlet calls them -->

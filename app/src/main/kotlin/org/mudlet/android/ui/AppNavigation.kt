@@ -40,6 +40,7 @@ import org.mudlet.android.ui.about.LicenceScreen
 import org.mudlet.android.ui.game.AnnouncementRegion
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
+import org.mudlet.android.ui.packages.PackagesScreen
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.report.ReportProblemScreen
@@ -75,6 +76,7 @@ private object Routes {
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
     const val TRIGGER_FROM_LINE = "triggerFromLine/{line}"
+    const val PACKAGES = "packages"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
@@ -189,7 +191,12 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                     onOpenSettings = { nav.navigate(Routes.settings(EngineClient.front.name.ifEmpty { null })) { launchSingleTop = true } },
                     onOpenScripts = { nav.navigate(Routes.SCRIPTS) { launchSingleTop = true } },
                     onMakeTrigger = { nav.navigate(Routes.triggerFromLine(it)) { launchSingleTop = true } },
+                    onOpenPackages = { nav.navigate(Routes.PACKAGES) { launchSingleTop = true } },
                 )
+            }
+            composable(Routes.PACKAGES) { entry ->
+                val front = EngineClient.front
+                PackagesScreen(front.packages, front.name, onBack = entry.whileShown { nav.navigateUp() })
             }
             composable(Routes.SCRIPTS) { entry ->
                 val front = EngineClient.front

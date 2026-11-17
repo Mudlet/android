@@ -1065,7 +1065,7 @@ class FrameReader(input: InputStream) {
         if (n < 0 || n > MAX_FRAME_BYTES) throw EOFException("bad frame length $n")
         val payload = ByteArray(n)
         data.readFully(payload)
-        return parse(payload)
+        return parse(JSONObject(String(payload, Charsets.UTF_8)))
     }
 
     companion object {

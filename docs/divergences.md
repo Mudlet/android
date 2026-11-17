@@ -38,6 +38,14 @@ profile that loads is given the app's values, over its own, so a script's `getCo
 phone they belong with the player and the device, as TalkBack itself does: kept per profile, every new profile would
 start without the player's choice.
 
+## The games the profile list offers
+
+The profile list offers each of the games in Mudlet's connection dialog (`src/TGameDetails.h`, copied by
+`scripts/sync-mudlet-games.py`) but the Mudlet Tutorial, which the desktop plays offline at `localhost`, port 0, from
+its own package. The engine's profiles take a port from 1 to 65535 (`ControlBridge`, `ProfileStore`) and the app
+connects when it opens one, so the tutorial would take a profile kind and an offline open of its own, for a lesson
+that points at the desktop's menus and windows, which the app does not have.
+
 ## Labels and TalkBack
 
 - A label's cursor shape is not drawn: a touch screen has no pointer to shape (`docs/phase-f.md`, `label`).

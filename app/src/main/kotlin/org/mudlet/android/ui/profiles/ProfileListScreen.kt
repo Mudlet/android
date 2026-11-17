@@ -54,10 +54,12 @@ import org.mudlet.android.ui.game.text
 
 /**
  * The start screen: the games open, if any, then the engine's profiles, the last used first, each with Connect and
- * Edit, and Add. Connect opens the profile with its stored password and goes to the game screen once the engine has
+ * Edit, and Add; below them the games Mudlet offers that the player has no profile for, as its connection dialog does
+ * ([DefaultGames]). Connect opens the profile with its stored password and goes to the game screen once the engine has
  * begun to open it; while games are open, it opens one beside them, and one already open just comes to the front, as
- * a tap on an open game does (docs/multi-profile.md, "The switcher"). Its top bar opens the settings and the About
- * screen. [selected] is the profile whose editor is open beside the list, if one is.
+ * a tap on an open game does (docs/multi-profile.md, "The switcher"). A tap on one of Mudlet's games adds it as a
+ * profile of its name, then connects the same way. Its top bar opens the settings and the About screen. [selected] is
+ * the profile whose editor is open beside the list, if one is.
  */
 @Composable
 fun ProfileListScreen(
@@ -73,6 +75,10 @@ fun ProfileListScreen(
     val profiles = EngineClient.profiles
     var error by remember { mutableStateOf<String?>(null) }
     val games = EngineClient.sessions
+    val defaultGames = rememberDefaultGames()
+    // The game whose details are shown, by name; whether one is being added, until the engine answers
+    var info by rememberSaveable { mutableStateOf<String?>(null) }
+    var adding by remember { mutableStateOf(false) }
     val list = rememberLazyListState()
     // The list keeps its first row where it is when rows come above it, as the games do when the engine tells of them
     // after its profiles are shown: bring them into view
@@ -82,6 +88,32 @@ fun ProfileListScreen(
         if (hasGames && !hadGames) list.scrollToItem(0)
         hadGames = hasGames
     }
+    // The error shows at the top, out of view after a tap on a game far down the list
+    LaunchedEffect(error) {
+        if (error != null) list.animateScrollToItem(0)
+    }
+    fun connect(name: String) {
+        error = null
+        // Without alongside, the engine would close the games open
+        val open = if (games.isEmpty()) EngineClient::openProfile else EngineClient::openProfileAlongside
+        open(name, passwords.get(name)) { refused ->
+            if (refused == null) onOpenGame() else error = refused
+        }
+    }
+
+    fun connectGame(game: DefaultGame) {
+        if (adding) return
+        info = null
+        val existing = DefaultGames.profileFor(game, profiles.orEmpty())
+        if (existing != null) return connect(existing.name)
+        error = null
+        adding = true
+        EngineClient.saveProfile(game.newProfile()) { refused ->
+            adding = false
+            if (refused == null) connect(game.name) else error = refused
+        }
+    }
+
     MudletScaffold(
         stringResource(R.string.profiles_title),
         actions = {
@@ -134,14 +166,7 @@ fun ProfileListScreen(
                         i,
                         profiles.size,
                         selected = profile.name == selected,
-                        onConnect = {
-                            error = null
-                            // Without alongside, the engine would close the games open
-                            val open = if (games.isEmpty()) EngineClient::openProfile else EngineClient::openProfileAlongside
-                            open(profile.name, passwords.get(profile.name)) { refused ->
-                                if (refused == null) onOpenGame() else error = refused
-                            }
-                        },
+                        onConnect = { connect(profile.name) },
                         onEdit = { onEditProfile(profile.name) },
                     )
                 }
@@ -149,7 +174,18 @@ fun ProfileListScreen(
             if (onOpenSelfTest != null) {
                 item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
             }
+            // Only once the profiles are known, as those already added are left out
+            val offered = profiles?.let { DefaultGames.offered(defaultGames, it) }.orEmpty()
+            if (offered.isNotEmpty()) {
+                item { SectionHeader(stringResource(R.string.default_games_title)) }
+                itemsIndexed(offered, key = { _, game -> "default:" + game.name }) { i, game ->
+                    DefaultGameItem(game, i, offered.size, enabled = !adding, onConnect = { connectGame(game) }, onInfo = { info = game.name })
+                }
+            }
         }
+    }
+    defaultGames.firstOrNull { it.name == info }?.let { game ->
+        DefaultGameInfo(game, onConnect = { connectGame(game) }, onDismiss = { info = null })
     }
 }
 

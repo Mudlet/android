@@ -9,6 +9,8 @@ name: CI
 # What runs for what changed (the filters in "changes" below say it exactly):
 #   any file                      the conflict-marker check (scripts/lint.sh conflict-markers)
 #   Mudlet patches                the vendored check (scripts/lint.sh vendored)
+#   the games list (app/src/main/assets/games), scripts/sync-mudlet-games.py
+#                                 the games check (scripts/lint.sh games)
 #   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the real engine on the host,
 #                                 whose ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
@@ -135,6 +137,11 @@ jobs:
               - scripts/mudlet-patches/**
               - *lint-tools
               - *everything
+            games:
+              - app/src/main/assets/games/**
+              - scripts/sync-mudlet-games.py
+              - *lint-tools
+              - *everything
             libmudlet-android:
               - *kotlin
               - native/**
@@ -179,7 +186,7 @@ jobs:
             esac
           }
           checks=()
-          for check in clang-format shellcheck actionlint strings conflict-markers vendored; do
+          for check in clang-format shellcheck actionlint strings conflict-markers vendored games; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {

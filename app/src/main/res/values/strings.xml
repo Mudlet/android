@@ -24,8 +24,8 @@
     <string name="profiles_pick">Pick a game to edit it, or add one.</string>
     <!-- The profile list's text before the engine (the part of the app that runs the game's connection) has started -->
     <string name="profiles_waiting">Waiting for the engine…</string>
-    <!-- The profile list's text while the player has no games yet -->
-    <string name="profiles_empty">No games yet. Add one with its address.</string>
+    <!-- The profile list's text while the player has no games of their own yet, above the list of games Mudlet knows -->
+    <string name="profiles_empty">No games of your own yet. Pick one below, or add one with its address.</string>
     <!-- The profile list's button that opens the editor for a new game -->
     <string name="profiles_add">Add a game</string>
     <!-- What TalkBack reads for a profile in the list: its name, then its address as host:port -->
@@ -38,6 +38,20 @@
     <string name="profile_connect_to">Connect to %1$s</string>
     <!-- TalkBack's label for a profile's edit button; %1$s is the profile's name -->
     <string name="profile_edit">Edit %1$s</string>
+    <!-- The heading in the profile list above the games Mudlet knows (as in its desktop connection dialog) that the
+         player has not added yet; a tap on one adds it and connects -->
+    <string name="default_games_title">More games</string>
+    <!-- What TalkBack reads for a game of Mudlet's in the profile list: %1$s is its name, %2$s the game's own summary of
+         itself (in the game's language, untranslated), or its address when it has none -->
+    <string name="default_game_description">%1$s, %2$s</string>
+    <!-- TalkBack's label for the button beside one of Mudlet's known games that opens what the game is: its
+         description and website; %1$s is the game's name -->
+    <string name="default_game_info">About %1$s</string>
+    <!-- Under a known game's name in its details: its address, connected to securely (TLS). %1$s is the host name,
+         %2$d the port number -->
+    <string name="default_game_address_secure">%1$s:%2$d, secure connection</string>
+    <!-- The button that closes a known game's details without connecting -->
+    <string name="default_game_close">Close</string>
     <!-- Why a profile request got no answer. The engine gives its own reasons, in English, for those it refuses -->
     <string name="profiles_error_not_attached">The engine is not running yet. Try again in a moment.</string>
     <!-- Why a profile request got no answer: the engine (the part of the app that runs the game's connection) stopped

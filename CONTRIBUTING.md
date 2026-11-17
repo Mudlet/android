@@ -12,7 +12,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, the script windows' state and layout, what a label draws, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the host tests (`tests/`) |
-| `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and the strings check it runs, `check-strings.py`, and `launcher-icons.py` |
+| `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and the strings check it runs, `check-strings.py`, `launcher-icons.py`, and `sync-mudlet-games.py`, which copies Mudlet's games into the profile list |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
 | `.agents/skills/` | Longer procedures for coding agents (running on the emulator, bumping Qt); `.claude/skills` links to it |
 | `crowdin.yml` | What Crowdin translates and where the translations go ([`docs/translations.md`](docs/translations.md)) |
@@ -144,7 +144,7 @@ names the Mudlet commits.
 ## Lint
 
 ```sh
-scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers and vendored code, as CI's Checks workflow
+scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored code and games, as CI's Checks workflow
 ./gradlew ktlintFormat           # fix the Kotlin
 FIX=1 scripts/lint.sh clang-format   # fix native/
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after scripts/build-apk.sh
@@ -157,7 +157,10 @@ is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editor
 for translators ([`docs/translations.md`](docs/translations.md)). The conflict-marker check fails on a line a merge
 conflict left in any text file (`<<<<<<< `, `=======`, `>>>>>>> `). The vendored check fails when a
 `scripts/mudlet-patches/*.patch` lacks the `Upstream:` line before its diff: `Upstream: Mudlet/Mudlet#<number>`, or
-`Upstream: not opened yet`, which the check prints.
+`Upstream: not opened yet`, which the check prints. The games check fails when `app/src/main/assets/games` is not
+what `scripts/sync-mudlet-games.py` makes from Mudlet's `src/TGameDetails.h` and logos at the commit `games.json`
+pins. To take in Mudlet's newer games, run the script on a Mudlet checkout of the commit to take them from
+(`scripts/sync-mudlet-games.py ../Mudlet`, with Pillow), which becomes the new pin.
 
 ## Ground rules
 

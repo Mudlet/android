@@ -75,6 +75,15 @@
       "source": "https://github.com/google/material-design-icons"
     },
     {
+      "id": "mudlet-game-logos",
+      "group": "native",
+      "name": "The games' logos (in the profile list)",
+      "licence": "GPL-2.0-or-later",
+      "copyright": "Each logo is its game's, as Mudlet's repository ships it",
+      "url": "https://www.mudlet.org/",
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/icons"
+    },
+    {
       "id": "libcxx",
       "group": "native",
       "name": "LLVM libc++ (Android NDK)",

@@ -74,6 +74,14 @@ where it last connected, until it is closed and opened again (`dlgConnectionProf
 preferences change the TLS choice of a profile that runs. A phone's player reconnects far more often than a
 desktop's, and closing the game to make it read its own details loses what its scripts hold.
 
+## Back on the game's offer of a secure port
+
+The question asked when a game offers its secure port has the desktop's Yes and No ("Connect securely", "No, don't
+ask again"), but Back answers neither: the dialog goes, the connection stays as it is, and the game's next offer asks
+again. On the desktop Escape is No, which connects again and turns "Offer a secure connection" off for good
+(`mudlet.cpp`, `signal_promptTlsAvailable`). Back on a phone is pressed far more readily than Escape on a question, and
+a stray press should not cost a reconnect and the game's future offers.
+
 ## The games the profile list offers
 
 The profile list offers each of the games in Mudlet's connection dialog (`src/TGameDetails.h`, copied by

@@ -513,4 +513,7 @@ public:
     virtual void errorConsoleEntry(const ErrorConsoleEntry& entry) = 0;
     // IEngine::clearErrorConsole() emptied it
     virtual void errorConsoleCleared() = 0;
+    // The game offers its secure port while the connection is not encrypted, for IEngine::answerSecureOffer(); not
+    // offered once answered, once its connection ends and with no profile open
+    virtual void secureOffer(bool offered) = 0;
 };

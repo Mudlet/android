@@ -87,6 +87,7 @@ public:
     void packageInstalled(const QString& path, PackageInstallResult result, const QString& error) override;
     void errorConsoleEntry(const ErrorConsoleEntry& entry) override;
     void errorConsoleCleared() override;
+    void secureOffer(bool offered) override;
 
 protected:
     struct StoredLine
@@ -167,6 +168,7 @@ protected:
     static QJsonArray runsJson(const QList<ColorRun>& runs);
     QJsonObject tailMessage() const;
     QJsonObject hiddenInputMessage() const;
+    QJsonObject secureOfferMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
     static QJsonObject linksChangedMessage(const QList<int>& ids);
     static QJsonObject windowJson(const ScriptWindowInfo& window);
@@ -200,6 +202,7 @@ protected:
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;
+    bool mSecureOffer = false;
     // A linksChanged went to no live UI, so the next to attach or catch up is told any link may have changed
     bool mLinksMissed = false;
     // As IFrontend::windows() last gave them

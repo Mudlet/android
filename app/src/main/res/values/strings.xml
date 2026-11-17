@@ -1093,6 +1093,18 @@
         <item quantity="one">Close a game to open another (at most %1$d)</item>
         <item quantity="other">Close a game to open another (at most %1$d)</item>
     </plurals>
+    <!-- The title of the question when the game, connected without encryption, says it has a secure (TLS) port -->
+    <string name="secure_offer_title">Secure connection available</string>
+    <!-- The question when the game says it has a secure (TLS) port; as desktop Mudlet asks it -->
+    <string name="secure_offer_text">For data transfer protection and privacy, this game advertises a secure port. Switch this game to it and connect again with encryption?</string>
+    <!-- The secure-port question's button that switches the game to its secure port and connects there -->
+    <string name="secure_offer_accept">Connect securely</string>
+    <!-- The secure-port question's button that connects again as before; the game is not asked about again (the
+         "Offer a secure connection" setting turns off) -->
+    <string name="secure_offer_decline">No, don\'t ask again</string>
+    <!-- Shown when the answer to the secure-port question was not taken; %1$s is why, as Mudlet says it (in English) or
+         as the app says it -->
+    <string name="secure_offer_refused">Not answered: %1$s</string>
     <!-- The title of the question before a connected game closes; %1$s is the game's (profile's) name -->
     <string name="game_close_title">Close %1$s?</string>
     <!-- The question before a connected game closes -->

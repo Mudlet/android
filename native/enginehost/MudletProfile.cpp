@@ -645,6 +645,10 @@ void MudletProfile::connectSession()
         (source == THeadlessSession::SoundSource::scripts ? mSounds.scriptsMuted : mSounds.gameMuted) = muted;
         mFrontend->sounds(mSounds);
     });
+    connect(session, &THeadlessSession::secureConnectionOffered, this, [this] {
+        qInfo("MudletEngine: %s's game offers its secure port", qPrintable(mProfile));
+        setSecureOffer(true);
+    });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
     });
@@ -750,6 +754,8 @@ void MudletProfile::connectSession()
         }
     });
     connect(session, &THeadlessSession::disconnected, this, [this] {
+        // Mudlet takes the offer back with its connection
+        setSecureOffer(false);
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
         if (mState == State::stopping) {
             return;
@@ -1428,6 +1434,7 @@ void MudletProfile::onProfileClosed()
     mFrontend->mapDownload(mMapDownload);
     mSounds = {};
     mFrontend->sounds(mSounds);
+    setSecureOffer(false);
 }
 
 void MudletProfile::pushWindows(bool withText)
@@ -2082,6 +2089,45 @@ QString MudletProfile::downloadMap()
     // Only the host: the rest of the URL can hold a user name, password or token
     qInfo("MudletEngine: downloading the map from %s", qPrintable(mMapDownload.host));
     pushMapDownloadProgress(true);
+    return {};
+}
+
+void MudletProfile::setSecureOffer(bool offered)
+{
+    mSecureOffer = offered;
+    mFrontend->secureOffer(offered);
+}
+
+QString MudletProfile::answerSecureOffer(bool accept)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (!mSecureOffer) {
+        return QStringLiteral("the game has offered no secure port to answer");
+    }
+    // A save waiting to be applied would put back the address a yes replaces
+    if (mSaved || mEngine.loadingOther(this)) {
+        return QStringLiteral("the profile is busy; answer again in a moment");
+    }
+    // Before the answer, which closes the connection. Mudlet lets the offer go even when it does not take the answer.
+    setSecureOffer(false);
+    if (!mSession->answerSecureConnectionOffer(accept)) {
+        return mSession->errorString();
+    }
+    if (accept) {
+        // Mudlet stored the secure port with TLS on, as its connection dialog would, and connects there: a restore and
+        // the UI's next connect go there too
+        qInfo("MudletEngine: %s takes its game's secure port", qPrintable(mProfile));
+        mProfileTls = true;
+        mKept.host.clear();
+        mKept.port = 0;
+        mKept.tls.reset();
+        mEngine.persist();
+        mEngine.mHost->profilesChanged();
+    } else {
+        qInfo("MudletEngine: %s declines its game's secure port, and is not asked again", qPrintable(mProfile));
+    }
     return {};
 }
 

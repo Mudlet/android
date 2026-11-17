@@ -11,10 +11,12 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -147,6 +149,13 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.game_title)))
         session.clear()
 
+        val question = hasText(string(R.string.secure_offer_title))
+        session.secureOffer(true)
+        waitFor(question)
+        assertTextFits("the secure port question", window = question)
+        session.secureOffer(false)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isEmpty() }
+
         activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
         val node = JSONObject().put("id", 1).put("parent", 0).put("name", "Greet").put("folder", false).put("enabled", false)
             .put("active", false).put("package", "").put("error", "")
@@ -258,9 +267,11 @@ class PseudoLocaleTest(private val locale: String) {
      * the semantics hand over is laid out across the width the text was offered, so a single line narrower than that
      * would count as overflowing its box.
      */
-    private fun assertTextFits(where: String) {
-        compose.onRoot().tryPerformAccessibilityChecks()
-        val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
+    private fun assertTextFits(where: String, window: SemanticsMatcher? = null) {
+        // A dialog is a window, and a root, of its own
+        val rootMatcher = if (window == null) isRoot() else isRoot() and hasAnyDescendant(window)
+        compose.onNode(rootMatcher).tryPerformAccessibilityChecks()
+        val root = compose.onNode(rootMatcher, useUnmergedTree = true).fetchSemanticsNode()
         val width = root.size.width
         val problems = ArrayList<String>()
         var checked = 0

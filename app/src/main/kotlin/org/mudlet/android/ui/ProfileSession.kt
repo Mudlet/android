@@ -481,8 +481,7 @@ class ProfileSession internal constructor(
                     val id = (message.replyTo as? Number)?.toLong()
                     if (id != null) post { completions.remove(id)?.invoke(message.value) }
                 } else if (message.key == "luaResult" && (message.replyTo as? Number)?.toLong()?.let(appLuaRequests::remove) == true) {
-                    // libmudlet answers "ran", the stand-in nothing, when the chunk ran
-                    if (message.value != "ran" && message.value.isNotEmpty()) Log.w(TAG, "Mudlet did not run the app's Lua: ${message.value}")
+                    if (message.value != "ran") Log.w(TAG, "Mudlet did not run the app's Lua: ${message.value}")
                 } else {
                     if (message.key == "sendError" && !replaying && inputSentAt > 0 && SystemClock.elapsedRealtime() - inputSentAt < SEND_ERROR_WINDOW_MS) {
                         post { sendError = message.value }

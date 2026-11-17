@@ -329,7 +329,7 @@ void ControlBridge::profileClosed(const QString& name)
     SocketBridge* bridge = mOpen.at(index).bridge;
     const bool wasFront = index == mFront;
     if (wasFront) {
-        // Not setFront(-1), which would start the stand-in's default session while others stay open
+        // Not setFront(-1), which would start the engine's default session while others stay open
         bridge->setMirror(nullptr);
         mFront = -1;
     }

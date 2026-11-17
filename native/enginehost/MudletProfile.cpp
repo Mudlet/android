@@ -126,7 +126,7 @@ int attributeBits(THeadlessSession::TextStyles styles)
     return attributes;
 }
 
-// Runs that are the profile's own colours with no style or link are left out, as the stand-in leaves them. A link's id
+// Runs that are the profile's own colours with no style or link are left out. A link's id
 // is the session's plus linkBase; linkTop is raised to the highest one.
 // exactForeground: the default foreground as its colour too, as for a script window, whose own the UI does not know.
 QList<ColorRun> colorRuns(const QList<TextRun>& runs, int linkBase, int& linkTop, bool exactForeground = false)

@@ -109,7 +109,7 @@ for apk in "${apks[@]}"; do
   done
   flag=$(sed -n 's/.*:extractNativeLibs([^)]*)=\([a-z]*\).*/\1/p' <<< "$manifest")
   # each native library and Gradle module with its licence and the licence's text, as the About screen lists them
-  python3 "$root/scripts/check-licences.py" --apk "$apk_dir/$apk" --abi "$ABI" --aapt2 "$aapt2" \
+  python3 "$root/scripts/check-licences.py" --apk "$apk_dir/$apk" --abi "$ABI" \
     || { echo "::error::$apk does not list the licence of everything it bundles (above; docs/licences.md)"; exit 1; }
   apk_size=$(stat -c %s "$apk")
   if [ "$EXTRACTED" = true ]; then

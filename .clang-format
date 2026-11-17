@@ -8,7 +8,7 @@
 ############################################################################
 
 # Mudlet's own .clang-format (Mudlet/Mudlet), unchanged below this note: native/ sits next to Mudlet's code and
-# follows its style. scripts/lint.sh clang-format checks native/ with it, except native/third_party.
+# follows its style. scripts/lint.sh clang-format checks native/ with it.
 
 # For more information on clang-format:
 # http://clang.llvm.org/docs/ClangFormat.html

@@ -11,13 +11,13 @@ Set `QT_ROOT` (with `gcc_64` and `android_arm64_v8a`), `ANDROID_SDK_ROOT`/`ANDRO
 Gradle is always `./gradlew`.
 
 ```sh
-LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh         # the APK (libmudlet), after build-mudlet-deps.sh and build-libmudlet.sh
-scripts/build-apk.sh                                   # the stand-in packaged, only for lint and JVM tests: not the app
+LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh         # the APK, after build-mudlet-deps.sh and build-libmudlet.sh
 ./gradlew :protocol:test                               # JVM tests, no engine
-# the stand-in engine, the protocol's host test harness, and the Kotlin client against it
-cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64
-cmake --build native/build-desktop --target engine
-QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine
+# the engine on the host (needs Mudlet's toolchain), its host tests, and the Kotlin client against it
+scripts/build-libmudlet-desktop.sh ../mudlet build-desktop
+cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64 -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
+cmake --build native/build-desktop-mudlet --target engine
+QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 scripts/check-apk.sh                                   # the APK checks, after build-apk.sh
 scripts/build-release.sh <staged-dir>... -- -PreleaseChannel=ptb   # AAB + APKs, after STAGE_ONLY=1 build-apk.sh per ABI
@@ -26,9 +26,8 @@ scripts/lint.sh                                        # ktlint, clang-format, S
 ./gradlew ktlintFormat; FIX=1 scripts/lint.sh clang-format             # fix formatting
 ```
 
-The real engine's host tests (`test_mudlet_engine.py`, `test_mudlet_restore.py`), the emulator smoke test and the
-instrumented tests (`src/androidTest`, run by `native/tests/android_instrumented.py`, not `connectedAndroidTest`) are
-in CONTRIBUTING.md's "Test". CI (`ci.yml`) runs only what the changed files need; "CI result" is its one result.
+The restore test (`test_mudlet_restore.py`), the emulator smoke test and the instrumented tests (`src/androidTest`,
+run by `native/tests/android_instrumented.py`, not `connectedAndroidTest`) are in CONTRIBUTING.md's "Test". CI (`ci.yml`) runs only what the changed files need; "CI result" is its one result.
 
 ## Skills
 
@@ -70,10 +69,8 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
     `engine-stopped`;
   - the command suggestions in `files/suggest/`;
   - the notification channels `engine` and `tells`, whose ids Android keeps the player's choices under.
-- Vendored code is never edited by hand: `native/third_party/` is Lua 5.1.5 as released (`VENDORED.txt`) and changes
-  only by replacing it with another release and its `SHA256SUMS`. Each `scripts/mudlet-patches/*.patch` goes to
-  Mudlet/Mudlet as a pull request, which its `Upstream:` line names once it is open. `scripts/lint.sh vendored`
-  checks both.
+- Each `scripts/mudlet-patches/*.patch` goes to Mudlet/Mudlet as a pull request, which its `Upstream:` line names
+  once it is open; `scripts/lint.sh vendored` checks it.
 - Comment only a why the code cannot show: a Qt or Android quirk, a workaround, an ordering or threading constraint,
   a file or wire format constraint, or why the obvious alternative is wrong. Never narrate the change ("previously",
   "now", "fixes #12"): that is the commit message's. Keep translators' comments and tool directives, and update them

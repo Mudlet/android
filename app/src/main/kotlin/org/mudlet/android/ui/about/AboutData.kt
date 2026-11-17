@@ -18,14 +18,12 @@ import org.mudlet.android.engine.R as EngineR
 
 /**
  * The engine the APK carries, as scripts/build-apk.sh staged it (res/values/engine_info.xml in :engine-service):
- * [kind] is "standin" or "mudlet"; for Mudlet, its version and the commit of Mudlet it was built from, if known.
+ * Mudlet's version and the commit of Mudlet it was built from, empty if not known.
  */
-data class EngineInfo(val kind: String, val version: String, val commit: String) {
-    val isMudlet get() = kind == "mudlet"
-}
+data class EngineInfo(val version: String, val commit: String)
 
 @Composable
-fun engineInfo(): EngineInfo = EngineInfo(stringResource(EngineR.string.engine_kind), stringResource(EngineR.string.engine_version), stringResource(EngineR.string.engine_commit))
+fun engineInfo(): EngineInfo = EngineInfo(stringResource(EngineR.string.engine_version), stringResource(EngineR.string.engine_commit))
 
 /** What reading the licence list gave: null while it is read */
 sealed interface LicenceList {
@@ -34,12 +32,12 @@ sealed interface LicenceList {
 }
 
 @Composable
-fun rememberLicences(engine: EngineInfo): LicenceList? {
+fun rememberLicences(): LicenceList? {
     val context = LocalContext.current
-    val list by produceState<LicenceList?>(null, engine) {
+    val list by produceState<LicenceList?>(null) {
         value = withContext(Dispatchers.IO) {
             try {
-                LicenceList.Loaded(Licences.parse(Licences.FILES.associateWith { readAsset(context, "${Licences.DIR}/$it") }, engine.kind))
+                LicenceList.Loaded(Licences.parse(Licences.FILES.associateWith { readAsset(context, "${Licences.DIR}/$it") }))
             } catch (e: Exception) {
                 // A broken APK: scripts/check-licences.py checks every APK CI builds, so this is not expected
                 LicenceList.Failed(e.toString())

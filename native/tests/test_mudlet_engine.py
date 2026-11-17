@@ -113,7 +113,7 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
+        for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_moves, map_rooms, map_edits, map_download, profile_settings):
             checks()
@@ -254,6 +254,24 @@ def engine_basics(port):
           f"3000 flood lines in order: got {len(flood)}")
     tails = sum(1 for m in msgs if m["t"] == "tail")
     check(tails < 50, f"the tail is synced once a turn, not once a line: {tails} tail frames")
+
+    # The ring: a UI that attaches afresh is replayed the last 2000 lines (scrollbackLines) and a gap for the rest; one
+    # that names the instance and the last seq it has, only the lines it lacks
+    c.close()
+    c = Client(SOCK)
+    msgs = []
+    synced = c.wait_for(lambda m: m["t"] == "synced", timeout=20, collect=msgs)
+    replayed = lines_of(msgs)
+    check(len(replayed) == 2000 and all(m.get("replay") for m in replayed) and any(m["t"] == "gap" for m in msgs),
+          f"a fresh UI is replayed the 2000-line ring and a gap: {len(replayed)} lines")
+    check("FLOOD DONE" in texts_of(msgs)[-2:], f"ending with the last lines seen: {texts_of(msgs)[-2:]}")
+    c.close()
+    c = Client(SOCK, hello=False)
+    c.send({"t": "hello", "v": PROTOCOL_VERSION, "client": "python-test", "instance": instance, "lastSeq": synced["seq"] - 3})
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    seqs = [m["seq"] for m in lines_of(msgs)]
+    check(seqs == [synced["seq"] - 2, synced["seq"] - 1, synced["seq"]], f"a UI that sends instance and lastSeq gets only the lines it lacks: {seqs}")
 
     # A line that neither a line feed nor GA has ended. While the game has sent no GA, Mudlet ends it once the game
     # has been quiet for the profile's network packet timeout (300 ms by default), and lineShown sends it, not as a
@@ -617,6 +635,156 @@ def running_profile_login(port):
     profile_checks.password_kept_out(check, second, seen, LOG)
     beta.close()
     ctl.close()
+
+
+def bridge_refusals():
+    """What the socket bridges (SocketBridge, ControlBridge) refuse before the engine sees it: a hello of another protocol
+    version, a request of no known type, and each request whose fields are wrong, answered with the error that names
+    the field and carries the request's id. Then the one UI a socket serves: a new one replaces it, and one that never
+    says hello is sent nothing."""
+    proc, c = start_engine("Bridge Test")
+    msgs = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    # libmudlet opens no profile until it is given a game or told to open one
+    m = c.ask(dict(profile_checks.profile("Bridge Test", 1), t="saveProfile"))
+    check(m["t"] == "profiles", f"saveProfile: {m}")
+    c.send({"t": "openProfile", "name": "Bridge Test", "connect": False})
+    wait_status(c, "profile", lambda v: v == "Bridge Test loaded", msgs, timeout=60)
+    check(not [m for m in msgs if m["t"] == "openProfiles"], "a UI that leaves out profileSockets is not told of the open profiles")
+
+    # A new connection replaces c, so c is attached again after it
+    bad = Client(SOCK, version=99)
+    m = bad.recv(2)
+    check(m == {"t": "error", "message": f"expected hello with v={PROTOCOL_VERSION}"}, f"hello with v=99 gets an error frame: {m}")
+    try:
+        after = bad.recv(2)
+    except Closed:
+        after = "closed"
+    check(after == "closed", f"and the connection is closed: {after}")
+    c.close()
+    c = Client(SOCK)
+    c.wait_for(lambda m: m["t"] == "synced")
+    m = c.ask({"t": "unknownThing"}, answers=("error",))
+    check(m["message"] == "unknown type unknownThing", f"a request of no known type is refused, with its id: {m}")
+
+    side = {"name": "side", "x": 0, "y": 0, "w": 300, "h": 200, "floating": False}
+    room_size = "w and h must be whole numbers above 0, or both 0"
+    for request, message in (
+            ({"t": "setScreenSize", "columns": 0, "rows": 25}, "columns and rows must be whole numbers from 1 to 65535"),
+            ({"t": "setScreenSize", "columns": 80, "rows": 65536}, "columns and rows must be whole numbers from 1 to 65535"),
+            ({"t": "setScreenSize", "columns": 80.5, "rows": 25}, "columns and rows must be whole numbers from 1 to 65535"),
+            ({"t": "setScreenSize", "columns": "80", "rows": 25}, "columns and rows must be whole numbers from 1 to 65535"),
+            ({"t": "setScreenSize", "columns": 80}, "columns and rows must be whole numbers from 1 to 65535"),
+            ({"t": "getLink", "link": 1, "window": 5}, "window must be a console's name"),
+            ({"t": "followLink", "link": 1, "window": None}, "window must be a console's name"),
+            ({"t": "getLink", "link": 0}, "link must be a whole number from 1"),
+            ({"t": "followLink", "link": "1"}, "link must be a whole number from 1"),
+            ({"t": "followLink", "link": 1, "item": 1.5}, "item must be a whole number from 0"),
+            ({"t": "setAppState", "active": "true", "minimized": False}, "active and minimized must be true or false"),
+            ({"t": "setAppState", "active": True}, "active and minimized must be true or false"),
+            ({"t": "connect", "host": "127.0.0.1", "port": 23, "tls": "yes"}, "tls must be true or false"),
+            ({"t": "complete", "text": "x", "fromHistory": "yes"}, "fromHistory must be true or false"),
+            ({"t": "getWindowText", "window": "chat", "first": -300, "count": 300}, 'there is no console named "chat"'),
+            ({"t": "setMainWindowSize", "w": 0, "h": 600}, "w and h must be whole numbers above 0"),
+            ({"t": "setMainWindowSize", "w": 800.5, "h": 600}, "w and h must be whole numbers above 0"),
+            (dict(side, t="placeUserWindow", x="0"), "x, y, w and h must be whole numbers, w and h above 0"),
+            (dict(side, t="placeUserWindow", floating="no"), "floating must be true or false"),
+            ({"t": "getWindowText", "window": "chat", "first": 0, "count": 0}, "first and count must be whole numbers, count above 0"),
+            ({"t": "setTextBoxText", "name": "notes", "text": 5}, "text must be a string"),
+            ({"t": "pointer", "window": "box", "type": "tap", "x": 1, "y": 2}, "type must be press, release, doubleClick, move, enter, leave or wheel"),
+            ({"t": "pointer", "window": "box", "type": "press", "x": "1", "y": 2}, "x and y must be numbers"),
+            ({"t": "pointer", "window": "box", "type": "press", "x": 1, "y": 2, "button": -1},
+             "button, buttons and modifiers must be whole numbers from 0, wheelY a whole number"),
+            ({"t": "pointer", "window": "box", "type": "wheel", "x": 1, "y": 2, "wheelY": 0.5},
+             "button, buttons and modifiers must be whole numbers from 0, wheelY a whole number"),
+            ({"t": "getImage", "path": "a.png", "w": 16}, "w and h go together, whole numbers from 1 to 4096"),
+            ({"t": "getImage", "path": "a.png", "w": 16, "h": 5000}, "w and h go together, whole numbers from 1 to 4096"),
+            ({"t": "getImage", "path": "a.png", "frame": -1}, "frame must be a whole number from 0"),
+            ({"t": "getImage", "path": ""}, "path must not be empty"),
+            ({"t": "pressButton", "button": "1"}, "button must be a whole number"),
+            ({"t": "pressButton", "button": 1.5}, "button must be a whole number"),
+            ({"t": "activateCommand"}, "command must be a whole number"),
+            ({"t": "mapPointer", "type": "move", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
+            ({"t": "mapPointer", "type": "press", "x": "1", "y": 2}, "x and y must be numbers"),
+            ({"t": "mapPointer", "type": "wheel", "x": 1, "y": 2, "wheelY": 0.5},
+             "button and modifiers must be whole numbers from 0, wheelY a whole number"),
+            ({"t": "mapPointer", "type": "press", "x": 1, "y": 2, "modifiers": -1},
+             "button and modifiers must be whole numbers from 0, wheelY a whole number"),
+            ({"t": "setMapViewOnly", "viewOnly": 1}, "viewOnly must be true or false"),
+            ({"t": "setMapViewOnly"}, "viewOnly must be true or false"),
+            ({"t": "appMapPointer", "type": "release", "x": 1, "y": 2}, "type must be press, doubleClick or wheel"),
+            ({"t": "showRoom", "room": "1"}, "room must be a whole number"),
+            ({"t": "moveMap", "map": "both", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 1}, "map must be app or mapper"),
+            ({"t": "moveMap", "map": "app", "dx": "0", "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 1}, "dx, dy, zoom, x and y must be numbers"),
+            ({"t": "moveMap", "map": "app", "dx": 0, "dy": 0, "zoom": 1, "y": 0, "seq": 1}, "dx, dy, zoom, x and y must be numbers"),
+            ({"t": "moveMap", "map": "app", "dx": 0, "dy": 0, "zoom": 0, "x": 0, "y": 0, "seq": 1}, "zoom must be above 0"),
+            ({"t": "moveMap", "map": "mapper", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0, "seq": 0}, "seq must be a whole number from 1"),
+            ({"t": "moveMap", "map": "mapper", "dx": 0, "dy": 0, "zoom": 1, "x": 0, "y": 0}, "seq must be a whole number from 1"),
+            ({"t": "followPlayer"}, "map must be app or mapper"),
+            ({"t": "showMapLevel", "map": "app"}, "level must be a whole number"),
+            ({"t": "showMapLevel", "level": 1}, "map must be app or mapper"),
+            ({"t": "showMapArea", "map": "mapper", "area": "2"}, "area must be a whole number"),
+            ({"t": "walkToRoom", "room": 1.5}, "room must be a whole number"),
+            ({"t": "findRooms", "text": " "}, "text must not be empty"),
+            ({"t": "roomInfo", "room": "1"}, "room must be a whole number"),
+            ({"t": "setAppMapSize", "w": 0, "h": 10, "scale": 1}, room_size),
+            ({"t": "setAppMapSize", "w": 1.5, "h": 10, "scale": 1}, room_size),
+            ({"t": "setAppMapSize", "w": 10, "h": 10, "scale": 0.5}, "scale must be a number from 1 to 4"),
+            ({"t": "setAppMapSize", "w": 10, "h": 10}, "scale must be a number from 1 to 4"),
+            ({"t": "setMapScale", "scale": 0.5}, "scale must be a number from 1 to 8"),
+            ({"t": "setMapScale", "scale": 8.5}, "scale must be a number from 1 to 8"),
+            ({"t": "setMapScale", "scale": "2"}, "scale must be a number from 1 to 8"),
+            ({"t": "editRoom", "room": 1, "weight": "2"}, "weight must be a whole number"),
+            ({"t": "editRoom", "room": 1, "x": 1, "y": 2}, "x, y and z go together"),
+            ({"t": "editRoom", "room": 1, "locked": 1}, "locked must be true or false"),
+            ({"t": "setRoomExit", "room": 1, "direction": "e", "to": -1}, "to must be a whole number from 0"),
+            ({"t": "lockRoomExit", "room": 1, "direction": "e"}, "locked must be true or false"),
+            ({"t": "deleteRoom", "room": "1"}, "room must be a whole number"),
+            ({"t": "renameArea", "area": 1}, "name must be a string"),
+            ({"t": "getSettings", "keys": []}, "keys must be a list of names"),
+            ({"t": "getSettings", "keys": "blankLinesBehaviour"}, "keys must be a list of names"),
+            ({"t": "getSettings", "keys": ["blankLinesBehaviour", 1]}, "keys must be a list of names"),
+            ({"t": "getSettings", "keys": [""]}, "keys must be a list of names"),
+            ({"t": "setSettings", "values": {}}, "values must be an object of settings"),
+            ({"t": "setSettings", "values": ["blankLinesBehaviour"]}, "values must be an object of settings")):
+        m = c.ask(request, answers=("error",))
+        check(m["message"] == f"{request['t']}: {message}", f"a bad field is refused: {request} -> {m['message']}")
+
+    ctl = Client(SOCK, profile_sockets=True)
+    msgs = []
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    try:
+        while c.recv(1) is not None:
+            pass
+        replaced = False
+    except Closed:
+        replaced = True
+    check(replaced, "a UI that attaches replaces (closes) the one before")
+    listed = [m for m in msgs if m["t"] == "openProfiles"]
+    names = [p["name"] for p in listed[-1]["profiles"]] if listed else []
+    check(names == ["Bridge Test"], f"the control socket lists the profile: {names}")
+    m = ctl.ask({"t": "markSeen", "name": "Bridge Test", "seq": -1}, answers=("error",))
+    check(m["message"] == "markSeen: seq must be a whole number from 0", f"markSeen of a seq below 0: {m}")
+    others = ["Bridge 2", "Bridge 3", "Bridge 4"]
+    for name in others:
+        ctl.ask(dict(profile_checks.profile(name, 1), t="saveProfile"))
+        ctl.send({"t": "openProfile", "name": name, "alongside": True, "connect": False})
+    ctl.wait_for(lambda m: m["t"] == "openProfiles" and len(m["profiles"]) == 4, timeout=60)
+    m = ctl.ask({"t": "openProfile", "name": "Bridge 5", "alongside": True}, answers=("openProfiles", "error"))
+    check(m["t"] == "error" and m["message"] == "openProfile: at most 4 open", f"no more than 4 open at once: {m}")
+    silent = Client(SOCK, hello=False)
+    try:
+        sent = silent.recv(1)
+    except Closed:
+        sent = None
+    check(sent is None, f"a UI that never says hello is sent nothing: {sent}")
+    silent.close()
+    ctl = Client(SOCK, profile_sockets=True)
+    m = ctl.ask({"t": "listProfiles"})
+    check(m["t"] == "profiles", f"and the engine serves the next UI: {m['t']}")
+    ctl.close()
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def input_line():

@@ -34,47 +34,41 @@ class LicencesTest {
     }
 
     @Test
-    fun parseKeepsTheEngineComponentsAndOrdersThemByGroupThenName() {
+    fun parseOrdersTheComponentsByGroupThenName() {
         val notices = """{"components": [
             {"id": "b", "group": "native", "name": "beta", "licence": "MIT"},
-            {"id": "m", "group": "app", "name": "Mudlet", "licence": "GPL-2.0-or-later", "texts": ["GPL-3.0-only"], "engines": ["mudlet"]},
-            {"id": "a", "group": "native", "name": "Alpha", "licence": "Apache-2.0 WITH LLVM-exception", "engines": ["standin"]}
+            {"id": "m", "group": "app", "name": "Mudlet", "licence": "GPL-2.0-or-later", "texts": ["GPL-3.0-only"]},
+            {"id": "a", "group": "native", "name": "Alpha", "licence": "Apache-2.0 WITH LLVM-exception"}
         ]}"""
         val gradle = """{"components": [{"id": "maven:x:y", "name": "x:y", "version": "1", "licence": "Apache-2.0"}]}"""
         val files = mapOf("notices.json" to notices, "android.json" to gradle)
 
-        val mudlet = Licences.parse(files, "mudlet")
-        assertEquals(listOf("m", "b", "maven:x:y"), mudlet.map { it.id })
-        assertEquals(listOf("GPL-2.0-or-later", "GPL-3.0-only"), mudlet[0].texts)
-        assertEquals(LicenceGroup.ANDROID, mudlet[2].group)
-
-        val standin = Licences.parse(files, "standin")
-        assertEquals(listOf("a", "b", "maven:x:y"), standin.map { it.id })
-        assertEquals(listOf("Apache-2.0", "LLVM-exception"), standin[0].texts)
+        val components = Licences.parse(files)
+        assertEquals(listOf("m", "a", "b", "maven:x:y"), components.map { it.id })
+        assertEquals(listOf("GPL-2.0-or-later", "GPL-3.0-only"), components[0].texts)
+        assertEquals(listOf("Apache-2.0", "LLVM-exception"), components[1].texts)
+        assertEquals(LicenceGroup.ANDROID, components[3].group)
     }
 
     @Test
     fun parseRefusesAComponentWithoutALicence() {
         val files = mapOf("notices.json" to """{"components": [{"id": "x", "group": "app", "name": "X"}]}""")
-        assertThrows(JSONException::class.java) { Licences.parse(files, "mudlet") }
+        assertThrows(JSONException::class.java) { Licences.parse(files) }
     }
 
     @Test
-    fun theRepositoryListsParseForBothEnginesAndHaveEveryTextTheyName() {
+    fun theRepositoryListsParseAndHaveEveryTextTheyName() {
         val texts = assets.resolve("texts").list()!!.map { it.removeSuffix(".txt") }.toSet()
-        for (engine in listOf("standin", "mudlet")) {
-            val components = Licences.parse(repositoryFiles(), engine)
-            assertEquals("ids are unique", components.size, components.map { it.id }.toSet().size)
-            for (c in components) {
-                assertTrue("${c.id} names ${c.texts - texts}, which have no text", texts.containsAll(c.texts))
-                assertTrue("${c.id} has no name", c.name.isNotBlank())
-            }
-            val ids = components.map { it.id }.toSet()
-            assertTrue("$engine lists Qt", "qt" in ids)
-            assertEquals("$engine lists this app's own code as LICENSE has it", "GPL-3.0-or-later", components.single { it.id == "mudlet-android" }.licence)
-            assertEquals("$engine lists Mudlet only with Mudlet's engine", engine == "mudlet", "mudlet" in ids)
-            assertEquals("Lua's notice is in either engine", true, "lua51" in ids || "lua51-standin" in ids)
-            assertFalse("$engine has Qt's third-party code", components.none { it.group == LicenceGroup.QT })
+        val components = Licences.parse(repositoryFiles())
+        assertEquals("ids are unique", components.size, components.map { it.id }.toSet().size)
+        for (c in components) {
+            assertTrue("${c.id} names ${c.texts - texts}, which have no text", texts.containsAll(c.texts))
+            assertTrue("${c.id} has no name", c.name.isNotBlank())
         }
+        val ids = components.map { it.id }.toSet()
+        assertTrue("Qt is listed", "qt" in ids)
+        assertEquals("this app's own code is listed as LICENSE has it", "GPL-3.0-or-later", components.single { it.id == "mudlet-android" }.licence)
+        assertTrue("Mudlet and its Lua are listed", "mudlet" in ids && "lua51" in ids)
+        assertFalse("Qt's third-party code is listed", components.none { it.group == LicenceGroup.QT })
     }
 }

@@ -78,6 +78,8 @@ android {
 
     buildTypes {
         getByName("debug") {
+            // DIAG, not for merging: ART inlines nothing in a debuggable app, and players' builds are not
+            isDebuggable = false
             isMinifyEnabled = false
             // en-XA (accented, longer text) and ar-XB (mirrored, right to left), to see a layout with text it was not
             // drawn for; PseudoLocaleTest runs the app in both (docs/translations.md, "Pseudo-locales")

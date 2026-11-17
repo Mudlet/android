@@ -34,18 +34,34 @@ object TextBehindMap {
     data class Ground(val background: Int?, val solid: List<Int>)
 
     /**
-     * The [Ground] of a frame [width] by [height] of 0xAARRGGBB [pixels], not premultiplied, row by row. Its background
+     * How a pixel's bytes lie in the Int it is read as. Only an opaque pixel's colour is read, so the pixels may be
+     * premultiplied or not.
+     */
+    enum class Layout(internal val red: Int, internal val blue: Int) {
+        /** 0xAARRGGBB, as Android's `Bitmap.getPixels` gives them. */
+        ARGB(16, 0),
+
+        /** 0xAABBGGRR: an ARGB_8888 bitmap's own bytes, red first, read as the Ints of a little-endian device. */
+        ABGR(0, 16),
+        ;
+
+        // A colour of this layout as 0xRRGGBB, and one of those in this layout: red and blue stay or change places
+        internal fun rgb(colour: Int) = if (this == ARGB) colour else (colour and 0xFF00) or (colour shr 16 and 0xFF) or (colour and 0xFF shl 16)
+    }
+
+    /**
+     * The [Ground] of a frame [width] by [height] of [pixels] in [layout], row by row, the same whichever. Its background
      * is the commonest colour of the grid [MapBehindText.tones] samples, or none where at least half of them are not
      * opaque. A solid colour is one at least [MIN_PIXELS] opaque pixels have on both sides along a row, a column or a
      * diagonal, but not those of them that lie between the background and a colour beside them across that line, the
      * antialiased edge of a room or of a line drawn between pixels, which is seen as part of what it edges. Null for a
      * frame of no pixels.
      */
-    fun ground(pixels: IntArray, width: Int, height: Int): Ground? {
+    fun ground(pixels: IntArray, width: Int, height: Int, layout: Layout = Layout.ARGB): Ground? {
         if (width <= 0 || height <= 0) return null
-        val background = background(pixels, width, height)
+        val background = background(pixels, width, height, layout)
         // No colour's, so that no pixel is taken for the background of a frame that has none
-        val ground = background ?: NO_COLOUR
+        val ground = background?.let(layout::rgb) ?: NO_COLOUR
         val counts = Counts()
         // Counted a run at a time, as a room's pixels come one after another
         var run = 0
@@ -54,18 +70,21 @@ object TextBehindMap {
             for (i in y * width + 1 until y * width + width - 1) {
                 val pixel = pixels[i]
                 if (pixel ushr 24 != 0xFF || pixel and 0xFFFFFF == ground) continue
-                // A row, the two diagonals and a column, each with the one across it
-                val along = solid(pixels, i, 1, width, ground) || solid(pixels, i, width + 1, width - 1, ground) || solid(pixels, i, width - 1, width + 1, ground) || solid(pixels, i, width, 1, ground)
+                // Inside a room, its colour above, below and on both sides, it is solid along the row with no edge to
+                // weigh. Else a row, the two diagonals and a column, each with the one across it
+                val inside = pixels[i - 1] == pixel && pixels[i + 1] == pixel && pixels[i - width] == pixel && pixels[i + width] == pixel
+                val along = inside || solid(pixels, i, 1, width, ground, layout) || solid(pixels, i, width + 1, width - 1, ground, layout) ||
+                    solid(pixels, i, width - 1, width + 1, ground, layout) || solid(pixels, i, width, 1, ground, layout)
                 if (!along) continue
                 if (pixel != runColour && run > 0) {
-                    counts.add(runColour and 0xFFFFFF, run)
+                    counts.add(layout.rgb(runColour and 0xFFFFFF), run)
                     run = 0
                 }
                 runColour = pixel
                 run++
             }
         }
-        if (run > 0) counts.add(runColour and 0xFFFFFF, run)
+        if (run > 0) counts.add(layout.rgb(runColour and 0xFFFFFF), run)
         return Ground(background, counts.atLeast(MIN_PIXELS))
     }
 
@@ -101,14 +120,14 @@ object TextBehindMap {
         return 0f
     }
 
-    /** Makes the [pixels] (0xAARRGGBB) of exactly the opaque [background] transparent, so what is under them shows. */
-    fun cutOut(pixels: IntArray, background: Int) {
-        val opaque = OPAQUE or background
+    /** Makes the [pixels], in [layout], of exactly the opaque [background] transparent, so what is under them shows. */
+    fun cutOut(pixels: IntArray, background: Int, layout: Layout = Layout.ARGB) {
+        val opaque = OPAQUE or layout.rgb(background)
         for (i in pixels.indices) if (pixels[i] == opaque) pixels[i] = 0
     }
 
     // The commonest colour of the sampled grid's opaque pixels, or null where at least half are not opaque
-    private fun background(pixels: IntArray, width: Int, height: Int): Int? {
+    private fun background(pixels: IntArray, width: Int, height: Int, layout: Layout): Int? {
         val rows = min(height, MapBehindText.SAMPLE_ROWS)
         val columns = min(width, MapBehindText.SAMPLE_COLUMNS)
         val opaque = IntArray(rows * columns)
@@ -117,7 +136,7 @@ object TextBehindMap {
             val row = MapBehindText.sampled(r, rows, height) * width
             for (c in 0 until columns) {
                 val pixel = pixels[row + MapBehindText.sampled(c, columns, width)]
-                if (pixel ushr 24 == 0xFF) opaque[count++] = pixel and 0xFFFFFF
+                if (pixel ushr 24 == 0xFF) opaque[count++] = layout.rgb(pixel and 0xFFFFFF)
             }
         }
         if (2 * count <= rows * columns) return null
@@ -137,21 +156,22 @@ object TextBehindMap {
     }
 
     // Whether the pixel at [i] has its colour on both sides [along] a line, and is not the blend of [background], if any,
-    // and the pixel on either side [across] it. This runs for every pixel of a frame that is not its background, so it
-    // makes no object
-    private fun solid(pixels: IntArray, i: Int, along: Int, across: Int, background: Int): Boolean {
+    // and the pixel on either side [across] it, all in [layout]. This runs for every pixel of a frame that is not its
+    // background or inside a room, so it makes no object
+    private fun solid(pixels: IntArray, i: Int, along: Int, across: Int, background: Int, layout: Layout): Boolean {
         val pixel = pixels[i]
         if (pixels[i - along] != pixel || pixels[i + along] != pixel) return false
-        return background == NO_COLOUR || (!edge(pixel, pixels[i - across], background) && !edge(pixel, pixels[i + across], background))
+        return background == NO_COLOUR || (!edge(pixel, pixels[i - across], background, layout) && !edge(pixel, pixels[i + across], background, layout))
     }
 
     // Whether [pixel] is a blend of [background] and the opaque [beside] it, another colour, to within rounding
-    private fun edge(pixel: Int, beside: Int, background: Int): Boolean {
+    private fun edge(pixel: Int, beside: Int, background: Int, layout: Layout): Boolean {
         if (beside ushr 24 != 0xFF || beside == pixel || beside and 0xFFFFFF == background) return false
-        // How far along from the background to the colour beside it, by the channel in which they are furthest apart
-        var widest = 16
+        // How far along from the background to the colour beside it, by the channel in which they are furthest apart:
+        // red's before green's before blue's where they are as far, whichever layout
+        var widest = layout.red
         if (apart(beside, background, 8) > apart(beside, background, widest)) widest = 8
-        if (apart(beside, background, 0) > apart(beside, background, widest)) widest = 0
+        if (apart(beside, background, layout.blue) > apart(beside, background, widest)) widest = layout.blue
         val share = ((pixel shr widest and 0xFF) - (background shr widest and 0xFF)).toDouble() / ((beside shr widest and 0xFF) - (background shr widest and 0xFF))
         if (share < 0 || share > 1) return false
         return blended(pixel, beside, background, share, 16) && blended(pixel, beside, background, share, 8) && blended(pixel, beside, background, share, 0)

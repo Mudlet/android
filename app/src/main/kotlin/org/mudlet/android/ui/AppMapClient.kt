@@ -23,6 +23,7 @@ import org.mudlet.android.protocol.RoomMatch
 import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.MapSource
+import java.nio.IntBuffer
 import java.util.EnumMap
 import java.util.concurrent.Executors
 import kotlin.math.floor
@@ -443,13 +444,25 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             return Decoded(bitmap?.asImageBitmap(), tones, bitmap?.takeIf { textBehind }?.let(::overText))
         }
 
-        private fun overText(bitmap: Bitmap): OverText? {
-            val pixels = IntArray(bitmap.width * bitmap.height)
-            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            val ground = TextBehindMap.ground(pixels, bitmap.width, bitmap.height) ?: return null
+        internal fun overText(bitmap: Bitmap): OverText? {
+            val width = bitmap.width
+            val height = bitmap.height
+            val pixels = IntArray(width * height)
+            // A decoded frame's pixels are copied as the bitmap keeps them, and the cut frame's copied back: getPixels
+            // and createBitmap(pixels) convert each one, most of the work of a frame. A bitmap that keeps anything but
+            // sRGB colours, a pixel to an Int, is converted
+            val kept = bitmap.config == Bitmap.Config.ARGB_8888 && bitmap.colorSpace?.isSrgb == true
+            val layout = if (kept) TextBehindMap.Layout.ABGR else TextBehindMap.Layout.ARGB
+            if (kept) bitmap.copyPixelsToBuffer(IntBuffer.wrap(pixels)) else bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            val ground = TextBehindMap.ground(pixels, width, height, layout) ?: return null
             val background = ground.background ?: return OverText(ground, bitmap.asImageBitmap())
-            TextBehindMap.cutOut(pixels, background)
-            return OverText(ground, Bitmap.createBitmap(pixels, bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888).asImageBitmap())
+            TextBehindMap.cutOut(pixels, background, layout)
+            val frame = if (kept) {
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(IntBuffer.wrap(pixels)) }
+            } else {
+                Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+            }
+            return OverText(ground, frame.asImageBitmap())
         }
 
         /** What [end] says to the player of how a download ended; null while none has ended. */

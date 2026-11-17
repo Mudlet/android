@@ -20,6 +20,10 @@ class TextBehindMapTest {
         }
 
         fun ground() = TextBehindMap.ground(pixels, width, height)
+
+        fun kept() = IntArray(pixels.size) { kept(pixels[it]) }
+
+        fun keptGround() = TextBehindMap.ground(kept(), width, height, TextBehindMap.Layout.ABGR)
     }
 
     // Mudlet's default map: DarkGreen and DarkCyan rooms on its black background, joined by exits in LightGray a
@@ -185,6 +189,95 @@ class TextBehindMapTest {
     }
 
     @Test
+    fun theCutOutClearsTheBackgroundAloneOfABitmapsOwnPixelsToo() {
+        val pixels = intArrayOf(OPAQUE or 0x102030, OPAQUE or 0x302010, OPAQUE or 0x102031, 0x7F102030, OPAQUE or LIGHT_GRAY, OPAQUE or 0x102030)
+        val kept = IntArray(pixels.size) { kept(pixels[it]) }
+        TextBehindMap.cutOut(kept, 0x102030, TextBehindMap.Layout.ABGR)
+        assertEquals(listOf(0, kept(pixels[1]), kept(pixels[2]), kept(pixels[3]), kept(pixels[4]), 0), kept.toList())
+    }
+
+    @Test
+    fun aBitmapsOwnPixelsHaveTheGroundTheirColoursHave() {
+        val default = mudletMap(background = OPAQUE or 0x102030)
+        assertEquals(TextBehindMap.Ground(0x102030, listOf(DARK_GREEN, DARK_CYAN, DARK_RED, LIGHT_GRAY)), default.ground())
+        assertEquals(default.ground(), default.keptGround())
+
+        // Translucent pixels, whose colours a bitmap keeps premultiplied, are not weighed as colours either way
+        val transparent = mudletMap(background = 0)
+        transparent.rect(0, 0, 200, 200, 0x80FFFFFF.toInt())
+        transparent.rect(300, 60, 90, 3, 0xFE3070B0.toInt())
+        assertEquals(TextBehindMap.Ground(null, listOf(DARK_GREEN, DARK_CYAN, DARK_RED, LIGHT_GRAY)), transparent.ground())
+        assertEquals(transparent.ground(), transparent.keptGround())
+
+        val random = Random(9011)
+        repeat(20) {
+            // Rooms, lines and their edges in colours that differ in every channel, on a background of one
+            val colours = List(6) { OPAQUE or random.nextInt(0x1000000) }
+            val frame = Frame(160, 120, colours[0])
+            repeat(40) {
+                val colour = colours[random.nextInt(1, colours.size)]
+                val x = random.nextInt(2, 130)
+                val y = random.nextInt(2, 90)
+                val w = random.nextInt(1, 28)
+                val h = random.nextInt(1, 28)
+                frame.rect(x, y, w, h, colour)
+                // An edge of a share of it over the background, as antialiasing leaves
+                val share = random.nextInt(1, 8) / 8.0
+                val edge = (0..16 step 8).fold(OPAQUE) { mixed, shift ->
+                    val from = colours[0] shr shift and 0xFF
+                    mixed or ((from + share * ((colour shr shift and 0xFF) - from)).roundToInt() shl shift)
+                }
+                frame.rect(x - 1, y, 1, h, edge)
+                frame.rect(x, y - 1, w, 1, edge)
+            }
+            assertEquals("frame $it", frame.ground(), frame.keptGround())
+        }
+    }
+
+    @Test
+    fun whereTwoColoursAreAsCommonTheBackgroundIsTheLesserInEitherLayout() {
+        // Blue is the lesser as 0xRRGGBB, and the greater as a bitmap keeps it
+        val frame = Frame(100, 100, OPAQUE or 0x0000FF)
+        frame.rect(50, 0, 50, 100, OPAQUE or 0x010000)
+        assertEquals(0x0000FF, frame.ground()!!.background)
+        assertEquals(0x0000FF, frame.keptGround()!!.background)
+    }
+
+    @Test
+    fun anEdgeIsMeasuredByRedBeforeBlueInEitherLayout() {
+        // Beside 0xC864C8 over black, red and blue are as far apart: by red, half way, 0x643462 is its edge to within
+        // rounding; by blue, 49% of the way, its green is too strong for one
+        val frame = Frame(200, 100, OPAQUE)
+        frame.rect(20, 40, 100, 1, OPAQUE or 0x643462)
+        frame.rect(20, 41, 100, 1, OPAQUE or 0xC864C8)
+        assertEquals(TextBehindMap.Ground(0x000000, listOf(0xC864C8)), frame.ground())
+        assertEquals(frame.ground(), frame.keptGround())
+        // and the same with red and blue the other way about, where it is no edge
+        val mirrored = Frame(200, 100, OPAQUE)
+        mirrored.rect(20, 40, 100, 1, OPAQUE or 0x623464)
+        mirrored.rect(20, 41, 100, 1, OPAQUE or 0xC864C8)
+        assertEquals(TextBehindMap.Ground(0x000000, listOf(0x623464, 0xC864C8)), mirrored.ground())
+        assertEquals(mirrored.ground(), mirrored.keptGround())
+    }
+
+    @Test
+    fun anEdgeTwoPixelsWideIsNoRoomWhereItHasItsColourOnThreeSides() {
+        // A room with an edge two pixels wide on each side, each a share of its grey: the outer pixels of each count,
+        // 38 of them, and the inner ones, with the room on their fourth side, do not, or each edge would have 76
+        val frame = Frame(200, 200, OPAQUE)
+        frame.rect(78, 80, 2, 40, OPAQUE or 0x303030)
+        frame.rect(120, 80, 2, 40, OPAQUE or 0x404040)
+        frame.rect(80, 78, 40, 2, OPAQUE or 0x505050)
+        frame.rect(80, 120, 40, 2, OPAQUE or 0x606060)
+        frame.rect(80, 80, 40, 40, OPAQUE or LIGHT_GRAY)
+        assertEquals(TextBehindMap.Ground(0x000000, listOf(LIGHT_GRAY)), frame.ground())
+        assertEquals(frame.ground(), frame.keptGround())
+        // Long enough for its outer pixels alone, each edge counts
+        frame.rect(78, 60, 2, 80, OPAQUE or 0x303030)
+        assertEquals(listOf(0x303030, LIGHT_GRAY), frame.ground()!!.solid)
+    }
+
+    @Test
     fun everyRoomKeepsThreeToOneAndOneMoreStepWouldLoseIt() {
         val random = Random(9011)
         repeat(2000) {
@@ -210,5 +303,13 @@ class TextBehindMapTest {
         const val DARK_CYAN = 0x008080
         const val DARK_RED = 0x800000
         const val LIGHT_GRAY = 0xC0C0C0
+
+        // The 0xAARRGGBB [pixel] as an ARGB_8888 bitmap keeps it: premultiplied, red first, read as a little-endian
+        // device's Int
+        fun kept(pixel: Int): Int {
+            val alpha = pixel ushr 24
+            val channels = (0..16 step 8).map { ((pixel shr it and 0xFF) * alpha + 127) / 255 }
+            return (alpha shl 24) or (channels[0] shl 16) or (channels[1] shl 8) or channels[2]
+        }
     }
 }

@@ -407,6 +407,10 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
   repeats the one before it or the one above it. It is some three times as large and made in a tenth of the time. A
   map that is mostly a picture, as one with a photograph for a label, would be as large as its pixels that way, so
   that one is Qt's PNG. A reader of any PNG reads both.
+- In base64 the PNG is most of its frame. The app takes it from the frame's bytes and reads only the rest as JSON
+  (`FrameReader.parse`), as the PNG read as part of the JSON's text took four times as long. A frame whose `png` is
+  written another way than the engine writes it, with an escape in it or space around its colon, is read whole as
+  JSON, to the same result.
 - While the mapper does not show (its `shown` false, or no such window), or has no size, as `Geyser.Mapper`'s `hide()`
   leaves it, nothing is sent: the UI hides what it drew from the `windows` message. A mapper opened before
   `setMainWindowSize` has no size, so nothing is drawn. The UI draws a `map` only while its `w` and `h` are the

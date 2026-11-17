@@ -9,11 +9,19 @@ data class MapPoint(val x: Double, val y: Double)
 
 /**
  * Where the game screen draws a map frame [frameW] by [frameH] pixels in [box], in the pixels of what draws it: scaled
- * alike across and down, as large as fits, and centred, so a touch on it goes back to the point of the frame under it.
+ * alike across and down and centred, so a touch on it goes back to the point of the frame under it. As large as fits;
+ * or, [asRedrawn], a frame the engine drew for a box of another size as it will draw the map for this one. Mudlet sizes
+ * its rooms by the shorter side of what it draws in and keeps the map's middle in its middle (`T2DMap::paintEvent()`),
+ * so that frame is scaled by the shorter sides of the two: the map stays where it is, and as large, when the frame for
+ * this box comes, cut off where the frame is larger than the box and short of its edges where it is smaller.
  */
-class MapFit(val frameW: Int, val frameH: Int, val box: PxRect) {
+class MapFit(val frameW: Int, val frameH: Int, val box: PxRect, asRedrawn: Boolean = false) {
     /** Screen pixels per pixel of the frame; 0 for a frame or box with no size. */
-    val scale: Float = if (frameW > 0 && frameH > 0 && box.w > 0 && box.h > 0) min(box.w / frameW, box.h / frameH) else 0f
+    val scale: Float = when {
+        frameW <= 0 || frameH <= 0 || box.w <= 0 || box.h <= 0 -> 0f
+        asRedrawn -> min(box.w, box.h) / min(frameW, frameH)
+        else -> min(box.w / frameW, box.h / frameH)
+    }
 
     /**
      * What to ask the engine to draw the mapper's map at (`setMapScale`): [scale] in hundredths, down, so a box a

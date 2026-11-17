@@ -1,10 +1,12 @@
 package org.mudlet.android.protocol
 
+import com.sun.management.ThreadMXBean
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.management.ManagementFactory
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -148,6 +150,31 @@ class TextBehindMapTest {
         // Translucent pixels are an edge's, not a room's
         frame.rect(0, 0, 200, 200, 0x80FFFFFF.toInt())
         assertEquals(ground, frame.ground())
+    }
+
+    @Test
+    fun aFramesGroundIsFoundWithoutAnObjectForEachOfItsPixels() {
+        // Each frame of the map in front is weighed as it is decoded, and each behind the text before the swap: an
+        // object or two for each pixel that is not the background, tens of megabytes a frame, is what made it slow
+        val frame = mudletMap()
+        // A first frame apart, as loading the classes it needs is counted too
+        Frame(8, 8, OPAQUE).ground()
+        val thread = ManagementFactory.getThreadMXBean() as ThreadMXBean
+        val id = Thread.currentThread().id
+        val before = thread.getThreadAllocatedBytes(id)
+        val ground = frame.ground()
+        val allocated = thread.getThreadAllocatedBytes(id) - before
+        assertEquals(listOf(DARK_GREEN, DARK_CYAN, DARK_RED, LIGHT_GRAY), ground?.solid)
+        assertTrue("$allocated bytes for a frame of ${frame.pixels.size} pixels", allocated < frame.pixels.size / 4)
+    }
+
+    @Test
+    fun aFrameOfManyColoursKeepsEachOfThem() {
+        // More than the colours' table starts with room for, and apart in one channel alone, as a map's colours often are
+        val colours = List(200) { 0x400000 + 0x100 * it }
+        val frame = Frame(20 * 16 + 4, 10 * 16 + 4, OPAQUE)
+        colours.forEachIndexed { i, colour -> frame.rect(4 + i % 20 * 16, 4 + i / 20 * 16, 12, 12, OPAQUE or colour) }
+        assertEquals(colours, frame.ground()!!.solid)
     }
 
     @Test

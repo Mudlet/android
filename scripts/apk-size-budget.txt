@@ -14,4 +14,4 @@ libmudlet-x86_64                     109624265    78850424     29634016
 # the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
 ptb-arm64-v8a                        79585181     75576352     3193380
 ptb-x86_64                           82910580     78880376     3193380
-ptb-aab                              111398929    71687855     1564767
+ptb-aab                              112175612    71938493     1644753

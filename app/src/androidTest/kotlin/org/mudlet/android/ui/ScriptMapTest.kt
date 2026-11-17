@@ -669,8 +669,13 @@ class ScriptMapTest {
         val nothing = hasText(string(R.string.app_map_no_rooms, "cellar")) and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(nothing).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(nothing).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        // An earlier search's refusal too, answered after the next was sent
+        type(R.string.room_edit_exit_to, "vau")
+        val earlier = receiveComposing("findRooms")
         type(R.string.room_edit_exit_to, "vault")
-        session.refuse(receiveComposing("findRooms"), "no profile running")
+        val later = receiveComposing("findRooms")
+        session.refuse(earlier, "an earlier search")
+        session.refuse(later, "no profile running")
         val refused = hasText(string(R.string.map_refused, "no profile running"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(refused and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
         compose.runOnIdle {

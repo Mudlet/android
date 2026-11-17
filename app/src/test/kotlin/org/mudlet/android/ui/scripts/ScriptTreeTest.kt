@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.ScriptItem
 import org.mudlet.android.protocol.ScriptItemDetails
 import org.mudlet.android.protocol.ScriptItemKind
@@ -14,7 +15,7 @@ import org.mudlet.android.protocol.TriggerPatternType
 
 /** The script library's tree, search and the detail page's edits, which need no engine */
 class ScriptTreeTest {
-    private fun node(id: Int, parent: Int, name: String, folder: Boolean = false) = ScriptItemNode(id, parent, name, folder, true, true, "", "")
+    private fun node(id: Int, parent: Int, name: String, folder: Boolean = false, summary: String = "", packageName: String = "") = ScriptItemNode(id, parent, name, folder, true, true, packageName, "", summary)
 
     // Combat/Hits/"You hit", Combat/"Flee", "Greet", as the engine lists them depth first
     private val triggers = listOf(
@@ -29,7 +30,8 @@ class ScriptTreeTest {
     fun aKeyComesBackFromItsText() {
         val key = ScriptItemKey(ScriptItemKind.ALIAS, 42)
         assertEquals(key, ScriptItemKey.decode(key.encode()))
-        assertNull(ScriptItemKey.decode("timer/1"))
+        assertEquals(ScriptItemKey(ScriptItemKind.TIMER, 1), ScriptItemKey.decode("timer/1"))
+        assertNull(ScriptItemKey.decode("gauge/1"))
         assertNull(ScriptItemKey.decode("trigger/"))
         assertNull(ScriptItemKey.decode("trigger"))
     }
@@ -113,5 +115,113 @@ class ScriptTreeTest {
     fun aNewSpacerSpansOneLine() {
         assertEquals("1", newPattern(TriggerPatternType.SPACER).text)
         assertEquals("", newPattern(TriggerPatternType.REGEX).text)
+    }
+
+    @Test
+    fun aSearchFindsWhatShowsUnderAName() {
+        val timers = listOf(node(1, 0, "Heal", summary = "00:00:02.500"))
+        val keys = listOf(node(1, 0, "North", summary = "keypad + 8"))
+        val found = searchScripts("keypad", mapOf(ScriptItemKind.TIMER to timers, ScriptItemKind.KEY to keys))
+        assertEquals(listOf(ScriptItemKind.KEY to "North"), found.map { it.kind to it.item.name })
+        assertEquals(listOf("Heal"), searchScripts("02.5", mapOf(ScriptItemKind.TIMER to timers)).map { it.item.name })
+    }
+
+    @Test
+    fun aTimeSplitsIntoTheEditorsFourFields() {
+        val time = 2 * 3_600_000 + 3 * 60_000 + 4 * 1_000 + 5
+        assertEquals(listOf(2, 3, 4, 5), TimePart.entries.map { time.timePart(it) })
+        assertEquals("only its own part changes", listOf(2, 59, 4, 5), TimePart.entries.map { time.withTimePart(TimePart.MINUTES, 59).timePart(it) })
+        assertEquals(750, 0.withTimePart(TimePart.MILLISECONDS, 750))
+        assertEquals("a part is held to its range", 23 * 3_600_000, 0.withTimePart(TimePart.HOURS, 99))
+        assertEquals(0, 5_000.withTimePart(TimePart.SECONDS, -1))
+        val most = TimePart.entries.fold(0) { millis, part -> millis.withTimePart(part, part.max) }
+        assertEquals("the most the four fields give is the engine's, a millisecond under a day", 86_399_999, most)
+    }
+
+    @Test
+    fun theKeysToPickAreNamedOrWritten() {
+        assertEquals("F1", QtKeys.symbol(QtKeys.F1))
+        assertEquals("F12", QtKeys.symbol(QtKeys.F1 + 11))
+        assertNull("F13 is not offered", QtKeys.symbol(QtKeys.F1 + 12))
+        assertEquals("8", QtKeys.symbol(0x38))
+        assertEquals("A", QtKeys.symbol(0x41))
+        assertEquals("+", QtKeys.symbol(0x2b))
+        assertNull("a named key is given its name by the screen", QtKeys.symbol(QtKeys.ESCAPE))
+        assertEquals("no key is offered twice", QtKeys.PICKABLE.size, QtKeys.PICKABLE.toSet().size)
+        assertTrue("each key offered has a name or is written", QtKeys.PICKABLE.all { it in QtKeys.NAMED || QtKeys.symbol(it) != null })
+        assertFalse("0 is no key, and has a choice of its own", 0 in QtKeys.PICKABLE)
+    }
+
+    @Test
+    fun theKeysHeldAreBitsOfQtsModifiers() {
+        val controlKeypad = 0x24000000
+        assertEquals(listOf(KeyModifier.CONTROL, KeyModifier.KEYPAD), heldKeys(controlKeypad))
+        assertEquals(emptyList<KeyModifier>(), heldKeys(0))
+        assertEquals(0x26000000, withHeld(controlKeypad, KeyModifier.SHIFT, true))
+        assertEquals(0x20000000, withHeld(controlKeypad, KeyModifier.CONTROL, false))
+        assertEquals("holding one twice changes nothing", controlKeypad, withHeld(controlKeypad, KeyModifier.CONTROL, true))
+        val groupSwitch = 0x40000000
+        assertEquals("a bit the page has no chip for is kept", groupSwitch or 0x02000000, withHeld(groupSwitch, KeyModifier.SHIFT, true))
+    }
+
+    @Test
+    fun aKeyTheAppCannotNameGoesByTheEnginesName() {
+        fun key(name: String) = ScriptItemDetails.Key("", 0x01000020, 0x04000000, name)
+        assertEquals("Shift", key("control + Shift").engineKeyName)
+        assertEquals("Shift", key("Shift").engineKeyName)
+        assertEquals("", key("").engineKeyName)
+    }
+
+    // A package's folder with a toolbar and its menu, then the player's toolbar with a button, and a button outside any
+    private val buttons = listOf(
+        node(1, 0, "ui-pack", folder = true, packageName = "ui-pack"),
+        node(2, 1, "Bar", folder = true, packageName = "ui-pack"),
+        node(3, 2, "More", folder = true, packageName = "ui-pack"),
+        node(4, 0, "Mine", folder = true),
+        node(5, 4, "Sword"),
+        node(6, 4, "Spells", folder = true),
+        node(7, 0, "Loose"),
+    )
+
+    @Test
+    fun aButtonsFolderIsAToolbarAMenuOrAPackages() {
+        fun part(id: Int) = buttons.buttonPart(buttons.first { it.id == id })
+        assertEquals(ButtonPart.PACKAGE, part(1))
+        assertEquals("a folder in a package's folder is a toolbar", ButtonPart.TOOLBAR, part(2))
+        assertEquals(ButtonPart.MENU, part(3))
+        assertEquals(ButtonPart.TOOLBAR, part(4))
+        assertEquals(ButtonPart.BUTTON, part(5))
+        assertEquals(ButtonPart.MENU, part(6))
+        assertEquals(ButtonPart.BUTTON, part(7))
+        assertEquals("until its folder is listed, a folder inside another is a menu", ButtonPart.MENU, emptyList<ScriptItemNode>().buttonPart(buttons[1]))
+    }
+
+    @Test
+    fun theLibraryOffersWhatMudletTakesWhereItIs() {
+        assertEquals(Adds.ITEM_AND_FOLDER, adds(ScriptItemKind.TRIGGER, null))
+        assertEquals(Adds.ITEM_AND_FOLDER, adds(ScriptItemKind.TRIGGER, triggers[0]))
+        assertEquals("only a folder is added to", Adds.NOTHING, adds(ScriptItemKind.TRIGGER, triggers[4]))
+        assertEquals("the buttons' top level takes toolbars", Adds.TOOLBAR, adds(ScriptItemKind.BUTTON, null))
+        assertEquals(Adds.ITEM_AND_FOLDER, adds(ScriptItemKind.BUTTON, buttons[3]))
+        assertEquals(Adds.NOTHING, adds(ScriptItemKind.BUTTON, buttons[4]))
+    }
+
+    @Test
+    fun anItemWithOthersInItIsGoneIntoAsAFolderIs() {
+        assertTrue(triggers[0].holdsItems(0))
+        assertTrue("a trigger others chain from", triggers[4].holdsItems(2))
+        assertFalse(triggers[4].holdsItems(0))
+    }
+
+    @Test
+    fun aRowSaysTheOneThingMostWorthSaying() {
+        val item = node(5, 0, "Greet", packageName = "pack")
+        assertEquals(RowStatus.FromPackage("pack"), item.rowStatus(0))
+        assertNull("the player's own, running", item.copy(packageName = "").rowStatus(0))
+        assertEquals("it holds others", RowStatus.Holds(2), item.rowStatus(2))
+        assertEquals(RowStatus.Idle, item.copy(active = false).rowStatus(2))
+        assertEquals("off comes before idle", RowStatus.Off, item.copy(enabled = false, active = false).rowStatus(2))
+        assertEquals("a folder says what it has, on or off", RowStatus.Holds(0), item.copy(folder = true, enabled = false).rowStatus(0))
+        assertEquals("an error comes first", RowStatus.NotRunning("no time"), item.copy(folder = true, enabled = false, error = "no time").rowStatus(3))
     }
 }

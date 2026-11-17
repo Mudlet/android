@@ -644,13 +644,14 @@ class ProtocolTest {
             JSONObject(
                 """{"t":"scriptItems","kind":"trigger","re":4,"items":[""" +
                     """{"id":1,"parent":0,"name":"Combat","folder":true,"enabled":true,"active":true,"package":"generic_mapper","error":""},"junk",""" +
-                    """{"id":3,"parent":1,"name":"Hit","folder":false,"enabled":false,"active":false,"package":"","error":"bad pattern"}]}""",
+                    """{"id":3,"parent":1,"name":"Hit","folder":false,"enabled":false,"active":false,"package":"","error":"bad pattern",""" +
+                    """"summary":"^You hit\nYou miss"}]}""",
             ),
         ) as EngineMessage.ScriptItems
         assertEquals(
             listOf(
-                ScriptItemNode(1, 0, "Combat", folder = true, enabled = true, active = true, packageName = "generic_mapper", error = ""),
-                ScriptItemNode(3, 1, "Hit", folder = false, enabled = false, active = false, packageName = "", error = "bad pattern"),
+                ScriptItemNode(1, 0, "Combat", folder = true, enabled = true, active = true, packageName = "generic_mapper", error = "", summary = ""),
+                ScriptItemNode(3, 1, "Hit", folder = false, enabled = false, active = false, packageName = "", error = "bad pattern", summary = "^You hit\nYou miss"),
             ),
             list.items,
         )
@@ -660,10 +661,10 @@ class ProtocolTest {
     @Test
     fun anItemOfEachKindDecodes() {
         fun item(json: String) = (FrameReader.parse(JSONObject(json)) as EngineMessage.ScriptItemFields).item
-        val node = """"id":3,"parent":1,"name":"Hit","folder":false,"enabled":true,"active":true,"package":"","error":"","script":"send('kick')""""
+        val node = """"id":3,"parent":1,"name":"Hit","folder":false,"enabled":true,"active":true,"package":"","error":"","summary":"hit","script":"send('kick')""""
         assertEquals(
             ScriptItem(
-                ScriptItemNode(3, 1, "Hit", folder = false, enabled = true, active = true, packageName = "", error = ""),
+                ScriptItemNode(3, 1, "Hit", folder = false, enabled = true, active = true, packageName = "", error = "", summary = "hit"),
                 "send('kick')",
                 ScriptItemDetails.Trigger(
                     patterns = listOf(TriggerPattern("^You hit (\\w+)$", TriggerPatternType.REGEX), TriggerPattern("1", TriggerPatternType.SPACER), TriggerPattern("x", TriggerPatternType.SUBSTRING)),
@@ -693,7 +694,27 @@ class ProtocolTest {
             ScriptItemDetails.Script(listOf("sysLoadEvent", "gmcp.Char")),
             item("""{"t":"scriptItem","kind":"script","fields":{$node,"eventHandlers":["sysLoadEvent","gmcp.Char"]}}""")?.details,
         )
-        assertNull(item("""{"t":"scriptItem","kind":"timer","fields":{$node}}"""))
+        assertEquals(
+            ScriptItemDetails.Timer("look", 90_500, offset = true),
+            item("""{"t":"scriptItem","kind":"timer","fields":{$node,"command":"look","time":90500,"offset":true}}""")?.details,
+        )
+        assertEquals(
+            ScriptItemDetails.Key("north", 0x38, KeyModifier.KEYPAD.bit or KeyModifier.CONTROL.bit, "control + keypad + 8"),
+            item("""{"t":"scriptItem","kind":"key","fields":{$node,"command":"north","key":56,"modifiers":603979776,"keyName":"control + keypad + 8"}}""")?.details,
+        )
+        assertEquals(
+            ScriptItemDetails.Button("wield sword", "remove sword", pushDown = true, location = BarPlace.RIGHT, vertical = true, columns = 2, css = "QToolButton{}"),
+            item(
+                """{"t":"scriptItem","kind":"button","fields":{$node,"commandDown":"wield sword","commandUp":"remove sword","pushDown":true,""" +
+                    """"location":"right","orientation":"vertical","columns":2,"css":"QToolButton{}"}}""",
+            )?.details,
+        )
+        // A place or a direction this client does not know reads as the desktop's first: a bar across the top
+        assertEquals(
+            ScriptItemDetails.Button("", "", pushDown = false, location = BarPlace.TOP, vertical = false, columns = 1, css = ""),
+            item("""{"t":"scriptItem","kind":"button","fields":{$node,"location":"bottom","orientation":"diagonal"}}""")?.details,
+        )
+        assertNull(item("""{"t":"scriptItem","kind":"gauge","fields":{$node}}"""))
     }
 
     @Test
@@ -717,7 +738,7 @@ class ProtocolTest {
 
     @Test
     fun anEditCarriesEveryFieldOfItsKind() {
-        val node = ScriptItemNode(4, 1, "Hit", folder = false, enabled = true, active = false, packageName = "", error = "")
+        val node = ScriptItemNode(4, 1, "Hit", folder = false, enabled = true, active = false, packageName = "", error = "", summary = "")
         val trigger = ScriptItemDetails.Trigger(
             patterns = listOf(TriggerPattern("You hit", TriggerPatternType.START_OF_LINE)),
             command = "cheer",
@@ -752,6 +773,32 @@ class ProtocolTest {
         assertEquals(
             mapOf("name" to "Hit", "script" to "", "eventHandlers" to listOf("sysLoadEvent")),
             (Requests.editScriptItem(ScriptItem(node, "", ScriptItemDetails.Script(listOf("sysLoadEvent"))), 8).toMap()["fields"]),
+        )
+        // What the engine alone sets, a timer's offset and a key's name, is not sent back: the engine refuses them
+        assertEquals(
+            mapOf("t" to "editScriptItem", "kind" to "timer", "item" to 4, "id" to 9L, "fields" to mapOf("name" to "Hit", "script" to "", "command" to "look", "time" to 1500)),
+            Requests.editScriptItem(ScriptItem(node, "", ScriptItemDetails.Timer("look", 1500, offset = true)), 9).toMap(),
+        )
+        assertEquals(
+            mapOf("name" to "Hit", "script" to "", "command" to "n", "key" to 0x01000030, "modifiers" to KeyModifier.SHIFT.bit),
+            Requests.editScriptItem(ScriptItem(node, "", ScriptItemDetails.Key("n", 0x01000030, KeyModifier.SHIFT.bit, "shift + F1")), 10).toMap()["fields"],
+        )
+        assertEquals(
+            mapOf(
+                "name" to "Hit", "script" to "", "commandDown" to "sit", "commandUp" to "stand", "pushDown" to true, "location" to "left",
+                "orientation" to "vertical", "columns" to 3, "css" to "",
+            ),
+            Requests.editScriptItem(
+                ScriptItem(node, "", ScriptItemDetails.Button("sit", "stand", pushDown = true, location = BarPlace.LEFT, vertical = true, columns = 3, css = "")),
+                11,
+            ).toMap()["fields"],
+        )
+        assertEquals(
+            "horizontal",
+            (
+                Requests.editScriptItem(ScriptItem(node, "", ScriptItemDetails.Button("", "", false, BarPlace.FLOATING, vertical = false, columns = 1, css = "")), 12)
+                    .toMap()["fields"] as Map<*, *>
+                )["orientation"],
         )
     }
 

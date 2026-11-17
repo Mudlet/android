@@ -129,9 +129,13 @@ class PseudoLocaleTest(private val locale: String) {
             .put("active", false).put("package", "").put("error", "")
         // The library asks as it opens, from its composition, which goes on while the test waits on it
         compose.waitForIdle()
-        for (kind in listOf("trigger", "alias", "script")) {
+        for (kind in listOf("trigger", "alias", "script", "timer", "key", "button")) {
             val ask = session.receive("scriptItems")
-            val items = if (ask.getString("kind") == "trigger") JSONArray().put(node) else JSONArray()
+            val items = when (ask.getString("kind")) {
+                "trigger", "timer", "key" -> JSONArray().put(node)
+                "button" -> JSONArray().put(JSONObject(node.toString()).put("name", "Bar").put("folder", true)).put(JSONObject(node.toString()).put("id", 2).put("parent", 1))
+                else -> JSONArray()
+            }
             session.send(JSONObject().put("t", "scriptItems").put("kind", ask.getString("kind")).put("items", items).put("re", ask.get("id")))
         }
         waitFor(hasText(string(R.string.scripts_off)))
@@ -160,6 +164,43 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("a trigger's page with its Lua being typed")
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.scripts_off)))
+
+        fun open(kind: String, fields: JSONObject) {
+            compose.waitForIdle()
+            val ask = session.receive("scriptItem")
+            session.send(JSONObject().put("t", "scriptItem").put("kind", kind).put("fields", fields.put("script", "")).put("re", ask.get("id")))
+        }
+        activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_timers), 1)))
+        activate(hasText("Greet"))
+        open("timer", JSONObject(node.toString()).put("command", "").put("time", 3_723_004).put("offset", true))
+        waitFor(hasText(string(R.string.scripts_timer_offset)))
+        assertTextFits("a timer's page")
+        assertAtStart("the time's heading", hasText(string(R.string.scripts_timer_after)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_keys), 1)))
+        activate(hasText("Greet"))
+        open("key", JSONObject(node.toString()).put("command", "").put("key", 0x38).put("modifiers", 0x20000000).put("keyName", "keypad + 8"))
+        waitFor(hasText(string(R.string.scripts_key_note)))
+        assertTextFits("a key's page")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        val button = JSONObject(node.toString()).put("commandDown", "").put("commandUp", "").put("pushDown", true).put("location", "top")
+            .put("orientation", "horizontal").put("columns", 1).put("css", "")
+        activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_buttons), 1)))
+        activate(hasText("Bar"))
+        activate(hasContentDescription(string(R.string.scripts_edit_folder)))
+        open("button", JSONObject(button.toString()).put("name", "Bar").put("folder", true))
+        waitFor(hasText(string(R.string.scripts_bar_vertical_hint)))
+        assertTextFits("a toolbar's page")
+        assertAtStart("the toolbar's heading", hasText(string(R.string.scripts_bar_place)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText("Greet"))
+        open("button", JSONObject(button.toString()).put("id", 2).put("parent", 1))
+        waitFor(hasText(string(R.string.scripts_button_push_down_hint)))
+        assertTextFits("a button's page")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.game_title)))
 

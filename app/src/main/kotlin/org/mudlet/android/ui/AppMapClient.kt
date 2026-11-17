@@ -159,7 +159,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         tones = frame.tones
         overText = frame.overText
         if (message.w == 0 || message.h == 0) {
-            overText = null
             map = null
             mover.onFrame(null)
             return

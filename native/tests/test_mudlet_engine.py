@@ -4185,8 +4185,8 @@ def packages():
     """A profile's packages as the desktop's Package Manager handles them: packages listing them in the order installed,
     with their details, the description's $packagePath standing for the package's folder and the icon's file;
     installPackage answering with packageInstalled, raising sysInstall and running the package's script, then
-    packagesChanged; the same package again left as it is; a file that cannot be read failing; uninstallPackage raising
-    sysUninstall and answering with what is left; and the refusals."""
+    packagesChanged; the same package again left as it is; a file that cannot be read failing; uninstallPackage refused
+    while the profile saves, then raising sysUninstall and answering with what is left; and the refusals."""
     profile = "Packages Test"
     folder = os.path.join(TMP, "packages")
     os.makedirs(folder, exist_ok=True)
@@ -4257,6 +4257,17 @@ def packages():
     check(bare == {"name": "Plain", "title": "", "author": "", "version": "", "description": "", "icon": ""},
           f"with no details to show: {bare}")
 
+    # The Package Manager refuses a removal while the profile saves, as each install's own save may still be doing from
+    # the event loop: one read with the save that leaving the front starts is refused, and one after the save goes
+    since = len(seen)
+    send_together(c, {"t": "setAppState", "active": False, "minimized": True},
+                  {"t": "uninstallPackage", "name": "Pack Test", "id": "during save"})
+    m = seen_or_next(c, lambda m: m.get("re") == "during save", seen, since)
+    check(m.get("message") == 'uninstallPackage: The package "Pack Test" could not be removed while the profile is being saved. '
+                              'Please try again in a moment.', f"a removal while the profile saves is refused: {m}")
+    m = seen_or_next(c, lambda m: m["t"] == "status" and m["key"] == "save", seen, since, timeout=30)
+    check(m["value"] == "saved", f"until the save has ended: {m}")
+    c.send({"t": "setAppState", "active": True, "minimized": False})
     since = len(seen)
     m = ask({"t": "uninstallPackage", "name": "Pack Test"})
     check(m["t"] == "packages" and [p["name"] for p in m.get("packages", [])] == before + ["Plain"],

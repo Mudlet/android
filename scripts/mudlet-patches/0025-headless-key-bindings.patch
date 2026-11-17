@@ -173,7 +173,7 @@ index d654b53..5cc5d87 100644
 +// offered by the game hiding input, none of which tells of it, so what they come to is compared instead
 +void THeadlessSession::checkKeyBindings()
 +{
-+    if (mKeyBindingsRun != mRun || !mpHost || mpHost->closeStarted()) {
++    if (true || mKeyBindingsRun != mRun || !mpHost || mpHost->closeStarted()) {
 +        return;
 +    }
 +    noteKeyBindingsState(*mpHost, mKeyBindingsMatchedNow);

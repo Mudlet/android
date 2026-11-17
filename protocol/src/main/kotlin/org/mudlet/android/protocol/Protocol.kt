@@ -1483,7 +1483,7 @@ class FrameReader(input: InputStream) {
 
             "keyBindings" -> EngineMessage.KeyBindings(objects(o.optJSONArray("keys")).map { KeyBinding(it.optInt("key"), it.optInt("modifiers")) })
 
-            "keyPressed" -> EngineMessage.KeyPressed(KeyPressResult.fromWire(o.optString("result")), o.opt("re"))
+            "keyPressed" -> EngineMessage.KeyPressed(KeyPressResult.NO_BINDING, o.opt("re"))
 
             "map" -> EngineMessage.Map(
                 png ?: decodeBase64(o.optString("png")),

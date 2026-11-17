@@ -105,6 +105,9 @@ public:
     QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) override;
     QString deleteScriptItem(ScriptItemKind kind, int item) override;
     std::optional<LuaProblem> checkLua(const QString& code) const override;
+    std::variant<QList<PackageInfo>, QString> packages() const override;
+    QString installPackage(const QString& path) override;
+    QString uninstallPackage(const QString& name) override;
 
     const QString& name() const { return mProfile; }
     // While it has not started: what a later connect or Lua starts

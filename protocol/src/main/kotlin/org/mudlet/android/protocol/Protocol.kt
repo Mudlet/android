@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 27
+const val PROTOCOL_VERSION = 28
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -477,6 +477,33 @@ sealed interface ScriptItemDetails {
 /** What is wrong with Lua that does not compile: the [line] Lua names, from 1, or 0 where it names none, and its [message], in English. */
 data class LuaProblem(val line: Int, val message: String)
 
+/**
+ * A package the profile has installed, as the desktop's Package Manager lists it: [title], [author], [version] and
+ * [description] as its config.lua gave them, empty where it gave none. [description] is Markdown; [icon] is its file,
+ * for Requests.getImage, empty for none.
+ */
+data class InstalledPackage(
+    val name: String,
+    val title: String,
+    val author: String,
+    val version: String,
+    val description: String,
+    val icon: String,
+)
+
+/** What Requests.installPackage did: [INSTALLED_WITH_ERRORS] is installed, as the desktop leaves it, with a part not working. */
+enum class PackageInstallResult(val wire: String) {
+    INSTALLED("installed"),
+    INSTALLED_WITH_ERRORS("installedWithErrors"),
+    ALREADY_INSTALLED("alreadyInstalled"),
+    FAILED("failed"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): PackageInstallResult = entries.firstOrNull { it.wire == wire } ?: FAILED
+    }
+}
+
 /** All of an item's fields, as Requests.scriptItem asks for them and Requests.editScriptItem saves them: [script] is its Lua. */
 data class ScriptItem(val node: ScriptItemNode, val script: String, val details: ScriptItemDetails) {
     val kind get() = details.kind
@@ -756,6 +783,15 @@ sealed interface EngineMessage {
      * client does not know.
      */
     data class ScriptItemFields(val item: ScriptItem?, val replyTo: Any?) : EngineMessage
+
+    /** The answer to Requests.packages and Requests.uninstallPackage: the profile's packages in the order they were installed. */
+    data class Packages(val packages: List<InstalledPackage>, val replyTo: Any?) : EngineMessage
+
+    /** A package was installed or removed, by the UI, a script or the profile's default packages: ask Requests.packages again. */
+    data object PackagesChanged : EngineMessage
+
+    /** The answer to Requests.installPackage for the file at [path]; [error] says why for all but [PackageInstallResult.INSTALLED]. */
+    data class PackageInstalled(val path: String, val result: PackageInstallResult, val error: String) : EngineMessage
 
     /** The answer to Requests.checkLua: [problem] is null for code that compiles. */
     data class LuaCheck(val problem: LuaProblem?, val replyTo: Any?) : EngineMessage
@@ -1082,6 +1118,18 @@ object Requests {
     /** [item] gone, and all in it for a folder. Answered only by an Error, when refused. */
     fun deleteScriptItem(kind: ScriptItemKind, item: Int): JSONObject = JSONObject().put("t", "deleteScriptItem").put("kind", kind.wire).put("item", item)
 
+    /** Answered by [EngineMessage.Packages] with [id] as its replyTo, or an Error: the profile's packages. */
+    fun packages(id: Long): JSONObject = JSONObject().put("t", "packages").put("id", id)
+
+    /**
+     * Installs the package file at [path], which the engine must be able to read, as the desktop's Package Manager installs
+     * one from a file. Answered by [EngineMessage.PackageInstalled], or an Error when refused.
+     */
+    fun installPackage(path: String): JSONObject = JSONObject().put("t", "installPackage").put("path", path)
+
+    /** Removes the package [name] as the Package Manager's Remove does. Answered by [EngineMessage.Packages] with [id] as its replyTo, or an Error. */
+    fun uninstallPackage(name: String, id: Long): JSONObject = JSONObject().put("t", "uninstallPackage").put("name", name).put("id", id)
+
     /** Answered by [EngineMessage.LuaCheck] with [id] as its replyTo, or an Error: whether [code] compiles as Lua; it is not run. */
     fun checkLua(code: String, id: Long): JSONObject = JSONObject().put("t", "checkLua").put("code", code).put("id", id)
 
@@ -1342,6 +1390,28 @@ class FrameReader(input: InputStream) {
             "scriptItem" -> EngineMessage.ScriptItemFields(
                 o.optJSONObject("fields")?.let { fields -> ScriptItemKind.fromWire(o.optString("kind"))?.let { parseScriptItem(it, fields) } },
                 o.opt("re"),
+            )
+
+            "packages" -> EngineMessage.Packages(
+                objects(o.optJSONArray("packages")).map {
+                    InstalledPackage(
+                        it.optString("name"),
+                        it.optString("title"),
+                        it.optString("author"),
+                        it.optString("version"),
+                        it.optString("description"),
+                        it.optString("icon"),
+                    )
+                },
+                o.opt("re"),
+            )
+
+            "packagesChanged" -> EngineMessage.PackagesChanged
+
+            "packageInstalled" -> EngineMessage.PackageInstalled(
+                o.optString("path"),
+                PackageInstallResult.fromWire(o.optString("result")),
+                o.optString("error"),
             )
 
             "luaCheck" -> EngineMessage.LuaCheck(if (o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))

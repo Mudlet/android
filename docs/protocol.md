@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **27**.
+The current version is **28**.
 
 ## Transport
 
@@ -120,9 +120,12 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, for a script editor to say what is wrong with it (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
+| `packages` | `id`? | Asks for the open profile's packages, as the desktop's Package Manager lists them (`THeadlessSession::installedPackages()`), answered by `packages`. |
+| `installPackage` | `path` | Installs the package file at `path`, a `.mpackage`, `.zip` or `.xml` the engine can read, as the desktop's Package Manager installs one from a file (`THeadlessSession::installPackageAsync()`): its scripts run and `sysInstall` and `sysInstallPackage` are raised. Answered by `packageInstalled` once it is done, then `packagesChanged` if it installed. |
+| `uninstallPackage` | `name`, `id`? | Removes the package `name` as the Package Manager's Remove does (`THeadlessSession::uninstallPackage()`): its items go, `sysUninstall` and `sysUninstallPackage` are raised, and the profile is saved. Answered by `packages`, the packages left. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `luaCheck` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `luaCheck`, `packages` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -206,6 +209,12 @@ forever, and the folder a package or module's buttons came in, which Mudlet keep
 `enableScriptItem` for an item that cannot run (its Lua does not compile, a timer has no time, a key none chosen),
 which it leaves off, with its error; `moveScriptItem` for a folder moved into itself or a folder inside it.
 
+`packages` and `uninstallPackage` are answered by `packages`, and `installPackage` by `packageInstalled`, or by `error`
+whose `message` is the request's name, a colon and why: in libmudlet no profile loaded (`no profile running`), an
+empty `path` or `name`, and `uninstallPackage` as `THeadlessSession::uninstallPackage()` refuses it, for a package
+not installed and while the profile is being saved. A file that cannot be installed is no refusal: `packageInstalled`
+says `failed` and why, as it does for an install sent before the last one has answered.
+
 `checkLua` is answered by `luaCheck`, or by `error` for a `code` that is not a string. Code that does not compile is
 no refusal: `luaCheck` says what is wrong with it.
 
@@ -249,6 +258,9 @@ no refusal: `luaCheck` says what is wrong with it.
 | `scriptItems` | `kind`, `items`: `id`, `parent`, `name`, `folder`, `enabled`, `active`, `package`, `error`, `summary`; `re`? | The answer to `scriptItems`: the `kind` asked for, and its `items` depth first, each folder before what is in it, in the desktop editor's order; each with its `id`, the id of the folder it is in, `parent` (0 for the top level), its `name`, whether it is a `folder`, `enabled` (switched on, as the editor's checkbox shows it), `active` (switched on, compiled, and in folders that run), the `package` or module it came with (empty for the player's own), `error`, why it cannot run, as plain text, or empty, and `summary`, what a list shows under its name, as plain text: a trigger's patterns and a script's event handlers, one a line, an alias's pattern, a timer's time as `hh:mm:ss.zzz`, a key's name as the desktop writes it (`control + F1`) and the command a button sends, or empty. The temporary items scripts make are left out, as the editor leaves them. |
 | `scriptItem` | `kind`, `fields`, `re`? | The answer to `scriptItem` and the changes that give an item: its `kind` and its `fields`, an object of what `scriptItems` gives of it, `script`, its Lua, and those of its kind: a trigger's `patterns`, each with its `text` and its `type` (`substring`, `regex`, `startOfLine`, `exact`, `lua`, `spacer`, whose text is the number of lines, `color`, whose text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`, or `prompt`), `command`, `lineDelta` (the lines a trigger's patterns may be spread over, -1 for a trigger of one line), `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`, `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour; an alias's `pattern` and `command`; a script's `eventHandlers`, a list of event names; a timer's `command`, `time` and `offset`; a key's `command`, `key`, `modifiers` and `keyName`; a button's `commandDown`, `commandUp`, `pushDown`, `location`, `orientation`, `columns` and `css` ("Editing triggers, aliases and scripts" below). |
 | `luaCheck` | `ok`, `line`?, `message`?; `re`? | The answer to `checkLua`: `ok` when the code compiles; else `line`, the line Lua names, from 1, or 0 where it names none, and `message`, what Lua says is wrong, in English. |
+| `packages` | `packages`: `name`, `title`, `author`, `version`, `description`, `icon`; `re`? | The answer to `packages` and `uninstallPackage`: the profile's packages in the order they were installed, as Lua's `getPackages()` gives them, each with its `name` and the `title`, `author`, `version` and `description` its `config.lua` gave, empty where it gave none, as for a plain `.xml` package. `description` is Markdown, as the Package Manager shows it, with `$packagePath` already standing for the package's folder. `icon` is the icon's file, for `getImage`, or empty when it gave none or the file is missing. |
+| `packagesChanged` | | A package was installed or removed, by the UI, a script or the profile's default packages: a UI that lists them asks with `packages` again. Not sent to a UI that attaches later. |
+| `packageInstalled` | `path`, `result`, `error` | The answer to `installPackage`, by the `path` it gave: `result` is `installed`; `installedWithErrors`, installed, as the desktop leaves it, but a part of it could not be read or an item's Lua failed; `alreadyInstalled`, a package of that name is installed and is left as it is; or `failed`. `error` says why, in English, for all but `installed`. Not sent to a UI that attaches later. |
 | `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
 | `envs` | `envs`: `env`, `color`; `re`? | The answer to `mapEnvs`: the environments the map gives a colour of its own, by number, as Mudlet's room colour dialog lists them (the profile's sixteen colours as 257 to 272, and those a script or the player added), each with the colour it draws rooms in as `#rrggbb`. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. |
@@ -742,8 +754,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 27, which added timers, keys and buttons to the script items (`timer`, `key` and `button`
-for `kind`) and `summary` to `scriptItems`; version 26 added whether an open profile was given a password
+As implemented in version 28, which added the profile's packages (`packages`, `installPackage`, `uninstallPackage`,
+`packagesChanged`, `packageInstalled`); version 27 added timers, keys and buttons to the script items (`timer`, `key`
+and `button` for `kind`) and `summary` to `scriptItems`; version 26 added whether an open profile was given a password
 (`passwordGiven` in `openProfiles`); version 25 added checking that Lua compiles (`checkLua`, `luaCheck`);
 version 24 took the map info box out of the map's picture and sends it as text (`info` in
 `map` and `appMap`); version 23 added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,

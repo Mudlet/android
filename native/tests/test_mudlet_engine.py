@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+import zipfile
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -115,7 +116,8 @@ def main():
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds):
+                       map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds,
+                       packages):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -4158,6 +4160,116 @@ def sounds():
     check(one["gameMuted"], f"each mute changes alone: {one}")
     c.ask({"t": "setSettings", "values": {"muteMediaGame": False}}, answers=("settings", "error"), collect=seen)
     c.wait_for(lambda m: m["t"] == "sounds" and not m["gameMuted"], collect=seen)
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def package_file(name, folder, details, icon=None):
+    """A Mudlet package as the desktop's exporter makes one: a zip of its config.lua, its XML with a script, and its icon
+    in .mudlet/Icon."""
+    path = os.path.join(folder, f"{name}.mpackage")
+    config = "".join(f'{key} = [[{value}]]\n' for key, value in dict(mpackage=name, **details).items())
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE MudletPackage>\n<MudletPackage version="1.001"><ScriptPackage>'
+           f'<Script isActive="yes" isFolder="no"><name>{name} script</name><packageName>{name}</packageName>'
+           f'<script>_G["{name} loaded"] = true</script><eventHandlerList/></Script></ScriptPackage></MudletPackage>\n')
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("config.lua", config)
+        z.writestr(f"{name}.xml", xml)
+        if icon:
+            png_file(os.path.join(folder, icon), 4, 4)
+            z.write(os.path.join(folder, icon), f".mudlet/Icon/{icon}")
+    return path
+
+
+def packages():
+    """A profile's packages as the desktop's Package Manager handles them: packages listing them in the order installed,
+    with their details, the description's $packagePath standing for the package's folder and the icon's file;
+    installPackage answering with packageInstalled, raising sysInstall and running the package's script, then
+    packagesChanged; the same package again left as it is; a file that cannot be read failing; uninstallPackage raising
+    sysUninstall and answering with what is left; and the refusals."""
+    profile = "Packages Test"
+    folder = os.path.join(TMP, "packages")
+    os.makedirs(folder, exist_ok=True)
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+
+    def ask(request):
+        return c.ask(request, answers=("packages", "error"), collect=seen)
+
+    for request in ({"t": "packages"}, {"t": "installPackage", "path": "/nowhere.mpackage"}, {"t": "uninstallPackage", "name": "x"}):
+        m = ask(request)
+        check(m.get("message") == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    c.send({"t": "runLua", "code": "\n".join([
+        'registerAnonymousEventHandler("sysInstall", function(_, name) echo("sysInstall " .. name .. "\\n") end)',
+        'registerAnonymousEventHandler("sysUninstall", function(_, name) echo("sysUninstall " .. name .. "\\n") end)',
+    ])})
+    wait_status(c, "luaResult", lambda v: True, seen)
+
+    m = ask({"t": "packages"})
+    before = [p["name"] for p in m.get("packages", [])]
+    check(m["t"] == "packages" and "Pack Test" not in before, f"packages lists what the profile has, its default packages: {m}")
+
+    path = package_file("Pack Test", folder, {"title": "A test package", "author": "Mudlet", "version": "1.2",
+                                              "description": "Kept at $packagePath", "icon": "pack.png"}, icon="pack.png")
+    plain = os.path.join(folder, "Plain.xml")
+    with open(plain, "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE MudletPackage>\n<MudletPackage version="1.001"></MudletPackage>\n')
+    since = len(seen)
+    c.send({"t": "installPackage", "path": path})
+    m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+    check(m == {"t": "packageInstalled", "path": path, "result": "installed", "error": ""}, f"installPackage answers that it installed: {m}")
+    seen_or_next(c, shown("sysInstall Pack Test"), seen, since)
+    seen_or_next(c, lambda m: m["t"] == "packagesChanged", seen, since)
+    check(True, "it raises sysInstall, and packagesChanged follows")
+    m = ask({"t": "packages"})
+    listed = m.get("packages", [])
+    pack = next((p for p in listed if p["name"] == "Pack Test"), {})
+    home = os.path.join(CONFIG, "profiles", profile, "Pack Test")
+    check([p["name"] for p in listed] == before + ["Pack Test"], f"it is listed last, in the order installed: {listed}")
+    check(pack.get("title") == "A test package" and pack.get("author") == "Mudlet" and pack.get("version") == "1.2"
+          and pack.get("description") == f"Kept at {home}" and pack.get("icon") == os.path.join(home, ".mudlet", "Icon", "pack.png")
+          and os.path.isfile(pack.get("icon", "")), f"with its details, $packagePath its folder, and its icon's file: {pack}")
+    m = c.ask({"t": "getImage", "path": pack.get("icon", "")}, answers=("image", "error"), collect=seen)
+    check((m["t"], m.get("w"), m.get("h")) == ("image", 4, 4), f"which getImage reads: {m.get('t')} {m.get('message', '')}")
+    c.send({"t": "runLua", "code": 'echo(string.format("loaded %s\\n", tostring(rawget(_G, "Pack Test loaded"))))'})
+    seen_or_next(c, shown("loaded true"), seen, since)
+    check(True, "its script ran")
+
+    since = len(seen)
+    c.send({"t": "installPackage", "path": path})
+    m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+    check(m.get("result") == "alreadyInstalled" and "Pack Test" in m.get("error", ""), f"the same package again is left as it is: {m}")
+    since = len(seen)
+    c.send({"t": "installPackage", "path": os.path.join(folder, "missing.mpackage")})
+    m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+    check(m.get("result") == "failed" and "missing.mpackage" in m.get("error", ""), f"a file that cannot be read fails, with why: {m}")
+    since = len(seen)
+    c.send({"t": "installPackage", "path": plain})
+    m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+    check(m.get("result") == "installed", f"a plain .xml package installs: {m}")
+    m = ask({"t": "packages"})
+    bare = next((p for p in m.get("packages", []) if p["name"] == "Plain"), None)
+    check(bare == {"name": "Plain", "title": "", "author": "", "version": "", "description": "", "icon": ""},
+          f"with no details to show: {bare}")
+
+    since = len(seen)
+    m = ask({"t": "uninstallPackage", "name": "Pack Test"})
+    check(m["t"] == "packages" and [p["name"] for p in m.get("packages", [])] == before + ["Plain"],
+          f"uninstallPackage answers with the packages left: {m}")
+    seen_or_next(c, shown("sysUninstall Pack Test"), seen, since)
+    seen_or_next(c, lambda m: m["t"] == "packagesChanged", seen, since)
+    check(not os.path.exists(home), f"it raises sysUninstall, packagesChanged follows, and its folder goes: {home}")
+    m = ask({"t": "uninstallPackage", "name": "Pack Test"})
+    check(m.get("message") == 'uninstallPackage: The package "Pack Test" is no longer installed, so there was nothing to remove.',
+          f"one not installed is refused: {m}")
+    for kind, field in (("installPackage", "path"), ("uninstallPackage", "name")):
+        m = ask({"t": kind, field: ""})
+        check(m.get("message") == f"{kind}: {field} must not be empty", f"{kind} with no {field} is refused: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

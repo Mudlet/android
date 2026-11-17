@@ -408,6 +408,21 @@ bool isMainConsole(const QString& window)
     return window.isEmpty() || window == QLatin1String("main");
 }
 
+PackageInstallResult packageInstallResult(const THeadlessSession::PackageResult result)
+{
+    switch (result) {
+    case THeadlessSession::PackageResult::installed:
+        return PackageInstallResult::installed;
+    case THeadlessSession::PackageResult::installedWithErrors:
+        return PackageInstallResult::installedWithErrors;
+    case THeadlessSession::PackageResult::alreadyInstalled:
+        return PackageInstallResult::alreadyInstalled;
+    case THeadlessSession::PackageResult::failed:
+        return PackageInstallResult::failed;
+    }
+    return PackageInstallResult::failed;
+}
+
 THeadlessSession::ScriptItemKind sessionKind(const IEngine::ScriptItemKind kind)
 {
     switch (kind) {
@@ -609,6 +624,12 @@ void MudletProfile::connectSession()
     });
     connect(session, &THeadlessSession::buttonsChanged, this, &MudletProfile::pushButtonBars);
     connect(session, &THeadlessSession::addonCommandsChanged, this, &MudletProfile::pushCommands);
+    connect(session, &THeadlessSession::packagesChanged, this, [this] {
+        mFrontend->packagesChanged();
+    });
+    connect(session, &THeadlessSession::packageInstallFinished, this, [this](const QString& path, THeadlessSession::PackageResult result, const QString& error) {
+        mFrontend->packageInstalled(path, packageInstallResult(result), error);
+    });
     // A repaint comes from the event loop, once a turn; the view-only flag is in each frame
     const auto pushShownMap = [this] {
         pushMap(shownMapperSize(mSession->scriptWindows()));
@@ -2055,6 +2076,35 @@ QString MudletProfile::setSettings(const QVariantMap& values, QMap<QString, QStr
         return QStringLiteral("no profile running");
     }
     return mSession->setSettings(values, refused) ? QString() : mSession->errorString();
+}
+
+std::variant<QList<PackageInfo>, QString> MudletProfile::packages() const
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QList<PackageInfo> packages;
+    for (const THeadlessSession::InstalledPackage& package : mSession->installedPackages()) {
+        packages.append({package.name, package.title, package.author, package.version, package.description, package.icon});
+    }
+    return packages;
+}
+
+QString MudletProfile::installPackage(const QString& path)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    mSession->installPackageAsync(path);
+    return {};
+}
+
+QString MudletProfile::uninstallPackage(const QString& name)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->uninstallPackage(name) ? QString() : mSession->errorString();
 }
 
 std::variant<QList<ScriptItemInfo>, QString> MudletProfile::scriptItems(ScriptItemKind kind) const

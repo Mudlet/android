@@ -1,0 +1,238 @@
+Let a frontend with no window list the profile's packages and remove one
+
+The GUI's Package Manager lists the packages a profile has installed, with the title, author, version, description
+and icon their config.lua gives, and removes the ones its player picks. A frontend with no window could install a
+package with installPackage(), but had no way to show what is installed, to remove a package, or to hear that a
+script or the profile's default packages had changed them.
+
+- THeadlessSession::installedPackages() gives the installed packages in the order installed, with the details the
+  Package Manager shows: the description with $packagePath standing for the package's folder, as it shows it, and
+  the icon's file in the package's .mudlet/Icon folder where the package has one.
+- THeadlessSession::uninstallPackage() removes one as the Package Manager's Remove does, through
+  Host::uninstallPackage(), so sysUninstall and sysUninstallPackage are raised. It is refused with errorString()
+  where submit() is, and for a package not installed or a profile being saved, with the Package Manager's reasons.
+- THeadlessSession::packagesChanged() follows Host::signal_packageListChanged(), once for all the changes made
+  before the event loop runs.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (packages: the list and its details before and after
+an install, sysInstall and sysUninstall raised, packagesChanged following an install, a removal answering with what
+is left, and the refusals). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 385d9fe..43d9371 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1951,3 +1951,22 @@ that leaves the line in place, and a line the app set itself (`CommandLineEdit::
+ until the line is typed into or completed. The call returns nothing for each of these, with `errorString()`
+ saying which, as it does when no line sent before starts with what was typed, while the game hides what is
+ typed, and wherever `submit()` is refused.
++
++## Embedding it: the installed packages
++
++An app with its own package manager lists and removes a profile's packages as the GUI's Package Manager does,
++with no `dlgPackageManager`, and installs them with `installPackage()` or `installPackageAsync()` above.
++
++`installedPackages()` gives each package in the order it was installed, as `getPackages()` does, with the title,
++author, version and description its `config.lua` gave, all empty for a package that gave none, such as a plain
++`.xml` one. The description is the Package Manager's Markdown, with `$packagePath` already standing for the
++package's folder, and `icon` is the icon's file, for the app to read as it reads a label's image, or empty when
++the package gave none or the file is missing.
++
++`uninstallPackage()` is the Package Manager's Remove: the package's items go, `sysUninstall` and
++`sysUninstallPackage` are raised, and the profile is saved. As there, it is refused while the profile is being
++saved, and `errorString()` says to try again in a moment; it is also refused for a package that is not installed,
++and where `submit()` is refused.
++
++`packagesChanged` follows any install or removal, by the app, a script or the profile's own default packages, for
++the app to read `installedPackages()` again: one for all the changes made before the event loop runs.
+diff --git a/src/headless/CMakeLists.txt b/src/headless/CMakeLists.txt
+index 319e23b..91c2fb5 100644
+--- a/src/headless/CMakeLists.txt
++++ b/src/headless/CMakeLists.txt
+@@ -26,6 +26,7 @@ add_library(mudlet_headless STATIC
+     THeadlessSessionCommands.cpp
+     THeadlessSession.h
+     THeadlessSessionOutput.cpp
++    THeadlessSessionPackages.cpp
+     THeadlessSessionCompletion.cpp
+     THeadlessSessionLinks.cpp
+     THeadlessSessionMap.cpp
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 7bfbf5a..d5d4b6b 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -793,6 +793,7 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                 connectAreaRelays(pNewHost, run);
+                 connectLinkRelays(pNewHost, run);
+                 connectWindowRelays(pNewHost, run);
++                connectPackageRelays(pNewHost, run);
+                 connect(pNewHost, &Host::signal_errorConsolePrint, this, [this](const QString& text, const QColor& foreground, const QColor& background) {
+                     const QString profile = mProfileName;
+                     ++gSignalsBeingHandedOut;
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index e612e82..d7cd1c9 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -254,6 +254,26 @@ public:
+     enum class PackageResult { installed, installedWithErrors, alreadyInstalled, failed };
+     Q_ENUM(PackageResult)
+     PackageResult installPackage(const QString& path);
++    // A package the profile has installed, as the GUI's Package Manager lists it, by the details its config.lua gave:
++    // empty for one that gave none, such as a plain .xml package
++    struct InstalledPackage
++    {
++        QString name;
++        QString title;
++        QString author;
++        QString version;
++        // As the Package Manager shows it: Markdown, with $packagePath standing for the package's folder
++        QString description;
++        // The icon's file in the package's folder, for an app to read as a label's image; empty when it gave none or
++        // the file is not there
++        QString icon;
++    };
++    // In the order they were installed, as getPackages() gives them. Empty with no profile open.
++    QList<InstalledPackage> installedPackages() const;
++    // As the Package Manager's Remove: its items go, sysUninstall and sysUninstallPackage are raised, and the profile
++    // is saved. False for one not installed, while the profile is saving, as the Package Manager refuses it, and
++    // where submit() is refused.
++    bool uninstallPackage(const QString& name);
+     // installPackage() without waiting: it returns at once, and packageInstallFinished() follows from the event loop.
+     // A save running now is waited out from the event loop, not in this call. Failed while another install asked
+     // for has not answered.
+@@ -1444,6 +1464,9 @@ signals:
+     // What buttonBars() gives changed, by a script, a package or the profile's reset, for the app to read the bars
+     // again. One for all the changes made before the event loop runs, from the event loop.
+     void buttonsChanged(const QString& profile);
++    // A package was installed or removed, by the session, a script or the profile's own default packages, for the app
++    // to read installedPackages() again. One for all the changes made before the event loop runs, from the event loop.
++    void packagesChanged(const QString& profile);
+     // With Options::supplyTransport, the profile wants a connection to host:port, as it starts, reconnects or a script
+     // connects: answer with transportConnected(), or transportClosed() if it cannot be made, passing connection, its
+     // id. tlsRequested is the profile's secure connection setting, for the app to honour as it can; the profile calls
+@@ -1554,6 +1577,7 @@ private:
+     void connectLinkRelays(Host*, unsigned int run);
+     void sendLinksChanged(unsigned int run);
+     void connectWindowRelays(Host*, unsigned int run);
++    void connectPackageRelays(Host*, unsigned int run);
+     void noteWindowsAtLoad();
+     struct WindowsTold;
+     WindowsTold windowsNow() const;
+@@ -1628,6 +1652,8 @@ private:
+     bool mLoadFailed = false;
+     bool mRemovingStalePasswords = false;
+     bool mInstallingPackage = false;
++    // The run a packagesChanged is queued for, so a burst of changes sends one
++    unsigned int mPackagesQueuedRun = 0;
+     bool mSaving = false;
+     bool mConfigSavedPending = false;
+     bool mSecureConnectionOffered = false;
+diff --git a/src/headless/THeadlessSessionPackages.cpp b/src/headless/THeadlessSessionPackages.cpp
+new file mode 100644
+index 0000000..800c132
+--- /dev/null
++++ b/src/headless/THeadlessSessionPackages.cpp
+@@ -0,0 +1,99 @@
++/***************************************************************************
++ *   Copyright (C) 2026 by Mudlet Developers                               *
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ *   This program is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
++ *   GNU General Public License for more details.                          *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public License     *
++ *   along with this program; if not, write to the                         *
++ *   Free Software Foundation, Inc.,                                       *
++ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
++ ***************************************************************************/
++
++#include "THeadlessSession.h"
++
++#include "Host.h"
++#include "MudletApp.h"
++
++#include <QFileInfo>
++#include <QPointer>
++
++QList<THeadlessSession::InstalledPackage> THeadlessSession::installedPackages() const
++{
++    QList<InstalledPackage> packages;
++    if (!mpHost) {
++        return packages;
++    }
++    const QString profile = mpHost->getName();
++    for (const QString& name : std::as_const(mpHost->mInstalledPackages)) {
++        const QMap<QString, QString> details = mpHost->mPackageInfo.value(name);
++        InstalledPackage package{name, details.value(qsl("title")), details.value(qsl("author")), details.value(qsl("version")), details.value(qsl("description")), {}};
++        // As dlgPackageManager shows them
++        package.description.replace(QLatin1String("$packagePath"), MudletApp::getMudletPath(enums::profileDataItemPath, profile, name));
++        if (const QString icon = details.value(qsl("icon")); !icon.isEmpty()) {
++            const QString path = MudletApp::getMudletPath(enums::profileDataItemPath, profile, qsl("%1/.mudlet/Icon/%2").arg(name, icon));
++            if (QFileInfo(path).isFile()) {
++                package.icon = path;
++            }
++        }
++        packages.append(package);
++    }
++    return packages;
++}
++
++bool THeadlessSession::uninstallPackage(const QString& name)
++{
++    if (!usable()) {
++        return false;
++    }
++    const auto notInstalled = [this, &name]() {
++        //: Error from a frontend with no window asked to remove a package that is not installed, as the Package Manager says it; %1 is the package's name
++        mErrorString = tr("The package \"%1\" is no longer installed, so there was nothing to remove.").arg(name);
++        return false;
++    };
++    if (!mpHost->mInstalledPackages.contains(name)) {
++        return notInstalled();
++    }
++    // Its sysUninstall handlers may close the profile, and a function the frontend bound into Lua delete the session
++    const QPointer<THeadlessSession> self(this);
++    const bool removed = mpHost->uninstallPackage(name, enums::PackageModuleType::Package);
++    if (removed || !self) {
++        return removed;
++    }
++    // As dlgPackageManager::removePackages() tells them apart: otherwise a handler of the removal took it first
++    if (!mpHost || !mpHost->currentlySavingProfile()) {
++        return notInstalled();
++    }
++    //: Error from a frontend with no window asked to remove a package while the profile was being saved, as the Package Manager says it; %1 is the package's name
++    mErrorString = tr("The package \"%1\" could not be removed while the profile is being saved. Please try again in a moment.").arg(name);
++    return false;
++}
++
++void THeadlessSession::connectPackageRelays(Host* pHost, const unsigned int run)
++{
++    connect(pHost, &Host::signal_packageListChanged, this, [this, run]() {
++        if (run != mRun || !mpHost || mPackagesQueuedRun == run) {
++            return;
++        }
++        mPackagesQueuedRun = run;
++        QMetaObject::invokeMethod(
++                this,
++                [this, run]() {
++                    if (mPackagesQueuedRun == run) {
++                        mPackagesQueuedRun = 0;
++                    }
++                    if (run == mRun && mpHost) {
++                        const QString profile = mProfileName;
++                        emit packagesChanged(profile);
++                    }
++                },
++                Qt::QueuedConnection);
++    });
++}

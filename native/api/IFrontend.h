@@ -419,6 +419,23 @@ struct ScriptItemInfo
     QString summary;
 };
 
+// A package the profile has installed, as the desktop's Package Manager lists it: all but name empty for one that
+// gave no details
+struct PackageInfo
+{
+    QString name;
+    QString title;
+    QString author;
+    QString version;
+    // Markdown, with $packagePath already standing for the package's folder
+    QString description;
+    // The icon's file, for getImage; empty for none
+    QString icon;
+};
+
+// What IEngine::installPackage() did, as THeadlessSession::PackageResult says it
+enum class PackageInstallResult { installed, installedWithErrors, alreadyInstalled, failed };
+
 // Everything the engine tells its host. Every method must be implementable
 // over a byte stream, so arguments are plain values only.
 class IFrontend
@@ -470,4 +487,8 @@ public:
     virtual void mapDownload(const MapDownload& download) = 0;
     // On each change; as none played and nothing muted once a profile closes
     virtual void sounds(const Sounds& sounds) = 0;
+    // A package was installed or removed, by the UI, a script or the profile's default packages
+    virtual void packagesChanged() = 0;
+    // The answer to IEngine::installPackage() for the file at path: why, where it did not install cleanly
+    virtual void packageInstalled(const QString& path, PackageInstallResult result, const QString& error) = 0;
 };

@@ -149,6 +149,21 @@ QString wireName(MapDownload::State state)
     return {};
 }
 
+QString wireName(PackageInstallResult result)
+{
+    switch (result) {
+    case PackageInstallResult::installed:
+        return QStringLiteral("installed");
+    case PackageInstallResult::installedWithErrors:
+        return QStringLiteral("installedWithErrors");
+    case PackageInstallResult::alreadyInstalled:
+        return QStringLiteral("alreadyInstalled");
+    case PackageInstallResult::failed:
+        return QStringLiteral("failed");
+    }
+    return {};
+}
+
 std::optional<IEngine::ScriptItemKind> scriptItemKind(const QJsonObject& message)
 {
     static constexpr std::pair<QLatin1StringView, IEngine::ScriptItemKind> kinds[]{{QLatin1StringView("trigger"), IEngine::ScriptItemKind::trigger},
@@ -617,6 +632,13 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, moveScriptItem(message));
     } else if (type == QLatin1String("deleteScriptItem")) {
         refuse(type, deleteScriptItem(message));
+    } else if (type == QLatin1String("packages")) {
+        packages();
+    } else if (type == QLatin1String("installPackage")) {
+        const QString path = message.value(QLatin1String("path")).toString();
+        refuse(type, path.isEmpty() ? QStringLiteral("path must not be empty") : mEngine->installPackage(path));
+    } else if (type == QLatin1String("uninstallPackage")) {
+        uninstallPackage(message);
     } else if (type == QLatin1String("checkLua")) {
         checkLua(message);
     } else if (type == QLatin1String("getSettings")) {
@@ -1097,6 +1119,39 @@ void SocketBridge::mapEnvs()
         envs.append(QJsonObject{{QStringLiteral("env"), env.env}, {QStringLiteral("color"), env.color}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("envs")}, {QStringLiteral("envs"), envs}});
+}
+
+void SocketBridge::packages()
+{
+    const std::variant<QList<PackageInfo>, QString> found = mEngine->packages();
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("packages: %1").arg(*problem));
+        return;
+    }
+    QJsonArray packages;
+    for (const PackageInfo& package : std::get<QList<PackageInfo>>(found)) {
+        packages.append(QJsonObject{{QStringLiteral("name"), package.name},
+                                    {QStringLiteral("title"), package.title},
+                                    {QStringLiteral("author"), package.author},
+                                    {QStringLiteral("version"), package.version},
+                                    {QStringLiteral("description"), package.description},
+                                    {QStringLiteral("icon"), package.icon}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("packages")}, {QStringLiteral("packages"), packages}});
+}
+
+void SocketBridge::uninstallPackage(const QJsonObject& message)
+{
+    const QString name = message.value(QLatin1String("name")).toString();
+    if (name.isEmpty()) {
+        sendError(QStringLiteral("uninstallPackage: name must not be empty"));
+        return;
+    }
+    if (const QString problem = mEngine->uninstallPackage(name); !problem.isEmpty()) {
+        sendError(QStringLiteral("uninstallPackage: %1").arg(problem));
+        return;
+    }
+    packages();
 }
 
 void SocketBridge::scriptItems(const QJsonObject& message)
@@ -2002,5 +2057,25 @@ void SocketBridge::sendIfChanged(QJsonObject& kept, QJsonObject message)
     kept = std::move(message);
     if (outputLive()) {
         sendFrame(kept);
+    }
+}
+
+void SocketBridge::packagesChanged()
+{
+    if (mMirror) {
+        mMirror->packagesChanged();
+    }
+    if (outputLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("packagesChanged")}});
+    }
+}
+
+void SocketBridge::packageInstalled(const QString& path, PackageInstallResult result, const QString& error)
+{
+    if (mMirror) {
+        mMirror->packageInstalled(path, result, error);
+    }
+    if (outputLive()) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("packageInstalled")}, {QStringLiteral("path"), path}, {QStringLiteral("result"), wireName(result)}, {QStringLiteral("error"), error}});
     }
 }

@@ -1058,10 +1058,17 @@
     <string name="scripts_aliases">Aliases</string>
     <!-- The script library's chip for its scripts: Lua run at load and on events, as Mudlet calls them -->
     <string name="scripts_scripts">Scripts</string>
+    <!-- The script library's chip for its timers: Lua and a command run every so often, as Mudlet calls them -->
+    <string name="scripts_timers">Timers</string>
+    <!-- The script library's chip for its keys: key bindings of a hardware keyboard, as Mudlet calls them -->
+    <string name="scripts_keys">Keys</string>
+    <!-- The script library's chip for its buttons: those on the game's toolbars, as Mudlet calls them -->
+    <string name="scripts_buttons">Buttons</string>
     <!-- A script library chip once the items are listed; %1$s is the kind ("Triggers"), %2$d how many items it has -->
     <string name="scripts_kind_count">%1$s %2$d</string>
-    <!-- The script library's search field's placeholder; it searches the items' names -->
-    <string name="scripts_search">Search by name</string>
+    <!-- The script library's search field's placeholder; it searches the items' names, and the patterns, times, keys
+         and commands shown under them -->
+    <string name="scripts_search">Search names and patterns</string>
     <!-- What the script library shows while the engine has not listed the items yet -->
     <string name="scripts_loading">Loading…</string>
     <!-- What the script library shows for a kind with no items at all -->
@@ -1069,21 +1076,21 @@
     <!-- What the script library shows inside a folder with nothing in it -->
     <string name="scripts_folder_empty">This folder is empty.</string>
     <!-- What the script library's search shows when no name matches; %1$s is what was typed -->
-    <string name="scripts_search_none">No names with “%1$s”</string>
+    <string name="scripts_search_none">Nothing with “%1$s”</string>
     <!-- The script library's breadcrumb's first step, the top level of a kind; %1$s is the kind, such as "Triggers" -->
     <string name="scripts_all">All %1$s</string>
     <!-- Between the steps of where a search result lives, such as "Triggers › Combat" -->
     <string name="scripts_path_separator">" › "</string>
-    <!-- The name shown for a trigger, alias or script whose name is empty -->
+    <!-- The name shown for an item of the script library whose name is empty -->
     <string name="scripts_unnamed">(no name)</string>
-    <!-- What a screen reader says a tap on a folder of the script library does -->
+    <!-- What a screen reader says a tap on a folder of the script library, or on an item that has others in it, does -->
     <string name="scripts_open_folder">open the folder</string>
     <!-- What a screen reader says a tap on an item of the script library does -->
     <string name="scripts_open_item">edit</string>
     <!-- Under a script item, in the error colour, or atop its page: why it does not run; %1$s is Mudlet's error, in
          English, such as a Lua syntax error -->
     <string name="scripts_not_running">Not running: %1$s</string>
-    <!-- Under a folder of the script library: how many items are directly in it -->
+    <!-- Under a folder of the script library, or an item that has others in it: how many items are directly in it -->
     <plurals name="scripts_folder_items">
         <item quantity="one">%1$d item</item>
         <item quantity="other">%1$d items</item>
@@ -1099,6 +1106,9 @@
     <!-- The script library's title bar button, read by a screen reader, that opens the folder shown, to rename it or edit
          its Lua -->
     <string name="scripts_edit_folder">Edit this folder</string>
+    <!-- The script library's title bar button, read by a screen reader, that opens the item whose own items are shown;
+         %1$s is its name -->
+    <string name="scripts_edit_item">Edit %1$s</string>
     <!-- The script library's title bar button, read by a screen reader, that makes a folder in the folder shown -->
     <string name="scripts_add_folder">Add a folder</string>
     <!-- The name a new folder of the script library starts with -->
@@ -1109,8 +1119,16 @@
     <string name="scripts_new_alias">New alias</string>
     <!-- The script library's button that makes a script, and the name it starts with -->
     <string name="scripts_new_script">New script</string>
+    <!-- The script library's button that makes a timer, and the name it starts with -->
+    <string name="scripts_new_timer">New timer</string>
+    <!-- The script library's button that makes a key binding, and the name it starts with -->
+    <string name="scripts_new_key">New key</string>
+    <!-- The script library's button that makes a toolbar button, and the name it starts with -->
+    <string name="scripts_new_button">New button</string>
+    <!-- The script library's button that makes a toolbar, which buttons go in, and the name it starts with -->
+    <string name="scripts_new_toolbar">New toolbar</string>
     <!-- Beside the script library on a wide screen, until an item is picked -->
-    <string name="scripts_pick">Pick a trigger, alias or script to edit it.</string>
+    <string name="scripts_pick">Pick an item to edit it.</string>
     <!-- What a screen reader says of the Game button at the foot of a script item's page, which shows the game again -->
     <string name="scripts_back_to_game">Back to the game</string>
     <!-- What a screen reader says a tap on the game's last lines, at the foot of the script library, does -->
@@ -1253,6 +1271,114 @@
     <string name="scripts_event_add">Add this event</string>
     <!-- A button read by a screen reader, that removes an event from a script's handlers; %1$s is the event's name -->
     <string name="scripts_event_remove">Remove %1$s</string>
+    <!-- A heading on a timer's page, over how long it counts between firings -->
+    <string name="scripts_timer_every">Every</string>
+    <!-- A heading on the page of an offset timer, one inside another timer, over how long it waits once that timer
+         has fired -->
+    <string name="scripts_timer_after">After</string>
+    <!-- The field of a timer's hours, from 0 to 23 -->
+    <string name="scripts_timer_hours">Hours</string>
+    <!-- The field of a timer's minutes, from 0 to 59 -->
+    <string name="scripts_timer_minutes">Minutes</string>
+    <!-- The field of a timer's seconds, from 0 to 59 -->
+    <string name="scripts_timer_seconds">Seconds</string>
+    <!-- The field of a timer's milliseconds, from 0 to 999 -->
+    <string name="scripts_timer_milliseconds">Milliseconds</string>
+    <!-- On the page of an offset timer, one inside another timer, under its time -->
+    <string name="scripts_timer_offset">An offset timer: it fires this long after the timer it is in.</string>
+    <!-- The field of what a timer sends to the game each time it fires -->
+    <string name="scripts_timer_command">Send to the game</string>
+    <!-- A heading on a key binding's page, over the key and the keys held with it -->
+    <string name="scripts_key_binding">Key</string>
+    <!-- A button on a key binding's page that opens the list of keys; %1$s is the key, such as "F1" or "Escape", or
+         scripts_key_none -->
+    <string name="scripts_key_pick">Key: %1$s</string>
+    <!-- What a key binding with no key chosen shows for its key -->
+    <string name="scripts_key_none">None</string>
+    <!-- The title of the sheet that picks a key binding's key from a list -->
+    <string name="scripts_key_sheet">Choose a key</string>
+    <!-- The button, read by a screen reader, that closes the sheet of keys -->
+    <string name="scripts_key_sheet_close">Close the keys</string>
+    <!-- A key that has no name here, by Qt's number for it; %1$s is that number in hexadecimal -->
+    <string name="scripts_key_code">Key %1$s</string>
+    <!-- A key held with a key binding's key, a chip on the key's page -->
+    <string name="scripts_key_shift">Shift</string>
+    <!-- A key held with a key binding's key, a chip on the key's page -->
+    <string name="scripts_key_control">Control</string>
+    <!-- A key held with a key binding's key, a chip on the key's page -->
+    <string name="scripts_key_alt">Alt</string>
+    <!-- A key held with a key binding's key, a chip on the key's page: the Windows or Command key -->
+    <string name="scripts_key_meta">Meta</string>
+    <!-- A chip on a key binding's page: the key is one of the number pad's -->
+    <string name="scripts_key_keypad">Number pad</string>
+    <!-- On a key binding's page, under the keys: the app does not pass a keyboard's keys on to the game's scripts yet -->
+    <string name="scripts_key_note">Key bindings run in Mudlet on a computer. This app does not pass a keyboard\'s keys to them yet.</string>
+    <!-- The field of what a key binding sends to the game when the key is pressed -->
+    <string name="scripts_key_command">Send to the game</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_escape">Escape</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_tab">Tab</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_backspace">Backspace</string>
+    <!-- A key's name in a key binding: the main keyboard's Return -->
+    <string name="key_return">Return</string>
+    <!-- A key's name in a key binding: the number pad's Enter -->
+    <string name="key_enter">Enter</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_insert">Insert</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_delete">Delete</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_pause">Pause</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_home">Home</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_end">End</string>
+    <!-- A key's name in a key binding: an arrow key -->
+    <string name="key_left">Left</string>
+    <!-- A key's name in a key binding: an arrow key -->
+    <string name="key_up">Up</string>
+    <!-- A key's name in a key binding: an arrow key -->
+    <string name="key_right">Right</string>
+    <!-- A key's name in a key binding: an arrow key -->
+    <string name="key_down">Down</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_page_up">Page up</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_page_down">Page down</string>
+    <!-- A key's name in a key binding -->
+    <string name="key_space">Space</string>
+    <!-- The field of what a toolbar button sends to the game when pressed -->
+    <string name="scripts_button_command">Send when pressed</string>
+    <!-- A switch on a button's page: the button stays down when pressed, until pressed again -->
+    <string name="scripts_button_push_down">Push-down button</string>
+    <!-- Under the push-down switch on a button's page -->
+    <string name="scripts_button_push_down_hint">Stays down until pressed again, and sends a second command then</string>
+    <!-- The field of what a push-down button sends to the game when pressed again, coming up -->
+    <string name="scripts_button_command_up">Send when released</string>
+    <!-- A heading on the page of a toolbar, a folder of buttons at the top level, over where it shows -->
+    <string name="scripts_bar_place">Toolbar</string>
+    <!-- Where a toolbar shows: across the top of the game -->
+    <string name="scripts_bar_top">At the top</string>
+    <!-- Where a toolbar shows: down the left of the game -->
+    <string name="scripts_bar_left">At the left</string>
+    <!-- Where a toolbar shows: down the right of the game -->
+    <string name="scripts_bar_right">At the right</string>
+    <!-- Where a toolbar shows: in a window of its own over the game -->
+    <string name="scripts_bar_floating">Floating</string>
+    <!-- A switch on a toolbar's page: its buttons go down in a column, not across in a row -->
+    <string name="scripts_bar_vertical">Vertical</string>
+    <!-- Under the vertical switch on a toolbar's page -->
+    <string name="scripts_bar_vertical_hint">Buttons one under another, not side by side</string>
+    <!-- The field of how many columns of buttons a toolbar has (rows, for a vertical one) -->
+    <string name="scripts_bar_columns">Columns</string>
+    <!-- On the page of the folder a package's buttons came in -->
+    <string name="scripts_button_package">This folder came with a package, and stays as the package made it.</string>
+    <!-- The field of a button's or toolbar's Qt style sheet, as Mudlet calls it -->
+    <string name="scripts_button_css">Style sheet</string>
+    <!-- Under a button's style sheet field -->
+    <string name="scripts_button_css_hint">Qt style sheet (CSS), as in Mudlet</string>
     <!-- A snackbar once a script item's changes are applied; %1$s is its name. Undo is offered -->
     <string name="scripts_applied">%1$s applied</string>
     <!-- A snackbar once a script item is deleted; %1$s is its name. Undo is offered -->

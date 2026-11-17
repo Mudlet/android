@@ -66,6 +66,8 @@ import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.protocol.ScriptItem
 import org.mudlet.android.protocol.ScriptItemDetails
+import org.mudlet.android.protocol.ScriptItemKind
+import org.mudlet.android.protocol.ScriptItemNode
 import org.mudlet.android.protocol.TriggerPattern
 import org.mudlet.android.protocol.TriggerPatternType
 import org.mudlet.android.protocol.rgbColor
@@ -80,19 +82,24 @@ import org.mudlet.android.ui.settings.MAX_WIDTH
 /** The item page's fields, for tests to scroll. */
 const val SCRIPT_ITEM_TAG = "scriptItem"
 
-private val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
+internal val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 /**
  * The page of the item [key]: its name, what its kind has (a trigger's patterns and options, an alias's pattern and
- * command, a script's event handlers) and its Lua, which [onEditCode] opens in the Lua editor. What the player changes is a draft, kept by [scripts] until Apply
- * saves it as the desktop editor's save does: [onGame] goes to the game and keeps it, to come back to, and Back asks
- * whether to discard it. Why the item does not run shows at the top. Delete hides it with Undo offered by the library,
+ * command, a script's event handlers, a timer's time and command, a key's key and command, a button's commands or a
+ * toolbar's place) and its Lua, which [onEditCode] opens in the Lua editor. What the player changes is a draft, kept by
+ * [scripts] until Apply saves it as the desktop editor's save does: [onGame] goes to the game and keeps it, to come
+ * back to, and Back asks whether to discard it. Why the item does not run shows at the top. Delete hides it with Undo offered by the library,
  * and goes [onBack].
  */
 @Composable
 internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, onBack: () -> Unit, onGame: () -> Unit, onEditCode: () -> Unit) {
     // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
-    LaunchedEffect(key, scripts.attaches) { scripts.open(key) }
+    LaunchedEffect(key, scripts.attaches) {
+        scripts.open(key)
+        // What a button's page asks depends on where the button is, which only the list says
+        if (key.kind == ScriptItemKind.BUTTON && scripts.lists[key.kind] == null) scripts.ask(key.kind)
+    }
     val saved = scripts.saved[key]
     val draft = scripts.drafts[key]
     val item = draft ?: saved
@@ -123,7 +130,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
             ) {
                 val refusal = scripts.unopened[key]
                 when {
-                    item != null -> Fields(item, saved?.node?.error.orEmpty(), scripts::edit, onEditCode)
+                    item != null -> Fields(item, scripts.lists[key.kind].orEmpty(), saved?.node?.error.orEmpty(), scripts::edit, onEditCode)
                     refusal != null -> Text(stringResource(R.string.scripts_refused_open, refusal), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.error)
                     else -> Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -161,7 +168,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
 }
 
 @Composable
-private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (ScriptItem) -> Unit, onEditCode: () -> Unit) {
+private fun ColumnScope.Fields(item: ScriptItem, listed: List<ScriptItemNode>, error: String, onChange: (ScriptItem) -> Unit, onEditCode: () -> Unit) {
     if (error.isNotEmpty()) {
         Surface(fieldWidth.padding(top = 8.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
             Text(stringResource(R.string.scripts_not_running, error), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
@@ -178,6 +185,9 @@ private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (Scrip
         is ScriptItemDetails.Trigger -> TriggerFields(details) { onChange(item.copy(details = it)) }
         is ScriptItemDetails.Alias -> AliasFields(details) { onChange(item.copy(details = it)) }
         is ScriptItemDetails.Script -> EventHandlers(details) { onChange(item.copy(details = it)) }
+        is ScriptItemDetails.Timer -> if (!item.node.folder) TimerFields(details) { onChange(item.copy(details = it)) }
+        is ScriptItemDetails.Key -> if (!item.node.folder) KeyFields(details) { onChange(item.copy(details = it)) }
+        is ScriptItemDetails.Button -> ButtonFields(details, listed.buttonPart(item.node)) { onChange(item.copy(details = it)) }
     }
     SectionHeader(stringResource(R.string.scripts_code), fieldWidth)
     ListSegment(0, 1, fieldWidth.padding(bottom = 16.dp)) {
@@ -360,21 +370,28 @@ private fun colorName(color: Int): String = when (color) {
     else -> color.toString()
 }
 
-/** The sheet that explains each pattern type and picks one; a colour pattern is picked on the desktop for now. */
+/** A sheet of things to pick from, under its [title] and a button that closes it, which a screen reader reads as [close]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit, onPick: (TriggerPatternType) -> Unit) {
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+internal fun TitledSheet(title: String, close: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheet,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         // No handle: its touch target is narrower than 48 dp, and the close button and Back do what it offers
         dragHandle = null,
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, top = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.scripts_pattern_type), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
-            IconButton(onDismiss) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.scripts_pattern_type_close)) }
+            Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+            IconButton(onDismiss) { Icon(painterResource(R.drawable.ic_close), close) }
         }
+        content()
+    }
+}
+
+/** The sheet that explains each pattern type and picks one; a colour pattern is picked on the desktop for now. */
+@Composable
+private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit, onPick: (TriggerPatternType) -> Unit) {
+    TitledSheet(stringResource(R.string.scripts_pattern_type), stringResource(R.string.scripts_pattern_type_close), onDismiss) {
         Column(Modifier.selectableGroup().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             for (type in TriggerPatternType.entries) {
                 if (type == TriggerPatternType.COLOR && current != TriggerPatternType.COLOR) continue
@@ -447,7 +464,7 @@ private fun ColumnScope.EventHandlers(script: ScriptItemDetails.Script, onChange
 }
 
 @Composable
-private fun Choice(text: String, selected: Boolean, onSelect: () -> Unit) {
+internal fun Choice(text: String, selected: Boolean, onSelect: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected, role = Role.RadioButton, onClick = onSelect).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -458,7 +475,7 @@ private fun Choice(text: String, selected: Boolean, onSelect: () -> Unit) {
 }
 
 @Composable
-private fun SwitchField(@StringRes label: Int, @StringRes hint: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchField(@StringRes label: Int, @StringRes hint: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         fieldWidth.heightIn(min = 48.dp).toggleable(checked, role = Role.Switch, onValueChange = onChange).padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -476,7 +493,7 @@ private fun NumberField(@StringRes label: Int, value: Int, range: IntRange, onVa
 
 /** A whole number in [range]; while what is typed is not one, the field says so and [value] stays as it was. */
 @Composable
-private fun NumberField(label: String, value: Int, range: IntRange, modifier: Modifier, onValue: (Int) -> Unit) {
+internal fun NumberField(label: String, value: Int, range: IntRange, modifier: Modifier, onValue: (Int) -> Unit) {
     var text by remember(value) { mutableStateOf(value.toString()) }
     val typed = text.toIntOrNull()
     OutlinedTextField(

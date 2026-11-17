@@ -416,9 +416,15 @@ THeadlessSession::ScriptItemKind sessionKind(const IEngine::ScriptItemKind kind)
     case IEngine::ScriptItemKind::alias:
         return THeadlessSession::ScriptItemKind::alias;
     case IEngine::ScriptItemKind::script:
+        return THeadlessSession::ScriptItemKind::script;
+    case IEngine::ScriptItemKind::timer:
+        return THeadlessSession::ScriptItemKind::timer;
+    case IEngine::ScriptItemKind::key:
+        return THeadlessSession::ScriptItemKind::key;
+    case IEngine::ScriptItemKind::button:
         break;
     }
-    return THeadlessSession::ScriptItemKind::script;
+    return THeadlessSession::ScriptItemKind::button;
 }
 
 } // namespace
@@ -1977,7 +1983,7 @@ std::variant<QList<ScriptItemInfo>, QString> MudletProfile::scriptItems(ScriptIt
     }
     QList<ScriptItemInfo> items;
     for (const THeadlessSession::ScriptItemNode& node : mSession->scriptItems(sessionKind(kind))) {
-        items.append({node.id, node.parent, node.name, node.folder, node.enabled, node.active, node.package, node.error});
+        items.append({node.id, node.parent, node.name, node.folder, node.enabled, node.active, node.package, node.error, node.summary});
     }
     return items;
 }

@@ -23,7 +23,7 @@ class ScriptItemsClientTest {
 
     private val key = ScriptItemKey(ScriptItemKind.ALIAS, 7)
 
-    private fun alias(name: String, pattern: String = "^k$") = ScriptItem(ScriptItemNode(7, 0, name, false, true, true, "", ""), "", ScriptItemDetails.Alias(pattern, "kick"))
+    private fun alias(name: String, pattern: String = "^k$") = ScriptItem(ScriptItemNode(7, 0, name, false, true, true, "", "", ""), "", ScriptItemDetails.Alias(pattern, "kick"))
 
     /** The request sent last, taken off, which must be a [type]. */
     private fun take(type: String): JSONObject {

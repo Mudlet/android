@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, and the script library and an item's page in `ui/scripts/` ("The script library" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases and scripts the library edits in `ui/ScriptItemsClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, and the script library and an item's page in `ui/scripts/` ("The script library" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with Mudlet's version and commit (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go, what their buttons draw of their style sheets and the commands' menu (`ButtonBarLayout`, `ButtonStyle`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -556,15 +556,27 @@ drawn by `ui/game/AppMap.kt`):
 The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
 (`ui/scripts/ScriptLibraryScreen.kt`), over the requests in `docs/protocol.md`, "Editing triggers, aliases and scripts",
 kept by `ScriptItemsClient`:
-- A chip for each kind (triggers, aliases, scripts) with how many items it has; the kind's items one folder at a time
-  under a breadcrumb, where Back goes up a folder, each row with its name, then why it does not run (Mudlet's error), how many items a folder has,
-  that it is off, that it is on but not running (in a folder that is off, or new and not applied yet) or the package it
-  came with, and a switch that sends `enableScriptItem`. A search finds names of every kind, with the folders each is
-  in. New items and folders go last in the folder shown; a new item opens, and a new folder is gone into. At the foot, the game's last two lines go back to the game.
+- A chip for each kind (triggers, aliases, scripts, timers, keys, buttons) with how many items it has; the kind's
+  items one folder at a time under a breadcrumb, where Back goes up a folder, each row with its name, its summary
+  (`scriptItems`' `summary`: a trigger's patterns, an alias's pattern, a timer's time, a key's name, the command a
+  button sends), then why it does not run (Mudlet's error), how many items a folder has, that it is off, that it is on
+  but not running (in a folder that is off, or new and not applied yet) or the package it came with, and a switch that
+  sends `enableScriptItem`. An item with others in it (a trigger that others chain from, a timer with offset timers)
+  is gone into as a folder is, with Edit in the title bar for its own page. A search finds names and summaries of
+  every kind, with the folders each is in. New items and folders go last in the folder shown; a new item opens, and a
+  new folder is gone into. Nothing is added inside an item that is not a folder, as Mudlet adds only to folders, and
+  the buttons' top level takes toolbars, since a button outside one is never drawn. At the foot, the game's last two
+  lines go back to the game. The rules are in `ScriptTree.kt` (`holdsItems`, `rowStatus`, `adds`), apart from the
+  screen.
 - An item's page (`ScriptItemScreen.kt`) edits its name and what its kind has, and opens its Lua in the Lua editor: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
-  an alias's pattern and what it sends; a script's event handlers. A colour pattern is shown, not edited. The edit is
+  an alias's pattern and what it sends; a script's event handlers; a timer's time, in the desktop's four fields, and
+  what it sends; a key binding's key, picked from a sheet, the keys held with it, and what it sends; a button's
+  commands, and a toolbar's place, direction and columns, with a style sheet for each (`ScriptKindFields.kt`; which
+  of them a button's folder is, `buttonPart`). A new timer, button or toolbar is switched off, as on the desktop, and
+  its row's switch starts it; a toolbar shows once it and a button in it are on. A colour pattern is shown, not
+  edited. The edit is
   a draft kept by `ScriptItemsClient` until Apply sends `editScriptItem`, whose snackbar offers Undo: a rotation keeps
   it, and so does the page's Game button, which goes to the game to come back from, the library marking the item
   "Draft" meanwhile; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
@@ -578,10 +590,11 @@ kept by `ScriptItemsClient`:
 - On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
   snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
   reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.
-- Not yet: a search of patterns and Lua, and a row's pattern under its name (`scriptItems` lists no text of either), a
-  colour pattern's picker, moving an item to another folder (`moveScriptItem` is there for it), timers, keys and
-  buttons, and in the Lua editor colours for Lua's words and what each function does (Mudlet's list has only how each
-  is called).
+- Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item to another
+  folder (`moveScriptItem` is there for it), which is also how an offset timer or a trigger's chain is made, a
+  button's icon and rotation, a key picked by pressing it, and in the Lua editor colours for Lua's words and what
+  each function does (Mudlet's list has only how each is called). A key binding is edited but does not run here: the
+  app passes no key of a keyboard on to the profile yet, and the key's page says so.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the
@@ -616,8 +629,10 @@ a room added beside another or deleted, the player placed, an area renamed and t
 moved and deleted as the desktop's script editor does (`0015-headless-script-items.patch`; see "Editing triggers,
 aliases and scripts" in [`protocol.md`](protocol.md)), the map info box as its parts, left out of the map's
 picture (`0016-headless-map-info.patch`; see "The map info"), Lua compiled without being run, for an editor to
-check it as it is typed (`checkLua()`, `0017-headless-check-lua.patch`), and a running profile's login and password
-changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`).
+check it as it is typed (`checkLua()`, `0017-headless-check-lua.patch`), a running profile's login and password
+changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`), and the timers,
+keys and buttons edited as the triggers are, with what each item's row shows under its name
+(`0019-headless-script-items-more.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -1692,6 +1707,14 @@ Item 13 of the on-device checklist covers this.
     - Change the name and tap Game: the game shows; back in Scripts the item is marked "Draft" and its page has the
       change. Press Back there: a dialog asks to discard; Keep editing keeps the change. Delete: the item goes, with
       Undo bringing it back; let the snackbar go and reopen the library: it is gone.
+    - Tap Timers, New timer: its page opens, and its row says "Off". Set Seconds to 5 and "Send to the game" to
+      `look`, Apply, go back and switch it on: `look` is sent every 5 seconds, and the row shows "00:00:05.000".
+      Switch it off again.
+    - Tap Buttons, New toolbar: the library goes into it. Tap New button, set "Send when pressed" to `score`, Apply,
+      go back, switch the button on, go up and switch the toolbar on: back in the game the toolbar shows at the top,
+      and its button sends `score`. In the toolbar, tap Edit, choose "At the left" and Apply: it moves to the left.
+    - Tap Keys, New key: tap "Key", choose F1, tap Control, Apply: the row shows "control + F1". The page says the
+      app does not pass keys on yet.
     - Rotate on an item's page with a change not applied: the change is still there. On a tablet in landscape, an item
       opens beside the library.
     - With TalkBack on: the title bar's button reads "Scripts of" and the game's name; each row reads its name and

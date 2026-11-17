@@ -134,8 +134,9 @@ The screen-reader pull request adds:
 - The 2D map's screen (`map`, `mapPointer`, version 10), part of Phase F: the game screen draws it, and its touches;
   and the app's own map behind the text and in front, with a room search (`appMap`, `findRooms`, version 11); it
   also downloads the map the game offers (`mapDownload`, version 13).
-- A script editor for timers, keys and buttons, and a trigger made from a console line. The script library edits
-  triggers, aliases and scripts, with a Lua editor (architecture.md, "The script library").
+- A trigger made from a console line, and a keyboard's keys passed on to the profile's key bindings. The script
+  library edits triggers, aliases, scripts, timers, keys and buttons, with a Lua editor (architecture.md, "The script
+  library").
 - A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
 - More than one profile at once, with a profile switcher: upstream allows one profile pool per process, so it needs
   upstream work; the plan and its pull requests are in [`multi-profile.md`](multi-profile.md).

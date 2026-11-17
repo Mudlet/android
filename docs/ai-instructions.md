@@ -96,6 +96,8 @@ Each looks wrong and is not. Most fail only on Android, where the emulator jobs 
   desktop. On, Android lint would fail every build in which a language lacks a string, from Crowdin's first one on.
 - The instrumented tests run through `android_instrumented.py`, not `connectedAndroidTest`, which installs with `-g`
   and so grants every permission: `NotificationPermissionTest` fails then.
+- The emulator tests install with `adb install --no-streaming`. Streamed, the API 28 emulator's install now and then
+  stops partway through the APK and hangs until the 300 s timeout fails the job.
 - `EngineLinkJvmTest`'s transport delays the reader's wake-up after a close on purpose: without it the reattach race
   the test guards never shows on the JVM, and the test passes whether or not the fix is there.
 - `settings.gradle.kts` lists Google's mirror of Maven Central before `mavenCentral()`, as Maven Central itself

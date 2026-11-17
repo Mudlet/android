@@ -83,6 +83,13 @@ def shell(command, check=True):
     return adb("shell", command, check=check)
 
 
+def install(apk, *flags):
+    # Pushed, not streamed: a streamed install pipes the APK into `cmd package install`'s stdin, a tty on the API 28
+    # emulator, and that transfer can stop partway, leaving the install waiting for bytes forever
+    out = adb("install", "--no-streaming", "-r", *flags, apk, timeout=300)
+    log(f"installed {os.path.basename(apk)}: {' '.join(out.split())}")
+
+
 class Device:
     def __init__(self, out, apk, symbols):
         self.out = out
@@ -252,7 +259,7 @@ def run(dev, apk):
     step(f"fake game server on the host's port {port}, {HOST_FROM_EMULATOR}:{port} from the emulator")
 
     step("install and launch")
-    adb("install", "-r", "-g", apk, timeout=300)  # -g: POST_NOTIFICATIONS without the dialog
+    install(apk, "-g")  # -g: POST_NOTIFICATIONS without the dialog
     for command in ("input keyevent KEYCODE_WAKEUP", "svc power stayon true", "wm dismiss-keyguard",
                     "settings put system screen_off_timeout 1800000"):
         shell(command, check=False)  # the UI detaches from the engine when its Activity stops

@@ -197,14 +197,16 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   breaks of IRE's, which unchanged values would undo. After that it keeps its own, as a game copied in or there
   before does from the start.
 - The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
-  what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the commands
-  the console shows, Unix line endings), Connection (offering a secure connection, and the protocols Mudlet negotiates
-  with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors
-  a secure connection lets past, and whether the game may install its packages or play its media) and Advanced
-  (desktop Mudlet's "Special options", and a script's errors shown in the game's text, as the app has no error
-  console). A number's slider changes it as the finger lifts, so a game's is sent once a slide. Mudlet's settings for
-  how its own console draws text (control characters, East Asian characters of either width) are not among them, as
-  the app draws the text itself.
+  what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the
+  commands the console shows, Unix line endings, the command separator, highlighting a command brought back from the
+  history, and showing passwords as they are typed, each as on desktop Mudlet's Input line tab), Connection (the
+  server data encoding, picked from a list of Mudlet's names for its encodings, `ServerEncodings`, with desktop
+  Mudlet's labels; offering a secure connection, and the protocols Mudlet negotiates with the game: GMCP, MSDP, MSSP,
+  MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors a secure connection lets past,
+  and whether the game may install its packages or play its media) and Advanced (desktop Mudlet's "Special options",
+  and a script's errors shown in the game's text, as the app has no error console). A number's slider changes it as
+  the finger lifts, so a game's is sent once a slide. Mudlet's settings for how its own console draws text (control
+  characters, East Asian characters of either width) are not among them, as the app draws the text itself.
 - Mudlet reads some settings only as a game connects (`Settings.readAsItConnects`: the protocols, compression, the
   go-ahead signal, the version in the terminal type, the certificate errors let past and the offer of a secure
   connection), so one changed while the game is connected waits for its next connection. The switch turns all the
@@ -226,6 +228,11 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   so the games there the first time it runs with it (`Settings.noteGamesBeforeInputClear`, by their profiles'
   directories) are each told once, as they next load, to go on clearing theirs; a profile copied in later keeps its
   own.
+- "Highlight history" (`highlightHistory`, on unless the game says not) selects a command the up and down buttons
+  bring back the same way, read as "Selected. Typing replaces it". The command separator (`commandSeparator`) is a
+  field sent as it is left or its Done key pressed, not on each key, as the engine's answer to one change could land
+  between two keys; Mudlet splits a sent line at it. "Show passwords as you type them" (`disablePasswordMasking`) is
+  Mudlet's: with it on, the engine sends no `hiddenInput` for a game's WILL ECHO.
 
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
@@ -1648,6 +1655,12 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       window's command line keeps its command too. With TalkBack on, the line reads "Sent. Typing replaces it" after
       the first send and nothing more for each send after. `lua echo(tostring(getConfig("autoClearInputLine")))` says
       `false`. Turn it on again: the line empties after each send, as it does in a game just added.
+    - Up gives the last command selected whole: a letter typed replaces it, and TalkBack reads "Selected. Typing
+      replaces it". Turn "Highlight history" off on the Input page: Up puts the cursor after the command instead.
+    - Set the Input page's command separator to `|`, press Done, then send `look|look`: the game gets two commands.
+      Empty it and the same line goes as one.
+    - Turn "Show passwords as you type them" on, then log in to a game that asks for a password: there is no masked
+      field, and the password shows on the input line as typed.
     - Disconnect, then send a command: "Not sent: ..." shows over the foot of the console, above the keyboard, and
       TalkBack reads it without moving focus.
 17. About and licences, with TalkBack on.
@@ -1688,6 +1701,10 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - Connected, turn GMCP off on the game's Connection page: the switch turns and a message says it takes effect
       the next time you connect, once however many protocols are turned while it shows. TalkBack reads it.
       Disconnected, no message shows.
+    - On the game's Connection page, "Server data encoding" reads its choice (UTF-8 (Recommended) for a new game);
+      double tap opens the list at it, and picking "ISO 8859-1 (Western European)" closes it:
+      `lua echo(getServerEncoding())` says `ISO 8859-1`, a game in Latin-1 (accented letters) reads right at once,
+      and the choice stays after the game is closed and opened again.
     - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
       interrupts it. The same announcement twice is read twice.
     - Swiping through the console moves line by line, and each line is read as its text, without colour or style

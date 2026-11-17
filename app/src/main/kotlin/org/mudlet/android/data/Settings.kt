@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
 
 /**
@@ -53,8 +54,20 @@ object Settings {
      */
     val clearInputAfterSend = BoolSetting("autoClearInputLine", default = true, mudlet = true, mudletDefault = false)
 
+    /** The text a sent line is split into commands at, as Mudlet's ";;"; none splits nothing. */
+    val commandSeparator = TextSetting("commandSeparator", default = ";;", mudlet = true, blankAllowed = true)
+
+    /** Whether a command brought back from the history is selected whole, so what is typed next replaces it. */
+    val highlightHistory = BoolSetting("highlightHistory", default = true, mudlet = true)
+
+    /** "Show passwords as you type them": no masked field when the game hides what is typed, as some hide everything. */
+    val showPasswords = BoolSetting("disablePasswordMasking", default = false, mudlet = true)
+
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
+
+    /** "Server data encoding": the encoding Mudlet reads the game's text in and sends in, by Mudlet's name for it. */
+    val serverEncoding = TextSetting("serverEncoding", default = ServerEncodings.DEFAULT, mudlet = true)
 
     // The game protocols Mudlet speaks, with Mudlet's defaults
     val gmcp = BoolSetting("enableGMCP", default = true, mudlet = true)
@@ -115,7 +128,11 @@ object Settings {
         showSentText,
         unixLineEndings,
         clearInputAfterSend,
+        commandSeparator,
+        highlightHistory,
+        showPasswords,
         offerSecureConnection,
+        serverEncoding,
         gmcp,
         msdp,
         mssp,
@@ -293,6 +310,19 @@ object Settings {
 
         override fun write(editor: SharedPreferences.Editor, v: Boolean) {
             editor.putBoolean(key, v)
+        }
+    }
+
+    /** Some text, such as one of Mudlet's names for an option of many; a blank one is taken as [default] unless [blankAllowed]. */
+    class TextSetting(key: String, default: String, mudlet: Boolean = false, private val blankAllowed: Boolean = false) : Setting<String>(key, default, mudlet) {
+        override fun normalise(v: String) = if (blankAllowed) v else v.ifBlank { default }
+
+        override fun fromMudlet(v: Any) = (v as? String)?.takeIf { blankAllowed || it.isNotBlank() }
+
+        override fun read(prefs: SharedPreferences) = prefs.getString(key, null) ?: default
+
+        override fun write(editor: SharedPreferences.Editor, v: String) {
+            editor.putString(key, v)
         }
     }
 

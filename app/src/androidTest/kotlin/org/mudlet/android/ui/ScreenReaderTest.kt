@@ -11,18 +11,23 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
@@ -45,7 +50,9 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
+import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.settings.encodingLabels
 
 /**
  * What TalkBack is given, against a fake engine, as the semantics tree shows it: new lines read as one announcement
@@ -300,6 +307,75 @@ class ScreenReaderTest {
         activate(hasText(string(R.string.settings_clear_input)), scroll = true)
         assertEquals(mapOf("autoClearInputLine" to false), values(session.receive("setSettings")))
         compose.runOnIdle { assertEquals("new games keep it", true, Settings.clearInputAfterSend.value) }
+    }
+
+    @Test
+    fun theConnectionPagePicksTheGamesEncodingFromMudletsList() {
+        assertEquals("every encoding Mudlet has is named as desktop Mudlet names it", ServerEncodings.names, encodingLabels.keys.toList())
+        session.status("profile", "Test loaded")
+        session.settings(APP_VALUES + ("serverEncoding" to "ISO 8859-1"), session.receive("getSettings").getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.setting(Settings.serverEncoding) == "ISO 8859-1" } }
+        activate(hasContentDescription(string(R.string.settings_title)))
+        // Found by the name of an encoding, which only its list has
+        compose.onNode(hasSetTextAction()).performTextInput("cyrillic")
+        activate(hasText(string(R.string.settings_server_encoding)), scroll = true)
+        session.settings(mapOf("serverEncoding" to "ISO 8859-1"), session.receive("getSettings").getLong("id"))
+        val row = hasText(string(R.string.settings_server_encoding)) and hasClickAction()
+        compose.onNode(row).assert(hasText(string(R.string.settings_encoding_iso_8859_1)))
+        activate(row, scroll = true)
+
+        val dialog = isRoot() and hasAnyDescendant(hasText(string(R.string.settings_choice_cancel)))
+        compose.onNode(dialog).tryPerformAccessibilityChecks()
+        val western = hasText(string(R.string.settings_encoding_iso_8859_1)) and hasAnyAncestor(isDialog())
+        compose.onNode(western).assertIsDisplayed().assert(isSelected())
+        val cyrillic = hasText(string(R.string.settings_encoding_koi8_r)) and hasAnyAncestor(isDialog())
+        compose.onNode(hasScrollToNodeAction() and hasAnyAncestor(isDialog())).performScrollToNode(cyrillic)
+        compose.onNode(cyrillic).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(mapOf("serverEncoding" to "KOI8-R"), values(session.receive("setSettings")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(row).assert(hasText(string(R.string.settings_encoding_koi8_r)))
+        compose.runOnIdle { assertEquals("new games keep Mudlet's", ServerEncodings.DEFAULT, Settings.serverEncoding.value) }
+
+        // A name the app has no label for, as from a newer Mudlet, shows as Mudlet gives it, and is in the list to see
+        compose.runOnIdle { EngineClient.front.settings["serverEncoding"] = "X-NEWER" }
+        compose.onNode(row).assert(hasText("X-NEWER"))
+        activate(row)
+        compose.onNode(hasText("X-NEWER") and hasAnyAncestor(isDialog())).assertIsDisplayed().assert(isSelected())
+        compose.onNode(hasText(string(R.string.settings_choice_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        session.assertNoRequest("setSettings", 500)
+    }
+
+    @Test
+    fun theInputPageTakesTheCommandSeparatorAsTheFieldIsDoneWithAndTurnsItsSwitches() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_input)), scroll = true)
+        val mudlets = mapOf("commandSeparator" to ";;", "highlightHistory" to true, "disablePasswordMasking" to false)
+        session.settings(mudlets, session.receive("getSettings").getLong("id"))
+        activate(hasText(string(R.string.settings_highlight_history)), scroll = true)
+        assertEquals(mapOf("highlightHistory" to false), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_show_passwords)), scroll = true)
+        assertEquals(mapOf("disablePasswordMasking" to true), values(session.receive("setSettings")))
+        val field = hasSetTextAction() and hasText(string(R.string.settings_command_separator))
+        compose.onNode(field).performScrollTo().assert(hasText(";;"))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        compose.onNode(field).performTextClearance()
+        compose.onNode(field).performTextInput("|")
+        session.assertNoRequest("setSettings", 500)
+        compose.onNode(field).performImeAction()
+        assertEquals(mapOf("commandSeparator" to "|"), values(session.receive("setSettings")))
+        // None splits nothing, as desktop Mudlet's blank field
+        compose.onNode(field).performTextClearance()
+        compose.onNode(field).performImeAction()
+        assertEquals(mapOf("commandSeparator" to ""), values(session.receive("setSettings")))
+        session.assertNoRequest("setSettings", 500)
+        // Typed and left by Back, with no Done, it is still taken
+        compose.onNode(field).performTextInput("&&")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        assertEquals(mapOf("commandSeparator" to "&&"), values(session.receive("setSettings")))
+
+        compose.runOnIdle { assertEquals("new games keep Mudlet's", ";;", Settings.commandSeparator.value) }
     }
 
     @Test

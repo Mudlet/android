@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,28 +11,41 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -40,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -117,6 +132,8 @@ private fun EntryRows(entry: SettingEntry, owner: SettingsOwner) {
         is SettingEntry.Switch -> SwitchRow(entry, owner)
         is SettingEntry.Choice<*> -> ChoiceRows(entry, owner)
         is SettingEntry.Number -> NumberRows(entry, owner)
+        is SettingEntry.Pick -> PickRow(entry, owner)
+        is SettingEntry.Typed -> TypedRow(entry, owner)
     }
 }
 
@@ -161,6 +178,76 @@ private fun ChoiceRows(entry: SettingEntry.Choice<*>, owner: SettingsOwner) {
             }
         }
     }
+}
+
+/** A field for the text, which changes the setting as it loses the focus, as Done is pressed or as the page closes. */
+@Composable
+private fun TypedRow(entry: SettingEntry.Typed, owner: SettingsOwner) {
+    val value = owner.value(entry.setting)
+    // Not sent on each key: the engine's answer to one change could land between two keys and undo the second
+    var draft by rememberSaveable(value) { mutableStateOf(value) }
+    val focusManager = LocalFocusManager.current
+    // The value read as it is done with: the focus going and the page closing can both come before a recomposition
+    val done by rememberUpdatedState {
+        if (draft != owner.value(entry.setting)) owner.change(entry.setting, draft)
+    }
+    DisposableEffect(Unit) { onDispose { done() } }
+    OutlinedTextField(
+        draft,
+        { draft = it },
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).onFocusChanged { if (!it.isFocused) done() },
+        label = { Text(stringResource(entry.label)) },
+        supportingText = entry.hint?.let { { Text(stringResource(it)) } },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+    )
+}
+
+/** A choice's label, or the choice itself for one the app has no label for, such as a name a newer Mudlet added. */
+@Composable
+private fun SettingEntry.Pick.labelOf(choice: String): String = choiceLabel(choice)?.let { stringResource(it) } ?: choice
+
+/** The current choice under the setting's label, and the list to pick another from, which a pick closes. */
+@Composable
+private fun PickRow(entry: SettingEntry.Pick, owner: SettingsOwner) {
+    val chosen = owner.value(entry.setting)
+    var picking by rememberSaveable { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .clickable(onClickLabel = stringResource(R.string.settings_choose), role = Role.Button) { picking = true }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
+        Text(entry.labelOf(chosen), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+    if (!picking) return
+    // One the list lacks is shown first, so the current choice is always there to see
+    val choices = if (chosen in entry.choices) entry.choices else listOf(chosen) + entry.choices
+    AlertDialog(
+        onDismissRequest = { picking = false },
+        confirmButton = {},
+        dismissButton = { TextButton({ picking = false }) { Text(stringResource(R.string.settings_choice_cancel)) } },
+        title = { Text(stringResource(entry.label)) },
+        text = {
+            LazyColumn(Modifier.selectableGroup(), rememberLazyListState(choices.indexOf(chosen))) {
+                items(choices) { choice ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .selectable(choice == chosen, role = Role.RadioButton) {
+                                picking = false
+                                owner.change(entry.setting, choice)
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(choice == chosen, onClick = null)
+                        Text(entry.labelOf(choice), Modifier.padding(start = 16.dp), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+    )
 }
 
 /**

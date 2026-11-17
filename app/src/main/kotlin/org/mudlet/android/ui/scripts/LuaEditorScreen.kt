@@ -62,10 +62,10 @@ import org.mudlet.android.ui.ScriptItemsClient
 const val LUA_EDITOR_TAG = "luaEditor"
 
 // How long the player has stopped typing for before the engine is asked whether the Lua compiles
-private const val CHECK_DELAY_MS = 400L
+internal const val CHECK_DELAY_MS = 400L
 
 /** What the row over the keyboard types: what Lua uses most and a phone's keyboard hides deepest; the first indents. */
-private val SYMBOLS = listOf(LUA_INDENT, "(", ")", "\"", "[", "]", "{", "}", "=", "..", "end")
+internal val SYMBOLS = listOf(LUA_INDENT, "(", ")", "\"", "[", "]", "{", "}", "=", "..", "end")
 
 /**
  * The Lua of the item [key], full screen: its lines numbered, a new line indented as the one above it, Mudlet's
@@ -96,7 +96,7 @@ internal fun LuaEditorScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fun
 }
 
 @Composable
-private fun Editor(scripts: ScriptItemsClient, item: ScriptItem, functions: List<LuaFunction>, modifier: Modifier) {
+internal fun Editor(scripts: ScriptItemsClient, item: ScriptItem, functions: List<LuaFunction>, modifier: Modifier) {
     var typed by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(item.script)) }
     // What changes the item elsewhere, as an Undo does, shows here, with the cursor at its start
     val shown = if (typed.text == item.script) typed else TextFieldValue(item.script)
@@ -167,7 +167,7 @@ private fun Editor(scripts: ScriptItemsClient, item: ScriptItem, functions: List
 
 /** What is wrong with the Lua, read out as it comes, and for a line Lua named, the button that goes there. */
 @Composable
-private fun Problem(problem: LuaProblem, onGoTo: () -> Unit) {
+internal fun Problem(problem: LuaProblem, onGoTo: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.errorContainer) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(

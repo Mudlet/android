@@ -10,6 +10,11 @@ name: libmudlet for Android
 # ci.yml calls it with the jobs the changes need, and nightly against Mudlet's latest development; a manual run builds
 # all of it on any branch. Mudlet's build comes from the cache (.github/actions/libmudlet) when the same Mudlet commit
 # was built with the same scripts before.
+#
+# On this branch the jobs build the script editor's three alternative designs instead (scripts/build-editor-designs.sh):
+# "libmudlet" the three arm64-v8a debug APKs to install, each its own artifact, and the emulator jobs the same for
+# x86_64 with their tests, which one boot of the API 36 emulator then runs (native/tests/android_editor_designs.py).
+# The app's JVM tests, Android lint and the APK checks are main's, where the designs' code is not.
 on:
   workflow_call:
     inputs: &inputs
@@ -82,11 +87,6 @@ jobs:
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v6
 
-      # :suggest's tests (ranking, prediction, the saved form and file, the session's timing, hidden input never
-      # stored) first, as they need no Mudlet and so report even when Mudlet's development fails to build
-      - name: Kotlin suggestion tests
-        run: ./gradlew -PqtRoot="$QT_ROOT" :suggest:test
-
       - id: libmudlet
         uses: ./.github/actions/libmudlet
         with:
@@ -97,60 +97,29 @@ jobs:
         with:
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
-      - name: Build the APK with libmudlet as the engine
-        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
-
-      # the About screen's licence data (app/src/test), after the build staged :engine-service's resources
-      - name: App JVM tests
-        run: ./gradlew -PqtRoot="$QT_ROOT" :app:testDebugUnitTest
-
-      # needs the Qt jars the APK build staged; a warning fails it too (lint.xml)
-      - name: Android lint
-        id: android-lint
-        run: ./gradlew -PqtRoot="$QT_ROOT" :app:lintDebug :engine-service:lintDebug
-
-      - name: Lint reports
-        if: failure() && steps.android-lint.outcome == 'failure'
-        uses: actions/upload-artifact@v7
-        with:
-          name: android-lint-reports
-          path: |
-            app/build/reports/lint-results-debug.*
-            engine-service/build/reports/lint-results-debug.*
-          retention-days: 14
-
-      - name: Check the APK
-        uses: ./.github/actions/check-apk
-        with:
-          apk-dir: app/build/outputs/apk/debug
-          engine: libengine
-          title: APK with libmudlet
-          size-budget: libmudlet-arm64-v8a
-          build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
-
-      # What the runner is checked for in build-libmudlet.sh, now in the engine an app ships
-      - name: Check the engine carries Mudlet's Lua, its Lua C modules and the KeyStore backend
-        run: |
-          engine=native/build-android-arm64-v8a-mudlet/enginehost/libengine_arm64-v8a.so
-          defined=$("$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -C --defined-only \
-            --format=just-symbols "$engine")
-          for sym in 'qInitResources_mudlet()' 'qInitResources_mudlet_lua()' luaopen_lfs luaopen_lpeg luaopen_rex_pcre2 \
-                     luaopen_luasql_sqlite3 luaopen_utf8 luaopen_brimworks_zip luaopen_yajl; do
-            grep -qxF "$sym" <<< "$defined" || { echo "::error::the engine lacks $sym"; exit 1; }
-          done
-          grep -q '^QKeychain::java::security::KeyStore::getInstance(' <<< "$defined" \
-            || { echo "::error::the engine lacks QtKeychain's KeyStore backend"; exit 1; }
-
-      # The About screen's licence list against what this Mudlet builds in: its Lua C modules, fonts and Lua files
-      - name: Check the licence list covers Mudlet's bundled components
-        run: python3 scripts/check-licences.py --mudlet-source mudlet
+      - name: Build the three editor designs' APKs
+        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-editor-designs.sh designs
 
       - uses: actions/upload-artifact@v7
         with:
-          name: mudlet-libmudlet-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: mudlet-editor-design-a-debug-apk
+          path: designs/a/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mudlet-editor-design-b-debug-apk
+          path: designs/b/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mudlet-editor-design-c-debug-apk
+          path: designs/c/*.apk
+          if-no-files-found: error
+          retention-days: 30
 
       - id: done
         run: echo "done=true" >> "$GITHUB_OUTPUT"
@@ -313,29 +282,15 @@ jobs:
           abi: x86_64
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
-      - name: Build the APK with libmudlet as the engine, and the test APKs
-        run: >-
-          LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
-          :app:assembleDebugAndroidTest :engine-service:assembleDebugAndroidTest
-
-      - name: Check the APK
-        uses: ./.github/actions/check-apk
-        with:
-          apk-dir: app/build/outputs/apk/debug
-          engine: libengine
-          abi: x86_64
-          title: APK with libmudlet (x86_64, for the emulator)
-          size-budget: libmudlet-x86_64
-          build-tools-dir: ${{ steps.toolchain.outputs.build-tools-dir }}
+      - name: Build the three editor designs' APKs and their tests
+        run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-editor-designs.sh designs --tests
 
       # The unstripped engine goes too, for ndk-stack to name the frames of a crash on the emulator
       - uses: actions/upload-artifact@v7
         with:
           name: emulator-apks${{ !inputs.lua-fortify-fix && '-without-lua-fortify-fix' || '' }}
           path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
+            designs
             native/build-android-x86_64-mudlet/enginehost/libengine_x86_64.so
           if-no-files-found: error
           retention-days: 3
@@ -348,11 +303,12 @@ jobs:
     name: emulator (API ${{ matrix.api }})
     needs: emulator-build
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        api: [28, 36]
+        # The walk-throughs' pictures need API 31
+        api: [36]
     env:
       EMULATOR_API: ${{ matrix.api }}
       LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix && '1' || '0' }}
@@ -384,25 +340,21 @@ jobs:
           path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
           key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64-v2
 
-      # The smoke test, then the instrumented tests, on one boot; both run whatever the other did, and the step fails
-      # if either failed
-      - name: Smoke test and instrumented tests on the emulator
+      # Each design's smoke test and walk-through, on one boot; all three run whatever the others did
+      - name: The three editor designs on the emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: ${{ env.EMULATOR_API }}
           target: google_apis
           arch: x86_64
+          # A phone's screen, for the pictures the walk-throughs take
+          profile: pixel_5
           cores: 4
           ram-size: 4096M
           disk-size: 6G
-          # one line: the action runs each line of a script in a shell of its own
           script: >-
-            python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out device-tests
-            --symbols native/build-android-x86_64-mudlet/enginehost; smoke=$?;
-            python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/app-debug.apk
-            --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
-            --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke
+            python3 native/tests/android_editor_designs.py --apks designs --out device-tests
+            --symbols native/build-android-x86_64-mudlet/enginehost
 
       - id: done
         run: echo "done=true" >> "$GITHUB_OUTPUT"
@@ -435,6 +387,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: editor-design-screenshots
+          path: device-tests/*/screenshots
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Summary
         if: always()
         env:
@@ -446,11 +406,12 @@ jobs:
             echo "Mudlet/Mudlet \`$MUDLET_REF\` at [${MUDLET_COMMIT:0:9}](https://github.com/Mudlet/Mudlet/commit/$MUDLET_COMMIT)"
             echo
             [ "$LUA_FORTIFY_FIX" = 1 ] || echo "Lua 5.1 built without the Android FORTIFY fix"
-            for log in smoke.log instrumented.log; do
+            for log in device-tests/{a,b,c}/{smoke,instrumented}.log; do
               echo
-              if [ -f "device-tests/$log" ]; then
+              if [ -f "$log" ]; then
+                echo "$log"
                 echo '```'
-                cat "device-tests/$log"
+                cat "$log"
                 echo '```'
               else
                 echo "No $log: that test did not run."

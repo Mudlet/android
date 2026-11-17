@@ -65,7 +65,7 @@ import org.mudlet.android.ui.settings.Overline
 /** The script library's list, for tests to scroll. */
 const val SCRIPT_LIBRARY_TAG = "scriptLibrary"
 
-private val itemWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
+internal val itemWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 private const val CONSOLE_STRIP_LINES = 2
 
@@ -178,7 +178,7 @@ internal fun ScriptLibraryScreen(
 }
 
 // The items left once those deleted, and what is in them, are hidden
-private fun List<ScriptItemNode>.withoutHidden(ids: Set<Int>): List<ScriptItemNode> {
+internal fun List<ScriptItemNode>.withoutHidden(ids: Set<Int>): List<ScriptItemNode> {
     if (ids.isEmpty()) return this
     val gone = HashSet(ids)
     // Depth first, so each folder comes before what is in it
@@ -190,7 +190,7 @@ private fun List<ScriptItemNode>.withoutHidden(ids: Set<Int>): List<ScriptItemNo
 }
 
 @Composable
-private fun SearchField(query: String, onQuery: (String) -> Unit) {
+internal fun SearchField(query: String, onQuery: (String) -> Unit) {
     OutlinedTextField(
         query,
         onQuery,
@@ -377,6 +377,6 @@ private fun ConsoleStrip(console: () -> List<UiLine>, colors: ConsoleColors, onG
 }
 
 @Composable
-private fun Hint(text: String) {
+internal fun Hint(text: String) {
     Text(text, itemWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
 }

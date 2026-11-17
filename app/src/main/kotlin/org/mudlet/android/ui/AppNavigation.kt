@@ -44,9 +44,17 @@ import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.scripts.LUA_FUNCTIONS_ASSET
 import org.mudlet.android.ui.scripts.LuaEditorScreen
+import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.ScriptItemScreen
 import org.mudlet.android.ui.scripts.ScriptLibraryScreen
+import org.mudlet.android.ui.scripts.designs.EditorDesign
+import org.mudlet.android.ui.scripts.designs.OnePage
+import org.mudlet.android.ui.scripts.designs.RecipesCode
+import org.mudlet.android.ui.scripts.designs.RecipesItem
+import org.mudlet.android.ui.scripts.designs.RecipesLibrary
+import org.mudlet.android.ui.scripts.designs.WorkbenchItem
+import org.mudlet.android.ui.scripts.designs.WorkbenchLibrary
 import org.mudlet.android.ui.scripts.parseLuaFunctions
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsPage
@@ -193,6 +201,17 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 // The item open beside the library, encoded
                 var open by rememberSaveable { mutableStateOf<String?>(null) }
                 val toGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) }
+                if (editorDesign != EditorDesign.CURRENT) {
+                    val console = { front.lines }
+                    val colors = ConsoleColors.of(front.status["consoleColors"])
+                    val openItem = { key: ScriptItemKey -> nav.navigate(Routes.scriptItem(key)) { launchSingleTop = true } }
+                    when (editorDesign) {
+                        EditorDesign.WORKBENCH -> WorkbenchLibrary(front.scripts, front.name, onBack = toGame, onOpen = openItem, console, colors)
+                        EditorDesign.ONE_PAGE -> OnePage(front.scripts, front.name, rememberLuaFunctions(), onBack = toGame, console, colors)
+                        else -> RecipesLibrary(front.scripts, front.name, onBack = toGame, onOpen = openItem, console, colors)
+                    }
+                    return@composable
+                }
                 ListDetail(
                     open,
                     onCloseDetail = { open = null },
@@ -222,7 +241,17 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
             composable(Routes.SCRIPT_ITEM, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
                 val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
                 val back = entry.whileShown { nav.navigateUp() }
-                if (key != null) {
+                if (key != null && editorDesign == EditorDesign.WORKBENCH) {
+                    WorkbenchItem(EngineClient.front.scripts, key, rememberLuaFunctions(), onBack = back, onGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) })
+                } else if (key != null && editorDesign == EditorDesign.RECIPES) {
+                    RecipesItem(
+                        EngineClient.front.scripts,
+                        key,
+                        onBack = back,
+                        onGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) },
+                        onEditCode = entry.whileShown { nav.navigate(Routes.scriptCode(key)) { launchSingleTop = true } },
+                    )
+                } else if (key != null) {
                     ScriptItemScreen(
                         EngineClient.front.scripts,
                         key,
@@ -237,9 +266,12 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
             composable(Routes.SCRIPT_CODE, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
                 val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
                 val back = entry.whileShown { nav.navigateUp() }
-                val assets = LocalContext.current.assets
-                val functions = remember { runCatching { assets.open(LUA_FUNCTIONS_ASSET).bufferedReader().use { it.readText() } }.map(::parseLuaFunctions).getOrDefault(emptyList()) }
-                if (key != null) LuaEditorScreen(EngineClient.front.scripts, key, functions, onBack = back) else LaunchedEffect(Unit) { back() }
+                val functions = rememberLuaFunctions()
+                when {
+                    key == null -> LaunchedEffect(Unit) { back() }
+                    editorDesign == EditorDesign.RECIPES -> RecipesCode(EngineClient.front.scripts, key, functions, onBack = back)
+                    else -> LuaEditorScreen(EngineClient.front.scripts, key, functions, onBack = back)
+                }
             }
             val game = navArgument("game") {
                 type = NavType.StringType
@@ -282,6 +314,16 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
         AnnouncementRegion(Modifier.align(Alignment.BottomStart))
     }
     if (Announcer.touchExploration && !Settings.screenReaderOffered.value) OfferScreenReaderSetting()
+}
+
+// The script editor this app was built with: the current one, unless -PeditorDesign picked an alternative to try
+private val editorDesign = EditorDesign.of(BuildConfig.EDITOR_DESIGN)
+
+/** Mudlet's Lua functions, for the Lua editor to offer, read once from the app's assets; none if they cannot be read. */
+@Composable
+private fun rememberLuaFunctions(): List<LuaFunction> {
+    val assets = LocalContext.current.assets
+    return remember { runCatching { assets.open(LUA_FUNCTIONS_ASSET).bufferedReader().use { it.readText() } }.map(::parseLuaFunctions).getOrDefault(emptyList()) }
 }
 
 // [side] is 1 for the right, -1 for the left

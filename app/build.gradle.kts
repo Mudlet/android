@@ -24,6 +24,12 @@ val splitApks = providers.gradleProperty("splitApks").map { it.toBooleanStrict()
 val releaseChannel = providers.gradleProperty("releaseChannel").getOrElse("stable")
 require(releaseChannel in setOf("stable", "ptb")) { "releaseChannel is stable or ptb, not '$releaseChannel'" }
 
+// -PeditorDesign=a, b or c: the app with one of the three alternative script editors (ui/scripts/designs) in place of
+// the current one, an app of its own to try beside it and the other two
+val editorDesign = providers.gradleProperty("editorDesign").getOrElse("")
+require(editorDesign in setOf("", "a", "b", "c")) { "editorDesign is a, b or c, not '$editorDesign'" }
+require(editorDesign.isEmpty() || releaseChannel == "stable") { "an editor design is not built as a PTB" }
+
 // The release's upload key comes from the environment, so no key or password is ever in a file here. Without
 // MUDLET_KEYSTORE the release AAB and APKs come out unsigned; CI signs with a throwaway key when it has no secrets.
 fun env(name: String) = providers.environmentVariable(name).orNull?.takeIf { it.isNotEmpty() }
@@ -57,9 +63,13 @@ android {
         if (releaseChannel == "ptb") {
             applicationIdSuffix = ".ptb"
             resValue("string", "app_name", "Mudlet PTB")
+        } else if (editorDesign.isNotEmpty()) {
+            applicationIdSuffix = ".design$editorDesign"
+            resValue("string", "app_name", "Mudlet ${editorDesign.uppercase()}")
         } else {
             resValue("string", "app_name", "Mudlet")
         }
+        buildConfigField("String", "EDITOR_DESIGN", "\"$editorDesign\"")
         buildConfigField("String", "SOURCE_COMMIT", "\"$sourceCommit\"")
         // The instrumented tests in src/androidTest; native/tests/android_instrumented.py runs them on a device
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -105,6 +115,8 @@ android {
     sourceSets {
         // The launcher icon's channel-specific layers: the PTB's looks out on night (docs/launcher-icon.md)
         getByName("main").res.srcDir("src/$releaseChannel/res")
+        // A design's walk-through test, which the current editor's tests are not to be run beside
+        if (editorDesign.isNotEmpty()) getByName("androidTest").kotlin.srcDir("src/androidTestDesigns/kotlin")
         getByName("smoke") {
             manifest.srcFile("src/debug/AndroidManifest.xml")
             kotlin.srcDir("src/debug/kotlin")

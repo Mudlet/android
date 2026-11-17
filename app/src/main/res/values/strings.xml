@@ -1329,4 +1329,121 @@
     <string name="selftest_command" translatable="false">Command</string>
     <string name="selftest_command_hint" translatable="false">command, or: lua return lineCount</string>
     <string name="selftest_send" translatable="false">Send</string>
+
+    <!-- The strings from here to the end are those of the three alternative script editors (design_a_: the tabbed
+         Workbench, design_b_: the single page, design_c_: the Recipes), prototypes to choose one from. -->
+    <!-- A title bar button of an alternative script editor, read by a screen reader: it shows a field that searches
+         the names of the triggers, aliases and scripts -->
+    <string name="design_search">Search by name</string>
+    <!-- The same button while the search field shows: it hides the field -->
+    <string name="design_search_close">Close the search</string>
+    <!-- A title bar button of an alternative script editor, read by a screen reader: it opens a menu that makes a new
+         trigger, alias, script or folder -->
+    <string name="design_add">Add an item or a folder</string>
+    <!-- The button that saves what was changed in a trigger, alias or script, as Mudlet's Save Item does -->
+    <string name="design_save">Save</string>
+    <!-- A switch on a trigger's, alias's or script's page: whether Mudlet uses it at all -->
+    <string name="design_on">Switched on</string>
+    <!-- Under the Switched on switch -->
+    <string name="design_on_hint">Off, it stays in the profile but does nothing</string>
+    <!-- Design A. What a screen reader says a tap on an open folder's row does: it hides the folder's items -->
+    <string name="design_a_close_folder">close the folder</string>
+    <!-- Design A. A folder's row's button, read by a screen reader: it opens a menu that makes an item in the folder
+         or opens the folder to edit. %1$s is the folder's name -->
+    <string name="design_a_folder_menu">More for %1$s</string>
+    <!-- Design A. The second tab of an item's page, beside Code: its name, patterns and options -->
+    <string name="design_a_settings">Settings</string>
+    <!-- Design B. The chip that shows triggers, aliases and scripts together -->
+    <string name="design_b_all">All</string>
+    <!-- Design B. Under the chips: how the page is used -->
+    <string name="design_b_hint">Tap an item to change it where it is. It is saved when you fold it again.</string>
+    <!-- Design B. What a screen reader says a tap on a heading does while its items show: it hides them -->
+    <string name="design_b_hide">hide its items</string>
+    <!-- Design B. What a screen reader says a tap on a heading does while its items are hidden: it shows them -->
+    <string name="design_b_show">show its items</string>
+    <!-- Design B. A heading's button, read by a screen reader: it opens a menu that makes a new item or folder there.
+         %1$s is where, such as "Triggers › Combat" -->
+    <string name="design_b_add_to">Add to %1$s</string>
+    <!-- Design B. The button at the top of an item unfolded, read by a screen reader: it folds the item to its row
+         again, which saves it. %1$s is the item's name -->
+    <string name="design_b_fold">Fold and save %1$s</string>
+    <!-- Design B. The button at the foot of an item unfolded: it folds the item to its row again, which saves it -->
+    <string name="design_b_done">Done</string>
+    <!-- Design B. A button in a trigger unfolded that shows the options few triggers use -->
+    <string name="design_b_more">More options</string>
+    <!-- Design B. The same button while those options show: it hides them -->
+    <string name="design_b_fewer">Fewer options</string>
+    <!-- Design C. The title bar's button, read by a screen reader: it opens the drawer that lists the kinds of items
+         and their folders -->
+    <string name="design_c_menu">Open the list of folders</string>
+    <!-- Design C. The label before what makes an item fire, on its card, and the title of the page that edits it -->
+    <string name="design_c_when">When</string>
+    <!-- Design C. The label before what an item does once it fires, on its card, and the title of the page that edits
+         it -->
+    <string name="design_c_then">Then</string>
+    <!-- Design C. The title of an item's third part: its name and the options few items change -->
+    <string name="design_c_more">Name and options</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Substring type. %1$s is the pattern's text -->
+    <string name="design_c_when_substring">A line has “%1$s”</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Start of line type. %1$s is the pattern's text -->
+    <string name="design_c_when_start">A line starts with “%1$s”</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Exact match type. %1$s is the pattern's text -->
+    <string name="design_c_when_exact">A line is exactly “%1$s”</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Perl regex type. %1$s is the regular expression -->
+    <string name="design_c_when_regex">A line matches %1$s</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Lua function type. %1$s is the Lua code -->
+    <string name="design_c_when_lua">This Lua returns true: %1$s</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Line spacer type. %1$s is a number of lines -->
+    <string name="design_c_when_spacer">Lines to skip: %1$s</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Colour trigger type -->
+    <string name="design_c_when_color">Text comes in the colours it names</string>
+    <!-- Design C. After "When", for a trigger's pattern of the Prompt type -->
+    <string name="design_c_when_prompt">The game shows its prompt</string>
+    <!-- Design C. After a trigger's first patterns on its card: how many more it has. %1$d is the number -->
+    <plurals name="design_c_when_more">
+        <item quantity="one">and %1$d more pattern</item>
+        <item quantity="other">and %1$d more patterns</item>
+    </plurals>
+    <!-- Design C. After "When", for a trigger or an alias that has no pattern yet -->
+    <string name="design_c_when_none">Nothing yet: it needs a pattern</string>
+    <!-- Design C. After "When", for an alias. %1$s is its pattern, a regular expression -->
+    <string name="design_c_when_alias">You type what matches %1$s</string>
+    <!-- Design C. After "When", for a script with event handlers. %1$s is the events' names, with commas between -->
+    <string name="design_c_when_events">The profile loads, or one of these events is raised: %1$s</string>
+    <!-- Design C. After "When", for a script with no event handlers -->
+    <string name="design_c_when_script">The profile loads</string>
+    <!-- Design C. After "Then", for an item that sends a command. %1$s is the command -->
+    <string name="design_c_then_send">Send “%1$s” to the game</string>
+    <!-- Design C. After "Then", for an item with Lua code. %1$s is how long it is, such as "12 lines" -->
+    <string name="design_c_then_lua">Run its Lua (%1$s)</string>
+    <!-- Design C. After "Then", for an item that sends nothing and has no Lua yet -->
+    <string name="design_c_then_none">Nothing yet</string>
+    <!-- Design C. What a screen reader says a tap on a part of an item's overview does: it opens the page that edits
+         that part -->
+    <string name="design_c_change">change it</string>
+    <!-- Design C. Over a page that edits one part of an item. %1$d is which part it is, %2$d how many there are -->
+    <string name="design_c_step">Part %1$d of %2$d</string>
+    <!-- Design C. On the page that edits a trigger's patterns -->
+    <string name="design_c_when_trigger_hint">A trigger fires when a line from the game matches its patterns.</string>
+    <!-- Design C. On the page that edits an alias's pattern -->
+    <string name="design_c_when_alias_hint">An alias fires when a command you type matches its pattern.</string>
+    <!-- Design C. On the page that edits a script's event handlers -->
+    <string name="design_c_when_script_hint">A script's code runs when the profile loads. Name events here to have Mudlet call the function of the script's name when one is raised.</string>
+    <!-- Design C. On the page that edits what an item does once it fires -->
+    <string name="design_c_then_hint">What it sends to the game, as if you had typed it, and the Lua it runs.</string>
+    <!-- Design C. On the page that edits an item's name and options -->
+    <string name="design_c_more_hint">What it is called in the lists, and how it behaves.</string>
+    <!-- Design C. The button on the page that edits what an item does: it opens the item's Lua in the editor -->
+    <string name="design_c_edit_code">Edit the Lua</string>
+    <!-- Design C. The button at the foot of a page that edits one part of an item: it goes back to the item's
+         overview, with what was changed kept -->
+    <string name="design_c_overview">Overview</string>
+    <!-- Design C. The button at the foot of a page that edits one part of an item: it goes to the next part. %1$s is
+         that part's title, such as "Then" -->
+    <string name="design_c_next">Next: %1$s</string>
+    <!-- Design C. The button that leaves the last part of an item, or the Lua editor, for the item's overview, with
+         what was changed kept -->
+    <string name="design_c_finish">Done</string>
+    <!-- Design C. Under the Lua editor: the line the cursor is on, %1$d, of how many there are, %2$d -->
+    <string name="design_c_line">Line %1$d of %2$d</string>
 </resources>

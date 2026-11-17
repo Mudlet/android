@@ -80,7 +80,7 @@ import org.mudlet.android.ui.settings.MAX_WIDTH
 /** The item page's fields, for tests to scroll. */
 const val SCRIPT_ITEM_TAG = "scriptItem"
 
-private val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
+internal val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 /**
  * The page of the item [key]: its name, what its kind has (a trigger's patterns and options, an alias's pattern and
@@ -202,6 +202,13 @@ private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (Scrip
 
 @Composable
 private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
+    TriggerPatterns(trigger, onChange)
+    TriggerOptions(trigger, onChange)
+    TriggerCommand(trigger, onChange)
+}
+
+@Composable
+internal fun ColumnScope.TriggerPatterns(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
     var typing by rememberSaveable { mutableStateOf<Int?>(null) }
     SectionHeader(stringResource(R.string.scripts_patterns), fieldWidth)
     val patterns = trigger.patterns
@@ -231,7 +238,10 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
             onChange(trigger.copy(patterns = patterns.toMutableList().also { it[typed] = TriggerPattern(text, type) }))
         }
     }
+}
 
+@Composable
+internal fun ColumnScope.TriggerOptions(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
     SectionHeader(stringResource(R.string.scripts_options), fieldWidth)
     val all = trigger.lineDelta >= 0
     Column(fieldWidth.selectableGroup()) {
@@ -259,6 +269,10 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
             singleLine = true,
         )
     }
+}
+
+@Composable
+internal fun ColumnScope.TriggerCommand(trigger: ScriptItemDetails.Trigger, onChange: (ScriptItemDetails.Trigger) -> Unit) {
     OutlinedTextField(
         trigger.command,
         { onChange(trigger.copy(command = it)) },
@@ -269,9 +283,9 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
 }
 
 /** The words each pattern type goes by here, and what it does, as the type sheet explains them. */
-private class PatternTypeText(@param:StringRes val name: Int, @param:StringRes val description: Int)
+internal class PatternTypeText(@param:StringRes val name: Int, @param:StringRes val description: Int)
 
-private val TriggerPatternType.text: PatternTypeText
+internal val TriggerPatternType.text: PatternTypeText
     get() = when (this) {
         TriggerPatternType.SUBSTRING -> PatternTypeText(R.string.pattern_substring, R.string.pattern_substring_description)
         TriggerPatternType.REGEX -> PatternTypeText(R.string.pattern_regex, R.string.pattern_regex_description)
@@ -396,6 +410,12 @@ private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit,
 
 @Composable
 private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (ScriptItemDetails.Alias) -> Unit) {
+    AliasPattern(alias, onChange)
+    AliasCommand(alias, onChange)
+}
+
+@Composable
+internal fun ColumnScope.AliasPattern(alias: ScriptItemDetails.Alias, onChange: (ScriptItemDetails.Alias) -> Unit) {
     SectionHeader(stringResource(R.string.scripts_patterns), fieldWidth)
     OutlinedTextField(
         alias.pattern,
@@ -406,6 +426,10 @@ private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (S
         textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
         singleLine = true,
     )
+}
+
+@Composable
+internal fun ColumnScope.AliasCommand(alias: ScriptItemDetails.Alias, onChange: (ScriptItemDetails.Alias) -> Unit) {
     OutlinedTextField(
         alias.command,
         { onChange(alias.copy(command = it)) },
@@ -416,7 +440,7 @@ private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (S
 }
 
 @Composable
-private fun ColumnScope.EventHandlers(script: ScriptItemDetails.Script, onChange: (ScriptItemDetails.Script) -> Unit) {
+internal fun ColumnScope.EventHandlers(script: ScriptItemDetails.Script, onChange: (ScriptItemDetails.Script) -> Unit) {
     SectionHeader(stringResource(R.string.scripts_event_handlers), fieldWidth)
     val handlers = script.eventHandlers
     for ((i, event) in handlers.withIndex()) {
@@ -458,7 +482,7 @@ private fun Choice(text: String, selected: Boolean, onSelect: () -> Unit) {
 }
 
 @Composable
-private fun SwitchField(@StringRes label: Int, @StringRes hint: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchField(@StringRes label: Int, @StringRes hint: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         fieldWidth.heightIn(min = 48.dp).toggleable(checked, role = Role.Switch, onValueChange = onChange).padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

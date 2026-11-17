@@ -89,6 +89,12 @@ object EngineMessages {
     fun areas(request: JSONObject, vararg areas: Pair<Int, String>): JSONObject = JSONObject().put("t", "areas")
         .put("areas", JSONArray(areas.map { (id, name) -> JSONObject().put("id", id).put("name", name) })).put("re", request.get("id"))
 
+    /** The engine's `rooms`, the answer to the findRooms [request] for [text]: each room found's id, name and area's name. */
+    fun rooms(request: JSONObject, text: String, found: List<Triple<Int, String, String>>, more: Boolean = false): JSONObject {
+        val list = JSONArray(found.map { (id, name, area) -> JSONObject().put("id", id).put("name", name).put("area", area) })
+        return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", more).put("re", request.get("id"))
+    }
+
     private fun png(w: Int, h: Int, colour: Int): ByteArray {
         val out = ByteArrayOutputStream()
         Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(colour) }

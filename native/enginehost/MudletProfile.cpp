@@ -567,6 +567,17 @@ void MudletProfile::connectSession()
         setMapDownloadState(MapDownload::State::none);
         takeOfferedMap(mSession->offeredMapUrl());
         mFrontend->mapDownload(mMapDownload);
+        mSounds = {false, mSession->soundsMuted(THeadlessSession::SoundSource::scripts), mSession->soundsMuted(THeadlessSession::SoundSource::game)};
+        mFrontend->sounds(mSounds);
+    });
+    connect(session, &THeadlessSession::soundStarted, this, [this] {
+        if (!std::exchange(mSounds.played, true)) {
+            mFrontend->sounds(mSounds);
+        }
+    });
+    connect(session, &THeadlessSession::soundsMutedChanged, this, [this](THeadlessSession::SoundSource source, bool muted) {
+        (source == THeadlessSession::SoundSource::scripts ? mSounds.scriptsMuted : mSounds.gameMuted) = muted;
+        mFrontend->sounds(mSounds);
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);
@@ -1343,6 +1354,8 @@ void MudletProfile::onProfileClosed()
     setMapDownloadState(MapDownload::State::none);
     takeOfferedMap({});
     mFrontend->mapDownload(mMapDownload);
+    mSounds = {};
+    mFrontend->sounds(mSounds);
 }
 
 void MudletProfile::pushWindows(bool withText)

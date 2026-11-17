@@ -739,6 +739,14 @@ sealed interface EngineMessage {
         val cancelable: Boolean,
         val error: String,
     ) : EngineMessage
+
+    /**
+     * Whether the profile has [played] a sound, music or video since it loaded, and desktop Mudlet's mutes, which are
+     * every profile's: [scriptsMuted] for what scripts and triggers play (`muteMediaAPI`), [gameMuted] for what the
+     * game sends over MSP or MCMP (`muteMediaGame`). Only libmudlet sends it, as the profile loads, on each change and
+     * to each UI that attaches.
+     */
+    data class Sounds(val played: Boolean, val scriptsMuted: Boolean, val gameMuted: Boolean) : EngineMessage
     data class Unknown(val type: String) : EngineMessage
 }
 
@@ -1285,6 +1293,8 @@ class FrameReader(input: InputStream) {
                 o.optBoolean("cancelable"),
                 o.optString("error"),
             )
+
+            "sounds" -> EngineMessage.Sounds(o.optBoolean("played"), o.optBoolean("scriptsMuted"), o.optBoolean("gameMuted"))
 
             else -> EngineMessage.Unknown(t)
         }

@@ -115,7 +115,7 @@ def main():
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
+                       map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds):
             checks()
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
@@ -3973,6 +3973,74 @@ def script_items():
     m = ask({"t": "scriptItem", "kind": "script", "item": scripts[0] if scripts else 1})
     check(m.get("fields", {}).get("eventHandlers") == ["testPing"], f"and the script its event handlers: {m}")
     check([i["name"] for i in listed("alias")].count("^k (\\w+)$") == 1, "and the alias")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+
+def silent_wav():
+    """A tenth of a second of silence, as a WAV file's bytes."""
+    rate, frames = 8000, 800
+    data = bytes(frames * 2)
+    return (b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
+            + b"data" + struct.pack("<I", len(data)) + data)
+
+
+def sounds():
+    """The sounds message: nothing played and nothing muted as a profile loads, a preload not taken for a sound, a sound
+    a script plays reported once, desktop's two mutes as setSettings changes them through getConfig()'s muteMediaAPI
+    and muteMediaGame, and the mutes kept in Mudlet.ini, where desktop keeps them, from one run of the engine to the
+    next."""
+    profile = "Sounds Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    first = c.wait_for(lambda m: m["t"] == "sounds", collect=seen)
+    check(first == {"t": "sounds", "played": False, "scriptsMuted": False, "gameMuted": False},
+          f"a profile loads with no sound played and none muted: {first}")
+
+    wav = "".join(f"\\{b}" for b in silent_wav())
+    c.send({"t": "runLua", "code": f'lfs.mkdir(getMudletHomeDir() .. "/media") '
+                                   f'local f = io.open(getMudletHomeDir() .. "/media/quiet.wav", "wb") f:write("{wav}") f:close() '
+                                   'playSoundFile({name = "quiet.wav", volume = 0})'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    since = len(seen)
+    c.ask({"t": "getSettings", "keys": ["muteMediaAPI"]}, answers=("settings", "error"), collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "sounds"], "a preload, which plays nothing, is not a sound played")
+
+    c.send({"t": "runLua", "code": 'playSoundFile({name = "quiet.wav"})'})
+    played = c.wait_for(lambda m: m["t"] == "sounds", collect=seen)
+    check(played == {"t": "sounds", "played": True, "scriptsMuted": False, "gameMuted": False}, f"a sound a script plays is reported: {played}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'playSoundFile({name = "quiet.wav"})'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    c.ask({"t": "getSettings", "keys": ["muteMediaAPI"]}, answers=("settings", "error"), collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "sounds"], "only the first sound is news")
+
+    m = c.ask({"t": "setSettings", "values": {"muteMediaAPI": True, "muteMediaGame": True}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"muteMediaAPI": True, "muteMediaGame": True} and "refused" not in m, f"setSettings mutes both: {m}")
+    muted = c.wait_for(lambda m: m["t"] == "sounds" and m["scriptsMuted"] and m["gameMuted"], collect=seen)
+    check(muted["played"], f"and the sounds message follows: {muted}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    kept = c.wait_for(lambda m: m["t"] == "sounds", collect=seen)
+    check(kept == {"t": "sounds", "played": False, "scriptsMuted": True, "gameMuted": True},
+          f"the next run of the engine keeps the mutes, with no sound played yet: {kept}")
+    m = c.ask({"t": "setSettings", "values": {"muteMediaAPI": False}}, answers=("settings", "error"), collect=seen)
+    one = c.wait_for(lambda m: m["t"] == "sounds" and not m["scriptsMuted"], collect=seen)
+    check(one["gameMuted"], f"each mute changes alone: {one}")
+    c.ask({"t": "setSettings", "values": {"muteMediaGame": False}}, answers=("settings", "error"), collect=seen)
+    c.wait_for(lambda m: m["t"] == "sounds" and not m["gameMuted"], collect=seen)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

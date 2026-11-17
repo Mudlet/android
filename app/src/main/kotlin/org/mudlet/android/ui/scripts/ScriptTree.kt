@@ -29,6 +29,18 @@ val ScriptItem.key: ScriptItemKey get() = ScriptItemKey(kind, node.id)
 /** The items in the folder [parent] (0 for the top level), in the order the engine listed them. */
 fun List<ScriptItemNode>.childrenOf(parent: Int): List<ScriptItemNode> = filter { it.parent == parent }
 
+/** These, [kind]'s items, without those of [hidden] (deleted, with their Undo offered) and what is in them. */
+fun List<ScriptItemNode>.withoutHidden(kind: ScriptItemKind, hidden: List<ScriptItemKey>): List<ScriptItemNode> {
+    val gone = hidden.filter { it.kind == kind }.mapTo(HashSet()) { it.id }
+    if (gone.isEmpty()) return this
+    // Depth first, so each folder comes before what is in it
+    return filter { item ->
+        val inGone = item.id in gone || item.parent in gone
+        if (inGone) gone.add(item.id)
+        !inGone
+    }
+}
+
 /** The folders from the top level down to [folder], [folder] last; empty for the top level or a folder not listed. */
 fun List<ScriptItemNode>.pathTo(folder: Int): List<ScriptItemNode> {
     val byId = associateBy { it.id }

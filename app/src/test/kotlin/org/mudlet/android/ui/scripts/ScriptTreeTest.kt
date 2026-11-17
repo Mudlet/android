@@ -218,6 +218,13 @@ class ScriptTreeTest {
     }
 
     @Test
+    fun aFolderDeletedWithItsUndoOfferedIsHiddenWithWhatIsInItAndTakesNoMove() {
+        val shown = triggers.withoutHidden(ScriptItemKind.TRIGGER, listOf(ScriptItemKey(ScriptItemKind.TRIGGER, 1), ScriptItemKey(ScriptItemKind.ALIAS, 5)))
+        assertEquals("another kind's id is not this kind's", listOf("Greet"), shown.map { it.name })
+        assertEquals(emptyList<ScriptItemNode?>(), shown.moveTargets(ScriptItemKind.TRIGGER, shown[0]))
+    }
+
+    @Test
     fun aButtonMovesIntoAToolbarAndAFolderOfButtonsAnywhere() {
         fun targets(id: Int) = buttons.moveTargets(ScriptItemKind.BUTTON, buttons.first { it.id == id }).map { it?.name }
         assertEquals("a button only where buttons are drawn", listOf("Bar", "More", "Spells"), targets(5))

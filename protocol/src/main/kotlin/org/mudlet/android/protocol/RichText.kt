@@ -63,7 +63,7 @@ data class RichText(val blocks: List<Block>) {
         private val HIDDEN_TAGS = setOf("head", "style", "script", "title")
 
         // A value in double quotes, in single quotes or unquoted, as Qt's QTextHtmlParser::parseWord() reads it
-        private val ATTRIBUTE = Regex("([^\\s=/]+)(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s<>=]+))?")
+        private val ATTRIBUTE = Regex("([^\\s=/]+)(?:\\s*(=)\\s*(\"[^\"]*\"|'[^']*'|[^\\s<>=]+)?)?")
         private val WHITESPACE = Regex("[ \\t\\r\\n\\u000C]+")
 
         // Qt reads &#128; to &#159; as Windows-1252's characters
@@ -205,15 +205,17 @@ data class RichText(val blocks: List<Block>) {
             return -1
         }
 
-        // A value in double quotes or unquoted has its entities decoded; one in single quotes Qt keeps as written
-        private fun attributes(text: String): Map<String, String> = ATTRIBUTE.findAll(text).associate { match ->
-            val value = match.groupValues[2]
-            match.groupValues[1].lowercase() to when (value.firstOrNull()) {
-                '"' -> decodeEntities(value.substring(1, value.length - 1))
-                '\'' -> value.substring(1, value.length - 1)
-                else -> decodeEntities(value)
+        // A value in double quotes or unquoted has its entities decoded; one in single quotes Qt keeps as written. Qt
+        // passes over an attribute given an empty value, so it changes nothing, nor one of the same name before it
+        private fun attributes(text: String): Map<String, String> = ATTRIBUTE.findAll(text).mapNotNull { match ->
+            val (name, equals, written) = match.destructured
+            val value = when (written.firstOrNull()) {
+                '"' -> decodeEntities(written.substring(1, written.length - 1))
+                '\'' -> written.substring(1, written.length - 1)
+                else -> decodeEntities(written)
             }
-        }
+            if (equals.isNotEmpty() && value.isEmpty()) null else name.lowercase() to value
+        }.toMap()
 
         private fun open(name: String, attributes: Map<String, String>, selfClosing: Boolean) {
             if (name in HIDDEN_TAGS) {
@@ -246,7 +248,7 @@ data class RichText(val blocks: List<Block>) {
                 "center" -> align = HAlign.CENTER
 
                 "font" -> {
-                    attributes["color"]?.let { CssColor.parse(it) }?.let { style = style.copy(color = it) }
+                    attributes["color"]?.let { style = style.copy(color = CssColor.named(it)) }
                     attributes["face"]?.let { style = style.copy(family = it.split(',').first().trim()) }
                     attributes["size"]?.let { fontSize(it, parent.style.sizePx) }?.let { style = style.copy(sizePx = it) }
                 }
@@ -323,11 +325,14 @@ data class RichText(val blocks: List<Block>) {
         }
 
         private fun styled(style: Style, property: String, value: String): Style = when (property) {
-            "color" -> CssColor.parse(value)?.let { style.copy(color = it) } ?: style
+            // Qt passes over a declaration with a `#` that is not a colour, draws text it reads no colour for black,
+            // and leaves the background as it was
+            "color" -> if (LabelStyle.hasUnreadableHex(value)) style else style.copy(color = LabelStyle.single(value)?.let(CssColor::parse) ?: CssColor.INVALID)
 
-            "background-color", "background" -> CssColor.parse(value)?.let { style.copy(background = it) } ?: style
+            "background-color", "background" ->
+                LabelStyle.single(value)?.let(CssColor::parse)?.let { style.copy(background = it) } ?: style
 
-            "font-size" -> LabelStyle.length(value)?.let { style.copy(sizePx = it) } ?: style
+            "font-size" -> LabelStyle.fontSize(value)?.let { style.copy(sizePx = it) } ?: style
 
             "font-weight" -> LabelStyle.fontWeight(value)?.let { style.copy(bold = it >= 600) } ?: style
 

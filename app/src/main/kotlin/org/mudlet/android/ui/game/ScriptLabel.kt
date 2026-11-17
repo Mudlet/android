@@ -3,6 +3,7 @@ package org.mudlet.android.ui.game
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -508,17 +509,18 @@ private object AboveOrBelow : PopupPositionProvider {
 }
 
 /**
- * What a label draws, as Qt's QLabel would at [sx] by [sy] screen pixels to its own: its style sheet's margin,
- * background, border and padding, then its raster image or movie at its own size, or its SVG fitted under its text.
+ * What a label draws, as Qt's QLabel would at [sx] by [sy] screen pixels to its own: its own colour, then its style
+ * sheet's margin, background, border and padding, then its raster image or movie at its own size, or its SVG fitted
+ * under its text.
  */
 @Composable
 private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelText, sx: Float, sy: Float, modifier: Modifier = Modifier) {
     val style = text.style
     val density = LocalDensity.current
     val scale = min(sx, sy)
-    val fill = style.background ?: window.bg.takeIf { it != -1 }?.let {
-        LabelFill.Solid(windowColour(it, Color.Transparent).copy(alpha = window.bgAlpha / 255f).toArgb())
-    }
+    // The colour `setBackgroundColor()` gave the label, where its sheet draws no box of its own: Qt fills the whole
+    // label with it then, its margin too, and draws the sheet's box without it
+    val ownColour = window.bg.takeIf { it != -1 && !style.drawsBox }?.let { windowColour(it, Color.Transparent).copy(alpha = window.bgAlpha / 255f) }
     val borderImage = engineImage(style.borderImage?.let { ImageRequest(it) })
     val backgroundImage = engineImage(style.backgroundImage?.let { ImageRequest(it) })
     val border = style.drawnBorderWidth * scale
@@ -538,9 +540,10 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
 
     Box(
         modifier
+            .then(if (ownColour != null) Modifier.background(ownColour) else Modifier)
             .edgePadding(style.margin, sx, sy, density)
             .drawBehind {
-                drawLabelFrame(fill, style, border, style.borderRadius * scale, scale, backgroundImage, borderImage)
+                drawLabelFrame(style.background, style, border, style.borderRadius * scale, scale, backgroundImage, borderImage)
             }
             .edgePadding(inner, sx, sy, density),
     ) {

@@ -50,6 +50,52 @@ class RichTextTest {
     }
 
     @Test
+    fun aStylesFontSizeNeedsItsUnit() {
+        // Qt reads a `style`'s `font-size` as a sheet's: with no unit it is no size
+        val text = parse("<span style=\"font-size: 30\">a</span><span style=\"font-size: 30px\">b</span><span style=\"font-size: 30pt\">c</span>")
+        assertEquals(
+            listOf(RichText.Span("a", base), RichText.Span("b", base.copy(sizePx = 30f)), RichText.Span("c", base.copy(sizePx = 40f))),
+            text.blocks.single().spans,
+        )
+        // Nor is it one with a space before the unit, or of 0 or less, which would hide the text; px are whole
+        for (none in listOf("30 px", "30 pt", "0px", "0pt", "-5px", "0.4px")) {
+            assertEquals(none, listOf(RichText.Span("a", base)), parse("<span style=\"font-size: $none\">a</span>").blocks.single().spans)
+        }
+        assertEquals(listOf(RichText.Span("a", base.copy(sizePx = 13f))), parse("<span style=\"font-size: 12.5px\">a</span>").blocks.single().spans)
+    }
+
+    @Test
+    fun coloursAsQtReadsThemInText() {
+        // Each as Qt 6.4.2 draws it inside a span whose text is blue and whose background is blue
+        val blue = 0xFF0000FF.toInt()
+        fun inner(css: String) = parse("<span style=\"color: blue; background: blue\"><span style=\"$css\">a</span></span>").blocks.single().spans.single().style
+        // Text it reads no colour for is black, and a `#` that is not a colour leaves the declaration out
+        for (black in listOf("nosuch", "rgba(255,0,0)", "rgb(300,0,0)", "red blue", "none", "3px", "RGB(255,0,0)")) {
+            assertEquals(black, CssColor.INVALID, inner("color: $black").color)
+        }
+        assertEquals(0xFF01FF01.toInt(), inner("color: hsl(120,255,128)").color)
+        assertEquals(blue, inner("color: #12345").color)
+        // A background it reads no colour off is as it was, and one it cannot name is black
+        for (kept in listOf("rgba(255,0,0)", "red blue", "none", "3px", "#12345")) {
+            assertEquals(kept, blue, inner("background-color: $kept").background)
+        }
+        assertEquals(CssColor.INVALID, inner("background: nosuch").background)
+        // Not read: Qt takes these from the palette, which the app does not have (docs/divergences.md)
+        assertEquals(CssColor.INVALID, inner("color: palette(highlight)").color)
+        assertEquals(blue, inner("background: palette(highlight)").background)
+        // `<font color>` takes only a name or a `#` and digits
+        for (black in listOf("nosuch", "hsl(120,255,128)", "rgb(255,0,0)", "#12345")) {
+            assertEquals(black, CssColor.INVALID, parse("<font color=\"$black\">a</font>").blocks.single().spans.single().style.color)
+        }
+        // An attribute given an empty value Qt passes over, also after one of the same name; one given no value at all,
+        // or a space, is no colour, so black
+        fun font(attributes: String) = parse("<span style=\"color: blue\"><font $attributes>a</font></span>").blocks.single().spans.single().style.color
+        for (kept in listOf("color=\"\"", "color=''", "color=", "color= ", "face=\"Mono\" color=\"\"")) assertEquals(kept, blue, font(kept))
+        assertEquals(0xFFFF0000.toInt(), font("color=\"red\" color=\"\""))
+        for (black in listOf("color", "color=\" \"", "color=\"red\" color")) assertEquals(black, CssColor.INVALID, font(black))
+    }
+
+    @Test
     fun linksKeepTheirTargets() {
         val text = parse("""Go <a href="send:north">north</a> or <a href='prompt:say '>speak</a>.<a name="anchor">here</a>""")
         assertEquals(listOf("north" to "send:north", "speak" to "prompt:say "), text.links)

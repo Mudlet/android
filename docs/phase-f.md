@@ -193,17 +193,60 @@ title.
 
 A `label` is a `Box` at its geometry, drawn in this order:
 
-- **Style sheet**, a subset of Qt's for `QLabel`, parsed by the app: `background-color` and `background` (named, `#rgb`,
-  `#rrggbb`, `rgb()`, `rgba()`, and `qlineargradient` as a gradient of its stops), `color`, `border`, `border-width`,
-  `border-style` (solid only), `border-color`, `border-radius`, `padding`, `margin`, `font-size` (pt and px, scaled by
-  `s`), `font-weight`, `font-style`, `font-family`, `qproperty-alignment`, and `border-image` or `background-image` with
-  `url()` (through `getImage`). As in Qt, the `background` and `border` shorthands set what they do not name back to
-  none, `background-image: none` leaves the image set before it, a `font-size` in px is a whole number and one of 0 or
-  less is ignored, a negative `border-radius` is none, and a gradient of one stop is its colour. No length is longer
-  than 4096 px, and of a gradient's numbers a coordinate that is not one is 0 and such a stop is left out
-  ([`divergences.md`](divergences.md), "Labels and TalkBack"). Bare declarations and a `QLabel { }` block apply; a rule
-  with any other selector, state or pseudo-element is skipped. A user window's or the profile's sheet does not reach the
-  app: only the label's own sheet is in `LabelContent`.
+- **Its own colour**, the one `setBackgroundColor()` gave it (the label's `bg` and `bgAlpha`), fills the whole label,
+  its margin too, where the sheet draws no box of its own, and is not drawn where it does, as Qt's style sheets decide
+  for a `QLabel` that fills its background (`hasDrawable()` in `qstylesheetstyle.cpp`): a sheet draws the box with a
+  background, a `border-image`, a `background-image`, an `image`, or a border that is not the native one, which a style
+  for its top edge or a radius makes it. So a sheet of `color` or `padding` shows the colour, and a frame of `border`
+  and `border-radius` alone shows what is behind the label through it ([`divergences.md`](divergences.md), "Labels and
+  TalkBack").
+- **Style sheet**, a subset of Qt's for `QLabel`, parsed by the app: `background-color` and `background`, with a colour
+  or `qlineargradient` as a gradient of its stops, `color`, `border`, `border-width`, `border-style` (solid only),
+  `border-color`, `border-radius`, `padding`, `margin`, `font-size` (pt and px, scaled by `s`), `font-weight`,
+  `font-style`, `font-family`, `qproperty-alignment`, and `border-image` or `background-image` with `url()` (through
+  `getImage`). A colour is read as Qt 6.4.2 reads one: a name, quoted or not, `#` and 3, 6, 8 (the alpha first), 9 or 12
+  hex digits, `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hsv()` or `hsva()`, their names in lower case, with three numbers
+  or percentages, and a fourth, the alpha, exactly where the name ends in `a`, rounded as Qt rounds them. A name Qt does
+  not know and a number out of its range are Qt's invalid colour, which it draws black; what it reads no colour off (a
+  function with the wrong count, a length, one of its own words such as `none`) sets `background-color` and `color`
+  back to none, a `background-color` or `color` of more than one value too, the border's colour to the sheet's `color`,
+  or clear where it has none, and a gradient's stop black. A border with its top edge left `native` is not drawn,
+  and one of a gradient is drawn in one colour, a linear gradient's at the middle of its box and another's first stop.
+  A gradient of another function's name, with a stop that is not a place and a colour, with an argument that has no
+  name, with a word that is not just one of Qt's terms (`red;`, `blue>`, `1.`), or with nothing but space before a
+  comma or between the last comma and the `)` is no colour; the comma after an argument may be left out, and the last
+  argument may end with one only with the `)` right after it. Of a gradient's stops, one past 0 to 1 is left out, a
+  place that is a percentage is its number, so `50%` is left out, one that is not a number is 0, the later of two at
+  one place is kept, and with none the gradient is black to white.
+  A `#` with a name that is not a colour stops Qt reading the declaration, so it changes nothing, and in a gradient's
+  stop takes the gradient away. The `background` shorthand reads its words in turn: a `url()`, `none` for no image, a
+  repeat (`repeat-x`; `repeat` is not one) or another of Qt's words passed over, and any other word as the colour; the
+  `border` shorthand reads a width, a style (`native` too) and a colour, each only in that place. As in Qt, the
+  `background` and `border` shorthands set what they do not name back to none, the `background` shorthand's `none` takes
+  away the image named before it in it, `background-image: none` leaves the image set before it, a box's lengths
+  (`padding`, `margin`, the border's width and its radius) are in px or have no unit, and one in another unit (`pt`,
+  `cm`) is 0, a `font-size` is read only with its unit, px or pt, and no space before it, one in px is rounded to a
+  whole number as Qt 6.8 and later do (6.4.2 ignores one with a fraction), one of 0 or less is ignored, a negative
+  `border-radius` is none, and a linear gradient of one stop, or whose two points are the same, is its first stop's
+  colour. No length is longer than 4096 px, one in `em` or `ex` is not read, and of a gradient's numbers a coordinate
+  of `NaN` is 0 ([`divergences.md`](divergences.md), "Labels and TalkBack"). The sheet is read as Qt reads a widget's:
+  as rules, up to the first thing in it that is not one, and where there is such a thing, the whole sheet once more as
+  the block of a `*` rule, which is how bare declarations apply. So a sheet of rules loses what follows them, among it
+  the colour `setBackgroundColor()` writes after a label's sheet that has no `background-color` declaration, and one
+  that starts with bare declarations loses its rules. Where the sheet has such declarations, Mudlet writes the colour
+  over each of them in place instead, inside a rule too, so the colour applies wherever that rule does. Between rules,
+  HTML's comment marks (`<!--`, `-->`) are passed over, and `@charset` first, `@import` before the rules, and the rules
+  of `@media`, `@page` and any other `@` keyword are read and left out. What Qt cannot read of a rule loses it and all
+  after it: a declaration followed by neither `;` nor the closing brace, a rule not closed, an `@` in a selector, and a
+  character Qt's scanner does not know outside a string, such as an unquoted file name's `?`, `&` or accented letter of
+  Latin-1, or a control character; a character from U+0100 up is one of a name's, and a `\` makes the character after it
+  one. A comment is read as a space, and one with no end runs to the sheet's last character, which it leaves. The rules
+  that apply are those that name the label as Qt's selectors know Mudlet's `TLabel`: by a class it is or inherits
+  (`TLabel`, `QLabel`, `QFrame`, `QWidget`, `QObject`), by `.TLabel`, the class it is, or by `*`. They are ranked as Qt
+  ranks them, wherever they are in the sheet: `.TLabel` over a rule naming a type, that over `*`, then the later rule. A
+  rule with any other selector, a state or a pseudo-element is skipped ([`divergences.md`](divergences.md), "Labels and
+  TalkBack"). A user window's or the profile's sheet does not reach the app: only the label's own sheet is in
+  `LabelContent`.
 - **Image**: the raster image fills the label as `QLabel` scales it; an SVG one is drawn under the text with its tint,
   rotation and shear; a playing movie is an `AnimatedImageDrawable` (API 28, the app's minSdk). That cannot seek or
   change speed, so a paused movie shows `movieFrame` as a still the engine renders (`getImage` with `frame`), and a
@@ -215,6 +258,10 @@ A `label` is a `Box` at its geometry, drawn in this order:
   value up to its own closing quote, `<`, `>` and the other quote included, and entities decoded as Qt decodes them
   (numeric ones, and the named ones of Qt's table, `HtmlEntities.kt`: HTML 4's, with Qt's own `&and;` and `&or;`, and
   `&AMP;`, `&GT;`, `&LT;`, `&QUOT;`, `&apos;` and `&percnt;`), but in a single-quoted value, which Qt keeps as written.
+  A `style`'s `font-size` is read as a sheet's, and its colours as a sheet's are, but text it reads no colour for is
+  black and a background it reads none off stays as it was, as `QTextHtmlParser` draws them; `font`'s `color` takes only
+  a name or `#` and hex digits, and anything else is black, but an empty value, which Qt passes over as it does any
+  attribute's.
 
 Taps reach the label with `pointer`, in its own Mudlet pixels: a tap is `enter`, `press` and `release`, a double tap
 adds `doubleClick`, a long press is the right button's `press` and `release` (Geyser's right-click menus); `leave`
@@ -227,8 +274,10 @@ keyboard, by which the desktop's screen readers reach them.
 ### Text boxes
 
 A `textBox` is a text field at its window's geometry, scaled by `s`, with the label style sheet's subset where a
-`QPlainTextEdit` has it: bare declarations and `QPlainTextEdit`, `TTextBox` or `*` blocks give its background, text
-colour, border (with its radius), padding, margin and font; one with no border has an outline, thicker while focused.
+`QPlainTextEdit` has it: bare declarations and the rules that name Mudlet's `TTextBox` (by `TTextBox`,
+`QPlainTextEdit`, `QAbstractScrollArea`, `QFrame`, `QWidget`, `QObject`, `.TTextBox` or `*`), read and ranked as a
+label's, give its background, text colour, border (with its radius), padding, margin and font; one with no border has an
+outline, thicker while focused.
 Where its style sheet sets no colours it has the theme's surface and text colours; the desktop's has the profile's
 command-line colours (dark grey on black unless changed), which the engine does not send. Its text is never drawn
 under 9 sp, and scrolls inside it. The player types in it unless `readOnly`, with the `placeholder` shown while it is
@@ -278,13 +327,16 @@ Of the pseudo-states, `:checked` (`:on`) applies while a push-down button is dow
 menu is open, `:open` while either, `:disabled` while no engine is attached, `:vertical` and `:active` always, as the
 desktop has them for a `TFlipButton` in an active window, and `:hover` and `:focus` never. The `background` and `border`
 shorthands set what they do not name back to none, as Qt's do. A bar draws its background, images and border. Where the
-sheets set no background colour and no border property, the button keeps the app's look, as the desktop keeps its native
-one, under their `background-image` where they set one; once they set a border, only their background is drawn, and the
-bar shows through the rest. Its text is the sheets' `color` on a colour or image of theirs, black or white, whichever
+sheets set no background colour and leave the button its native frame, the button keeps the app's look, as the desktop
+keeps its native one, under their `background-image` where they set one: as Qt's `hasNativeBorder()` has it, a style for
+the border's top edge but `native`, a radius of 0 or more, or a `border-image` takes the frame away, and a border's
+colour, its width or its other edges alone do not. Once they take it away, only their background is drawn, and the bar
+shows through the rest. Its text is the sheets' `color` on a colour or image of theirs, black or white, whichever
 reads, on a colour of theirs without one, and on the app's colour the sheets' `color` only where it reads; where a
 colour of theirs that is mostly see-through tints the app's, the app's text colour too only where it reads, and black or
 white where neither does. No button is bigger than the game area: its margin, border and padding shrink by one share to
-leave its content 48 dp of it, and a name too long for it ends in an ellipsis. What else is not drawn, and why, is in
+leave its content 48 dp of it, and a name too long for it ends in an ellipsis. A sheet's lengths, and which of its
+rules and bare declarations apply, are read as a label's ("Labels"). What else is not drawn, and why, is in
 [`divergences.md`](divergences.md), "Button bars".
 
 ### The map

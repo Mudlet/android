@@ -128,6 +128,46 @@ that points at the desktop's menus and windows, which the app does not have.
   on, while a length of dozens of digits is infinite once it is multiplied into a screen's pixels, and Compose and
   Android throw on a corner or a size that is infinite. A `qlineargradient`'s coordinates are bounded the same way, and
   one that is not a number is 0, as Android has no gradient between such points.
+- Of a label's or a text box's own sheet, a rule with a pseudo-state is not drawn (`QLabel:hover`, and also one for a
+  state the widget would be in, such as `:enabled`, `:!hover` or a focused text box's `:focus`), nor one with a
+  descendant or child selector (`QWidget QLabel`), an object name (`#label_<profile>_<name>`) or an attribute; the
+  desktop applies those that match (`docs/phase-f.md`, "Labels"). The app's widgets are not Qt's, so no state, name,
+  property or parent of one is there to match, and a touch screen has no pointer to hover.
+- A label made not to fill its background (`createLabel()`'s `fillBackground` 0) is drawn with its own colour, the one
+  `setBackgroundColor()` gave it, where its sheet draws no box of its own, as one made to fill is; the desktop draws
+  that colour on such a label only where it is a declaration of the sheet that Qt reads (`docs/phase-f.md`, "Labels").
+  The engine sends the colour as the label's `bg` (`docs/protocol.md`, "Script windows") but not `fillBackground`,
+  which the headless `createLabel()` does not keep. Geyser fills its labels but a gauge's text label, whose colour is
+  wholly see-through.
+- A sheet's `border-image` or `background-image` of a file that does not load still counts as drawing the label's box,
+  so the label's own colour is not drawn under it; the desktop draws the colour there (`docs/phase-f.md`, "Labels").
+  The app asks the engine for the file only as it draws, so it does not know in time whether the file loads.
+- A box's length in `em` or `ex` is not read: `padding: 1em` leaves the padding set before it, and the `border`
+  shorthand with one (`border: 2em solid red`) leaves the border with no width, so none is drawn. The desktop measures
+  them by its font: at Qt's default 9 pt font `2em` is 30 px and `2ex` 14 px (`docs/phase-f.md`, "Labels"). Those are
+  the heights of a line and of an x in the desktop's font, which the app, drawing with Android's fonts, does not have.
+- A comment between a rule's selector and its brace (`QLabel /* note */ { ... }`) is read as space; Qt drops that rule,
+  and reads the rules after it. The app takes comments out of a sheet before it reads it, which keeps its reader to one
+  kind of space, for a place where Geyser's sheets have no comment.
+- A colour of the palette's, `palette(highlight)` and the like, is no colour in a label's, a bar's or a button's sheet,
+  so it is read as one Qt reads no colour off: a property set back to none, a border in the sheet's `color`, and in a
+  label's rich text black for its text and no change to its background; Qt takes the colour from the widget's palette
+  (`docs/phase-f.md`, "Labels"). The app's widgets have no Qt palette, and the desktop's palette, which differs with its
+  style and theme, does not reach it.
+- A border whose colour the sheet does not name (`border: 2px solid`, or `border-width` and `border-style` alone) is
+  drawn in the text's colour, the sheet's `color` or else the app's; Qt draws it black whatever the `color`. One it
+  names but Qt reads no colour off (`border: 2px solid none`) is drawn as Qt draws it, in the sheet's `color`, or clear
+  where it has none (`docs/phase-f.md`, "Labels"). A black frame on the app's dark theme would not show, and the text's
+  colour is what a frame with no colour has in CSS and in the browsers that scripts' authors test their sheets in.
+- A border of a gradient (`border: 2px solid qlineargradient(...)`) is drawn in one colour: a linear gradient's at
+  the middle of its box, which is the colour Qt draws at the middle of each edge, and a radial or conical gradient's
+  first stop (`docs/phase-f.md`, "Labels"). Qt fills each edge with the gradient across the edge's own box, so the
+  colour changes along an edge and across it. The app draws a border as one stroke of one colour, which the middle
+  colour stands for on every edge.
+- A border whose top edge is left native (`border: 2px solid red; border-top-style: native`) is not drawn on a label,
+  a text box or a bar, and leaves its content no room, as on the desktop; where the sheet also has a background, Qt
+  draws the other edges, in their style (`docs/phase-f.md`, "Labels"). The app draws one border for all four edges,
+  and a native top edge is what Qt draws no border of where the sheet draws nothing else.
 
 ## Button bars
 
@@ -167,8 +207,9 @@ A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f
   label's is in the label's own pixels (`docs/phase-f.md`, "Labels"). A label is a drawing a script laid out to the
   pixel, which larger letters would break; a button is a control the app lays out, to be read at the size the player
   chose for text.
-- The app draws its own button's colour where the desktop draws its native button, with no background colour and no
-  border property in the sheets, under their `background-image` where they set one. Qt may also draw that native frame
+- The app draws its own button's colour where the desktop draws its native button, with no background colour in the
+  sheets and its native frame left (`docs/phase-f.md`, "Button bars and commands"), under their `background-image`
+  where they set one. Qt may also draw that native frame
   instead of a background a sheet sets without a border, as some desktop styles do, where the app draws the sheet's
   background. What the button looks like then depends on the desktop's style, and the sheet asked for the background.
 

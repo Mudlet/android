@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 30;
+    static constexpr int protocolVersion = 31;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -83,6 +83,7 @@ public:
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
     void secureOffer(bool offered) override;
+    void certificateRefused(const std::optional<RefusedCertificate>& certificate) override;
 
 protected:
     struct StoredLine
@@ -162,6 +163,7 @@ protected:
     QJsonObject tailMessage() const;
     QJsonObject hiddenInputMessage() const;
     QJsonObject secureOfferMessage() const;
+    QJsonObject certificateMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
     static QJsonObject linksChangedMessage(const QList<int>& ids);
     static QJsonObject windowJson(const ScriptWindowInfo& window);
@@ -194,6 +196,7 @@ protected:
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;
     bool mSecureOffer = false;
+    std::optional<RefusedCertificate> mRefusedCertificate;
     // A linksChanged went to no live UI, so the next to attach or catch up is told any link may have changed
     bool mLinksMissed = false;
     // As IFrontend::windows() last gave them

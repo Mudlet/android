@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QList>
 #include <QPointF>
 #include <QRect>
@@ -254,6 +255,23 @@ struct MapDownload
     bool operator==(const MapDownload&) const = default;
 };
 
+// The game's certificate the profile's last secure connection was refused for, as THeadlessSession::RefusedCertificate
+struct RefusedCertificate
+{
+    QString issuedTo;
+    QString issuer;
+    QDateTime expires;
+    QString serial;
+    bool expired = false;
+    bool selfSigned = false;
+    // Any other error, which only sslIgnoreAll lets past
+    bool others = false;
+    // In Qt's words, English
+    QStringList errors;
+
+    bool operator==(const RefusedCertificate&) const = default;
+};
+
 // A room a map frame drew, at its middle in the frame's pixels
 struct MapRoomPlace
 {
@@ -460,4 +478,7 @@ public:
     // The game offers its secure port while the connection is not encrypted, for IEngine::answerSecureOffer(); not
     // offered once answered, once its connection ends and with no profile open
     virtual void secureOffer(bool offered) = 0;
+    // Why the last secure connection ended, when it was the game's certificate; none once the next connection is tried
+    // and with no profile open
+    virtual void certificateRefused(const std::optional<RefusedCertificate>& certificate) = 0;
 };

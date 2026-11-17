@@ -46,14 +46,8 @@ import org.mudlet.android.protocol.linkLabel
 /**
  * The links of a line: [spans] where they are in it, [info] what `getLink` last said of one (null until it answers),
  * and [follow], for a tap on one, or with an item, for that item picked from its menu, false where it could not be sent.
- * With [states], TalkBack's actions also say whether a link has been visited or is the one chosen in its group.
  */
-internal class LineLinks(
-    val spans: List<LinkSpan>,
-    val info: (Int) -> EngineMessage.Link?,
-    val follow: (link: Int, item: Int?) -> Boolean,
-    val states: Boolean = false,
-)
+internal class LineLinks(val spans: List<LinkSpan>, val info: (Int) -> EngineMessage.Link?, val follow: (link: Int, item: Int?) -> Boolean)
 
 /**
  * A line of a console: drawn as [text], in its colours and styles, and one node for TalkBack, whose text is [plain],
@@ -172,11 +166,7 @@ private fun linkActions(
     openMenu: (link: Int) -> Unit,
 ): List<CustomAccessibilityAction> = links.spans.flatMap { span ->
     val info = links.info(span.link)
-    var label = linkLabel(info, plain.substring(span.start, span.end))
-    if (links.states && info != null) {
-        if (info.visited) label = stringResource(R.string.console_link_visited, label)
-        if (info.selected) label = stringResource(R.string.console_link_selected, label)
-    }
+    val label = linkLabel(info, plain.substring(span.start, span.end))
     buildList<CustomAccessibilityAction> {
         if (info?.disabled != true) {
             add(

@@ -582,9 +582,9 @@ kept by `ScriptItemsClient`:
   is gone into as a folder is, with Edit in the title bar for its own page. A search finds names and summaries of
   every kind, with the folders each is in. New items and folders go last in the folder shown; a new item opens, and a
   new folder is gone into. Nothing is added inside an item that is not a folder, as Mudlet adds only to folders, and
-  the buttons' top level takes toolbars, since a button outside one is never drawn. At the foot, the game's last two
-  lines go back to the game. The rules are in `ScriptTree.kt` (`holdsItems`, `rowStatus`, `adds`), apart from the
-  screen.
+  the buttons' top level, as a package's folder of them, takes toolbars, since a button outside one is never drawn.
+  At the foot, the game's last two lines go back to the game. The rules are in `ScriptTree.kt` (`holdsItems`,
+  `rowStatus`, `adds`), apart from the screen.
 - An item's page (`ScriptItemScreen.kt`) edits its name, what its kind has and its Lua: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;

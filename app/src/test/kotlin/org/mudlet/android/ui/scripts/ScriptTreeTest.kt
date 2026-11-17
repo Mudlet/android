@@ -202,6 +202,8 @@ class ScriptTreeTest {
         assertEquals(Adds.ITEM_AND_FOLDER, adds(ScriptItemKind.TRIGGER, triggers[0]))
         assertEquals("only a folder is added to", Adds.NOTHING, adds(ScriptItemKind.TRIGGER, triggers[4]))
         assertEquals("the buttons' top level takes toolbars", Adds.TOOLBAR, adds(ScriptItemKind.BUTTON, null))
+        assertEquals("and so does a package's folder", Adds.TOOLBAR, adds(ScriptItemKind.BUTTON, buttons[0]))
+        assertEquals("a package's folder of triggers takes triggers", Adds.ITEM_AND_FOLDER, adds(ScriptItemKind.TRIGGER, buttons[0]))
         assertEquals(Adds.ITEM_AND_FOLDER, adds(ScriptItemKind.BUTTON, buttons[3]))
         assertEquals(Adds.NOTHING, adds(ScriptItemKind.BUTTON, buttons[4]))
     }

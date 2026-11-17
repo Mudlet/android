@@ -1,10 +1,12 @@
 package org.mudlet.android.ui
 
 import android.graphics.Bitmap
+import android.graphics.ColorSpace
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,24 +44,30 @@ class AppMapOverTextTest {
         val overText = checkNotNull(decoded.overText) { "the frame is cut out as it is decoded" }
         assertEquals(TextBehindMap.Ground(BACKGROUND, listOf(ROOM, OTHER_ROOM)), overText.ground)
         val cut = overText.frame.asAndroidBitmap()
-        assertCutOut("the colours", pixels(source), pixels(cut))
+        assertCutOut("the colours", pixels(source), pixels(cut), OPAQUE or BACKGROUND)
         // What is left is the decoder's, byte for byte, the translucent pixels too
-        assertCutOut("the bytes kept", kept(source), kept(cut))
+        assertCutOut("the bytes kept", kept(source), kept(cut), OPAQUE or BACKGROUND_KEPT)
     }
 
     @Test
     fun aBitmapThatKeepsItsPixelsAnotherWayIsCutOutByItsColours() {
-        val source = checkNotNull(Bitmap.createBitmap(frame(), WIDTH, HEIGHT, Bitmap.Config.ARGB_8888).copy(Bitmap.Config.RGB_565, false)) { "a copy at 16 bits a pixel" }
-        val overText = checkNotNull(AppMapClient.overText(source))
-        assertEquals(TextBehindMap.ground(pixels(source), WIDTH, HEIGHT), overText.ground)
-        assertCutOut("the colours", pixels(source), pixels(overText.frame.asAndroidBitmap()))
+        val sixteenBits = checkNotNull(Bitmap.createBitmap(frame(), WIDTH, HEIGHT, Bitmap.Config.ARGB_8888).copy(Bitmap.Config.RGB_565, false)) { "a copy at 16 bits a pixel" }
+        val displayP3 = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888, true, ColorSpace.get(ColorSpace.Named.DISPLAY_P3))
+        displayP3.setPixels(frame(), 0, WIDTH, 0, 0, WIDTH, HEIGHT)
+        for ((what, source) in listOf("16 bits a pixel" to sixteenBits, "Display P3" to displayP3)) {
+            val overText = checkNotNull(AppMapClient.overText(source)) { what }
+            assertEquals(what, TextBehindMap.ground(pixels(source), WIDTH, HEIGHT), overText.ground)
+            val background = checkNotNull(overText.ground.background) { "$what: a background" }
+            assertCutOut("$what: the colours", pixels(source), pixels(overText.frame.asAndroidBitmap()), OPAQUE or background)
+        }
     }
 
-    // [cut] is [source] with each pixel of the background, which is its first pixel, transparent
-    private fun assertCutOut(what: String, source: IntArray, cut: IntArray) {
-        assertEquals("$what: the first pixel, of the background", "0", hex(cut[0]))
+    // [cut] is [source] with each pixel that is [background] transparent. A copy at 16 bits a pixel may be dithered, so
+    // not every pixel of the background has the one colour
+    private fun assertCutOut(what: String, source: IntArray, cut: IntArray, background: Int) {
+        assertTrue("$what: the background ${hex(background)} is in the frame", background in source)
         for (i in source.indices) {
-            assertEquals("$what: the pixel at ${i % WIDTH}, ${i / WIDTH}", hex(if (source[i] == source[0]) 0 else source[i]), hex(cut[i]))
+            assertEquals("$what: the pixel at ${i % WIDTH}, ${i / WIDTH}", hex(if (source[i] == background) 0 else source[i]), hex(cut[i]))
         }
     }
 
@@ -89,6 +97,9 @@ class AppMapOverTextTest {
         const val HEIGHT = 100
         const val OPAQUE = 0xFF shl 24
         const val BACKGROUND = 0x102030
+
+        // As a bitmap keeps it: red first, read as an Int of a little-endian device
+        const val BACKGROUND_KEPT = 0x302010
         const val ROOM = 0x2060A0
         const val OTHER_ROOM = 0xA06020
         const val EXIT = 0xC0D0E0

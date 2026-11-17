@@ -448,9 +448,9 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             val width = bitmap.width
             val height = bitmap.height
             val pixels = IntArray(width * height)
-            // A decoded frame's pixels are copied as the bitmap keeps them, and the cut frame's copied back: getPixels
-            // and createBitmap(pixels) convert each one, most of the work of a frame. A bitmap that keeps anything but
-            // sRGB colours, a pixel to an Int, is converted
+            // A decoded frame's pixels are copied as the bitmap keeps them, and the cut frame's copied back, which
+            // getPixels and createBitmap(pixels) would convert one by one. A bitmap that keeps anything but sRGB
+            // colours, a pixel to an Int, is converted
             val kept = bitmap.config == Bitmap.Config.ARGB_8888 && bitmap.colorSpace?.isSrgb == true
             val layout = if (kept) TextBehindMap.Layout.ABGR else TextBehindMap.Layout.ARGB
             if (kept) bitmap.copyPixelsToBuffer(IntBuffer.wrap(pixels)) else bitmap.getPixels(pixels, 0, width, 0, 0, width, height)

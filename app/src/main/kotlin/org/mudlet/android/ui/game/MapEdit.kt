@@ -357,26 +357,33 @@ private fun RoomExitsDialog(info: RoomInfo, rooms: MapRooms, onDismiss: () -> Un
         dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.room_edit_cancel)) } },
         title = { Text(stringResource(R.string.room_edit_exits_title, roomName(info))) },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExitGrid(exits, way) {
-                    way = it
-                    to = exits[it]?.to?.toString().orEmpty()
-                    found = null
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExitGrid(exits, way) {
+                        way = it
+                        to = exits[it]?.to?.toString().orEmpty()
+                        found = null
+                    }
+                    way?.let { picked ->
+                        val exit = exits[picked]
+                        Text(
+                            exit?.let { exitText(it) } ?: stringResource(R.string.room_edit_no_exit, exitWay(picked)),
+                            Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        val known = found?.takeIf { it.id == toRoom }?.let { stringResource(R.string.room_edit_exit_to_found, it.name, it.area) }
+                            ?: exit?.takeIf { it.to == toRoom && it.toName.isNotEmpty() }?.toName
+                        DestinationField(to, known) { text, match ->
+                            to = text
+                            found = match
+                        }
+                        CheckRow(bothWays, stringResource(R.string.room_edit_both_ways)) { bothWays = it }
+                    }
                 }
+                // Kept out of the scroller: below its fold they are out of sight, yet their touch areas reach into view and Compose
+                // reports a sliver of each to accessibility
                 way?.let { picked ->
                     val exit = exits[picked]
-                    Text(
-                        exit?.let { exitText(it) } ?: stringResource(R.string.room_edit_no_exit, exitWay(picked)),
-                        Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    val known = found?.takeIf { it.id == toRoom }?.let { stringResource(R.string.room_edit_exit_to_found, it.name, it.area) }
-                        ?: exit?.takeIf { it.to == toRoom && it.toName.isNotEmpty() }?.toName
-                    DestinationField(to, known) { text, match ->
-                        to = text
-                        found = match
-                    }
-                    CheckRow(bothWays, stringResource(R.string.room_edit_both_ways)) { bothWays = it }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton({ if (toRoom != null && rooms.setExit(info.id, picked, toRoom, bothWays)) onDismiss() }, enabled = toRoom != null) {
                             Text(stringResource(R.string.room_edit_exit_set))

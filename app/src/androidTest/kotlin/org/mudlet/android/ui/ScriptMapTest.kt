@@ -565,6 +565,8 @@ class ScriptMapTest {
         val tower = hasText(string(R.string.room_exit, string(R.string.exit_north), "Tower"))
         activateInDialog(hasText(string(R.string.exit_north)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(tower and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+        assertShownWhole(hasText(string(R.string.room_edit_exit_lock)))
+        assertShownWhole(hasText(string(R.string.room_edit_exit_remove)))
         activateInDialog(hasText(string(R.string.room_edit_exit_lock)))
         val lock = session.receive("lockRoomExit")
         assertEquals(listOf(2, "n", true), listOf(lock.getInt("room"), lock.getString("direction"), lock.getBoolean("locked")))
@@ -574,6 +576,9 @@ class ScriptMapTest {
         // the middle, as the banner, the place bar and the card can cover the middle of a map as short as the emulator's
         tapInCard(R.string.room_edit_exits)
         activateInDialog(hasText(string(R.string.exit_east)))
+        // The way's actions in sight once it is picked, on a screen as short as the emulator's
+        assertShownWhole(hasText(string(R.string.room_edit_exit_set)))
+        assertShownWhole(hasText(string(R.string.room_edit_exit_pick)))
         activateInDialog(hasText(string(R.string.room_edit_exit_pick)))
         val prompt = hasText(string(R.string.room_edit_link_prompt, string(R.string.exit_east)))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(prompt).fetchSemanticsNodes().isNotEmpty() }
@@ -832,6 +837,16 @@ class ScriptMapTest {
         // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
         if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
         compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    // Not cut by a scroller's fold or the dialog, and touched within 48 dp, before anything scrolls to it
+    private fun assertShownWhole(label: SemanticsMatcher) {
+        val node = compose.onNode(label and hasClickAction() and hasAnyAncestor(isDialog())).fetchSemanticsNode()
+        assertEquals("${label.description}'s width shown", node.size.width.toFloat(), node.boundsInRoot.width, 1f)
+        assertEquals("${label.description}'s height shown", node.size.height.toFloat(), node.boundsInRoot.height, 1f)
+        val reach = with(compose.density) { 48.dp.toPx() }
+        val touch = node.touchBoundsInRoot
+        assertTrue("${label.description} touched within $touch", touch.height >= reach && touch.width >= reach)
     }
 
     // [text] typed into the dialog's field [label]; Compose checks the screen, keyboard and all, as it focuses the field

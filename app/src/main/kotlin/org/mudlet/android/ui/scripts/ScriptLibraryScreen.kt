@@ -102,9 +102,9 @@ internal val ScriptItemKind.newName: Int
  * a breadcrumb, each with what it matches, runs at or sends under its name, and its switch. An item, or a folder's Edit,
  * opens through [onOpen]; [selected] is the item shown beside the library. An item with others in it (a trigger that
  * others chain from, a timer with offset timers) is gone into as a folder is. New items go last in the folder shown,
- * and open once made; among the buttons the top level takes toolbars, which the buttons go in. A search lists the items
- * of every kind whose name or summary it finds, with where each lives. At the foot, the last of the game's lines,
- * [console] in [colors], go back to the game as [onBack] does.
+ * and open once made; among the buttons the top level, as a package's folder, takes toolbars, which the buttons go
+ * in ([adds]). A search lists the items of every kind whose name or summary it finds, with where each lives. At the
+ * foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does.
  */
 @Composable
 internal fun ScriptLibraryScreen(

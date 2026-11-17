@@ -156,8 +156,8 @@ and engine ship in one APK.
 | P4 | `getLink` request and `link` message; `followLink` request; `linksChanged` message | 5 |
 | P5 | `setAppState` (active, minimized), which also saves the profile when the app leaves the front; `attention` message | 6 |
 
-The stand-in engine implements what it can, so `test_engine.py` and the JVM test cover the protocol path; the real
-engine is covered by `test_mudlet_engine.py` and the emulator.
+`test_mudlet_engine.py` and the JVM test cover the protocol path against libmudlet on the host, and the emulator
+jobs the engine on Android.
 
 ## Upstream gaps
 
@@ -183,7 +183,7 @@ come after #31, whose fake engine (`FakeEngine`) and emulator jobs run the app's
 | E0 | This roadmap | - |
 | U1 | App structure: navigation between a profile list placeholder, the game screen and the self-test (debug); theme; `strings.xml`; the accessibility checks in the UI tests | #31 |
 | U2 | Game screen: console, follow and jump to bottom, input line with local history, soft keyboard, connection bar with Reconnect | U1 |
-| P1 | Profiles over the protocol, both engines | #31 |
+| P1 | Profiles over the protocol | #31 |
 | U3 | Profile list and editor; password kept in the Android KeyStore and sent with `openProfile`; the self-test and smoke test connect through a profile | U1, P1 |
 | P2 | Input line protocol | P1 |
 | U4 | Hidden input, engine history, script-set input line, completion | U2, P2 |
@@ -207,8 +207,8 @@ come after #31, whose fake engine (`FakeEngine`) and emulator jobs run the app's
 P1 can run beside U1 and U2, and U3 beside U2 once P1 is in. U4 to U7 all change the game screen, so they go one at
 a time in the order listed; U8, the notification and the app's lifecycle, can run beside them.
 
-**How each is verified:** CI only. The protocol pull requests through `ProtocolSpecTest`, the JVM test against the
-stand-in, `test_engine.py`, and `test_mudlet_engine.py` against libmudlet on the host; the app pull requests through
+**How each is verified:** CI only. The protocol pull requests through `ProtocolSpecTest`, and the JVM test and
+`test_mudlet_engine.py` against libmudlet on the host; the app pull requests through
 Compose UI tests against `FakeEngine` on the API 28 and 36 emulators, with the accessibility checks, and
 `android_smoke.py` with libmudlet. What only a person can judge, TalkBack's speech and the keyboard's feel on a phone,
 goes on the on-device checklist in [`architecture.md`](architecture.md#on-device-checklist), item by item, in the pull

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The app's own Kotlin protocol code (EngineLink, FrameReader/Writer) against the
- * desktop build of the engine, over a Unix socket as on Android. Run by
+ * desktop build of the engine (libmudlet), over a Unix socket as on Android. Run by
  * native/tests/run_jvm_client_test.sh, which passes the engine binary and a fake game port.
  */
 class EngineLinkJvmTest {
@@ -29,6 +29,7 @@ class EngineLinkJvmTest {
     private val fakePort = System.getProperty("fakePort").orEmpty().toIntOrNull() ?: 0
     private val engineRequired = System.getProperty("engineRequired").toBoolean()
     private lateinit var socketPath: Path
+    private lateinit var home: Path
     private var engine: Process? = null
     private val events = LinkedBlockingQueue<Any>()
 
@@ -42,7 +43,9 @@ class EngineLinkJvmTest {
         val unset = "engineBin or fakePort not set; run native/tests/run_jvm_client_test.sh"
         if (engineRequired) assertTrue(unset, given) else assumeTrue(unset, given)
         assertTrue("no executable engine at $engineBin", File(engineBin).canExecute())
-        socketPath = Files.createTempDirectory("engine-jvm").resolve("engine.sock")
+        val dir = Files.createTempDirectory("engine-jvm")
+        socketPath = dir.resolve("engine.sock")
+        home = dir.resolve("home")
         startEngine()
     }
 
@@ -52,8 +55,21 @@ class EngineLinkJvmTest {
     }
 
     private fun startEngine() {
+        // Mudlet's own files (its Lua, Mudlet.ini outside the config dir) stay in the test's directory too
         engine = ProcessBuilder(engineBin, "--socket", socketPath.toString(), "--heartbeat-ms", "1000")
-            .apply { environment()["QT_QPA_PLATFORM"] = "offscreen" }
+            .apply {
+                environment().putAll(
+                    mapOf(
+                        "QT_QPA_PLATFORM" to "offscreen",
+                        "MUDLET_CONFIG_DIR" to home.resolve("mudlet").toString(),
+                        "MUDLET_PROFILE" to "Jvm Test",
+                        "HOME" to home.toString(),
+                        "XDG_CONFIG_HOME" to home.resolve(".config").toString(),
+                        "XDG_DATA_HOME" to home.resolve(".local/share").toString(),
+                        "XDG_CACHE_HOME" to home.resolve(".cache").toString(),
+                    ),
+                )
+            }
             .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
     }
 
@@ -129,53 +145,27 @@ class EngineLinkJvmTest {
 
     private fun percentile(sorted: List<Long>, p: Int) = sorted[(sorted.size * p / 100).coerceAtMost(sorted.size - 1)]
 
+    /** The console's text as it ends a line, or as its open tail, which the next line ends. */
+    private fun shown(
+        timeoutMs: Long = 5000,
+        queue: LinkedBlockingQueue<Any> = events,
+        pred: (String) -> Boolean,
+    ): EngineMessage = next<EngineMessage>(timeoutMs, queue) {
+        (it is EngineMessage.Line && pred(it.text)) || (it is EngineMessage.Tail && pred(it.text))
+    }
+
+    private fun text(message: EngineMessage) = (message as? EngineMessage.Line)?.text ?: (message as EngineMessage.Tail).text
+
     @Test
-    fun theStandInHasNoScriptWindows() {
+    fun aRefusalCarriesItsRequestsId() {
         val link = newLink()
         link.start()
-        next<Attached>()
-        assertEquals(EngineMessage.Windows(true, emptyList(), emptyList()), next<EngineMessage.Windows>())
+        next<Attached>(ENGINE_START_MS)
         next<EngineMessage.Synced>()
         link.send(Requests.getWindowText("chat", -300, 300, 5))
         val refused = next<EngineMessage.Error>()
         assertEquals("getWindowText: there is no console named \"chat\"", refused.message)
         assertEquals(5, (refused.replyTo as Number).toInt())
-        link.send(Requests.placeUserWindow("side", 0, 0, 300, 200, false))
-        assertEquals("placeUserWindow: the stand-in engine has no script windows", next<EngineMessage.Error>().message)
-        link.send(Requests.pointer("box", PointerType.PRESS, 1.5, 2.0, POINTER_LEFT, POINTER_LEFT, 0, 0))
-        assertEquals("pointer: the stand-in engine has no script windows", next<EngineMessage.Error>().message)
-        link.send(Requests.getImage("/no/such.png", 16, 16, null, 6))
-        val noImage = next<EngineMessage.Error>()
-        assertEquals("getImage: the stand-in engine has no script windows", noImage.message)
-        assertEquals(6, (noImage.replyTo as Number).toInt())
-        link.stop()
-    }
-
-    @Test
-    fun theStandInHasNoButtonsOrCommands() {
-        val link = newLink()
-        link.start()
-        next<Attached>()
-        assertEquals(EngineMessage.ButtonBars(emptyList()), next<EngineMessage.ButtonBars>())
-        assertEquals(EngineMessage.Commands(emptyList()), next<EngineMessage.Commands>())
-        next<EngineMessage.Synced>()
-        link.send(Requests.pressButton(1))
-        assertEquals("pressButton: the stand-in engine has no buttons or commands", next<EngineMessage.Error>().message)
-        link.send(Requests.activateCommand(1))
-        assertEquals("activateCommand: the stand-in engine has no buttons or commands", next<EngineMessage.Error>().message)
-        link.stop()
-    }
-
-    @Test
-    fun theStandInHasNoMap() {
-        val link = newLink()
-        link.start()
-        next<Attached>()
-        next<EngineMessage.Synced>()
-        link.send(Requests.mapPointer(MapPointerType.DOUBLE_CLICK, 1.5, 2.0, POINTER_LEFT, 0, 0))
-        assertEquals("mapPointer: the stand-in engine has no map", next<EngineMessage.Error>().message)
-        link.send(Requests.setMapViewOnly(false))
-        assertEquals("setMapViewOnly: the stand-in engine has no map", next<EngineMessage.Error>().message)
         link.stop()
     }
 
@@ -183,7 +173,7 @@ class EngineLinkJvmTest {
     fun severalProfilesEachOnTheirOwnSocket() {
         val control = newLink(profileSockets = true)
         control.start()
-        assertEquals(null, next<Attached>().hello.profile)
+        assertEquals(null, next<Attached>(ENGINE_START_MS).hello.profile)
         for (name in listOf("North", "South")) {
             control.send(Requests.saveProfile(Profile(name, "127.0.0.1", fakePort, false, "", false), 1))
             next<EngineMessage.Profiles>()
@@ -191,7 +181,12 @@ class EngineLinkJvmTest {
         control.send(Requests.openProfile("North", null, connect = true, alongside = true, id = 2))
         next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 2 }
         control.send(Requests.openProfile("South", null, connect = true, alongside = true, id = 3))
-        val open = next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 3 }.profiles
+        val asked = next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 3 }.profiles
+        assertEquals(listOf("North", "South"), asked.map { it.name })
+        // libmudlet loads a profile after the answer, one at a time
+        val open = next<EngineMessage.OpenProfiles>(PROFILE_LOAD_MS) { list ->
+            list.profiles.size == 2 && list.profiles.all { it.state == OpenProfileState.LOADED }
+        }.profiles
         assertEquals(listOf("North" to false, "South" to true), open.map { it.name to it.front })
         assertEquals(listOf(1, 2), open.map { it.slot })
 
@@ -200,21 +195,24 @@ class EngineLinkJvmTest {
         links.values.forEach(EngineLink::start)
         for ((name, queue) in queues) {
             assertEquals(name, next<Attached>(queue = queue).hello.profile)
-            next<EngineMessage.Status>(queue = queue) { it.key == "connection" && it.value == "connected" }
+            next<EngineMessage.Status>(PROFILE_LOAD_MS, queue) { it.key == "connection" && it.value == "connected" }
         }
         links.getValue("North").send(Requests.send("echo north only"))
-        val said = next<EngineMessage.Line>(queue = queues.getValue("North")) { it.text.contains("north only") }
-        next<EngineMessage.OpenProfiles> { list -> list.profiles.any { it.name == "North" && it.lastSeq >= said.seq } }
+        val said = shown(queue = queues.getValue("North")) { it.contains("north only") }
+        val seq = (said as? EngineMessage.Line)?.seq ?: 1
+        next<EngineMessage.OpenProfiles> { list -> list.profiles.any { it.name == "North" && it.lastSeq >= seq } }
         val south = queues.getValue("South")
         while (true) {
             val e = south.poll(300, TimeUnit.MILLISECONDS) ?: break
-            assertTrue("North's line reached South's socket: $e", e !is EngineMessage.Line || !e.text.contains("north only"))
+            val leaked = (e is EngineMessage.Line || e is EngineMessage.Tail) && text(e).contains("north only")
+            assertTrue("North's line reached South's socket: $e", !leaked)
         }
 
         control.send(Requests.closeProfile("South", 4))
-        val left = next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 4 }.profiles
+        next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 4 }
+        val left = next<EngineMessage.OpenProfiles>(PROFILE_LOAD_MS) { list -> list.profiles.none { it.name == "South" } }.profiles
         assertEquals(listOf("North" to true), left.map { it.name to it.front })
-        next<Detached>(queue = south)
+        next<Detached>(PROFILE_LOAD_MS, south)
         links.values.forEach(EngineLink::stop)
         control.stop()
     }
@@ -223,28 +221,36 @@ class EngineLinkJvmTest {
     fun protocolLatencyThroughputAndEngineDeath() {
         val link = newLink()
         link.start()
-        val first = next<Attached>().hello
+        val first = next<Attached>(ENGINE_START_MS).hello
         assertEquals(PROTOCOL_VERSION, first.version)
         next<EngineMessage.Synced>()
 
         // What is sent says which connection it went out on, as a text box's typing is counted by it
         assertEquals("the first connection", 1, link.sendOn(Requests.setScreenSize(100, 30)))
 
+        // libmudlet makes the profile when it is given a game, and shows a GA prompt as the open tail
         link.send(Requests.connect("127.0.0.1", fakePort, false))
-        // The tell line comes before the banner's prompt, and next() discards what it skips
-        assertEquals("Lua notify() reached the JVM client", "Tell", next<EngineMessage.Notify>().title)
-        val banner = next<EngineMessage.Line> { it.prompt }
+        val banner = next<EngineMessage.Tail>(PROFILE_LOAD_MS) { it.prompt }
         assertEquals("HP:100> ", banner.text)
 
-        link.send(Requests.send("naws"))
-        next<EngineMessage.Line> { it.text == "NAWS asked" }
-        link.send(Requests.send("size"))
-        assertEquals("the game was told the size setScreenSize gave", "SIZE: 100x30", next<EngineMessage.Line> { it.text.startsWith("SIZE:") }.text)
-
-        link.send(Requests.runLua("return 6 * 7", 99))
+        link.send(Requests.runLua("tempTrigger(\"tells you\", function() showNotification(\"Tell\", line) end) echo(\"answer \" .. 6 * 7 .. \"\\n\")", 99))
         val lua = next<EngineMessage.Status> { it.key == "luaResult" }
-        assertEquals("42", lua.value)
+        assertEquals("ran", lua.value)
         assertEquals(99, (lua.replyTo as Number).toInt())
+        shown { it.endsWith("answer 42") }
+        link.send(Requests.send("tell"))
+        assertEquals("showNotification() reached the JVM client", "Tell", next<EngineMessage.Notify>().title)
+
+        // Mudlet tells the game a new size once it has held for 0.3 s
+        link.send(Requests.send("naws"))
+        shown { it == "NAWS asked" }
+        val deadline = System.nanoTime() + 5_000_000_000
+        var size: String
+        do {
+            link.send(Requests.send("size"))
+            size = text(shown { it.startsWith("SIZE:") })
+        } while (size != "SIZE: 100x30" && System.nanoTime() < deadline)
+        assertEquals("the game was told the size setScreenSize gave", "SIZE: 100x30", size)
 
         // Ping round trips through the app's EngineLink
         val rtts = (0 until 3000).map { link.ping()!! / 1000 }.drop(300).sorted()
@@ -252,6 +258,8 @@ class EngineLinkJvmTest {
 
         // Paced floods, decoded by FrameReader the way the UI does
         for (rate in listOf(25_000, 50_000, 100_000, 200_000)) {
+            link.send(Requests.send("echo before $rate"))
+            shown { it == "You said: before $rate" }
             events.clear()
             link.send(Requests.send("pace $rate $rate"))
             var lines = 0
@@ -259,9 +267,11 @@ class EngineLinkJvmTest {
             while (true) {
                 when (val e = events.poll(30, TimeUnit.SECONDS) ?: error("flood timed out")) {
                     is EngineMessage.Line -> {
-                        lines++
+                        if (e.text.startsWith("Line ")) lines++
                         if (e.text == "FLOOD DONE") break
                     }
+
+                    is EngineMessage.Tail -> if (e.text == "FLOOD DONE") break
 
                     is EngineMessage.Gap -> skipped += e.skipped
 
@@ -269,7 +279,8 @@ class EngineLinkJvmTest {
                 }
             }
             println("JVM: paced $rate lines/s for 1 s: delivered $lines, skipped $skipped")
-            assertEquals(rate + 1L, lines + skipped)
+            // A gap can also take the echo line before the flood, which the open tail ended
+            assertTrue("every flood line delivered or counted in a gap: $lines + $skipped", lines + skipped in rate.toLong()..rate + 1L)
         }
 
         // Detach and reattach to the same engine: only the lines that arrived meanwhile come back
@@ -315,10 +326,15 @@ class EngineLinkJvmTest {
         next<Detached>()
         val detectUs = (System.nanoTime() - killedAt) / 1000
         startEngine()
-        val restarted = next<Attached>(10_000)
+        val restarted = next<Attached>(ENGINE_START_MS)
         val reconnectMs = (System.nanoTime() - killedAt) / 1_000_000
         assertTrue("new engine instance", !restarted.same && restarted.hello.instance != first.instance)
         println("JVM: engine killed -> EOF seen in ${detectUs}us; link reattached to the restarted engine ${reconnectMs}ms after the kill")
         link.stop()
+    }
+
+    private companion object {
+        const val ENGINE_START_MS = 30_000L
+        const val PROFILE_LOAD_MS = 30_000L
     }
 }

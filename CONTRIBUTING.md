@@ -11,7 +11,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `engine-service/` | `:engine-service`: `EngineService` in the `:engine` process, and the Qt libraries `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, the script windows' state and layout, what a label draws, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
-| `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`, a test harness of the socket protocol on the host, never the app), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5, the stand-in's |
+| `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the host tests (`tests/`) |
 | `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and the strings check it runs, `check-strings.py`, and `launcher-icons.py` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
 | `.agents/skills/` | Longer procedures for coding agents (running on the emulator, bumping Qt); `.claude/skills` links to it |
@@ -45,20 +45,19 @@ scripts/build-mudlet-deps.sh deps/prefix
 scripts/build-libmudlet.sh ../mudlet build deps/prefix
 LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh -PextractNativeLibs=true   # the variant that extracts its libraries at install
-
-# Without Mudlet's build: the stand-in engine packaged, only for Android lint and the app's JVM tests. Not the app
-# (no TLS, map, script windows or login; its About screen says so): never install it to play, or hand it out
-scripts/build-apk.sh
 ```
+
+There is no engine without Mudlet: `build-apk.sh` needs `LIBMUDLET_BUILD_DIR`, and so do Android lint and the app's
+JVM tests, which run after it.
 
 `build-libmudlet.sh` adds the Lua 5.1 FORTIFY fix to the Mudlet checkout (see the README's CI section). For the
 emulator, set `ANDROID_ABI=x86_64` for all three scripts; that needs Qt for `android_x86_64`.
 
 ```sh
-# The release: each ABI's engine staged (add LIBMUDLET_BUILD_DIR for libmudlet), then the AAB, an APK for each ABI
-# and the smoke build, minified; signed with MUDLET_KEYSTORE, MUDLET_KEYSTORE_PASSWORD and MUDLET_KEY_ALIAS if set
-STAGE_ONLY=1 DEPLOY_DIR=staged/arm64-v8a scripts/build-apk.sh
-ANDROID_ABI=x86_64 STAGE_ONLY=1 DEPLOY_DIR=staged/x86_64 scripts/build-apk.sh
+# The release: each ABI's engine staged from its libmudlet build, then the AAB, an APK for each ABI and the smoke
+# build, minified; signed with MUDLET_KEYSTORE, MUDLET_KEYSTORE_PASSWORD and MUDLET_KEY_ALIAS if set
+LIBMUDLET_BUILD_DIR=build STAGE_ONLY=1 DEPLOY_DIR=staged/arm64-v8a scripts/build-apk.sh
+LIBMUDLET_BUILD_DIR=build-x86_64 ANDROID_ABI=x86_64 STAGE_ONLY=1 DEPLOY_DIR=staged/x86_64 scripts/build-apk.sh
 scripts/build-release.sh staged/arm64-v8a staged/x86_64 -- -PreleaseChannel=ptb
 ```
 
@@ -66,6 +65,11 @@ The public test builds, their versions and signing, and what the maintainer sets
 [`docs/ptb.md`](docs/ptb.md).
 
 ## Test
+
+Running an engine on your machine, for the host tests and `EngineLinkJvmTest`, needs Mudlet's toolchain: a checkout
+of Mudlet, the system libraries in `scripts/build-libmudlet-desktop.sh`'s header and Qt's qt5compat, qtmultimedia,
+qtspeech and qtsvg for `gcc_64`, as the engine is libmudlet. There is no smaller engine to test against; without them,
+`:protocol`'s other tests and `:suggest`'s still run, and CI's `desktop-engine` job runs the rest.
 
 ```sh
 # :protocol's JVM tests without an engine (EngineLinkJvmTest is then skipped, but fails with CI=true, as on CI)
@@ -75,20 +79,15 @@ The public test builds, their versions and signing, and what the maintainer sets
 ./gradlew :suggest:test
 KOTLIN_HOME=path/to/kotlinc JUNIT_JARS=junit-4.13.2.jar:hamcrest-core-1.3.jar suggest/run-tests.sh
 
-# The stand-in engine, the protocol's test harness, on the host, then :protocol's tests with the Kotlin client against it
-cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64
-cmake --build native/build-desktop --target engine
-QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine
-QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
-
-# The real engine on the host: libmudlet for gcc_64 needs Qt's qt5compat, qtmultimedia, qtspeech and qtsvg there
-# too, and the system libraries in the script's header
+# The engine on the host, its host tests through the socket protocol, then :protocol's tests with the Kotlin client
+# against it (run_jvm_client_test.sh takes ENGINE, by default the one built here)
 scripts/build-libmudlet-desktop.sh ../mudlet build-desktop
 cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64 \
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
 cmake --build native/build-desktop-mudlet --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
+QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 
 # The app's JVM tests (the About screen's licence data), after scripts/build-apk.sh
 ./gradlew -PqtRoot=$QT_ROOT :app:testDebugUnitTest
@@ -156,8 +155,7 @@ FIX=1 scripts/lint.sh clang-format   # fix native/
 is Mudlet's `.clang-format` for C++ and ktlint's `intellij_idea` style (`.editorconfig`) for Kotlin. The strings check
 (`scripts/check-strings.py`) fails on text written into the Kotlin and on a string in `strings.xml` without a comment
 for translators ([`docs/translations.md`](docs/translations.md)). The conflict-marker check fails on a line a merge
-conflict left in any text file (`<<<<<<< `, `=======`, `>>>>>>> `). The vendored check fails when a file in
-`native/third_party/` differs from the release its `SHA256SUMS` lists, or is not in it, and when a
+conflict left in any text file (`<<<<<<< `, `=======`, `>>>>>>> `). The vendored check fails when a
 `scripts/mudlet-patches/*.patch` lacks the `Upstream:` line before its diff: `Upstream: Mudlet/Mudlet#<number>`, or
 `Upstream: not opened yet`, which the check prints.
 

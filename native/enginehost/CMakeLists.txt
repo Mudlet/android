@@ -1,32 +1,28 @@
-set(HOST_SOURCES main.cpp ControlBridge.cpp ControlBridge.h SocketBridge.cpp SocketBridge.h)
+set(HOST_SOURCES main.cpp ControlBridge.cpp ControlBridge.h SocketBridge.cpp SocketBridge.h MudletEngine.cpp MudletEngine.h
+    MudletProfile.cpp MudletProfile.h ProfileStore.cpp ProfileStore.h SessionStore.cpp SessionStore.h)
 if(ANDROID)
     list(APPEND HOST_SOURCES AndroidNotifier.cpp AndroidNotifier.h AndroidServiceSetup.cpp AndroidServiceSetup.h)
 endif()
 
 # On Android this produces libengine_arm64-v8a.so, which EngineService (:engine-service) loads in the :engine process.
-# With LIBMUDLET_BUILD_DIR, a Mudlet build tree made by scripts/build-libmudlet.sh (Android) or
-# scripts/build-libmudlet-desktop.sh (host), the engine is libmudlet (MudletEngine, through THeadlessSession's public
-# API) instead of the stand-in. That tree's libmudlet.cmake (scripts/export-libmudlet.py) defines libmudlet::headless.
-set(LIBMUDLET_BUILD_DIR "" CACHE PATH "Mudlet build tree with libmudlet.cmake, for the real engine")
-if(LIBMUDLET_BUILD_DIR)
-    if(NOT EXISTS "${LIBMUDLET_BUILD_DIR}/libmudlet.cmake")
-        message(FATAL_ERROR "${LIBMUDLET_BUILD_DIR}/libmudlet.cmake is missing: run scripts/export-libmudlet.py on that tree")
-    endif()
-    include("${LIBMUDLET_BUILD_DIR}/libmudlet.cmake")
-    list(APPEND HOST_SOURCES MudletEngine.cpp MudletEngine.h MudletProfile.cpp MudletProfile.h ProfileStore.cpp ProfileStore.h SessionStore.cpp SessionStore.h)
+# LIBMUDLET_BUILD_DIR is a Mudlet build tree made by scripts/build-libmudlet.sh (Android) or
+# scripts/build-libmudlet-desktop.sh (host): the engine is libmudlet (MudletEngine, through THeadlessSession's public
+# API). That tree's libmudlet.cmake (scripts/export-libmudlet.py) defines libmudlet::headless.
+set(LIBMUDLET_BUILD_DIR "" CACHE PATH "Mudlet build tree with libmudlet.cmake")
+if(NOT LIBMUDLET_BUILD_DIR)
+    message(FATAL_ERROR "Set LIBMUDLET_BUILD_DIR to a Mudlet build tree from scripts/build-libmudlet.sh or scripts/build-libmudlet-desktop.sh")
 endif()
+if(NOT EXISTS "${LIBMUDLET_BUILD_DIR}/libmudlet.cmake")
+    message(FATAL_ERROR "${LIBMUDLET_BUILD_DIR}/libmudlet.cmake is missing: run scripts/export-libmudlet.py on that tree")
+endif()
+include("${LIBMUDLET_BUILD_DIR}/libmudlet.cmake")
 
 qt_add_executable(engine ${HOST_SOURCES})
-if(LIBMUDLET_BUILD_DIR)
-    target_compile_definitions(engine PRIVATE ENGINE_LIBMUDLET)
-    target_link_libraries(engine PRIVATE libmudlet::headless)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        # As Mudlet links its runner: a distribution's qt6keychain needs Qt6DBus but has no search path; unlike a
-        # RUNPATH, an RPATH finds it beside our Qt
-        target_link_options(engine PRIVATE "LINKER:--disable-new-dtags")
-    endif()
-else()
-    target_link_libraries(engine PRIVATE engine_core)
+target_link_libraries(engine PRIVATE libmudlet::headless)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # As Mudlet links its runner: a distribution's qt6keychain needs Qt6DBus but has no search path; unlike a
+    # RUNPATH, an RPATH finds it beside our Qt
+    target_link_options(engine PRIVATE "LINKER:--disable-new-dtags")
 endif()
 target_link_libraries(engine PRIVATE engine_api Qt6::Core Qt6::Gui Qt6::Network)
 if(ANDROID)

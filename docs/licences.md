@@ -16,24 +16,23 @@ Everything is in the APK's `assets/licences/`, from [`app/src/main/assets/licenc
 | `texts/<id>.txt` | The text of each licence, named by its SPDX identifier, from Qt's `LICENSES/` or the SPDX list | hand, `qt-attributions.py` |
 
 A component's `licence` is an SPDX expression; the screen shows the text of each identifier in it, plus `texts`
-(the GPL v3 that the LGPL v3 is written on top of, for Qt). `engines` says which APKs carry a component: the
-stand-in engine's (`standin`) or libmudlet's (`mudlet`). `scripts/build-apk.sh` writes which engine an APK carries,
-with Mudlet's version and the commit it was built from, into `:engine-service`'s `res/values/engine_info.xml`.
+(the GPL v3 that the LGPL v3 is written on top of, for Qt). `scripts/build-apk.sh` writes Mudlet's version and the
+commit it was built from into `:engine-service`'s `res/values/engine_info.xml`.
 
 ## What keeps it true
 
 - **Every APK CI builds** goes through `scripts/check-apk.sh`, which runs `scripts/check-licences.py --apk`: each
-  `lib/<abi>/*.so` must be claimed by a component of that APK's engine, the APK must carry the licence files as they
+  `lib/<abi>/*.so` must be claimed by a component, the APK must carry the licence files as they
   are in the repository, and `android.json` with a text for each of its licences.
 - **The repository** (`scripts/check-licences.py` alone, also part of the above): every licence named has its text and
   every text is used; `LICENSE` is the text of the licence listed for this app's own code (`mudlet-android`); the
-  versions listed for OpenSSL, Qt, the NDK, the stand-in's Lua and each dependency `build-mudlet-deps.sh` builds are
+  versions listed for OpenSSL, Qt, the NDK and each dependency `build-mudlet-deps.sh` builds are
   the ones the scripts pin, so a bump that forgets the list fails.
 - **Mudlet's checkout** (`--mudlet-source`, in the libmudlet job, so also nightly against Mudlet's `development`):
   each Lua C module in Mudlet's `cmake/BundledLuaModules.cmake`, each font directory in `mudlet_fonts_common.qrc`,
   each file in `src/mudlet-lua/lua/3rdparty` and the `3rdparty/` libraries the core builds must have a component.
 - **The Gradle task** fails the build on a POM licence that `pomLicences` does not map, or a module with no POM licence.
-- `LicencesTest` (`app/src/test`, the libmudlet arm64 APK's job) checks the data parses for both engines; `AboutScreenTest`
+- `LicencesTest` (`app/src/test`, the libmudlet arm64 APK's job) checks the data parses and names only texts it has; `AboutScreenTest`
   (`app/src/androidTest`, the emulator jobs) opens the screen and a licence through TalkBack's actions, with the
   accessibility checks on.
 
@@ -45,8 +44,7 @@ for m in qtbase qtsvg qtmultimedia qt5compat qtspeech; do
     git clone --depth 1 --branch v6.12.0 --filter=blob:none --sparse https://github.com/qt/$m ../$m
     git -C ../$m sparse-checkout set --no-cone '/**/qt_attribution.json' '/LICENSES/'
 done
-scripts/qt-attributions.py 6.12.0 ../qtbase=standin,mudlet ../qtsvg=mudlet ../qtmultimedia=mudlet \
-    ../qt5compat=mudlet ../qtspeech=mudlet
+scripts/qt-attributions.py 6.12.0 ../qtbase ../qtsvg ../qtmultimedia ../qt5compat ../qtspeech
 ```
 
 ## This app, Mudlet and the GPL
@@ -69,11 +67,10 @@ bundled).
 What the APK ships, as checked in the APKs CI builds:
 
 - **Shared libraries only.** Qt's modules (`libQt6*_<abi>.so`) and plugins (`libplugins_*_<abi>.so`) are separate
-  `.so` files that the engine loads dynamically: Core, Gui and Network for the stand-in engine, and with libmudlet
-  also Concurrent, Core5Compat, Multimedia, OpenGL, Svg and TextToSpeech. They are the Qt Company's prebuilt,
-  unmodified binaries of Qt 6.12.0 (installed by `aqtinstall`). Nothing of Qt is linked statically (QtKeychain,
-  which is, is not Qt and is BSD licensed).
-- **FFmpeg** (libmudlet APK only): Qt Multimedia's FFmpeg backend brings Qt's own build of FFmpeg 9.0.1, LGPL v2.1
+  `.so` files that the engine loads dynamically: Core, Gui, Network, Concurrent, Core5Compat, Multimedia, OpenGL, Svg
+  and TextToSpeech. They are the Qt Company's prebuilt, unmodified binaries of Qt 6.12.0 (installed by `aqtinstall`).
+  Nothing of Qt is linked statically (QtKeychain, which is, is not Qt and is BSD licensed).
+- **FFmpeg**: Qt Multimedia's FFmpeg backend brings Qt's own build of FFmpeg 9.0.1, LGPL v2.1
   or later without its GPL parts, as `libavcodec.so`, `libavformat.so`, `libavutil.so`, `libswresample.so` and
   `libswscale.so`, loaded dynamically too. The About screen links its source release; Qt's build scripts for it are
   in Qt's `qt5` repository (`coin/provisioning`).

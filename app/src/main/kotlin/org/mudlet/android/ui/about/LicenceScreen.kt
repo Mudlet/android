@@ -27,7 +27,7 @@ import org.mudlet.android.ui.MudletScaffold
  */
 @Composable
 fun LicenceScreen(componentId: String, onBack: () -> Unit) {
-    val licences = rememberLicences(engineInfo())
+    val licences = rememberLicences()
     val component = (licences as? LicenceList.Loaded)?.components?.firstOrNull { it.id == componentId }
     val context = LocalContext.current
     // each text's paragraphs, or null for a text the APK lacks (scripts/check-licences.py checks it has them all)

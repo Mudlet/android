@@ -140,9 +140,8 @@ came, scripts read the main window's size the windows UI measured (`getMainWindo
 placed by it), and the game is told the console the player sees, which in the stacked layout is not Mudlet's grid
 (see "Layout").
 
-The stand-in engine has no windows: it sends empty `windows`, `buttonBars` and `commands` on attach and answers the
-window requests with `error`, so `test_engine.py` and the JVM test cover the framing. `FakeEngine` feeds the app's UI
-tests.
+`test_mudlet_engine.py` and the JVM test cover the framing against libmudlet on the host, and the bridge's refusals
+of malformed window requests; `FakeEngine` feeds the app's UI tests.
 
 ## Compose rendering
 
@@ -334,8 +333,8 @@ F4 and F5 are independent of each other and of F3.
 
 **Tests for each:**
 
-- **P pull requests:** `ProtocolSpecTest`; `protocol_client.py` and the JVM test against the stand-in (empty window
-  state, refusals); in `test_mudlet_engine.py`, a Lua script that builds the windows through Geyser and checks the
+- **P pull requests:** `ProtocolSpecTest`; the bridge's refusals in `test_mudlet_engine.py`
+  (`bridge_refusals`); in `test_mudlet_engine.py`, a Lua script that builds the windows through Geyser and checks the
   frames:
   - F1P: `Geyser.MiniConsole:new{name="chat", x=0, y=0, width="30%", height="40%"}` and `chat:echo()` give `windows`
     with its geometry and `windowText` with the coloured row; `Geyser.UserWindow:new{name="side"}` and

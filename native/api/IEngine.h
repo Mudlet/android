@@ -43,7 +43,7 @@ struct PngImage
     QSize size;
 };
 
-// What the host asks of one profile's session, the stand-in's or libmudlet's (MudletEngine); IEngineControl has what
+// What the host asks of one profile's session (MudletEngine's MudletProfile); IEngineControl has what
 // is the whole engine's
 class IEngine
 {

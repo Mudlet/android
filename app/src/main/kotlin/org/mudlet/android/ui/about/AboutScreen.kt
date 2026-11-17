@@ -45,7 +45,7 @@ private val GROUP_TITLES = mapOf(
 @Composable
 fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selected: String? = null) {
     val engine = engineInfo()
-    val licences = rememberLicences(engine)
+    val licences = rememberLicences()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val open = { url: String -> openLink(uriHandler, context, url) }
@@ -54,24 +54,20 @@ fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selec
             item {
                 Heading(stringResource(R.string.app_name), MaterialTheme.typography.headlineSmall)
                 Paragraph(stringResource(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
-                if (engine.isMudlet) {
-                    Paragraph(stringResource(R.string.about_engine_mudlet, engine.version))
-                    Paragraph(
-                        if (engine.commit.isEmpty()) {
-                            stringResource(R.string.about_engine_commit_unknown)
-                        } else {
-                            stringResource(R.string.about_engine_commit, engine.commit.take(12))
-                        },
-                    )
-                } else {
-                    Paragraph(stringResource(R.string.about_engine_standin))
-                }
+                Paragraph(stringResource(R.string.about_engine_mudlet, engine.version))
+                Paragraph(
+                    if (engine.commit.isEmpty()) {
+                        stringResource(R.string.about_engine_commit_unknown)
+                    } else {
+                        stringResource(R.string.about_engine_commit, engine.commit.take(12))
+                    },
+                )
             }
             item {
                 Heading(stringResource(R.string.about_free_software_heading))
                 Paragraph(stringResource(R.string.about_free_software))
                 LinkButton(stringResource(R.string.about_source_app)) { open(appSourceUrl(BuildConfig.SOURCE_COMMIT)) }
-                if (engine.isMudlet) LinkButton(stringResource(R.string.about_source_mudlet)) { open(mudletSourceUrl(engine.commit)) }
+                LinkButton(stringResource(R.string.about_source_mudlet)) { open(mudletSourceUrl(engine.commit)) }
                 Paragraph(stringResource(R.string.about_qt_notice))
                 val qt = (licences as? LicenceList.Loaded)?.components?.firstOrNull { it.id == "qt" }
                 if (qt != null) LinkButton(stringResource(R.string.about_qt_source, qt.version)) { open(qt.source) }

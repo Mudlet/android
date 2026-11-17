@@ -27,13 +27,12 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 | Where | What |
 |---|---|
 | `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
-| `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with the engine's name and version (`res/values/engine_info.xml`) |
+| `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with Mudlet's version and commit (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go and the commands' menu (`ButtonBarLayout`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, the protocol's engine side (`ControlBridge` on the control socket, which keeps the open profiles, and a `SocketBridge` per open profile), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | Between the host and an engine: `IEngineControl` (the profiles, app state, saving) and `IEngineHost` (profiles opening and closing, the engine-wide statuses) for the engine as a whole; `IEngine` and `IFrontend` for one profile's session |
-| `native/standin/` | The stand-in engine, a test harness of the socket protocol on the host and never the app (CI builds no APK with it), which runs several profiles at once (`StandIn`, with an `Engine` each): minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
-| `native/tests/` | The fake game server, the Python protocol client, and the host tests of both engines |
+| `native/tests/` | The fake game server, the Python protocol client, and the engine's host tests |
 
 ## How it is wired
 ```
@@ -46,7 +45,7 @@ Kotlin + Compose, no Qt                     QtServiceBase + libengine.so (Qt Cor
              one per socket
               <======== LocalSocket ========>                  ControlBridge -> IEngineControl
               frames: u32 BE length + JSON                     SocketBridge : IFrontend -> IEngine, per profile
-                                                                 (MudletEngine, or the stand-in)
+                                                                 (MudletEngine)
                                                                AndroidNotifier -> EngineNotifications (JNI)
 ```
 
@@ -429,8 +428,7 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   whatever the scripts made. The app's map raises no script events (`sysMapWindowMousePressEvent`,
   `sysMapAreaChanged`), and getMapSelection() does not see what it selects.
 - Known limits: a `centerview()` on the room the player is already in is taken by whichever view draws first, so a
-  view moved by `showRoom` (or a pan) that draws second keeps its place until the player moves to another room; the
-  stand-in engine has no map, so neither draws anything there.
+  view moved by `showRoom` (or a pan) that draws second keeps its place until the player moves to another room.
 
 ### Downloading the map
 A game can offer its map, as GMCP's `Client.Map` (docs/protocol.md, "Downloading the map"; a carried Mudlet patch),
@@ -467,7 +465,7 @@ drawn by `ui/game/AppMap.kt`):
   server's words, as on the desktop.
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
-  time limit, so a stalled download runs until cancelled; the stand-in engine refuses both requests.
+  time limit, so a stalled download runs until cancelled.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the
@@ -524,7 +522,7 @@ keeps the profiles' passwords in the KeyStore.
 | `lineShown`: each line once its triggers ran, gagged ones left out | `line`. The last one is held as the `tail` until the next line or text that does not continue it, so an `echo()` after `deleteLine()` or a command typed at a prompt (`continuesLine`) still lands on its end |
 | `localTextStyled`: `echo()`, Mudlet's messages, the command echo | `line` for each piece a line feed ends, `tail` for the rest. The line feed it repeats after `lineShown` ended its line is dropped, as `docs/headless.md` says |
 | `mainConsoleCleared` | `clear`. The ring is emptied, and a UI that attaches later is sent `clear` too |
-| `notificationRequested` (`showNotification()`) | `notify`, posted by the engine process as the stand-in's are |
+| `notificationRequested` (`showNotification()`) | `notify`, posted by the engine process |
 | `connecting`, `connected`, `disconnected` | status `connection` |
 | `outputLine`, `localTextStyled`, `errorConsoleText` | counters, and status `luaError` |
 | `profileLoaded`, `startFinished` | status `profile`, `profileLoadMs`, `startMs` |
@@ -594,13 +592,17 @@ new session beside them, up to `ControlBridge::maxOpenProfiles`.
 **Tests.** `native/tests/test_mudlet_engine.py` runs the host build of this engine against
 `native/tests/fake_telnet.py` through the socket protocol. CI builds libmudlet for the host with the
 Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
+- the bridges' refusals before the engine is called: a wrong `hello` version, an unknown type, each request with a
+  field missing or out of range, a fifth profile opened alongside four, a UI that never says `hello`, and a new UI
+  replacing the old one;
 - the banner's colours and styles, and the prompt as the tail;
 - a prompt from a game that has sent no GA, as the tail after 300 ms of quiet; after a GA, an
   unfinished line held back until its line feed;
 - a gag, a trigger's `echo()`, and an `echo()` after `deleteLine()`;
 - `showNotification()`, `echo()` and `cecho()`;
 - `clearWindow()`, and the replay after a clear;
-- a 3000-line flood that arrives whole and in order;
+- a 3000-line flood that arrives whole and in order, and a UI that attaches after it replayed the ring's last 2000
+  lines after a `gap`, or only those after its `lastSeq`;
 - Lua errors;
 - the profile's save on quit;
 - `setAppState`: sysApplicationFocusChangeEvent to a Lua handler and a save each time the app leaves the front;
@@ -694,7 +696,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL, with
 one profile open and with two.
-`native/tests/profile_checks.py` holds the profile requests both host tests run, the stand-in's `test_engine.py` too.
+`native/tests/profile_checks.py` holds the profile requests `test_mudlet_engine.py` runs.
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
 (CI's emulator jobs) or a device, from the host through adb. It drives the UI through a debug-only hook,
@@ -810,8 +812,7 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   `deleteProfile` does not remove them either. The engine stores no password (the app keeps its own, encrypted, and
   sends it with each `openProfile`), so only one stored by Mudlet's own GUI under the same config dir could be left.
   Profile management in `THeadlessSession` would close this.
-- On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`, as the stand-in's is
-  (`native/standin/CMakeLists.txt`). Otherwise bionic's FORTIFY check aborts the engine in
+- On a device, Lua 5.1 must be built with `-U_FORTIFY_SOURCE`. Otherwise bionic's FORTIFY check aborts the engine in
   `luaL_openlibs`. Mudlet does not do this yet; `scripts/build-libmudlet.sh` carries it in this
   repository's libmudlet build, and CI's emulator smoke test fails without it.
 
@@ -819,8 +820,7 @@ CI runs both on API 28, the app's minSdk, and on API 36.
 Android kills `:engine` when it needs the memory, and the user can kill it from the self-test. The engine is started
 again within about half a second while the UI is shown (the UI starts it, and the system may too), but a new engine
 knew nothing of the profiles, so the player was silently left disconnected. Now the engine keeps what it needs to
-start each open profile again on disk, and a new engine restores them. Only the engine with libmudlet does this; the
-stand-in does not.
+start each open profile again on disk, and a new engine restores them.
 
 **What is kept.** `native/enginehost/SessionStore.*` keeps one JSON file, `<files>/engine-session.json`
 (`MUDLET_ENGINE_STATE`; the app names it in `EngineSession.kt`), version 2 (a version 1 file, of one profile, is
@@ -996,9 +996,8 @@ that attaches later is told too. The UI shows it as a marker line.
     ([`c-device.md`](decisions/hosting-results/c-device.md), 9b).
   - The new engine has a new `instance`. The UI keeps its old lines and adds a
     "new engine instance" marker. The engine's scrollback is gone.
-  - The engine with libmudlet loads the profile again and reconnects it, and the
-    UI shows that as marker lines ("Restoring the session" above). The
-    stand-in's game connection is gone.
+  - The engine loads the profile again and reconnects it, and the
+    UI shows that as marker lines ("Restoring the session" above).
   - Host timings: the restarted engine is reachable 33 ms after it starts, and
     the JVM link reattaches 110 ms after the kill.
   - On a phone, expect a few hundred ms for the process fork and Qt library load.
@@ -1201,8 +1200,7 @@ certificate folders, such as `/etc/ssl/certs`.
 connect starts the profile; Mudlet stores it with the profile, as its connection dialog does. `THeadlessSession`
 takes the choice only at start, so while the profile runs a `connect` with a different `tls` is refused with status
 `connection` `error: ...`; stopping and starting the engine changes it. An engine restored after a kill starts
-the profile with the choice it was started with (see "Restoring the session"). The stand-in engine has no TLS and refuses
-`tls` true the same way. The self-test screen has a TLS box beside the port.
+the profile with the choice it was started with (see "Restoring the session"). The self-test screen has a TLS box beside the port.
 
 **Tests.** `native/tests/test_mudlet_engine.py` runs the real engine on the host, with the host's Qt and OpenSSL,
 against `fake_telnet.py` behind Python's `ssl` with a certificate it makes with the `openssl` command:
@@ -1599,7 +1597,7 @@ Item 13 of the on-device checklist covers this.
   so it uses the JDK's Unix sockets directly.
 - **The JVM test runner needs `ANDROID_HOME`**, as Gradle configures the Android
   modules too; `native/tests/run_jvm_client_test.sh` sets it.
-- **`pkill -f test_engine.py` from a shell whose own command line contains that
+- **`pkill -f test_mudlet_engine.py` from a shell whose own command line contains that
   string kills the shell.** Use the pid.
 - **`/usr/bin/time` is not installed.** Use the bash `time` builtin.
 - **A sent line came back on the input line** (`GameScreenTest`, once on API 28: "northdraft"). The field took a
@@ -1615,7 +1613,7 @@ From prototype C's report, on the host, before it became this app; the paths are
 
 | Check | Result |
 |-------|--------|
-| Engine desktop build and fake-server test | **pass** (rerun after the startup fixes). `native/tests/test_engine.py`: 0 failures ([`c-desktop-test.txt`](decisions/hosting-results/c-desktop-test.txt)). The JVM test of the app's Kotlin client against the same engine also passes ([`c-jvm-test.txt`](decisions/hosting-results/c-jvm-test.txt)). |
+| Engine desktop build and fake-server test | **pass** (rerun after the startup fixes). The stand-in engine's `test_engine.py` (since removed): 0 failures ([`c-desktop-test.txt`](decisions/hosting-results/c-desktop-test.txt)). The JVM test of the app's Kotlin client against the same engine also passes ([`c-jvm-test.txt`](decisions/hosting-results/c-jvm-test.txt)). |
 | Real engine (libmudlet from Mudlet's `development`) on the host | **pass**. `native/tests/test_mudlet_engine.py` against the fake server; CI's libmudlet workflow runs it, and builds and checks the APK with this engine. See "libmudlet as the engine". |
 | APK builds (`assembleDebug`) | **yes** |
 | Clean build time | **1 min 27 s** wall time with Gradle dependencies cached: 20 s CMake configure plus native build (44 steps, `ninja -j2`) and aux-mode deploy, then 1 min 7 s Gradle. The machine was shared with two other agents' builds. The first build, which downloaded dependencies, took 4 min 58 s. An incremental Kotlin-only rebuild takes 33 s. |
@@ -1634,7 +1632,7 @@ against the desktop engine, `native/tests/run_jvm_client_test.sh`, three runs:
 | engine SIGKILL, until the UI sees EOF | 6-16 ms |
 | engine SIGKILL, until reattached to a restarted engine | 108-112 ms. This includes the test spawning a new engine (about 40 ms) and the 100 ms reconnect backoff. |
 
-From the Python client in `native/tests/test_engine.py`:
+From the Python client in the stand-in engine's `test_engine.py`, against the stand-in:
 
 | | Result |
 |---|---|

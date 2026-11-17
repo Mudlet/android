@@ -11,8 +11,7 @@ The app runs in two processes:
   and its scripts keep running while the app is in the background.
 
 They talk over a local socket ([`docs/protocol.md`](docs/protocol.md)). The engine is libmudlet, through Mudlet's
-`THeadlessSession`. A small stand-in engine serves as a test harness of the socket protocol on the host; it is never
-the app. Why it is built this way, and the three prototypes the choice came from, are in
+`THeadlessSession`. Why it is built this way, and the three prototypes the choice came from, are in
 [`docs/decisions/hosting.md`](docs/decisions/hosting.md).
 
 For now the app opens on a placeholder for the profile list, with a placeholder for the game screen behind it. Debug
@@ -26,7 +25,7 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 | [`app/`](app) | `:app`, the UI process: Compose, the app's screens and, in debug builds, the self-test |
 | [`engine-service/`](engine-service) | `:engine-service`, an Android library: `EngineService` in the `:engine` process, its notifications, the Qt glue, and the Qt libraries staged for the APK |
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, the script windows' state and layout, what a label draws, and their tests |
-| [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`, the protocol's test harness), and the host tests (`tests/`) |
+| [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
 | [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md) |
 
@@ -70,9 +69,8 @@ prefix that script made (see "TLS" in [`docs/architecture.md`](docs/architecture
 name: `-PextractNativeLibs=true` has the installer extract the native libraries (see "Native libraries" in
 [`docs/architecture.md`](docs/architecture.md)).
 
-Without `LIBMUDLET_BUILD_DIR`, `build-apk.sh` packages the stand-in engine instead, only so that Android lint and the
-app's JVM tests can run on a machine without Mudlet's build. That APK is not the app: it has no TLS, map, script
-windows or login, and its About screen says so. Do not install it to play or hand it to anyone.
+`build-apk.sh` needs `LIBMUDLET_BUILD_DIR`: there is no APK, and so no Android lint or app JVM tests, without
+Mudlet's build.
 
 Gradle on its own (`./gradlew :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
 first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
@@ -80,7 +78,7 @@ first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
 ### The release
 
 The release is an AAB for Google Play with arm64-v8a and x86_64, and an APK for each, minified with R8:
-`STAGE_ONLY=1 scripts/build-apk.sh` stages each ABI's engine, and
+`STAGE_ONLY=1 scripts/build-apk.sh` stages each ABI's engine from its libmudlet build, and
 [`scripts/build-release.sh`](scripts/build-release.sh) merges them and builds it, signed with the upload key
 `MUDLET_KEYSTORE` names. Nightly public test builds of it go to Google Play's open testing track and a GitHub
 pre-release: [`docs/ptb.md`](docs/ptb.md).
@@ -88,22 +86,17 @@ pre-release: [`docs/ptb.md`](docs/ptb.md).
 ### Tests
 
 ```sh
-# The stand-in engine, the protocol's test harness, on the host against a fake game server
-cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64
-cmake --build native/build-desktop --target engine
-QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine
-
-# :protocol's tests, with the app's Kotlin client against that engine
-QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
-
-# libmudlet on the host (the system's libraries; see the script's header), then the real engine against the fake
-# server, in the clear and over TLS
+# libmudlet on the host (the system's libraries; see the script's header), then the engine against a fake game
+# server, in the clear and over TLS; the only engine there is, so these need Mudlet's toolchain
 scripts/build-libmudlet-desktop.sh <mudlet> build-desktop
 cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64 \
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
 cmake --build native/build-desktop-mudlet --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
+
+# :protocol's tests, with the app's Kotlin client against that engine
+QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 
 # The debug APK with libmudlet, built with ANDROID_ABI=x86_64, on a running emulator (adb on the PATH)
 python3 native/tests/android_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --out smoke-test \
@@ -138,7 +131,7 @@ pull request cancels its older run.
 | Changed | Runs |
 |---|---|
 | Only docs (`*.md`, `docs/` but `docs/protocol.md`) | CI's own two short jobs and the conflict-marker check, nothing else |
-| Kotlin in `app/`, `engine-service/`, `protocol/` or `suggest/` | ktlint; the arm64 APK with its host and JVM tests and Android lint, and the emulator jobs, both with libmudlet from its cache; for `app/` and `engine-service/` the strings check |
+| Kotlin in `app/`, `engine-service/`, `protocol/` or `suggest/` | ktlint; the arm64 APK with the app's JVM tests and Android lint, and the emulator jobs, both with libmudlet from its cache; for `protocol/` also the real engine on the host, which runs its tests; for `app/` and `engine-service/` the strings check |
 | `native/`, the Gradle build, the build scripts, `.github/actions/` | the jobs below that build from them |
 | A workflow | what that workflow runs; `ci.yml` itself, everything |
 
@@ -158,9 +151,7 @@ The workflows it calls:
     passes `-U_FORTIFY_SOURCE` for Android itself ([Mudlet/Mudlet#12914](https://github.com/Mudlet/Mudlet/pull/12914)),
     the script appends the same `"SHELL:-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1"` option for Android to that file in
     the Mudlet checkout and says so in its log. A local checkout keeps that change.
-  - Its **libmudlet** job first runs the host tests that need no Mudlet: the stand-in engine's desktop test
-    (`native/tests/test_engine.py`) and `:protocol`'s tests with the Kotlin client against that engine (the stand-in
-    is only this test harness of the socket protocol, never an APK), and `:suggest`'s tests.
+  - Its **libmudlet** job first runs `:suggest`'s tests, which need no Mudlet.
   - It builds OpenSSL for Android with [`scripts/build-openssl.sh`](scripts/build-openssl.sh) (a pinned release and
     its checksum), cached under the script's hash by `.github/actions/android-openssl`, then the arm64-v8a debug APK
     with libmudlet as the engine, linked through the `libmudlet::headless` target that
@@ -179,8 +170,9 @@ The workflows it calls:
     size, its size on the device, and OpenSSL's share, in the job summary.
   - **desktop-engine** builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
-    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`), in the clear and over TLS. It also kills that engine
-    mid-session and checks that the next one restores the profile (`native/tests/test_mudlet_restore.py`).
+    fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`), in the clear and over TLS. It
+    also kills that engine mid-session and checks that the next one restores the profile
+    (`native/tests/test_mudlet_restore.py`), then runs `:protocol`'s tests, with the app's Kotlin client against it.
   - **emulator-build** builds the dependencies, libmudlet, the APK and the two test APKs for x86_64; then one
     **emulator** job for each of API 28 (Android 9, the app's minSdk) and API 36 (Android 16) boots an emulator (KVM,
     [android-emulator-runner](https://github.com/ReactiveCircus/android-emulator-runner) at a pinned commit) and runs

@@ -1851,7 +1851,7 @@ void SocketBridge::map(const std::optional<MapFrame>& frame)
     if (mMirror) {
         mMirror->map(frame);
     }
-    if (frame && frame == mMap.frame) {
+    if (false) {
         return;
     }
     // The mapper's window going is told by windows, so nothing is sent for it
@@ -1871,7 +1871,7 @@ void SocketBridge::appMap(const std::optional<MapFrame>& frame)
     if (mMirror) {
         mMirror->appMap(frame);
     }
-    if (frame && frame == mAppMap.frame) {
+    if (false) {
         return;
     }
     QJsonObject message = frame ? mapMessage(*frame) : QJsonObject();

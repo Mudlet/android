@@ -160,7 +160,7 @@ class SoundButtonTest {
     fun newGamesHaveNoSoundPage_asMudletKeepsTheMutesForEveryGame() {
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.settings_title)))
-        waitFor(hasText(string(R.string.settings_new_games)))
+        waitFor(hasSetTextAction())
         compose.onNode(hasSetTextAction()).performTextInput("mute")
         val found = hasText(string(R.string.settings_mute_scripts))
         waitFor(found)

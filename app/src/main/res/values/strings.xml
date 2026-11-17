@@ -162,6 +162,34 @@
     <string name="about_no_browser">No app here can open %1$s</string>
     <!-- About: the button that opens the screen for sending the developers a problem report; desktop Mudlet's Help menu has "Report an issue" -->
     <string name="about_report">Report a problem</string>
+    <!-- About: the heading over the links to Mudlet's manual and where to ask for help, as desktop Mudlet's Help menu -->
+    <string name="help_heading">Help</string>
+    <!-- A link that opens the contents of Mudlet's manual, on its wiki, in the browser -->
+    <string name="help_manual">Manual</string>
+    <!-- A link that opens the manual's page of every Lua function Mudlet has, in the browser -->
+    <string name="help_lua_functions">Lua functions</string>
+    <!-- About > Help: a link to Mudlet's video tutorials on its website; desktop Mudlet's Help menu says the same -->
+    <string name="help_videos">Video tutorials</string>
+    <!-- About > Help: a link to Mudlet's Discord server; desktop Mudlet's Help menu says the same -->
+    <string name="help_discord">Discord help channel</string>
+    <!-- About > Help: a link to Mudlet's IRC channel in the browser; desktop Mudlet's Help menu says the same -->
+    <string name="help_live_chat">Live help chat</string>
+    <!-- About > Help: a link to Mudlet's forum; desktop Mudlet's Help menu says the same -->
+    <string name="help_forum">Online forum</string>
+    <!-- The script library's title bar button, read by a screen reader, that opens a menu of help pages -->
+    <string name="scripts_help">Help</string>
+    <!-- Script library > Help: the manual's introduction to triggers, opened in the browser -->
+    <string name="help_introduction_triggers">Introduction to triggers</string>
+    <!-- Script library > Help: the manual's introduction to aliases, opened in the browser -->
+    <string name="help_introduction_aliases">Introduction to aliases</string>
+    <!-- Script library > Help: the manual's introduction to scripts, opened in the browser -->
+    <string name="help_introduction_scripts">Introduction to scripts</string>
+    <!-- Script library > Help: the manual's introduction to timers, opened in the browser -->
+    <string name="help_introduction_timers">Introduction to timers</string>
+    <!-- Script library > Help: the manual's introduction to key bindings, opened in the browser -->
+    <string name="help_introduction_keys">Introduction to key bindings</string>
+    <!-- Script library > Help: the manual's introduction to buttons, opened in the browser -->
+    <string name="help_introduction_buttons">Introduction to buttons</string>
     <!-- Title of the problem report screen -->
     <string name="report_title">Report a problem</string>
     <!-- Problem report screen: what it is, above the report itself -->

@@ -611,6 +611,6 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 15 Tablets and Chromebooks | expected | not started | |
 | 16 Slow phones | expected | not started | |
 | 17 Translations live | expected | not started | |
-| 18 Help and first steps | nice later | not started | |
+| 18 Help and first steps | nice later | in flight: Help in About and the script library; function descriptions and the tour next | |
 | 19 Lines changed after shown | expected | not started | |
 | 20 Movement pad | nice later | not started | |

@@ -1,7 +1,7 @@
 # Architecture
 
 Mudlet for Android runs in two processes. The UI process is Kotlin and Jetpack Compose and loads no Qt. The engine
-process (`:engine`) runs Qt and the engine (libmudlet, or the stand-in for fast tests) in a foreground service. They
+process (`:engine`) runs Qt and the engine, libmudlet, in a foreground service. They
 talk over a local socket with the protocol in [`protocol.md`](protocol.md). Why it is built this way is in
 [`decisions/hosting.md`](decisions/hosting.md).
 
@@ -32,7 +32,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
 | `native/enginehost/` | `libengine`'s `main()`, the protocol's engine side (`ControlBridge` on the control socket, which keeps the open profiles, and a `SocketBridge` per open profile), `MudletEngine` (libmudlet through `THeadlessSession`), and the Android glue: `AndroidServiceSetup` (the only private Qt API, so a rename in Qt fails the build) and `AndroidNotifier` |
 | `native/api/` | Between the host and an engine: `IEngineControl` (the profiles, app state, saving) and `IEngineHost` (profiles opening and closing, the engine-wide statuses) for the engine as a whole; `IEngine` and `IFrontend` for one profile's session |
-| `native/standin/` | The stand-in engine for fast tests, which runs several profiles at once (`StandIn`, with an `Engine` each): minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
+| `native/standin/` | The stand-in engine, a test harness of the socket protocol on the host and never the app (CI builds no APK with it), which runs several profiles at once (`StandIn`, with an `Engine` each): minimal telnet, ANSI runs, Lua 5.1.5 (vendored in `native/third_party/lua-5.1.5`, tarball sha256 `2640fc56…695333`), a font check and a heartbeat |
 | `native/tests/` | The fake game server, the Python protocol client, and the host tests of both engines |
 
 ## How it is wired
@@ -1119,9 +1119,9 @@ then puts `<nativeLibraryDir>/lib?.so` on `package.cpath`. A module the app hand
 
 What extraction costs, measured on CI's debug APK of prototype C with the stand-in engine (Prototype
 APKs run 43482451881, commit 0dd127f). The "extracted" column is a repack of that APK with the same 16
-libraries deflated at zlib level 6, not an APK AGP built; the `APK (extracted libs)` CI job builds
-that variant on every run and reports its real sizes. MB here is 10^6 bytes, as in
-the CI summary, so the libraries' 20,419,784 bytes are 20.4 MB (19.5 MiB).
+libraries deflated at zlib level 6, not an APK AGP built. CI builds no extracted variant: nothing installs or ships
+one while the default stays off, so the APK that turns it on gets its own budget line and CI job then. MB here is
+10^6 bytes, as in the CI summary, so the libraries' 20,419,784 bytes are 20.4 MB (19.5 MiB).
 
 | | Loaded from the APK (default) | Extracted |
 |---|---|---|
@@ -1205,8 +1205,9 @@ trusted.
 Item 13 of the on-device checklist covers this.
 
 ## On-device checklist
-1. Install the APK with `adb install -r app-debug.apk`. Open it and allow notifications. It opens on "Profiles";
-   tap "Self-test" for the checks below (debug builds only: a release build has no self-test).
+1. Install the APK with libmudlet (CI's `mudlet-libmudlet-debug-apk`) with `adb install -r app-debug.apk`. Open it
+   and allow notifications. It opens on "Profiles"; tap "Self-test" for the checks below (debug builds only: a release
+   build has no self-test).
 2. **The critical check: does Qt start in a service-only process?**
    - There must be no ANR, and no "isn't responding" dialog, in the first 10 s.
      An ANR in `Service.onCreate` means the semaphore release did not work.
@@ -1243,8 +1244,7 @@ Item 13 of the on-device checklist covers this.
    scrollback is replayed.
 9. Press "Kill engine process". Expect "engine connection lost", then an
    automatic restart and "new engine instance"; note the loss-to-attach time.
-   - With the stand-in, the game connection is gone, as expected.
-   - With libmudlet, expect the marker lines "profile restored, reconnecting to
+   - Expect the marker lines "profile restored, reconnecting to
      ..." and "Reconnected to ...", and the game's output again. Note how long
      after the kill it reconnects.
    - Kill it twice more within 10 minutes: the second restore waits 10 s and the
@@ -1256,8 +1256,7 @@ Item 13 of the on-device checklist covers this.
 10. Press "Stop engine". The `:engine` process and its notification should
     disappear, and the UI stays alive.
     - Check with `adb shell ps -A | grep mudlet`.
-    - Then press "Start engine". With libmudlet, no profile comes back and the
-      game is not called.
+    - Then press "Start engine". No profile comes back and the game is not called.
     - Repeat with the notification's Quit action.
 11. Leave the phone with the screen off for 30 minutes or more, connected to the
     game.
@@ -1266,7 +1265,7 @@ Item 13 of the on-device checklist covers this.
     - Also check whether tells arrived as notifications while the screen was off.
 12. Measure memory with `adb shell dumpsys meminfo org.mudlet.mudlet:engine`, and
     the same for the UI process.
-13. TLS, with the libmudlet APK (the stand-in has no TLS).
+13. TLS.
     - Check that `adb logcat | grep -i ssl` shows no "No functional TLS backend".
     - Tick TLS and connect to a game from Mudlet's list that has TLS on, such as MUME (`mume.org`, 4242). Expect the
       game's text and `connected`, then note the time from Connect to the first line.

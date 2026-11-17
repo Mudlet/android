@@ -1,7 +1,9 @@
 name: libmudlet for Android
 
 # Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
-# builds the app's APK with libmudlet as its engine. A second job builds libmudlet for the host and runs the real
+# builds the app's APK with libmudlet as its engine, the one APK to install, with the app's JVM tests and Android lint.
+# Before that, the same job runs the host tests that need no Mudlet: the stand-in engine, a test harness of the socket
+# protocol and never an APK, with its desktop test and :protocol's tests against it, and :suggest's tests. A second job builds libmudlet for the host and runs the real
 # engine against the fake game server through the socket protocol. The emulator jobs build it all for x86_64 once,
 # then run the APK on an emulator at the app's minSdk (28) and at the newest API (36), one boot each: first the smoke
 # test (native/tests/android_smoke.py), then the instrumented tests (native/tests/android_instrumented.py). They are
@@ -34,6 +36,15 @@ on:
         description: The x86_64 APK on the emulators
         type: boolean
         default: true
+    # Each "true" once its job got to its end, so that ci.yml's "CI result" fails when a job it needs was skipped:
+    # a skipped job passes for GitHub, so the call alone would still succeed
+    outputs:
+      libmudlet-android:
+        value: ${{ jobs.libmudlet.outputs.done }}
+      desktop-engine:
+        value: ${{ jobs.desktop-engine.outputs.done }}
+      emulator:
+        value: ${{ jobs.emulator.outputs.done }}
   workflow_dispatch:
     inputs: *inputs
 
@@ -52,6 +63,8 @@ jobs:
     if: inputs.android
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    outputs:
+      done: ${{ steps.done.outputs.done }}
     steps:
       - uses: actions/checkout@v7
 
@@ -64,8 +77,33 @@ jobs:
       - id: toolchain
         uses: ./.github/actions/android-toolchain
         with:
-          # lua5.1 writes the translation statistics that mudlet.qrc embeds
-          apt-packages: lua5.1
+          # lua5.1 writes the translation statistics that mudlet.qrc embeds; host Qt Gui, which the stand-in's desktop
+          # engine links, needs the OpenGL headers to configure and the rest to run
+          apt-packages: lua5.1 libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
+
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
+      - uses: gradle/actions/setup-gradle@v6
+
+      # The host tests first, as they need no Mudlet and so report even when Mudlet's development fails to build
+      - name: Stand-in engine desktop test
+        working-directory: native
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cmake -S . -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
+          cmake --build build-desktop --target engine
+          python3 tests/test_engine.py build-desktop/enginehost/engine
+
+      # :protocol's tests: the spec check, the run encoding, and the app's EngineLink against the stand-in's desktop
+      # engine, which fails rather than skips here when it has no engine (CI=true)
+      - name: Kotlin protocol tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
+
+      # :suggest's tests: ranking, prediction, the saved form and file, the session's timing, hidden input never stored
+      - name: Kotlin suggestion tests
+        run: ./gradlew -PqtRoot="$QT_ROOT" :suggest:test
 
       - id: libmudlet
         uses: ./.github/actions/libmudlet
@@ -73,15 +111,31 @@ jobs:
           qt-version: ${{ steps.toolchain.outputs.qt-version }}
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
-      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
-      - uses: gradle/actions/setup-gradle@v6
-
       - uses: ./.github/actions/android-openssl
         with:
           ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
 
       - name: Build the APK with libmudlet as the engine
         run: LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
+
+      # the About screen's licence data (app/src/test), after the build staged :engine-service's resources
+      - name: App JVM tests
+        run: ./gradlew -PqtRoot="$QT_ROOT" :app:testDebugUnitTest
+
+      # needs the Qt jars the APK build staged; a warning fails it too (lint.xml)
+      - name: Android lint
+        run: ./gradlew -PqtRoot="$QT_ROOT" :app:lintDebug :engine-service:lintDebug
+
+      - name: Lint reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-lint-reports
+          path: |
+            app/build/reports/lint-results-debug.*
+            engine-service/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Check the APK
         uses: ./.github/actions/check-apk
@@ -116,6 +170,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - id: done
+        run: echo "done=true" >> "$GITHUB_OUTPUT"
+
       - name: Summary
         if: always()
         env:
@@ -145,6 +202,8 @@ jobs:
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 1000M
+    outputs:
+      done: ${{ steps.done.outputs.done }}
     steps:
       - uses: actions/checkout@v7
 
@@ -203,6 +262,9 @@ jobs:
           cmake --build build-desktop-mudlet --target engine
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
           python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
+
+      - id: done
+        run: echo "done=true" >> "$GITHUB_OUTPUT"
 
   # The APK with libmudlet and the two test APKs, built for x86_64 once for the emulator jobs below
   emulator-build:
@@ -287,6 +349,8 @@ jobs:
     env:
       EMULATOR_API: ${{ matrix.api }}
       LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix && '1' || '0' }}
+    outputs:
+      done: ${{ steps.done.outputs.done }}
     steps:
       - uses: actions/checkout@v7
 
@@ -332,6 +396,9 @@ jobs:
             --app-tests app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             --engine-tests engine-service/build/outputs/apk/androidTest/debug/engine-service-debug-androidTest.apk
             --out device-tests --symbols native/build-android-x86_64-mudlet/enginehost && exit $smoke
+
+      - id: done
+        run: echo "done=true" >> "$GITHUB_OUTPUT"
 
       # A failed download still leaves the image's directory behind, which would otherwise be cached and restored
       - name: Check the system image installed

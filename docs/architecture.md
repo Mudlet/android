@@ -957,7 +957,10 @@ device shows, below the UI's debug hook:
   each pixel as the writer was given it (`MapPngTest`).
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
-  emulator only.
+  emulator only. `ScriptLibraryTest` and `PseudoLocaleTest` turn them on through `AccessibilityChecks.kt`, which
+  leaves out a result about something wholly outside the scrolling area it is in: Compose hands accessibility a node
+  that ends within half a touch target of the area that clips it, so an empty text field scrolled to just above an
+  item's page counted as an edit box with no label.
 
 CI runs both on API 28, the app's minSdk, and on API 36.
 

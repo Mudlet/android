@@ -251,6 +251,11 @@ class ScriptLibraryTest {
         compose.onNode(hasText(string(R.string.pattern_color))).assertDoesNotExist()
         activate(hasText(string(R.string.pattern_regex)) and hasClickAction())
         waitFor(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_regex))))
+        // The sheet's Close leaves the type as it was
+        activate(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_regex))))
+        activate(hasContentDescription(string(R.string.scripts_pattern_type_close)))
+        compose.onNode(hasText(string(R.string.pattern_regex_description))).assertDoesNotExist()
+        waitFor(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_regex))))
 
         activate(hasContentDescription(string(R.string.scripts_pattern_up, 2)))
         waitFor(hasContentDescription(string(R.string.scripts_pattern_type_of, 1, string(R.string.pattern_regex))))

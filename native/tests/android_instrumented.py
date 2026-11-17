@@ -22,7 +22,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from android_smoke import Device, SmokeFailure, adb, shell  # noqa: E402
+from android_smoke import Device, SmokeFailure, adb, install, shell  # noqa: E402
 
 APP = "org.mudlet.mudlet"
 APP_TESTS = APP + ".test"
@@ -155,10 +155,6 @@ def pull_screenshots(dev):
     log(f"screenshots: {', '.join(sorted(copied))}")
 
 
-def install(apk, grant=False):
-    adb("install", "-r", *(["-g"] if grant else []), apk, timeout=300)
-
-
 def run(dev, args):
     for package in (APP_TESTS, APP, ENGINE_TESTS):
         adb("uninstall", package, check=False)
@@ -174,7 +170,7 @@ def run(dev, args):
                            480, "-e", "class", PERMISSION_TEST)
     failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 720, "-e", "notClass", PERMISSION_TEST)
     pull_screenshots(dev)
-    install(args.engine_tests, grant=True)
+    install(args.engine_tests, "-g")
     failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
                            1320)
     return failures

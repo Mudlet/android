@@ -388,7 +388,7 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
 ### The map behind the text
 The game screen also has a map of its own, which needs no script: `appMap`, the engine's second map view
 (docs/protocol.md, "The app's map"; `ui/AppMapClient.kt`, drawn by `ui/game/AppMap.kt`).
-- Behind the text, while the setting "Map behind the text" (`Settings.mapBehindText`, on by default) has it there: it
+- Behind the text, while the setting "See-through map and text" (`Settings.mapBehindText`, on by default) has it there: it
   fills the main console, between the console's background and its text (Console's `behindText`), and follows the player
   as the desktop's mapper does: asked for, it opens the map for scripts as opening the desktop's mapper does, so a
   mapper script's `centerview()` moves the player on it with no script mapper. Its alpha is the most at which the
@@ -405,14 +405,35 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   eases in, a fainter one's at once. Before the first frame the map is weighed as any colour at all. The console's
   colours, ANSI ones included, are not changed; text the game colours is not weighed, so a dim colour of the game's
   reads less well over the map. It takes no touches, which reach the text as before, and TalkBack does not read it.
-- In front: the title bar's map button, a toggle read as "Map" with its state, covers all of the game screen between the
-  title bar and the row with the game pill, the input line too, and that row has no History while it is in front, with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, drag, pinch, the zoom
-  buttons, the edit switch, refusals and TalkBack's actions), under a search field. The buttons are beside the field,
-  not over the map, whose top line is Mudlet's name of the room, which they would hide. TalkBack does not read what it
-  covers, and a hardware keyboard's focus does not reach it. The input line lets go of the focus and the keyboard while
-  the map is in front, and Ctrl+R opens no history. Back or the button again sends it back, and the input line has the
-  focus again if it had it; with a predictive back gesture the map shrinks as the gesture goes, over the game screen
-  under it. A switch to another open game keeps the map in front, with that game's map.
+- In front: the title bar's map button, a toggle read as "Map" with its state, swaps the map and the text. The map takes
+  the console's place, between the title bar and the input line, with the map as the mapper window draws it (`MapView`,
+  shared with `ScriptMap`: tap, double tap, drag, pinch, the zoom buttons, the edit switch, refusals and TalkBack's
+  actions), under a search field. The buttons are beside the field, not over the map, whose top line is Mudlet's name
+  of the room, which they would hide. It takes every touch on the console's place; TalkBack does not read the console
+  and the script windows under it, and a hardware keyboard's focus does not reach them, while new lines are still
+  announced (`Announcer`). The input line, the row with the game pill and History stay below it, to type and pick
+  commands in, and Ctrl+R opens the history. The swap opens no keyboard: one that was up goes down, so the map has the
+  room, but the input line keeps the focus, so a hardware keyboard still types in it and a tap brings the keyboard back.
+  Back or the button again sends it back, with the keyboard if it went with the swap; with a predictive back gesture the
+  map shrinks as the gesture goes, over the game screen under it. A switch to another open game keeps the map in front,
+  with that game's map.
+- The text behind the map, with the same setting; without it the map in front covers the console. The engine paints the
+  frame's background opaque (TMapPainter fills it with the map's background colour), so text could never show through
+  it: the console and its script windows are drawn over that colour instead, faintly, and the frame over them with each
+  pixel of exactly that colour made transparent (`TextBehindMap.cutOut`), so the text shows where the map draws nothing,
+  as behind a transparent map; a frame that is transparent itself is drawn as it is, over the console's background. The
+  alpha is the most at which every colour the map draws its rooms and exits in keeps WCAG 1.4.11's 3:1 against every
+  colour between the console's text and backgrounds blended over that ground (`TextBehindMap` in `:protocol`, beside
+  `MapBehindText`), up to the same 54%. `MapBehindText`'s tones do not serve here: they leave out thin exit lines and
+  take in the background, while this needs each drawn colour against the ground. The colours are found as the frame is
+  decoded, off the main thread, and only while the text is behind the map: the colour of at least 64 pixels that have it
+  on both sides along a row, a column or a diagonal, so a line a pixel wide counts, but not an antialiased edge, a pixel
+  between the background and the colour beside it across the line, which is seen as part of what it edges. A colour
+  already below 3:1 against the ground is not weighed, as no alpha could give it that. Mudlet's default map (dark green
+  and cyan rooms, grey exits, on black) shows the default grey text at 19%, held down by the dark green; white rooms
+  leave it to the grey exits, at 54%; rooms barely at 3:1 leave none. It eases in and drops at once as
+  `BackgroundMap` does, comes back to full with a predictive back gesture, and is none until a cut-out frame has come.
+  Text the game colours, and the script windows, are not weighed, as for the map behind the text.
 - The search sends `findRooms`, from its button or the keyboard's Search key, and puts the keyboard away, as on a
   small screen it leaves the results no room. The engine sends the best first: the name the text, then names that
   begin with it, then those that hold it, and within each the rooms of the player's area, then the nearest. The
@@ -767,7 +788,8 @@ device shows, below the UI's debug hook:
   for the game and for new games, the Input, Connection, Security and Advanced pages' changes, and a game's number sent once a slide; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
-  map in front the title bar, its search, the map and the game pill, and nothing it covers; the script
+  map in front the title bar, its search, the map, the input line and the row with the game pill, and nothing it
+  covers; the script
   windows: a mini console at its scaled place in the fitted and the stacked layout, the size the game
   screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
   button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
@@ -1472,19 +1494,22 @@ Item 13 of the on-device checklist covers this.
     - The map shows faintly behind the console's text, filling it, and follows the player as they walk
       (`lua centerview(<room>)` moves it there); the text and its ANSI colours read as without it, and a swipe scrolls
       the text and a pinch sizes it, as before.
-    - Turning "Map behind the text" off in the settings takes it away; on, it comes back. Opening a mapper
+    - Turning "See-through map and text" off in the settings takes it away; on, it comes back. Opening a mapper
       (`lua myMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})`) takes it away
       too, and closing it (`lua myMapper:hide()`) brings it back.
     - The title bar's map button brings it to the front: a tap selects, a double tap walks there, a pinch and the zoom
       buttons zoom, and the edit switch edits it. A tap on a room shows its name, area, distance and exits at the
       bottom, with "Walk here"; the bar there lists the areas and moves between levels. "Find a room" with part of a
       room's name lists the rooms that match, how many, the best first, with the text marked; a tap on one centres the
-      map on it and shows it, and its walk button walks there. It covers the input line, and the keyboard goes with it;
-      only the title bar and the row with the game pill and the pinned commands stay, without History. Back and the button again send it back, and an input line that
-      had the focus has it again; a predictive back gesture shrinks the map as it goes, and a cancelled one leaves it
-      as it was.
+      map on it and shows it, and its walk button walks there. The console's text shows faintly behind it where it draws
+      no room or exit, and the rooms and exits stay clear against it; with the setting off it is opaque. The input line
+      stays below it and no keyboard opens; a tap on the line opens it, and a command typed there is sent with the map
+      still in front, as are History and the pinned commands. Back and the button again send it back, and a keyboard
+      that went with the swap comes back; a predictive back gesture shrinks the map as it goes, and a cancelled one
+      leaves it as it was.
     - With TalkBack on: the map behind the text is never read; the button reads "Map" and whether it is on; in front,
-      the field, its results and the map read as the mapper window's does, and the console under it is not read.
+      the field, its results and the map read as the mapper window's does, then the input line, and the console under
+      it is not read, though new lines are still said.
     - With the system font at its largest, the search field and its results still fit and read whole.
 25. Links and the screen reader in script windows, with the libmudlet APK: `lua win = Geyser.MiniConsole:new({name =
     "win", x = "50%", y = 0, width = "50%", height = "30%"})`, then `lua echoLink("win", "go north", [[send("north")]],

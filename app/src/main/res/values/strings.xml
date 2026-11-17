@@ -219,9 +219,9 @@
     <!-- Words a player might search the settings for to find "Colours from my wallpaper", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_wallpaper_colours_keywords">Material You, dynamic colour, color, theme</string>
-    <!-- Words a player might search the settings for to find "Map behind the text", besides the words of its name and
-         description, separated by commas. Use the words a player of your language would search for. -->
-    <string name="settings_map_behind_text_keywords">mapper, background, rooms, faint</string>
+    <!-- Words a player might search the settings for to find "See-through map and text", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_map_behind_text_keywords">mapper, background, rooms, faint, behind, swap, transparent</string>
     <!-- A setting on the Appearance page: the size of the game's text -->
     <string name="settings_text_size">Text size</string>
     <!-- Under the text size setting, what it does -->
@@ -245,11 +245,11 @@
     <string name="settings_advertise_screen_reader">Tell games I use a screen reader</string>
     <!-- Under "Tell games I use a screen reader", what the switch does -->
     <string name="settings_advertise_screen_reader_hint">Games that ask are told, and some then send text laid out for screen readers.</string>
-    <!-- A switch on the Appearance page: draw the game's map faintly behind the game's text. The map button above
-         the game's text brings it to the front either way. -->
-    <string name="settings_map_behind_text">Map behind the text</string>
-    <!-- Under "Map behind the text", what the switch does -->
-    <string name="settings_map_behind_text_hint">The game\'s map shows faintly behind the game\'s text, following you. The map button brings it to the front.</string>
+    <!-- A switch on the Appearance page: whichever of the game's map and the game's text is in front, the other shows
+         faintly behind it. The map button above the game's text swaps which is in front, with the switch on or off. -->
+    <string name="settings_map_behind_text">See-through map and text</string>
+    <!-- Under "See-through map and text", what the switch does -->
+    <string name="settings_map_behind_text_hint">The game\'s map shows faintly behind the game\'s text, following you. The map button swaps them: the map in front, the text faintly behind it.</string>
     <!-- A setting on a game's Display & text page, the heading of three choices: what becomes of the empty lines the
          game sends -->
     <string name="settings_blank_lines">Blank lines from the game</string>

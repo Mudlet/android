@@ -26,8 +26,8 @@ object MapBehindText {
     const val OUTLIERS = 0.01
 
     // How many rows and columns of a frame are sampled, at most
-    private const val SAMPLE_ROWS = 128
-    private const val SAMPLE_COLUMNS = 256
+    internal const val SAMPLE_ROWS = 128
+    internal const val SAMPLE_COLUMNS = 256
 
     /**
      * A map frame's lightest and darkest colours, each channel on its own, without the lightest and darkest [OUTLIERS]
@@ -55,9 +55,9 @@ object MapBehindText {
         val columns = min(width, SAMPLE_COLUMNS)
         var sampled = 0
         for (r in 0 until rows) {
-            readRow(((2L * r + 1) * height / (2 * rows)).toInt(), row)
+            readRow(sampled(r, rows, height), row)
             for (c in 0 until columns) {
-                val pixel = row[((2L * c + 1) * width / (2 * columns)).toInt()]
+                val pixel = row[sampled(c, columns, width)]
                 if (pixel ushr 24 == 0) continue
                 counts[pixel shr 16 and 0xFF]++
                 counts[256 + (pixel shr 8 and 0xFF)]++
@@ -106,11 +106,10 @@ object MapBehindText {
     }
 
     /** WCAG's contrast ratio of two colours, from 1 to 21. */
-    fun contrast(a: Int, b: Int): Double {
-        val la = luminance(a)
-        val lb = luminance(b)
-        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
-    }
+    fun contrast(a: Int, b: Int): Double = ratio(luminance(a), luminance(b))
+
+    /** WCAG's contrast ratio of two relative luminances. */
+    internal fun ratio(la: Double, lb: Double): Double = (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 
     /** [over] drawn at [alpha] on [under], channel by channel in sRGB. */
     fun blend(under: Int, over: Int, alpha: Float): Int {
@@ -122,14 +121,17 @@ object MapBehindText {
         return rgb
     }
 
-    private fun channels(a: Int, b: Int, pick: (Int, Int) -> Int): Int {
+    /** The [i]th of [count] samples across [size] pixels, each in the middle of its share. */
+    internal fun sampled(i: Int, count: Int, size: Int): Int = ((2L * i + 1) * size / (2 * count)).toInt()
+
+    internal fun channels(a: Int, b: Int, pick: (Int, Int) -> Int): Int {
         var rgb = 0
         for (shift in intArrayOf(16, 8, 0)) rgb = rgb or (pick(a shr shift and 0xFF, b shr shift and 0xFF) shl shift)
         return rgb
     }
 
-    // WCAG's relative luminance
-    private fun luminance(rgb: Int): Double {
+    /** WCAG's relative luminance of a 0xRRGGBB colour. */
+    internal fun luminance(rgb: Int): Double {
         fun linear(channel: Int): Double {
             val c = channel / 255.0
             return if (c <= 0.03928) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)

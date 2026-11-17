@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -780,13 +781,18 @@ class ScriptMapTest {
             dialogNodes.forEach { n ->
                 val scroll = n.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)
                 val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString()
-                val wanted = scroll != null || text in labels
-                if (!wanted) return@forEach
                 val c = n.layoutInfo.coordinates
                 val unclipped = Rect(c.positionInRoot(), androidx.compose.ui.geometry.Size(c.size.width.toFloat(), c.size.height.toFloat()))
+                // As Compose's touch bounds: a clickable node's at least the minimum touch target, about its centre
+                val grow = if (n.config.contains(SemanticsActions.OnClick)) maxOf(0f, (48f * compose.density.density - unclipped.height) / 2) else 0f
+                val touch = unclipped.copy(top = unclipped.top - grow, bottom = unclipped.bottom + grow)
+                val near = touch.bottom > 470f * compose.density.density && touch.top < 600f * compose.density.density
+                val wanted = scroll != null || text in labels || near
+                if (!wanted) return@forEach
                 val info = provider?.createAccessibilityNodeInfo(n.id)
                 val screen = android.graphics.Rect().also { info?.getBoundsInScreen(it) }
-                b.append(" {${text ?: "scroll"}#${n.id} root=${n.boundsInRoot.r()} unclip=${unclipped.r()} ani=${screen.toShortString()} vis=${info?.isVisibleToUser}")
+                val what = text ?: n.config.getOrNull(SemanticsProperties.EditableText)?.let { "edit:$it" } ?: n.config.getOrNull(SemanticsProperties.Role)?.toString() ?: if (scroll != null) "scroll" else "node"
+                b.append(" {$what#${n.id} p=${n.parent?.id} root=${n.boundsInRoot.r()} unclip=${unclipped.r()} touch=${touch.r()} ani=${screen.toShortString()} vis=${info?.isVisibleToUser}")
                 if (scroll != null) b.append(" v=${scroll.value()}/${scroll.maxValue()}")
                 b.append("}")
             }

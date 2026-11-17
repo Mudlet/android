@@ -51,7 +51,7 @@ import org.mudlet.android.ui.game.Announcer
  * What TalkBack is given, against a fake engine, as the semantics tree shows it: new lines read as one announcement
  * while touch exploration is on (the Announcer's switch stands in for the system's), a script's announce(), the
  * console's lines as plain text, and the settings, which are each game's own: a game added here is given the app's, then a
- * settings page shows and changes the game's.
+ * settings page shows and changes the game's, and says once that a change waits for the game's next connection.
  */
 @RunWith(AndroidJUnit4::class)
 class ScreenReaderTest {
@@ -167,11 +167,11 @@ class ScreenReaderTest {
 
         // A page asks for the game's own values as it opens: a script, or desktop Mudlet, may have changed them
         activate(hasContentDescription(string(R.string.settings_title)))
-        activate(hasText(string(R.string.settings_display)))
+        activate(hasText(string(R.string.settings_accessibility)))
         val asked = session.receive("getSettings")
         session.settings(mapOf("announceIncomingText" to false, "advertiseScreenReader" to true, "blankLinesBehaviour" to "hide"), asked.getLong("id"))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { !EngineClient.front.setting(Settings.readNewText) } }
-        compose.onNode(hasText(string(R.string.settings_blank_lines_hide)) and isSelected()).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.settings_blank_lines_hide)) and isSelected()).performScrollTo().assertIsDisplayed()
 
         // A change is the game's alone: what new games start with stays as it was
         activate(hasText(string(R.string.settings_blank_lines_space)), scroll = true)
@@ -233,7 +233,7 @@ class ScreenReaderTest {
         // A result that is not a switch opens its page, which asks for the game's values
         compose.onNode(hasSetTextAction()).performTextClearance()
         compose.onNode(hasSetTextAction()).performTextInput("blank")
-        val crumb = compose.activity.getString(R.string.settings_breadcrumb, GAME.name, string(R.string.settings_display))
+        val crumb = compose.activity.getString(R.string.settings_breadcrumb, GAME.name, string(R.string.settings_accessibility))
         activate(hasText(crumb) and hasText(string(R.string.settings_blank_lines)), scroll = true)
         session.receive("getSettings")
         compose.onNode(hasText(string(R.string.settings_blank_lines_show)) and isSelected()).assertIsDisplayed()
@@ -245,6 +245,8 @@ class ScreenReaderTest {
         activate(hasContentDescription(string(R.string.settings_title)))
         activate(hasText(string(R.string.settings_connection)), scroll = true)
         session.receive("getSettings")
+        // No hint says when its switch applies: a message does, when one is turned while the game is connected
+        compose.onNode(hasText("next connection", substring = true, ignoreCase = true)).assertDoesNotExist()
         activate(hasText(string(R.string.settings_gmcp)), scroll = true)
         assertEquals(mapOf("enableGMCP" to false), values(session.receive("setSettings")))
         compose.runOnIdle { assertEquals("new games keep it", true, Settings.gmcp.value) }
@@ -264,6 +266,8 @@ class ScreenReaderTest {
         activate(hasContentDescription(string(R.string.settings_title)))
         activate(hasText(string(R.string.settings_display)))
         session.receive("getSettings")
+        // As on desktop Mudlet, what becomes of blank lines is on the Accessibility page
+        compose.onNode(hasText(string(R.string.settings_blank_lines))).assertDoesNotExist()
         val width = hasContentDescription(string(R.string.settings_undo_wrap_width)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
         compose.onNode(width).performScrollTo().performTouchInput { swipeRight(startX = centerX, endX = (centerX + right) / 2, durationMillis = 500) }
         val slid = values(session.receive("setSettings"))["undoServerWrapWidth"] as Int
@@ -286,6 +290,68 @@ class ScreenReaderTest {
         assertEquals(mapOf("lazyCaptureGlobals" to false), values(session.receive("setSettings")))
         activate(hasText(string(R.string.settings_show_script_errors)), scroll = true)
         assertEquals(mapOf("echoLuaErrors" to true), values(session.receive("setSettings")))
+        // Desktop Mudlet's "Fix unnecessary linebreaks on GA servers", with its other workarounds
+        activate(hasText(string(R.string.settings_fix_linebreaks)), scroll = true)
+        assertEquals(mapOf("fixUnnecessaryLinebreaks" to true), values(session.receive("setSettings")))
+    }
+
+    // Mudlet reads a protocol's switch as the game connects: turned while it is connected, it waits for the next one
+    @Test
+    fun aSettingReadAsTheGameConnectsSaysSoOnceWhileItIsConnected() {
+        loaded()
+        session.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.status["connection"] == "connected" } }
+        val notice = hasText(string(R.string.settings_next_connection))
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_connection)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_gmcp)), scroll = true)
+        assertEquals(mapOf("enableGMCP" to false), values(session.receive("setSettings")))
+        compose.onNode(notice).assertIsDisplayed()
+        // Another turned while it shows is not said again, after it either
+        activate(hasText(string(R.string.settings_msdp)), scroll = true)
+        assertEquals(mapOf("enableMSDP" to true), values(session.receive("setSettings")))
+        compose.onNode(notice).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SNACKBAR_MS)
+        compose.onNode(notice).assertDoesNotExist()
+
+        // A search's switch, turned where it is found, says so there
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.onNode(hasSetTextAction()).performTextInput("gmcp")
+        val crumb = compose.activity.getString(R.string.settings_breadcrumb, GAME.name, string(R.string.settings_connection))
+        activate(hasText(crumb) and hasText(string(R.string.settings_gmcp)), scroll = true)
+        assertEquals(mapOf("enableGMCP" to true), values(session.receive("setSettings")))
+        compose.onNode(notice).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SNACKBAR_MS)
+        compose.onNode(notice).assertDoesNotExist()
+        compose.onNode(hasSetTextAction()).performTextClearance()
+
+        // A setting that applies at once says nothing; one turned later that does not says so again
+        activate(hasText(string(R.string.settings_advanced)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_fix_linebreaks)), scroll = true)
+        assertEquals(mapOf("fixUnnecessaryLinebreaks" to true), values(session.receive("setSettings")))
+        compose.onNode(notice).assertDoesNotExist()
+        activate(hasText(string(R.string.settings_force_compression_off)), scroll = true)
+        assertEquals(mapOf("specialForceCompressionOff" to true), values(session.receive("setSettings")))
+        compose.onNode(notice).assertIsDisplayed()
+
+        // Once the connection ends there is nothing to wait for
+        session.status("connection", "disconnected")
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.status["connection"] == "disconnected" } }
+        compose.onNode(notice).assertDoesNotExist()
+    }
+
+    // The change is there for the connection to come
+    @Test
+    fun aSettingReadAsTheGameConnectsSaysNothingWhileItIsNotConnected() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_connection)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_gmcp)), scroll = true)
+        assertEquals(mapOf("enableGMCP" to false), values(session.receive("setSettings")))
+        compose.onNode(hasText(string(R.string.settings_next_connection))).assertDoesNotExist()
     }
 
     @Test
@@ -365,6 +431,9 @@ class ScreenReaderTest {
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
 
         const val WAIT_MS = 10_000L
+
+        // Longer than Material's short snackbar stays, and too short for one after it to have gone too
+        const val SNACKBAR_MS = 4_500L
 
         // Well past the Announcer's wait for more lines
         const val QUIET_MS = 1_000L

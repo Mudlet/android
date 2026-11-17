@@ -48,7 +48,8 @@ import java.util.concurrent.CompletableFuture
 
 /**
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
- * settings (the hub, a search and four pages, and in light mode the hub and a page side by side on a tablet), the
+ * settings (the hub, a search and six pages, one as a change says it waits for the next connection, and in light mode
+ * the hub and a page side by side on a tablet), the
  * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
  * part of a name, and the game sheet with two games open, light and dark, against a fake engine, for a pull request
  * that changes how they look. Each is saved in the app's
@@ -124,6 +125,19 @@ class ScreenshotTest {
         activate(hasText(string(R.string.settings_connection)))
         waitFor(hasText(string(R.string.settings_gmcp)))
         save("settings-connection-$mode")
+        // The game is connected, so a protocol's switch turned now waits for its next connection
+        activate(hasText(string(R.string.settings_gmcp)))
+        waitFor(hasText(string(R.string.settings_next_connection)))
+        save("settings-connection-changed-$mode")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText(string(R.string.settings_accessibility)))
+        waitFor(hasText(string(R.string.settings_blank_lines)))
+        save("settings-accessibility-$mode")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_advanced)))
+        activate(hasText(string(R.string.settings_advanced)))
+        waitFor(hasText(string(R.string.settings_fix_linebreaks)))
+        save("settings-advanced-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_display)))
         activate(hasText(string(R.string.settings_display)))

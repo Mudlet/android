@@ -102,20 +102,6 @@ sealed class SettingEntry(
 /** Every setting the settings screen has, in the order its pages show them. A game category's are each game's own. */
 val settingsCatalogue: List<SettingEntry> by lazy {
     listOfNotNull(
-        SettingEntry.Choice(SettingsCategory.DISPLAY, Settings.blankLines, R.string.settings_blank_lines, R.string.settings_blank_lines_keywords) {
-            when (it) {
-                Settings.BlankLines.SHOW -> R.string.settings_blank_lines_show
-                Settings.BlankLines.HIDE -> R.string.settings_blank_lines_hide
-                Settings.BlankLines.SPACE -> R.string.settings_blank_lines_space
-            }
-        },
-        SettingEntry.Switch(
-            SettingsCategory.DISPLAY,
-            Settings.joinSplitLines,
-            R.string.settings_join_split_lines,
-            R.string.settings_join_split_lines_hint,
-            R.string.settings_join_split_lines_keywords,
-        ),
         SettingEntry.Switch(
             SettingsCategory.DISPLAY,
             Settings.undoWrap,
@@ -147,6 +133,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_advertise_screen_reader_hint,
             R.string.settings_advertise_screen_reader_keywords,
         ),
+        SettingEntry.Choice(SettingsCategory.ACCESSIBILITY, Settings.blankLines, R.string.settings_blank_lines, R.string.settings_blank_lines_keywords) {
+            when (it) {
+                Settings.BlankLines.SHOW -> R.string.settings_blank_lines_show
+                Settings.BlankLines.HIDE -> R.string.settings_blank_lines_hide
+                Settings.BlankLines.SPACE -> R.string.settings_blank_lines_space
+            }
+        },
         SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.closedCaptions,
@@ -204,6 +197,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_force_ga_off,
             R.string.settings_force_ga_off_hint,
             R.string.settings_force_ga_off_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ADVANCED,
+            Settings.fixLinebreaks,
+            R.string.settings_fix_linebreaks,
+            R.string.settings_fix_linebreaks_hint,
+            R.string.settings_fix_linebreaks_keywords,
         ),
         SettingEntry.Switch(
             SettingsCategory.ADVANCED,

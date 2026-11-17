@@ -96,6 +96,13 @@ class ProfileSession internal constructor(
     /** The profile's settings, by Mudlet's `getConfig()` keys, as the engine last gave them; [setting] reads one. */
     val settings = mutableStateMapOf<String, Any>()
 
+    /**
+     * A setting changed while the game is connected waits for its next connection ([Settings.readAsItConnects]), until
+     * the settings screen has said so and calls [settingAwaitsConnectionShown], or the connection ends.
+     */
+    var settingAwaitsConnection by mutableStateOf(false)
+        private set
+
     /** How this session's link to its socket stands, for the smoke test's errors and the tests. */
     var linkState by mutableStateOf("not attached")
         private set
@@ -318,10 +325,13 @@ class ProfileSession internal constructor(
 
     // Only a change seen as it happens counts: an attach resends the status from scratch, which is no drop
     private fun connectionChanged(was: String?, now: String) {
-        if (now == "connected") {
+        if (now == CONNECTED) {
             dropped = false
             disconnectAsked = false
-        } else if (was == "connected") {
+            return
+        }
+        settingAwaitsConnection = false
+        if (was == CONNECTED) {
             dropped = !disconnectAsked
             disconnectAsked = false
         }
@@ -348,7 +358,12 @@ class ProfileSession internal constructor(
         val mudletValue = setting.toMudlet(value)
         if (!sendSettings(Requests.setSettings(mapOf(setting.key to mudletValue), newRequestId()))) return false
         settings[setting.key] = mudletValue
+        if (setting in Settings.readAsItConnects && status["connection"] == CONNECTED) settingAwaitsConnection = true
         return true
+    }
+
+    fun settingAwaitsConnectionShown() {
+        settingAwaitsConnection = false
     }
 
     /** Asks Mudlet for this game's settings again, as a script may have changed them; nothing while it has not loaded. */
@@ -704,6 +719,7 @@ class ProfileSession internal constructor(
         // shown while none is
         private const val NO_PROFILE_SUGGESTIONS = "Android"
         private const val LOADED = " loaded"
+        private const val CONNECTED = "connected"
 
         // Each followed by the profile's name
         private const val PREF_LAST_HOST = "lastHost:"

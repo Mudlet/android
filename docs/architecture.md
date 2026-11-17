@@ -193,18 +193,23 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   profile, where desktop Mudlet does, so a profile copied between the two keeps them. `ProfileSession` asks for them
   with `getSettings` as the profile loads and as a page opens (a script may have changed them), and a change sends
   `setSettings` ([`protocol.md`](protocol.md)). A game added in the app is given, as it first loads, those of the
-  app's values the player changed ("New games"): Mudlet picks some for the game it knows, such as joining split lines
-  for IRE's, which unchanged values would undo. After that it keeps its own, as a game copied in or there before does
-  from the start.
-- The game categories are Display (blank lines, joining split lines, undoing the game's own wrapping and the width it
-  wraps at), Accessibility (with captions for sounds), Input (the commands the console shows, Unix line endings),
-  Connection (offering a secure connection, and the protocols Mudlet negotiates with the game: GMCP, MSDP, MSSP, MSP,
-  MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors a secure connection lets past, and
-  whether the game may install its packages or play its media) and Advanced (desktop Mudlet's "Special options", and
-  a script's errors shown in the game's text, as the app has no error console); Mudlet reads the
-  protocols' as it connects, so a change applies from the next connection. A number's slider changes it as the finger
-  lifts, so a game's is sent once a slide. Mudlet's settings for how its own console draws text (control characters, East Asian
-  characters of either width) are not among them, as the app draws the text itself.
+  app's values the player changed ("New games"): Mudlet picks some for the game it knows, such as fixing the line
+  breaks of IRE's, which unchanged values would undo. After that it keeps its own, as a game copied in or there
+  before does from the start.
+- The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
+  what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the commands
+  the console shows, Unix line endings), Connection (offering a secure connection, and the protocols Mudlet negotiates
+  with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors
+  a secure connection lets past, and whether the game may install its packages or play its media) and Advanced
+  (desktop Mudlet's "Special options", and a script's errors shown in the game's text, as the app has no error
+  console). A number's slider changes it as the finger lifts, so a game's is sent once a slide. Mudlet's settings for
+  how its own console draws text (control characters, East Asian characters of either width) are not among them, as
+  the app draws the text itself.
+- Mudlet reads some settings only as a game connects (`Settings.readAsItConnects`: the protocols, compression, the
+  go-ahead signal, the version in the terminal type, the certificate errors let past and the offer of a secure
+  connection), so one changed while the game is connected waits for its next connection. The switch turns all the
+  same, and a snackbar says so (`SettingsNotices`, from `ProfileSession.settingAwaitsConnection`): one for the
+  switches turned while it shows, none for a game that is not connected or for "New games".
 - The search matches each word of the query against a setting's label, description, choices, category and translated
   keywords, whatever the case and accents (`searchMatches()`). A result says where it lives ("Aardwolf ›
   Accessibility"), chips narrow it to one game, the new games or the app, a switch turns where it is found and any
@@ -901,7 +906,7 @@ device shows, below the UI's debug hook:
   announcement, `announce`, each console line as its plain text) and the settings: a game added in the app given
   the app's values the player changed (`setSettings`), none if none were, and any other keeping its own (`getSettings`), read again as a page opens and changed there
   alone, a search's switches
-  for the game and for new games, the Input, Connection, Security and Advanced pages' changes, and a game's number sent once a slide; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
+  for the game and for new games, the Input, Connection, Security and Advanced pages' changes, a game's number sent once a slide, and a setting read as the game connects saying once, while it is connected, that it waits for the next connection; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
   button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
   map in front the title bar, its search, the map, the input line and the row with the game pill, and nothing it
@@ -1571,10 +1576,13 @@ Item 13 of the on-device checklist covers this.
     - New text is read as it arrives, without moving focus. A burst (`look` in a busy room, or
       `lua for i = 1, 20 do echo("line " .. i .. "\n") end`) is read once, as its count and its last lines, not
       queued line by line. With "Read new text aloud" off on the game's Accessibility page, nothing is read.
-    - On the game's Display & text page choose "Hide them": `lua echo(getConfig("blankLinesBehaviour"))` says `hide`.
-      After `lua setConfig("blankLinesBehaviour", "show")`, the page opened again shows "Show them". Close the game
-      and open it again: the choice stays. A game added afterwards starts with the values of "New games"; a profile
-      copied in from desktop Mudlet keeps its own.
+    - On the game's Accessibility page, under "Blank lines from the game", choose "Hide them":
+      `lua echo(getConfig("blankLinesBehaviour"))` says `hide`. After `lua setConfig("blankLinesBehaviour", "show")`,
+      the page opened again shows "Show them". Close the game and open it again: the choice stays. A game added
+      afterwards starts with the values of "New games"; a profile copied in from desktop Mudlet keeps its own.
+    - Connected, turn GMCP off on the game's Connection page: the switch turns and a message says it takes effect
+      the next time you connect, once however many protocols are turned while it shows. TalkBack reads it.
+      Disconnected, no message shows.
     - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
       interrupts it. The same announcement twice is read twice.
     - Swiping through the console moves line by line, and each line is read as its text, without colour or style

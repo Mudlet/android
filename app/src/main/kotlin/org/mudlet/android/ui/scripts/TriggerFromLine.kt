@@ -56,10 +56,14 @@ const val TRIGGER_NAME_LENGTH = 40
  * text), so that [captures], which tries it here, says what the trigger will do there.
  */
 data class TriggerFromLine(val line: String, val roles: List<WordRole>, val wholeLine: Boolean = false, val wideCaptures: Boolean = false) {
-    private val found: List<MatchResult> get() = WORD.findAll(line).toList()
+    private val found: List<MatchResult> = WORD.findAll(line).toList()
 
     /** The line's words, which [roles] are of. */
     val words: List<String> get() = found.map { it.value }
+
+    init {
+        require(roles.size == found.size) { "${roles.size} roles for ${found.size} words" }
+    }
 
     /** With the word at [index] given its next role. */
     fun withNextRole(index: Int): TriggerFromLine = if (index in roles.indices) copy(roles = roles.toMutableList().also { it[index] = it[index].next() }) else this
@@ -67,18 +71,21 @@ data class TriggerFromLine(val line: String, val roles: List<WordRole>, val whol
     /** Whether there is a pattern to make: a line of only optional words would match every line. */
     val usable: Boolean get() = line.isNotBlank() && (roles.isEmpty() || roles.any { it != WordRole.OPTIONAL })
 
-    val pattern: TriggerPattern
-        get() = when {
+    val pattern: TriggerPattern by lazy {
+        when {
             roles.any { it != WordRole.FIXED } -> TriggerPattern(regex(), TriggerPatternType.REGEX)
             wholeLine -> TriggerPattern(line, TriggerPatternType.EXACT)
             else -> TriggerPattern(line.trim(), TriggerPatternType.SUBSTRING)
         }
+    }
+
+    // Compiled once for all the lines it is tried on
+    private val compiled by lazy { Regex(pattern.text) }
 
     /** What the new trigger is called: the line, shortened. */
     val name: String get() = line.trim().take(TRIGGER_NAME_LENGTH).trim()
 
     private fun regex(): String {
-        val found = found
         // What is before each word, and after the last: gaps[i] is before word i
         val gaps = (0..found.size).map { i ->
             val from = if (i == 0) 0 else found[i - 1].range.last + 1
@@ -130,13 +137,10 @@ data class TriggerFromLine(val line: String, val roles: List<WordRole>, val whol
      * What the pattern captures from [text], in order, as the trigger's Lua has them from `matches[2]` on; empty where it
      * captures nothing, and null where [text] does not match.
      */
-    fun captures(text: String): List<String>? {
-        val pattern = pattern
-        return when (pattern.type) {
-            TriggerPatternType.EXACT -> emptyList<String>().takeIf { text == pattern.text }
-            TriggerPatternType.REGEX -> Regex(pattern.text).find(text)?.groupValues?.drop(1)
-            else -> emptyList<String>().takeIf { pattern.text in text }
-        }
+    fun captures(text: String): List<String>? = when (pattern.type) {
+        TriggerPatternType.EXACT -> emptyList<String>().takeIf { text == pattern.text }
+        TriggerPatternType.REGEX -> compiled.find(text)?.groupValues?.drop(1)
+        else -> emptyList<String>().takeIf { pattern.text in text }
     }
 
     companion object {

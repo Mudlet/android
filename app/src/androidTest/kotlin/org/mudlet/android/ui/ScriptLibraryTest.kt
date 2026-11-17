@@ -417,7 +417,16 @@ class ScriptLibraryTest {
     // Each window's: a dialog is a window of its own over the activity's
     private fun checkAccessibility() {
         val roots = compose.onAllNodes(isRoot())
-        for (i in roots.fetchSemanticsNodes().indices) roots[i].tryPerformAccessibilityChecks()
+        for (i in roots.fetchSemanticsNodes().indices) {
+            try {
+                roots[i].tryPerformAccessibilityChecks()
+            } catch (e: Throwable) {
+                val nodes = compose.onAllNodes(SemanticsMatcher("any") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+                    .filter { it.boundsInRoot.height <= 12f || it.boundsInRoot.top in 280f..315f || it.boundsInRoot.bottom in 300f..315f }
+                    .joinToString(" ## ") { "${it.boundsInRoot} ${it.config}" }
+                throw AssertionError("${e.message?.take(260)} NODES: $nodes".replace("\n", " "))
+            }
+        }
     }
 
     /**

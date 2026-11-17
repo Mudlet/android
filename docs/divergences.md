@@ -99,6 +99,19 @@ updater's feed. The app is released apart from Mudlet, and what a player notices
 the engine's Mudlet version and commit are in About. The desktop also shows its changelog once after an update, which
 the app leaves to Google Play's "What's new", the same text.
 
+## The UI tour
+
+The game screen's tour (`ui/game/GameTour.kt`; `docs/architecture.md`, "On-device checklist") shows the first time the
+game screen does to every player, where the desktop leaves its tour out for a player it judges experienced from their
+profiles and how long Mudlet has been there (`TUiTour::shouldShowOnFirstProfile`). The app's controls are not the
+desktop's, so a desktop player meets them new too, and Skip ends the tour at the first step. Scripts see no tour:
+the desktop sets `mudlet.uiTourPending` while its tour is due and raises `sysUiTourFinished` when it closes, both from
+its connection dialog, which the engine here does not run. Telling scripts would take the engine a message from the UI
+for the tour's end. Of the packages Mudlet ships, two wait on the flag: the Mudlet Tutorial, which the app does not
+offer ("The games the profile list offers"), and the starter UI (`mudlet-base-ui`), whose introduction then comes on
+the console under the tour, where it stays to be read after. The last step leaves out the desktop's pointer to the
+tutorial.
+
 ## A new game's input line is emptied after a send
 
 A game added in the app starts with "Clear the input line after sending" on, and so does every game that was there

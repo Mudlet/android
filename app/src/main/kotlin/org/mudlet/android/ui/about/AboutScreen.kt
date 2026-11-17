@@ -41,11 +41,18 @@ private val GROUP_TITLES = mapOf(
  * The app's version and engine, where the source of both is, how Qt's LGPL is met, and the licence of everything
  * the APK bundles (docs/licences.md); a component opens its licence texts through [onOpenComponent]. [selected] is the
  * component whose licence is open beside the list, if one is. [onReportProblem] opens the problem report screen. Its
- * Help links open in the browser the pages desktop's Help menu does ([Help]), and "Show changelog" the app's release
- * notes ([onShowChangelog]).
+ * Help links open in the browser the pages desktop's Help menu does ([Help]), "Take a UI tour" ([onTakeTour]) the
+ * game screen's tour again and "Show changelog" the app's release notes ([onShowChangelog]).
  */
 @Composable
-fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selected: String? = null, onReportProblem: () -> Unit, onShowChangelog: () -> Unit) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    onOpenComponent: (id: String) -> Unit,
+    selected: String? = null,
+    onReportProblem: () -> Unit,
+    onTakeTour: () -> Unit,
+    onShowChangelog: () -> Unit,
+) {
     val engine = engineInfo()
     val licences = rememberLicences()
     val context = LocalContext.current
@@ -68,7 +75,9 @@ fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selec
             }
             item {
                 Heading(stringResource(R.string.help_heading))
-                for (link in listOf(Help.MANUAL, Help.LUA_FUNCTIONS) + Help.COMMUNITY) LinkButton(stringResource(link.label)) { open(link.url) }
+                for (link in listOf(Help.MANUAL, Help.LUA_FUNCTIONS)) LinkButton(stringResource(link.label)) { open(link.url) }
+                LinkButton(stringResource(R.string.help_tour), onTakeTour)
+                for (link in Help.COMMUNITY) LinkButton(stringResource(link.label)) { open(link.url) }
                 LinkButton(stringResource(R.string.help_changelog), onShowChangelog)
             }
             item {

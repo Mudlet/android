@@ -82,7 +82,9 @@ import kotlin.reflect.KClass
  * covers the console. The input line and the row stay below the map in front, to type and pick commands in. The title
  * bar's scripts button opens the profile's script library ([onOpenScripts]), and its menu the search of the text and
  * the profile's packages ([onOpenPackages]); a long press on a line of the console offers to make a trigger from it
- * ([onMakeTrigger], with the line's text).
+ * ([onMakeTrigger], with the line's text). The first time it shows, and after Help's "Take a UI tour", a short tour
+ * points out the console, the input line, the scripts and the settings ([GameTourHost]), once no dialog over the
+ * screen asks something more urgent ([tourHeld]).
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
@@ -93,7 +95,14 @@ import kotlin.reflect.KClass
  * there ([desktopShortcut]), and a hardware key a key binding of the profile takes goes to the engine.
  */
 @Composable
-fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: () -> Unit, onOpenPackages: () -> Unit, onMakeTrigger: (String) -> Unit) {
+fun GameScreen(
+    onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenScripts: () -> Unit,
+    onOpenPackages: () -> Unit,
+    onMakeTrigger: (String) -> Unit,
+    tourHeld: Boolean = false,
+) {
     val front = EngineClient.front
     val kept = rememberSaveableStateHolder()
     val open = EngineClient.sessions.map { it.name }
@@ -117,7 +126,11 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: ()
     val scope = rememberCoroutineScope()
     val swipe = remember { GameSwipe(scope) }
     ScriptWebPageOpener()
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onOpenPackages, onMakeTrigger) }
+    GameTourHost(tourHeld) {
+        kept.SaveableStateProvider(front.name) {
+            ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onOpenPackages, onMakeTrigger)
+        }
+    }
 }
 
 // What a composition last saw, which changing does not compose again
@@ -221,11 +234,11 @@ private fun ProfileGameScreen(
         topBar = {
             MudletTopBar(stringResource(R.string.game_title), onBack) {
                 ScriptCommandsButton()
-                IconButton(onOpenScripts) {
+                IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
                     ErrorCountBadge(c.errors.unseen, stringResource(R.string.scripts_open, c.name)) { Icon(painterResource(R.drawable.ic_auto_fix_high), it) }
                 }
                 MapButton(mapOpen, onMapOpen)
-                IconButton(onOpenSettings) {
+                IconButton(onOpenSettings, Modifier.tourTarget(TourTarget.SETTINGS)) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }
                 GameMenuButton(c.name, onSearch = { searching = true }, onOpenPackages = onOpenPackages)
@@ -296,7 +309,7 @@ private fun ProfileGameScreen(
                             colors = colors,
                             onTextSize = Settings.textSize::set,
                             onScreenSize = EngineClient::setScreenSize,
-                            consoleModifier,
+                            consoleModifier.tourTarget(TourTarget.CONSOLE),
                             links = c.links,
                             onMakeTrigger = onMakeTrigger,
                             searchQuery = if (searching) search.query else "",
@@ -322,7 +335,7 @@ private fun ProfileGameScreen(
                     onSendHidden = { secret -> c.sendHidden(secret).also { if (it) suggestions.sentHidden() } },
                     onDismissHidden = c::dismissHidden,
                     onComplete = c::complete,
-                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp).tourTarget(TourTarget.INPUT_LINE),
                     suggestions = suggestions.answer,
                     onInputChanged = suggestions::inputChanged,
                     picked = picked,

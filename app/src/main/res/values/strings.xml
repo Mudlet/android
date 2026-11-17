@@ -176,6 +176,8 @@
     <string name="report_contents_heading">What will be sent</string>
     <!-- Problem report screen: shown while the log is read -->
     <string name="report_collecting">Collecting…</string>
+    <!-- Problem report screen: shown, and said by TalkBack, once the report below is ready to send -->
+    <string name="report_ready">Ready to send. The report follows.</string>
     <!-- The subject a shared problem report is given, as an email's -->
     <string name="report_subject">Mudlet for Android: problem report</string>
     <!-- A message when no app on the device can take a shared problem report -->

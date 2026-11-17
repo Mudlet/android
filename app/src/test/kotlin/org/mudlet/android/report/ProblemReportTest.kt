@@ -47,6 +47,12 @@ class ProblemReportTest {
     }
 
     @Test
+    fun aLogThatCouldNotBeCleanedIsLeftOutWhole() {
+        val text = composeReport(listOf("head $login"), null, redactor)
+        assertEquals("head ${Redactor.LOGIN}\n\n$LOG_WITHHELD\n", text)
+    }
+
+    @Test
     fun theIssueAddressCarriesTheSummaryAndStaysShort() {
         val summary = listOf("App: org.mudlet.mudlet 1.0 (5)", "Android: 14 (API 34)")
         val url = newIssueUrl(summary)

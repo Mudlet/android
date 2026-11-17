@@ -60,8 +60,14 @@ class PasswordStore(context: Context) {
         }
     }
 
-    /** Every stored password that can be decrypted now, for a problem report to take out of what it sends */
-    fun all(): List<String> = read()?.keys()?.asSequence()?.toList().orEmpty().mapNotNull(::get)
+    /**
+     * Every stored password, for a problem report to take out of what it sends; null if any of them, or the file,
+     * cannot be read now.
+     */
+    fun all(): List<String>? {
+        val all = read() ?: return null
+        return all.keys().asSequence().toList().map { get(it) ?: return null }
+    }
 
     /** False if it could not be stored. */
     fun set(profile: String, password: String): Boolean {

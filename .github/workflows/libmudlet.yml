@@ -234,23 +234,31 @@ jobs:
           path: .ccache
           key: ccache-libmudlet-desktop-${{ github.run_id }}
 
+      - id: engine
+        name: Build the engine
+        working-directory: native
+        run: |
+          cmake -S . -B build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64" \
+            -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
+          cmake --build build-desktop-mudlet --target engine
+
       - name: Test the real engine
         working-directory: native
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          cmake -S . -B build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64" \
-            -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
-          cmake --build build-desktop-mudlet --target engine
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
           python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies
       - uses: gradle/actions/setup-gradle@v6
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
 
       # :protocol's tests: the spec check, the run encoding, and the app's EngineLink against the engine just built,
-      # which fails rather than skips here when it has no engine (CI=true)
+      # which fails rather than skips here when it has no engine (CI=true). They run when the Python tests failed too,
+      # so one run shows both.
       - name: Kotlin protocol tests
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
         env:
           QT_QPA_PLATFORM: offscreen
         run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a

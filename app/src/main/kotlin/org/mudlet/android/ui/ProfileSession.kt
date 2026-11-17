@@ -196,10 +196,12 @@ class ProfileSession internal constructor(
 
     internal fun start() {
         link?.start()
+        linkState = "connecting"
     }
 
     internal fun stop() {
         link?.stop()
+        linkState = "detached"
     }
 
     /** Connects at once if the link is waiting to try again. */
@@ -213,8 +215,8 @@ class ProfileSession internal constructor(
         socket = path
         misdirected = false
         if (running) {
-            link?.stop()
-            link?.start()
+            stop()
+            start()
         }
     }
 

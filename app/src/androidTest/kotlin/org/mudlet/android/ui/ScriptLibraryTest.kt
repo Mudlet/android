@@ -326,8 +326,9 @@ class ScriptLibraryTest {
         // To the page's end, so that the empty Lua field is not cut off at the foot of what shows: Material's outlined
         // field has 8 dp over its outline, and an empty one is named to accessibility services only by its label, a
         // child that is left out while it is scrolled out of sight (Compose gives the field's own node its text, which
-        // is empty). With only that strip showing, the checks find an edit box with no name, as TalkBack would
-        compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_lua))).performScrollTo()
+        // is empty). With only that strip showing, the checks find an edit box with no name, as TalkBack would. By
+        // the scroll action itself: performScrollTo() runs the checks first, on the page as it is
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
         activate(apply)
         val events = received("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")
         assertEquals(listOf("sysDisconnectionEvent"), (0 until events.length()).map(events::getString))
@@ -444,6 +445,9 @@ class ScriptLibraryTest {
     private companion object {
         const val INSTANCE = "fake-scripts"
         const val CONSOLE_LINE = "A rat bites you."
+
+        // Further than any page is long
+        const val PAGE_END_PX = 100_000f
         const val WAIT_MS = 10_000L
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first

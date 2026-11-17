@@ -59,7 +59,7 @@ class PseudoLocaleTest(private val locale: String) {
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS))
         .around(AppLocaleRule(locale))
-        .around(compose)
+        .around(compose).around(A11yDump { compose })
 
     @Before
     fun enableChecks() {

@@ -71,7 +71,7 @@ class ScriptLibraryTest {
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
-        .around(compose)
+        .around(compose).around(A11yDump { compose })
 
     private lateinit var session: FakeEngine.Session
     private val game = Profile("scripts ${System.nanoTime()}", "127.0.0.1", 4000, false, "", false)

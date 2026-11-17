@@ -1194,6 +1194,14 @@
     <string name="scripts_to_game">go back to the game</string>
     <!-- A script item page's title bar button, read by a screen reader; %1$s is the item's name. Undo is offered after -->
     <string name="scripts_delete">Delete %1$s</string>
+    <!-- A script item page's title bar button, read by a screen reader, that opens the list of folders to move the item to; %1$s is the item's name -->
+    <string name="scripts_move">Move %1$s</string>
+    <!-- The title of the sheet that lists the folders a script item can be moved to; %1$s is the item's name -->
+    <string name="scripts_move_title">Move %1$s to</string>
+    <!-- The button, read by a screen reader, that closes the sheet of folders to move a script item to, without moving it -->
+    <string name="scripts_move_close">Close without moving</string>
+    <!-- In the sheet of folders to move a script item to, the first row: the top level of its kind, outside every folder -->
+    <string name="scripts_move_top">Top level</string>
     <!-- The button at the foot of a script item's page that puts what was changed to use, as Mudlet's Save Item does -->
     <string name="scripts_apply">Apply</string>
     <!-- The title of what asks, on leaving a script item's page, whether to lose what was changed; %1$s is its name -->
@@ -1431,6 +1439,10 @@
     <string name="scripts_applied">%1$s applied</string>
     <!-- A snackbar once a script item is deleted; %1$s is its name. Undo is offered -->
     <string name="scripts_deleted">%1$s deleted</string>
+    <!-- A snackbar once a script item is moved into a folder; %1$s is the item's name, %2$s the folder's -->
+    <string name="scripts_moved">%1$s moved to %2$s</string>
+    <!-- A snackbar once a script item is moved to the top level of its kind, outside every folder; %1$s is the item's name -->
+    <string name="scripts_moved_top">%1$s moved to the top level</string>
     <!-- The snackbar button that undoes a script item's apply or delete -->
     <string name="scripts_undo">Undo</string>
     <!-- A snackbar when the engine refuses to list script items; %1$s is its reason, in English -->

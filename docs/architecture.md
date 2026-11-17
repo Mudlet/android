@@ -654,9 +654,11 @@ kept by `ScriptItemsClient`:
 - On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
   snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
   reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.
-- Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item to another
-  folder (`moveScriptItem` is there for it), which is also how an offset timer or a trigger's chain is made, a
-  button's icon and rotation, a key picked by pressing it, and in the Lua field colours for Lua's words and what
+- An item's page moves it, last, into a folder picked from a sheet (`moveScriptItem`), each folder with those it is
+  in: not where it is, nor into itself, and among the buttons a button only into a toolbar or a menu; a package's
+  own folder stays put. The snackbar says where it went once the list after the move has come.
+- Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item onto another
+  to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the Lua field colours for Lua's words and what
   each function does (Mudlet's list has only how each is called). A key binding is edited but does not run here: the
   app passes no key of a keyboard on to the profile yet, and the key's page says so.
 

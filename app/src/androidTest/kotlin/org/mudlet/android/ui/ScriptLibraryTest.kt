@@ -56,7 +56,8 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
  * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
  * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
  * draft over a trip to the game, edits a trigger's patterns and options, an alias's command, a script's events, a
- * timer's time, a key binding's key, a toolbar's place and a button's commands, and deletes with Undo, sent only once
+ * timer's time, a key binding's key, a toolbar's place and a button's commands, moves to a folder picked from a sheet,
+ * and deletes with Undo, sent only once
  * the library goes; a timer with offset timers in it is gone into, and the buttons' top level takes toolbars; its Lua
  * is edited in the page, which indents a new line, completes a function's name and types Lua's symbols, is checked
  * only when applied, when what the engine finds wrong shows with a way to its line until the code is changed, and is
@@ -548,6 +549,21 @@ class ScriptLibraryTest {
         assertEquals("trigger", delete.getString("kind"))
         assertEquals(3, delete.getInt("item"))
         items("trigger", triggers.take(2), received("scriptItems"))
+    }
+
+    @Test
+    fun anItemIsMovedToAFolderPickedFromASheet() {
+        openGreet()
+        activate(hasContentDescription(string(R.string.scripts_move, "Greet")))
+        waitFor(hasText(string(R.string.scripts_move_title, "Greet")))
+        // Greet is at the top level, which is therefore not offered
+        compose.onNode(hasText(string(R.string.scripts_move_top))).assertDoesNotExist()
+        activate(hasText("Combat") and hasClickAction())
+        val move = received("moveScriptItem")
+        assertEquals(listOf("trigger", 3, 1, 1), listOf(move.getString("kind"), move.getInt("item"), move.getInt("parent"), move.getInt("position")))
+        items("trigger", listOf(triggers[0], triggers[1], node(3, 1, "Greet")), received("scriptItems"))
+        waitFor(hasText(string(R.string.scripts_moved, "Greet", "Combat")))
+        compose.onNode(hasText(string(R.string.scripts_move_title, "Greet"))).assertDoesNotExist()
     }
 
     @Test

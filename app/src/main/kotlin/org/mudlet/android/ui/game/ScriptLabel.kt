@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import android.os.Build
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -244,7 +245,7 @@ private fun rememberLabelText(content: LabelContent?, window: ScriptWindow, scal
     val basePx = fontPx(style, window)
     val text = content?.text.orEmpty()
     val rich = remember(text, basePx) { if (text.isBlank()) null else RichText.parse(text, basePx) }
-    val linksFollowable = content?.linksFollowable != false
+    val linksFollowable = content?.clickThrough != true || (Build.VERSION.SDK_INT >= 34 && content?.accessibleName.isNullOrEmpty())
     return remember(rich, style, scale, linksFollowable) { LabelText(style, rich, scale, linksFollowable) }
 }
 
@@ -710,7 +711,7 @@ private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = M
     val toSp: (Float) -> TextUnit = { px -> with(density) { (px * scale).toSp() } }
     // Keyed on the whole of what the label's text is drawn from, so a change to any part of it, as to whether its links
     // are followed, redraws it
-    val annotated = remember(label, text, density) {
+    val annotated = remember(label, rich, style, text.scale, density, text.linksFollowable.takeIf { Build.VERSION.SDK_INT >= 34 }) {
         buildAnnotatedString {
             for (block in rich.blocks) {
                 withStyle(ParagraphStyle(textAlign = textAlign(block.align ?: style.hAlign))) {

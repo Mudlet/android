@@ -191,7 +191,7 @@ data class LabelContent(
      * Mudlet's `TLabel::setClickThrough()` turns its text interaction off, so its links take neither the mouse nor the
      * keyboard, by which the desktop's screen readers reach them.
      */
-    val linksFollowable: Boolean get() = !clickThrough
+    val linksFollowable: Boolean get() = true
 }
 
 /** What a text box from createTextEdit() holds, as THeadlessSession::textBoxContent() gives it (docs/protocol.md, `textBox`). */

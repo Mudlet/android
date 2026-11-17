@@ -15,7 +15,6 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -45,7 +44,7 @@ import kotlin.math.abs
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
  * editor, the settings, the game screen, with the connection chip's states and the password field, the script library,
- * a trigger's page and the Lua editor, no text is
+ * and a trigger's page, with its Lua being typed, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
  */
@@ -64,8 +63,7 @@ class PseudoLocaleTest(private val locale: String) {
 
     @Before
     fun enableChecks() {
-        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.enableAccessibilityChecksOfWhatShows()
     }
 
     @Test
@@ -151,13 +149,15 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("a trigger's page")
         assertAtStart("the patterns' heading", hasText(string(R.string.scripts_patterns)))
 
-        val lua = hasText(string(R.string.scripts_lua)) and hasClickAction()
+        // The keys over the keyboard come once the Lua has it
+        val lua = hasTestTag(LUA_EDITOR_TAG)
         compose.onNode(lua).performScrollTo()
-        activate(lua)
-        waitFor(hasTestTag(LUA_EDITOR_TAG))
-        assertTextFits("the Lua editor")
-        activate(hasContentDescription(string(R.string.navigate_back)))
-        waitFor(hasText(string(R.string.scripts_pattern, 1)))
+        compose.onNode(lua).performSemanticsAction(SemanticsActions.RequestFocus)
+        val keys = hasContentDescription(string(R.string.lua_indent))
+        waitFor(keys)
+        // Measured once the page has stopped moving over the keyboard that comes with them
+        compose.keyboardHasCome(keys, WAIT_MS)
+        assertTextFits("a trigger's page with its Lua being typed")
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.scripts_off)))
         activate(hasContentDescription(string(R.string.navigate_back)))

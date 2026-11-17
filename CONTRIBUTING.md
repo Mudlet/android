@@ -124,9 +124,9 @@ python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/a
 ```
 
 `android_instrumented.py` also copies the screenshots `ScreenshotTest` takes (the profile list, the game screen with
-the map behind its text, the settings and the map in front, light and dark, on Android 12 and later) into
-`<out>/screenshots/`, which CI's emulator jobs upload with their results: before and after shots for a pull request
-that changes how the app looks.
+the map behind its text, the settings, the map in front and a trigger's page, light and dark, on Android 12 and
+later) into `<out>/screenshots/`, which CI's emulator jobs upload with their results: before and after shots for a pull
+request that changes how the app looks.
 
 The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist).
 

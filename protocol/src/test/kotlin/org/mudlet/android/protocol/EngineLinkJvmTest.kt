@@ -197,10 +197,11 @@ class EngineLinkJvmTest {
             assertEquals(name, next<Attached>(queue = queue).hello.profile)
             next<EngineMessage.Status>(PROFILE_LOAD_MS, queue) { it.key == "connection" && it.value == "connected" }
         }
+        // The next line ends the first, which libmudlet holds as the open tail until then
         links.getValue("North").send(Requests.send("echo north only"))
-        val said = shown(queue = queues.getValue("North")) { it.contains("north only") }
-        val seq = (said as? EngineMessage.Line)?.seq ?: 1
-        next<EngineMessage.OpenProfiles> { list -> list.profiles.any { it.name == "North" && it.lastSeq >= seq } }
+        links.getValue("North").send(Requests.send("echo north next"))
+        val said = next<EngineMessage.Line>(queue = queues.getValue("North")) { it.text.contains("north only") }
+        next<EngineMessage.OpenProfiles> { list -> list.profiles.any { it.name == "North" && it.lastSeq >= said.seq } }
         val south = queues.getValue("South")
         while (true) {
             val e = south.poll(300, TimeUnit.MILLISECONDS) ?: break

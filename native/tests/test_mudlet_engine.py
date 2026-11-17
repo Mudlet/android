@@ -647,17 +647,15 @@ def bridge_refusals():
     c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
     check(not [m for m in msgs if m["t"] == "openProfiles"], "a UI that leaves out profileSockets is not told of the open profiles")
 
+    # A new connection replaces c, so c is attached again after it
     bad = Client(SOCK, version=99)
+    m = bad.recv(2)
+    check(m == {"t": "error", "message": f"expected hello with v={PROTOCOL_VERSION}"}, f"hello with v=99 gets an error frame: {m}")
     try:
-        m = bad.recv(2)
-        check(m == {"t": "error", "message": f"expected hello with v={PROTOCOL_VERSION}"}, f"hello with v=99 gets an error frame: {m}")
-        try:
-            gone = bad.recv(2) is None
-        except Closed:
-            gone = True
-        check(gone, "and the connection is closed")
+        after = bad.recv(2)
     except Closed:
-        check(False, "hello with v=99 gets an error frame")
+        after = "closed"
+    check(after == "closed", f"and the connection is closed: {after}")
     c.close()
     c = Client(SOCK)
     c.wait_for(lambda m: m["t"] == "synced")

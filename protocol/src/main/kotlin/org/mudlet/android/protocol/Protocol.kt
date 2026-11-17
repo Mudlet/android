@@ -1294,7 +1294,7 @@ class FrameReader(input: InputStream) {
                 o.optString("error"),
             )
 
-            "sounds" -> EngineMessage.Sounds(o.optBoolean("played"), o.optBoolean("scriptsMuted"), o.optBoolean("gameMuted"))
+            "sounds" -> EngineMessage.Sounds(o.optBoolean("played"), o.optBoolean("gameMuted"), o.optBoolean("scriptsMuted"))
 
             else -> EngineMessage.Unknown(t)
         }

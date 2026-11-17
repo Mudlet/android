@@ -40,14 +40,14 @@ index 1f73624..f574e25 100644
  
  An app with its own settings screen reads and changes a profile's settings with `settings()` and
 diff --git a/src/TMedia.cpp b/src/TMedia.cpp
-index 3ec8f78..9a5bd47 100644
+index 3ec8f78..c68d5bc 100644
 --- a/src/TMedia.cpp
 +++ b/src/TMedia.cpp
 @@ -2590,6 +2590,9 @@ void TMedia::play(TMediaData& mediaData)
  
      pPlayer->mediaPlayer()->play();
      updateMediaPlayerList(std::move(pPlayer));
-+    if (mediaData.mediaVolume() != TMediaData::MediaVolumePreload) {
++    if (mediaData.mediaVolume() == TMediaData::MediaVolumePreload) {
 +        emit signal_mediaStarted(mediaData.mediaProtocol() == TMediaData::MediaProtocolAPI);
 +    }
  }

@@ -1227,6 +1227,18 @@ that attaches later is told too. The UI shows it as a marker line.
     "new engine instance" marker. The engine's scrollback is gone.
   - The engine loads the profile again and reconnects it, and the
     UI shows that as marker lines ("Restoring the session" above).
+  - When the engine before it was stopped by Android in the background, the UI
+    explains once that a battery saver or Android stopped Mudlet, and opens the
+    app's page in Android's settings on "Battery settings" (`EngineStopped.kt`).
+    It reads why from the `:engine` process's last `ApplicationExitInfo`
+    (Android 11 and later): a low-memory kill, a signal, `REASON_OTHER`, excessive
+    resource use, the freezer or an unknown reason; not a crash, an ANR, a force
+    stop or an update. Android 10 and earlier record no reason, so there any
+    restore counts. "Battery settings" or "Not now" is kept as
+    `engineStoppedAnswered` in the `ui` preferences, and it is never shown again;
+    Back hides it until the next engine. The app does not ask for
+    `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, which Google Play allows only for a
+    few kinds of app.
   - Host timings: the restarted engine is reachable 33 ms after it starts, and
     the JVM link reattaches 110 ms after the kill.
   - On a phone, expect a few hundred ms for the process fork and Qt library load.

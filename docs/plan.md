@@ -597,7 +597,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 1 Stable release on Play | release blocker | in flight | |
 | 2 Main console links | release blocker | in flight | |
 | 3 Profiles: backup, move, copy | release blocker | in flight | |
-| 4 Real phones and background | release blocker | not started | |
+| 4 Real phones and background | release blocker | in flight | #155 (device pass page, merged), #NEW |
 | 5 Report a problem | release blocker | not started | |
 | 6 Copy, search, timestamps, lag | expected | not started | |
 | 7 Hardware keyboards and keys | expected | not started | |

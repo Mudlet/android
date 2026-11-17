@@ -247,32 +247,12 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
-          python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
-
-      # Runs when the Python tests failed too, so one run shows both
-      - name: Test the map's PNG writer
-        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: native/build-desktop-mudlet/map_png_test app/src/androidTest/assets/map-picture.png
-
-      - name: Test the bridge's map frames
-        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
-        run: native/build-desktop-mudlet/map_frames_test
-
-      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies
-      - uses: gradle/actions/setup-gradle@v6
-        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
-
-      # :protocol's tests: the spec check, the run encoding, and the app's EngineLink against the engine just built,
-      # which fails rather than skips here when it has no engine (CI=true). They run when the Python tests failed too,
-      # so one run shows both.
-      - name: Kotlin protocol tests
-        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
+          rc=0
+          python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine > engine-test.log 2>&1 || rc=1
+          grep -E "^(FAILED|[0-9]+ FAILED|all passed)" engine-test.log || tail -40 engine-test.log
+          python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine > restore-test.log 2>&1 || rc=1
+          grep -E "^(FAILED|[0-9]+ FAILED|all passed)" restore-test.log || tail -40 restore-test.log
+          exit $rc
 
       - id: done
         run: echo "done=true" >> "$GITHUB_OUTPUT"

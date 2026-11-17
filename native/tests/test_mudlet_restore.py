@@ -241,7 +241,8 @@ def restarted_after_kill(port):
 
 
 def tls_choice_restored(e, port):
-    """A profile started with a TLS choice is restored with it, so the UI's next connect with that choice is taken."""
+    """A profile started with a TLS choice is restored with it, so the UI's next connect with that choice is taken,
+    until the profile is saved with another address, which a restore then connects to."""
     e.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": False})
     e.wait_status("connection", lambda v: v == "connected")
     check(state() is not None and state().get("tls") is False, f"the TLS choice is kept: {state()}")
@@ -251,12 +252,19 @@ def tls_choice_restored(e, port):
     check(value == f"reconnected 127.0.0.1:{port}", f"a profile started without TLS is restored: {value}")
     e.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": True})
     value = e.wait_status("connection", lambda v: v.startswith("error"))
-    check("started without TLS" in value, f"it runs as it was started, without TLS: {value}")
+    check("connects without TLS" in value, f"it runs as it was started, without TLS: {value}")
     e.status.pop("connection")
     e.send({"t": "connect", "host": "127.0.0.1", "port": port, "tls": False})
     e.drain(QUIET_S)
     value = e.status.get("connection", "")
     check(not value.startswith("error"), f"and a connect with the same choice is taken: {value}")
+    stored = {"t": "saveProfile", "name": PROFILE, "host": "127.0.0.1", "port": port, "tls": False, "login": "",
+              "autoReconnect": False}
+    m = e.ask(dict(stored, host="localhost"))
+    kept = state()
+    check(m["t"] == "profiles" and kept.get("host") == "" and not kept.get("port") and kept.get("tls") is None,
+          f"an address saved for the running profile is the one a restore connects to, with its TLS choice: {kept}")
+    e.ask(stored)
     return e
 
 
@@ -291,19 +299,22 @@ def opened_profile_restored(e, port):
 
 def several_restored(e, port):
     """Two profiles open, the second alongside the first and so in front, both connected: a kill brings back both, the
-    front one first and the other staggered after it, and the front one stays in front."""
+    front one first and the other staggered after it, and the front one stays in front. The one opened with a password
+    comes back without it, as openProfiles says, and logs in with the one the UI then hands it, its restore going on."""
     other = "Second Profile"
+    password = "pw-Restored-never-kept"
 
     def listed(m):
         return m["t"] == "openProfiles" and [(p["name"], p["state"], p["connection"]) for p in m["profiles"]]
 
     e.connect(port)
-    e.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": port, "tls": False, "login": "",
+    e.ask({"t": "saveProfile", "name": other, "host": "127.0.0.1", "port": port, "tls": False, "login": "restored-hero",
            "autoReconnect": False})
     # The control socket takes one UI at a time: this one, with profile sockets, in place of the version 14 one
     e.client.close()
     e.client = Client(SOCK, profile_sockets=True)
-    m = e.client.ask({"t": "openProfile", "name": other, "alongside": True}, answers=("openProfiles", "error"))
+    m = e.client.ask({"t": "openProfile", "name": other, "password": password, "alongside": True},
+                     answers=("openProfiles", "error"))
     check(m["t"] == "openProfiles", f"a second profile opens alongside: {m}")
     e.wait(lambda m: listed(m) == [(PROFILE, "loaded", "connected"), (other, "loaded", "connected")])
     kept = state()
@@ -317,13 +328,27 @@ def several_restored(e, port):
     first = e.wait(lambda m: m["t"] == "openProfiles")["profiles"]
     attached = time.monotonic()
     check([p["name"] for p in first] == [other], f"the front profile is restored first, alone: {first}")
+    check([p.get("passwordGiven") for p in first] == [False], f"holding no password, as openProfiles says: {first}")
+    got = len(fake_telnet.RECEIVED)
+    m = e.client.ask({"t": "openProfile", "name": other, "password": password, "connect": False, "alongside": True},
+                     timeout=30, answers=("openProfiles", "error"))
+    check([p.get("passwordGiven") for p in m.get("profiles", []) if p["name"] == other] == [True],
+          f"the UI hands it the password while it is restored: {m}")
     both = e.wait(lambda m: listed(m) == [(other, "loaded", "connected"), (PROFILE, "loaded", "connected")], timeout=40)["profiles"]
     gap = time.monotonic() - attached
     check(gap >= 1.5, f"then the other, staggered after it: loaded {gap:.1f} s after the first was listed")
     check([p["front"] for p in both] == [True, False], f"and the front profile stays in front: {both}")
     log = e.log()
-    check(f"restore: reconnected {other}\n" in log and f"restore: reconnected 127.0.0.1:{port}\n" in log,
-          "the restore reports both reconnected")
+    check(f"restore: reconnected {other}\n" in log and f"restore: reconnected 127.0.0.1:{port}\n" in log
+          and "restore: cancelled" not in log, "the restore reports both reconnected, the password cancelling neither")
+    # Mudlet sends the login 2 s after connecting, then the password 1 s later
+    deadline = time.monotonic() + 15
+    while password not in fake_telnet.RECEIVED[got:] and time.monotonic() < deadline:
+        time.sleep(0.1)
+    check(fake_telnet.RECEIVED[got:].count(password) == 1 and "restored-hero" in fake_telnet.RECEIVED[got:],
+          "and the restored connection logs in with it")
+    with open(STATE) as f:
+        check(password not in f.read() and password not in log, "which is neither kept on disk nor logged")
     e.client.close()
     e.client = Client(SOCK)
     e.wait(lambda m: m["t"] == "synced")
@@ -503,6 +528,8 @@ def main():
         print(f"\n{len(failures)} FAILED; engine log: {LOG}")
         with open(LOG, errors="replace") as f:
             print(f.read()[-6000:])
+        for what in failures:
+            print(f"FAILED {what}")
         sys.exit(1)
     print("\nall passed")
 

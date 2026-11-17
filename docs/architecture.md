@@ -518,7 +518,7 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   of the two and centred, cut off or short at the edges, and the map neither moves nor changes size when the new frame
   comes. While the map is behind the text its frame is cut out for the text behind the map too, on a thread of its own
   below the others (`AppMapClient.cutOutAhead`), so the text is behind the map from its first frame in front. Finding a
-  frame's colours makes no object for each pixel (`TextBehindMap.ground`): for a frame of 1080 by 1740 on the host's
+  frame's colours makes no object for each pixel (`TextBehindMap.cutOut`): for a frame of 1080 by 1740 on the host's
   JVM, 133 KB and 12 to 16 ms where it was 36 to 50 MB and 24 to 37 ms with only the first JIT compiler, which removes
   no allocation, and 7 to 9 ms where it was 8 to 12 ms with both.
   The cut-out works on the frame's pixels as the bitmap keeps them, copied out and the cut frame's copied back
@@ -528,6 +528,12 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   on the emulators, in a build that is not debuggable (ART inlines nothing in one that is), the cut-out takes 10 to
   15 ms on API 28 where it took 24 to 28, and 26 to 29 on API 36 where it took 34 to 42; most of what is left is the
   finding of the colours, and on API 36 the first write to the cut frame's new bitmap.
+  The colours are found and the background cut out in one pass over the frame, as a second pass over its 10 MB costs
+  about as much as the first one's passing of the background: a run of the background along a row is passed in a
+  tight loop, and a pixel within a room, its colour on all four sides, is taken as solid without weighing its lines.
+  Measured in one run beside the two-pass code, on the same three frames, that takes a fifth to over a quarter off the
+  whole cut-out: 7 to 15 ms on API 28 where it was 10 to 20, and 20 to 22 % on API 36 (whose runner was slow that
+  run, 37 to 65 ms before); times move by a third from runner to runner, so only those of one run compare.
 - The keyboard moves the map's box at each frame of its animation. The map is laid out, and asked for, at the size the
   box has once the keyboard is where it is going (`MapBox`, from `WindowInsets.imeAnimationTarget`), so it stays still
   while the keyboard slides and is drawn anew once. As the map comes to the front the input line lets its keyboard go,

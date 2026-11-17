@@ -460,9 +460,9 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             val own = bitmap.config == Bitmap.Config.ARGB_8888 && bitmap.isPremultiplied && bitmap.colorSpace?.isSrgb == true
             val layout = if (own) TextBehindMap.Layout.ABGR else TextBehindMap.Layout.ARGB
             if (own) bitmap.copyPixelsToBuffer(IntBuffer.wrap(pixels)) else bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-            val ground = TextBehindMap.ground(pixels, width, height, layout) ?: return null
-            val background = ground.background ?: return OverText(ground, bitmap.asImageBitmap())
-            TextBehindMap.cutOut(pixels, background, layout)
+            val ground = TextBehindMap.cutOut(pixels, width, height, layout) ?: return null
+            // No background, so no pixel was cut
+            if (ground.background == null) return OverText(ground, bitmap.asImageBitmap())
             val frame = if (own) {
                 createBitmap(width, height).apply { copyPixelsFromBuffer(IntBuffer.wrap(pixels)) }
             } else {

@@ -289,8 +289,8 @@ class AppMapTest {
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
         assertTrue("the map behind the text shows its info", compose.onAllNodes(shown, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
 
+        // In front the frame drawn behind the text shows at once, with its info, until the one at the new size comes
         activate(button)
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
         val size = lastRequest("setAppMapSize")
         session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")).put("info", info))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }

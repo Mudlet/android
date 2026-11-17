@@ -1,5 +1,5 @@
 set(HOST_SOURCES main.cpp ControlBridge.cpp ControlBridge.h SocketBridge.cpp SocketBridge.h MudletEngine.cpp MudletEngine.h
-    MudletProfile.cpp MudletProfile.h ProfileStore.cpp ProfileStore.h SessionStore.cpp SessionStore.h)
+    MapPng.cpp MapPng.h MudletProfile.cpp MudletProfile.h ProfileStore.cpp ProfileStore.h SessionStore.cpp SessionStore.h)
 if(ANDROID)
     list(APPEND HOST_SOURCES AndroidNotifier.cpp AndroidNotifier.h AndroidServiceSetup.cpp AndroidServiceSetup.h)
 endif()
@@ -24,7 +24,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # RUNPATH, an RPATH finds it beside our Qt
     target_link_options(engine PRIVATE "LINKER:--disable-new-dtags")
 endif()
-target_link_libraries(engine PRIVATE engine_api Qt6::Core Qt6::Gui Qt6::Network)
+target_link_libraries(engine PRIVATE engine_api Qt6::Core Qt6::Gui Qt6::Network ZLIB::ZLIB)
 if(ANDROID)
     # QtAndroidPrivate's service-setup semaphore; ties the build to this exact Qt version
     find_package(Qt6 REQUIRED COMPONENTS CorePrivate)

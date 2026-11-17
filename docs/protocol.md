@@ -402,6 +402,11 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
 - The engine draws the map again on upstream's `mapRepaintRequested`, at most once a turn of its event loop, when
   `viewOnly` changes, when the mapper shows or changes size, and on a new `setMapScale`. It sends `map` only when the PNG, `viewOnly`, `view`
   or `info` differs from what it last sent.
+- The PNG of `map` and of `appMap` is the engine's own (`MapPng.cpp`), as Qt's writer took several times as long as
+  drawing the map did: the pixels Qt's PNG would have, unfiltered, in a deflate stream that only says where a pixel
+  repeats the one before it or the one above it. It is some three times as large and made in a tenth of the time. A
+  map that is mostly a picture, as one with a photograph for a label, would be as large as its pixels that way, so
+  that one is Qt's PNG. A reader of any PNG reads both.
 - While the mapper does not show (its `shown` false, or no such window), or has no size, as `Geyser.Mapper`'s `hide()`
   leaves it, nothing is sent: the UI hides what it drew from the `windows` message. A mapper opened before
   `setMainWindowSize` has no size, so nothing is drawn. The UI draws a `map` only while its `w` and `h` are the

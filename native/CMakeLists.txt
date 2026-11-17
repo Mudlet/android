@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network)
+find_package(ZLIB REQUIRED)
 qt_standard_project_setup()
 
 # IEngine and IFrontend: what the engine host and the engine (libmudlet, through MudletEngine) say to each other
@@ -12,3 +13,10 @@ add_library(engine_api INTERFACE)
 target_include_directories(engine_api INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/api)
 
 add_subdirectory(enginehost)
+
+if(NOT ANDROID)
+    # The map's PNG writer against Qt's own, which needs no libmudlet
+    qt_add_executable(map_png_test tests/map_png_test.cpp enginehost/MapPng.cpp enginehost/MapPng.h)
+    target_include_directories(map_png_test PRIVATE enginehost)
+    target_link_libraries(map_png_test PRIVATE Qt6::Gui ZLIB::ZLIB)
+endif()

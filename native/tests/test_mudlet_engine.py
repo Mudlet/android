@@ -2262,14 +2262,27 @@ def button_bars():
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
-def png_pixel(data, x, y):
-    """The (r, g, b, a) of a pixel of an 8-bit RGB or RGBA PNG with no interlace, as Qt saves one."""
-    width, height = png_size(data)
+def png_chunks(data):
+    """A PNG's chunks: the data of each, in the file's order, by kind."""
     chunks, at = {}, 8
     while at < len(data):
         length, kind = struct.unpack(">I4s", data[at:at + 8])
         chunks.setdefault(kind, []).append(data[at + 8:at + 8 + length])
         at += 12 + length
+    return chunks
+
+
+def map_writers_png(data):
+    """Whether a PNG is from the engine's writer for maps (MapPng.cpp) and not from Qt's, which takes ten times as
+    long: one IDAT, marked as zlib's fastest compression, that is one last block of the fixed Huffman codes."""
+    data_chunks = png_chunks(data)[b"IDAT"]
+    return len(data_chunks) == 1 and data_chunks[0][:2] == b"\x78\x01" and data_chunks[0][2] & 0b111 == 0b011
+
+
+def png_pixel(data, x, y):
+    """The (r, g, b, a) of a pixel of an 8-bit RGB or RGBA PNG with no interlace, as Qt saves one."""
+    width, height = png_size(data)
+    chunks = png_chunks(data)
     depth, colour, interlace = chunks[b"IHDR"][0][8], chunks[b"IHDR"][0][9], chunks[b"IHDR"][0][12]
     if depth != 8 or colour not in (2, 6) or interlace:
         raise ValueError(f"a PNG of depth {depth}, colour type {colour}, interlace {interlace}")
@@ -2362,6 +2375,7 @@ def map_view():
     check(png_size(png) == (400, 300) and m["viewOnly"] is True and png_pixel(png, room2[0], room2[1] + 20)[:3] != (200, 30, 30),
           f"a Geyser.Mapper sends the map at its size, viewed, with room 2 where the layout puts it and not below it: "
           f"{png_size(png)}, {m['viewOnly']}")
+    check(map_writers_png(png), "the map's PNG is from the engine's own writer, which searches for nothing")
 
     def selection():
         c.send({"t": "runLua", "code": "selected()"})
@@ -2542,6 +2556,7 @@ def app_map():
     if not sized:
         stop_engine(proc)
         return
+    check(map_writers_png(png), "the app's map's PNG is from the engine's own writer, which searches for nothing")
     try:
         m = seen_or_next(c, lambda m: m["t"] == "appMap" and m["w"] and red_at(m, room2), seen, since, timeout=15)
     except TimeoutError as e:

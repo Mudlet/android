@@ -2,6 +2,7 @@ package org.mudlet.android.ui.game
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -105,21 +106,32 @@ private const val LOADED_SHOWN_MS = 5_000L
 
 /**
  * The app's map behind the main console's text (docs/architecture.md, "The map behind the text"), filling the console
- * and following the player: as faint as keeps text in [colors] readable over it ([MapBehindText]), and none where even
- * the console's own background leaves the text too faint. It takes no touches, which go to the console's text, and
- * TalkBack does not read it, as the full-screen map is there to be read.
+ * and following the player: as strong as keeps text in [colors] readable over the colours of its frame ([MapBehindText]),
+ * easing up to a stronger frame's, and none where even the console's own background leaves the text too faint. It
+ * takes no touches, which go to the console's text, and TalkBack does not read it, as the full-screen map is there to
+ * be read.
  */
 @Composable
 internal fun BoxScope.BackgroundMap(colors: ConsoleColors) {
-    val alpha = remember(colors) { MapBehindText.alpha(colors.foreground.toArgb() and 0xFFFFFF, colors.background.toArgb() and 0xFFFFFF) }
-    if (alpha <= 0f) return
+    val foreground = colors.foreground.toArgb() and 0xFFFFFF
+    val background = colors.background.toArgb() and 0xFFFFFF
+    // Over a map of any colour: before a frame has come, and so that colours which leave the map no room ask for none
+    val anyMap = remember(colors) { MapBehindText.alpha(foreground, background) }
+    if (anyMap <= 0f) return
+    val appMap = EngineClient.front.appMap
+    val tones = appMap.tones
+    val target = remember(colors, tones) { if (tones == null) anyMap else MapBehindText.alpha(foreground, background, tones) }
+    val alpha = remember { Animatable(target) }
+    // Fainter at once, as easing down would leave the text too faint over the new frame for a moment; the draw takes the
+    // lower too, as the effect snaps only after the new frame's first draw
+    LaunchedEffect(target) { if (target < alpha.value) alpha.snapTo(target) else alpha.animateTo(target) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     AskForMap(AppMapClient.Owner.BACKGROUND, size)
-    val map = EngineClient.front.appMap.map
+    val map = appMap.map
     Canvas(Modifier.matchParentSize().onSizeChanged { size = it }.clearAndSetSemantics {}) {
         val drawn = map ?: return@Canvas
         val frame = drawn.bitmap ?: return@Canvas
-        drawFrame(frame, MapFit(drawn.w, drawn.h, PxRect(0f, 0f, this.size.width, this.size.height)), alpha)
+        drawFrame(frame, MapFit(drawn.w, drawn.h, PxRect(0f, 0f, this.size.width, this.size.height)), minOf(alpha.value, target))
     }
 }
 

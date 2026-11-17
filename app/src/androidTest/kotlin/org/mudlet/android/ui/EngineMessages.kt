@@ -27,9 +27,12 @@ object EngineMessages {
     ): JSONObject = JSONObject().put("id", id).put("name", name).put("icon", icon).put("styleSheet", "").put("pushDown", pushDown)
         .put("checked", checked).put("menu", children.isNotEmpty()).put("children", JSONArray(children))
 
-    /** An `appMap` message: a white map [w] by [h] of the map's pixels, at [scale] device pixels to each, laid out as [view] says. */
-    fun appMap(w: Int, h: Int, scale: Double = 1.0, viewOnly: Boolean = true, view: JSONObject? = null): JSONObject = JSONObject().put("t", "appMap")
-        .put("png", Base64.getEncoder().encodeToString(whitePng((w * scale).toInt(), (h * scale).toInt()))).put("w", w).put("h", h)
+    /**
+     * An `appMap` message: a map [w] by [h] of the map's pixels all in [colour], white unless given, at [scale] device
+     * pixels to each, laid out as [view] says.
+     */
+    fun appMap(w: Int, h: Int, scale: Double = 1.0, viewOnly: Boolean = true, view: JSONObject? = null, colour: Int = android.graphics.Color.WHITE): JSONObject = JSONObject()
+        .put("t", "appMap").put("png", Base64.getEncoder().encodeToString(png((w * scale).toInt(), (h * scale).toInt(), colour))).put("w", w).put("h", h)
         .put("viewOnly", viewOnly).apply { if (view != null) put("view", view) }
 
     /**
@@ -86,9 +89,9 @@ object EngineMessages {
     fun areas(request: JSONObject, vararg areas: Pair<Int, String>): JSONObject = JSONObject().put("t", "areas")
         .put("areas", JSONArray(areas.map { (id, name) -> JSONObject().put("id", id).put("name", name) })).put("re", request.get("id"))
 
-    private fun whitePng(w: Int, h: Int): ByteArray {
+    private fun png(w: Int, h: Int, colour: Int): ByteArray {
         val out = ByteArrayOutputStream()
-        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.WHITE) }
+        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(colour) }
             .compress(Bitmap.CompressFormat.PNG, 100, out)
         return out.toByteArray()
     }

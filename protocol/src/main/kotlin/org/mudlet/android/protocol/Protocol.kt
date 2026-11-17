@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 26
+const val PROTOCOL_VERSION = 27
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -344,6 +344,9 @@ enum class ScriptItemKind(val wire: String) {
     TRIGGER("trigger"),
     ALIAS("alias"),
     SCRIPT("script"),
+    TIMER("timer"),
+    KEY("key"),
+    BUTTON("button"),
     ;
 
     companion object {
@@ -352,10 +355,11 @@ enum class ScriptItemKind(val wire: String) {
 }
 
 /**
- * A trigger, alias or script as the desktop's script editor lists it (docs/protocol.md, `scriptItems`): the folder it is
- * in, [parent] (0 for the top level), [enabled] as its switch shows it, [active] while it runs (switched on, compiled, and
- * in folders that run), the package or module it came with, [packageName] (empty for the player's own), and [error], why
- * it cannot run, or empty.
+ * A trigger, alias, script, timer, key or button as the desktop's script editor lists it (docs/protocol.md,
+ * `scriptItems`): the folder it is in, [parent] (0 for the top level), [enabled] as its switch shows it, [active] while it
+ * runs (switched on, compiled, and in folders that run), the package or module it came with, [packageName] (empty for the
+ * player's own), [error], why it cannot run, or empty, and [summary], what a list shows under its name: its patterns
+ * or event handlers, one a line, its time as `hh:mm:ss.zzz`, its key as the desktop writes it or the command it sends.
  */
 data class ScriptItemNode(
     val id: Int,
@@ -366,6 +370,7 @@ data class ScriptItemNode(
     val active: Boolean,
     val packageName: String,
     val error: String,
+    val summary: String,
 )
 
 /** How a trigger's pattern matches, as the desktop editor's pattern types; one this client does not know is [SUBSTRING]. */
@@ -390,6 +395,17 @@ enum class TriggerPatternType(val wire: String) {
 }
 
 data class TriggerPattern(val text: String, val type: TriggerPatternType)
+
+/** A key held with a key binding's key: its [bit] in [ScriptItemDetails.Key.modifiers], as Qt::KeyboardModifiers has it. */
+enum class KeyModifier(val bit: Int) {
+    SHIFT(0x02000000),
+    CONTROL(0x04000000),
+    ALT(0x08000000),
+    META(0x10000000),
+
+    /** The key is one of the number pad's. */
+    KEYPAD(0x20000000),
+}
 
 /** What an item has of its own kind, beside what every item has (docs/protocol.md, `scriptItem`). */
 sealed interface ScriptItemDetails {
@@ -422,6 +438,39 @@ sealed interface ScriptItemDetails {
 
     data class Script(val eventHandlers: List<String>) : ScriptItemDetails {
         override val kind get() = ScriptItemKind.SCRIPT
+    }
+
+    /**
+     * [command] is what it sends each time it fires, [time] how long it counts, in milliseconds, under a day. [offset],
+     * which the engine alone sets, is true for a timer inside another timer, which counts once that timer has fired.
+     */
+    data class Timer(val command: String, val time: Int, val offset: Boolean) : ScriptItemDetails {
+        override val kind get() = ScriptItemKind.TIMER
+    }
+
+    /**
+     * [key] is a Qt::Key, 0 for none, and [modifiers] the [KeyModifier] bits held with it. [keyName], which the engine
+     * alone sets, is the two as the desktop writes them when the item was read, or empty for no key.
+     */
+    data class Key(val command: String, val key: Int, val modifiers: Int, val keyName: String) : ScriptItemDetails {
+        override val kind get() = ScriptItemKind.KEY
+    }
+
+    /**
+     * [commandDown] is what it sends when pressed and [commandUp] what a [pushDown] button sends when released; [css]
+     * its style sheet. [location], [vertical] and [columns], from 1, mean something for a toolbar, a folder at the top
+     * level or in the folder a package's buttons came in, and are what its [ButtonBar] then has.
+     */
+    data class Button(
+        val commandDown: String,
+        val commandUp: String,
+        val pushDown: Boolean,
+        val location: BarPlace,
+        val vertical: Boolean,
+        val columns: Int,
+        val css: String,
+    ) : ScriptItemDetails {
+        override val kind get() = ScriptItemKind.BUTTON
     }
 }
 
@@ -966,7 +1015,7 @@ object Requests {
     /**
      * Answered by [EngineMessage.ScriptItemFields], the new item, with [id] as its replyTo, or an Error: an item of [kind], or a
      * [folder], named [name], in the folder [parent] (0 for the top level) at [position] among the items there. It is
-     * switched on, but runs only from its first [editScriptItem].
+     * switched on, but runs only from its first [editScriptItem]; a timer or a button is switched off.
      */
     fun addScriptItem(kind: ScriptItemKind, parent: Int, position: Int, folder: Boolean, name: String, id: Long): JSONObject = JSONObject()
         .put("t", "addScriptItem").put("kind", kind.wire).put("parent", parent).put("position", position).put("folder", folder).put("name", name)
@@ -996,6 +1045,20 @@ object Requests {
             is ScriptItemDetails.Alias -> fields.put("pattern", details.pattern).put("command", details.command)
 
             is ScriptItemDetails.Script -> fields.put("eventHandlers", JSONArray(details.eventHandlers))
+
+            is ScriptItemDetails.Timer -> fields.put("command", details.command).put("time", details.time)
+
+            is ScriptItemDetails.Key -> fields.put("command", details.command).put("key", details.key).put("modifiers", details.modifiers)
+
+            is ScriptItemDetails.Button ->
+                fields
+                    .put("commandDown", details.commandDown)
+                    .put("commandUp", details.commandUp)
+                    .put("pushDown", details.pushDown)
+                    .put("location", details.location.wire)
+                    .put("orientation", if (details.vertical) "vertical" else "horizontal")
+                    .put("columns", details.columns)
+                    .put("css", details.css)
         }
         return JSONObject().put("t", "editScriptItem").put("kind", item.kind.wire).put("item", item.node.id).put("fields", fields).put("id", id)
     }
@@ -1330,6 +1393,7 @@ class FrameReader(input: InputStream) {
             active = i.optBoolean("active"),
             packageName = i.optString("package"),
             error = i.optString("error"),
+            summary = i.optString("summary"),
         )
 
         private fun parseScriptItem(kind: ScriptItemKind, f: JSONObject): ScriptItem {
@@ -1351,6 +1415,20 @@ class FrameReader(input: InputStream) {
                 ScriptItemKind.ALIAS -> ScriptItemDetails.Alias(f.optString("pattern"), f.optString("command"))
 
                 ScriptItemKind.SCRIPT -> ScriptItemDetails.Script(parseStrings(f.optJSONArray("eventHandlers")))
+
+                ScriptItemKind.TIMER -> ScriptItemDetails.Timer(f.optString("command"), f.optInt("time"), f.optBoolean("offset"))
+
+                ScriptItemKind.KEY -> ScriptItemDetails.Key(f.optString("command"), f.optInt("key"), f.optInt("modifiers"), f.optString("keyName"))
+
+                ScriptItemKind.BUTTON -> ScriptItemDetails.Button(
+                    commandDown = f.optString("commandDown"),
+                    commandUp = f.optString("commandUp"),
+                    pushDown = f.optBoolean("pushDown"),
+                    location = BarPlace.fromWire(f.optString("location")) ?: BarPlace.TOP,
+                    vertical = f.optString("orientation") == "vertical",
+                    columns = f.optInt("columns", 1),
+                    css = f.optString("css"),
+                )
             }
             return ScriptItem(parseScriptItemNode(f), f.optString("script"), details)
         }

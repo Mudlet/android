@@ -1,0 +1,814 @@
+Let a frontend edit a profile's timers, keys and buttons
+
+The script items a frontend with no dlgTriggerEditor reads and changes were triggers, aliases and scripts. A phone's
+editor has the other three kinds the GUI's has to show as well, so the same calls take them.
+
+- THeadlessSession::ScriptItemKind gains timer, key and button, which scriptItems(), scriptItem(), addScriptItem(),
+  editScriptItem(), setScriptItemEnabled(), moveScriptItem() and deleteScriptItem() take as they take the first three.
+  Each does what the editor does for that kind: a new timer or button is left switched off, a new toolbar is at the
+  top (where the editor's first save puts it), a timer with no time and a key with none chosen have that for their
+  error, a key given no name takes its key's, a timer that is switched on counts from its save, an offset timer is
+  armed by the timer it is in, and a change to a button redraws the toolbars.
+  The folder a package's buttons came in is refused, where the editor's save leaves it alone without a word.
+- A timer's fields are command and time, a key's command, key and modifiers, and a button's commandDown, commandUp,
+  pushDown, location, orientation, columns and css. A timer's offset and a key's keyName are only read.
+- ScriptItemNode gains summary, what a list shows under an item's name: a trigger's patterns, an alias's pattern, a
+  script's event handlers, a timer's time, a key's name and the command a button sends.
+- TimerUnit::processingDepth() gives the depth the other units already give, so that a write is refused while a timer
+  runs, as it is while a trigger does.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (script_items: each new kind added, edited, read back,
+switched, moved and deleted, a timer firing and a button on its bar, the errors and the refusals, and all of it read
+again after the profile is saved and reopened). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 1f73624..385d9fe 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1759,17 +1759,20 @@ the globals changes nothing. They are false, reading or changing nothing, where
+ 
+ ## Embedding it: triggers, aliases and scripts
+ 
+-An app with its own script editor reads and changes a profile's triggers, aliases and scripts as the
+-GUI's editor does, by `ScriptItemKind`, with no `dlgTriggerEditor`. Items are known by their ids, which
+-a profile keeps while it runs; the temporary items scripts make, which the editor does not show, are
+-left out of everything here.
++An app with its own script editor reads and changes a profile's triggers, aliases, scripts, timers,
++keys and buttons as the GUI's editor does, by `ScriptItemKind`, with no `dlgTriggerEditor`. Items are
++known by their ids, which a profile keeps while it runs; the temporary items scripts make, which the
++editor does not show, are left out of everything here.
+ 
+ `scriptItems()` lists a kind's items depth first, each folder before what is in it, in the editor's
+ order: each item's id, its folder's id (0 at the top level), name, whether it is a folder, `enabled`
+ (switched on, as the editor's checkbox shows it), `active` (switched on, compiled and in folders that
+-run), the package or module it came with, and `error`, why it cannot run, as plain text. It is a
+-getter, so it may be called from any handler. `scriptItem()` gives all of one item's fields in a
+-`QVariantMap`, by the names `editScriptItem()` takes: those, its Lua as `script`, and those of its kind:
++run), the package or module it came with, `error`, why it cannot run, as plain text, and `summary`,
++what a list shows under the name: a trigger's patterns and a script's event handlers, one a line, an
++alias's pattern, a timer's time as `hh:mm:ss.zzz`, a key's name as the editor writes it and the
++command a button sends. It is a getter, so it may be called from any handler. `scriptItem()` gives
++all of one item's fields in a `QVariantMap`, by the names `editScriptItem()` takes: those, its Lua as
++`script`, and those of its kind:
+ 
+ - a trigger's `patterns`, each a map of `text` and `type`, one of `substring`, `regex`, `startOfLine`,
+   `exact`, `lua`, `spacer` (its text the number of lines), `color` (its text as the profile keeps it,
+@@ -1778,23 +1781,40 @@ getter, so it may be called from any handler. `scriptItem()` gives all of one it
+   `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`,
+   `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour;
+ - an alias's `pattern` and `command`;
+-- a script's `eventHandlers`, a list of event names.
++- a script's `eventHandlers`, a list of event names;
++- a timer's `command` and `time`, in milliseconds, under a day; and `offset`, which is only read:
++  whether it is an offset timer, one inside another timer, which runs its time after that timer fires;
++- a key's `command`, `key`, a `Qt::Key` as a number, or 0 for none, and `modifiers`, the
++  `Qt::KeyboardModifiers` held with it, as a number; and `keyName`, which is only read: the two as the
++  editor writes them, as "control + F1", or empty with no key;
++- a button's `commandDown`, which it sends when pressed, `commandUp`, which a push-down button sends
++  when released, and `pushDown`; and what the editor asks for a toolbar, a folder at the top level or
++  in the folder a package's buttons came in: `location`, one of `top`, `left`, `right` and `floating`,
++  `orientation`, `horizontal` or `vertical`, `columns`, from 1, and `css`, its style sheet, which a
++  button has too.
+ 
+ `addScriptItem()` makes an item or a folder as the editor's add does: switched on, but not running
+-until its first `editScriptItem()`, at a place among the items the editor shows in that folder.
++until its first `editScriptItem()`, or switched off for a timer or a button, at a place among the
++items the editor shows in that folder. A new toolbar is at the top, its buttons side by side.
+ `editScriptItem()` sets the fields it is given and keeps the rest, then saves the item as the editor's
+ save does: the name trimmed, its patterns and Lua compiled, a new item set running if that worked
+ (but not during the emergency stop, which starts it as it ends) and a trigger that did not compile
+ stopped and switched off, with its error kept for `scriptItem()` to give, which the call is still
+ true for. Saving a script runs it, as in the GUI. An alias given no name takes its pattern, and one
+-whose replacement matches its own pattern is refused, as it would call itself forever.
++whose replacement matches its own pattern is refused, as it would call itself forever. A timer
++that is switched on counts from its save; one with no time has that for its error, as has a key with
++none chosen, and a key given no name takes its key's, or keeps the one it had. The folder a package or
++module's buttons came in is refused, as the GUI's editor leaves it as the package made it.
+ `setScriptItemEnabled()` switches an item on or off as the editor's checkbox does, leaving off one
+ that does not compile; `moveScriptItem()` moves one into a folder or to the top level, as a drag in
+ the editor does, and refuses a folder into itself; `deleteScriptItem()` deletes one, and all in it.
++A change to a button redraws the toolbars, so `buttonsChanged()` follows it.
+ Each write is false, with the reason in `errorString()` and nothing changed, where `submit()` is
+-refused, while a trigger, alias or event handler runs (as one does that waits on the event loop),
+-for an id not of that kind, a parent that is not a folder, a field not of that kind or a value of the
+-wrong type. What they change is written with the profile's next save, as the GUI's editor's is.
++refused, while a trigger, alias, timer, key, button or event handler runs (as one does that waits on
++the event loop), for an id not of that kind, a parent that is not a folder (so an offset timer cannot
++be made here, though one the profile has is read and changed as any other), a field not of that kind
++or a value of the wrong type. What they change is written with the profile's next save, as the GUI's
++editor's is.
+ 
+ `checkLua()` compiles Lua without running it, for an editor to say what is wrong as a script is
+ typed: nothing for code that compiles, else the line Lua names (0 where it names none) and its
+diff --git a/src/TimerUnit.h b/src/TimerUnit.h
+index 1d18598..a5f37c8 100644
+--- a/src/TimerUnit.h
++++ b/src/TimerUnit.h
+@@ -89,6 +89,7 @@ public:
+         --mProcessingDepth;
+         Q_ASSERT(mProcessingDepth >= 0);
+     }
++    int processingDepth() const { return mProcessingDepth; }
+     std::tuple<QString, int, int, int> assembleReport();
+     int getNewID();
+     void uninstall(const QString&);
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 31f7e5e..e612e82 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -886,9 +886,9 @@ public:
+     // The environments the map gives a colour of its own, by number, as the GUI's room colour dialog lists them; none with no profile
+     // open. A getter, so it may be called from any handler.
+     QList<MapEnv> mapEnvs() const;
+-    // The profile's triggers, aliases and scripts, as the GUI's script editor shows and edits them. Temporary items,
+-    // which scripts make and the editor does not show, are left out of each, ids included.
+-    enum class ScriptItemKind { trigger, alias, script };
++    // The profile's triggers, aliases, scripts, timers, keys and buttons, as the GUI's script editor shows and edits
++    // them. Temporary items, which scripts make and the editor does not show, are left out of each, ids included.
++    enum class ScriptItemKind { trigger, alias, script, timer, key, button };
+     Q_ENUM(ScriptItemKind)
+     struct ScriptItemNode
+     {
+@@ -899,12 +899,18 @@ public:
+         bool folder = false;
+         // Switched on, as the editor's checkbox shows it, whether or not it can run
+         bool enabled = false;
+-        // Runs: switched on, compiled, and in folders that run
++        // Runs: switched on, compiled, and in folders that run; an offset timer, one inside another timer, when that
++        // timer does
+         bool active = false;
+         // The package or module it came with, its own or the nearest folder's above it; empty for the player's own
+         QString package;
+-        // Why it cannot run, as plain text: a pattern or its Lua that did not compile
++        // Why it cannot run, as plain text: a pattern or its Lua that did not compile, a timer with no time, a key
++        // with none chosen
+         QString error;
++        // What a list shows under the name, as plain text: a trigger's patterns and a script's event handlers, one a
++        // line, an alias's pattern, a timer's time as hh:mm:ss.zzz, a key's name as the editor writes it and the
++        // command a button sends; empty for a folder of timers, keys or buttons
++        QString summary;
+     };
+     // Each item of that kind, depth first, a folder before what is in it, in the editor's order; none with no profile
+     // open. A getter, so it may be called from any handler.
+@@ -914,17 +920,17 @@ public:
+     // with errorString() saying why, for an id not of that kind or temporary.
+     bool scriptItem(ScriptItemKind kind, int id, QVariantMap& item);
+     // The writes below are each false, with errorString() saying why and nothing changed, where submit() is refused,
+-    // while a trigger, alias or event handler runs (a script that waits on the event loop), for an id not of that kind
+-    // or temporary, and for a parent that is not a folder.
++    // while a trigger, alias, timer, key, button or event handler runs (a script that waits on the event loop), for an
++    // id not of that kind or temporary, and for a parent that is not a folder.
+     // A new item or folder, as the editor's add makes one: named name, switched on but not running until its first
+-    // editScriptItem(), at position among the folder parent's items shown (0 first; past the end appends), or at the
+-    // top level for parent 0. Its id, or 0.
++    // editScriptItem() (a timer or a button switched off), at position among the folder parent's items shown (0 first;
++    // past the end appends), or at the top level for parent 0. Its id, or 0.
+     int addScriptItem(ScriptItemKind kind, int parent, int position, bool folder, const QString& name);
+     // Sets the fields given, keeping the rest, then saves the item as the editor's save does: the name trimmed, its
+     // patterns and Lua compiled, a new item set running if it compiled, and an item that did not compile stopped
+     // with its error kept. True for that too: scriptItem() then gives the error. False also for a field not of that
+-    // kind, a value of the wrong type, and an alias whose replacement matches its own pattern, which would call itself
+-    // forever.
++    // kind, a value of the wrong type, an alias whose replacement matches its own pattern, which would call itself
++    // forever, and the folder a package's buttons came in, which Mudlet keeps as the package made it.
+     bool editScriptItem(ScriptItemKind kind, int id, const QVariantMap& fields);
+     // Switched on or off, as the editor's checkbox does: an item that cannot compile is left off, false with its error.
+     bool setScriptItemEnabled(ScriptItemKind kind, int id, bool enabled);
+diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
+index 106fc74..0920fef 100644
+--- a/src/headless/THeadlessSessionScripts.cpp
++++ b/src/headless/THeadlessSessionScripts.cpp
+@@ -19,13 +19,19 @@
+ 
+ #include "THeadlessSession.h"
+ 
++#include "ActionUnit.h"
+ #include "AliasUnit.h"
+ #include "Host.h"
++#include "KeyUnit.h"
+ #include "ScriptUnit.h"
++#include "TAction.h"
+ #include "TAlias.h"
++#include "TKey.h"
+ #include "TLuaInterpreter.h"
+ #include "TScript.h"
++#include "TTimer.h"
+ #include "TTrigger.h"
++#include "TimerUnit.h"
+ #include "TriggerUnit.h"
+ 
+ #include <QRegularExpression>
+@@ -34,7 +40,8 @@
+ #include <limits>
+ #include <type_traits>
+ 
+-// TTrigger, TAlias and TScript share nothing but Tree<T>, so what is the same for the three is written once over it
++// TTrigger, TAlias, TScript, TTimer, TKey and TAction share nothing but Tree<T>, so what is the same for them is
++// written once over it
+ 
+ namespace {
+ 
+@@ -47,8 +54,23 @@ const QStringList& patternTypes()
+     return types;
+ }
+ 
+-// count: from 0; lineDelta: from -1, which stands for none
+-enum class FieldType { text, flag, count, lineDelta, textList, patterns, color };
++// By TAction::mLocation, which has no 1 since Mudlet dropped the bar at the foot
++const QStringList& barLocations()
++{
++    static const QStringList locations{qsl("top"), QString(), qsl("left"), qsl("right"), qsl("floating")};
++    return locations;
++}
++
++// By TAction::mOrientation
++const QStringList& barOrientations()
++{
++    static const QStringList orientations{qsl("horizontal"), qsl("vertical")};
++    return orientations;
++}
++
++// count: from 0; positive: from 1; lineDelta: from -1, which stands for none; time: the milliseconds of a day;
++// modifiers: Qt::KeyboardModifiers as a number
++enum class FieldType { text, flag, count, positive, lineDelta, time, modifiers, textList, patterns, color, barLocation, barOrientation };
+ 
+ const QMap<QString, FieldType>& editableFields(const Kind kind)
+ {
+@@ -67,15 +89,33 @@ const QMap<QString, FieldType>& editableFields(const Kind kind)
+                                                   {qsl("highlightBg"), FieldType::color}};
+     static const QMap<QString, FieldType> alias{{qsl("name"), FieldType::text}, {qsl("script"), FieldType::text}, {qsl("pattern"), FieldType::text}, {qsl("command"), FieldType::text}};
+     static const QMap<QString, FieldType> script{{qsl("name"), FieldType::text}, {qsl("script"), FieldType::text}, {qsl("eventHandlers"), FieldType::textList}};
++    static const QMap<QString, FieldType> timer{{qsl("name"), FieldType::text}, {qsl("script"), FieldType::text}, {qsl("command"), FieldType::text}, {qsl("time"), FieldType::time}};
++    static const QMap<QString, FieldType> key{
++            {qsl("name"), FieldType::text}, {qsl("script"), FieldType::text}, {qsl("command"), FieldType::text}, {qsl("key"), FieldType::count}, {qsl("modifiers"), FieldType::modifiers}};
++    static const QMap<QString, FieldType> button{{qsl("name"), FieldType::text},
++                                                 {qsl("script"), FieldType::text},
++                                                 {qsl("commandDown"), FieldType::text},
++                                                 {qsl("commandUp"), FieldType::text},
++                                                 {qsl("pushDown"), FieldType::flag},
++                                                 {qsl("location"), FieldType::barLocation},
++                                                 {qsl("orientation"), FieldType::barOrientation},
++                                                 {qsl("columns"), FieldType::positive},
++                                                 {qsl("css"), FieldType::text}};
+     switch (kind) {
+     case Kind::trigger:
+         return trigger;
+     case Kind::alias:
+         return alias;
+     case Kind::script:
++        return script;
++    case Kind::timer:
++        return timer;
++    case Kind::key:
++        return key;
++    case Kind::button:
+         break;
+     }
+-    return script;
++    return button;
+ }
+ 
+ // A whole number, as a frontend's JSON may give it as a double
+@@ -118,8 +158,22 @@ bool fitsField(const FieldType type, const QVariant& value)
+         return value.typeId() == QMetaType::Bool;
+     case FieldType::count:
+         return wholeNumber(value).value_or(-1) >= 0;
++    case FieldType::positive:
++        return wholeNumber(value).value_or(0) >= 1;
+     case FieldType::lineDelta:
+         return wholeNumber(value).value_or(-2) >= -1;
++    case FieldType::time: {
++        const int milliseconds = wholeNumber(value).value_or(-1);
++        return milliseconds >= 0 && milliseconds < 24 * 60 * 60 * 1000;
++    }
++    case FieldType::modifiers: {
++        const int modifiers = wholeNumber(value).value_or(-1);
++        return modifiers >= 0 && (modifiers & ~static_cast<int>(Qt::KeyboardModifierMask)) == 0;
++    }
++    case FieldType::barLocation:
++        return value.typeId() == QMetaType::QString && !value.toString().isEmpty() && barLocations().contains(value.toString());
++    case FieldType::barOrientation:
++        return value.typeId() == QMetaType::QString && barOrientations().contains(value.toString());
+     case FieldType::color:
+         return colorFits(value);
+     case FieldType::textList: {
+@@ -148,6 +202,36 @@ bool fitsField(const FieldType type, const QVariant& value)
+     return false;
+ }
+ 
++TriggerUnit* unitOf(Host& host, const TTrigger*)
++{
++    return host.getTriggerUnit();
++}
++
++AliasUnit* unitOf(Host& host, const TAlias*)
++{
++    return host.getAliasUnit();
++}
++
++ScriptUnit* unitOf(Host& host, const TScript*)
++{
++    return host.getScriptUnit();
++}
++
++TimerUnit* unitOf(Host& host, const TTimer*)
++{
++    return host.getTimerUnit();
++}
++
++KeyUnit* unitOf(Host& host, const TKey*)
++{
++    return host.getKeyUnit();
++}
++
++ActionUnit* unitOf(Host& host, const TAction*)
++{
++    return host.getActionUnit();
++}
++
+ template <class T>
+ std::list<T*> rootItems(Host& host)
+ {
+@@ -155,24 +239,21 @@ std::list<T*> rootItems(Host& host)
+         return host.getTriggerUnit()->getTriggerRootNodeList();
+     } else if constexpr (std::is_same_v<T, TAlias>) {
+         return host.getAliasUnit()->getAliasRootNodeList();
+-    } else {
++    } else if constexpr (std::is_same_v<T, TScript>) {
+         return host.getScriptUnit()->getScriptRootNodeList();
++    } else if constexpr (std::is_same_v<T, TTimer>) {
++        return host.getTimerUnit()->getTimerRootNodeList();
++    } else if constexpr (std::is_same_v<T, TKey>) {
++        return host.getKeyUnit()->getKeyRootNodeList();
++    } else {
++        return host.getActionUnit()->getActionRootNodeList();
+     }
+ }
+ 
+ template <class T>
+ bool shown(Host& host, T* pItem)
+ {
+-    if (pItem->isTemporary()) {
+-        return false;
+-    }
+-    if constexpr (std::is_same_v<T, TTrigger>) {
+-        return !host.getTriggerUnit()->pendingDeletion(pItem);
+-    } else if constexpr (std::is_same_v<T, TAlias>) {
+-        return !host.getAliasUnit()->pendingDeletion(pItem);
+-    } else {
+-        return !host.getScriptUnit()->pendingDeletion(pItem);
+-    }
++    return !pItem->isTemporary() && !unitOf(host, pItem)->pendingDeletion(pItem);
+ }
+ 
+ template <class T>
+@@ -183,8 +264,14 @@ T* shownItem(Host& host, const int id)
+         pItem = host.getTriggerUnit()->getTrigger(id);
+     } else if constexpr (std::is_same_v<T, TAlias>) {
+         pItem = host.getAliasUnit()->getAlias(id);
+-    } else {
++    } else if constexpr (std::is_same_v<T, TScript>) {
+         pItem = host.getScriptUnit()->getScript(id);
++    } else if constexpr (std::is_same_v<T, TTimer>) {
++        pItem = host.getTimerUnit()->getTimer(id);
++    } else if constexpr (std::is_same_v<T, TKey>) {
++        pItem = host.getKeyUnit()->getKey(id);
++    } else {
++        pItem = host.getActionUnit()->getAction(id);
+     }
+     return pItem && shown(host, pItem) ? pItem : nullptr;
+ }
+@@ -198,8 +285,23 @@ void reParent(Host& host, T* pItem, const int parentId, const std::optional<int>
+         host.getTriggerUnit()->reParentTrigger(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
+     } else if constexpr (std::is_same_v<T, TAlias>) {
+         host.getAliasUnit()->reParentAlias(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
+-    } else {
++    } else if constexpr (std::is_same_v<T, TScript>) {
+         host.getScriptUnit()->reParentScript(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    } else if constexpr (std::is_same_v<T, TTimer>) {
++        host.getTimerUnit()->reParentTimer(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    } else if constexpr (std::is_same_v<T, TKey>) {
++        host.getKeyUnit()->reParentKey(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    } else {
++        host.getActionUnit()->reParentAction(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    }
++}
++
++// The bars the app draws follow the buttons, as the GUI's do once the editor has changed one
++template <class T>
++void redrawBars(Host& host)
++{
++    if constexpr (std::is_same_v<T, TAction>) {
++        host.getActionUnit()->updateAllToolbars();
+     }
+ }
+ 
+@@ -247,6 +349,62 @@ QString errorOf(T* pItem)
+     return pItem->state() ? QString() : TLuaInterpreter::compileErrorAsPlainText(pItem->getError());
+ }
+ 
++template <class T>
++bool runs(T* pItem)
++{
++    return pItem->isActive() && pItem->ancestorsActive();
++}
++
++// An offset timer, one inside another timer, is started by that timer as it fires, so it is not active until then, and
++// Tree's ancestorsActive() takes the timer it is in for one that never runs
++bool runs(TTimer* pItem)
++{
++    return (pItem->isOffsetTimer() ? pItem->shouldBeActive() && pItem->state() : pItem->isActive()) && pItem->shouldAncestorsBeActive();
++}
++
++QString summaryOf(TTrigger* pItem)
++{
++    QStringList texts = pItem->getPatternsList();
++    texts.removeAll(QString());
++    return texts.join(QLatin1Char('\n'));
++}
++
++QString summaryOf(TAlias* pItem)
++{
++    return pItem->getRegexCode();
++}
++
++QString summaryOf(TScript* pItem)
++{
++    return pItem->getEventHandlerList().join(QLatin1Char('\n'));
++}
++
++QString summaryOf(TTimer* pItem)
++{
++    // A new timer's time is a null QTime, which toString() gives as empty
++    return pItem->isFolder() ? QString() : QTime::fromMSecsSinceStartOfDay(pItem->getTime().msecsSinceStartOfDay()).toString(qsl("hh:mm:ss.zzz"));
++}
++
++bool hasKey(const TKey* pItem)
++{
++    return pItem->getKeyCode() != Qt::Key_unknown && pItem->getKeyCode() != Qt::Key(0);
++}
++
++QString keyName(const TKey* pItem)
++{
++    return hasKey(pItem) ? pItem->mpHost->getKeyUnit()->getKeyName(pItem->getKeyCode(), pItem->getKeyModifiers()) : QString();
++}
++
++QString summaryOf(TKey* pItem)
++{
++    return pItem->isFolder() ? QString() : keyName(pItem);
++}
++
++QString summaryOf(TAction* pItem)
++{
++    return pItem->isFolder() ? QString() : pItem->getCommandButtonDown();
++}
++
+ template <class T>
+ THeadlessSession::ScriptItemNode nodeOf(T* pItem)
+ {
+@@ -256,9 +414,10 @@ THeadlessSession::ScriptItemNode nodeOf(T* pItem)
+     node.name = pItem->getName();
+     node.folder = pItem->isFolder();
+     node.enabled = pItem->shouldBeActive();
+-    node.active = pItem->isActive() && pItem->ancestorsActive();
++    node.active = runs(pItem);
+     node.package = packageOf(pItem);
+     node.error = errorOf(pItem);
++    node.summary = summaryOf(pItem);
+     return node;
+ }
+ 
+@@ -316,6 +475,32 @@ QVariantMap fieldsOf(TScript* pItem)
+     return {{qsl("eventHandlers"), QVariant(pItem->getEventHandlerList())}};
+ }
+ 
++QVariantMap fieldsOf(TTimer* pItem)
++{
++    return {{qsl("command"), pItem->getCommand()}, {qsl("time"), pItem->getTime().msecsSinceStartOfDay()}, {qsl("offset"), pItem->isOffsetTimer()}};
++}
++
++QVariantMap fieldsOf(TKey* pItem)
++{
++    return {{qsl("command"), pItem->getCommand()},
++            // 0 for none, which Qt::Key_unknown is in the profile
++            {qsl("key"), hasKey(pItem) ? static_cast<int>(pItem->getKeyCode()) : 0},
++            {qsl("modifiers"), static_cast<int>(pItem->getKeyModifiers().toInt())},
++            {qsl("keyName"), keyName(pItem)}};
++}
++
++QVariantMap fieldsOf(TAction* pItem)
++{
++    return {{qsl("commandDown"), pItem->getCommandButtonDown()},
++            {qsl("commandUp"), pItem->getCommandButtonUp()},
++            {qsl("pushDown"), pItem->isPushDownButton()},
++            // As the bars are drawn: any place Mudlet no longer has is the top
++            {qsl("location"), barLocations().value(pItem->mLocation == 1 ? 0 : pItem->mLocation, barLocations().constFirst())},
++            {qsl("orientation"), barOrientations().at(pItem->mOrientation == 1 ? 1 : 0)},
++            {qsl("columns"), std::max(1, pItem->getButtonColumns())},
++            {qsl("css"), pItem->css}};
++}
++
+ template <class T>
+ QVariantMap itemFields(T* pItem)
+ {
+@@ -329,6 +514,7 @@ QVariantMap itemFields(T* pItem)
+     fields.insert(qsl("active"), node.active);
+     fields.insert(qsl("package"), node.package);
+     fields.insert(qsl("error"), node.error);
++    fields.insert(qsl("summary"), node.summary);
+     fields.insert(qsl("script"), pItem->getScript());
+     return fields;
+ }
+@@ -412,6 +598,107 @@ void saveItem(Host& host, TScript* pItem, const QVariantMap& fields)
+     host.getScriptUnit()->doCleanup();
+ }
+ 
++void saveItem(Host& host, TTimer* pItem, const QVariantMap& fields)
++{
++    const QTime time = QTime::fromMSecsSinceStartOfDay(fields.value(qsl("time")).toInt());
++    pItem->setName(fields.value(qsl("name")).toString().trimmed());
++    // setTime() stops the QTimer, so even an unchanged time would end the countdown
++    if (pItem->getTime() != time) {
++        pItem->setTime(time);
++    }
++    pItem->setCommand(fields.value(qsl("command")).toString());
++    pItem->setScript(fields.value(qsl("script")).toString());
++    pItem->validateTime();
++    // As the editor's save: one that is switched on carries on, or starts, but not during the emergency stop, whose
++    // resume starts it; an offset timer waits for the timer it is in
++    if (!pItem->isFolder() && !pItem->isOffsetTimer() && pItem->shouldBeActive() && !host.mEmergencyStop) {
++        pItem->stayActive();
++    }
++}
++
++void saveItem(Host& host, TKey* pItem, const QVariantMap& fields)
++{
++    const int key = fields.value(qsl("key")).toInt();
++    pItem->setKeyCode(key ? key : -1);
++    pItem->setKeyModifiers(fields.value(qsl("modifiers")).toInt());
++    QString name = fields.value(qsl("name")).toString().trimmed();
++    // As the editor names one given no name: by its key, else as it was
++    if (name.isEmpty() && !pItem->isFolder()) {
++        name = keyName(pItem);
++    }
++    if (name.isEmpty()) {
++        name = pItem->getName();
++    }
++    pItem->setName(name);
++    pItem->setCommand(fields.value(qsl("command")).toString());
++    pItem->setScript(fields.value(qsl("script")).toString());
++    pItem->validateKeyBinding();
++    // A new one runs from its first save that compiled and has a key, as the editor's does, but not during the
++    // emergency stop, whose resume starts it
++    if (pItem->state() && pItem->shouldBeActive() && !pItem->isActive() && !host.mEmergencyStop) {
++        pItem->setIsActive(true);
++    }
++}
++
++void saveItem(Host& host, TAction* pItem, const QVariantMap& fields)
++{
++    Q_UNUSED(host)
++    const int location = barLocations().indexOf(fields.value(qsl("location")).toString());
++    const int orientation = barOrientations().indexOf(fields.value(qsl("orientation")).toString());
++    const QString css = fields.value(qsl("css")).toString();
++    const bool barChanged = pItem->mLocation != location || pItem->mOrientation != orientation || pItem->css != css;
++    pItem->setName(fields.value(qsl("name")).toString().trimmed());
++    pItem->setScript(fields.value(qsl("script")).toString());
++    pItem->setCommandButtonDown(fields.value(qsl("commandDown")).toString());
++    pItem->setCommandButtonUp(fields.value(qsl("commandUp")).toString());
++    pItem->setIsPushDownButton(fields.value(qsl("pushDown")).toBool());
++    pItem->mLocation = location;
++    pItem->mOrientation = orientation;
++    pItem->setIsActive(pItem->shouldBeActive());
++    pItem->setButtonColumns(fields.value(qsl("columns")).toInt());
++    pItem->mUseCustomLayout = false;
++    pItem->css = css;
++    // As the editor's save: a bar that is off is not raised for it, and one whose place or style changed is drawn again
++    if (!pItem->shouldBeActive()) {
++        pItem->setDataSaved();
++    }
++    if (barChanged) {
++        pItem->setDataChanged();
++    }
++}
++
++// As the editor's checkbox
++template <class T>
++void switchItem(T* pItem, const bool enabled)
++{
++    pItem->setIsActive(enabled);
++}
++
++void switchItem(TTimer* pItem, const bool enabled)
++{
++    const bool offset = pItem->isOffsetTimer();
++    if (offset) {
++        pItem->setShouldBeActive(enabled);
++    } else {
++        pItem->setIsActive(enabled);
++    }
++    if (!enabled) {
++        pItem->disableTimer(pItem->getID());
++        return;
++    }
++    pItem->enableTimer(pItem->getID());
++    if (offset) {
++        // The timer it is in arms it as it fires, so it must not count down from being switched on
++        pItem->stop();
++    }
++}
++
++void switchItem(TAction* pItem, const bool enabled)
++{
++    pItem->setIsActive(enabled);
++    pItem->setDataChanged();
++}
++
+ // As the editor refuses to save one: its replacement would match its own pattern, so it would call itself forever
+ bool aliasLoops(const QString& pattern, const QString& replacement)
+ {
+@@ -436,14 +723,35 @@ T* newItem(Host& host, T* pParent, const bool folder, const QString& name)
+         pItem->setName(name);
+         pItem->setCommand(QString());
+         pItem->setRegexCode(QString());
+-    } else {
++    } else if constexpr (std::is_same_v<T, TScript>) {
+         pItem = pParent ? new TScript(pParent, &host) : new TScript(name, &host);
+         pItem->setName(name);
++    } else if constexpr (std::is_same_v<T, TTimer>) {
++        pItem = pParent ? new TTimer(pParent, &host) : new TTimer(name, QTime(), &host);
++        pItem->setName(name);
++        pItem->setCommand(QString());
++    } else if constexpr (std::is_same_v<T, TKey>) {
++        pItem = pParent ? new TKey(pParent, &host) : new TKey(name, &host);
++        pItem->setName(name);
++        pItem->setKeyCode(Qt::Key_unknown);
++        pItem->setKeyModifiers(Qt::NoModifier);
++    } else {
++        pItem = pParent ? new TAction(pParent, &host) : new TAction(name, &host);
++        pItem->setName(name);
++        pItem->setCommandButtonUp(QString());
++        pItem->setCommandButtonDown(QString());
++        pItem->setIsPushDownButton(false);
++        // Not the 1 the GUI's add gives it, which no strip is drawn for: its editor's first save makes that 0
++        pItem->mLocation = 0;
++        pItem->mOrientation = 0;
+     }
+     pItem->setScript(QString());
+     pItem->setIsFolder(folder);
+     pItem->setIsActive(false);
+-    pItem->setShouldBeActive(true);
++    // A new timer or button is left switched off, as the editor leaves it
++    if constexpr (!std::is_same_v<T, TTimer> && !std::is_same_v<T, TAction>) {
++        pItem->setShouldBeActive(true);
++    }
+     if constexpr (std::is_same_v<T, TTrigger>) {
+         pItem->setIsMultiline(false);
+         pItem->mStayOpen = 0;
+@@ -451,21 +759,28 @@ T* newItem(Host& host, T* pParent, const bool folder, const QString& name)
+         pItem->registerTrigger();
+     } else if constexpr (std::is_same_v<T, TAlias>) {
+         pItem->registerAlias();
+-    } else {
++    } else if constexpr (std::is_same_v<T, TScript>) {
+         pItem->registerScript();
++    } else if constexpr (std::is_same_v<T, TTimer>) {
++        host.getTimerUnit()->registerTimer(pItem);
++    } else if constexpr (std::is_same_v<T, TKey>) {
++        pItem->registerKey();
++    } else {
++        pItem->registerAction();
++        pItem->setDataSaved();
+     }
+     return pItem;
+ }
+ 
+ QString noItem(const int id)
+ {
+-    //: Error from a frontend with no window that was asked for a trigger, alias or script by an id the profile does not have, or has only for one a script made for a while, which the script editor does not show
++    //: Error from a frontend with no window that was asked for a trigger, alias, script, timer, key or button by an id the profile does not have, or has only for one a script made for a while, which the script editor does not show
+     return THeadlessSession::tr("There is no item %1 of that kind.").arg(id);
+ }
+ 
+ QString noFolder(const int id)
+ {
+-    //: Error from a frontend with no window that was asked to put a trigger, alias or script in a folder by an id that is not one of that kind's folders
++    //: Error from a frontend with no window that was asked to put a trigger, alias, script, timer, key or button in a folder by an id that is not one of that kind's folders
+     return THeadlessSession::tr("There is no folder %1 of that kind.").arg(id);
+ }
+ 
+@@ -482,9 +797,15 @@ QList<THeadlessSession::ScriptItemNode> THeadlessSession::scriptItems(const Scri
+     case ScriptItemKind::alias:
+         return shownItems<TAlias>(*mpHost);
+     case ScriptItemKind::script:
++        return shownItems<TScript>(*mpHost);
++    case ScriptItemKind::timer:
++        return shownItems<TTimer>(*mpHost);
++    case ScriptItemKind::key:
++        return shownItems<TKey>(*mpHost);
++    case ScriptItemKind::button:
+         break;
+     }
+-    return shownItems<TScript>(*mpHost);
++    return shownItems<TAction>(*mpHost);
+ }
+ 
+ namespace {
+@@ -499,9 +820,15 @@ auto withItemClass(const Kind kind, Call&& call)
+     case Kind::alias:
+         return call(static_cast<TAlias*>(nullptr));
+     case Kind::script:
++        return call(static_cast<TScript*>(nullptr));
++    case Kind::timer:
++        return call(static_cast<TTimer*>(nullptr));
++    case Kind::key:
++        return call(static_cast<TKey*>(nullptr));
++    case Kind::button:
+         break;
+     }
+-    return call(static_cast<TScript*>(nullptr));
++    return call(static_cast<TAction*>(nullptr));
+ }
+ 
+ } // namespace
+@@ -549,9 +876,10 @@ bool THeadlessSession::scriptItemsWritable()
+     if (!usable()) {
+         return false;
+     }
+-    if (mpHost->getTriggerUnit()->processingDepth() || mpHost->getAliasUnit()->processingDepth() || mpHost->getScriptUnit()->processingDepth()) {
+-        //: Error from a frontend with no window that was asked to change a trigger, alias or script while one of them was running and waiting on the event loop
+-        mErrorString = tr("A trigger, alias or event handler is running; triggers, aliases and scripts cannot be changed until it returns.");
++    if (mpHost->getTriggerUnit()->processingDepth() || mpHost->getAliasUnit()->processingDepth() || mpHost->getScriptUnit()->processingDepth() || mpHost->getTimerUnit()->processingDepth()
++        || mpHost->getKeyUnit()->processingDepth() || mpHost->getActionUnit()->processingDepth()) {
++        //: Error from a frontend with no window that was asked to change a trigger, alias, script, timer, key or button while one of them was running and waiting on the event loop
++        mErrorString = tr("A trigger, alias, timer, key, button or event handler is running; the profile's items cannot be changed until it returns.");
+         return false;
+     }
+     return true;
+@@ -576,6 +904,7 @@ int THeadlessSession::addScriptItem(const ScriptItemKind kind, const int parent,
+         if (const std::optional<int> place = unitPosition<T>(*mpHost, pParent, pItem, position)) {
+             reParent(*mpHost, pItem, parent, place);
+         }
++        redrawBars<T>(*mpHost);
+         return pItem->getID();
+     });
+ }
+@@ -616,7 +945,16 @@ bool THeadlessSession::editScriptItem(const ScriptItemKind kind, const int id, c
+                 return false;
+             }
+         }
++        if constexpr (std::is_same_v<T, TAction>) {
++            // The editor's save leaves one as it is and says nothing
++            if (!pItem->mPackageName.isEmpty()) {
++                //: Error from a frontend with no window that was asked to change the folder of buttons that a package or module came in, which Mudlet keeps as the package made it
++                mErrorString = tr("The folder a package or module's buttons came in cannot be changed.");
++                return false;
++            }
++        }
+         saveItem(*mpHost, pItem, merged);
++        redrawBars<T>(*mpHost);
+         return true;
+     });
+ }
+@@ -633,13 +971,15 @@ bool THeadlessSession::setScriptItemEnabled(const ScriptItemKind kind, const int
+             mErrorString = noItem(id);
+             return false;
+         }
+-        pItem->setIsActive(enabled);
+-        if (!pItem->state()) {
++        switchItem(pItem, enabled);
++        const bool runnable = pItem->state();
++        if (!runnable) {
+             pItem->setIsActive(false);
+-            if (enabled) {
+-                mErrorString = errorOf(pItem);
+-                return false;
+-            }
++        }
++        redrawBars<T>(*mpHost);
++        if (enabled && !runnable) {
++            mErrorString = errorOf(pItem);
++            return false;
+         }
+         return true;
+     });
+@@ -673,6 +1013,7 @@ bool THeadlessSession::moveScriptItem(const ScriptItemKind kind, const int id, c
+             }
+         }
+         reParent(*mpHost, pItem, parent, unitPosition<T>(*mpHost, pParent, pItem, position));
++        redrawBars<T>(*mpHost);
+         return true;
+     });
+ }
+@@ -690,6 +1031,7 @@ bool THeadlessSession::deleteScriptItem(const ScriptItemKind kind, const int id)
+             return false;
+         }
+         delete pItem;
++        redrawBars<T>(*mpHost);
+         return true;
+     });
+ }

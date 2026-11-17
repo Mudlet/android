@@ -17,10 +17,11 @@ import org.mudlet.android.ui.scripts.changedFrom
 import org.mudlet.android.ui.scripts.key
 
 /**
- * The profile's triggers, aliases and scripts as the script library shows and edits them (docs/protocol.md, "Editing
- * triggers, aliases and scripts"): each kind's items as the engine last listed them, the fields of the items opened,
- * and the drafts of those, which live here so that a rotation or a trip to the game keeps them. Requests go with
- * [send], each answer's `id` from [newId]. What it holds is Compose state, changed only here. Main thread only.
+ * The profile's triggers, aliases, scripts, timers, keys and buttons as the script library shows and edits them
+ * (docs/protocol.md, "Editing triggers, aliases and scripts"): each kind's items as the engine last listed them, the
+ * fields of the items opened, and the drafts of those, which live here so that a rotation or a trip to the game keeps
+ * them. Requests go with [send], each answer's `id` from [newId]. What it holds is Compose state, changed only here.
+ * Main thread only.
  */
 internal class ScriptItemsClient(private val newId: () -> Long, private val send: (JSONObject) -> Boolean) {
     private val listed = mutableStateMapOf<ScriptItemKind, List<ScriptItemNode>>()

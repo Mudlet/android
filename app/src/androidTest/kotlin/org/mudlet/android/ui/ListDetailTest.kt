@@ -158,7 +158,7 @@ class ListDetailTest {
         val triggers = JSONArray().put(scriptNode(1, "Greet")).put(scriptNode(2, "Wave"))
         // The library asks as it opens, and an item's page too, from their composition, which goes on while the test waits on it
         compose.waitForIdle()
-        for (kind in listOf("trigger", "alias", "script")) {
+        for (kind in listOf("trigger", "alias", "script", "timer", "key", "button")) {
             val ask = session.receive("scriptItems")
             session.send(JSONObject().put("t", "scriptItems").put("kind", kind).put("items", if (kind == "trigger") triggers else JSONArray()).put("re", ask.get("id")))
         }

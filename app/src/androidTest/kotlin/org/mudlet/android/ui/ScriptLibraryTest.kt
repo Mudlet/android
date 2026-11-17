@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
@@ -52,11 +55,13 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
  * bar, it lists each kind one folder at a time, its switches switch items on and off, its search finds names, its
  * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
  * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
- * draft over a trip to the game, edits a trigger's patterns and options, an alias's command and a script's events, and deletes with
- * Undo, sent only once the library goes; its Lua is edited in the page, which indents a new line, completes a
- * function's name and types Lua's symbols, is checked only when applied, when what the engine finds wrong shows with a
- * way to its line until the code is changed, and is kept or asked about as the other fields are; and what the engine
- * refuses is said. Controls are found by the labels TalkBack reads and activated through their accessibility actions.
+ * draft over a trip to the game, edits a trigger's patterns and options, an alias's command, a script's events, a
+ * timer's time, a key binding's key, a toolbar's place and a button's commands, and deletes with Undo, sent only once
+ * the library goes; a timer with offset timers in it is gone into, and the buttons' top level takes toolbars; its Lua
+ * is edited in the page, which indents a new line, completes a function's name and types Lua's symbols, is checked
+ * only when applied, when what the engine finds wrong shows with a way to its line until the code is changed, and is
+ * kept or asked about as the other fields are; and what the engine refuses is said. Controls are found by the labels
+ * TalkBack reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLibraryTest {
@@ -82,6 +87,13 @@ class ScriptLibraryTest {
     // Combat/"You hit", then "Greet", as the engine lists them, depth first
     private val triggers = listOf(node(1, 0, "Combat", folder = true), node(2, 1, "You hit"), node(3, 0, "Greet"))
 
+    // "Heal" with the offset timer "Then" in it
+    private val timers = listOf(node(1, 0, "Heal", summary = "00:00:02.500"), node(2, 1, "Then", summary = "00:00:01.000"))
+    private val keys = listOf(node(1, 0, "North", summary = "keypad + 8"), node(2, 0, "Odd", summary = "control + Shift"))
+
+    // The toolbar "Bar" with the button "Sword"
+    private val buttons = listOf(node(1, 0, "Bar", folder = true), node(2, 1, "Sword", summary = "wield sword"))
+
     @Before
     fun openTheLibrary() {
         compose.enableAccessibilityChecksOfWhatShows()
@@ -103,11 +115,14 @@ class ScriptLibraryTest {
 
     private fun openTheLibraryFromTheGame() {
         activate(hasContentDescription(string(R.string.scripts_open, game.name)))
-        val asked = (1..3).map { received("scriptItems") }
-        assertEquals(listOf("trigger", "alias", "script"), asked.map { it.getString("kind") })
+        val asked = (1..6).map { received("scriptItems") }
+        assertEquals(listOf("trigger", "alias", "script", "timer", "key", "button"), asked.map { it.getString("kind") })
         items("trigger", triggers, asked[0])
         items("alias", listOf(node(1, 0, "kick")), asked[1])
         items("script", listOf(node(1, 0, "On connect")), asked[2])
+        items("timer", timers, asked[3])
+        items("key", keys, asked[4])
+        items("button", buttons, asked[5])
         waitFor(row("Greet"))
     }
 
@@ -340,6 +355,180 @@ class ScriptLibraryTest {
     }
 
     @Test
+    fun aTimerWithOffsetTimersIsGoneIntoAndItsTimeIsSetInFourFields() {
+        activate(kind(R.string.scripts_timers, 2))
+        waitFor(row("Heal") and hasText("00:00:02.500"))
+        compose.onNode(row("Then")).assertDoesNotExist()
+        activate(row("Heal"))
+        waitFor(row("Then"))
+        // Mudlet adds only to a folder
+        compose.onNode(hasContentDescription(string(R.string.scripts_new_timer))).assertDoesNotExist()
+        compose.onNode(hasContentDescription(string(R.string.scripts_add_folder))).assertDoesNotExist()
+
+        activate(hasContentDescription(string(R.string.scripts_edit_item, "Heal")))
+        val open = received("scriptItem")
+        assertEquals("timer", open.getString("kind"))
+        assertEquals(1, open.getInt("item"))
+        session.send(fields("timer", timer(1, 0, "Heal", 2_500), open))
+        waitFor(hasText(string(R.string.scripts_timer_every)))
+        compose.onNode(field(R.string.scripts_timer_seconds) and hasText("2")).assertExists()
+        compose.onNode(field(R.string.scripts_timer_milliseconds) and hasText("500")).assertExists()
+        compose.onNode(hasText(string(R.string.scripts_timer_offset))).assertDoesNotExist()
+
+        val minutes = field(R.string.scripts_timer_minutes)
+        compose.onNode(minutes).performTextClearance()
+        compose.onNode(minutes).performTextInput("1")
+        // More than a minute has: the field says so, and the 2 seconds stay
+        val seconds = field(R.string.scripts_timer_seconds)
+        compose.onNode(seconds).performTextClearance()
+        compose.onNode(seconds).performTextInput("75")
+        waitFor(hasText(string(R.string.scripts_number_range, 0, 59)))
+        compose.onNode(field(R.string.scripts_timer_command)).performTextReplacement("cast heal")
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
+        activate(apply)
+        val edit = received("editScriptItem")
+        assertEquals("timer", edit.getString("kind"))
+        assertEquals(62_500, edit.getJSONObject("fields").getInt("time"))
+        assertEquals("cast heal", edit.getJSONObject("fields").getString("command"))
+        assertFalse("what is only read is not sent", edit.getJSONObject("fields").has("offset"))
+        session.send(fields("timer", timer(1, 0, "Heal", 62_500).put("command", "cast heal"), edit))
+        waitFor(hasText(string(R.string.scripts_applied, "Heal")))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        activate(row("Then"))
+        session.send(fields("timer", timer(2, 1, "Then", 1_000).put("offset", true), received("scriptItem")))
+        waitFor(hasText(string(R.string.scripts_timer_after)))
+        compose.onNode(hasText(string(R.string.scripts_timer_offset))).assertExists()
+        compose.onNode(hasText(string(R.string.scripts_timer_every))).assertDoesNotExist()
+    }
+
+    @Test
+    fun aKeyIsPickedFromASheetAndTheKeysHeldAreChips() {
+        activate(kind(R.string.scripts_keys, 2))
+        activate(row("North"))
+        val open = received("scriptItem")
+        assertEquals("key", open.getString("kind"))
+        session.send(fields("key", key(1, "North", 0x38, KEYPAD, "keypad + 8"), open))
+        waitFor(hasText(string(R.string.scripts_key_pick, "8")))
+        val keypad = hasText(string(R.string.scripts_key_keypad)) and hasClickAction()
+        val control = hasText(string(R.string.scripts_key_control)) and hasClickAction()
+        compose.onNode(keypad).assertIsSelected()
+        compose.onNode(control).assertIsNotSelected()
+        compose.onNode(hasText(string(R.string.scripts_key_note))).assertExists()
+
+        activate(hasText(string(R.string.scripts_key_pick, "8")))
+        waitFor(hasText(string(R.string.scripts_key_sheet)))
+        compose.onNode(hasText("8") and hasClickAction()).assertIsSelected()
+        // The sheet's Close leaves the key as it was
+        activate(hasContentDescription(string(R.string.scripts_key_sheet_close)))
+        waitFor(hasText(string(R.string.scripts_key_pick, "8")))
+        compose.onNode(hasText(string(R.string.scripts_key_sheet))).assertDoesNotExist()
+
+        activate(hasText(string(R.string.scripts_key_pick, "8")))
+        waitFor(hasText(string(R.string.scripts_key_sheet)))
+        compose.onNode(hasText("F1") and hasClickAction()).performScrollTo()
+        activate(hasText("F1"))
+        waitFor(hasText(string(R.string.scripts_key_pick, "F1")))
+        activate(control)
+        activate(keypad)
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
+        activate(apply)
+        val edit = received("editScriptItem")
+        assertEquals("key", edit.getString("kind"))
+        assertEquals(F1, edit.getJSONObject("fields").getInt("key"))
+        assertEquals(CONTROL, edit.getJSONObject("fields").getInt("modifiers"))
+        assertFalse("what is only read is not sent", edit.getJSONObject("fields").has("keyName"))
+        session.send(fields("key", key(1, "North", F1, CONTROL, "control + F1"), edit))
+        waitFor(hasText(string(R.string.scripts_applied, "North")))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        // A key the sheet does not have, set on the desktop, goes by the name the engine wrote; no key at all says so
+        activate(row("Odd"))
+        session.send(fields("key", key(2, "Odd", SHIFT_KEY, CONTROL, "control + Shift"), received("scriptItem")))
+        waitFor(hasText(string(R.string.scripts_key_pick, "Shift")))
+        activate(hasText(string(R.string.scripts_key_pick, "Shift")))
+        activate(hasText(string(R.string.scripts_key_none)))
+        waitFor(hasText(string(R.string.scripts_key_pick, string(R.string.scripts_key_none))))
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
+        activate(apply)
+        assertEquals(0, received("editScriptItem").getJSONObject("fields").getInt("key"))
+    }
+
+    @Test
+    fun theButtonsTopLevelTakesToolbarsWhichButtonsGoIn() {
+        activate(kind(R.string.scripts_buttons, 1))
+        waitFor(row("Bar"))
+        compose.onNode(hasContentDescription(string(R.string.scripts_new_button))).assertDoesNotExist()
+        compose.onNode(hasContentDescription(string(R.string.scripts_add_folder))).assertDoesNotExist()
+        val toolbar = string(R.string.scripts_new_toolbar)
+        activate(hasContentDescription(toolbar))
+        val add = received("addScriptItem")
+        assertEquals("button", add.getString("kind"))
+        assertEquals(0, add.getInt("parent"))
+        assertTrue("a toolbar is a folder", add.getBoolean("folder"))
+        assertEquals(toolbar, add.getString("name"))
+        session.send(fields("button", button(9, 0, toolbar, folder = true, enabled = false), add))
+        items("button", buttons + node(9, 0, toolbar, folder = true, enabled = false), received("scriptItems"))
+        // The new toolbar is gone into, where a button and a menu's folder are made
+        waitFor(hasText(string(R.string.scripts_folder_empty)))
+        compose.onNode(hasContentDescription(string(R.string.scripts_add_folder))).assertExists()
+        activate(hasContentDescription(string(R.string.scripts_new_button)))
+        val made = received("addScriptItem")
+        assertEquals(9, made.getInt("parent"))
+        assertFalse(made.getBoolean("folder"))
+        assertEquals(string(R.string.scripts_new_button), made.getString("name"))
+    }
+
+    @Test
+    fun aToolbarHasItsPlaceAndAButtonItsCommands() {
+        activate(kind(R.string.scripts_buttons, 1))
+        activate(row("Bar"))
+        waitFor(row("Sword") and hasText("wield sword"))
+        activate(hasContentDescription(string(R.string.scripts_edit_folder)))
+        val open = received("scriptItem")
+        assertEquals("button", open.getString("kind"))
+        session.send(fields("button", button(1, 0, "Bar", folder = true), open))
+        waitFor(hasText(string(R.string.scripts_bar_place)))
+        compose.onNode(field(R.string.scripts_button_command)).assertDoesNotExist()
+        compose.onNode(hasText(string(R.string.scripts_bar_top)) and hasClickAction()).assertIsSelected()
+        activate(hasText(string(R.string.scripts_bar_left)))
+        activate(hasText(string(R.string.scripts_bar_vertical)))
+        val columns = field(R.string.scripts_bar_columns)
+        compose.onNode(columns).performTextClearance()
+        compose.onNode(columns).performTextInput("2")
+        compose.onNode(field(R.string.scripts_button_css)).performTextReplacement("QToolBar { color: red; }")
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
+        activate(apply)
+        val edit = received("editScriptItem")
+        val bar = edit.getJSONObject("fields")
+        assertEquals("left", bar.getString("location"))
+        assertEquals("vertical", bar.getString("orientation"))
+        assertEquals(2, bar.getInt("columns"))
+        assertEquals("QToolBar { color: red; }", bar.getString("css"))
+        val saved = button(1, 0, "Bar", folder = true).put("location", "left").put("orientation", "vertical").put("columns", 2).put("css", bar.getString("css"))
+        session.send(fields("button", saved, edit))
+        waitFor(hasText(string(R.string.scripts_applied, "Bar")))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+
+        activate(row("Sword"))
+        session.send(fields("button", button(2, 1, "Sword").put("commandDown", "wield sword").put("commandUp", "sheathe sword"), received("scriptItem")))
+        val down = field(R.string.scripts_button_command)
+        waitFor(down and hasText("wield sword"))
+        compose.onNode(hasText(string(R.string.scripts_bar_place))).assertDoesNotExist()
+        val up = field(R.string.scripts_button_command_up)
+        compose.onNode(up).assertDoesNotExist()
+        activate(hasText(string(R.string.scripts_button_push_down)))
+        waitFor(up)
+        compose.onNode(up).performTextReplacement("remove sword")
+        compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
+        activate(apply)
+        val sword = received("editScriptItem").getJSONObject("fields")
+        assertEquals("wield sword", sword.getString("commandDown"))
+        assertTrue(sword.getBoolean("pushDown"))
+        assertEquals("remove sword", sword.getString("commandUp"))
+    }
+
+    @Test
     fun aDeleteIsSentOnlyOnceItsUndoHasGone() {
         openGreet()
         activate(hasContentDescription(string(R.string.scripts_delete, "Greet")))
@@ -561,9 +750,19 @@ class ScriptLibraryTest {
         return session.receive(type)
     }
 
-    private fun node(id: Int, parent: Int, name: String, folder: Boolean = false, enabled: Boolean = true): JSONObject = JSONObject()
+    private fun node(id: Int, parent: Int, name: String, folder: Boolean = false, enabled: Boolean = true, summary: String = ""): JSONObject = JSONObject()
         .put("id", id).put("parent", parent).put("name", name).put("folder", folder).put("enabled", enabled).put("active", enabled)
-        .put("package", "").put("error", "")
+        .put("package", "").put("error", "").put("summary", summary)
+
+    // The fields that take text have some: an empty one whose top alone shows at the page's foot has no name for the
+    // checks (docs/roadmap.md, "A known gap, the toolkit's")
+    private fun timer(id: Int, parent: Int, name: String, time: Int): JSONObject = node(id, parent, name).put("script", "").put("command", "look").put("time", time).put("offset", false)
+
+    private fun key(id: Int, name: String, key: Int, modifiers: Int, keyName: String): JSONObject = node(id, 0, name).put("script", "").put("command", "north").put("key", key).put("modifiers", modifiers).put("keyName", keyName)
+
+    private fun button(id: Int, parent: Int, name: String, folder: Boolean = false, enabled: Boolean = true): JSONObject = node(id, parent, name, folder, enabled)
+        .put("script", "").put("commandDown", "").put("commandUp", "").put("pushDown", false).put("location", "top").put("orientation", "horizontal")
+        .put("columns", 1).put("css", "color: blue;")
 
     private fun trigger(id: Int, parent: Int, name: String, enabled: Boolean = true): JSONObject = node(id, parent, name, enabled = enabled)
         .put("script", "").put("patterns", JSONArray().put(JSONObject().put("text", "You wave").put("type", "substring")))
@@ -573,6 +772,12 @@ class ScriptLibraryTest {
     private fun items(kind: String, items: List<JSONObject>, request: JSONObject) = session.send(JSONObject().put("t", "scriptItems").put("kind", kind).put("items", JSONArray(items)).put("re", request.get("id")))
 
     private fun fields(kind: String, fields: JSONObject, request: JSONObject): JSONObject = JSONObject().put("t", "scriptItem").put("kind", kind).put("fields", fields).put("re", request.get("id"))
+
+    /** The library's chip of a kind, [title], that has [count] items. */
+    private fun kind(@StringRes title: Int, count: Int) = hasText(string(R.string.scripts_kind_count, string(title), count)) and hasClickAction()
+
+    /** A field of an item's page, by its label. */
+    private fun field(@StringRes label: Int) = hasSetTextAction() and hasText(string(label))
 
     /** A library row: the item's name, which opens it or goes into the folder. */
     private fun row(name: String) = hasText(name) and hasClickAction() and hasAnyAncestor(library)
@@ -608,6 +813,12 @@ class ScriptLibraryTest {
     private companion object {
         const val INSTANCE = "fake-scripts"
         const val CONSOLE_LINE = "A rat bites you."
+
+        // Qt's numbers, as docs/protocol.md gives them for a key binding
+        const val F1 = 0x01000030
+        const val SHIFT_KEY = 0x01000020
+        const val CONTROL = 0x04000000
+        const val KEYPAD = 0x20000000
 
         // Further than any page is long
         const val PAGE_END_PX = 100_000f

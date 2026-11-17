@@ -184,6 +184,13 @@ public:
     virtual QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) = 0;
     virtual QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) = 0;
     virtual QString deleteScriptItem(ScriptItemKind kind, int item) = 0;
+    // The profile's packages in the order they were installed, as the desktop's Package Manager lists them
+    virtual std::variant<QList<PackageInfo>, QString> packages() const = 0;
+    // Installs the package file at path as the Package Manager's install from a file does, sysInstall included;
+    // IFrontend::packageInstalled() answers unless it is refused here
+    virtual QString installPackage(const QString& path) = 0;
+    // Removes it as the Package Manager's Remove does, sysUninstall included
+    virtual QString uninstallPackage(const QString& name) = 0;
     // What is wrong with Lua that does not compile (THeadlessSession::checkLua()): the line Lua names, from 1, or 0
     // where it names none, and its message
     struct LuaProblem

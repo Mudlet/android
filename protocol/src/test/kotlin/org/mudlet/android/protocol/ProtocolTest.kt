@@ -639,6 +639,43 @@ class ProtocolTest {
     }
 
     @Test
+    fun packagesDecode() {
+        val list = FrameReader.parse(
+            JSONObject(
+                """{"t":"packages","re":3,"packages":[""" +
+                    """{"name":"Pack","title":"A pack","author":"Mudlet","version":"1.2","description":"Kept at /p","icon":"/p/.mudlet/Icon/i.png"},"junk",""" +
+                    """{"name":"Plain"}]}""",
+            ),
+        ) as EngineMessage.Packages
+        assertEquals(
+            listOf(
+                InstalledPackage("Pack", "A pack", "Mudlet", "1.2", "Kept at /p", "/p/.mudlet/Icon/i.png"),
+                InstalledPackage("Plain", "", "", "", "", ""),
+            ),
+            list.packages,
+        )
+        assertEquals(3, list.replyTo)
+        assertEquals(EngineMessage.PackagesChanged, FrameReader.parse(JSONObject("""{"t":"packagesChanged"}""")))
+    }
+
+    @Test
+    fun anInstallAnswerDecodesEachResult() {
+        fun result(wire: String) = (FrameReader.parse(JSONObject("""{"t":"packageInstalled","path":"/c/p.zip","result":"$wire","error":"why"}""")) as EngineMessage.PackageInstalled)
+        assertEquals(EngineMessage.PackageInstalled("/c/p.zip", PackageInstallResult.INSTALLED_WITH_ERRORS, "why"), result("installedWithErrors"))
+        assertEquals(PackageInstallResult.INSTALLED, result("installed").result)
+        assertEquals(PackageInstallResult.ALREADY_INSTALLED, result("alreadyInstalled").result)
+        assertEquals(PackageInstallResult.FAILED, result("failed").result)
+        assertEquals("an answer from a newer engine is not taken for success", PackageInstallResult.FAILED, result("deferred").result)
+    }
+
+    @Test
+    fun thePackageRequestsCarryWhatTheEngineReads() {
+        assertEquals(mapOf("t" to "packages", "id" to 4L), Requests.packages(4).toMap())
+        assertEquals(mapOf("t" to "installPackage", "path" to "/c/p.mpackage"), Requests.installPackage("/c/p.mpackage").toMap())
+        assertEquals(mapOf("t" to "uninstallPackage", "name" to "Pack", "id" to 5L), Requests.uninstallPackage("Pack", 5).toMap())
+    }
+
+    @Test
     fun scriptItemsDecode() {
         val list = FrameReader.parse(
             JSONObject(

@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 27;
+    static constexpr int protocolVersion = 28;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -83,6 +83,8 @@ public:
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
     void sounds(const Sounds& sounds) override;
+    void packagesChanged() override;
+    void packageInstalled(const QString& path, PackageInstallResult result, const QString& error) override;
 
 protected:
     struct StoredLine
@@ -138,6 +140,8 @@ protected:
     void addRoom(const QJsonObject& message);
     QString renameArea(const QJsonObject& message);
     void mapEnvs();
+    void packages();
+    void uninstallPackage(const QJsonObject& message);
     void scriptItems(const QJsonObject& message);
     void scriptItem(const QJsonObject& message);
     void addScriptItem(const QJsonObject& message);

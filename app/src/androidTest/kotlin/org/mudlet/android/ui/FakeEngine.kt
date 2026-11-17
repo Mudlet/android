@@ -7,6 +7,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.mudlet.android.protocol.FrameWriter
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Transport
 import java.io.DataInputStream
 import java.io.IOException
@@ -336,6 +337,17 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         fun hiddenInput(wanted: Boolean) = send(JSONObject().put("t", "hiddenInput").put("wanted", wanted))
 
         fun secureOffer(offered: Boolean) = send(JSONObject().put("t", "secureOffer").put("offered", offered))
+
+        /** The certificate the last secure connection was refused for, or none (null). */
+        fun certificateRefused(certificate: RefusedCertificate?) = send(
+            JSONObject().put("t", "certificateRefused").put("refused", certificate != null).apply {
+                if (certificate != null) {
+                    put("issuedTo", certificate.issuedTo).put("issuer", certificate.issuer).put("expires", certificate.expires)
+                        .put("serial", certificate.serial).put("expired", certificate.expired).put("selfSigned", certificate.selfSigned)
+                        .put("others", certificate.others).put("errors", JSONArray(certificate.errors))
+                }
+            },
+        )
 
         /** [lines]: newest first. */
         fun history(lines: List<String>) = send(JSONObject().put("t", "history").put("lines", JSONArray(lines)))

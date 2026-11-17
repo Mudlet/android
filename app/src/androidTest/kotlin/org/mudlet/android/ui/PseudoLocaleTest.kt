@@ -38,6 +38,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.util.Locale
 import kotlin.math.abs
@@ -132,6 +133,13 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("the secure port question", window = question)
         session.secureOffer(false)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isEmpty() }
+
+        val certificate = hasText(string(R.string.certificate_refused_title))
+        session.certificateRefused(RefusedCertificate("localhost", "localhost", "2020-01-02T00:00:00Z", "01", true, true, false, listOf("The certificate has expired")))
+        waitFor(certificate)
+        assertTextFits("the refused certificate", window = certificate)
+        session.certificateRefused(null)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(certificate).fetchSemanticsNodes().isEmpty() }
 
         activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
         val node = JSONObject().put("id", 1).put("parent", 0).put("name", "Greet").put("folder", false).put("enabled", false)

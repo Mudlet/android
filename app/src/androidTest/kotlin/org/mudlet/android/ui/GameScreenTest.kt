@@ -11,10 +11,12 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -33,10 +35,14 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.test.withKeyDown
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -44,6 +50,8 @@ import androidx.test.rule.GrantPermissionRule
 import androidx.test.uiautomator.UiDevice
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -54,6 +62,8 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
+import org.mudlet.android.protocol.KeyBinding
+import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.protocol.RefusedCertificate
@@ -238,6 +248,24 @@ class GameScreenTest {
         activate(hasTestTag(GAME_PILL_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun desktopsAltShortcutsBeatAKeyBinding() {
+        val altD = KeyBinding('D'.code, KeyModifier.ALT.bit)
+        session.send(JSONObject().put("t", "keyBindings").put("keys", JSONArray().put(JSONObject().put("key", altD.key).put("modifiers", altD.modifiers))))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.keyBindings } == setOf(altD) }
+        session.status("connection", "connected")
+        waitForPill(string(R.string.connection_connected))
+
+        compose.onNode(input).requestFocus().performKeyInput { withKeyDown(Key.AltLeft) { pressKey(Key.D) } }
+        session.receive("disconnect")
+        session.assertNoRequest("pressKey", 500)
+        compose.onNode(input).assert(editableText(""))
+
+        compose.onNode(input).performKeyInput { withKeyDown(Key.AltLeft) { pressKey(Key.P) } }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.settings_title))).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

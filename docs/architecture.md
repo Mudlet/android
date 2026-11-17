@@ -703,6 +703,10 @@ kept by `ScriptItemsClient`:
   no key to the bindings either; any other key types as before. A binding beats the app's Ctrl+R and Ctrl+Tab, as
   desktop's command line claims a bound profile-switching shortcut. Not yet: Input's "Run all matching key
   bindings" (`runAllKeyMatches`, which no setting the engine takes carries), so the first binding that matches runs.
+- Desktop's main-window shortcuts off macOS (`mudlet.cpp`) beat a key binding, as a QShortcut does there, for the
+  screens the app has: Alt+E the scripts, Alt+P the settings, Alt+M the map, Alt+C the games, Alt+D, Alt+R and Alt+W
+  disconnect, reconnect and close the game. Not yet: the caret key, mute, notepad, packages, modules, multi-view, the
+  input line's toggle and the Ctrl+Alt ones.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the

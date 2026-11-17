@@ -37,6 +37,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -89,7 +90,8 @@ import kotlin.reflect.KClass
  * front, TalkBack says its name and state and the focus goes to its input line. A swipe on the pill, or Ctrl+Tab and
  * Ctrl+Shift+Tab on a hardware keyboard, brings the next or the previous game, and the console, or the map in front,
  * slides across with it ([GameSwipe]). Each change of the front game's connection is said once, with the game's name
- * first, so Mudlet's retries after a drop are not each read out.
+ * first, so Mudlet's retries after a drop are not each read out. Desktop's Alt shortcuts open the screens they open
+ * there ([desktopShortcut]), and a hardware key a key binding of the profile takes goes to the engine.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: () -> Unit, onMakeTrigger: (String) -> Unit) {
@@ -226,7 +228,21 @@ private fun ProfileGameScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
-                // A binding comes first, as desktop's command line claims a bound profile-switching shortcut
+                desktopShortcut(event)?.let { shortcut ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (shortcut) {
+                            DesktopShortcut.SCRIPTS -> onOpenScripts()
+                            DesktopShortcut.SETTINGS -> onOpenSettings()
+                            DesktopShortcut.MAP -> onMapOpen(!mapOpen)
+                            DesktopShortcut.CONNECT -> onBack()
+                            DesktopShortcut.DISCONNECT -> if (c.name.isNotEmpty() && state.canDisconnect) disconnect()
+                            DesktopShortcut.RECONNECT -> if (canReconnect) reconnect()
+                            DesktopShortcut.CLOSE -> if (c.name.isNotEmpty()) close(c.name)
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                // A binding comes next, as desktop's command line claims a bound profile-switching shortcut
                 if (sentToKeyBindings(event, c.windows, boundKeysDown)) return@onPreviewKeyEvent true
                 val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
@@ -460,4 +476,27 @@ private fun sentToKeyBindings(event: KeyEvent, windows: ScriptWindowsClient, dow
     if (!windows.pressKey(key, if (typed > 0) String(Character.toChars(typed)) else "")) return false
     down += native.keyCode
     return true
+}
+
+private enum class DesktopShortcut { SCRIPTS, SETTINGS, MAP, CONNECT, DISCONNECT, RECONNECT, CLOSE }
+
+/**
+ * Which of the main window's shortcuts desktop Mudlet gives off macOS (`mudlet.cpp`) [event] is, for the screens the
+ * app has: Alt+E the scripts, Alt+P the settings, Alt+M the map, Alt+C the games, Alt+D, Alt+R and Alt+W disconnect,
+ * reconnect and close the game. As a QShortcut there, it beats a key binding on the same key.
+ */
+private fun desktopShortcut(event: KeyEvent): DesktopShortcut? {
+    // The left Alt alone: the right one is AltGr on most layouts, which types
+    val leftAlt = event.nativeKeyEvent.metaState and android.view.KeyEvent.META_ALT_LEFT_ON != 0
+    if (!leftAlt || event.isCtrlPressed || event.isShiftPressed || event.isMetaPressed) return null
+    return when (event.key) {
+        Key.E -> DesktopShortcut.SCRIPTS
+        Key.P -> DesktopShortcut.SETTINGS
+        Key.M -> DesktopShortcut.MAP
+        Key.C -> DesktopShortcut.CONNECT
+        Key.D -> DesktopShortcut.DISCONNECT
+        Key.R -> DesktopShortcut.RECONNECT
+        Key.W -> DesktopShortcut.CLOSE
+        else -> null
+    }
 }

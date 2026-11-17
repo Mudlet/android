@@ -1,7 +1,6 @@
 package org.mudlet.android.ui
 
 import android.content.res.Resources
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -19,7 +18,6 @@ import org.mudlet.android.protocol.MapTarget
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.RoomMatch
-import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.MapSource
 import java.util.EnumMap
@@ -63,17 +61,8 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     /** What findRooms found for [text]: null [rooms] until the engine answers; [more] when it found more than it sent. */
     data class RoomSearch(val text: String, val rooms: List<RoomMatch>?, val more: Boolean = false)
 
-    /**
-     * An `appMap`'s frame as [decode] made it: its [bitmap] and [tones], null where there is none, and with [textBehind]
-     * its [overText].
-     */
-    class Decoded(val bitmap: ImageBitmap?, val tones: MapBehindText.Tones?, val overText: OverText? = null)
-
-    /**
-     * A frame to draw over the console's text: its [ground], and the [frame] itself with the pixels of its background
-     * colour made transparent, or as it is where it has none ([TextBehindMap]).
-     */
-    class OverText(val ground: TextBehindMap.Ground, val frame: ImageBitmap)
+    /** An `appMap`'s frame as [decode] made it: its [bitmap] and [tones], null where there is none. */
+    class Decoded(val bitmap: ImageBitmap?, val tones: MapBehindText.Tones?)
 
     /** The map as the engine last drew it, at the size asked; null while it draws none (no profile, or no rooms). */
     var map by mutableStateOf<ScriptWindowsClient.MapImage?>(null)
@@ -81,10 +70,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
 
     /** The colours of [map]'s frame, which set how strongly it shows behind the text; null for any colour at all. */
     var tones by mutableStateOf<MapBehindText.Tones?>(null)
-        private set
-
-    /** [map]'s frame made to draw over the text, while [textBehind] wants it; null while it does not, or there is none. */
-    var overText by mutableStateOf<OverText?>(null)
         private set
 
     /** Why the engine refused the last request about this map, until the next one or the player dismisses it. */
@@ -142,9 +127,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     /** A new `appMap`, with what [decode] made of it. */
     internal fun onAppMap(message: EngineMessage.AppMap, frame: Decoded) {
         tones = frame.tones
-        overText = frame.overText
         if (message.w == 0 || message.h == 0) {
-            overText = null
             map = null
             mover.onFrame(null)
             return
@@ -196,7 +179,6 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         mover.clear()
         if (!sameInstance) {
             map = null
-            overText = null
             mover.onFrame(null)
             refused = null
             download = NO_DOWNLOAD
@@ -326,30 +308,13 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         }
 
         /**
-         * Whether the map in front shows the text behind it, and so wants each frame [decode]s cut out: set on the main
-         * thread, read on the reader's.
-         */
-        @Volatile
-        var textBehind = false
-
-        /**
-         * [message]'s PNG, decoded off the main thread, and its colours sampled there too, and cut out while
-         * [textBehind]; a null bitmap for none, or one that does not decode.
+         * [message]'s PNG, decoded off the main thread, and its colours sampled there too; a null bitmap for none, or
+         * one that does not decode.
          */
         internal fun decode(message: EngineMessage.AppMap): Decoded {
             val bitmap = if (message.png.isEmpty()) null else BitmapFactory.decodeByteArray(message.png, 0, message.png.size)
             val tones = bitmap?.let { MapBehindText.tones(it.width, it.height) { y, row -> it.getPixels(row, 0, it.width, 0, y, it.width, 1) } }
-            val image = bitmap?.asImageBitmap()
-            return Decoded(image, tones, if (bitmap != null && image != null && textBehind) overText(bitmap, image) else null)
-        }
-
-        private fun overText(bitmap: Bitmap, image: ImageBitmap): OverText? {
-            val pixels = IntArray(bitmap.width * bitmap.height)
-            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            val ground = TextBehindMap.ground(pixels, bitmap.width, bitmap.height) ?: return null
-            val background = ground.background ?: return OverText(ground, image)
-            TextBehindMap.cutOut(pixels, background)
-            return OverText(ground, Bitmap.createBitmap(pixels, bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888).asImageBitmap())
+            return Decoded(bitmap?.asImageBitmap(), tones)
         }
 
         /** What [end] says to the player of how a download ended; null while none has ended. */

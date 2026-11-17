@@ -46,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -80,7 +79,6 @@ import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RoomMatch
-import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.protocol.matchRange
 import org.mudlet.android.protocol.roomAreas
 import org.mudlet.android.ui.AppMapClient
@@ -137,28 +135,6 @@ internal fun BoxScope.BackgroundMap(colors: ConsoleColors) {
     }
 }
 
-/** How the console shows behind the map in front: drawn at [alpha] over [ground]. */
-internal class TextBehind(val ground: Color, val alpha: () -> Float)
-
-/**
- * How the main console shows behind the app's map in front (docs/architecture.md, "The map behind the text"): as
- * strongly as keeps the map's rooms and exits at 3:1 against text in [colors] ([TextBehindMap]), over the map's own
- * background colour, which [FullScreenMap] cuts out of its frame. Easing up to a frame that allows more, at once down to
- * one that allows less, and none before a cut-out frame has come.
- */
-@Composable
-internal fun textBehindMap(appMap: AppMapClient, colors: ConsoleColors): TextBehind {
-    val foreground = colors.foreground.toArgb() and 0xFFFFFF
-    val background = colors.background.toArgb() and 0xFFFFFF
-    val ground = appMap.overText?.ground
-    val target = remember(colors, ground) { TextBehindMap.alpha(ground, foreground, background, CONSOLE_BACKGROUND.toArgb() and 0xFFFFFF) }
-    val alpha = remember { Animatable(target) }
-    // As BackgroundMap's: fainter at once, and the draw takes the lower until the effect has snapped
-    LaunchedEffect(target) { if (target < alpha.value) alpha.snapTo(target) else alpha.animateTo(target) }
-    val under = ground?.background?.let { Color(0xFF shl 24 or it) } ?: colors.background
-    return TextBehind(under) { minOf(alpha.value, target) }
-}
-
 /** The title bar's button that brings the map to the front, [open], and sends it back. */
 @Composable
 internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
@@ -172,41 +148,30 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
  * results right under it ([RoomResults]), and the download of the map the game offers ([MapDownloadBar]), over the map
  * as [MapView] draws it, which a tap selects in and a double tap walks on; with no map drawn, the offer is in its middle
  * ([MapOffer]), or in the bar while a search's results or a refusal would be where it is. Back closes the results, then
- * the room picked, then calls [onClose], after the map shrinks with a predictive back gesture, whose progress goes to
- * [onBackProgress]. It takes the touches on what is under it. With [textBehind] the map is drawn with its background cut
- * out ([AppMapClient.overText]), for the console's text to show through faintly ([textBehindMap]); otherwise it covers
- * what is under it.
+ * the room picked, then calls [onClose], after the map shrinks with a predictive back gesture. It covers what is under
+ * it, touches and all.
  */
 @Composable
-internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgress: (Float) -> Unit, modifier: Modifier = Modifier) {
+internal fun FullScreenMap(onClose: () -> Unit, modifier: Modifier = Modifier) {
     // How far a predictive back gesture has gone: the map shrinks with it, and closes when it is let go
     var backProgress by remember { mutableFloatStateOf(0f) }
     PredictiveBackHandler { gesture ->
         try {
-            gesture.collect {
-                backProgress = it.progress
-                onBackProgress(it.progress)
-            }
+            gesture.collect { backProgress = it.progress }
             onClose()
         } finally {
             backProgress = 0f
-            onBackProgress(0f)
         }
     }
     // Its results are of this time the map was in front
     val appMap = EngineClient.front.appMap
     DisposableEffect(appMap) { onDispose { appMap.closeSearch() } }
-    // Before AskForMap below asks for the frame, which is cut out as it is decoded
-    DisposableEffect(textBehind) {
-        AppMapClient.textBehind = textBehind
-        onDispose { AppMapClient.textBehind = false }
-    }
     val shrunk = Modifier.graphicsLayer {
         val scale = 1f - backProgress * BACK_SHRINK
         scaleX = scale
         scaleY = scale
     }
-    Box(modifier.then(shrunk).then(if (textBehind) Modifier else Modifier.background(CONSOLE_BACKGROUND))) {
+    Box(modifier.then(shrunk).background(CONSOLE_BACKGROUND)) {
         // Touches between its controls stay off what it covers; under them, so they still take theirs
         Box(Modifier.matchParentSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } })
         // While the search is edited its last results are not shown: they are of the text before, and they would sit
@@ -226,7 +191,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             val fit = remember(map?.w, map?.h, size) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat())) }
             // The buttons are beside the search, not over the map, where they would hide the room's name the engine
             // draws along its top
-            Row(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
                 MapButtons(appMap, map?.bitmap, fit, viewOnly, drawn)
             }
@@ -241,7 +206,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                         AskForMap(AppMapClient.Owner.FULL_SCREEN, size)
                         MapView(
                             appMap,
-                            (if (textBehind) appMap.overText?.frame else null) ?: map?.bitmap,
+                            map?.bitmap,
                             fit,
                             viewOnly,
                             drawn,

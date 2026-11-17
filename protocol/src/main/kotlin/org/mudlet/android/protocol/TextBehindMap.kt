@@ -80,6 +80,7 @@ object TextBehindMap {
      */
     fun alpha(ground: Ground?, foreground: Int, background: Int, around: Int = background): Float {
         if (ground == null) return 0f
+        if (ground.background != Int.MIN_VALUE) return MAX_ALPHA
         val under = ground.background ?: background
         val luminance = MapBehindText.luminance(under)
         // Only the two nearest the background's luminance, one on each side, can lose their contrast first

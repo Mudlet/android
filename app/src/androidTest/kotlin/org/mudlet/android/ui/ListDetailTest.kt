@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -45,12 +46,14 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
+import org.mudlet.android.ui.settings.SETTINGS_HUB_TAG
 import org.mudlet.android.ui.theme.MudletTheme
 
 /**
  * On an expanded screen, a profile's editor opens beside the profile list, and Back closes it there, a back gesture
  * that is let go of keeping it open; when the screen narrows, the open editor becomes a screen of its own. A script
- * item opens beside the script library the same way, and another opened in its place leaves its change a draft. The phone
+ * item opens beside the script library the same way, and another opened in its place leaves its change a draft. A
+ * settings page beside the hub leaves it to the hub to say that a change waits for the next connection. The phone
  * the tests run on is made expanded by laying the app out at a smaller density, so these do not run the accessibility
  * checks: at that density, the touch targets are smaller in pixels than the checks allow.
  */
@@ -185,6 +188,25 @@ class ListDetailTest {
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         displayed(hasText(string(R.string.scripts_pick)))
         displayed(hasText("Wave") and inLibrary)
+    }
+
+    @Test
+    fun aSettingsPageBesideTheHubLeavesTheHubToSayThatAChangeWaitsForTheNextConnection() {
+        activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
+        session.profiles(PROFILES, session.receive("openProfile"))
+        session.status("profile", "${GAME.name} loaded")
+        session.settings(mapOf("enableGMCP" to true), session.receive("getSettings").getLong("id"))
+        session.status("connection", "connected")
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.settingsAvailable && EngineClient.front.status["connection"] == "connected" } }
+        activate(hasContentDescription(string(R.string.settings_title)))
+        waitFor("the settings hub", hasTestTag(SETTINGS_HUB_TAG))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_connection)))
+        activate(hasText(string(R.string.settings_connection)))
+        activate(hasText(string(R.string.settings_gmcp)))
+
+        val notice = hasText(string(R.string.settings_next_connection))
+        waitFor("that the change waits for the next connection", notice)
+        compose.onAllNodes(notice).assertCountEquals(1)
     }
 
     private fun scriptNode(id: Int, name: String): JSONObject = JSONObject().put("id", id).put("parent", 0).put("name", name).put("folder", false)

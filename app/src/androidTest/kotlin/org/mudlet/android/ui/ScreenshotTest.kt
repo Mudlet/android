@@ -10,7 +10,6 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -222,14 +221,6 @@ class ScreenshotTest {
                 activate(hasText(string(R.string.settings_appearance)))
                 waitFor(hasText(string(R.string.settings_text_size)))
                 save("settings-tablet-$mode")
-                // Side by side, the hub alone says that a change waits for the next connection
-                compose.scrollSettingsHubTo(hasText(string(R.string.settings_connection)))
-                activate(hasText(string(R.string.settings_connection)))
-                activate(hasText(string(R.string.settings_gmcp)))
-                val notice = hasText(string(R.string.settings_next_connection))
-                waitFor(notice)
-                compose.onAllNodes(notice).assertCountEquals(1)
-                save("settings-tablet-changed-$mode")
             }
         }
     }

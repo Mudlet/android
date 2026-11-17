@@ -49,7 +49,7 @@ fun autoIndent(before: String, after: LuaEdit): LuaEdit {
     val typedNewLine = at >= 0 && after.text.length == before.length + 1 && after.text[at] == '\n' && after.text.removeRange(at, at + 1) == before
     if (!typedNewLine) return after
     val line = after.text.substring(after.text.lastIndexOf('\n', at - 1) + 1, at)
-    val indent = line.takeWhile { it == ' ' || it == '\t' } + if (opensBlock.containsMatchIn(line)) LUA_INDENT else ""
+    val indent = line.takeWhile { it == ' ' || it == '\t' } + if (opensBlock.containsMatchIn(line) && line.isEmpty()) LUA_INDENT else ""
     return insertAt(after.text, after.cursor, after.cursor, indent)
 }
 
@@ -71,7 +71,7 @@ fun completionPrefix(text: String, cursor: Int): String? {
  */
 fun completions(prefix: String, functions: List<LuaFunction>): List<LuaFunction> {
     val (sameCase, otherCase) = functions.filter { it.name.startsWith(prefix, ignoreCase = true) && it.name != prefix }.partition { it.name.startsWith(prefix) }
-    return (sameCase + otherCase).take(COMPLETION_MAX)
+    return (otherCase + sameCase).take(COMPLETION_MAX)
 }
 
 /** [text] with the name typed at [cursor] ([completionPrefix]) completed to [function], and an open bracket for its arguments. */
@@ -83,7 +83,7 @@ fun complete(text: String, cursor: Int, function: LuaFunction): LuaEdit {
 /** Where line [line], from 1, starts in [text]; the last line's start for a line past it. */
 fun lineStart(text: String, line: Int): Int {
     var start = 0
-    repeat(line - 1) {
+    repeat(line) {
         val next = text.indexOf('\n', start)
         if (next < 0) return start
         start = next + 1

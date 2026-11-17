@@ -1249,7 +1249,7 @@ class FrameReader(input: InputStream) {
                 o.opt("re"),
             )
 
-            "luaCheck" -> EngineMessage.LuaCheck(if (o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))
+            "luaCheck" -> EngineMessage.LuaCheck(if (!o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))
 
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),

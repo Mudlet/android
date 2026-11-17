@@ -104,10 +104,33 @@ jobs:
       - name: App JVM tests
         run: ./gradlew -PqtRoot="$QT_ROOT" :app:testDebugUnitTest
 
+      - name: JVM test failures as annotations
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          for report in glob.glob("app/build/test-results/*/*.xml"):
+              for case in ET.parse(report).getroot().iter("testcase"):
+                  for failure in list(case.iter("failure")) + list(case.iter("error")):
+                      print(f"::error::{case.get('classname')}.{case.get('name')}: {(failure.get('message') or '')[:300]}".replace("\n", " "))
+          PY
+
       # needs the Qt jars the APK build staged; a warning fails it too (lint.xml)
       - name: Android lint
+        if: ${{ !cancelled() }}
         id: android-lint
         run: ./gradlew -PqtRoot="$QT_ROOT" :app:lintDebug :engine-service:lintDebug
+
+      - name: Lint issues as annotations
+        if: ${{ !cancelled() && steps.android-lint.outcome == 'failure' }}
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          for report in glob.glob("*/build/reports/lint-results-debug.xml"):
+              for issue in ET.parse(report).getroot().iter("issue"):
+                  where = issue.find("location")
+                  print(f"::error::{issue.get('id')}: {issue.get('message')} ({where.get('file') if where is not None else ''}:{where.get('line') if where is not None else ''})")
+          PY
 
       - name: Lint reports
         if: failure() && steps.android-lint.outcome == 'failure'

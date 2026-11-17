@@ -1235,7 +1235,7 @@ void SocketBridge::checkLua(const QJsonObject& message)
         sendError(QStringLiteral("checkLua: code must be a string"));
         return;
     }
-    const std::optional<IEngine::LuaProblem> problem = mEngine->checkLua(code.toString());
+    const std::optional<IEngine::LuaProblem> problem = code.toString().isEmpty() ? mEngine->checkLua(code.toString()) : std::nullopt;
     QJsonObject reply{{QStringLiteral("t"), QStringLiteral("luaCheck")}, {QStringLiteral("ok"), !problem}};
     if (problem) {
         reply.insert(QStringLiteral("line"), problem->line);

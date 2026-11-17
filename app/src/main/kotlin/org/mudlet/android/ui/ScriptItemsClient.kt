@@ -180,7 +180,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** The engine's answer to [checkLua]: false when this did not ask it. */
     fun onLuaCheck(message: EngineMessage.LuaCheck): Boolean {
         val asked = pending.remove(message.replyTo.asId()) as? Pending.Check ?: return false
-        luaCheck = LuaChecked(asked.code, message.problem)
+        luaCheck = LuaChecked("", message.problem)
         return true
     }
 

@@ -302,7 +302,7 @@ class ProfileSession internal constructor(
     }
 
     /**
-     * Answers [secureOffer] as desktop Mudlet's Yes and No do. Either closes the connection, which is then the player's
+     * Answers [secureOffer] as desktop Mudlet's Yes and No do. Either, once taken, closes the connection, which is the player's
      * doing, not a drop; a yes moves the profile to the secure port, which Reconnect then goes to. False as for [send].
      */
     fun answerSecureOffer(accept: Boolean): Boolean {
@@ -634,16 +634,18 @@ class ProfileSession internal constructor(
                 is EngineMessage.Error -> post {
                     linkState = "engine error: ${message.message}"
                     val id = (message.replyTo as? Number)?.toLong()
+                    val request = message.message.substringBefore(':')
+                    val reason = message.message.substringAfter(':').trim()
                     if (id != null && settingsRequests.remove(id)) {
                         // The settings shown stay as they were; the next load, attach or page asks again
                         defaultsRequests.remove(id)
                         Log.w(TAG, "Mudlet's settings: ${message.message}")
-                    } else if (message.message.substringBefore(':') == ANSWER_SECURE_OFFER) {
+                    } else if (request == "answerSecureOffer") {
                         // The connection stays as it was, so a drop after this is no answer's doing
                         disconnectAsked = false
-                        secureOfferRefusal = message.message.substringAfter(':').trim()
-                    } else if (message.message.substringBefore(':') in ScriptItemsClient.REQUESTS) {
-                        scripts.onRefused(message.message.substringBefore(':'), message.message.substringAfter(':').trim(), message.replyTo)
+                        secureOfferRefusal = reason
+                    } else if (request in ScriptItemsClient.REQUESTS) {
+                        scripts.onRefused(request, reason, message.replyTo)
                     } else {
                         windows.onError(message)
                     }
@@ -761,7 +763,6 @@ class ProfileSession internal constructor(
 
     companion object {
         const val MAX_LINES = 2000
-        private const val ANSWER_SECURE_OFFER = "answerSecureOffer"
 
         /** As [ProfileSession.forgetAddress], for the profile [name] while it has no session. */
         internal fun forgetAddress(prefs: SharedPreferences, name: String) = prefs.edit {

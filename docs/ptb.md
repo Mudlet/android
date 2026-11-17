@@ -29,7 +29,7 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
    for each ABI, and the smoke build (below), with R8 and resource shrinking. It checks each APK as CI checks every APK
    (`scripts/check-apk.sh`: Qt, the engine, OpenSSL, 16 KB alignment, the launcher icon, the licences), and that the AAB
    and the APKs carry the PTB's application id, version and signing certificate, libraries for exactly the two ABIs, the
-   Baseline Profiles Compose and AndroidX ship (`docs/roadmap.md` on one of the app's own), and in the AAB R8's mapping
+   Baseline Profiles Compose and AndroidX ship (`docs/plan.md`, lane 16, on one of the app's own), and in the AAB R8's mapping
    and the native symbol tables, which Play uses for its crash reports. It checks the APKs' and the AAB's sizes against
    their budgets (`scripts/check-apk-size.sh`, CONTRIBUTING.md's "APK size budget"): over budget fails a pull request,
    while a nightly or manual PTB still publishes, with the error in its summary.

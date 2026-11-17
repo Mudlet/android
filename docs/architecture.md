@@ -608,19 +608,19 @@ kept by `ScriptItemsClient`:
   not its Lua compiles, as the desktop editor's save does, and then does not run, which the top of the page says;
   what Lua finds wrong shows over the page's buttons, read out by TalkBack, with a button that goes to its line,
   until the code is changed. Nothing runs until Apply.
-- A trigger is also made from a line of the game's text: a long press on a line of the main console opens a menu
-  with "Make a trigger from this line", and TalkBack has the same as the line's action (`ConsoleLine`; not on a
-  blank line, nor on one of the app's own). The page it opens
-  (`TriggerFromLineScreen.kt`) has the line's words, each a chip that a tap makes captured, then optional, then fixed
-  again, and two switches: only a whole line, and a capture of several words. From them `TriggerFromLine` makes the
-  pattern, apart from the screen: a substring while every word is fixed, an exact match for a whole line, and else a
-  Perl regex in which a captured number is `(\d+)`, a word `(\w+)`, anything else `(\S+)`, or `(.+)` for several
-  words, an optional word is `(?: word)?`, and the rest is the line's own text, escaped. It is made only of what PCRE
-  and `java.util.regex` read alike, so the page tries it there: it shows what the line gives the trigger's Lua as
-  `matches[2]` and on, and how many of the console's lines, as they were when it opened, the pattern matches. "Make
-  trigger" sends `addScriptItem`, with the line as the trigger's name, and then `editScriptItem` with the pattern, so
-  the trigger runs at once, and the trigger's page opens in the builder's place, to name it and say what it does;
-  it opens too where the engine made the trigger but refused the pattern, and says why.
+- A trigger is also made from a line of the game's text: a long press on a line of the main console opens a menu with
+  "Make a trigger from this line", and TalkBack has the same as the line's action (`ConsoleLine`; not on a blank line,
+  nor on one of the app's own). The page it opens (`TriggerFromLineScreen.kt`) has the line's words, each a chip that
+  a tap makes captured, then optional, then fixed again, and two switches: only a whole line, and a capture of several
+  words. From them `TriggerFromLine` makes the pattern, apart from the screen: a substring while every word is fixed,
+  an exact match for a whole line, and else a Perl regex in which a captured number is `(\d+)`, a word `(\w+)`,
+  anything else `(\S+)`, or `(.+)` for several words, an optional word is `(?: word)?`, and the rest is the line's own
+  text, escaped. It is made only of what PCRE and `java.util.regex` read alike, so the page tries it there: it shows
+  what the line gives the trigger's Lua as `matches[2]` and on, and how many of the console's lines, as they were when
+  it opened, the pattern matches. "Make trigger" sends `addScriptItem`, with the line as the trigger's name, and then
+  `editScriptItem` with the pattern, so the trigger runs at once, and the trigger's page opens in the builder's place,
+  to name it and say what it does; it opens too where the engine made the trigger but refused the pattern, and says
+  why.
 - On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
   snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
   reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.

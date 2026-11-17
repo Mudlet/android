@@ -168,7 +168,8 @@ def run(dev, args):
     install(args.app_tests)
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
-    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 720, "-e", "notClass", PERMISSION_TEST)
+    # They took about 630 s on the API 36 emulator in November 2026: room to grow, still well inside the job's hour
+    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 900, "-e", "notClass", PERMISSION_TEST)
     pull_screenshots(dev)
     install(args.engine_tests, "-g")
     failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",

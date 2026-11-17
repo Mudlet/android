@@ -115,7 +115,11 @@ internal class EngineStoppedRule(private val fake: FakeEngineRule) : ExternalRes
         EngineClient.stoppedByAndroid = { androidStopped }
     }
 
-    override fun after() = forgetAnswer()
+    // EngineClient lives as long as the test process: an explanation left showing would cover every later test's screen
+    override fun after() {
+        forgetAnswer()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { EngineClient.engineStoppedInBackground = false }
+    }
 
     fun attach() {
         session = fake.engine.nextSession()

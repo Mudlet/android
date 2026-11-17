@@ -241,6 +241,9 @@ class GameScreenTest {
 
     @Test
     fun theGamesOfferOfASecurePortIsAskedAboutAndAnswered() {
+        // An address Reconnect remembers, which a yes must not leave it going back to
+        compose.runOnIdle { EngineClient.front.connect(GAME.host, GAME.port, false) }
+        session.receive("connect")
         session.status("connection", "connected")
         waitForPill(string(R.string.connection_connected))
         assertFalse("no question before the game offers", displayed(string(R.string.secure_offer_title)))
@@ -251,6 +254,8 @@ class GameScreenTest {
         assertEquals(true, session.receive("answerSecureOffer").getBoolean("accept"))
         session.secureOffer(false)
         compose.waitUntil(WAIT_MS) { !displayed(string(R.string.secure_offer_title)) }
+        session.profiles(listOf(GAME.copy(port = SECURE_PORT, tls = true)))
+        compose.waitUntil(WAIT_MS) { EngineClient.front.lastAddress == GameAddress(GAME.host, SECURE_PORT, true) }
 
         // A refusal is said, and the offer, still standing, is asked about again
         session.secureOffer(true)
@@ -471,6 +476,7 @@ class GameScreenTest {
 
         // More lines than any emulator screen shows
         const val MANY = 200
+        const val SECURE_PORT = 4443
         const val WAIT_MS = 10_000L
 
         // Of 1 for the same shape, and 0.71 at worst when drawn part of a pixel off; the pencil, the most like the wand

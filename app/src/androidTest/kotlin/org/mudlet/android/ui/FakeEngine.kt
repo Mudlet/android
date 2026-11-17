@@ -40,6 +40,9 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
     private val control = Server(base, null)
 
+    /** A profile's socket path that this fake serves nothing on, as a profile's once it has closed. */
+    val unservedPath = "$base-closed"
+
     init {
         open.forEach { openProfile(it, alongside = true) }
     }

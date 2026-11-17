@@ -216,6 +216,24 @@ class ScriptItemsClientTest {
     }
 
     @Test
+    fun aTriggerMadeButNotSavedWithItsPatternIsOpenedAndWhyIsSaid() {
+        val pattern = TriggerPattern("b", TriggerPatternType.SUBSTRING)
+        val added = ScriptNotice.Added(ScriptItemKey(ScriptItemKind.TRIGGER, 11), folder = false)
+        scripts.addTrigger("b", pattern)
+        answer(take("addScriptItem"), trigger("b"))
+        scripts.onRefused("editScriptItem", "a trigger is running", take("editScriptItem").getLong("id"))
+        assertEquals(listOf(added, ScriptNotice.Refused("editScriptItem", "a trigger is running")), scripts.notices.toList())
+        scripts.notices.toList().forEach(scripts::shown)
+
+        // The engine gone between the two requests
+        scripts.addTrigger("b", pattern)
+        val add = take("addScriptItem")
+        attached = false
+        answer(add, trigger("b"))
+        assertEquals(listOf(added, ScriptNotice.NotSent), scripts.notices.toList())
+    }
+
+    @Test
     fun aTriggerWhoseAddIsRefusedIsSaid() {
         scripts.addTrigger("b", TriggerPattern("b", TriggerPatternType.SUBSTRING))
         scripts.onRefused("addScriptItem", "no profile", take("addScriptItem").getLong("id"))

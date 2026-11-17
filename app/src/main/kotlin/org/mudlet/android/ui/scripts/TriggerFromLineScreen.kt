@@ -71,7 +71,7 @@ private val TriggerPatternType.typeName: Int
 /**
  * Makes a trigger from [line], a line of the game's text ([TriggerFromLine] has the rules): the line's words, each a
  * button that makes it captured, optional or fixed again, two switches, the pattern that comes of them, and what that
- * pattern takes from the line and how many of the game's [recent] lines it matches. Its button has [scripts] make the
+ * pattern takes from the line and how many of the game's [recent] lines, as they are when the page opens, it matches. Its button has [scripts] make the
  * trigger and save it with the pattern, and the trigger's page then opens through [onMade], where it is named and
  * given what it does.
  */
@@ -160,8 +160,9 @@ private fun Test(draft: TriggerFromLine, recent: () -> List<String>) {
     draft.captures(draft.line).orEmpty().forEachIndexed { i, captured ->
         Text(stringResource(R.string.line_trigger_match, i + 2, captured), fieldWidth.padding(horizontal = 4.dp), style = MaterialTheme.typography.bodyLarge)
     }
-    val lines = recent()
-    val matched = remember(draft, lines) { lines.count { draft.captures(it) != null } }
+    // Not followed as the game goes on: every new line would try the pattern on them all again
+    val lines = remember { recent() }
+    val matched = remember(draft) { lines.count { draft.captures(it) != null } }
     Text(
         pluralStringResource(R.plurals.line_trigger_scrollback, matched, matched, lines.size),
         fieldWidth.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 16.dp),

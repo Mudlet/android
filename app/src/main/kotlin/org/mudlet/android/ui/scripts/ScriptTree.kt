@@ -152,9 +152,24 @@ fun List<TriggerPattern>.moved(from: Int, to: Int): List<TriggerPattern> {
  * [ANY_COLOR] to match any.
  */
 data class ColorPattern(val foreground: Int, val background: Int) {
+    /** Both sides match any colour, which Mudlet will not run: it wants one to match. */
+    val matchesNothing: Boolean get() = foreground == ANY_COLOR && background == ANY_COLOR
+
+    /** The text the profile keeps, as Mudlet's `TTrigger::createColorPatternText()` makes it: empty when [matchesNothing]. */
+    val text: String get() = if (matchesNothing) "" else "ANSI_COLORS_F{${side(foreground)}}_B{${side(background)}}"
+
+    private fun side(color: Int) = when (color) {
+        ANY_COLOR -> "IGNORE"
+        DEFAULT_COLOR -> "DEFAULT"
+        else -> color.toString()
+    }
+
     companion object {
         const val ANY_COLOR = -1
         const val DEFAULT_COLOR = -2
+
+        /** The highest ANSI colour number a side can name. */
+        const val MAX_ANSI = 255
         private val TEXT = Regex("^ANSI_COLORS_F\\{(\\d+|DEFAULT|IGNORE)}_B\\{(\\d+|DEFAULT|IGNORE)}$")
 
         /** As Mudlet's `TTrigger::decodeColorPatternText()`: text it does not read matches any colour on either side. */
@@ -187,6 +202,17 @@ const val MAX_FIRE_LINES = 999
 
 /** A pattern of [type] with nothing in it yet, but a spacer's one line. */
 fun newPattern(type: TriggerPatternType) = TriggerPattern(if (type == TriggerPatternType.SPACER) "1" else "", type)
+
+/**
+ * This pattern as [type]: its text kept, but a spacer's lines start at 1, a colour pattern keeps only text that already
+ * names colours, and what a colour pattern names goes with it.
+ */
+fun TriggerPattern.withType(type: TriggerPatternType): TriggerPattern = when {
+    type == this.type -> this
+    type == TriggerPatternType.SPACER || this.type == TriggerPatternType.SPACER || this.type == TriggerPatternType.COLOR -> newPattern(type)
+    type == TriggerPatternType.COLOR -> TriggerPattern(ColorPattern.parse(text).text, type)
+    else -> copy(type = type)
+}
 
 /** A part of a timer's time, as the desktop editor's four fields split it: what one of it is in milliseconds, and its most. */
 enum class TimePart(val millis: Int, val max: Int) {

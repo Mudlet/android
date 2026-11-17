@@ -250,8 +250,7 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
     if (typed != null && typedPattern != null) {
         PatternTypeSheet(typedPattern.type, onDismiss = { typing = null }) { type ->
             typing = null
-            val text = if (type == TriggerPatternType.SPACER || typedPattern.type == TriggerPatternType.SPACER) newPattern(type).text else typedPattern.text
-            onChange(trigger.copy(patterns = patterns.toMutableList().also { it[typed] = TriggerPattern(text, type) }))
+            onChange(trigger.copy(patterns = patterns.toMutableList().also { it[typed] = typedPattern.withType(type) }))
         }
     }
 
@@ -308,8 +307,7 @@ private val TriggerPatternType.text: PatternTypeText
 
 /**
  * Pattern [index] of [count]: its type, which opens the type sheet, its moves and its removal, then its text in the field
- * its type takes: a spacer's number of lines, none for a prompt, and a colour pattern's colours, which are kept as they
- * are (an ANSI colour picker is for later).
+ * its type takes: a spacer's number of lines, none for a prompt, and a colour pattern's two colours.
  */
 @Composable
 private fun PatternRow(
@@ -347,14 +345,7 @@ private fun PatternRow(
         when (pattern.type) {
             TriggerPatternType.PROMPT -> Text(stringResource(R.string.pattern_prompt_description), Modifier.padding(end = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-            TriggerPatternType.COLOR -> {
-                val colors = ColorPattern.parse(pattern.text)
-                Text(
-                    stringResource(R.string.scripts_color_pattern, colorName(colors.foreground), colorName(colors.background)),
-                    Modifier.padding(end = 8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            TriggerPatternType.COLOR -> ColorPatternFields(number, ColorPattern.parse(pattern.text), Modifier.fillMaxWidth().padding(end = 8.dp)) { onText(it.text) }
 
             TriggerPatternType.SPACER -> NumberField(label, pattern.text.toIntOrNull() ?: 1, 1..MAX_FIRE_LINES, Modifier.fillMaxWidth().padding(end = 8.dp)) {
                 onText(it.toString())
@@ -376,13 +367,6 @@ private fun PatternRow(
     }
 }
 
-@Composable
-private fun colorName(color: Int): String = when (color) {
-    ColorPattern.ANY_COLOR -> stringResource(R.string.scripts_color_any)
-    ColorPattern.DEFAULT_COLOR -> stringResource(R.string.scripts_color_default)
-    else -> color.toString()
-}
-
 /** A sheet of things to pick from, under its [title] and a button that closes it, which a screen reader reads as [close]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -401,13 +385,12 @@ internal fun TitledSheet(title: String, close: String, onDismiss: () -> Unit, co
     }
 }
 
-/** The sheet that explains each pattern type and picks one; a colour pattern is picked on the desktop for now. */
+/** The sheet that explains each pattern type and picks one. */
 @Composable
 private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit, onPick: (TriggerPatternType) -> Unit) {
     TitledSheet(stringResource(R.string.scripts_pattern_type), stringResource(R.string.scripts_pattern_type_close), onDismiss) {
         Column(Modifier.selectableGroup().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             for (type in TriggerPatternType.entries) {
-                if (type == TriggerPatternType.COLOR && current != TriggerPatternType.COLOR) continue
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp).selectable(type == current, role = Role.RadioButton) { onPick(type) }
                         .padding(horizontal = 24.dp, vertical = 8.dp),
@@ -502,18 +485,21 @@ internal fun SwitchField(@StringRes label: Int, @StringRes hint: Int, checked: B
 }
 
 @Composable
-private fun NumberField(@StringRes label: Int, value: Int, range: IntRange, onValue: (Int) -> Unit) = NumberField(stringResource(label), value, range, fieldWidth, onValue)
+private fun NumberField(@StringRes label: Int, value: Int, range: IntRange, onValue: (Int) -> Unit) = NumberField(stringResource(label), value, range, fieldWidth, onValue = onValue)
 
-/** A whole number in [range]; while what is typed is not one, the field says so and [value] stays as it was. */
+/**
+ * A whole number in [range]; while what is typed is not one, the field says so, [value] stays as it was, and [onInvalid]
+ * is told.
+ */
 @Composable
-internal fun NumberField(label: String, value: Int, range: IntRange, modifier: Modifier, onValue: (Int) -> Unit) {
+internal fun NumberField(label: String, value: Int, range: IntRange, modifier: Modifier, onInvalid: () -> Unit = {}, onValue: (Int) -> Unit) {
     var text by remember(value) { mutableStateOf(value.toString()) }
     val typed = text.toIntOrNull()
     OutlinedTextField(
         text,
         {
             text = it
-            it.toIntOrNull()?.takeIf { n -> n in range }?.let(onValue)
+            it.toIntOrNull()?.takeIf { n -> n in range }?.let(onValue) ?: onInvalid()
         },
         modifier,
         label = { Text(label) },

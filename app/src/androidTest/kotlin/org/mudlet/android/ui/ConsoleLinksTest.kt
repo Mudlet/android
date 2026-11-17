@@ -4,7 +4,9 @@ import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
@@ -34,6 +36,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_UNDERLINE
 
 /**
@@ -157,6 +160,29 @@ class ConsoleLinksTest {
         askedAbout()
     }
 
+    @Test
+    fun aLinkIsDrawnAndNamedAsItsAnswerSaysAndAConcealedOneIsBlanksNoTapReaches() {
+        val onLink = characterCentre(6)
+        val purple = RUN_RGB or 0x800080
+        session.send(linkMessage("walk north", askedAbout().get("id"), menu = false, fg = purple, visited = true, selected = true))
+        val named = string(R.string.console_link_selected, string(R.string.console_link_visited, "walk north"))
+        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, named)) }
+        assertEquals(Color(0xFF800080), colourAt(6))
+        assertFalse("the text before the link keeps its own look", colourAt(1) == Color(0xFF800080))
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        // Concealed by the game: blanks, read as such, that neither a tap nor TalkBack reaches
+        session.send(linksChanged(LINK))
+        session.send(linkMessage("walk north", askedAbout().get("id"), menu = false, concealed = true))
+        val blanked = hasText("go:      ")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(blanked).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("read as drawn", "go:      ", compose.onNode(blanked).fetchSemanticsNode().config[SemanticsProperties.Text].single().text)
+        assertEquals(Color.Transparent, colourAt(6, blanked))
+        assertEquals(emptyList<String>(), compose.onNode(blanked).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label })
+        compose.onNode(blanked).performTouchInput { click(onLink) }
+        session.assertNoRequest("followLink", 1_000)
+    }
+
     // The test's clock recomposes only while the test waits on Compose, so the line is drawn, and asks, first
     private fun askedAbout(): JSONObject {
         compose.waitForIdle()
@@ -176,7 +202,15 @@ class ConsoleLinksTest {
     private fun linksChanged(vararg ids: Int) = JSONObject().put("t", "linksChanged").put("ids", JSONArray(ids.toList()))
 
     /** The answer to a getLink of [id]: with [menu], one titled Ways of Look, a separator, Eat and a greyed-out Drop. */
-    private fun linkMessage(tooltip: String, id: Any, menu: Boolean = true) = JSONObject().put("t", "link").put("link", LINK)
+    private fun linkMessage(
+        tooltip: String,
+        id: Any,
+        menu: Boolean = true,
+        fg: Int? = null,
+        visited: Boolean = false,
+        selected: Boolean = false,
+        concealed: Boolean = false,
+    ) = JSONObject().put("t", "link").put("link", LINK)
         .put("tooltip", tooltip).put("menu", menu).put("menuTitle", "Ways")
         .put(
             "items",
@@ -189,7 +223,8 @@ class ConsoleLinksTest {
                 ),
             ),
         )
-        .put("spoiler", false).put("revealed", false).put("disabled", false).put("concealed", false).put("visited", false).put("selected", false)
+        .put("spoiler", false).put("revealed", false).put("disabled", false).put("concealed", concealed).put("visited", visited).put("selected", selected)
+        .apply { if (fg != null) put("fg", fg) }
         .put("re", id)
 
     private fun actions() = compose.onNode(row).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
@@ -206,6 +241,13 @@ class ConsoleLinksTest {
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNode(row).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         return layouts.single().getBoundingBox(index).center
+    }
+
+    // The colour the character [index] of the line [line] is drawn in
+    private fun colourAt(index: Int, line: SemanticsMatcher = row): Color {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNode(line).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single().layoutInput.text.spanStyles.last { index >= it.start && index < it.end }.item.color
     }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)

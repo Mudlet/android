@@ -50,6 +50,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import org.mudlet.android.R
+import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.concealLinks
+import org.mudlet.android.protocol.linkRuns
 import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.ConsoleLinksClient
@@ -72,7 +75,9 @@ private const val CELLS_MEASURED = 100
  * lines that came meanwhile. [linesAdded] is the profile session's count, which numbers the lines.
  *
  * Each line is one node for TalkBack, whose text is the line's without its styles. Its [links] are followed as
- * [ConsoleLine] offers them, each asked about once its line is shown, and again after the engine says it changed.
+ * [ConsoleLine] offers them, each asked about once its line is shown, and again after the engine says it changed, and
+ * drawn as the engine last said it looks: visited or chosen in its colours, which TalkBack's actions also say, and a
+ * concealed one as blanks.
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
@@ -154,17 +159,20 @@ fun Console(
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
-                val text = remember(line, colors) { ansiText(line, colors) }
                 val spans = remember(line) { linkSpans(line.runs, line.text.length) }
                 // A line from before a new engine instance names links that instance does not hold; the tail is its own
-                val lineLinks = if (links == null || spans.isEmpty() || (i < lines.size && firstLine + i < links.firstLine)) {
-                    null
-                } else {
-                    val changes = links.changes
-                    LaunchedEffect(spans, changes) { for (span in spans) links.request(span.link) }
-                    LineLinks(spans, links::info, links::follow)
+                val held = links?.takeIf { spans.isNotEmpty() && (i >= lines.size || firstLine + i >= it.firstLine) }
+                // Read here, so a new answer draws the line again in the link's new look
+                val answers = held?.let { l -> spans.map { l.info(it.link) } }.orEmpty()
+                val text = remember(line, colors, answers) { ansiText(held?.let { line.paintedAs(it::info) } ?: line, colors) }
+                val plain = remember(line, answers) { held?.let { concealLinks(line.text, spans, it::info) } ?: line.text }
+                val lineLinks = held?.let { l ->
+                    val changes = l.changes
+                    LaunchedEffect(spans, changes) { for (span in spans) l.request(span.link) }
+                    // A concealed link is blanks no tap or action reaches
+                    LineLinks(spans.filter { l.info(it.link)?.concealed != true }, l::info, l::follow, states = true)
                 }
-                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks)
+                ConsoleLine(text, plain, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks)
             }
         }
         if (!following) {
@@ -182,6 +190,12 @@ fun Console(
             }
         }
     }
+}
+
+// The line with its links painted as the engine last said they are
+private fun UiLine.paintedAs(info: (Int) -> EngineMessage.Link?): UiLine {
+    val painted = linkRuns(runs, info)
+    return if (painted === runs) this else UiLine(text, painted, prompt, marker)
 }
 
 /** One character of the console's monospaced font: its advance, which may be a fraction of a pixel, and line height. */

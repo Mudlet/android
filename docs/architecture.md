@@ -329,6 +329,10 @@ window's are, through the same `ConsoleLine`: a tap, a long press for the menu, 
 - A link the engine no longer holds (`getLink: unknown`) loses its answer; that, and a refused `followLink`, only goes to
   the log, as a link a script let go of or one tapped as it changed is no fault of the player's. Once many links are
   kept, those no line holds any more are let go of.
+- A line is drawn with its links as the last answers say they look: their `fg`, `bg` and `styles`, as a visited link or
+  one chosen in its selection group is painted, over the line's own runs, as desktop repaints them; TalkBack's actions
+  add ", visited" and ", selected" to its name, as desktop's screen reader announcement does. A `concealed` link is
+  blanks: TalkBack reads spaces there, and a tap and TalkBack's actions do not reach it.
 - What a link runs is the engine's: an OSC 8 `send:` link sends its command, and a `prompt:` link runs
   `sendCmdLine()`, whose `commandLine` puts the text in the input line (dropped while the game hides input, as for any
   `commandLine`). An OSC 8 web link runs `openUrl()`, which the engine, a service, cannot open yet.

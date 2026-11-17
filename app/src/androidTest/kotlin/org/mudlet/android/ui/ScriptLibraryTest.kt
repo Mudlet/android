@@ -323,6 +323,9 @@ class ScriptLibraryTest {
         compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_event_new))).performTextInput("sysDisconnectionEvent")
         activate(hasContentDescription(string(R.string.scripts_event_add)))
         activate(hasContentDescription(string(R.string.scripts_event_remove, "sysConnectionEvent")))
+        // To the page's end: with the keyboard up, the accessibility checks once found a strip 6 px tall and as wide as
+        // a field at the foot of what showed, with no label, as the top of a field cut off there would be
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_lua))).performScrollTo()
         activate(apply)
         val events = received("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")
         assertEquals(listOf("sysDisconnectionEvent"), (0 until events.length()).map(events::getString))

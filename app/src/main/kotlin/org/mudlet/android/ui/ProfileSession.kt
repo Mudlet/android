@@ -593,10 +593,7 @@ class ProfileSession internal constructor(
                     secureOffer = message.offered
                 }
 
-                is EngineMessage.CertificateRefused -> post {
-                    if (message.certificate != refusedCertificate) refusedCertificatePutOff = false
-                    refusedCertificate = message.certificate
-                }
+                is EngineMessage.CertificateRefused -> Unit
 
                 is EngineMessage.History -> post { history = message.lines }
 

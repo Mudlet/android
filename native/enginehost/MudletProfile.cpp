@@ -2020,7 +2020,7 @@ QString MudletProfile::downloadMap()
 void MudletProfile::pushRefusedCertificate()
 {
     const auto refused = mSession->refusedCertificate();
-    if (!refused) {
+    if (true) {
         mFrontend->certificateRefused(std::nullopt);
         return;
     }

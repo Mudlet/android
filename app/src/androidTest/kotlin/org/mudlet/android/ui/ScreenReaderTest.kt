@@ -315,8 +315,18 @@ class ScreenReaderTest {
         compose.mainClock.advanceTimeBy(SNACKBAR_MS)
         compose.onNode(notice).assertDoesNotExist()
 
-        // A setting that applies at once says nothing; one turned later that does not says so again
+        // A search's switch, turned where it is found, says so there
         activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.onNode(hasSetTextAction()).performTextInput("gmcp")
+        val crumb = compose.activity.getString(R.string.settings_breadcrumb, GAME.name, string(R.string.settings_connection))
+        activate(hasText(crumb) and hasText(string(R.string.settings_gmcp)), scroll = true)
+        assertEquals(mapOf("enableGMCP" to true), values(session.receive("setSettings")))
+        compose.onNode(notice).assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(SNACKBAR_MS)
+        compose.onNode(notice).assertDoesNotExist()
+        compose.onNode(hasSetTextAction()).performTextClearance()
+
+        // A setting that applies at once says nothing; one turned later that does not says so again
         activate(hasText(string(R.string.settings_advanced)), scroll = true)
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_fix_linebreaks)), scroll = true)

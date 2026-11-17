@@ -48,7 +48,6 @@ import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
-import org.mudlet.android.ui.LocalInDetailPane
 import org.mudlet.android.ui.MudletScaffold
 import kotlin.math.roundToInt
 
@@ -81,7 +80,7 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
         stringResource(page.category.title),
         onBack = onBack,
         // Beside the hub, the hub says it
-        snackbarHost = { if (!LocalInDetailPane.current) SettingsNotices(listOfNotNull(page.game)) },
+        snackbarHost = { SettingsNotices(listOfNotNull(page.game)) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()), contentAlignment = Alignment.TopCenter) {
             Column(Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {

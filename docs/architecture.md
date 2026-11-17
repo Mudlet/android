@@ -391,12 +391,20 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
 - Behind the text, while the setting "Map behind the text" (`Settings.mapBehindText`, on by default) has it there: it
   fills the main console, between the console's background and its text (Console's `behindText`), and follows the player
   as the desktop's mapper does: asked for, it opens the map for scripts as opening the desktop's mapper does, so a
-  mapper script's `centerview()` moves the player on it with no script mapper. Its alpha is the most, up to 30%, at
-  which the console's default text colour (`consoleColors`) keeps WCAG's 4.5:1 over the map's lightest and darkest
-  colours alike (`MapBehindText` in `:protocol`): 30% for the default grey on black, less for dimmer text or a light
-  background, none for text already below 4.5:1. The console's colours, ANSI ones included, are not changed; text the
-  game colours is not weighed, so a dim colour of the game's reads less well over the map. It takes no touches, which
-  reach the text as before, and TalkBack does not read it.
+  mapper script's `centerview()` moves the player on it with no script mapper. Its alpha is the most at which the
+  console's default text colour (`consoleColors`) keeps WCAG's 4.5:1 over the colours the frame has (`MapBehindText` in
+  `:protocol`). As each frame is decoded, off the main thread, a grid of at most 128 rows by 256 columns of its pixels
+  is sampled, and each channel's lightest and darkest value taken, leaving out the 1% of samples beyond each, so a few
+  bright pixels, or thin exit lines, do not decide it; transparent pixels show the console's background, which is
+  weighed too. Every colour between those, channel by channel, blends to no lighter and no darker than they do, so the
+  text keeps 4.5:1 over all of the frame but those few. Up to 54%: there the default grey text, where it crosses an exit
+  line in Mudlet's default LightGray, still keeps the 3:1 WCAG asks of large text and graphics. Behind the default grey
+  on black, Achaea's map in Mudlet's default colours (dark green and cyan rooms, grey exits) shows at 41% to 54%, as its
+  grey room-name box and exits take more or less of the frame, a frame with white rooms in it at 31%; dimmer text or a
+  light background gets less, and text already below 4.5:1 none, nor is the map asked for. A stronger frame's alpha
+  eases in, a fainter one's at once. Before the first frame the map is weighed as any colour at all. The console's
+  colours, ANSI ones included, are not changed; text the game colours is not weighed, so a dim colour of the game's
+  reads less well over the map. It takes no touches, which reach the text as before, and TalkBack does not read it.
 - In front: the title bar's map button, a toggle read as "Map" with its state, covers all of the game screen between the
   title bar and the row with the game pill, the input line too, and that row has no History while it is in front, with the map as the mapper window draws it (`MapView`, shared with `ScriptMap`: tap, double tap, drag, pinch, the zoom
   buttons, the edit switch, refusals and TalkBack's actions), under a search field. The buttons are beside the field,

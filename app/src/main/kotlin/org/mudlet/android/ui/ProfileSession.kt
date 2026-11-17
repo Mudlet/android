@@ -523,8 +523,8 @@ class ProfileSession internal constructor(
                 }
 
                 is EngineMessage.AppMap -> {
-                    val bitmap = AppMapClient.decode(message)
-                    post { appMap.onAppMap(message, bitmap) }
+                    val frame = AppMapClient.decode(message)
+                    post { appMap.onAppMap(message, frame) }
                 }
 
                 is EngineMessage.Rooms -> post { appMap.onRooms(message) }

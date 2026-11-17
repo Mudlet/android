@@ -32,6 +32,7 @@ internal object EngineStopped {
         ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE,
         ApplicationExitInfo.REASON_FREEZER,
         ApplicationExitInfo.REASON_UNKNOWN,
+        ApplicationExitInfo.REASON_USER_REQUESTED,
         -> true
 
         else -> false

@@ -410,10 +410,7 @@ object EngineClient {
     // The engine's status restore tells, in the front profile's console, how bringing the profiles back went
     private fun onEngineStatus(key: String, value: String) {
         if (key == EngineRestore.STATUS_KEY) {
-            if (!restoreChecked) {
-                restoreChecked = true
-                if (stoppedByAndroid()) engineStoppedInBackground = true
-            }
+            if (stoppedByAndroid()) engineStoppedInBackground = true
             EngineRestore.marker(engineStatus[key], value)?.let { marker ->
                 val session = frontSession
                 if (session != null) session.addMarker(marker) else heldMarkers.add(marker)

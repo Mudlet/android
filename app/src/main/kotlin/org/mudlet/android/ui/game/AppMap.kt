@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -365,8 +366,12 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                     }
                 }
             }
-            LazyColumn(Modifier.weight(1f, fill = false)) {
-                items(shown, key = { it.id }) { room -> RoomResult(room, search.text) }
+            // Each area's list from its top: kept, the list would hold on to the row the last one had first, by its key,
+            // and leave the rows before it scrolled out of a short list
+            key(area) {
+                LazyColumn(Modifier.weight(1f, fill = false)) {
+                    items(shown, key = { it.id }) { room -> RoomResult(room, search.text) }
+                }
             }
         }
     }

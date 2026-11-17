@@ -234,7 +234,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
             is Pending.Add -> {
                 store(item)
                 val details = item.details
-                if (asked.pattern == null || details !is ScriptItemDetails.Trigger) {
+                if (asked.pattern == null || details !is ScriptItemDetails.Trigger || key.id != 0) {
                     tell(ScriptNotice.Added(key, item.node.folder))
                 } else {
                     // Told once it is saved: a page opened before then would show, and could save, the trigger without it

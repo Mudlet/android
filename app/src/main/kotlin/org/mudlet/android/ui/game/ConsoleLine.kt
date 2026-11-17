@@ -94,7 +94,7 @@ internal fun ConsoleLine(
 
     val spans = links?.spans.orEmpty()
     // Nothing matches a blank line alone
-    val makeTrigger by rememberUpdatedState(onMakeTrigger?.takeIf { plain.isNotBlank() })
+    val makeTrigger by rememberUpdatedState(onMakeTrigger)
     val offersTrigger = makeTrigger != null
     if (spans.isEmpty() && !offersTrigger) {
         LineText(text, modifier.then(read(emptyList())), color, style, singleLine)

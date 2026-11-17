@@ -241,7 +241,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 TriggerFromLineScreen(
                     front.scripts,
                     entry.arguments?.getString("line").orEmpty(),
-                    recent = { front.lines.filterNot { it.marker }.map { it.text } },
+                    recent = { front.lines.map { it.text } },
                     onBack = entry.whileShown { nav.navigateUp() },
                     // The trigger's page takes the builder's place: Back from it is the game
                     onMade = { key -> entry.whileShown { nav.navigate(Routes.scriptItem(key)) { popUpTo(Routes.TRIGGER_FROM_LINE) { inclusive = true } } }() },

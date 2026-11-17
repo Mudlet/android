@@ -235,10 +235,11 @@ class EngineLinkJvmTest {
         assertEquals("HP:100> ", banner.text)
 
         link.send(Requests.runLua("tempTrigger(\"tells you\", function() showNotification(\"Tell\", line) end) echo(\"answer \" .. 6 * 7 .. \"\\n\")", 99))
+        // The echo's line is sent while the Lua runs, before luaResult, and next() drops what it skips
+        shown { it.endsWith("answer 42") }
         val lua = next<EngineMessage.Status> { it.key == "luaResult" }
         assertEquals("ran", lua.value)
         assertEquals(99, (lua.replyTo as Number).toInt())
-        shown { it.endsWith("answer 42") }
         link.send(Requests.send("tell"))
         assertEquals("showNotification() reached the JVM client", "Tell", next<EngineMessage.Notify>().title)
 

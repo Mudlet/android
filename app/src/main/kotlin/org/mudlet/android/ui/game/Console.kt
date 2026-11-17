@@ -71,6 +71,8 @@ private const val CELLS_MEASURED = 100
  *
  * Each line is one node for TalkBack, whose text is the line's without its styles.
  *
+ * A long press on a line, or TalkBack's action on it, hands the line's text to [onMakeTrigger], to make a trigger from.
+ *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
  */
@@ -84,6 +86,7 @@ fun Console(
     onTextSize: (Int) -> Unit,
     onScreenSize: (columns: Int, rows: Int) -> Unit,
     modifier: Modifier = Modifier,
+    onMakeTrigger: ((String) -> Unit)? = null,
     behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -151,7 +154,9 @@ fun Console(
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
                 val text = remember(line, colors) { ansiText(line, colors) }
-                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground)
+                // The app's own markers are not the game's text: no trigger sees them
+                val makeTrigger = onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } }
+                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground, onMakeTrigger = makeTrigger)
             }
         }
         if (!following) {

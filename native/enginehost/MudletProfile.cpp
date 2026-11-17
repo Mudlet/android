@@ -408,6 +408,19 @@ bool isMainConsole(const QString& window)
     return window.isEmpty() || window == QLatin1String("main");
 }
 
+THeadlessSession::ScriptItemKind sessionKind(const IEngine::ScriptItemKind kind)
+{
+    switch (kind) {
+    case IEngine::ScriptItemKind::trigger:
+        return THeadlessSession::ScriptItemKind::trigger;
+    case IEngine::ScriptItemKind::alias:
+        return THeadlessSession::ScriptItemKind::alias;
+    case IEngine::ScriptItemKind::script:
+        break;
+    }
+    return THeadlessSession::ScriptItemKind::script;
+}
+
 } // namespace
 
 MudletProfile::MudletProfile(MudletEngine& engine, const QString& profile)
@@ -1950,6 +1963,74 @@ QString MudletProfile::setSettings(const QVariantMap& values, QMap<QString, QStr
         return QStringLiteral("no profile running");
     }
     return mSession->setSettings(values, refused) ? QString() : mSession->errorString();
+}
+
+std::variant<QList<ScriptItemInfo>, QString> MudletProfile::scriptItems(ScriptItemKind kind) const
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QList<ScriptItemInfo> items;
+    for (const THeadlessSession::ScriptItemNode& node : mSession->scriptItems(sessionKind(kind))) {
+        items.append({node.id, node.parent, node.name, node.folder, node.enabled, node.active, node.package, node.error});
+    }
+    return items;
+}
+
+std::variant<QVariantMap, QString> MudletProfile::scriptItem(ScriptItemKind kind, int item)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QVariantMap fields;
+    if (!mSession->scriptItem(sessionKind(kind), item, fields)) {
+        return mSession->errorString();
+    }
+    return fields;
+}
+
+std::variant<int, QString> MudletProfile::addScriptItem(ScriptItemKind kind, int parent, int position, bool folder, const QString& name)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    const int id = mSession->addScriptItem(sessionKind(kind), parent, position, folder, name);
+    if (!id) {
+        return mSession->errorString();
+    }
+    return id;
+}
+
+QString MudletProfile::editScriptItem(ScriptItemKind kind, int item, const QVariantMap& fields)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->editScriptItem(sessionKind(kind), item, fields) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::enableScriptItem(ScriptItemKind kind, int item, bool enabled)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setScriptItemEnabled(sessionKind(kind), item, enabled) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::moveScriptItem(ScriptItemKind kind, int item, int parent, int position)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->moveScriptItem(sessionKind(kind), item, parent, position) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::deleteScriptItem(ScriptItemKind kind, int item)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->deleteScriptItem(sessionKind(kind), item) ? QString() : mSession->errorString();
 }
 
 void MudletProfile::takeOfferedMap(const QString& url)

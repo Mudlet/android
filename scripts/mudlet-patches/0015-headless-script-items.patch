@@ -1,0 +1,848 @@
+Let a frontend with no window read and change the profile's triggers, aliases and scripts as the editor does
+
+A phone has no dlgTriggerEditor, so a player could see and change their triggers, aliases and scripts only by
+writing Lua that rebuilt them. The editor's add, save, toggle, move and delete live in the dialog, not in the core.
+
+- THeadlessSession::scriptItems() lists a kind's items depth first in the editor's order, each with its folder,
+  name, whether it is switched on and whether it runs, its package and its compile error as plain text; temporary
+  items are left out, as the editor leaves them.
+- scriptItem() gives all of an item's fields: its Lua, a trigger's patterns and options, an alias's pattern and
+  replacement, a script's event handlers.
+- addScriptItem(), editScriptItem(), setScriptItemEnabled(), moveScriptItem() and deleteScriptItem() do as the
+  editor's add, save, checkbox, drag and delete do: a new item runs from its first save if it compiled, a trigger that
+  does not compile is switched off with its error kept, an alias whose replacement matches its own pattern is refused.
+- Each write is refused with errorString(), changing nothing, while a trigger, alias or event handler runs, for an id
+  not of that kind, a parent that is not a folder and a field or value it cannot take.
+- ScriptUnit::processingDepth() reads the depth that TriggerUnit and AliasUnit already give.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (script_items: each write and what the reads then
+give, a compile error, the refusals, and the items kept through a save, a close and an open). The desktop is
+unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 02d59e0..81e1a43 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1731,6 +1731,45 @@ string. What it took is kept with the profile and written with its next save, as
+ are. Both call Mudlet's own functions, so a script that has put its own `getConfig` or `setConfig` in
+ the globals changes nothing. They are false, reading or changing nothing, where `runLua()` is refused.
+ 
++## Embedding it: triggers, aliases and scripts
++
++An app with its own script editor reads and changes a profile's triggers, aliases and scripts as the
++GUI's editor does, by `ScriptItemKind`, with no `dlgTriggerEditor`. Items are known by their ids, which
++a profile keeps while it runs; the temporary items scripts make, which the editor does not show, are
++left out of everything here.
++
++`scriptItems()` lists a kind's items depth first, each folder before what is in it, in the editor's
++order: each item's id, its folder's id (0 at the top level), name, whether it is a folder, `enabled`
++(switched on, as the editor's checkbox shows it), `active` (switched on, compiled and in folders that
++run), the package or module it came with, and `error`, why it cannot run, as plain text. It is a
++getter, so it may be called from any handler. `scriptItem()` gives all of one item's fields in a
++`QVariantMap`, by the names `editScriptItem()` takes: those, its Lua as `script`, and those of its kind:
++
++- a trigger's `patterns`, each a map of `text` and `type`, one of `substring`, `regex`, `startOfLine`,
++  `exact`, `lua`, `spacer` (its text the number of lines), `color` (its text as the profile keeps it,
++  as `ANSI_COLORS_F{1}_B{IGNORE}`) and `prompt`; `command`; `lineDelta`, the lines a multi-line
++  trigger's patterns may be spread over, -1 for a trigger of one line, as the editor shows it;
++  `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`,
++  `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour;
++- an alias's `pattern` and `command`;
++- a script's `eventHandlers`, a list of event names.
++
++`addScriptItem()` makes an item or a folder as the editor's add does: switched on, but not running
++until its first `editScriptItem()`, at a place among the items the editor shows in that folder.
++`editScriptItem()` sets the fields it is given and keeps the rest, then saves the item as the editor's
++save does: the name trimmed, its patterns and Lua compiled, a new item set running if that worked
++(but not during the emergency stop, which starts it as it ends) and a trigger that did not compile
++stopped and switched off, with its error kept for `scriptItem()` to give, which the call is still
++true for. Saving a script runs it, as in the GUI. An alias given no name takes its pattern, and one
++whose replacement matches its own pattern is refused, as it would call itself forever.
++`setScriptItemEnabled()` switches an item on or off as the editor's checkbox does, leaving off one
++that does not compile; `moveScriptItem()` moves one into a folder or to the top level, as a drag in
++the editor does, and refuses a folder into itself; `deleteScriptItem()` deletes one, and all in it.
++Each write is false, with the reason in `errorString()` and nothing changed, where `submit()` is
++refused, while a trigger, alias or event handler runs (as one does that waits on the event loop),
++for an id not of that kind, a parent that is not a folder, a field not of that kind or a value of the
++wrong type. What they change is written with the profile's next save, as the GUI's editor's is.
++
+ ## Embedding it: commands and buttons that scripts add
+ 
+ `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
+diff --git a/src/ScriptUnit.h b/src/ScriptUnit.h
+index 565b92d..946595a 100644
+--- a/src/ScriptUnit.h
++++ b/src/ScriptUnit.h
+@@ -78,6 +78,7 @@ public:
+         --mProcessingDepth;
+         Q_ASSERT(mProcessingDepth >= 0);
+     }
++    int processingDepth() const { return mProcessingDepth; }
+     void doCleanup();
+     int getNewID();
+     std::vector<int> findItems(const QString& name, const bool exactMatch = true, const bool caseSensitive = true);
+diff --git a/src/headless/CMakeLists.txt b/src/headless/CMakeLists.txt
+index 14e0af6..319e23b 100644
+--- a/src/headless/CMakeLists.txt
++++ b/src/headless/CMakeLists.txt
+@@ -29,6 +29,7 @@ add_library(mudlet_headless STATIC
+     THeadlessSessionCompletion.cpp
+     THeadlessSessionLinks.cpp
+     THeadlessSessionMap.cpp
++    THeadlessSessionScripts.cpp
+     THeadlessSessionSettings.cpp
+     THeadlessSessionWindows.cpp
+     THeadlessSessionWindowText.cpp
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 03ea83c..879d151 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -847,6 +847,53 @@ public:
+     // The environments the map gives a colour of its own, by number, as the GUI's room colour dialog lists them; none with no profile
+     // open. A getter, so it may be called from any handler.
+     QList<MapEnv> mapEnvs() const;
++    // The profile's triggers, aliases and scripts, as the GUI's script editor shows and edits them. Temporary items,
++    // which scripts make and the editor does not show, are left out of each, ids included.
++    enum class ScriptItemKind { trigger, alias, script };
++    Q_ENUM(ScriptItemKind)
++    struct ScriptItemNode
++    {
++        int id = 0;
++        // 0 for the top level
++        int parent = 0;
++        QString name;
++        bool folder = false;
++        // Switched on, as the editor's checkbox shows it, whether or not it can run
++        bool enabled = false;
++        // Runs: switched on, compiled, and in folders that run
++        bool active = false;
++        // The package or module it came with, its own or the nearest folder's above it; empty for the player's own
++        QString package;
++        // Why it cannot run, as plain text: a pattern or its Lua that did not compile
++        QString error;
++    };
++    // Each item of that kind, depth first, a folder before what is in it, in the editor's order; none with no profile
++    // open. A getter, so it may be called from any handler.
++    QList<ScriptItemNode> scriptItems(ScriptItemKind kind) const;
++    // All of an item's fields, by the names editScriptItem() takes, into item: those of ScriptItemNode, its Lua as
++    // "script", and those of its kind (see "Embedding it: triggers, aliases and scripts" in docs/headless.md). False,
++    // with errorString() saying why, for an id not of that kind or temporary.
++    bool scriptItem(ScriptItemKind kind, int id, QVariantMap& item);
++    // The writes below are each false, with errorString() saying why and nothing changed, where submit() is refused,
++    // while a trigger, alias or event handler runs (a script that waits on the event loop), for an id not of that kind
++    // or temporary, and for a parent that is not a folder.
++    // A new item or folder, as the editor's add makes one: named name, switched on but not running until its first
++    // editScriptItem(), at position among the folder parent's items shown (0 first; past the end appends), or at the
++    // top level for parent 0. Its id, or 0.
++    int addScriptItem(ScriptItemKind kind, int parent, int position, bool folder, const QString& name);
++    // Sets the fields given, keeping the rest, then saves the item as the editor's save does: the name trimmed, its
++    // patterns and Lua compiled, a new item set running if it compiled, and an item that did not compile stopped
++    // with its error kept. True for that too: scriptItem() then gives the error. False also for a field not of that
++    // kind, a value of the wrong type, and an alias whose replacement matches its own pattern, which would call itself
++    // forever.
++    bool editScriptItem(ScriptItemKind kind, int id, const QVariantMap& fields);
++    // Switched on or off, as the editor's checkbox does: an item that cannot compile is left off, false with its error.
++    bool setScriptItemEnabled(ScriptItemKind kind, int id, bool enabled);
++    // Moved into the folder parent, or to the top level for 0, at position among the items shown there, as a drag in
++    // the editor moves it. False also for a move into itself or a folder inside it.
++    bool moveScriptItem(ScriptItemKind kind, int id, int parent, int position);
++    // The item gone, and all in it for a folder, as the editor's delete does
++    bool deleteScriptItem(ScriptItemKind kind, int id);
+     // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
+     // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
+     // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
+@@ -1511,6 +1558,8 @@ private:
+     TNullMapView* drawnMap(MapTarget map);
+     // The room an edit of the map acts on; null, with errorString() saying why, where the edits are refused for it
+     TRoom* editableRoom(int roomId);
++    // Whether the script item writes may run now; false, with errorString() saying why, otherwise
++    bool scriptItemsWritable();
+ 
+     QPointer<Host> mpHost;
+     QString mProfileName;
+diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
+new file mode 100644
+index 0000000..bad7742
+--- /dev/null
++++ b/src/headless/THeadlessSessionScripts.cpp
+@@ -0,0 +1,676 @@
++/***************************************************************************
++ *   Copyright (C) 2026 by Mudlet Developers                               *
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ *   This program is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
++ *   GNU General Public License for more details.                          *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public License     *
++ *   along with this program; if not, write to the                         *
++ *   Free Software Foundation, Inc.,                                       *
++ *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
++ ***************************************************************************/
++
++#include "THeadlessSession.h"
++
++#include "AliasUnit.h"
++#include "Host.h"
++#include "ScriptUnit.h"
++#include "TAlias.h"
++#include "TLuaInterpreter.h"
++#include "TScript.h"
++#include "TTrigger.h"
++#include "TriggerUnit.h"
++
++#include <QRegularExpression>
++
++#include <algorithm>
++#include <limits>
++#include <type_traits>
++
++// TTrigger, TAlias and TScript share nothing but Tree<T>, so what is the same for the three is written once over it
++
++namespace {
++
++using Kind = THeadlessSession::ScriptItemKind;
++
++// By Mudlet's REGEX_ numbers, which a trigger's pattern kinds are
++const QStringList& patternTypes()
++{
++    static const QStringList types{qsl("substring"), qsl("regex"), qsl("startOfLine"), qsl("exact"), qsl("lua"), qsl("spacer"), qsl("color"), qsl("prompt")};
++    return types;
++}
++
++// count: from 0; lineDelta: from -1, which stands for none
++enum class FieldType { text, flag, count, lineDelta, textList, patterns, color };
++
++const QMap<QString, FieldType>& editableFields(const Kind kind)
++{
++    static const QMap<QString, FieldType> trigger{{qsl("name"), FieldType::text},
++                                                  {qsl("script"), FieldType::text},
++                                                  {qsl("patterns"), FieldType::patterns},
++                                                  {qsl("command"), FieldType::text},
++                                                  {qsl("lineDelta"), FieldType::lineDelta},
++                                                  {qsl("matchAll"), FieldType::flag},
++                                                  {qsl("filter"), FieldType::flag},
++                                                  {qsl("fireLength"), FieldType::count},
++                                                  {qsl("sound"), FieldType::flag},
++                                                  {qsl("soundFile"), FieldType::text},
++                                                  {qsl("highlight"), FieldType::flag},
++                                                  {qsl("highlightFg"), FieldType::color},
++                                                  {qsl("highlightBg"), FieldType::color}};
++    static const QMap<QString, FieldType> alias{{qsl("name"), FieldType::text}, {qsl("script"), FieldType::text}, {qsl("pattern"), FieldType::text}, {qsl("command"), FieldType::text}};
++    static const QMap<QString, FieldType> script{{qsl("name"), FieldType::text}, {qsl("script"), FieldType::text}, {qsl("eventHandlers"), FieldType::textList}};
++    switch (kind) {
++    case Kind::trigger:
++        return trigger;
++    case Kind::alias:
++        return alias;
++    case Kind::script:
++        break;
++    }
++    return script;
++}
++
++// A whole number, as a frontend's JSON may give it as a double
++std::optional<int> wholeNumber(const QVariant& value)
++{
++    switch (value.typeId()) {
++    case QMetaType::Int:
++    case QMetaType::UInt:
++    case QMetaType::LongLong:
++    case QMetaType::ULongLong:
++    case QMetaType::Double: {
++        const double number = value.toDouble();
++        if (number >= std::numeric_limits<int>::min() && number <= std::numeric_limits<int>::max() && number == static_cast<double>(static_cast<int>(number))) {
++            return static_cast<int>(number);
++        }
++        return std::nullopt;
++    }
++    default:
++        return std::nullopt;
++    }
++}
++
++bool colorFits(const QVariant& value)
++{
++    static const QRegularExpression rgb(qsl("^(#[0-9A-Fa-f]{6})?$"));
++    return value.typeId() == QMetaType::QString && rgb.match(value.toString()).hasMatch();
++}
++
++QString colorText(const QColor& color)
++{
++    return color.isValid() && color.alpha() ? color.name() : QString();
++}
++
++bool fitsField(const FieldType type, const QVariant& value)
++{
++    switch (type) {
++    case FieldType::text:
++        return value.typeId() == QMetaType::QString;
++    case FieldType::flag:
++        return value.typeId() == QMetaType::Bool;
++    case FieldType::count:
++        return wholeNumber(value).value_or(-1) >= 0;
++    case FieldType::lineDelta:
++        return wholeNumber(value).value_or(-2) >= -1;
++    case FieldType::color:
++        return colorFits(value);
++    case FieldType::textList: {
++        if (value.typeId() != QMetaType::QVariantList) {
++            return false;
++        }
++        const QVariantList entries = value.toList();
++        return std::all_of(entries.cbegin(), entries.cend(), [](const QVariant& entry) {
++            return entry.typeId() == QMetaType::QString;
++        });
++    }
++    case FieldType::patterns: {
++        if (value.typeId() != QMetaType::QVariantList) {
++            return false;
++        }
++        const QVariantList entries = value.toList();
++        return std::all_of(entries.cbegin(), entries.cend(), [](const QVariant& entry) {
++            if (entry.typeId() != QMetaType::QVariantMap) {
++                return false;
++            }
++            const QVariantMap pattern = entry.toMap();
++            return pattern.size() == 2 && pattern.value(qsl("text")).typeId() == QMetaType::QString && patternTypes().contains(pattern.value(qsl("type")).toString());
++        });
++    }
++    }
++    return false;
++}
++
++template <class T>
++std::list<T*> rootItems(Host& host)
++{
++    if constexpr (std::is_same_v<T, TTrigger>) {
++        return host.getTriggerUnit()->getTriggerRootNodeList();
++    } else if constexpr (std::is_same_v<T, TAlias>) {
++        return host.getAliasUnit()->getAliasRootNodeList();
++    } else {
++        return host.getScriptUnit()->getScriptRootNodeList();
++    }
++}
++
++template <class T>
++bool shown(Host& host, T* pItem)
++{
++    if (pItem->isTemporary()) {
++        return false;
++    }
++    if constexpr (std::is_same_v<T, TTrigger>) {
++        return !host.getTriggerUnit()->pendingDeletion(pItem);
++    } else if constexpr (std::is_same_v<T, TAlias>) {
++        return !host.getAliasUnit()->pendingDeletion(pItem);
++    } else {
++        return !host.getScriptUnit()->pendingDeletion(pItem);
++    }
++}
++
++template <class T>
++T* shownItem(Host& host, const int id)
++{
++    T* pItem = nullptr;
++    if constexpr (std::is_same_v<T, TTrigger>) {
++        pItem = host.getTriggerUnit()->getTrigger(id);
++    } else if constexpr (std::is_same_v<T, TAlias>) {
++        pItem = host.getAliasUnit()->getAlias(id);
++    } else {
++        pItem = host.getScriptUnit()->getScript(id);
++    }
++    return pItem && shown(host, pItem) ? pItem : nullptr;
++}
++
++template <class T>
++void reParent(Host& host, T* pItem, const int parentId, const std::optional<int> position)
++{
++    const int oldParentId = pItem->getParent() ? pItem->getParent()->getID() : 0;
++    const TreeItemInsertMode mode = position ? TreeItemInsertMode::AtPosition : TreeItemInsertMode::Append;
++    if constexpr (std::is_same_v<T, TTrigger>) {
++        host.getTriggerUnit()->reParentTrigger(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    } else if constexpr (std::is_same_v<T, TAlias>) {
++        host.getAliasUnit()->reParentAlias(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    } else {
++        host.getScriptUnit()->reParentScript(pItem->getID(), oldParentId, parentId, mode, position.value_or(0));
++    }
++}
++
++// Where, among all of a folder's items or the top level's with the moving item taken out, the shown one at position
++// is, as the units' reParent...() count temporary items too; none to append
++template <class T>
++std::optional<int> unitPosition(Host& host, T* pParent, const T* pMoving, const int position)
++{
++    std::list<T*> siblings;
++    if (pParent) {
++        for (auto* pChild : *pParent->getChildrenList()) {
++            siblings.push_back(static_cast<T*>(pChild));
++        }
++    } else {
++        siblings = rootItems<T>(host);
++    }
++    int index = 0;
++    int shownIndex = 0;
++    for (T* pSibling : siblings) {
++        if (pSibling == pMoving) {
++            continue;
++        }
++        if (shown(host, pSibling) && shownIndex++ == position) {
++            return index;
++        }
++        ++index;
++    }
++    return std::nullopt;
++}
++
++template <class T>
++QString packageOf(const T* pItem)
++{
++    for (const T* pAncestor = pItem; pAncestor; pAncestor = pAncestor->getParent()) {
++        if (!pAncestor->mPackageName.isEmpty()) {
++            return pAncestor->mPackageName;
++        }
++    }
++    return {};
++}
++
++template <class T>
++QString errorOf(T* pItem)
++{
++    return pItem->state() ? QString() : TLuaInterpreter::compileErrorAsPlainText(pItem->getError());
++}
++
++template <class T>
++THeadlessSession::ScriptItemNode nodeOf(T* pItem)
++{
++    THeadlessSession::ScriptItemNode node;
++    node.id = pItem->getID();
++    node.parent = pItem->getParent() ? pItem->getParent()->getID() : 0;
++    node.name = pItem->getName();
++    node.folder = pItem->isFolder();
++    node.enabled = pItem->shouldBeActive();
++    node.active = pItem->isActive() && pItem->ancestorsActive();
++    node.package = packageOf(pItem);
++    node.error = errorOf(pItem);
++    return node;
++}
++
++template <class T>
++void appendShown(Host& host, T* pItem, QList<THeadlessSession::ScriptItemNode>& nodes)
++{
++    if (!shown(host, pItem)) {
++        return;
++    }
++    nodes.append(nodeOf(pItem));
++    for (auto* pChild : *pItem->getChildrenList()) {
++        appendShown(host, static_cast<T*>(pChild), nodes);
++    }
++}
++
++template <class T>
++QList<THeadlessSession::ScriptItemNode> shownItems(Host& host)
++{
++    QList<THeadlessSession::ScriptItemNode> nodes;
++    for (T* pItem : rootItems<T>(host)) {
++        appendShown(host, pItem, nodes);
++    }
++    return nodes;
++}
++
++QVariantMap fieldsOf(TTrigger* pItem)
++{
++    QVariantList patterns;
++    const QStringList& texts = pItem->getPatternsList();
++    const QList<int> kinds = pItem->getRegexCodePropertyList();
++    for (qsizetype i = 0; i < texts.size() && i < kinds.size(); ++i) {
++        patterns.append(QVariantMap{{qsl("text"), texts.at(i)}, {qsl("type"), patternTypes().value(kinds.at(i), patternTypes().constFirst())}});
++    }
++    return {{qsl("patterns"), patterns},
++            {qsl("command"), pItem->getCommand()},
++            // As the editor shows it: -1 for a trigger of one line
++            {qsl("lineDelta"), pItem->isMultiline() ? pItem->getConditionLineDelta() : -1},
++            {qsl("matchAll"), pItem->mPerlSlashGOption},
++            {qsl("filter"), pItem->mFilterTrigger},
++            {qsl("fireLength"), pItem->mStayOpen},
++            {qsl("sound"), pItem->mSoundTrigger},
++            {qsl("soundFile"), pItem->mSoundFile},
++            {qsl("highlight"), pItem->isColorizerTrigger()},
++            {qsl("highlightFg"), colorText(pItem->getFgColor())},
++            {qsl("highlightBg"), colorText(pItem->getBgColor())}};
++}
++
++QVariantMap fieldsOf(TAlias* pItem)
++{
++    return {{qsl("pattern"), pItem->getRegexCode()}, {qsl("command"), pItem->getCommand()}};
++}
++
++QVariantMap fieldsOf(TScript* pItem)
++{
++    return {{qsl("eventHandlers"), QVariant(pItem->getEventHandlerList())}};
++}
++
++template <class T>
++QVariantMap itemFields(T* pItem)
++{
++    QVariantMap fields = fieldsOf(pItem);
++    const THeadlessSession::ScriptItemNode node = nodeOf(pItem);
++    fields.insert(qsl("id"), node.id);
++    fields.insert(qsl("parent"), node.parent);
++    fields.insert(qsl("name"), node.name);
++    fields.insert(qsl("folder"), node.folder);
++    fields.insert(qsl("enabled"), node.enabled);
++    fields.insert(qsl("active"), node.active);
++    fields.insert(qsl("package"), node.package);
++    fields.insert(qsl("error"), node.error);
++    fields.insert(qsl("script"), pItem->getScript());
++    return fields;
++}
++
++// As the editor's save: a new item that compiled runs, unless the emergency stop is on, whose resume starts it
++template <class T>
++void startIfNew(Host& host, T* pItem, const bool heedEmergencyStop)
++{
++    if (pItem->state() && pItem->checkIfNew()) {
++        if (pItem->shouldBeActive() && !(heedEmergencyStop && host.mEmergencyStop)) {
++            pItem->setIsActive(true);
++        }
++        pItem->unmarkAsNew();
++    }
++}
++
++void saveItem(Host& host, TTrigger* pItem, const QVariantMap& fields)
++{
++    QStringList patterns;
++    QList<int> kinds;
++    const QVariantList entries = fields.value(qsl("patterns")).toList();
++    for (const QVariant& entry : entries) {
++        const QVariantMap pattern = entry.toMap();
++        const QString text = pattern.value(qsl("text")).toString();
++        const int kind = patternTypes().indexOf(pattern.value(qsl("type")).toString());
++        if (text.isEmpty() && kind != REGEX_PROMPT && kind != REGEX_LINE_SPACER) {
++            continue;
++        }
++        patterns << text;
++        kinds << kind;
++    }
++    const int lineDelta = fields.value(qsl("lineDelta")).toInt();
++    pItem->setName(fields.value(qsl("name")).toString().trimmed());
++    pItem->setCommand(fields.value(qsl("command")).toString());
++    pItem->setRegexCodeList(patterns, kinds);
++    pItem->setScript(fields.value(qsl("script")).toString());
++    pItem->setIsMultiline(lineDelta > -1 && patterns.size() > 1);
++    pItem->mPerlSlashGOption = fields.value(qsl("matchAll")).toBool();
++    pItem->mFilterTrigger = fields.value(qsl("filter")).toBool();
++    if (lineDelta >= 0) {
++        pItem->setConditionLineDelta(lineDelta);
++    }
++    pItem->mStayOpen = fields.value(qsl("fireLength")).toInt();
++    pItem->mSoundTrigger = fields.value(qsl("sound")).toBool();
++    pItem->setSound(fields.value(qsl("soundFile")).toString());
++    const QString foreground = fields.value(qsl("highlightFg")).toString();
++    const QString background = fields.value(qsl("highlightBg")).toString();
++    pItem->setColorizerFgColor(foreground.isEmpty() ? QColor(QColorConstants::Transparent) : QColor(foreground));
++    pItem->setColorizerBgColor(background.isEmpty() ? QColor(QColorConstants::Transparent) : QColor(background));
++    pItem->setIsColorizerTrigger(fields.value(qsl("highlight")).toBool());
++    if (pItem->state()) {
++        startIfNew(host, pItem, true);
++    } else {
++        pItem->setIsActive(false);
++    }
++}
++
++void saveItem(Host& host, TAlias* pItem, const QVariantMap& fields)
++{
++    const QString pattern = fields.value(qsl("pattern")).toString();
++    QString name = fields.value(qsl("name")).toString().trimmed();
++    if (name.isEmpty()) {
++        name = pattern.trimmed();
++    }
++    pItem->setName(name);
++    pItem->setCommand(fields.value(qsl("command")).toString());
++    pItem->setRegexCode(pattern);
++    pItem->setScript(fields.value(qsl("script")).toString());
++    startIfNew(host, pItem, true);
++}
++
++void saveItem(Host& host, TScript* pItem, const QVariantMap& fields)
++{
++    pItem->setName(fields.value(qsl("name")).toString().trimmed());
++    pItem->setEventHandlerList(fields.value(qsl("eventHandlers")).toStringList());
++    pItem->setScript(fields.value(qsl("script")).toString());
++    pItem->compileAll();
++    host.getTriggerUnit()->doCleanup();
++    startIfNew(host, pItem, false);
++    // A script that uninstalled its own package as it ran is deleted here, so pItem may be gone after this
++    host.getScriptUnit()->doCleanup();
++}
++
++// As the editor refuses to save one: its replacement would match its own pattern, so it would call itself forever
++bool aliasLoops(const QString& pattern, const QString& replacement)
++{
++    if (pattern.isEmpty()) {
++        return false;
++    }
++    const QRegularExpression regex(pattern);
++    return regex.isValid() && regex.match(replacement).capturedStart() != -1;
++}
++
++// As the editor's add makes one, in its order
++template <class T>
++T* newItem(Host& host, T* pParent, const bool folder, const QString& name)
++{
++    T* pItem = nullptr;
++    if constexpr (std::is_same_v<T, TTrigger>) {
++        pItem = pParent ? new TTrigger(pParent, &host) : new TTrigger(name, {}, {}, false, &host);
++        pItem->setName(name);
++        pItem->setRegexCodeList({}, {}, false);
++    } else if constexpr (std::is_same_v<T, TAlias>) {
++        pItem = pParent ? new TAlias(pParent, &host) : new TAlias(name, &host);
++        pItem->setName(name);
++        pItem->setCommand(QString());
++        pItem->setRegexCode(QString());
++    } else {
++        pItem = pParent ? new TScript(pParent, &host) : new TScript(name, &host);
++        pItem->setName(name);
++    }
++    pItem->setScript(QString());
++    pItem->setIsFolder(folder);
++    pItem->setIsActive(false);
++    pItem->setShouldBeActive(true);
++    if constexpr (std::is_same_v<T, TTrigger>) {
++        pItem->setIsMultiline(false);
++        pItem->mStayOpen = 0;
++        pItem->setConditionLineDelta(0);
++        pItem->registerTrigger();
++    } else if constexpr (std::is_same_v<T, TAlias>) {
++        pItem->registerAlias();
++    } else {
++        pItem->registerScript();
++    }
++    return pItem;
++}
++
++QString noItem(const int id)
++{
++    //: Error from a frontend with no window that was asked for a trigger, alias or script by an id the profile does not have, or has only for one a script made for a while, which the script editor does not show
++    return THeadlessSession::tr("There is no item %1 of that kind.").arg(id);
++}
++
++QString noFolder(const int id)
++{
++    //: Error from a frontend with no window that was asked to put a trigger, alias or script in a folder by an id that is not one of that kind's folders
++    return THeadlessSession::tr("There is no folder %1 of that kind.").arg(id);
++}
++
++} // namespace
++
++QList<THeadlessSession::ScriptItemNode> THeadlessSession::scriptItems(const ScriptItemKind kind) const
++{
++    if (!mpHost) {
++        return {};
++    }
++    switch (kind) {
++    case ScriptItemKind::trigger:
++        return shownItems<TTrigger>(*mpHost);
++    case ScriptItemKind::alias:
++        return shownItems<TAlias>(*mpHost);
++    case ScriptItemKind::script:
++        break;
++    }
++    return shownItems<TScript>(*mpHost);
++}
++
++namespace {
++
++// The calls below each take the item's own class, so they dispatch on kind once, here
++template <class Call>
++auto withItemClass(const Kind kind, Call&& call)
++{
++    switch (kind) {
++    case Kind::trigger:
++        return call(static_cast<TTrigger*>(nullptr));
++    case Kind::alias:
++        return call(static_cast<TAlias*>(nullptr));
++    case Kind::script:
++        break;
++    }
++    return call(static_cast<TScript*>(nullptr));
++}
++
++} // namespace
++
++bool THeadlessSession::scriptItem(const ScriptItemKind kind, const int id, QVariantMap& item)
++{
++    if (!mpHost) {
++        //: Error from a frontend with no window that has no open profile to send to
++        mErrorString = tr("No profile is open.");
++        return false;
++    }
++    return withItemClass(kind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        T* pItem = shownItem<T>(*mpHost, id);
++        if (!pItem) {
++            mErrorString = noItem(id);
++            return false;
++        }
++        item = itemFields(pItem);
++        return true;
++    });
++}
++
++bool THeadlessSession::scriptItemsWritable()
++{
++    if (!usable()) {
++        return false;
++    }
++    if (mpHost->getTriggerUnit()->processingDepth() || mpHost->getAliasUnit()->processingDepth() || mpHost->getScriptUnit()->processingDepth()) {
++        //: Error from a frontend with no window that was asked to change a trigger, alias or script while one of them was running and waiting on the event loop
++        mErrorString = tr("A trigger, alias or event handler is running; triggers, aliases and scripts cannot be changed until it returns.");
++        return false;
++    }
++    return true;
++}
++
++int THeadlessSession::addScriptItem(const ScriptItemKind kind, const int parent, const int position, const bool folder, const QString& name)
++{
++    if (!scriptItemsWritable()) {
++        return 0;
++    }
++    return withItemClass(kind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        T* pParent = nullptr;
++        if (parent) {
++            pParent = shownItem<T>(*mpHost, parent);
++            if (!pParent || !pParent->isFolder()) {
++                mErrorString = noFolder(parent);
++                return 0;
++            }
++        }
++        T* pItem = newItem<T>(*mpHost, pParent, folder, name);
++        if (const std::optional<int> place = unitPosition<T>(*mpHost, pParent, pItem, position)) {
++            reParent(*mpHost, pItem, parent, place);
++        }
++        return pItem->getID();
++    });
++}
++
++bool THeadlessSession::editScriptItem(const ScriptItemKind kind, const int id, const QVariantMap& fields)
++{
++    if (!scriptItemsWritable()) {
++        return false;
++    }
++    const QMap<QString, FieldType>& editable = editableFields(kind);
++    for (auto field = fields.cbegin(); field != fields.cend(); ++field) {
++        if (!editable.contains(field.key())) {
++            //: Error from a frontend with no window that was asked to change a field of a trigger, alias or script that it does not have or that cannot be changed; %1 is the field's name, which is not translated
++            mErrorString = tr("\"%1\" is not a field of that kind that can be changed.").arg(field.key());
++            return false;
++        }
++        if (!fitsField(editable.value(field.key()), field.value())) {
++            //: Error from a frontend with no window that was given a value of the wrong type for a field of a trigger, alias or script; %1 is the field's name, which is not translated
++            mErrorString = tr("The value given for \"%1\" is not one it takes.").arg(field.key());
++            return false;
++        }
++    }
++    return withItemClass(kind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        T* pItem = shownItem<T>(*mpHost, id);
++        if (!pItem) {
++            mErrorString = noItem(id);
++            return false;
++        }
++        QVariantMap merged = itemFields(pItem);
++        for (auto field = fields.cbegin(); field != fields.cend(); ++field) {
++            merged.insert(field.key(), field.value());
++        }
++        if constexpr (std::is_same_v<T, TAlias>) {
++            if (aliasLoops(merged.value(qsl("pattern")).toString(), merged.value(qsl("command")).toString())) {
++                //: Error from a frontend with no window that was asked to save an alias whose replacement text would itself match the alias's pattern
++                mErrorString = tr("The alias's replacement matches its own pattern, so it would call itself forever.");
++                return false;
++            }
++        }
++        saveItem(*mpHost, pItem, merged);
++        return true;
++    });
++}
++
++bool THeadlessSession::setScriptItemEnabled(const ScriptItemKind kind, const int id, const bool enabled)
++{
++    if (!scriptItemsWritable()) {
++        return false;
++    }
++    return withItemClass(kind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        T* pItem = shownItem<T>(*mpHost, id);
++        if (!pItem) {
++            mErrorString = noItem(id);
++            return false;
++        }
++        pItem->setIsActive(enabled);
++        if (!pItem->state()) {
++            pItem->setIsActive(false);
++            if (enabled) {
++                mErrorString = errorOf(pItem);
++                return false;
++            }
++        }
++        return true;
++    });
++}
++
++bool THeadlessSession::moveScriptItem(const ScriptItemKind kind, const int id, const int parent, const int position)
++{
++    if (!scriptItemsWritable()) {
++        return false;
++    }
++    return withItemClass(kind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        T* pItem = shownItem<T>(*mpHost, id);
++        if (!pItem) {
++            mErrorString = noItem(id);
++            return false;
++        }
++        T* pParent = nullptr;
++        if (parent) {
++            pParent = shownItem<T>(*mpHost, parent);
++            if (!pParent || !pParent->isFolder()) {
++                mErrorString = noFolder(parent);
++                return false;
++            }
++            for (const T* pAncestor = pParent; pAncestor; pAncestor = pAncestor->getParent()) {
++                if (pAncestor == pItem) {
++                    //: Error from a frontend with no window that was asked to move a folder of triggers, aliases or scripts into itself or into a folder inside it
++                    mErrorString = tr("A folder cannot be moved into itself or into a folder inside it.");
++                    return false;
++                }
++            }
++        }
++        reParent(*mpHost, pItem, parent, unitPosition<T>(*mpHost, pParent, pItem, position));
++        return true;
++    });
++}
++
++bool THeadlessSession::deleteScriptItem(const ScriptItemKind kind, const int id)
++{
++    if (!scriptItemsWritable()) {
++        return false;
++    }
++    return withItemClass(kind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        T* pItem = shownItem<T>(*mpHost, id);
++        if (!pItem) {
++            mErrorString = noItem(id);
++            return false;
++        }
++        delete pItem;
++        return true;
++    });
++}

@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **22**.
+The current version is **23**.
 
 ## Transport
 
@@ -110,11 +110,18 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `markSeen` | `name`, `seq` | The player has seen that open profile's lines up to `seq`: its `attention` clears, and its `unread` counts from there. |
 | `downloadMap` | | Downloads the map the game offers, which `mapDownload` tells of, and loads it in place of the profile's, as the desktop mapper's "Download from game" does (`THeadlessSession::downloadOfferedMap()`, "Downloading the map" below). `mapDownload` follows how it goes. |
 | `cancelMapDownload` | | Stops that download, as the Abort of Mudlet's progress dialog does (`THeadlessSession::cancelMapOperation()`), while `mapDownload`'s `cancelable` holds: `mapDownload` with `state` `cancelled` follows. |
+| `scriptItems` | `kind`, `id`? | Asks for the open profile's triggers, aliases or scripts, `kind` `trigger`, `alias` or `script`, as the desktop's script editor lists them (`THeadlessSession::scriptItems()`), answered by `scriptItems`. |
+| `scriptItem` | `kind`, `item`, `id`? | Asks for all the fields of the item of that kind whose id is `item` (`THeadlessSession::scriptItem()`), answered by `scriptItem`. |
+| `addScriptItem` | `kind`, `parent`, `position`, `folder`, `name`, `id`? | Makes an item of that kind, or a folder for `folder` true, named `name`, as the desktop editor's add does (`THeadlessSession::addScriptItem()`): in the folder whose id is `parent`, or at the top level for 0, at `position` among the items shown there (0 first; past the end appends); switched on, but not running until its first `editScriptItem`. Answered by `scriptItem`, the new item. |
+| `editScriptItem` | `kind`, `item`, `fields`, `id`? | Sets the fields `fields` holds of the item, by the names `scriptItem` gives them, keeps the rest, and saves it as the desktop editor's save does (`THeadlessSession::editScriptItem()`; "Editing triggers, aliases and scripts" below). Answered by `scriptItem`, the item as it now is. |
+| `enableScriptItem` | `kind`, `item`, `enabled`, `id`? | Switches the item on or off, as the desktop editor's checkbox does (`THeadlessSession::setScriptItemEnabled()`). Answered by `scriptItem`. |
+| `moveScriptItem` | `kind`, `item`, `parent`, `position` | Moves the item into the folder whose id is `parent`, or to the top level for 0, at `position` among the items shown there, as a drag in the desktop editor does (`THeadlessSession::moveScriptItem()`). |
+| `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -184,6 +191,18 @@ of it, which Mudlet relays after a `downloadMap` read in the same pass.
 and why: a `keys` or `values` that is not as above, and in libmudlet no profile loaded (`no profile running`). A value in
 `setSettings` that is not true or false, a number or a string is refused in `settings`, and the rest are set.
 
+`moveScriptItem` and `deleteScriptItem` are answered only when refused, and `scriptItems` by `scriptItems` or `error`,
+`scriptItem`, `addScriptItem`, `editScriptItem` and `enableScriptItem` by `scriptItem` or `error`, as above; a refused
+change changes nothing. libmudlet refuses all seven while no profile is open (`no profile running`), for a `kind` other
+than `trigger`, `alias` or `script`, an `item` that is not a whole number from 1, a `parent` or `position` that is not a
+whole number from 0, a `folder` or `enabled` that is not true or false, a `name` that is not a string and `fields` that
+are not an object; and as `THeadlessSession` does: for an `item` not of that kind, or one a script made for a while,
+which the desktop editor does not show; the changes for a `parent` that is not a folder of that kind, and while a
+trigger, alias or event handler runs; `editScriptItem` for a field not of that kind or that cannot be changed (`id`,
+`folder` and the rest that `scriptItems` gives), a value of the wrong type, and an alias whose `command` matches its
+own `pattern`, which would call itself forever; `enableScriptItem` for an item that does not compile, which it leaves
+off, with its error; `moveScriptItem` for a folder moved into itself or a folder inside it.
+
 ### Engine to UI
 
 | Message | Fields | Meaning |
@@ -221,6 +240,8 @@ and why: a `keys` or `values` that is not as above, and in libmudlet no profile 
 | `settings` | `values`, `refused`?, `re`? | The answer to `getSettings` or `setSettings`: `values` holds each key it asked for or set with the value the profile holds now, as `getConfig()` gives it with `true` for its second argument: true or false, a number, or a string, an option of several by its name (`showSentText` as `never`, `always` or `script`). A key the engine does not know is left out. `refused`, only after `setSettings`, holds each key not changed with why: `setConfig()`'s message, its Lua error for a value of the wrong type, or that the value was not true or false, a number or a string. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `areaId`, `area`, `match`, `steps`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, each with its `id`, `name`, its area's id `areaId` and name `area`, how it matched in `match` (`exact` for a name that is the text ignoring case, `prefix` for one that starts with it, `contains`, or `id` for the room whose id the text is and whose name does not hold it) and `steps`, the fewest exits from the player's room to it by rooms and exits that are not locked, as the speedwalk goes (0 for the player's room, -1 for no way there or no room for the player). Best first: `exact` and `id`, then `prefix`, then `contains`; within each, the rooms in the player's area first, then by `steps` with -1 last, then by name ignoring case, then id. `more` is true when more rooms matched than were sent. |
 | `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `symbol`, `env`, `color`, `weight`, `locked`; `re`? | The answer to `roomInfo` and the edits that give a room: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`; then what `editRoom` sets: its `symbol`, environment `env` and the colour that draws it `color`, as `#rrggbb`, its `weight` and whether it is `locked`. |
+| `scriptItems` | `kind`, `items`: `id`, `parent`, `name`, `folder`, `enabled`, `active`, `package`, `error`; `re`? | The answer to `scriptItems`: the `kind` asked for, and its `items` depth first, each folder before what is in it, in the desktop editor's order; each with its `id`, the id of the folder it is in, `parent` (0 for the top level), its `name`, whether it is a `folder`, `enabled` (switched on, as the editor's checkbox shows it), `active` (switched on, compiled, and in folders that run), the `package` or module it came with (empty for the player's own) and `error`, why it cannot run, as plain text, or empty. The temporary items scripts make are left out, as the editor leaves them. |
+| `scriptItem` | `kind`, `fields`, `re`? | The answer to `scriptItem` and the changes that give an item: its `kind` and its `fields`, an object of what `scriptItems` gives of it, `script`, its Lua, and those of its kind: a trigger's `patterns`, each with its `text` and its `type` (`substring`, `regex`, `startOfLine`, `exact`, `lua`, `spacer`, whose text is the number of lines, `color`, whose text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`, or `prompt`), `command`, `lineDelta` (the lines a trigger's patterns may be spread over, -1 for a trigger of one line), `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`, `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour; an alias's `pattern` and `command`; a script's `eventHandlers`, a list of event names. |
 | `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
 | `envs` | `envs`: `env`, `color`; `re`? | The answer to `mapEnvs`: the environments the map gives a colour of its own, by number, as Mudlet's room colour dialog lists them (the profile's sixteen colours as 257 to 272, and those a script or the player added), each with the colour it draws rooms in as `#rrggbb`. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. |
@@ -459,6 +480,22 @@ instead, with the edits above, which act whether the map is edited or viewed, as
 - `editRoom`'s place is the room's, in its area: a drag of the picked room on an edited map moves it there, a whole
   number of rooms from where it was by the frame's `roomSize`.
 
+### Editing triggers, aliases and scripts
+
+The desktop edits a profile's triggers, aliases and scripts in its script editor, a dialog libmudlet does not have.
+The UI edits them with the requests above instead, which do what the editor's add, save, checkbox, drag and delete do:
+
+- Items are known by their ids, which the profile keeps while it runs and which are unique within a kind, not across
+  kinds. A UI that has an item's fields sends back those it changed, or all of them.
+- `editScriptItem` saves as the editor's save does: the name trimmed, the patterns and the Lua compiled, and a new item
+  set running if that worked (but not during the emergency stop, which starts it as it ends). A trigger that does not
+  compile is switched off with its error kept; that is no refusal, and the `scriptItem` that answers gives the error.
+  Saving a script runs it, as on the desktop. An alias given no name takes its pattern.
+- A `scriptItems` sent after a `moveScriptItem` or `deleteScriptItem` lists the items as they are after it, as the
+  engine reads the requests in order.
+- What changes is written with the profile's next save, as the desktop editor's changes are: when the app leaves the
+  front and when the profile closes.
+
 ### Downloading the map
 
 A game offers its map with GMCP's `Client.Map`, `{"url": "..."}` (the MMP's map location), which the desktop's mapper
@@ -648,7 +685,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 22, which added following a label's link (`followLabelLink`); version 21 added editing
+As implemented in version 23, which added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,
+`addScriptItem`, `editScriptItem`, `enableScriptItem`, `moveScriptItem`, `deleteScriptItem`); version 22 added
+following a label's link (`followLabelLink`); version 21 added editing
 the map (`editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom`, `deleteRoom`, `setPlayerRoom`, `renameArea`, `mapEnvs`,
 `envs`, and `symbol`, `env`, `color`, `weight` and `locked` in `room`); version 20 added a room's details and the map's
 levels and areas (`roomInfo`, `room`, `walkToRoom`, `showMapLevel`, `showMapArea`, `mapAreas`, `areas`, `levels` in

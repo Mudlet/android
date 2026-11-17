@@ -149,6 +149,37 @@ QString wireName(MapDownload::State state)
     return {};
 }
 
+std::optional<IEngine::ScriptItemKind> scriptItemKind(const QJsonObject& message)
+{
+    const QString kind = message.value(QLatin1String("kind")).toString();
+    if (kind == QLatin1String("trigger")) {
+        return IEngine::ScriptItemKind::trigger;
+    }
+    if (kind == QLatin1String("alias")) {
+        return IEngine::ScriptItemKind::alias;
+    }
+    if (kind == QLatin1String("script")) {
+        return IEngine::ScriptItemKind::script;
+    }
+    return std::nullopt;
+}
+
+constexpr QLatin1StringView scriptItemKindProblem("kind must be trigger, alias or script");
+
+// The kind and item a script item request names, or why it names none
+std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> scriptItemTarget(const QJsonObject& message)
+{
+    const std::optional<IEngine::ScriptItemKind> kind = scriptItemKind(message);
+    if (!kind) {
+        return QString(scriptItemKindProblem);
+    }
+    const std::optional<int> item = wholeNumber(message.value(QLatin1String("item")), 1);
+    if (!item) {
+        return QStringLiteral("item must be a whole number from 1");
+    }
+    return std::pair{*kind, *item};
+}
+
 // The messages of those of now that are new or differ from what they were before, matched by name
 template <typename Info, typename Message>
 QList<QJsonObject> changedByName(const QList<Info>& before, const QList<Info>& now, Message message)
@@ -567,6 +598,20 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, mEngine->downloadMap());
     } else if (type == QLatin1String("cancelMapDownload")) {
         refuse(type, mEngine->cancelMapDownload());
+    } else if (type == QLatin1String("scriptItems")) {
+        scriptItems(message);
+    } else if (type == QLatin1String("scriptItem")) {
+        scriptItem(message);
+    } else if (type == QLatin1String("addScriptItem")) {
+        addScriptItem(message);
+    } else if (type == QLatin1String("editScriptItem")) {
+        editScriptItem(message);
+    } else if (type == QLatin1String("enableScriptItem")) {
+        enableScriptItem(message);
+    } else if (type == QLatin1String("moveScriptItem")) {
+        refuse(type, moveScriptItem(message));
+    } else if (type == QLatin1String("deleteScriptItem")) {
+        refuse(type, deleteScriptItem(message));
     } else if (type == QLatin1String("getSettings")) {
         getSettings(message);
     } else if (type == QLatin1String("setSettings")) {
@@ -1045,6 +1090,149 @@ void SocketBridge::mapEnvs()
         envs.append(QJsonObject{{QStringLiteral("env"), env.env}, {QStringLiteral("color"), env.color}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("envs")}, {QStringLiteral("envs"), envs}});
+}
+
+void SocketBridge::scriptItems(const QJsonObject& message)
+{
+    const std::optional<IEngine::ScriptItemKind> kind = scriptItemKind(message);
+    if (!kind) {
+        sendError(QStringLiteral("scriptItems: %1").arg(scriptItemKindProblem));
+        return;
+    }
+    const std::variant<QList<ScriptItemInfo>, QString> found = mEngine->scriptItems(*kind);
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("scriptItems: %1").arg(*problem));
+        return;
+    }
+    QJsonArray items;
+    for (const ScriptItemInfo& item : std::get<QList<ScriptItemInfo>>(found)) {
+        items.append(QJsonObject{{QStringLiteral("id"), item.id},
+                                 {QStringLiteral("parent"), item.parent},
+                                 {QStringLiteral("name"), item.name},
+                                 {QStringLiteral("folder"), item.folder},
+                                 {QStringLiteral("enabled"), item.enabled},
+                                 {QStringLiteral("active"), item.active},
+                                 {QStringLiteral("package"), item.package},
+                                 {QStringLiteral("error"), item.error}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("scriptItems")}, {QStringLiteral("kind"), message.value(QLatin1String("kind"))}, {QStringLiteral("items"), items}});
+}
+
+void SocketBridge::sendScriptItem(const QString& request, const QJsonObject& message, int item)
+{
+    const std::variant<QVariantMap, QString> found = mEngine->scriptItem(*scriptItemKind(message), item);
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("%1: %2").arg(request, *problem));
+        return;
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("scriptItem")},
+               {QStringLiteral("kind"), message.value(QLatin1String("kind"))},
+               {QStringLiteral("fields"), QJsonObject::fromVariantMap(std::get<QVariantMap>(found))}});
+}
+
+void SocketBridge::scriptItem(const QJsonObject& message)
+{
+    const std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> target = scriptItemTarget(message);
+    if (const QString* problem = std::get_if<QString>(&target)) {
+        sendError(QStringLiteral("scriptItem: %1").arg(*problem));
+        return;
+    }
+    sendScriptItem(QStringLiteral("scriptItem"), message, std::get<0>(target).second);
+}
+
+void SocketBridge::addScriptItem(const QJsonObject& message)
+{
+    const std::optional<IEngine::ScriptItemKind> kind = scriptItemKind(message);
+    const std::optional<int> parent = wholeNumber(message.value(QLatin1String("parent")), 0);
+    const std::optional<int> position = wholeNumber(message.value(QLatin1String("position")), 0);
+    const QJsonValue folder = message.value(QLatin1String("folder"));
+    const QJsonValue name = message.value(QLatin1String("name"));
+    QString problem;
+    if (!kind) {
+        problem = QString(scriptItemKindProblem);
+    } else if (!parent) {
+        problem = QStringLiteral("parent must be a whole number from 0");
+    } else if (!position) {
+        problem = QStringLiteral("position must be a whole number from 0");
+    } else if (!folder.isBool()) {
+        problem = QStringLiteral("folder must be true or false");
+    } else if (!name.isString()) {
+        problem = QStringLiteral("name must be a string");
+    }
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("addScriptItem: %1").arg(problem));
+        return;
+    }
+    const std::variant<int, QString> added = mEngine->addScriptItem(*kind, *parent, *position, folder.toBool(), name.toString());
+    if (const QString* refused = std::get_if<QString>(&added)) {
+        sendError(QStringLiteral("addScriptItem: %1").arg(*refused));
+        return;
+    }
+    sendScriptItem(QStringLiteral("addScriptItem"), message, std::get<int>(added));
+}
+
+void SocketBridge::editScriptItem(const QJsonObject& message)
+{
+    const std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> target = scriptItemTarget(message);
+    const QJsonValue fields = message.value(QLatin1String("fields"));
+    QString problem;
+    if (const QString* bad = std::get_if<QString>(&target)) {
+        problem = *bad;
+    } else if (!fields.isObject()) {
+        problem = QStringLiteral("fields must be an object");
+    } else {
+        problem = mEngine->editScriptItem(std::get<0>(target).first, std::get<0>(target).second, fields.toObject().toVariantMap());
+    }
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("editScriptItem: %1").arg(problem));
+        return;
+    }
+    sendScriptItem(QStringLiteral("editScriptItem"), message, std::get<0>(target).second);
+}
+
+void SocketBridge::enableScriptItem(const QJsonObject& message)
+{
+    const std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> target = scriptItemTarget(message);
+    const QJsonValue enabled = message.value(QLatin1String("enabled"));
+    QString problem;
+    if (const QString* bad = std::get_if<QString>(&target)) {
+        problem = *bad;
+    } else if (!enabled.isBool()) {
+        problem = QStringLiteral("enabled must be true or false");
+    } else {
+        problem = mEngine->enableScriptItem(std::get<0>(target).first, std::get<0>(target).second, enabled.toBool());
+    }
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("enableScriptItem: %1").arg(problem));
+        return;
+    }
+    sendScriptItem(QStringLiteral("enableScriptItem"), message, std::get<0>(target).second);
+}
+
+QString SocketBridge::moveScriptItem(const QJsonObject& message)
+{
+    const std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> target = scriptItemTarget(message);
+    if (const QString* problem = std::get_if<QString>(&target)) {
+        return *problem;
+    }
+    const std::optional<int> parent = wholeNumber(message.value(QLatin1String("parent")), 0);
+    const std::optional<int> position = wholeNumber(message.value(QLatin1String("position")), 0);
+    if (!parent) {
+        return QStringLiteral("parent must be a whole number from 0");
+    }
+    if (!position) {
+        return QStringLiteral("position must be a whole number from 0");
+    }
+    return mEngine->moveScriptItem(std::get<0>(target).first, std::get<0>(target).second, *parent, *position);
+}
+
+QString SocketBridge::deleteScriptItem(const QJsonObject& message)
+{
+    const std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> target = scriptItemTarget(message);
+    if (const QString* problem = std::get_if<QString>(&target)) {
+        return *problem;
+    }
+    return mEngine->deleteScriptItem(std::get<0>(target).first, std::get<0>(target).second);
 }
 
 void SocketBridge::getImage(const QJsonObject& message)

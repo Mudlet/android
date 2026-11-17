@@ -95,6 +95,13 @@ public:
     QString cancelMapDownload() override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
     QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) override;
+    std::variant<QList<ScriptItemInfo>, QString> scriptItems(ScriptItemKind kind) const override;
+    std::variant<QVariantMap, QString> scriptItem(ScriptItemKind kind, int item) override;
+    std::variant<int, QString> addScriptItem(ScriptItemKind kind, int parent, int position, bool folder, const QString& name) override;
+    QString editScriptItem(ScriptItemKind kind, int item, const QVariantMap& fields) override;
+    QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) override;
+    QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) override;
+    QString deleteScriptItem(ScriptItemKind kind, int item) override;
 
     const QString& name() const { return mProfile; }
     // While it has not started: what a later connect or Lua starts

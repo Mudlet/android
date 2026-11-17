@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit
 class EngineLinkJvmTest {
     private val engineBin = System.getProperty("engineBin").orEmpty()
     private val fakePort = System.getProperty("fakePort").orEmpty().toIntOrNull() ?: 0
+    private val engineRequired = System.getProperty("engineRequired").toBoolean()
     private lateinit var socketPath: Path
     private var engine: Process? = null
     private val events = LinkedBlockingQueue<Any>()
@@ -36,7 +38,10 @@ class EngineLinkJvmTest {
 
     @Before
     fun setUp() {
-        assumeTrue("engineBin not set; run native/tests/run_jvm_client_test.sh", engineBin.isNotEmpty() && fakePort > 0)
+        val given = engineBin.isNotEmpty() && fakePort > 0
+        val unset = "engineBin or fakePort not set; run native/tests/run_jvm_client_test.sh"
+        if (engineRequired) assertTrue(unset, given) else assumeTrue(unset, given)
+        assertTrue("no executable engine at $engineBin", File(engineBin).canExecute())
         socketPath = Files.createTempDirectory("engine-jvm").resolve("engine.sock")
         startEngine()
     }

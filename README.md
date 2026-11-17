@@ -11,8 +11,9 @@ The app runs in two processes:
   and its scripts keep running while the app is in the background.
 
 They talk over a local socket ([`docs/protocol.md`](docs/protocol.md)). The engine is libmudlet, through Mudlet's
-`THeadlessSession`, or a small stand-in engine for fast tests. Why it is built this way, and the three prototypes the
-choice came from, are in [`docs/decisions/hosting.md`](docs/decisions/hosting.md).
+`THeadlessSession`. A small stand-in engine serves as a test harness of the socket protocol on the host; it is never
+the app. Why it is built this way, and the three prototypes the choice came from, are in
+[`docs/decisions/hosting.md`](docs/decisions/hosting.md).
 
 For now the app opens on a placeholder for the profile list, with a placeholder for the game screen behind it. Debug
 builds also have a self-test screen there: connect to a game, see its coloured output, send commands and Lua, and,
@@ -25,7 +26,7 @@ behind "Debug", the engine's start times, heartbeat, process ids and buttons tha
 | [`app/`](app) | `:app`, the UI process: Compose, the app's screens and, in debug builds, the self-test |
 | [`engine-service/`](engine-service) | `:engine-service`, an Android library: `EngineService` in the `:engine` process, its notifications, the Qt glue, and the Qt libraries staged for the APK |
 | [`protocol/`](protocol) | `:protocol`, plain Kotlin/JVM: the socket protocol's wire format and `EngineLink`, the client that reconnects to the engine, the script windows' state and layout, what a label draws, and their tests |
-| [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`), and the host tests (`tests/`) |
+| [`native/`](native) | C++: the engine host (`enginehost/`: `main()`, the socket bridge, libmudlet's adapter, the Android glue), the engine interface (`api/`), the stand-in engine (`standin/`, the protocol's test harness), and the host tests (`tests/`) |
 | [`scripts/`](scripts) | Building the APK, and libmudlet and its dependencies for Android and the host |
 | [`docs/`](docs) | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`decisions/`](docs/decisions), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md) |
 
@@ -45,26 +46,10 @@ You need:
 The build files default to `~/Programs/Qt/6.12.0` and `~/Android/Sdk`, and build arm64-v8a. Override them with
 `QT_ROOT`, `ANDROID_SDK_ROOT` and `ANDROID_ABI` (`x86_64` for the emulator).
 
-### The APK with the stand-in engine
+### The APK
 
-```sh
-scripts/build-apk.sh
-```
-
-This builds `native/` with Qt's Android CMake into `native/build-android-<abi>`, stages the engine and its Qt
-libraries into `engine-service/qtdeploy` with `androiddeployqt --aux-mode`, then runs Gradle's
-`:app:assembleDebug`. The engine's APK carries OpenSSL for Qt's TLS backend: the first run builds it into
-`native/openssl-<abi>` with [`scripts/build-openssl.sh`](scripts/build-openssl.sh), or `OPENSSL_PREFIX` names a
-prefix that script made (see "TLS" in [`docs/architecture.md`](docs/architecture.md)). The APK is `app/build/outputs/apk/debug/app-debug.apk`. Gradle arguments go after the script's
-name: `-PextractNativeLibs=true` has the installer extract the native libraries (see "Native libraries" in
-[`docs/architecture.md`](docs/architecture.md)).
-
-Gradle on its own (`./gradlew :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
-first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
-
-### The APK with libmudlet
-
-Mudlet installs nothing to link against, so first build it from a checkout of Mudlet's `development`:
+The one APK to install is the one with libmudlet as its engine. Mudlet installs nothing to link against, so first
+build it from a checkout of Mudlet's `development`:
 
 ```sh
 scripts/build-mudlet-deps.sh deps/prefix                # its third-party libraries, for Android
@@ -77,6 +62,21 @@ LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
 Lua 5.1 needs `-U_FORTIFY_SOURCE`, which Mudlet does not set yet; until it does, `build-libmudlet.sh` adds it to
 the checkout (see "Lua 5.1 FORTIFY fix" under [CI](#ci)).
 
+`build-apk.sh` builds `native/` with Qt's Android CMake into `native/build-android-<abi>-mudlet`, stages the engine
+and its Qt libraries into `engine-service/qtdeploy` with `androiddeployqt --aux-mode`, then runs Gradle's
+`:app:assembleDebug`. The engine's APK carries OpenSSL for Qt's TLS backend: the first run builds it into
+`native/openssl-<abi>` with [`scripts/build-openssl.sh`](scripts/build-openssl.sh), or `OPENSSL_PREFIX` names a
+prefix that script made (see "TLS" in [`docs/architecture.md`](docs/architecture.md)). The APK is `app/build/outputs/apk/debug/app-debug.apk`. Gradle arguments go after the script's
+name: `-PextractNativeLibs=true` has the installer extract the native libraries (see "Native libraries" in
+[`docs/architecture.md`](docs/architecture.md)).
+
+Without `LIBMUDLET_BUILD_DIR`, `build-apk.sh` packages the stand-in engine instead, only so that Android lint and the
+app's JVM tests can run on a machine without Mudlet's build. That APK is not the app: it has no TLS, map, script
+windows or login, and its About screen says so. Do not install it to play or hand it to anyone.
+
+Gradle on its own (`./gradlew :app:assembleDebug`, or an IDE) needs `engine-service/qtdeploy` staged by the script
+first, and `-PqtRoot=...` unless `qtRoot` in `gradle.properties` fits.
+
 ### The release
 
 The release is an AAB for Google Play with arm64-v8a and x86_64, and an APK for each, minified with R8:
@@ -88,7 +88,7 @@ pre-release: [`docs/ptb.md`](docs/ptb.md).
 ### Tests
 
 ```sh
-# The stand-in engine on the host, against a fake game server
+# The stand-in engine, the protocol's test harness, on the host against a fake game server
 cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64
 cmake --build native/build-desktop --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine
@@ -119,7 +119,7 @@ python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/a
 ```
 
 `./gradlew :protocol:test` alone runs the protocol tests without an engine; the one against the desktop engine is then
-skipped. `ProtocolSpecTest` among them checks that [`docs/protocol.md`](docs/protocol.md), the C++ engine and the
+skipped, but fails on CI (`CI=true`), where a skip would pass with nothing tested. `ProtocolSpecTest` among them checks that [`docs/protocol.md`](docs/protocol.md), the C++ engine and the
 Kotlin client agree.
 
 `scripts/check-apk.sh` runs CI's APK checks on the APK `build-apk.sh` made. The on-device checklist is in
@@ -138,25 +138,12 @@ pull request cancels its older run.
 | Changed | Runs |
 |---|---|
 | Only docs (`*.md`, `docs/` but `docs/protocol.md`) | CI's own two short jobs and the conflict-marker check, nothing else |
-| Kotlin in `app/`, `engine-service/` or `protocol/` | ktlint; APKs; the emulator jobs, with libmudlet from its cache; for `app/` and `engine-service/` the strings check |
+| Kotlin in `app/`, `engine-service/`, `protocol/` or `suggest/` | ktlint; the arm64 APK with its host and JVM tests and Android lint, and the emulator jobs, both with libmudlet from its cache; for `app/` and `engine-service/` the strings check |
 | `native/`, the Gradle build, the build scripts, `.github/actions/` | the jobs below that build from them |
 | A workflow | what that workflow runs; `ci.yml` itself, everything |
 
 The workflows it calls:
 
-- **APKs** (`.github/workflows/apks.yml`)
-  - runs the stand-in engine's desktop test, and `:protocol`'s tests with the Kotlin client against that engine;
-  - builds OpenSSL for Android with [`scripts/build-openssl.sh`](scripts/build-openssl.sh) (a pinned release and its
-    checksum), cached under the script's hash by `.github/actions/android-openssl`;
-  - builds the debug APK with the stand-in engine, and again with its libraries extracted at install;
-  - checks that each APK holds Qt and the engine, and OpenSSL as Qt's TLS backend loads it (`libcrypto_3.so` and
-    `libssl_3.so`, their names, the libraries they need, OpenSSL 3), that its libraries are 16 KB aligned (their
-    offsets in the APK and their load segments), that they are stored or compressed as `extractNativeLibs` says, and
-    that the launcher icon is an adaptive icon with a monochrome layer ([`scripts/check-apk.sh`](scripts/check-apk.sh)),
-    and that the APK, its libraries and its dex keep to their size budget
-    ([`scripts/check-apk-size.sh`](scripts/check-apk-size.sh), CONTRIBUTING.md's "APK size budget");
-  - runs Android lint on `:app` and `:engine-service`, where a warning fails (`lint.xml` says what is off and why);
-  - uploads both APKs, and gives each one's size, its size on the device, and OpenSSL's share, in the job summary.
 - **libmudlet for Android** (`.github/workflows/libmudlet.yml`) checks out Mudlet's `development` branch (or any ref
   given to a manual run).
   - It cross-builds libmudlet's dependencies for arm64-v8a with
@@ -171,10 +158,25 @@ The workflows it calls:
     passes `-U_FORTIFY_SOURCE` for Android itself ([Mudlet/Mudlet#12914](https://github.com/Mudlet/Mudlet/pull/12914)),
     the script appends the same `"SHELL:-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1"` option for Android to that file in
     the Mudlet checkout and says so in its log. A local checkout keeps that change.
-  - It builds the APK with libmudlet as the engine, linked through the `libmudlet::headless` target that
-    [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line, puts it through
-    the same checks as above, checks that the engine carries Mudlet's Lua, its Lua C modules and QtKeychain's KeyStore
-    backend, and uploads it.
+  - Its **libmudlet** job first runs the host tests that need no Mudlet: the stand-in engine's desktop test
+    (`native/tests/test_engine.py`) and `:protocol`'s tests with the Kotlin client against that engine (the stand-in
+    is only this test harness of the socket protocol, never an APK), and `:suggest`'s tests.
+  - It builds OpenSSL for Android with [`scripts/build-openssl.sh`](scripts/build-openssl.sh) (a pinned release and
+    its checksum), cached under the script's hash by `.github/actions/android-openssl`, then the arm64-v8a debug APK
+    with libmudlet as the engine, linked through the `libmudlet::headless` target that
+    [`scripts/export-libmudlet.py`](scripts/export-libmudlet.py) writes from the runner's link line. It runs on every
+    change to the app, so every pull request that changes it has an APK to install.
+  - It runs the app's JVM tests, and Android lint on `:app` and `:engine-service`, where a warning fails (`lint.xml`
+    says what is off and why).
+  - It checks that the APK holds Qt and the engine, and OpenSSL as Qt's TLS backend loads it (`libcrypto_3.so` and
+    `libssl_3.so`, their names, the libraries they need, OpenSSL 3), that its libraries are 16 KB aligned (their
+    offsets in the APK and their load segments), that they are stored or compressed as `extractNativeLibs` says, and
+    that the launcher icon is an adaptive icon with a monochrome layer ([`scripts/check-apk.sh`](scripts/check-apk.sh)),
+    and that the APK, its libraries and its dex keep to their size budget
+    ([`scripts/check-apk-size.sh`](scripts/check-apk-size.sh), CONTRIBUTING.md's "APK size budget"); and that the
+    engine carries Mudlet's Lua, its Lua C modules and QtKeychain's KeyStore backend.
+  - It uploads the APK as `mudlet-libmudlet-debug-apk`, the one APK CI makes to install on a phone, and gives its
+    size, its size on the device, and OpenSSL's share, in the job summary.
   - **desktop-engine** builds libmudlet for the host with the same options
     ([`scripts/build-libmudlet-desktop.sh`](scripts/build-libmudlet-desktop.sh)) and runs the real engine against the
     fake game server through the socket protocol (`native/tests/test_mudlet_engine.py`), in the clear and over TLS. It also kills that engine
@@ -217,7 +219,7 @@ repository, which pushes to `main` already check), so a change on Mudlet's side 
 a nightly that fails or times out opens or updates an issue here. GitHub pauses the nightly after 60 days without
 activity in this repository; re-enable it from the Actions tab. A red check on a pull request can come from Mudlet's
 side too. A manual run of CI (Actions, CI, "Run workflow") runs everything on any branch, with any Mudlet ref;
-`apks.yml` and `libmudlet.yml` can also be run on their own, the latter with a choice of its jobs.
+`libmudlet.yml` can also be run on its own, with a choice of its jobs.
 
 **PTB** (`.github/workflows/ptb.yml`), outside CI, runs every night and on pull requests that change the app's code
 or how the release is built, whose minified size it checks against its budget. It builds the release from Mudlet's
@@ -230,7 +232,7 @@ when neither Mudlet nor this repository changed, and publishes nothing without i
 Dependabot proposes updates for the Gradle dependencies, the actions and the linters weekly; Qt, the NDK and the
 versions tied to them are bumped by hand (see "Pinned versions" in [`CONTRIBUTING.md`](CONTRIBUTING.md)).
 
-APKs and libmudlet install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt
+The libmudlet jobs install the versions under [Building](#building) with `.github/actions/android-toolchain` (Qt
 through a pinned aqtinstall). Qt, the NDK, the dependencies, OpenSSL, Mudlet's Android builds, Gradle, ccache and the
 emulators' system images are cached between runs.
 
@@ -241,8 +243,7 @@ This repository's code is free software under the GNU General Public License, ve
 distributed under version 3 of the GPL.
 
 The app's About screen lists the licence of everything the APK bundles, with the texts: Mudlet (GPL v2 or later), Qt
-(LGPL v3), OpenSSL 3 (Apache 2.0), the stand-in engine's vendored Lua 5.1.5 (MIT, see
-[`native/third_party/lua-5.1.5/COPYRIGHT`](native/third_party/lua-5.1.5/COPYRIGHT)), Mudlet's dependencies and the
+(LGPL v3), OpenSSL 3 (Apache 2.0), Lua 5.1.5 (MIT), Mudlet's dependencies and the
 Android libraries. Where the list comes from, the checks that keep it complete, and how to rebuild the app with your
 own Qt are in [`docs/licences.md`](docs/licences.md).
 The launcher icon is made from Mudlet's logo, by Thorsten Wilms, from Mudlet/Mudlet (GPL-2.0-or-later); see

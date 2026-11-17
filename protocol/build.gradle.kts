@@ -23,9 +23,11 @@ dependencies {
 }
 
 tasks.test {
-    // EngineLinkJvmTest runs only when given a desktop engine and a fake game server's port
+    // EngineLinkJvmTest runs only when given a desktop engine and a fake game server's port; on CI (CI=true, as
+    // GitHub Actions sets it) it fails without them, as a skip there would pass with nothing tested
     systemProperty("engineBin", providers.gradleProperty("engineBin").getOrElse(""))
     systemProperty("fakePort", providers.gradleProperty("fakePort").getOrElse(""))
+    systemProperty("engineRequired", providers.environmentVariable("CI").getOrElse("") == "true")
     // ProtocolSpecTest reads docs/protocol.md and the engine's sources
     systemProperty("repoRoot", rootDir.absolutePath)
     inputs.files(

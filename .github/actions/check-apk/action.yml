@@ -19,9 +19,6 @@ inputs:
   size-budget:
     description: The APK's line in scripts/apk-size-budget.txt (scripts/check-apk-size.sh)
     required: true
-  extracted:
-    description: "true when the APK was built to extract its libraries at install (useLegacyPackaging)"
-    default: "false"
   build-tools-dir:
     description: The SDK build-tools directory (zipalign, aapt2), as android-toolchain outputs it
     required: true
@@ -36,7 +33,6 @@ runs:
       shell: bash
       env:
         TITLE: ${{ inputs.title }}
-        EXTRACTED: ${{ inputs.extracted }}
         ENGINE: ${{ inputs.engine }}
         BUILD_TOOLS: ${{ inputs.build-tools-dir }}
         ABI: ${{ inputs.abi }}

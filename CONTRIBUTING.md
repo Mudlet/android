@@ -11,12 +11,12 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `engine-service/` | `:engine-service`: `EngineService` in the `:engine` process, and the Qt libraries `scripts/build-apk.sh` stages into `engine-service/qtdeploy/` |
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, the script windows' state and layout, what a label draws, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
-| `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5 |
+| `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the stand-in engine (`standin/`, a test harness of the socket protocol on the host, never the app), the host tests (`tests/`); `third_party/` is vendored Lua 5.1.5, the stand-in's |
 | `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and the strings check it runs, `check-strings.py`, and `launcher-icons.py` |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
 | `.agents/skills/` | Longer procedures for coding agents (running on the emulator, bumping Qt); `.claude/skills` links to it |
 | `crowdin.yml` | What Crowdin translates and where the translations go ([`docs/translations.md`](docs/translations.md)) |
-| `.github/` | The workflows (`ci.yml`, which calls `checks.yml`, `apks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
+| `.github/` | The workflows (`ci.yml`, which calls `checks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
 
 ## Setting up
@@ -36,16 +36,19 @@ dependency scripts use every core unless `JOBS` says otherwise.
 
 ## Build
 
-```sh
-# The debug APK with the stand-in engine: app/build/outputs/apk/debug/app-debug.apk
-scripts/build-apk.sh
-scripts/build-apk.sh -PextractNativeLibs=true      # the variant that extracts its libraries at install
+There is one APK to install: the one with libmudlet as its engine, which CI uploads as `mudlet-libmudlet-debug-apk`.
 
-# The debug APK with libmudlet, from a checkout of Mudlet's development branch
+```sh
+# The debug APK with libmudlet, from a checkout of Mudlet's development branch: app/build/outputs/apk/debug/app-debug.apk
 git clone --depth 1 --branch development https://github.com/Mudlet/Mudlet ../mudlet
 scripts/build-mudlet-deps.sh deps/prefix
 scripts/build-libmudlet.sh ../mudlet build deps/prefix
 LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh
+LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh -PextractNativeLibs=true   # the variant that extracts its libraries at install
+
+# Without Mudlet's build: the stand-in engine packaged, only for Android lint and the app's JVM tests. Not the app
+# (no TLS, map, script windows or login; its About screen says so): never install it to play, or hand it out
+scripts/build-apk.sh
 ```
 
 `build-libmudlet.sh` adds the Lua 5.1 FORTIFY fix to the Mudlet checkout (see the README's CI section). For the
@@ -65,14 +68,14 @@ The public test builds, their versions and signing, and what the maintainer sets
 ## Test
 
 ```sh
-# :protocol's JVM tests without an engine (EngineLinkJvmTest is then skipped)
+# :protocol's JVM tests without an engine (EngineLinkJvmTest is then skipped, but fails with CI=true, as on CI)
 ./gradlew :protocol:test
 
 # :suggest's tests, with Gradle or with kotlinc and JUnit 4 alone (no Android SDK)
 ./gradlew :suggest:test
 KOTLIN_HOME=path/to/kotlinc JUNIT_JARS=junit-4.13.2.jar:hamcrest-core-1.3.jar suggest/run-tests.sh
 
-# The stand-in engine on the host, then :protocol's tests with the Kotlin client against it
+# The stand-in engine, the protocol's test harness, on the host, then :protocol's tests with the Kotlin client against it
 cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64
 cmake --build native/build-desktop --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine
@@ -98,7 +101,7 @@ scripts/check-licences.py --mudlet-source ../mudlet
 # size budget (below)
 scripts/check-apk.sh                       # after scripts/build-apk.sh
 EXTRACTED=true scripts/check-apk.sh        # after scripts/build-apk.sh -PextractNativeLibs=true
-SIZE_BUDGET=standin-arm64-v8a scripts/check-apk.sh
+SIZE_BUDGET=libmudlet-arm64-v8a scripts/check-apk.sh   # after the libmudlet build
 scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab   # after scripts/build-release.sh
 
 # The x86_64 APK with libmudlet on a running emulator (CI's emulator job)

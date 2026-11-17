@@ -11,9 +11,10 @@ Set `QT_ROOT` (with `gcc_64` and `android_arm64_v8a`), `ANDROID_SDK_ROOT`/`ANDRO
 Gradle is always `./gradlew`.
 
 ```sh
-scripts/build-apk.sh                                   # stand-in engine APK
-LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh         # libmudlet APK, after build-mudlet-deps.sh and build-libmudlet.sh
+LIBMUDLET_BUILD_DIR=build scripts/build-apk.sh         # the APK (libmudlet), after build-mudlet-deps.sh and build-libmudlet.sh
+scripts/build-apk.sh                                   # the stand-in packaged, only for lint and JVM tests: not the app
 ./gradlew :protocol:test                               # JVM tests, no engine
+# the stand-in engine, the protocol's host test harness, and the Kotlin client against it
 cmake -S native -B native/build-desktop -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64
 cmake --build native/build-desktop --target engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_engine.py native/build-desktop/enginehost/engine

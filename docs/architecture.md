@@ -253,6 +253,16 @@ last one's stored password, as on an engine started again after the notification
 have libmudlet make a profile named `MUDLET_PROFILE` with that address, a copy of the player's. A profile's name cannot
 change, as the engine keeps the name a profile was created with.
 
+Below the profiles, under "More games", the list offers the games of Mudlet's connection dialog
+(`ui/profiles/DefaultGames.kt`, from `assets/games/games.json` and its logos, which `scripts/sync-mudlet-games.py`
+copies from Mudlet's `src/TGameDetails.h` at a pinned commit), each with its logo, name and the first paragraph of its
+description; its info button opens the whole description, the address and the game's links. A game the player has a
+profile for, of its name or at its address (any of its hosts, and its port), is left out. A tap saves a profile of the
+game's name, address and TLS choice, then opens it as Connect does. The name is the desktop's own, so Mudlet treats the
+profile as that game, as it does a profile made from its dialog, and picks settings for it, such as joining Achaea's
+split lines (`Host::setupIreDriverBugfix`), which the app's "New games" defaults leave alone unless the player changed
+them (`ProfileSession.giveDefaults`).
+
 The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
 never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's
 name as associated data, so one profile's cannot be moved to another's. The ciphertext is in

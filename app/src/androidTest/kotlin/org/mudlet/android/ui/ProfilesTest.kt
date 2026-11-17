@@ -3,6 +3,7 @@ package org.mudlet.android.ui
 import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -22,6 +24,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.AnnotatedString
@@ -41,6 +44,8 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.profiles.DefaultGame
+import org.mudlet.android.ui.profiles.DefaultGames
 
 /**
  * The profile list and editor against a fake engine, as a TalkBack user drives them: each control found by the label
@@ -71,9 +76,9 @@ class ProfilesTest {
 
     @After
     fun forgetPasswords() {
-        listOf(ALPHA, BETA, GAMMA).forEach {
-            passwords.forget(it.name)
-            Settings.setAwaitsDefaults(it.name, false)
+        (listOf(ALPHA, BETA, GAMMA).map { it.name } + listOf(ACHAEA, STICKMUD)).forEach {
+            passwords.forget(it)
+            Settings.setAwaitsDefaults(it, false)
         }
     }
 
@@ -245,6 +250,75 @@ class ProfilesTest {
         compose.onNodeWithText(string(R.string.games_title)).assertIsDisplayed()
     }
 
+    @Test
+    fun offersMudletsGamesBelowTheProfilesAndAddsOneAtATap() {
+        listed(ALPHA)
+        val achaea = game(ACHAEA)
+        val row = gameRow(achaea)
+        scrollToGame(row)
+        val header = compose.onNodeWithText(string(R.string.default_games_title)).assertIsDisplayed().fetchSemanticsNode()
+        val alpha = compose.onNodeWithContentDescription("Alpha, a.example:23").fetchSemanticsNode()
+        assertTrue("below the player's own", alpha.boundsInRoot.top < header.boundsInRoot.top)
+        compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        compose.onNode(hasContentDescription(string(R.string.default_game_info, ACHAEA)) and hasClickAction()).assertIsDisplayed()
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        activate(row)
+        val save = engine.receive("saveProfile")
+        assertEquals(Profile(ACHAEA, "achaea.com", 23, false, "", false), profileOf(save))
+        engine.profiles(listOf(ALPHA, achaea.newProfile()), save)
+        val open = engine.receive("openProfile")
+        assertEquals(ACHAEA, open.getString("name"))
+        assertTrue(open.getBoolean("connect"))
+        compose.runOnIdle { assertTrue("Mudlet's game is given the app's settings as it first loads", Settings.awaitsDefaults(ACHAEA)) }
+        engine.profiles(listOf(achaea.newProfile(), ALPHA), open)
+        waitFor(hasText(string(R.string.game_title)))
+    }
+
+    @Test
+    fun leavesOutAGameThePlayerHasAProfileAt() {
+        listed(Profile("Mine", " ACHAEA.COM", 23, false, "", false))
+        // Aardwolf is listed before Achaea and Aetolia after, so Achaea would be laid out between them
+        scrollToGame(gameRow(game("Aardwolf")))
+        scrollToGame(gameRow(game("Aetolia")))
+        compose.onNode(gameRow(game(ACHAEA))).assertDoesNotExist()
+        compose.onNodeWithContentDescription(string(R.string.default_game_info, ACHAEA)).assertDoesNotExist()
+    }
+
+    @Test
+    fun tellsOfAGameAndShowsTheEnginesRefusalToAddIt() {
+        listed()
+        val stick = game(STICKMUD)
+        val info = hasContentDescription(string(R.string.default_game_info, STICKMUD)) and hasClickAction()
+        scrollToGame(info)
+        activate(info)
+        compose.onNode(hasText(STICKMUD) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.default_game_address_secure, stick.host, stick.port)).assertIsDisplayed()
+        compose.onNodeWithText(stick.description).assertIsDisplayed()
+        for (link in stick.links) compose.onNode(hasText(link.label) and hasClickAction() and hasAnyAncestor(isDialog())).assertExists()
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        activate(hasText(string(R.string.profile_connect)) and hasAnyAncestor(isDialog()))
+        val save = engine.receive("saveProfile")
+        assertEquals(Profile(STICKMUD, stick.host, stick.port, true, "", false), profileOf(save))
+        compose.onNode(isDialog()).assertDoesNotExist()
+        engine.refuse(save, "the disk is full")
+        waitFor(hasText("saveProfile: the disk is full"))
+        compose.onNodeWithText("saveProfile: the disk is full").assertIsDisplayed()
+        engine.assertNoRequest("openProfile", 1000)
+    }
+
+    private fun game(name: String) = compose.activity.assets.open(DefaultGames.FILE).bufferedReader().use { DefaultGames.parse(it.readText()) }
+        .single { it.name == name }
+
+    private fun gameRow(game: DefaultGame) = hasContentDescription(string(R.string.default_game_description, game.name, game.summary.ifEmpty { string(R.string.profile_address, game.host, game.port) })) and hasClickAction()
+
+    // The list is lazy: a row far down is not laid out, so not found, until scrolled to
+    private fun scrollToGame(matcher: SemanticsMatcher) {
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(matcher)
+        compose.onNode(matcher).assertIsDisplayed()
+    }
+
     /** The engine answers the UI's listProfiles, sent when it attached, with [profiles]. */
     private fun listed(vararg profiles: Profile) {
         engine.profiles(profiles.toList(), engine.receive("listProfiles"))
@@ -291,6 +365,10 @@ class ProfilesTest {
         val ALPHA = Profile("Alpha", "a.example", 23, false, "", false)
         val BETA = Profile("Beta", "b.example", 4000, true, "", true)
         val GAMMA = Profile("Gamma", "g.example", 4242, true, "hero", true)
+
+        // Two of Mudlet's games (app/src/main/assets/games), StickMUD's connection secure
+        const val ACHAEA = "Achaea"
+        const val STICKMUD = "StickMUD"
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

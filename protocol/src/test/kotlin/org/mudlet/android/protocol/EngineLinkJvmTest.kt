@@ -228,6 +228,9 @@ class EngineLinkJvmTest {
 
         // What is sent says which connection it went out on, as a text box's typing is counted by it
         assertEquals("the first connection", 1, link.sendOn(Requests.setScreenSize(100, 30)))
+        // As the game screen gives it. Without it the main window is the console's 100 columns, and the dock the starter
+        // UI builds for the banner's tell takes up to a quarter of them from what the game is told, as on the desktop
+        link.send(Requests.setMainWindowSize(1000, 800))
 
         // libmudlet makes the profile when it is given a game, and shows a GA prompt as the open tail
         link.send(Requests.connect("127.0.0.1", fakePort, false))
@@ -252,7 +255,7 @@ class EngineLinkJvmTest {
             link.send(Requests.send("size"))
             size = text(shown { it.startsWith("SIZE:") })
         } while (size != "SIZE: 100x30" && System.nanoTime() < deadline)
-        assertEquals("the game was told the size setScreenSize gave", "SIZE: 100x30", size)
+        assertEquals("the game was told the console's size, not what the dock leaves of the main window", "SIZE: 100x30", size)
 
         // Ping round trips through the app's EngineLink
         val rtts = (0 until 3000).map { link.ping()!! / 1000 }.drop(300).sorted()

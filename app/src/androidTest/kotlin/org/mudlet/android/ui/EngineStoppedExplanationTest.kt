@@ -64,6 +64,8 @@ class EngineStoppedExplanationTest {
         stopped.waitForExplanation(compose, false)
         assertTrue("Not now is kept", stopped.answered())
 
+        // A new Activity reads the answer
+        compose.activityRule.scenario.recreate()
         stopped.restartEngine()
         stopped.assertStaysHidden(compose, "a later engine, once answered")
     }

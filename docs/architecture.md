@@ -1271,8 +1271,9 @@ that attaches later is told too. The UI shows it as a marker line.
     It reads why from the `:engine` process's last `ApplicationExitInfo`
     (Android 11 and later): a low-memory kill, a signal, `REASON_OTHER`, excessive
     resource use, the freezer or an unknown reason; not a crash, an ANR, a force
-    stop or an update. Android 10 and earlier record no reason, so there any
-    restore counts. "Battery settings" or "Not now" is kept as
+    stop or an update, nor an exit before the device last started (the engine
+    restores after a reboot too). Android 10 and earlier record no reason, so
+    there any restore counts. "Battery settings" or "Not now" is kept as
     `engineStoppedAnswered` in the `ui` preferences, and it is never shown again;
     Back hides it until the next engine. The app does not ask for
     `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, which Google Play allows only for a

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 
@@ -37,17 +38,30 @@ internal object EngineStopped {
         else -> false
     }
 
+    /** One recorded exit of a process of the app, as ApplicationExitInfo has it; [timeMs] is wall-clock time. */
+    data class Exit(val processName: String, val reason: Int, val timeMs: Long)
+
     /**
-     * [byAndroid] for the engine process's last exit. Android 10 and earlier record none, and a restore follows only a
-     * kill, so there it is true; on 11 and later an exit not recorded is false.
+     * Whether the newest of [exits] (newest first, as Android lists them) that is [engine]'s was Android stopping it
+     * since the device started at [bootedAtMs]. An exit before that is the shutdown of a reboot, after which the engine
+     * restores too, and which no battery setting prevents. No exit of the engine's is false.
+     */
+    fun lastEngineExitByAndroid(exits: List<Exit>, engine: String, bootedAtMs: Long): Boolean {
+        val last = exits.firstOrNull { it.processName == engine } ?: return false
+        return last.timeMs >= bootedAtMs && byAndroid(last.reason)
+    }
+
+    /**
+     * [lastEngineExitByAndroid] for the app's recorded exits. Android 10 and earlier record none, and a restore
+     * follows only a kill or a reboot, so there it is true.
      */
     fun lastExitByAndroid(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true
-        val engine = "${context.packageName}:engine"
-        val exits = context.getSystemService(ActivityManager::class.java).getHistoricalProcessExitReasons(context.packageName, 0, EXITS_READ)
-        // Newest first
-        val last = exits.firstOrNull { it.processName == engine } ?: return false
-        return byAndroid(last.reason)
+        val exits = context.getSystemService(ActivityManager::class.java)
+            .getHistoricalProcessExitReasons(context.packageName, 0, EXITS_READ)
+            .map { Exit(it.processName, it.reason, it.timestamp) }
+        val bootedAtMs = System.currentTimeMillis() - SystemClock.elapsedRealtime()
+        return lastEngineExitByAndroid(exits, "${context.packageName}:engine", bootedAtMs)
     }
 
     /**

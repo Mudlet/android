@@ -15,7 +15,6 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -64,8 +63,7 @@ class PseudoLocaleTest(private val locale: String) {
 
     @Before
     fun enableChecks() {
-        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.enableAccessibilityChecksOfWhatShows()
     }
 
     @Test
@@ -155,7 +153,10 @@ class PseudoLocaleTest(private val locale: String) {
         val lua = hasTestTag(LUA_EDITOR_TAG)
         compose.onNode(lua).performScrollTo()
         compose.onNode(lua).performSemanticsAction(SemanticsActions.RequestFocus)
-        waitFor(hasContentDescription(string(R.string.lua_indent)))
+        val keys = hasContentDescription(string(R.string.lua_indent))
+        waitFor(keys)
+        // Measured once the page has stopped moving over the keyboard that comes with them
+        compose.keyboardHasCome(keys, WAIT_MS)
         assertTextFits("a trigger's page with its Lua being typed")
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.scripts_off)))

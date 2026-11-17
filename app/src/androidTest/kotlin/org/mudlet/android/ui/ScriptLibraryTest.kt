@@ -19,7 +19,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
@@ -85,8 +84,7 @@ class ScriptLibraryTest {
 
     @Before
     fun openTheLibrary() {
-        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.enableAccessibilityChecksOfWhatShows()
         // A new engine instance for each test, so no item of an earlier test is kept
         val first = fake.engine.nextSession()
         fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
@@ -376,10 +374,10 @@ class ScriptLibraryTest {
 
         // Enter at the end of a line that opens a block indents the next
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(9, 9, true) }
-        compose.onNode(editor).performTextInput("\n")
+        typeLua("\n")
         waitFor(editor and hasText("if x then\n  "))
         // A name typed is completed from Mudlet's functions, and the row over the keyboard types what Lua needs
-        compose.onNode(editor).performTextInput("sen")
+        typeLua("sen")
         activate(hasContentDescription(string(R.string.lua_complete, "send(command, showOnScreen)")))
         activate(closeBracket)
         waitFor(editor and hasText("if x then\n  send()"))
@@ -392,7 +390,7 @@ class ScriptLibraryTest {
         openGreet(script = "if x then")
         waitFor(editor and hasText("if x then"))
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(9, 9, true) }
-        compose.onNode(editor).performTextInput("\n  send()")
+        typeLua("\n  send()")
         val broken = "if x then\n  send()"
         waitFor(editor and hasText(broken))
 
@@ -423,7 +421,7 @@ class ScriptLibraryTest {
 
         // The problem was of the code as applied: it goes with the first key, and typing still asks the engine nothing
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(18, 18, true) }
-        compose.onNode(editor).performTextInput("\nend")
+        typeLua("\nend")
         val mended = "$broken\nend"
         waitFor(editor and hasText(mended))
         compose.onNode(problem).assertDoesNotExist()
@@ -460,7 +458,7 @@ class ScriptLibraryTest {
         val shown = compose.onNode(page).fetchSemanticsNode().size.height
         assertTrue("the field is taller than what shows of the page", compose.onNode(editor).fetchSemanticsNode().size.height > shown)
 
-        compose.onNode(editor).performTextInput("-")
+        typeLua("-")
         activate(apply)
         val check = received("checkLua")
         val save = received("editScriptItem")
@@ -488,7 +486,7 @@ class ScriptLibraryTest {
         openGreet(script = "x = 1")
         waitFor(editor and hasText("x = 1"))
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(5, 5, true) }
-        compose.onNode(editor).performTextInput("2")
+        typeLua("2")
         waitFor(editor and hasText("x = 12"))
         compose.onNode(apply).assertIsEnabled()
 
@@ -541,6 +539,15 @@ class ScriptLibraryTest {
         assertEquals(3, open.getInt("item"))
         session.send(fields("trigger", trigger(3, 0, "Greet").put("script", script), open))
         waitFor(hasText(shown) and hasSetTextAction() and hasAnyAncestor(page))
+    }
+
+    /**
+     * Types [text] at the Lua's cursor, and waits for the keyboard this brings where the accessibility checks run: they
+     * are of the page as it stays, not as it moves over the keyboard.
+     */
+    private fun typeLua(text: String) {
+        compose.onNode(editor).performTextInput(text)
+        if (Build.VERSION.SDK_INT >= 34) compose.keyboardHasCome(hasContentDescription(string(R.string.lua_indent)), WAIT_MS)
     }
 
     private fun back() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }

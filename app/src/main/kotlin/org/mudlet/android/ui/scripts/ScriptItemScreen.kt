@@ -107,7 +107,8 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
     val dirty = draft != null
     var leaving by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
-    val listed = scripts.lists[key.kind].orEmpty()
+    // Not a folder deleted with its Undo offered, which the library beside it still shows, as what moves in goes with it
+    val listed = scripts.lists[key.kind].orEmpty().withoutHidden(key.kind, scripts.deleting)
     val targets = listed.firstOrNull { it.id == key.id }?.let { listed.moveTargets(key.kind, it) }.orEmpty()
     BackHandler(enabled = dirty) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
@@ -122,10 +123,10 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
         // Beside the library, the library's show them
         snackbarHost = { if (!LocalInDetailPane.current) ScriptNotices(scripts) {} },
         actions = {
-            if (item != null && targets.isNotEmpty()) {
-                IconButton({ moving = true }) { Icon(painterResource(R.drawable.ic_drive_file_move), stringResource(R.string.scripts_move, name.orEmpty())) }
-            }
             if (item != null) {
+                if (targets.isNotEmpty()) {
+                    IconButton({ moving = true }) { Icon(painterResource(R.drawable.ic_drive_file_move), stringResource(R.string.scripts_move, name.orEmpty())) }
+                }
                 IconButton({
                     scripts.deleteLater(key, name.orEmpty())
                     onBack()

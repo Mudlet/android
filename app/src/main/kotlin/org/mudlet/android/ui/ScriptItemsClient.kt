@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONObject
 import org.mudlet.android.protocol.EngineMessage
@@ -30,6 +29,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     private val refused = mutableStateMapOf<ScriptItemKey, String>()
     private val hidden = mutableStateListOf<ScriptItemKey>()
     private val queued = mutableStateListOf<ScriptNotice>()
+    private val problems = mutableStateMapOf<ScriptItemKey, FoundInLua>()
 
     /** Each kind's items, as the engine last listed them; absent until it first does. */
     val lists: Map<ScriptItemKind, List<ScriptItemNode>> get() = listed
@@ -53,9 +53,11 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     var attaches by mutableIntStateOf(0)
         private set
 
-    /** The Lua the engine last checked ([checkLua]), with what it found wrong; null until it has checked any. */
-    var luaCheck by mutableStateOf<LuaChecked?>(null)
-        private set
+    /**
+     * What the engine found wrong with [key]'s Lua when it was last applied ([apply]), for as long as that is still the
+     * item's code: null once the code is changed, as a problem in code that is no longer there says nothing.
+     */
+    fun luaProblem(key: ScriptItemKey): LuaProblem? = problems[key]?.problem
 
     private sealed interface Pending {
         data class List(val kind: ScriptItemKind) : Pending
@@ -69,7 +71,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
         data class Enable(val kind: ScriptItemKind) : Pending
 
-        data class Check(val code: String) : Pending
+        data class Check(val key: ScriptItemKey, val code: String) : Pending
     }
 
     private val pending = HashMap<Long, Pending>()
@@ -86,16 +88,24 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** [changed] is what the player has made of its item: its draft, or none when it is as [saved] has the item. */
     fun edit(changed: ScriptItem) {
         if (changed.changedFrom(opened[changed.key])) edited[changed.key] = changed else edited.remove(changed.key)
+        dropStaleProblem(changed.key)
     }
 
     /** Drops [key]'s draft. */
     fun discard(key: ScriptItemKey) {
         edited.remove(key)
+        dropStaleProblem(key)
     }
 
-    /** Saves [key]'s draft; [notices] then has [ScriptNotice.Applied], whose Undo is [undo]. False when there is no draft, or as for [ProfileSession.send]. */
+    /**
+     * Saves [key]'s draft; [notices] then has [ScriptNotice.Applied], whose Undo is [undo]. Its Lua is saved whether or
+     * not it compiles, as the desktop editor's save does, and the engine is asked what is wrong with it, which
+     * [luaProblem] then says. False when there is no draft, or as for [ProfileSession.send].
+     */
     fun apply(key: ScriptItemKey): Boolean {
         val draft = edited[key] ?: return false
+        // Quietly: when the check cannot be sent neither can the save after it, which says so
+        request(Pending.Check(key, draft.script), quiet = true) { Requests.checkLua(draft.script, it) }
         return request(Pending.Apply(key, draft, opened[key])) { Requests.editScriptItem(draft, it) }
     }
 
@@ -137,17 +147,12 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         if (!hidden.remove(key)) return
         opened.remove(key)
         edited.remove(key)
+        problems.remove(key)
         if (send(Requests.deleteScriptItem(key.kind, key.id))) ask(key.kind) else tell(ScriptNotice.NotSent)
     }
 
     /** Deletes every item whose Undo is still offered, as the screen that offered it goes. */
     fun commitDeletes() = hidden.toList().forEach(::commitDelete)
-
-    /**
-     * Asks whether [code] compiles as Lua, which [luaCheck] then says; the code is not run. Checked as the player types,
-     * so one that cannot be sent is not said. False as for [ProfileSession.send].
-     */
-    fun checkLua(code: String): Boolean = request(Pending.Check(code), quiet = true) { Requests.checkLua(code, it) }
 
     /** Takes [notice] off [notices], once a screen has shown it. */
     fun shown(notice: ScriptNotice) {
@@ -177,10 +182,12 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         return true
     }
 
-    /** The engine's answer to [checkLua]: false when this did not ask it. */
+    /** The engine's answer to the check an [apply] asked for: false when this did not ask it. */
     fun onLuaCheck(message: EngineMessage.LuaCheck): Boolean {
         val asked = pending.remove(message.replyTo.asId()) as? Pending.Check ?: return false
-        luaCheck = LuaChecked(asked.code, message.problem)
+        val problem = message.problem
+        if (problem == null) problems.remove(asked.key) else problems[asked.key] = FoundInLua(asked.code, problem)
+        dropStaleProblem(asked.key)
         return true
     }
 
@@ -217,6 +224,11 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     private fun store(item: ScriptItem) {
         opened[item.key] = item
         if (edited[item.key]?.changedFrom(item) == false) edited.remove(item.key)
+        dropStaleProblem(item.key)
+    }
+
+    private fun dropStaleProblem(key: ScriptItemKey) {
+        if (problems[key]?.code != (edited[key] ?: opened[key])?.script) problems.remove(key)
     }
 
     /**
@@ -241,6 +253,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
             listed.clear()
             opened.clear()
             edited.clear()
+            problems.clear()
             refused.clear()
             hidden.clear()
         }
@@ -255,8 +268,8 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     }
 }
 
-/** Lua the engine checked, [code], and what is wrong with it; [problem] is null when it compiles. */
-internal data class LuaChecked(val code: String, val problem: LuaProblem?)
+/** What the engine found wrong, [problem], with the Lua [code]. */
+private data class FoundInLua(val code: String, val problem: LuaProblem)
 
 /** What the script library has to tell the player, through a snackbar. */
 internal sealed interface ScriptNotice {

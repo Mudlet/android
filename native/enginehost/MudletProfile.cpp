@@ -1,6 +1,5 @@
 #include "MudletProfile.h"
 
-#include "MapPng.h"
 #include "MudletEngine.h"
 #include "THeadlessSession.h"
 
@@ -1285,8 +1284,7 @@ void MudletProfile::onProfileClosed()
     mFrontend->windows({}, {}, {});
     mFrontend->buttonBars({});
     mFrontend->commands({});
-    mMapSize.reset();
-    mFrontend->map(std::nullopt);
+    pushMap(std::nullopt);
     pushAppMap();
     setMapDownloadState(MapDownload::State::none);
     takeOfferedMap({});
@@ -1360,7 +1358,11 @@ void MudletProfile::pushCommands()
 void MudletProfile::pushMap(const std::optional<QSize>& mapperSize)
 {
     mMapSize = mapperSize;
-    mFrontend->map(mapperSize ? drawMap(*mapperSize) : std::nullopt);
+    const std::optional<MapFrame> frame = mapperSize ? drawMap(*mapperSize) : std::nullopt;
+    if (!frame) {
+        mMapPicture.clear();
+    }
+    mFrontend->map(frame);
 }
 
 std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
@@ -1389,7 +1391,7 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
         qWarning("MudletEngine: the map was not drawn: %s", qPrintable(mSession->errorString()));
         return std::nullopt;
     }
-    const QByteArray png = mapPng(std::move(image));
+    const QByteArray png = mMapPicture.png(std::move(image));
     if (png.isEmpty()) {
         qWarning("MudletEngine: the map could not be made a PNG");
         return std::nullopt;
@@ -1400,9 +1402,14 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
 // Nothing while none is asked for: setAppMapSize() said so once
 void MudletProfile::pushAppMap()
 {
-    if (!mAppMapSize.isEmpty()) {
-        mFrontend->appMap(loaded() ? drawAppMap() : std::nullopt);
+    if (mAppMapSize.isEmpty()) {
+        return;
     }
+    const std::optional<MapFrame> frame = loaded() ? drawAppMap() : std::nullopt;
+    if (!frame) {
+        mAppMapPicture.clear();
+    }
+    mFrontend->appMap(frame);
 }
 
 std::optional<MapFrame> MudletProfile::drawAppMap()
@@ -1423,7 +1430,7 @@ std::optional<MapFrame> MudletProfile::drawAppMap()
         warnAppMapUndrawn(mSession->errorString());
         return std::nullopt;
     }
-    const QByteArray png = mapPng(std::move(image));
+    const QByteArray png = mAppMapPicture.png(std::move(image));
     if (png.isEmpty()) {
         warnAppMapUndrawn(QStringLiteral("it could not be made a PNG"));
         return std::nullopt;
@@ -1707,6 +1714,7 @@ QString MudletProfile::setAppMapSize(const QSize& size, double scale)
     if (loaded()) {
         mSession->closeAppMap();
     }
+    mAppMapPicture.clear();
     mFrontend->appMap(std::nullopt);
     return {};
 }

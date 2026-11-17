@@ -262,3 +262,21 @@ QByteArray mapPng(QImage image)
     }
     return png;
 }
+
+QByteArray MapPicture::png(QImage image)
+{
+    // The pixels mapPng() writes, which it takes as they are: so two pictures are told apart before a PNG is made
+    QImage pixels = std::move(image).convertToFormat(QImage::Format_RGBA8888);
+    // With no PNG, the last picture could not be made one: the same picture is tried again
+    if (mPng.isEmpty() || pixels != mPixels) {
+        mPng = mapPng(pixels);
+        mPixels = std::move(pixels);
+    }
+    return mPng;
+}
+
+void MapPicture::clear()
+{
+    mPixels = {};
+    mPng.clear();
+}

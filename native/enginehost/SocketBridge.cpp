@@ -312,7 +312,7 @@ void SocketBridge::forgetClient()
         mEngine->setAppMapSize(QSize(0, 0), 1);
         mEngine->setMapScale(1);
     }
-    mAppMap = QJsonObject();
+    mAppMap = {};
 }
 
 void SocketBridge::onReadyRead()
@@ -413,11 +413,11 @@ void SocketBridge::sendState()
     for (const TextBoxInfo& textBox : std::as_const(mTextBoxes)) {
         sendFrame(textBoxMessage(textBox));
     }
-    if (!mMap.isEmpty()) {
-        sendFrame(mMap);
+    if (!mMap.message.isEmpty()) {
+        sendFrame(mMap.message);
     }
-    if (!mAppMap.isEmpty()) {
-        sendFrame(mAppMap);
+    if (!mAppMap.message.isEmpty()) {
+        sendFrame(mAppMap.message);
     }
     if (!mMapDownload.isEmpty()) {
         sendFrame(mMapDownload);
@@ -1869,14 +1869,18 @@ void SocketBridge::map(const std::optional<MapFrame>& frame)
     if (mMirror) {
         mMirror->map(frame);
     }
+    if (frame && frame == mMap.frame) {
+        return;
+    }
     // The mapper's window going is told by windows, so nothing is sent for it
     QJsonObject message = frame ? mapMessage(*frame) : QJsonObject();
     if (message.isEmpty()) {
-        mMap = QJsonObject();
+        mMap = {};
         return;
     }
     message.insert(QStringLiteral("t"), QStringLiteral("map"));
-    sendIfChanged(mMap, std::move(message));
+    mMap.frame = frame;
+    sendIfChanged(mMap.message, std::move(message));
 }
 
 // Sent with nothing to draw too, as only this tells the UI to take down what it drew
@@ -1885,12 +1889,16 @@ void SocketBridge::appMap(const std::optional<MapFrame>& frame)
     if (mMirror) {
         mMirror->appMap(frame);
     }
+    if (frame && frame == mAppMap.frame) {
+        return;
+    }
     QJsonObject message = frame ? mapMessage(*frame) : QJsonObject();
+    mAppMap.frame = frame;
     if (message.isEmpty()) {
         message = mapMessage(MapFrame{{}, QSize(0, 0), true});
     }
     message.insert(QStringLiteral("t"), QStringLiteral("appMap"));
-    sendIfChanged(mAppMap, std::move(message));
+    sendIfChanged(mAppMap.message, std::move(message));
 }
 
 void SocketBridge::mapDownload(const MapDownload& download)
@@ -1912,6 +1920,7 @@ void SocketBridge::mapDownload(const MapDownload& download)
 
 QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
 {
+    ++sMapMessagesMade;
     const QByteArray base64 = frame.png.toBase64();
     const QJsonObject view = frame.view ? mapViewMessage(*frame.view) : QJsonObject();
     const QJsonObject info = frame.info.lines.isEmpty() ? QJsonObject() : mapInfoMessage(frame.info);

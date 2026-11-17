@@ -292,6 +292,7 @@ struct MapInfoLine
     bool bold = false;
     bool italic = false;
     QString color;
+    bool operator==(const MapInfoLine&) const = default;
 };
 
 // The map info box of a map frame, which the frame's picture leaves out for the UI to show as text: no box with no
@@ -301,6 +302,7 @@ struct MapInfo
     QList<MapInfoLine> lines;
     QString background;
     int backgroundAlpha = 255;
+    bool operator==(const MapInfo&) const = default;
 };
 
 // The profile's 2D map as its mapper window shows it, its size the window's in pixels, so that a point of it is a
@@ -316,6 +318,7 @@ struct MapFrame
     // None where the frame showed no area
     std::optional<MapViewInfo> view;
     MapInfo info;
+    bool operator==(const MapFrame&) const = default;
 };
 
 // A room of the map that IEngine::findRooms() found: its id, its name, its area's id and name, how the text matched

@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.test.withKeyDown
 import androidx.compose.ui.text.TextRange
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -49,6 +51,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.HISTORY_SHEET_TAG
 
 /**
  * The input line's engine features against a fake engine: the masked field while the game hides input, the engine's
@@ -284,9 +287,10 @@ class InputLineTest {
         // As tempKey(mudlet.keymodifier.Keypad, mudlet.key["8"], [[send("north")]]) and tempKey(mudlet.key.F1, ...) give them
         val keypad8 = KeyBinding('8'.code, KeyModifier.KEYPAD.bit)
         val f1 = KeyBinding(0x01000030, 0)
-        val keys = JSONArray(listOf(keypad8, f1).map { JSONObject().put("key", it.key).put("modifiers", it.modifiers) })
+        val ctrlR = KeyBinding('R'.code, KeyModifier.CONTROL.bit)
+        val keys = JSONArray(listOf(keypad8, f1, ctrlR).map { JSONObject().put("key", it.key).put("modifiers", it.modifiers) })
         session.send(JSONObject().put("t", "keyBindings").put("keys", keys))
-        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.keyBindings } == setOf(keypad8, f1) }
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.keyBindings } == setOf(keypad8, f1, ctrlR) }
         compose.onNode(input).requestFocus()
 
         compose.onNode(input).performKeyInput {
@@ -299,6 +303,12 @@ class InputLineTest {
         val help = session.receive("pressKey")
         assertEquals(listOf(0x01000030, 0, ""), listOf(help.getInt("key"), help.getInt("modifiers"), help.getString("text")))
         compose.onNode(input).assertIsFocused().assert(editableText(""))
+        // A binding beats the app's own Ctrl+R, the history
+        compose.onNode(input).performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.R) } }
+        val bound = session.receive("pressKey")
+        assertEquals(listOf('R'.code, KeyModifier.CONTROL.bit), listOf(bound.getInt("key"), bound.getInt("modifiers")))
+        compose.waitForIdle()
+        compose.onNode(hasTestTag(HISTORY_SHEET_TAG)).assertDoesNotExist()
 
         // A key no binding takes types as before
         compose.onNode(input).performKeyInput { pressKey(Key.A) }

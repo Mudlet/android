@@ -700,7 +700,9 @@ kept by `ScriptItemsClient`:
 - A hardware keyboard's key that the profile's key bindings take (`keyBindings`, by Qt's key code and modifier bits,
   which `HardwareKeys` makes from Android's, the number pad's by Num Lock as on the desktop) goes to the engine as
   `pressKey`, from the input line or anywhere on the game screen but a script's text box, which on the desktop offers
-  no key to the bindings either; any other key types as before. Ctrl+R and Ctrl+Tab come first.
+  no key to the bindings either; any other key types as before. A binding beats the app's Ctrl+R and Ctrl+Tab, as
+  desktop's command line claims a bound profile-switching shortcut. Not yet: Input's "Run all matching key
+  bindings" (`runAllKeyMatches`, which no setting the engine takes carries), so the first binding that matches runs.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the

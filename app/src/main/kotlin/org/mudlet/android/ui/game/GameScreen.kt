@@ -226,6 +226,8 @@ private fun ProfileGameScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
+                // A binding comes first, as desktop's command line claims a bound profile-switching shortcut
+                if (sentToKeyBindings(event, c.windows, boundKeysDown)) return@onPreviewKeyEvent true
                 val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
                 // Both halves of the press, so the focused field types no "r" and the focus stays where it is
@@ -235,7 +237,7 @@ private fun ProfileGameScreen(
                     val target = if (forward) next else previous
                     if (target != null && EngineClient.setFront(target)) swipe.arrive(left = forward != rtl)
                 }
-                ctrlR || ctrlTab || sentToKeyBindings(event, c.windows, boundKeysDown)
+                ctrlR || ctrlTab
             },
         ) {
             Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {

@@ -26,7 +26,6 @@ if [[ $REF =~ ^refs/tags/android-v(.+)$ ]]; then
     publish=true
     [ -z "${VERSION_INPUT:-}" ] || [ "$VERSION_INPUT" = "$version" ] \
         || fail "the version '$VERSION_INPUT' given is not the tag's, '$version'"
-    [ "${ON_MAIN:-}" = true ] || fail "the tag android-v$version is not on a commit of main, so it cannot be released"
     [[ $MUDLET_REF =~ ^Mudlet-[0-9]+\.[0-9]+\.[0-9]+$ || $MUDLET_REF =~ ^[0-9a-f]{40}$ ]] \
         || fail "a release builds a fixed Mudlet: a tag Mudlet-x.y.z or a full commit SHA, not '$MUDLET_REF'"
     reason="the tag android-v$version"

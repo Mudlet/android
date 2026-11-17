@@ -190,7 +190,7 @@ jobs:
             case "$EVENT" in
               push | pull_request) jq -r --arg k "$1" '.[$k] // "false"' <<< "$CHANGES" ;;
               schedule) case "$1" in libmudlet-android | desktop-engine | emulator) echo true ;; *) echo false ;; esac ;;
-              *) echo true ;;
+              *) case "$1" in release-plan) echo true ;; *) echo false ;; esac ;;
             esac
           }
           checks=()

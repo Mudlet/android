@@ -1516,6 +1516,9 @@ Nothing is accepted without the player, and what is accepted stays visible and c
 Security settings. Back or Cancel accepts nothing, and the same certificate is not asked about again until a later
 connection is refused (divergences.md). A secure connection needs the game's name, not an IP address, as Mudlet
 refuses TLS to a raw address.
+Until the next connection is tried, the game's Security page lists the refused certificate above the switches, as
+desktop's Connection page does, and marks each switch that would let it past ("Lets the refused certificate through",
+which TalkBack reads with the switch).
 
 **The game's secure port.** A game connected without TLS may say in MSSP that it has a secure port. Mudlet then
 asks, as its GUI does, whether to move there, unless the profile's "Offer a secure connection" (`askTlsAvailable`) is

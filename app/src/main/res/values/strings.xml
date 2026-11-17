@@ -763,6 +763,14 @@
     <string name="settings_accept_any_certificate">Ignore all certificate errors</string>
     <!-- Under "Ignore all certificate errors", what the switch does and why it is a risk -->
     <string name="settings_accept_any_certificate_hint">The connection is still encrypted, but nothing checks that it goes to the game. Use only if you must.</string>
+    <!-- A heading on a game's Security settings page, above the facts of the certificate its last secure connection
+         was refused for -->
+    <string name="settings_refused_certificate_title">Certificate refused</string>
+    <!-- On a game's Security settings page, under "Certificate refused", before the reasons and the certificate's facts -->
+    <string name="settings_refused_certificate_text">This game\'s last secure connection was closed because its certificate did not pass the check:</string>
+    <!-- Above a certificate switch on a game's Security page, when turning it on would let the refused certificate
+         through -->
+    <string name="settings_certificate_lets_through">Lets the refused certificate through</string>
     <!-- A row on a game's Security page, desktop Mudlet's "Clear stored media": deletes the sounds and music the game
          and its scripts downloaded, which Mudlet keeps with the game -->
     <string name="settings_clear_media">Clear stored media</string>

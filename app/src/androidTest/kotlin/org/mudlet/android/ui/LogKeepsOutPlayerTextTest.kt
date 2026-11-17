@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.os.Build
 import android.util.Log
 import androidx.annotation.StringRes
@@ -21,7 +22,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -42,7 +42,6 @@ class LogKeepsOutPlayerTextTest {
     private val fake = FakeEngineRule()
     private val compose = createAndroidComposeRule<MainActivity>()
 
-    // Notifications are not granted, so the tell is not posted: android_instrumented.py installs without -g
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake).around(compose)
 
@@ -59,10 +58,8 @@ class LogKeepsOutPlayerTextTest {
     @Test
     fun noLogLineHoldsTheCommandTheGamesTextOrATell() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
-        assumeFalse(
-            "a tell is posted, not logged, while notifications are allowed",
-            Build.VERSION.SDK_INT >= 33 && app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == 0,
-        )
+        // Only a tell that is not posted is logged
+        val tellLogged = Build.VERSION.SDK_INT >= 33 && app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PERMISSION_GRANTED
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
         session.line(1, "$GAME_TEXT says hello")
@@ -76,7 +73,7 @@ class LogKeepsOutPlayerTextTest {
         for (request in listOf("getLink", "followLink", "followLabelLink", "selectFrameTab", "setTextBoxText")) {
             session.send(JSONObject().put("t", "error").put("message", "$request: The label \"$LINK\" has no link to \"$LINK\"."))
         }
-        if (Build.VERSION.SDK_INT >= 33) EngineNotifications.postTell(app, GAME.name, TELL, TELL)
+        if (tellLogged) EngineNotifications.postTell(app, GAME.name, TELL, TELL)
         // On the same socket after the refusals, so they have been handled once it shows
         session.line(2, DONE)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(DONE)).fetchSemanticsNodes().isNotEmpty() }

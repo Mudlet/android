@@ -39,6 +39,26 @@ class ButtonStyleTest {
     }
 
     @Test
+    fun aBarsAndAButtonsSheetIsItsRulesOrItsBareDeclarationsToo() {
+        val navy = LabelFill.Solid(0xFF000080.toInt())
+        val red = LabelFill.Solid(0xFFFF0000.toInt())
+        // Qt reads a sheet's rules up to what is not one, so not what follows them, a `*` rule either
+        assertEquals(navy, background("", "* { background: navy } background: red"))
+        assertEquals(navy, background("* { background: navy } background: red", ""))
+        assertEquals(navy, ButtonStyle.bar("* { background: navy } background: red").background)
+        assertNull(background("", "QPushButton { color: yellow } background: red"))
+        assertNull(ButtonStyle.bar("QWidget { color: yellow } background: red").background)
+        // One that starts with bare declarations is those and none of its rules
+        assertEquals(red, background("", "background: red; QPushButton { background: navy }"))
+        assertEquals(red, ButtonStyle.bar("background: red; QWidget { background: navy }").background)
+        // A rule with a pseudo-state after them reads as a declaration with a brace after it, which loses them all
+        assertNull(background("background: red; QPushButton:checked { background: navy }", "", ButtonState(checked = true)))
+        // What Qt cannot read of a rule loses it and all after it, here for want of a `;`
+        assertNull(background("", "QPushButton { color: yellow\n background: red } QPushButton { background: navy }"))
+        assertNull(ButtonStyle.bar("QWidget { color: yellow\n background: red } QWidget { background: navy }").background)
+    }
+
+    @Test
     fun rulesRankAsQtRanksThem() {
         val down = ButtonState(checked = true)
         // A class and a pseudo-state each count as much as each other, and more than a type, wherever the rules are
@@ -109,6 +129,8 @@ class ButtonStyleTest {
         assertEquals(Edges(1f, 2f, 1f, 2f), ButtonStyle.of("padding: 5px", "padding: 1px 2px", up).padding)
         // A value that is not a length leaves it unset
         assertNull(ButtonStyle.of("", "padding: wide", up).padding)
+        // One in a unit Qt does not read a box in is 0, set
+        assertEquals(Edges.ZERO, ButtonStyle.of("padding: 5px", "padding: 30pt", up).padding)
     }
 
     @Test
@@ -129,7 +151,7 @@ class ButtonStyleTest {
 
     @Test
     fun aSizeOfNothingKeepsTheBarsAndARadiusBelowNothingIsNone() {
-        val style = ButtonStyle.of("QPushButton { font-size: 9pt; border-radius: 6px }", "font-size: 0; border-radius: -3px", up).style
+        val style = ButtonStyle.of("QPushButton { font-size: 9pt; border-radius: 6px }", "font-size: 0px; border-radius: -3px", up).style
         assertEquals(12f, style.fontSizePx)
         assertEquals(0f, style.borderRadius)
     }
@@ -139,11 +161,29 @@ class ButtonStyleTest {
         fun of(bar: String, button: String) = ButtonStyle.of(bar, button, up)
         assertTrue(of("color: red", "background-image: url(tile.png); padding: 4px").nativeBorder)
         assertTrue(of("color: red", "").appFill)
-        // Any border property, or a border image, is a frame of the sheets', and the bar's reach the button
-        for (sheet in listOf("border: none", "border-style: solid", "border-radius: 4px", "border-left-color: red", "border-width: 0", "border-image: url(b.png)")) {
+        // A style for the top edge but `native`, a radius, or a border image, is a frame of the sheets', and the bar's
+        // reach the button; each as Qt 6.4.2 draws a QPushButton
+        val gone = listOf(
+            "border: none", "border: 2px solid red", "border-style: solid", "border-top: 3px solid red", "border-top-style: solid",
+            "border-radius: 4px", "border-radius: 0", "border-top-left-radius: 0", "border-image: url(b.png)",
+        )
+        for (sheet in gone) {
             assertFalse(sheet, of("", sheet).nativeBorder)
             assertFalse(sheet, of("", sheet).appFill)
             assertFalse(sheet, of("QWidget { $sheet }", "").nativeBorder)
+            assertTrue(sheet, of("", sheet).style.drawsBox)
+        }
+        // Qt keeps its native frame under the other edges' styles, the border's colour and width, and a negative radius
+        val kept = listOf(
+            "border-color: red", "border-left-color: red", "border-width: 0", "border-width: 3px; border-color: red", "border-left: 3px solid red",
+            "border-bottom-style: solid", "border-style: native", "border: native", "border: 3px native red", "border-top-style: native", "border-radius: -3px",
+        )
+        for (sheet in kept) {
+            assertTrue(sheet, of("", sheet).nativeBorder)
+            assertTrue(sheet, of("", sheet).appFill)
+            assertTrue(sheet, of("QWidget { $sheet }", "").nativeBorder)
+            assertFalse(sheet, of("", sheet).style.drawsBox)
+            assertEquals(sheet, 0f, of("", sheet).style.drawnBorderWidth)
         }
         // A background of the sheets' is drawn instead of the app's, frame or not
         val filled = of("", "background: #000080")
@@ -271,6 +311,8 @@ class ButtonStyleTest {
         assertEquals(ButtonRoom(appMargin, 0f, appPadding), room("color: red", 312f, 400f))
         assertEquals(ButtonRoom(Edges(10f, 20f, 10f, 20f), 3f, Edges(1f, 2f, 3f, 4f)), room("margin: 10px 20px; border: 3px solid red; padding: 1px 2px 3px 4px", 312f, 400f))
         assertEquals(ButtonRoom(appMargin, 0f, appPadding), room("border: 3px", Float.POSITIVE_INFINITY, Float.NaN))
+        // Qt draws its native button where the top edge is native, and none of the others' border
+        assertEquals(ButtonRoom(appMargin, 0f, appPadding), room("background: blue; border: 6px solid red; border-top-style: native", 312f, 400f))
         // Across, 800 are asked of 200, so each gets a quarter; down there is room for all 220
         assertEquals(ButtonRoom(Edges(10f, 25f, 10f, 25f), 25f, Edges(0f, 50f, 0f, 50f)), room("margin: 10px 100px; border: 100px solid red; padding: 0 200px", 200f, 400f))
         // Lengths at their longest take no more than there is, either way, and nothing where there is nothing

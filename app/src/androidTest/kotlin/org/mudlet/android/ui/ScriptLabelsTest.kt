@@ -9,6 +9,8 @@ import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -19,6 +21,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -44,6 +47,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -56,6 +60,7 @@ import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.POINTER_RIGHT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.ui.game.Announcer
 import java.io.ByteArrayOutputStream
 import kotlin.math.abs
@@ -68,7 +73,8 @@ import kotlin.math.abs
  * one as its new text said, a live label as one live node, a link followed by the engine, by its action or a tap, with
  * its href as Qt reads it, a `prompt:` one giving the input line the focus, but a web link opened in the browser, a
  * click-through label's links neither tapped nor actions, also once a label already drawn is made click-through, and
- * both again once it no longer is, and the images the engine is asked for.
+ * both again once it no longer is, a label's own colour drawn only where its sheet draws no box of its own, and the
+ * images the engine is asked for.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -537,6 +543,33 @@ class ScriptLabelsTest {
 
     // A tap in the middle of the label [name], on its centred link
     private fun tapLinkIn(name: String) = compose.onNode(hasContentDescription(name)).performTouchInput { click(center) }
+
+    @Test
+    fun aLabelsOwnColourIsDrawnOnlyWhereItsSheetDrawsNoBoxOfItsOwn() {
+        // The colour setBackgroundColor() gives each, which the engine sends as the label's `bg` and writes after its sheet
+        val labels = listOf("Framed" to 0, "Spaced" to 300, "Yellow" to 600)
+        session.windows(labels.map { (name, x) -> label(name, x = x, y = 0, w = 200, h = 100).put("bg", RUN_RGB or 0xFF0000).put("bgAlpha", 255) }, full = true)
+        val added = "\nbackground-color: rgba(255, 0, 0, 255);"
+        session.label("Framed", accessibleName = "Framed", styleSheet = "QLabel { border: 10px solid white }$added")
+        session.label("Spaced", accessibleName = "Spaced", styleSheet = "QLabel { margin: 20px }$added")
+        session.label("Yellow", accessibleName = "Yellow", styleSheet = "QLabel { color: yellow }$added")
+        for ((name, _) in labels) compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(name)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        fun pixels(name: String) = compose.onNode(hasContentDescription(name)).captureToImage().toPixelMap()
+        val red = 0xFFFF0000.toInt()
+
+        // A border of the sheet's own is drawn on what is behind the label, as on the desktop
+        val framed = pixels("Framed")
+        assertEquals("border", 0xFFFFFFFF.toInt(), framed[1, framed.height / 2].toArgb())
+        assertNotEquals("inside the border", red, framed[framed.width / 2, framed.height / 2].toArgb())
+        // Where the sheet draws no box, the colour fills the label, its margin too
+        val spaced = pixels("Spaced")
+        assertEquals("margin", red, spaced[1, 1].toArgb())
+        assertEquals("middle", red, spaced[spaced.width / 2, spaced.height / 2].toArgb())
+        val yellow = pixels("Yellow")
+        assertEquals("middle", red, yellow[yellow.width / 2, yellow.height / 2].toArgb())
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
 
     @Test
     fun anImageLabelAsksTheEngineForItsImageOnce() {

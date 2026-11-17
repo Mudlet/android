@@ -57,6 +57,27 @@ class EngineClientTest {
     }
 
     @Test
+    fun aStoppedLinkIsNotSaidToBeAttached() {
+        waitUntil("the profile's link attached") { EngineClient.front.linkState.startsWith("attached") }
+        val state = onMain {
+            EngineClient.detach()
+            EngineClient.front.linkState
+        }
+        assertFalse(state, state.startsWith("attached"))
+    }
+
+    @Test
+    fun aLinkMovedToAnotherSocketIsNotSaidToBeAttachedBeforeItIs() {
+        waitUntil("the profile's link attached") { EngineClient.front.linkState.startsWith("attached") }
+        // Read in the main-thread task that moves it, before any attach or failure the link posts can run
+        val state = onMain {
+            EngineClient.front.moveTo(fake.engine.unservedPath, running = true)
+            EngineClient.front.linkState
+        }
+        assertFalse(state, state.startsWith("attached"))
+    }
+
+    @Test
     fun theMapSearchsRefusalIsNoProfileRequestsAnswer() {
         // The fake has answered the hellos before the links have read them, and a request sent sooner is dropped
         waitUntil("the links attached") { EngineClient.linkState.startsWith("attached to pid") && EngineClient.front.linkState.startsWith("attached") }

@@ -96,7 +96,7 @@ class ProfileSession internal constructor(
     /** The profile's settings, by Mudlet's `getConfig()` keys, as the engine last gave them; [setting] reads one. */
     val settings = mutableStateMapOf<String, Any>()
 
-    /** How this session's link to its socket stands, for the self-test screen. */
+    /** How this session's link to its socket stands, for the smoke test's errors and the tests. */
     var linkState by mutableStateOf("not attached")
         private set
 
@@ -196,10 +196,12 @@ class ProfileSession internal constructor(
 
     internal fun start() {
         link?.start()
+        linkState = "connecting"
     }
 
     internal fun stop() {
         link?.stop()
+        linkState = "detached"
     }
 
     /** Connects at once if the link is waiting to try again. */
@@ -213,8 +215,8 @@ class ProfileSession internal constructor(
         socket = path
         misdirected = false
         if (running) {
-            link?.stop()
-            link?.start()
+            stop()
+            start()
         }
     }
 

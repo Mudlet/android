@@ -71,9 +71,9 @@ private val TriggerPatternType.typeName: Int
 /**
  * Makes a trigger from [line], a line of the game's text ([TriggerFromLine] has the rules): the line's words, each a
  * button that makes it captured, optional or fixed again, two switches, the pattern that comes of them, and what that
- * pattern takes from the line and how many of the game's [recent] lines, as they are when the page opens, it matches. Its button has [scripts] make the
- * trigger and save it with the pattern, and the trigger's page then opens through [onMade], where it is named and
- * given what it does.
+ * pattern takes from the line and how many of the game's [recent] lines, as they are when the page opens, it matches.
+ * Its button has [scripts] make the trigger and save it with the pattern, and the trigger's page then opens through
+ * [onMade], where it is named and given what it does.
  */
 @Composable
 internal fun TriggerFromLineScreen(scripts: ScriptItemsClient, line: String, recent: () -> List<String>, onBack: () -> Unit, onMade: (ScriptItemKey) -> Unit) {

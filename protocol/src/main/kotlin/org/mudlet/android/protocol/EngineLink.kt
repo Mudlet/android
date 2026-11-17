@@ -136,11 +136,12 @@ class EngineLink(
                 if (waitForRetry(retryDelayMs(attempt))) attempt = 0
                 continue
             }
-            if (!live(g)) {
+            // Under the lock stop() holds: it closes the transport it finds, so one taken after it would stay open
+            val taken = synchronized(this) { live(g).also { if (it) transport = t } }
+            if (!taken) {
                 t.close()
                 break
             }
-            transport = t
             attempt = 0
             try {
                 val w = FrameWriter(t.output)
@@ -151,9 +152,11 @@ class EngineLink(
                     throw IOException("engine answered hello with $first")
                 }
                 val same = first.instance == instance
-                if (!same) lastSeq = 0
-                instance = first.instance
                 synchronized(this) {
+                    // stop() may have come since the hello, and its close() need not fail this read: android.net.LocalSocket's wakes none
+                    if (!live(g)) throw IOException("stopped")
+                    if (!same) lastSeq = 0
+                    instance = first.instance
                     connection++
                     writer = w
                 }

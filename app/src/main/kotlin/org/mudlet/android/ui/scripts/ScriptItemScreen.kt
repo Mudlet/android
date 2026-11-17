@@ -91,13 +91,10 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
     // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
     LaunchedEffect(key, scripts.attaches) { scripts.open(key) }
     val saved = scripts.saved[key]
-    val item = scripts.drafts[key] ?: saved
-    val dirty = scripts.drafts[key]?.changedFrom(saved) == true
+    val draft = scripts.drafts[key]
+    val item = draft ?: saved
+    val dirty = draft != null
     var leaving by remember { mutableStateOf(false) }
-
-    fun change(changed: ScriptItem) {
-        if (changed.changedFrom(saved)) scripts.drafts[key] = changed else scripts.drafts.remove(key)
-    }
     BackHandler(enabled = dirty) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
@@ -123,7 +120,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
             ) {
                 val refusal = scripts.unopened[key]
                 when {
-                    item != null -> Fields(item, saved?.node?.error.orEmpty(), ::change)
+                    item != null -> Fields(item, saved?.node?.error.orEmpty(), scripts::edit)
                     refusal != null -> Text(stringResource(R.string.scripts_refused_open, refusal), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.error)
                     else -> Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -149,7 +146,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
             confirmButton = {
                 TextButton({
                     leaving = false
-                    scripts.drafts.remove(key)
+                    scripts.discard(key)
                     onBack()
                 }) { Text(stringResource(R.string.scripts_discard)) }
             },
@@ -212,16 +209,13 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
         Icon(painterResource(R.drawable.ic_add), contentDescription = null)
         Text(stringResource(R.string.scripts_add_pattern), Modifier.padding(start = 8.dp))
     }
-    typing?.let { i ->
-        val pattern = patterns.getOrNull(i)
-        if (pattern == null) {
+    val typed = typing
+    val typedPattern = typed?.let(patterns::getOrNull)
+    if (typed != null && typedPattern != null) {
+        PatternTypeSheet(typedPattern.type, onDismiss = { typing = null }) { type ->
             typing = null
-        } else {
-            PatternTypeSheet(pattern.type, onDismiss = { typing = null }) { type ->
-                typing = null
-                val text = if (type == TriggerPatternType.SPACER || pattern.type == TriggerPatternType.SPACER) newPattern(type).text else pattern.text
-                onChange(trigger.copy(patterns = patterns.toMutableList().also { it[i] = TriggerPattern(text, type) }))
-            }
+            val text = if (type == TriggerPatternType.SPACER || typedPattern.type == TriggerPatternType.SPACER) newPattern(type).text else typedPattern.text
+            onChange(trigger.copy(patterns = patterns.toMutableList().also { it[typed] = TriggerPattern(text, type) }))
         }
     }
 
@@ -235,7 +229,7 @@ private fun ColumnScope.TriggerFields(trigger: ScriptItemDetails.Trigger, onChan
         NumberField(R.string.scripts_match_within, trigger.lineDelta, 0..MAX_MATCH_LINES) { onChange(trigger.withMatchAll(true, it)) }
     }
     SwitchField(R.string.scripts_every_occurrence, R.string.scripts_every_occurrence_hint, trigger.matchAll) { onChange(trigger.copy(matchAll = it)) }
-    NumberField(R.string.scripts_keep_firing, trigger.fireLength, 0..MAX_MATCH_LINES) { onChange(trigger.copy(fireLength = it)) }
+    NumberField(R.string.scripts_keep_firing, trigger.fireLength, 0..MAX_FIRE_LINES) { onChange(trigger.copy(fireLength = it)) }
     SwitchField(R.string.scripts_filter, R.string.scripts_filter_hint, trigger.filter) { onChange(trigger.copy(filter = it)) }
     SwitchField(R.string.scripts_highlight, R.string.scripts_highlight_hint, trigger.highlight) { onChange(trigger.copy(highlight = it)) }
     if (trigger.highlight) {
@@ -324,7 +318,7 @@ private fun PatternRow(
                 )
             }
 
-            TriggerPatternType.SPACER -> NumberField(label, pattern.text.toIntOrNull() ?: 1, 1..MAX_MATCH_LINES, Modifier.fillMaxWidth().padding(end = 8.dp)) {
+            TriggerPatternType.SPACER -> NumberField(label, pattern.text.toIntOrNull() ?: 1, 1..MAX_FIRE_LINES, Modifier.fillMaxWidth().padding(end = 8.dp)) {
                 onText(it.toString())
             }
 

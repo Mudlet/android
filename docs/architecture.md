@@ -1627,7 +1627,7 @@ Item 13 of the on-device checklist covers this.
     - Rotate on an item's page with a change not applied: the change is still there. On a tablet in landscape, an item
       opens beside the library.
     - With TalkBack on: the title bar's button reads "Scripts of" and the game's name; each row reads its name and
-      state, its switch is read by the item's name, a pattern's type button reads "Pattern 1 type: Substring", and the
+      state, its switch is read by the item's name, a pattern's type button reads "Type of pattern 1: Substring", and the
       move and remove buttons say which pattern.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.

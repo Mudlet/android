@@ -1135,11 +1135,11 @@
     <string name="scripts_pattern">Pattern %1$d</string>
     <!-- What a screen reader says of a trigger pattern's type button; %1$d is the pattern's number, %2$s its type, such
          as "Substring" -->
-    <string name="scripts_pattern_type_of">Pattern %1$d type: %2$s</string>
+    <string name="scripts_pattern_type_of">Type of pattern %1$d: %2$s</string>
     <!-- A button read by a screen reader, that moves a trigger pattern up the list; %1$d is its number -->
-    <string name="scripts_pattern_up">Move pattern %1$d up</string>
+    <string name="scripts_pattern_up">Move up pattern %1$d</string>
     <!-- A button read by a screen reader, that moves a trigger pattern down the list; %1$d is its number -->
-    <string name="scripts_pattern_down">Move pattern %1$d down</string>
+    <string name="scripts_pattern_down">Move down pattern %1$d</string>
     <!-- A button read by a screen reader, that removes a trigger pattern; %1$d is its number -->
     <string name="scripts_pattern_remove">Remove pattern %1$d</string>
     <!-- The button that adds a pattern to a trigger -->

@@ -39,6 +39,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.scripts.MAX_MATCH_LINES
 import org.mudlet.android.ui.scripts.SCRIPT_ITEM_TAG
 import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
 
@@ -47,7 +48,7 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
  * bar, it lists each kind one folder at a time, its switches switch items on and off, its search finds names, its
  * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
  * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
- * draft over a trip to the game, edits a trigger's patterns, an alias's command and a script's events, and deletes with
+ * draft over a trip to the game, edits a trigger's patterns and options, an alias's command and a script's events, and deletes with
  * Undo, sent only once the library goes; and what the engine refuses is said. Controls are found by the labels TalkBack
  * reads and activated through their accessibility actions.
  */
@@ -123,9 +124,14 @@ class ScriptLibraryTest {
         waitFor(switch("You hit") and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         waitFor(hasText(string(R.string.scripts_off)))
 
-        // The breadcrumb's first step goes back to the top
+        // The breadcrumb's first step goes back to the top, and so does Back, which leaves the library only from there
         activate(hasText(string(R.string.scripts_all, string(R.string.scripts_triggers))) and hasClickAction())
         waitFor(row("Greet"))
+        activate(row("Combat"))
+        waitFor(row("You hit"))
+        back()
+        waitFor(row("Greet"))
+        compose.onNode(library).assertIsDisplayed()
         checkAccessibility()
     }
 
@@ -256,6 +262,32 @@ class ScriptLibraryTest {
         assertEquals(1, patterns.length())
         assertEquals("^hi$", patterns.getJSONObject(0).getString("text"))
         assertEquals("regex", patterns.getJSONObject(0).getString("type"))
+    }
+
+    @Test
+    fun aTriggersOptionsAreSentAndANumberOutOfRangeIsNot() {
+        openGreet()
+        activate(hasText(string(R.string.scripts_match_all)))
+        val within = hasSetTextAction() and hasText(string(R.string.scripts_match_within))
+        waitFor(within)
+        compose.onNode(within).performTextClearance()
+        compose.onNode(within).performTextInput("3")
+        // More lines than the desktop allows: the field says so, and the 3 stays
+        compose.onNode(within).performTextClearance()
+        compose.onNode(within).performTextInput("500")
+        waitFor(hasText(string(R.string.scripts_number_range, 0, MAX_MATCH_LINES)))
+
+        activate(hasText(string(R.string.scripts_highlight)))
+        val colour = hasSetTextAction() and hasText(string(R.string.scripts_highlight_fg))
+        waitFor(colour)
+        compose.onNode(colour).performTextInput("#00ff00")
+
+        activate(apply)
+        val fields = session.receive("editScriptItem").getJSONObject("fields")
+        assertEquals(3, fields.getInt("lineDelta"))
+        assertTrue(fields.getBoolean("highlight"))
+        assertEquals("#00ff00", fields.getString("highlightFg"))
+        assertEquals("", fields.getString("highlightBg"))
     }
 
     @Test

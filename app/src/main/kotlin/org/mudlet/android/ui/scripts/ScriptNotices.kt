@@ -43,7 +43,7 @@ internal fun ScriptNotices(scripts: ScriptItemsClient, onAdded: (ScriptNotice.Ad
 
             ScriptNotice.NotSent -> host.showSnackbar(resources.getString(R.string.profiles_error_not_attached), withDismissAction = true)
         }
-        scripts.notices.remove(notice)
+        scripts.shown(notice)
     }
     SnackbarHost(host)
 }

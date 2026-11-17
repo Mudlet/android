@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.scripts
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -117,6 +118,16 @@ internal fun ScriptLibraryScreen(
     val folder = if (items != null && items.none { it.id == openFolder }) 0 else openFolder
     val newItem = stringResource(kind.newName)
     val newFolder = stringResource(R.string.scripts_new_folder)
+    // Back leaves a search, then goes up a folder, before it leaves the library
+    BackHandler(enabled = query.isNotBlank() || folder != 0) {
+        if (query.isNotBlank()) query = "" else openFolder = items?.firstOrNull { it.id == folder }?.parent ?: 0
+    }
+
+    fun enter(kind: ScriptItemKind, folder: Int) {
+        kindWire = kind.wire
+        query = ""
+        openFolder = folder
+    }
 
     MudletScaffold(
         stringResource(R.string.scripts_title, game),
@@ -125,27 +136,24 @@ internal fun ScriptLibraryScreen(
             if (folder != 0) {
                 IconButton({ onOpen(ScriptItemKey(kind, folder)) }) { Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.scripts_edit_folder)) }
             }
-            IconButton({ scripts.add(kind, folder, folder = true, newFolder) }) {
-                Icon(painterResource(R.drawable.ic_create_new_folder), stringResource(R.string.scripts_add_folder))
-            }
-        },
-        snackbarHost = {
-            ScriptNotices(scripts) { added ->
-                if (added.folder) {
-                    kindWire = added.key.kind.wire
-                    query = ""
-                    openFolder = added.key.id
-                } else {
-                    onOpen(added.key)
+            // A new item goes after those listed, so not before they are
+            if (items != null) {
+                IconButton({ scripts.add(kind, folder, folder = true, newFolder) }) {
+                    Icon(painterResource(R.drawable.ic_create_new_folder), stringResource(R.string.scripts_add_folder))
                 }
             }
         },
+        snackbarHost = {
+            ScriptNotices(scripts) { added -> if (added.folder) enter(added.key.kind, added.key.id) else onOpen(added.key) }
+        },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                text = { Text(newItem) },
-                icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
-                onClick = { scripts.add(kind, folder, folder = false, newItem) },
-            )
+            if (items != null) {
+                ExtendedFloatingActionButton(
+                    text = { Text(newItem) },
+                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                    onClick = { scripts.add(kind, folder, folder = false, newItem) },
+                )
+            }
         },
         bottomBar = { ConsoleStrip(console, colors, onBack) },
     ) { padding ->
@@ -157,22 +165,11 @@ internal fun ScriptLibraryScreen(
         ) {
             item(key = "search") { SearchField(query) { query = it } }
             if (query.isBlank()) {
-                item(key = "kinds") {
-                    KindChips(kind, lists) {
-                        kindWire = it.wire
-                        openFolder = 0
-                    }
-                }
+                item(key = "kinds") { KindChips(kind, lists) { enter(it, 0) } }
                 folderRows(kind, folder, items, selected, scripts, onEnter = { openFolder = it }, onOpen = onOpen)
             } else {
                 searchResults(query, lists, selected, scripts) { result ->
-                    if (result.item.folder) {
-                        kindWire = result.kind.wire
-                        query = ""
-                        openFolder = result.item.id
-                    } else {
-                        onOpen(ScriptItemKey(result.kind, result.item.id))
-                    }
+                    if (result.item.folder) enter(result.kind, result.item.id) else onOpen(ScriptItemKey(result.kind, result.item.id))
                 }
             }
         }
@@ -184,7 +181,11 @@ private fun List<ScriptItemNode>.withoutHidden(ids: Set<Int>): List<ScriptItemNo
     if (ids.isEmpty()) return this
     val gone = HashSet(ids)
     // Depth first, so each folder comes before what is in it
-    return filter { item -> (item.id in gone || item.parent in gone).also { if (it) gone.add(item.id) }.not() }
+    return filter { item ->
+        val hidden = item.id in gone || item.parent in gone
+        if (hidden) gone.add(item.id)
+        !hidden
+    }
 }
 
 @Composable

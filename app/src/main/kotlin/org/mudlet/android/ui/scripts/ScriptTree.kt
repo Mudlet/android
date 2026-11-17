@@ -22,6 +22,9 @@ data class ScriptItemKey(val kind: ScriptItemKind, val id: Int) {
     }
 }
 
+/** What an item is known by. */
+val ScriptItem.key: ScriptItemKey get() = ScriptItemKey(kind, node.id)
+
 /** The items in the folder [parent] (0 for the top level), in the order the engine listed them. */
 fun List<ScriptItemNode>.childrenOf(parent: Int): List<ScriptItemNode> = filter { it.parent == parent }
 
@@ -77,7 +80,7 @@ data class ColorPattern(val foreground: Int, val background: Int) {
     }
 }
 
-/** Whether [draft] differs from [saved] in anything the detail page edits. */
+/** Whether this, a draft, differs from [saved] in anything the detail page edits. */
 fun ScriptItem.changedFrom(saved: ScriptItem?): Boolean = saved == null || node.name != saved.node.name || script != saved.script || details != saved.details
 
 /**
@@ -87,7 +90,10 @@ fun ScriptItem.changedFrom(saved: ScriptItem?): Boolean = saved == null || node.
 fun ScriptItemDetails.Trigger.withMatchAll(all: Boolean, lines: Int = lineDelta.coerceAtLeast(0)): ScriptItemDetails.Trigger = copy(lineDelta = if (all) lines.coerceIn(0, MAX_MATCH_LINES) else -1)
 
 /** The most lines a trigger's patterns may be spread over, as the desktop editor's Match control allows. */
-const val MAX_MATCH_LINES = 999
+const val MAX_MATCH_LINES = 99
+
+/** The most lines a trigger keeps firing for, as the desktop editor's control allows; a spacer's lines are held to it too. */
+const val MAX_FIRE_LINES = 999
 
 /** A pattern of [type] with nothing in it yet, but a spacer's one line. */
 fun newPattern(type: TriggerPatternType) = TriggerPattern(if (type == TriggerPatternType.SPACER) "1" else "", type)

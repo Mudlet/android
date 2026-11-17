@@ -40,6 +40,12 @@ class ScriptItemsClientTest {
         assertEquals(item, scripts.saved[key])
     }
 
+    /** The aliases listed as [items], with nothing left to answer. */
+    private fun listed(items: List<ScriptItemNode>) {
+        scripts.ask(ScriptItemKind.ALIAS)
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(items, take("scriptItems").getLong("id"))))
+    }
+
     @Test
     fun aListIsKeptOnlyWhenItAnswersWhatWasAsked() {
         assertTrue(scripts.ask(ScriptItemKind.ALIAS))
@@ -58,7 +64,7 @@ class ScriptItemsClientTest {
         val before = alias("kick")
         opened(before)
         assertFalse("nothing to apply", scripts.apply(key))
-        scripts.drafts[key] = alias("punch")
+        scripts.edit(alias("punch"))
         assertTrue(scripts.apply(key))
         val edit = take("editScriptItem")
         assertEquals("punch", edit.getJSONObject("fields").getString("name"))
@@ -71,7 +77,7 @@ class ScriptItemsClientTest {
         assertEquals("alias", take("scriptItems").getString("kind"))
         assertEquals(listOf<ScriptNotice>(ScriptNotice.Applied(after, before)), scripts.notices.toList())
 
-        scripts.notices.clear()
+        scripts.shown(scripts.notices.single())
         assertTrue(scripts.undo(before))
         val undo = take("editScriptItem")
         assertEquals("kick", undo.getJSONObject("fields").getString("name"))
@@ -83,12 +89,53 @@ class ScriptItemsClientTest {
     @Test
     fun whatIsChangedWhileTheEngineSavesStaysADraft() {
         opened(alias("kick"))
-        scripts.drafts[key] = alias("punch")
+        scripts.edit(alias("punch"))
         scripts.apply(key)
         val typedSince = alias("punch hard")
-        scripts.drafts[key] = typedSince
+        scripts.edit(typedSince)
         answer(take("editScriptItem"), alias("punch"))
         assertEquals(typedSince, scripts.drafts[key])
+    }
+
+    @Test
+    fun anUndoKeepsWhatWasTypedSinceTheApply() {
+        val before = alias("kick")
+        opened(before)
+        scripts.edit(alias("punch"))
+        scripts.apply(key)
+        answer(take("editScriptItem"), alias("punch"))
+        take("scriptItems")
+        val typedSince = alias("punch hard")
+        scripts.edit(typedSince)
+        scripts.undo(before)
+        assertEquals(typedSince, scripts.drafts[key])
+        answer(take("editScriptItem"), before)
+        assertEquals(typedSince, scripts.drafts[key])
+    }
+
+    @Test
+    fun onlyTheLastApplyOfAnItemOffersItsUndo() {
+        val first = alias("kick")
+        opened(first)
+        scripts.edit(alias("punch"))
+        scripts.apply(key)
+        val second = alias("punch")
+        answer(take("editScriptItem"), second)
+        scripts.edit(alias("slap"))
+        scripts.apply(key)
+        val third = alias("slap")
+        answer(take("editScriptItem"), third)
+        assertEquals("an Undo of the first would lose the second", listOf<ScriptNotice>(ScriptNotice.Applied(third, second)), scripts.notices.toList())
+    }
+
+    @Test
+    fun aDraftTheEngineNowHasIsNoDraft() {
+        opened(alias("kick"))
+        scripts.edit(alias("punch"))
+        // As when the link dropped after an apply the engine did
+        scripts.onAttached(sameInstance = true)
+        opened(alias("punch"))
+        assertNull(scripts.drafts[key])
     }
 
     @Test
@@ -107,7 +154,7 @@ class ScriptItemsClientTest {
 
     @Test
     fun aNewItemIsAddedLastInItsFolderAndThenOpened() {
-        scripts.lists[ScriptItemKind.ALIAS] = listOf(alias("kick").node, alias("punch").node.copy(id = 8), alias("in a folder").node.copy(id = 9, parent = 8))
+        listed(listOf(alias("kick").node, alias("punch").node.copy(id = 8), alias("in a folder").node.copy(id = 9, parent = 8)))
         assertTrue(scripts.add(ScriptItemKind.ALIAS, 0, folder = false, "New alias"))
         take("scriptItems")
         val add = take("addScriptItem")
@@ -124,7 +171,7 @@ class ScriptItemsClientTest {
     @Test
     fun aDeleteIsSentOnlyOnceItsUndoHasGone() {
         opened(alias("kick"))
-        scripts.drafts[key] = alias("punch")
+        scripts.edit(alias("punch"))
         scripts.deleteLater(key, "kick")
         assertEquals(listOf(key), scripts.deleting.toList())
         assertEquals(listOf<ScriptNotice>(ScriptNotice.Deleted(key, "kick")), scripts.notices.toList())
@@ -149,7 +196,7 @@ class ScriptItemsClientTest {
     @Test
     fun aRefusedApplyIsSaidAndKeepsTheDraft() {
         opened(alias("kick"))
-        scripts.drafts[key] = alias("punch")
+        scripts.edit(alias("punch"))
         scripts.apply(key)
         scripts.onRefused("editScriptItem", "no such item", take("editScriptItem").getLong("id"))
         assertEquals(listOf<ScriptNotice>(ScriptNotice.Refused("editScriptItem", "no such item")), scripts.notices.toList())
@@ -182,8 +229,8 @@ class ScriptItemsClientTest {
     @Test
     fun aNewEngineInstanceForgetsTheItemsAndTheSameOneKeepsThem() {
         opened(alias("kick"))
-        scripts.lists[ScriptItemKind.ALIAS] = listOf(alias("kick").node)
-        scripts.drafts[key] = alias("punch")
+        listed(listOf(alias("kick").node))
+        scripts.edit(alias("punch"))
         scripts.ask(ScriptItemKind.ALIAS)
         val unanswered = take("scriptItems")
 

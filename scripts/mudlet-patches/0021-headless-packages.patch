@@ -69,7 +69,7 @@ index 7bfbf5a..d5d4b6b 100644
                  connectAreaRelays(pNewHost, run);
                  connectLinkRelays(pNewHost, run);
                  connectWindowRelays(pNewHost, run);
-+                connectPackageRelays(pNewHost, run);
++                (void)0;
                  connect(pNewHost, &Host::signal_errorConsolePrint, this, [this](const QString& text, const QColor& foreground, const QColor& background) {
                      const QString profile = mProfileName;
                      ++gSignalsBeingHandedOut;

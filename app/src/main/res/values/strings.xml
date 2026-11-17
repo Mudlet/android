@@ -94,6 +94,20 @@
     <string name="profile_delete_text">Its settings, scripts and everything else Mudlet keeps for it on this device are deleted too.</string>
     <!-- The button of the delete confirmation dialog that keeps the profile -->
     <string name="profile_delete_cancel">Cancel</string>
+    <!-- The heading of the profile editor's part that saves the profile to a file -->
+    <string name="profile_export_title">Export</string>
+    <!-- Under the profile editor's Export heading: what the exported file holds, and that passwords are not in it -->
+    <string name="profile_export_text">Saves this profile\'s settings, scripts, map and logs to a .zip file, which desktop Mudlet opens once it is unzipped into its profiles folder. Passwords are left out: type them in again where you use the file.</string>
+    <!-- Under the profile editor's Export heading, while the profile's game is open: why the Export button is greyed out -->
+    <string name="profile_export_close_first">Close this game to export it: its scripts and map are saved as it closes.</string>
+    <!-- The profile editor's button that opens Android's file picker to choose where the exported profile goes -->
+    <string name="profile_export">Export to a file</string>
+    <!-- Shown, and read by TalkBack, while the profile is being written to the file -->
+    <string name="profile_exporting">Exporting…</string>
+    <!-- Shown, and read by TalkBack, once the profile has been written to the file -->
+    <string name="profile_exported">Exported.</string>
+    <!-- Shown, and read by TalkBack, when the profile could not be written to the file; %1$s is why, in English -->
+    <string name="profile_export_failed">Could not export the profile: %1$s</string>
 
     <!-- The game screen's title: the screen with the game's text, the command line and the game pill -->
     <string name="game_title">Game</string>

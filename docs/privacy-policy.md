@@ -41,6 +41,9 @@ Mudlet is a client for text-based online games (MUDs). Those games are run by ot
 Mudlet does not back any of this up to the cloud, and does not let Android copy it to a new device. Android's own
 system logs on your device may hold Mudlet's error messages; they never hold a password.
 
+You can export a profile to a file yourself, from the profile's editor: it goes only where you choose in Android's file
+picker, and Mudlet leaves your passwords out of it. Who can read it then depends on where you put it.
+
 ## Permissions
 
 - **Internet and network state**, to connect to games.

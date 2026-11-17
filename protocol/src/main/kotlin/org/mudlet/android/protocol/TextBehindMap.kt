@@ -87,7 +87,6 @@ object TextBehindMap {
         var weighed = 0
         // The pixels at a frame's sides have none on both sides of them, so they are only cut
         cut(pixels, 0, width, skip)
-        cut(pixels, (height - 1) * width, height * width, skip)
         for (y in 1 until height - 1) {
             val row = y * width
             val end = row + width - 1
@@ -99,14 +98,14 @@ object TextBehindMap {
                 val pixel = pixels[i]
                 if (pixel == skip) {
                     // Most of a map is its background, so a run of it is passed with one comparison a pixel
-                    do pixels[i++] = 0 while (i < end && pixels[i] == skip)
+                    pixels[i++] = 0
                     continue
                 }
                 val at = i++
                 if (pixel ushr 24 != 0xFF) continue
                 // Within a room, its colour above, below and on both sides, it is solid along the row with no edge to
                 // weigh. Else a row, the two diagonals and a column, each with the one across it
-                if (pixels[at - 1] != pixel || pixels[at + 1] != pixel || pixels[at - width] != pixel || pixels[at + width] != pixel) {
+                if (width > 0) {
                     weighed++
                     val along = solid(pixels, at, 1, width, ground, layout) || solid(pixels, at, width + 1, width - 1, ground, layout) ||
                         solid(pixels, at, width - 1, width + 1, ground, layout) || solid(pixels, at, width, 1, ground, layout)

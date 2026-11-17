@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 23;
+    static constexpr int protocolVersion = 24;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -169,6 +169,7 @@ protected:
     // The fields of a map or appMap message, all but its type; empty for a frame too large to send
     static QJsonObject mapMessage(const MapFrame& frame);
     static QJsonObject mapViewMessage(const MapViewInfo& view);
+    static QJsonObject mapInfoMessage(const MapInfo& info);
 
     ControlBridge* mControl = nullptr;
     SocketBridge* mMirror = nullptr;

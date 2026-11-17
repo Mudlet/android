@@ -397,6 +397,23 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   centre it on the player while it does not follow them; the buttons and the switch read their names. Touches, buttons and actions are off while no engine is
   attached or no frame of the window's size has come.
 
+### The map info
+The desktop paints the map info box into the map: the room's name, number and area from the built-in `Short`
+contributor, more from `Full`, and whatever a script adds with `registerMapInfo()`. The engine leaves it out of the
+pictures it sends (`0016-headless-map-info.patch`) and sends its parts as `info` in `map` and `appMap`
+(`docs/protocol.md`, "The map info"); `MapInfoBox` (`ui/game/MapInfoBox.kt`) shows them at the top of the map
+(`MapView`), under the buttons of a script's mapper:
+- Each part keeps the colour, bold and italic the engine gives it, over the box's own colour, so a script's colours
+  mean what they do on the desktop; the text is the app's, at the size Android's font scale gives.
+- It stays where it is while a drag or a pinch moves the picture under it, and takes no touches, which reach the map.
+  It takes at most two fifths of the map's height.
+- TalkBack reads it as one, "Map info:" and the parts in order.
+- The map behind the text shows none: the picture there is a backdrop TalkBack skips, and the box's text would lie
+  under the game's.
+- Which contributors are on is the profile's, saved with it: `enableMapInfo()` and `disableMapInfo()` switch them, and
+  the engine draws the map again. Painted into the picture, the box cost the engine nothing to speak of (0.2 to 0.5
+  ms of a frame whose PNG takes 80 to 140 ms to encode on a desktop CPU), so this is for reading it, not for speed.
+
 ### The map behind the text
 The game screen also has a map of its own, which needs no script: `appMap`, the engine's second map view
 (docs/protocol.md, "The app's map"; `ui/AppMapClient.kt`, drawn by `ui/game/AppMap.kt`).
@@ -540,7 +557,8 @@ a room added beside another or deleted, the player placed, an area renamed and t
 (`0013-headless-map-edits.patch`), following a link in a label as the GUI's click does (`followLabelLink()`,
 `0014-headless-label-links.patch`), and the triggers, aliases and scripts listed, added, saved, switched on or off,
 moved and deleted as the desktop's script editor does (`0015-headless-script-items.patch`; see "Editing triggers,
-aliases and scripts" in [`protocol.md`](protocol.md)).
+aliases and scripts" in [`protocol.md`](protocol.md)), and the map info box as its parts, left out of the map's
+picture (`0016-headless-map-info.patch`; see "The map info").
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

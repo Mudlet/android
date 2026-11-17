@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **23**.
+The current version is **24**.
 
 ## Transport
 
@@ -235,8 +235,8 @@ off, with its error; `moveScriptItem` for a folder moved into itself or a folder
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: `png` is the image as a PNG, in base64, of `w` by `h` pixels. |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`: `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | The profile's button bars, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
-| `map` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels` | The profile's 2D map as its mapper window shows it ("The map" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. |
-| `appMap` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
+| `map` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels`; `info`?: `lines`: `text`, `bold`, `italic`, `color`; `bg`, `bgAlpha` | The profile's 2D map as its mapper window shows it ("The map" below), with its map info as text ("The map info" below): `png` is a PNG, in base64, of `w` by `h` pixels at the scale `setMapScale` asked for, so of `w` times `scale` by `h` times `scale` pixels (`w` by `h` until it asks), and `viewOnly` false while the map is edited. Sent when it changes, and to a UI that attaches while the mapper shows. |
+| `appMap` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels`; `info`?: `lines`: `text`, `bold`, `italic`, `color`; `bg`, `bgAlpha` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below), with `info` as in `map`: `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `settings` | `values`, `refused`?, `re`? | The answer to `getSettings` or `setSettings`: `values` holds each key it asked for or set with the value the profile holds now, as `getConfig()` gives it with `true` for its second argument: true or false, a number, or a string, an option of several by its name (`showSentText` as `never`, `always` or `script`). A key the engine does not know is left out. `refused`, only after `setSettings`, holds each key not changed with why: `setConfig()`'s message, its Lua error for a value of the wrong type, or that the value was not true or false, a number or a string. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `areaId`, `area`, `match`, `steps`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, each with its `id`, `name`, its area's id `areaId` and name `area`, how it matched in `match` (`exact` for a name that is the text ignoring case, `prefix` for one that starts with it, `contains`, or `id` for the room whose id the text is and whose name does not hold it) and `steps`, the fewest exits from the player's room to it by rooms and exits that are not locked, as the speedwalk goes (0 for the player's room, -1 for no way there or no room for the player). Best first: `exact` and `id`, then `prefix`, then `contains`; within each, the rooms in the player's area first, then by `steps` with -1 last, then by name ignoring case, then id. `more` is true when more rooms matched than were sent. |
 | `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `symbol`, `env`, `color`, `weight`, `locked`; `re`? | The answer to `roomInfo` and the edits that give a room: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`; then what `editRoom` sets: its `symbol`, environment `env` and the colour that draws it `color`, as `#rrggbb`, its `weight` and whether it is `locked`. |
@@ -400,8 +400,8 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
 `mapPointer`; `pointer` on the window `mapper` does the same for a press, double-click or wheel turn.
 
 - The engine draws the map again on upstream's `mapRepaintRequested`, at most once a turn of its event loop, when
-  `viewOnly` changes, when the mapper shows or changes size, and on a new `setMapScale`. It sends `map` only when the PNG or `viewOnly`
-  differs from what it last sent.
+  `viewOnly` changes, when the mapper shows or changes size, and on a new `setMapScale`. It sends `map` only when the PNG, `viewOnly`, `view`
+  or `info` differs from what it last sent.
 - While the mapper does not show (its `shown` false, or no such window), or has no size, as `Geyser.Mapper`'s `hide()`
   leaves it, nothing is sent: the UI hides what it drew from the `windows` message. A mapper opened before
   `setMainWindowSize` has no size, so nothing is drawn. The UI draws a `map` only while its `w` and `h` are the
@@ -443,6 +443,24 @@ profile with a map has one without a script that opens a mapper.
 - A `centerview()` on the room the player is already in is taken by whichever view is drawn first: a view moved by
   `showRoom` (or a script's map moved by a pan) that is drawn second keeps its place until the player moves to another
   room.
+
+### The map info
+
+The desktop paints a box over the top of the map: what each map info contributor the profile has on says of the room
+shown, the built-in `Short` and `Full` and those a script adds with `registerMapInfo()`. The engine leaves that box
+out of `png` (libmudlet's `THeadlessSession::setMapInfoPainted()`, a Mudlet patch the app carries until Mudlet has
+it) and sends what it holds as `info`, in each `map` and `appMap` whose box has something in it, for the UI to show
+as text over the map.
+
+- `lines` are the contributors' parts, in the box's order: the `text` as the contributor gave it, which may hold line
+  breaks and for the built-in ones ends with one, whether it is `bold` and `italic`, and its `color` as `#rrggbb`.
+  A contributor that gives no colour has the map's own: black or white, whichever shows on the map's background.
+- `bg` is the box's colour as `#rrggbb` and `bgAlpha` its alpha, 0 to 255: what `setConfig("mapInfoColor", ...)`
+  set, grey at 120 until a script does.
+- No `info` means no box: no contributor is on, or the map shows no room they speak of.
+- The contributors run in the engine each time it draws the map, a script's in Lua, as on the desktop, so `info`
+  changes only with a frame: `enableMapInfo()`, `disableMapInfo()`, `registerMapInfo()`, `killMapInfo()` and
+  `updateMap()` each have the map drawn again. A frame whose `png` is as before but whose `info` differs is sent.
 
 ### Moving a map
 
@@ -685,7 +703,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 23, which added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,
+As implemented in version 24, which took the map info box out of the map's picture and sends it as text (`info` in
+`map` and `appMap`); version 23 added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,
 `addScriptItem`, `editScriptItem`, `enableScriptItem`, `moveScriptItem`, `deleteScriptItem`); version 22 added
 following a label's link (`followLabelLink`); version 21 added editing
 the map (`editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom`, `deleteRoom`, `setPlayerRoom`, `renameArea`, `mapEnvs`,

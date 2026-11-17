@@ -70,7 +70,8 @@ import kotlin.math.min
  * under them, a drag and a pinch sent as `moveMap`, the zoom buttons and TalkBack's actions that do the same without a
  * gesture, the button that centres the map on the player, the switch between viewing and editing it, the room a tap
  * picks with its exits and a walk there, and on an edited map what can be done to it, TalkBack's moves between levels,
- * a refusal shown until dismissed, a frame of another size not drawn, and openMapWidget()'s docked map as a page.
+ * a refusal shown until dismissed, a frame of another size not drawn, openMapWidget()'s docked map as a page, and the
+ * map info as text over it.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptMapTest {
@@ -261,6 +262,48 @@ class ScriptMapTest {
         session.send(mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H, moved = drag.last().getInt("seq"))))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(followButton()).fetchSemanticsNodes().isEmpty() }
         compose.onNode(map).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.map_viewing)))
+    }
+
+    @Test
+    fun theMapInfoIsTextUnderTheButtonsThatTalkBackReadsAsOneAndADragOnItPansTheMap() {
+        showMap(mapView(MAP_W, MAP_H))
+        val map = drawnMap()
+        val colour = """"bold":false,"italic":false,"color":"#000080""""
+        val parts = """[{"text":"Great Hall / 7 (Castle)\n",$colour},{"text":" \n",$colour},{"text":"HP 12","bold":true,"italic":true,"color":"#800000"}]"""
+
+        fun frame(lines: String?) = mapFrame(MAP_W, MAP_H, view = mapView(MAP_W, MAP_H))
+            .apply { if (lines != null) put("info", JSONObject("""{"lines":$lines,"bg":"#969696","bgAlpha":120}""")) }
+        val anyInfo = hasContentDescription(string(R.string.map_info, "").trim(), substring = true)
+        // The part of nothing but space is left out, and the line break the first ends with
+        val info = hasContentDescription(string(R.string.map_info, "Great Hall / 7 (Castle)\nHP 12"))
+        assertTrue("a frame with no info shows one", compose.onAllNodes(anyInfo).fetchSemanticsNodes().isEmpty())
+
+        session.send(frame(parts))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(info).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(info).assertIsDisplayed()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        val drawn = bounds(map)
+        val box = bounds(info)
+        val buttons = touchBounds(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction())
+        assertTrue("the info $box is not in the map $drawn", box.left >= drawn.left && box.right <= drawn.right && box.bottom <= drawn.bottom)
+        assertTrue("the info $box is not under the buttons $buttons", box.top >= buttons.bottom - 1)
+
+        // It takes no touch: a drag that starts on it is the map's
+        val scale = shownScale(drawn)
+        compose.onNode(info).performTouchInput {
+            down(center)
+            repeat(DRAG_STEPS) { moveBy(Offset((DRAG_STEP * scale).toFloat(), 0f)) }
+            advanceEventTime(300)
+            up()
+        }
+        assertEquals("mapper", session.receiveLast("moveMap").getString("map"))
+
+        session.send(frame("""[{"text":"\n",$colour}]"""))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isEmpty() }
+        session.send(frame(parts))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(info).fetchSemanticsNodes().isNotEmpty() }
+        session.send(frame(null))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test

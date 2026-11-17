@@ -479,6 +479,8 @@ std::optional<SessionStore::Session> MudletProfile::kept() const
 void MudletProfile::connectSession()
 {
     THeadlessSession* session = mSession.get();
+    // The UI shows the box as text over the map: a picture of it is not read by TalkBack and moves with a drag
+    session->setMapInfoPainted(false);
     connect(session, &THeadlessSession::startFinished, this, [this](THeadlessSession::StartResult result, const QString& error) {
         onStartFinished(int(result), error);
     });
@@ -1392,7 +1394,7 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
         qWarning("MudletEngine: the map could not be made a PNG");
         return std::nullopt;
     }
-    return MapFrame{png, size, mSession->mapViewOnly(), mapView(MapTarget::mapper)};
+    return MapFrame{png, size, mSession->mapViewOnly(), mapView(MapTarget::mapper), mapInfo(MapTarget::mapper)};
 }
 
 // Nothing while none is asked for: setAppMapSize() said so once
@@ -1429,7 +1431,7 @@ std::optional<MapFrame> MudletProfile::drawAppMap()
         return std::nullopt;
     }
     mAppMapUndrawn.clear();
-    return MapFrame{png, mAppMapSize, mSession->mapViewOnly(), mapView(MapTarget::app)};
+    return MapFrame{png, mAppMapSize, mSession->mapViewOnly(), mapView(MapTarget::app), mapInfo(MapTarget::app)};
 }
 
 std::optional<MapViewInfo> MudletProfile::mapView(MapTarget map) const
@@ -1454,6 +1456,17 @@ std::optional<MapViewInfo> MudletProfile::mapView(MapTarget map) const
         info.rooms.append({room.id, room.position, room.name});
     }
     info.levels = view->levels;
+    return info;
+}
+
+MapInfo MudletProfile::mapInfo(MapTarget map) const
+{
+    const THeadlessSession::MapInfo box = mSession->mapInfo(sessionMap(map));
+    MapInfo info{{}, box.background.name(), box.background.alpha()};
+    info.lines.reserve(box.lines.size());
+    for (const THeadlessSession::MapInfoLine& line : box.lines) {
+        info.lines.append(MapInfoLine{line.text, line.bold, line.italic, line.color.name()});
+    }
     return info;
 }
 

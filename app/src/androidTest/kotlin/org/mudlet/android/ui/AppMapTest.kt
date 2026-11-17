@@ -281,6 +281,27 @@ class AppMapTest {
     }
 
     @Test
+    fun theMapInfoIsReadAtTheTopOfTheMapInFrontAndNotShownBehindTheText() {
+        val behind = lastRequest("setAppMapSize", readPast = true)
+        val info = JSONObject("""{"lines":[{"text":"Great Hall / 7 (Castle)\n","bold":false,"italic":false,"color":"#000080"}],"bg":"#969696","bgAlpha":120}""")
+        val shown = hasContentDescription(string(R.string.map_info, "Great Hall / 7 (Castle)"))
+        session.send(appMap(behind.getInt("w"), behind.getInt("h"), scale = behind.getDouble("scale")).put("info", info))
+        compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
+        assertTrue("the map behind the text shows its info", compose.onAllNodes(shown, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+
+        activate(button)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
+        val size = lastRequest("setAppMapSize")
+        session.send(appMap(size.getInt("w"), size.getInt("h"), scale = size.getDouble("scale")).put("info", info))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(shown).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(shown).assertIsDisplayed()
+        val map = bounds(drawnMap())
+        val box = bounds(shown)
+        assertTrue("the info $box is not in the top half of the map $map", box.top >= map.top && box.bottom <= map.center.y && box.right <= map.right)
+        checkAccessibility()
+    }
+
+    @Test
     fun theButtonBringsTheMapToTheFrontWhereATapSelectsADoubleTapWalksAndBackSendsItBack() {
         val behind = lastRequest("setAppMapSize", readPast = true)
         compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))

@@ -1,0 +1,292 @@
+Let a frontend with no window show the map info box itself
+
+An app that draws the map as a picture gets the map info box painted into it: text at the profile's display font
+that a screen reader cannot read, that moves and scales with the picture while a finger drags it, and that the app
+cannot keep clear of its own controls. The box's content was reachable only as pixels.
+
+- TMapPainter::mapInfo() gives what the enabled contributors return for a room, in the box's order;
+  paintMapInfo() paints from it, so the GUI's box is unchanged.
+- TMapPainter::View::mPaintMapInfo, set by default, leaves the box out of a frame when cleared; PaintResult::mapInfo
+  then holds its lines.
+- THeadlessSession::setMapInfoPainted(false) has renderMap() and renderAppMap() leave the box out, and mapInfo()
+  gives each contributor's text, bold, italic and colour and the box's background for either map. The contributors
+  run at each draw as before, so registerMapInfo(), enableMapInfo() and the rest act as they do in the GUI.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_info: the lines of the built-in and a script's
+contributor, their order, style and colour, enabling and disabling one, the box's colour, and the frame's pixels
+without the box). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 81e1a43..b3147f5 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1096,6 +1096,12 @@ there were more, and the levels of that area that have rooms. Both calls are fal
+ `appMapPointer()` are, and for a map whose last draw showed no area; `followPlayerOnMap()` also with no room
+ for the player.
+ 
++An app that shows the map info box itself, in its own text, calls `setMapInfoPainted(false)`: `renderMap()` and
++`renderAppMap()` then leave the box out, and `mapInfo()` gives what a map's last draw would have painted, the
++part of each contributor the profile has enabled (the built-in ones and those of `registerMapInfo()`) with its
++text, bold, italic and colour, in the box's order, and the box's background. The contributors run at each draw
++as before, a script's in Lua, so `mapInfo()` changes only with a draw, and `mapRepaintRequested` says when.
++
+ `showMapLevel()` and `showMapArea()` are the GUI's level buttons and area box for those maps. A level is one of
+ the area's that has rooms, shown about the same point; an area is shown following the player where they are in
+ it, else about the room nearest the middle of the level shown, or of its level with the most rooms where it has
+diff --git a/src/TMapPainter.cpp b/src/TMapPainter.cpp
+index 10e6ed9..cba4a3b 100644
+--- a/src/TMapPainter.cpp
++++ b/src/TMapPainter.cpp
+@@ -2949,7 +2949,11 @@ void TMapPainter::paintFrame(QPainter& painter, PaintResult& result, const std::
+     if (viewSettled) {
+         viewSettled(*this);
+     }
+-    paintMapInfo(renderTimer, painter, mpHost, mpMap, roomID, mAreaID, mMultiSelectionSet.size(), infoColor, xOffset, 20, width(), mFontHeight);
++    if (mPaintMapInfo) {
++        paintMapInfo(renderTimer, painter, mpHost, mpMap, roomID, mAreaID, mMultiSelectionSet.size(), infoColor, xOffset, 20, width(), mFontHeight);
++    } else {
++        result.mapInfo = mapInfo(mpHost, mpMap, roomID, mAreaID, mMultiSelectionSet.size(), infoColor);
++    }
+ 
+     if (!mHelpMsg.isEmpty()) {
+         painter.setPen(QColor(255, 155, 50));
+@@ -3027,6 +3031,34 @@ void TMapPainter::resolveAreaExitClick(QPainter& painter, const QMap<int, QPoint
+     }
+ }
+ 
++QList<TMapPainter::MapInfoLine> TMapPainter::mapInfo(Host* pHost, TMap* pMap, int roomID, int displayAreaId, int selectionSize, QColor& infoColor)
++{
++    QList<MapInfoLine> lines;
++    if (!pMap || !pMap->mMapInfoContributorManager || !pHost) {
++        return lines;
++    }
++    TRoom* pRoom = pMap->mpRoomDB->getRoom(roomID);
++    if (!pRoom) {
++        return lines;
++    }
++    // The caller holds raw TRoom/TArea pointers across this, and a Lua contributor can
++    // register or kill contributors, so walk a copy and skip any that went away.
++    const TMap::ScriptCallbackScope callbackScope(pMap);
++    const int areaId = pRoom->getArea();
++    const QList<QString> keys = pMap->mMapInfoContributorManager->getContributorKeys();
++    for (const auto& key : keys) {
++        if (pHost->mMapInfoContributors.contains(key)) {
++            const MapInfoCallback contributor = pMap->mMapInfoContributorManager->getContributor(key);
++            if (!contributor) {
++                continue;
++            }
++            const MapInfoProperties properties = contributor(roomID, selectionSize, areaId, displayAreaId, infoColor);
++            lines.append(MapInfoLine{properties.text, properties.isBold, properties.isItalic, properties.color.isValid() ? properties.color : infoColor});
++        }
++    }
++    return lines;
++}
++
+ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+                               QPainter& painter,
+                               Host* pHost,
+@@ -3052,8 +3084,7 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+         return yOffset;
+     }
+ 
+-    TRoom* pRoom = pMap->mpRoomDB->getRoom(roomID);
+-    if (!pRoom) {
++    if (!pMap->mpRoomDB->getRoom(roomID)) {
+         return yOffset;
+     }
+ 
+@@ -3068,22 +3099,9 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+     }
+     painter.setFont(font);
+ 
+-    // The caller holds raw TRoom/TArea pointers across this, and a Lua contributor can
+-    // register or kill contributors, so walk a copy and skip any that went away.
+-    const TMap::ScriptCallbackScope callbackScope(pMap);
+-    const QList<QString> keys = pMap->mMapInfoContributorManager->getContributorKeys();
+-    for (const auto& key : keys) {
+-        if (pHost->mMapInfoContributors.contains(key)) {
+-            const MapInfoCallback contributor = pMap->mMapInfoContributorManager->getContributor(key);
+-            if (!contributor) {
+-                continue;
+-            }
+-            auto properties = contributor(roomID, selectionSize, pRoom->getArea(), displayAreaId, infoColor);
+-            if (!properties.color.isValid()) {
+-                properties.color = infoColor;
+-            }
+-            yOffset += paintMapInfoContributor(painter, xOffset, yOffset, properties, infoBackground, fontHeight, widgetWidth);
+-        }
++    const QList<MapInfoLine> lines = mapInfo(pHost, pMap, roomID, displayAreaId, selectionSize, infoColor);
++    for (const MapInfoLine& line : lines) {
++        yOffset += paintMapInfoContributor(painter, xOffset, yOffset, {line.bold, line.italic, line.text, line.color}, infoBackground, fontHeight, widgetWidth);
+     }
+ 
+ #ifdef QT_DEBUG
+diff --git a/src/TMapPainter.h b/src/TMapPainter.h
+index 11dc1d2..df4c1dd 100644
+--- a/src/TMapPainter.h
++++ b/src/TMapPainter.h
+@@ -121,6 +121,9 @@ struct TMapPainterView
+     bool isCenterViewCall = false;
+     // Drawn over the map but under the map info box
+     std::function<void(QPainter&)> mPaintBelowInfoBox;
++    // Cleared for a caller that shows the map info box itself: the frame leaves it out, and PaintResult::mapInfo
++    // holds its lines
++    bool mPaintMapInfo = true;
+     // A click at mPHighlight that the drawing of a room resolves: it clears mPick, and mStartSpeedWalk when the
+     // room it lands on is one to speedwalk to
+     QPoint mPHighlight;
+@@ -149,6 +152,14 @@ public:
+     void setView(const View& view) { static_cast<View&>(*this) = view; }
+     const View& view() const { return *this; }
+ 
++    // One contributor's part of the map info box
++    struct MapInfoLine
++    {
++        QString text;
++        bool bold = false;
++        bool italic = false;
++        QColor color;
++    };
+     // What painting a view resolved, for its caller to act on: no Lua runs in here but the map info contributors'
+     struct PaintResult
+     {
+@@ -161,10 +172,15 @@ public:
+         // Rooms outside the area now shown left the selection, so its room list is stale
+         bool selectionPruned = false;
+         int lodExitIndexRoomsHandedOver = -1;
++        // The map info box of a view that does not paint it (View::mPaintMapInfo)
++        QList<MapInfoLine> mapInfo;
+     };
+     // Paints the whole view, the map info box included, at view.mSize. viewSettled is handed the frame's view just
+     // before the info box's contributors run, so the Lua they run can read this frame's area and zoom from its caller.
+     void paintView(QPainter&, const View&, PaintResult&, const std::function<void(const View&)>& viewSettled = {});
++    // What the profile's enabled map info contributors give for the room, in the order the box shows them; each
++    // runs here, a script's in Lua. A contributor may change infoColor for those after it.
++    static QList<MapInfoLine> mapInfo(Host* pHost, TMap* pMap, int roomID, int displayAreaId, int selectionSize, QColor& infoColor);
+     // Returns where the box ends, down from the top
+     static int paintMapInfo(const QElapsedTimer& renderTimer,
+                             QPainter& painter,
+diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
+index 4eb74dd..21b044c 100644
+--- a/src/TNullMapView.cpp
++++ b/src/TNullMapView.cpp
+@@ -345,6 +345,7 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
+         mView = frame;
+     });
+     mView = result.view;
++    mMapInfo = result.mapInfo;
+     mLaidOut = mView.mRoomWidth > 0.0f;
+     collectDrawnRooms();
+     if (result.areaChanged) {
+diff --git a/src/TNullMapView.h b/src/TNullMapView.h
+index 08b2b2c..7443ac2 100644
+--- a/src/TNullMapView.h
++++ b/src/TNullMapView.h
+@@ -47,6 +47,11 @@ public:
+     void render(QPainter&, const QSize&);
+     // What a mouse press, the second press of a double-click and a wheel turn at that point of the last render() do
+     // to T2DMap, menus and dragging aside
++    // Cleared for an app that shows the map info box itself: render() then leaves the box out and mapInfo() holds
++    // what it would have painted
++    void setMapInfoPainted(bool painted) { mView.mPaintMapInfo = painted; }
++    // The map info box the last render() left out, a contributor's part each; empty where it painted the box
++    const QList<TMapPainter::MapInfoLine>& mapInfo() const { return mMapInfo; }
+     bool rendered() const { return !mView.mSize.isEmpty(); }
+     QSize renderedSize() const { return mView.mSize; }
+     // Whether the last render() laid out an area's rooms, which a press and a wheel turn act on
+@@ -159,6 +164,7 @@ private:
+     int mFollowedRoomId = 0;
+     int mFollowedAreaId = 0;
+     bool mLaidOut = false;
++    QList<TMapPainter::MapInfoLine> mMapInfo;
+     // Cleared by a move(), showRoom(), showLevel() or showArea() that leaves the view off the player, set again as it
+     // follows the player
+     bool mFollowing = true;
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 879d151..0459f7e 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -746,6 +746,28 @@ public:
+     };
+     // None before that map has drawn an area, or with no such map
+     std::optional<MapView> mapView(MapTarget map) const;
++    // For an app that shows the map info box itself, in its own text: false has renderMap() and renderAppMap() leave
++    // the box out of what they draw from then on, and mapInfo() gives what it holds. The contributors run as before,
++    // so a script's still runs its Lua at each draw.
++    void setMapInfoPainted(bool painted) { mMapInfoPainted = painted; }
++    // One contributor's part of the map info box, as registerMapInfo() gives it; the colour is the map's own text
++    // colour, black or white against its background, where the contributor gave none
++    struct MapInfoLine
++    {
++        QString text;
++        bool bold = false;
++        bool italic = false;
++        QColor color;
++    };
++    // The map info box a map's last draw left out: the parts of the contributors the profile has enabled, in the
++    // box's order, and the box's background (setConfig("mapInfoColor")). No lines while the box is painted, before
++    // that map is drawn, with no such map, and where no contributor is enabled.
++    struct MapInfo
++    {
++        QList<MapInfoLine> lines;
++        QColor background;
++    };
++    MapInfo mapInfo(MapTarget map) const;
+     // A room findRooms() found
+     struct RoomMatch
+     {
+@@ -1565,6 +1587,7 @@ private:
+     QString mProfileName;
+     // The app's map, which the profile holds
+     QPointer<TNullMapView> mpAppMap;
++    bool mMapInfoPainted = true;
+     QString mErrorString;
+     bool mShuttingDown = false;
+     bool mLoadFailed = false;
+diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
+index caa8d6e..3a30bd6 100644
+--- a/src/headless/THeadlessSessionMap.cpp
++++ b/src/headless/THeadlessSessionMap.cpp
+@@ -104,6 +104,7 @@ bool THeadlessSession::renderMap(QPainter& painter, const QSize& size)
+         mErrorString = tr("The map is drawn at 10 by 10 pixels or more, not %1 by %2.").arg(size.width()).arg(size.height());
+         return false;
+     }
++    pView->setMapInfoPainted(mMapInfoPainted);
+     pView->render(painter, size);
+     return true;
+ }
+@@ -288,6 +289,7 @@ bool THeadlessSession::renderAppMap(QPainter& painter, const QSize& size)
+         mErrorString = tr("The map has no rooms.");
+         return false;
+     }
++    pView->setMapInfoPainted(mMapInfoPainted);
+     pView->render(painter, size);
+     return true;
+ }
+@@ -471,6 +473,22 @@ std::optional<THeadlessSession::MapView> THeadlessSession::mapView(const MapTarg
+     return view;
+ }
+ 
++THeadlessSession::MapInfo THeadlessSession::mapInfo(const MapTarget map) const
++{
++    MapInfo info;
++    if (!mpHost) {
++        return info;
++    }
++    info.background = mpHost->mMapInfoBg;
++    const TNullMapView* pView = map == MapTarget::app ? (mpAppMap && mpAppMap->parent() == mpHost ? mpAppMap.data() : nullptr) : dynamic_cast<TNullMapView*>(mpHost->mapViewFrontend());
++    if (pView) {
++        for (const TMapPainter::MapInfoLine& line : pView->mapInfo()) {
++            info.lines.append(MapInfoLine{.text = line.text, .bold = line.bold, .italic = line.italic, .color = line.color});
++        }
++    }
++    return info;
++}
++
+ QList<THeadlessSession::RoomMatch> THeadlessSession::findRooms(const QString& text) const
+ {
+     QList<RoomMatch> found;

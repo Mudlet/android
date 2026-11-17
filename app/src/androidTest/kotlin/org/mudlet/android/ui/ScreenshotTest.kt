@@ -31,7 +31,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONArray
 import org.json.JSONObject
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -271,12 +270,8 @@ class ScreenshotTest {
         compose.onNode(lua).performTextInput("\n")
         compose.onNode(lua).performTextInput("sen")
         waitFor(hasContentDescription(string(R.string.lua_indent)))
-        try {
-            compose.waitUntil(WAIT_MS) { keyboardShown() }
-        } catch (_: ComposeTimeoutException) {
-        }
-        assumeTrue("a keyboard on the screen", keyboardShown())
-        save("script-item-keyboard-$mode")
+        // An emulator set up with keys of its own shows no keyboard, and this screenshot is then not taken
+        if (keyboardComes()) save("script-item-keyboard-$mode")
 
         activate(hasText(string(R.string.scripts_apply)))
         compose.waitForIdle()
@@ -292,9 +287,14 @@ class ScreenshotTest {
         save("script-item-problem-$mode")
     }
 
-    private fun keyboardShown(): Boolean {
+    private fun keyboardComes(): Boolean {
         val view = compose.activity.window.decorView
-        return compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+        return try {
+            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true } }
+            true
+        } catch (_: ComposeTimeoutException) {
+            false
+        }
     }
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }

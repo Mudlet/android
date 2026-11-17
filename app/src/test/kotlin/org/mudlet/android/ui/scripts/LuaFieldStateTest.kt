@@ -74,6 +74,10 @@ class LuaFieldStateTest {
         field.goTo(1)
         assertEquals(TextRange(0), field.value.selection)
         assertTrue("the item is not edited", changes.isEmpty())
+        // Each is told, for the line to be shown again where the cursor was on it already and the page has been scrolled
+        val told = field.wentTo
+        field.goTo(1)
+        assertEquals(told + 1, field.wentTo)
     }
 
     @Test

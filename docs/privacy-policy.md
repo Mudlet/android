@@ -5,7 +5,7 @@
 > in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
 > change both together.
 
-**Effective date:** 2026-11-15; the file's
+**Effective date:** 2026-11-17; the file's
 [history](https://github.com/Mudlet/android/commits/main/docs/privacy-policy.md) shows every earlier version.
 
 This policy covers Mudlet for Android and Mudlet PTB, its nightly test build, made by the Mudlet team, a group of
@@ -40,6 +40,15 @@ Mudlet is a client for text-based online games (MUDs). Those games are run by ot
 
 Mudlet does not back any of this up to the cloud, and does not let Android copy it to a new device. Android's own
 system logs on your device may hold Mudlet's error messages; they never hold a password.
+
+## Reporting a problem
+
+About > Report a problem shows you a report to send the Mudlet team when something goes wrong: Mudlet's recent
+messages from Android's system log, the versions of the app and of Mudlet, and your device's make, model and Android
+version. Your saved passwords and your characters' logins are taken out of it, and what you typed while a game hid
+your input is never in it. You see all of it before anything is sent, and Mudlet sends nothing itself: you choose to
+share it through Android's share sheet, copy it, or paste it into an issue on GitHub, and only the person or service
+you send it to receives it.
 
 ## Permissions
 

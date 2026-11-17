@@ -60,6 +60,9 @@ class PasswordStore(context: Context) {
         }
     }
 
+    /** Every stored password that can be decrypted now, for a problem report to take out of what it sends */
+    fun all(): List<String> = read()?.keys()?.asSequence()?.toList().orEmpty().mapNotNull(::get)
+
     /** False if it could not be stored. */
     fun set(profile: String, password: String): Boolean {
         val sealed = try {

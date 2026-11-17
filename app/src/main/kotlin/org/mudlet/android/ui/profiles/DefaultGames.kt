@@ -25,7 +25,7 @@ data class DefaultGame(
     val summary: String get() = description.substringBefore("\n\n").trim()
 
     /** A new profile for this game, of its name, so that Mudlet treats it as this game, as the desktop's does. */
-    fun newProfile() = Profile(name, host, port, tls, login = "", autoReconnect = false)
+    fun newProfile() = Profile(name, host, port, tls = false, login = "", autoReconnect = false)
 }
 
 /** The games in assets/games, which scripts/sync-mudlet-games.py writes from Mudlet's list. */
@@ -56,7 +56,6 @@ object DefaultGames {
      * that game, else one at its address (any of its hosts, and its port), so that it is never added twice.
      */
     fun profileFor(game: DefaultGame, profiles: List<Profile>): Profile? = profiles.firstOrNull { it.name.equals(game.name, ignoreCase = true) }
-        ?: profiles.firstOrNull { p -> p.port == game.port && (listOf(game.host) + game.alternateHosts).any { it.equals(p.host.trim(), ignoreCase = true) } }
 
     /** The [games] the player has no profile for yet, which the profile list offers below their profiles. */
     fun offered(games: List<DefaultGame>, profiles: List<Profile>): List<DefaultGame> = games.filter { profileFor(it, profiles) == null }

@@ -465,7 +465,7 @@
     {
       "name": "StickMUD",
       "host": "stickmud.com",
-      "port": 7670,
+      "port": 7671,
       "tls": true,
       "links": [
         {

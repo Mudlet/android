@@ -134,7 +134,8 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
     /**
      * Makes a trigger named [name] that matches [pattern], last at the top level, and saves it, so that it runs;
-     * [notices] then has [ScriptNotice.Added], once the engine has it with its pattern. False as for [ProfileSession.send].
+     * [notices] then has [ScriptNotice.Added], once the engine has it with its pattern, or, where the engine made it
+     * but did not save the pattern, with why not after it. False as for [ProfileSession.send].
      */
     fun addTrigger(name: String, pattern: TriggerPattern): Boolean {
         // Past the end appends, which is where it goes when the triggers were never listed
@@ -238,7 +239,9 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
                 } else {
                     // Told once it is saved: a page opened before then would show, and could save, the trigger without it
                     val sent = item.copy(details = details.copy(patterns = listOf(asked.pattern)))
-                    request(Pending.Apply(key, sent, previous = null, added = true)) { Requests.editScriptItem(sent, it) }
+                    if (!request(Pending.Apply(key, sent, previous = null, added = true), quiet = true) { Requests.editScriptItem(sent, it) }) {
+                        addedWithout(key, ScriptNotice.NotSent)
+                    }
                 }
             }
 
@@ -269,8 +272,15 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
             refused[asked.key] = reason
             ask(asked.key.kind)
         } else {
-            tell(ScriptNotice.Refused(request, reason))
+            val refusal = ScriptNotice.Refused(request, reason)
+            if (asked is Pending.Apply && asked.added) addedWithout(asked.key, refusal) else tell(refusal)
         }
+    }
+
+    // A trigger made but not saved with its pattern is there all the same: it opens, and its page says [why] it has none
+    private fun addedWithout(key: ScriptItemKey, why: ScriptNotice) {
+        tell(ScriptNotice.Added(key, folder = false))
+        tell(why)
     }
 
     /** What the last link did not answer is not answered; a new engine instance loaded the profile again, with new ids. */

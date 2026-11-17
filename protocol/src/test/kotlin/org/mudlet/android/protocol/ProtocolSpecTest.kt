@@ -85,6 +85,7 @@ class ProtocolSpecTest {
                         MapTarget::class.java -> MapTarget.APP
                         List::class.java -> listOf("x")
                         Map::class.java -> mapOf("x" to true)
+                        RoomEdit::class.java -> RoomEdit("x", "x", 1, 1, true, Triple(1, 1, 1))
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

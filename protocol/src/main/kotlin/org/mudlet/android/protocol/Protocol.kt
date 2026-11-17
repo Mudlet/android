@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 20
+const val PROTOCOL_VERSION = 21
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
@@ -275,7 +275,11 @@ data class RoomMatch(
 /** A way out of a room: one of the twelve directions, "n" to "out", or a special exit's command, to the room [to]. */
 data class RoomExit(val direction: String, val to: Int, val toName: String, val locked: Boolean)
 
-/** A room of the map, as Requests.roomInfo asks for it (docs/protocol.md, `room`); [steps] as in [RoomMatch]. */
+/**
+ * A room of the map, as Requests.roomInfo asks for it (docs/protocol.md, `room`); [steps] as in [RoomMatch]. What the
+ * map's editing sets ([RoomEdit]): the [symbol] drawn on it, its environment [env] and the colour that draws it, [color]
+ * (opaque ARGB, null where the engine gave none), its [weight] for the speedwalk and whether the speedwalk avoids it, [locked].
+ */
 data class RoomInfo(
     val id: Int,
     val name: String,
@@ -286,7 +290,30 @@ data class RoomInfo(
     val z: Int,
     val steps: Int,
     val exits: List<RoomExit>,
+    val symbol: String = "",
+    val env: Int = -1,
+    val color: Int? = null,
+    val weight: Int = 1,
+    val locked: Boolean = false,
 )
+
+/** What Requests.editRoom sets of a room: each null is kept; [place] is x, y (north up) and z in its area. */
+data class RoomEdit(
+    val name: String? = null,
+    val symbol: String? = null,
+    val env: Int? = null,
+    val weight: Int? = null,
+    val locked: Boolean? = null,
+    val place: Triple<Int, Int, Int>? = null,
+)
+
+/** An environment a room can be given, with the colour it draws rooms in, opaque ARGB (docs/protocol.md, `envs`). */
+data class MapEnv(val env: Int, val color: Int)
+
+/** `#rrggbb` as an opaque ARGB colour; null for anything else. */
+fun rgbColor(text: String): Int? = if (text.length == 7 && text[0] == '#') text.substring(1).toIntOrNull(16)?.let { it or OPAQUE } else null
+
+private const val OPAQUE = 0xFF000000.toInt()
 
 /** An area of the map that has rooms (docs/protocol.md, `areas`). */
 data class MapArea(val id: Int, val name: String)
@@ -541,6 +568,9 @@ sealed interface EngineMessage {
     /** The answer to Requests.mapAreas: the map's areas that have rooms, by name. */
     data class Areas(val areas: List<MapArea>, val replyTo: Any?) : EngineMessage
 
+    /** The answer to Requests.mapEnvs: the environments a room can be given, by number. */
+    data class Envs(val envs: List<MapEnv>, val replyTo: Any?) : EngineMessage
+
     /**
      * The answer to getSettings or setSettings: [values] by Lua's getConfig() keys, each a Boolean, a Double or a
      * String, as the profile holds it now, a key the engine does not know left out; [refused] the keys setSettings did
@@ -742,6 +772,42 @@ object Requests {
 
     /** Answered by [EngineMessage.Areas] with [id] as its replyTo, or an Error. */
     fun mapAreas(id: Long): JSONObject = JSONObject().put("t", "mapAreas").put("id", id)
+
+    /** Answered by [EngineMessage.Room], the room as it now is, with [id] as its replyTo, or an Error: [edit] made to [room]. */
+    fun editRoom(room: Int, edit: RoomEdit, id: Long): JSONObject = JSONObject().put("t", "editRoom").put("room", room).put("id", id).apply {
+        edit.name?.let { put("name", it) }
+        edit.symbol?.let { put("symbol", it) }
+        edit.env?.let { put("env", it) }
+        edit.weight?.let { put("weight", it) }
+        edit.locked?.let { put("locked", it) }
+        edit.place?.let { (x, y, z) -> put("x", x).put("y", y).put("z", z) }
+    }
+
+    /**
+     * As [editRoom]: [room]'s exit [direction], one of the twelve as [RoomExit] names them, led to the room [to], or removed for 0;
+     * with [bothWays] the exit back too.
+     */
+    fun setRoomExit(room: Int, direction: String, to: Int, bothWays: Boolean, id: Long): JSONObject = JSONObject()
+        .put("t", "setRoomExit").put("room", room).put("direction", direction).put("to", to).put("bothWays", bothWays).put("id", id)
+
+    /** As [editRoom]: [room]'s exit [direction] [locked], so the speedwalk avoids it, or not. */
+    fun lockRoomExit(room: Int, direction: String, locked: Boolean, id: Long): JSONObject = JSONObject()
+        .put("t", "lockRoomExit").put("room", room).put("direction", direction).put("locked", locked).put("id", id)
+
+    /** Answered by [EngineMessage.Room], the new room, with [id] as its replyTo, or an Error: a room one place from [room] that way, with exits both ways. */
+    fun addRoom(room: Int, direction: String, id: Long): JSONObject = JSONObject().put("t", "addRoom").put("room", room).put("direction", direction).put("id", id)
+
+    /** [room] and its exits gone. Answered only by an Error, when refused. */
+    fun deleteRoom(room: Int): JSONObject = JSONObject().put("t", "deleteRoom").put("room", room)
+
+    /** The player placed in [room], as a script's centerview() does. Answered only by an Error, when refused. */
+    fun setPlayerRoom(room: Int): JSONObject = JSONObject().put("t", "setPlayerRoom").put("room", room)
+
+    /** [area] renamed [name]. Answered only by an Error, when refused. */
+    fun renameArea(area: Int, name: String): JSONObject = JSONObject().put("t", "renameArea").put("area", area).put("name", name)
+
+    /** Answered by [EngineMessage.Envs] with [id] as its replyTo, or an Error. */
+    fun mapEnvs(id: Long): JSONObject = JSONObject().put("t", "mapEnvs").put("id", id)
 
     /** Downloads the map the game offers and loads it, as [EngineMessage.MapDownload] follows. Answered only by an Error, when refused. */
     fun downloadMap(): JSONObject = JSONObject().put("t", "downloadMap")
@@ -952,11 +1018,21 @@ class FrameReader(input: InputStream) {
                     o.optInt("z"),
                     o.optInt("steps", -1),
                     objects(o.optJSONArray("exits")).map { RoomExit(it.optString("direction"), it.optInt("to"), it.optString("toName"), it.optBoolean("locked")) },
+                    o.optString("symbol"),
+                    o.optInt("env", -1),
+                    rgbColor(o.optString("color")),
+                    o.optInt("weight", 1),
+                    o.optBoolean("locked"),
                 ),
                 o.opt("re"),
             )
 
             "areas" -> EngineMessage.Areas(objects(o.optJSONArray("areas")).map { MapArea(it.optInt("id"), it.optString("name")) }, o.opt("re"))
+
+            "envs" -> EngineMessage.Envs(
+                objects(o.optJSONArray("envs")).mapNotNull { env -> rgbColor(env.optString("color"))?.let { MapEnv(env.optInt("env"), it) } },
+                o.opt("re"),
+            )
 
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),

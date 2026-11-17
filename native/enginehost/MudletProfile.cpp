@@ -1779,7 +1779,7 @@ std::variant<RoomDetails, QString> MudletProfile::roomInfo(int room) const
     if (!info) {
         return QStringLiteral("there is no room %1 in the map").arg(room);
     }
-    RoomDetails details{info->id, info->name, info->areaId, info->areaName, info->x, info->y, info->z, info->steps, {}};
+    RoomDetails details{info->id, info->name, info->areaId, info->areaName, info->x, info->y, info->z, info->steps, {}, info->symbol, info->env, info->color.name(), info->weight, info->locked};
     for (const THeadlessSession::RoomExit& exit : info->exits) {
         details.exits.append({exit.direction, exit.to, exit.toName, exit.locked});
     }
@@ -1804,6 +1804,76 @@ std::variant<QList<MapAreaInfo>, QString> MudletProfile::mapAreas() const
         areas.append({area.id, area.name});
     }
     return areas;
+}
+
+std::variant<RoomDetails, QString> MudletProfile::editRoom(int room, const RoomEdit& edit)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    const THeadlessSession::RoomEdit sessionEdit{edit.name, edit.symbol, edit.env, edit.weight, edit.locked, edit.position};
+    return mSession->editRoom(room, sessionEdit) ? roomInfo(room) : mSession->errorString();
+}
+
+std::variant<RoomDetails, QString> MudletProfile::setRoomExit(int room, const QString& direction, int to, bool bothWays)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setRoomExit(room, direction, to, bothWays) ? roomInfo(room) : mSession->errorString();
+}
+
+std::variant<RoomDetails, QString> MudletProfile::lockRoomExit(int room, const QString& direction, bool locked)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->lockRoomExit(room, direction, locked) ? roomInfo(room) : mSession->errorString();
+}
+
+std::variant<RoomDetails, QString> MudletProfile::addRoom(int beside, const QString& direction)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    const int added = mSession->addRoomBeside(beside, direction);
+    return added ? roomInfo(added) : mSession->errorString();
+}
+
+QString MudletProfile::deleteRoom(int room)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->deleteRoom(room) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::setPlayerRoom(int room)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setPlayerRoom(room) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::renameArea(int area, const QString& name)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->renameArea(area, name) ? QString() : mSession->errorString();
+}
+
+std::variant<QList<MapEnvInfo>, QString> MudletProfile::mapEnvs() const
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QList<MapEnvInfo> envs;
+    for (const THeadlessSession::MapEnv& env : mSession->mapEnvs()) {
+        envs.append({env.env, env.color.name()});
+    }
+    return envs;
 }
 
 QString MudletProfile::downloadMap()

@@ -70,6 +70,14 @@ public:
     std::variant<RoomDetails, QString> roomInfo(int) const override { return noMap(); }
     QString walkToRoom(int) override { return noMap(); }
     std::variant<QList<MapAreaInfo>, QString> mapAreas() const override { return noMap(); }
+    std::variant<RoomDetails, QString> editRoom(int, const RoomEdit&) override { return noMap(); }
+    std::variant<RoomDetails, QString> setRoomExit(int, const QString&, int, bool) override { return noMap(); }
+    std::variant<RoomDetails, QString> lockRoomExit(int, const QString&, bool) override { return noMap(); }
+    std::variant<RoomDetails, QString> addRoom(int, const QString&) override { return noMap(); }
+    QString deleteRoom(int) override { return noMap(); }
+    QString setPlayerRoom(int) override { return noMap(); }
+    QString renameArea(int, const QString&) override { return noMap(); }
+    std::variant<QList<MapEnvInfo>, QString> mapEnvs() const override { return noMap(); }
     QString downloadMap() override { return noMap(); }
     QString cancelMapDownload() override { return noMap(); }
     // Kept as given, with no meaning here: what a UI sets it reads back, and a key never set is left out

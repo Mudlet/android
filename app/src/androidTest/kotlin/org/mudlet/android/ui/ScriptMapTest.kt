@@ -10,10 +10,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
@@ -21,13 +23,18 @@ import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
@@ -53,6 +60,7 @@ import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.EngineMessages.room
 import java.io.ByteArrayOutputStream
 import java.util.Base64
+import kotlin.math.abs
 import kotlin.math.min
 
 /**
@@ -60,8 +68,8 @@ import kotlin.math.min
  * a tap and a double tap (not two taps apart) sent as `mapPointer` at the room nearest them or the point of the frame
  * under them, a drag and a pinch sent as `moveMap`, the zoom buttons and TalkBack's actions that do the same without a
  * gesture, the button that centres the map on the player, the switch between viewing and editing it, the room a tap
- * picks with its exits and a walk there, TalkBack's moves between levels, a refusal shown until dismissed, a frame of
- * another size not drawn, and openMapWidget()'s docked map as a page.
+ * picks with its exits and a walk there, and on an edited map what can be done to it, TalkBack's moves between levels,
+ * a refusal shown until dismissed, a frame of another size not drawn, and openMapWidget()'s docked map as a page.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptMapTest {
@@ -508,7 +516,261 @@ class ScriptMapTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.map_refused, "There is no room 1 in the map."))).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    @Test
+    fun anEditedMapsRoomHasItsDetailsAndExitsEditedAndAnExitLedToARoomTappedNext() {
+        val rooms = mapOf(1 to (200.0 to 150.0), 2 to (230.0 to 150.0))
+        session.windows(listOf(mapper()), full = true)
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms)))
+        val map = drawnMap()
+        val drawn = bounds(map)
+        compose.onNode(map).performTouchInput { click(at(drawn, 230.0, 150.0)) }
+        val ask = session.receive("roomInfo")
+        session.send(room(ask, 2, "Kitchen", steps = 1, exits = listOf(exit("w", 1, "Great Hall"))))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Kitchen")).fetchSemanticsNodes().isNotEmpty() }
+
+        // Its details: what changed goes as one editRoom, the colour picked from the map's environments
+        tapInCard(R.string.room_edit_properties)
+        // The dialog asks for them once composed, which the test's clock does only while the test waits on Compose
+        compose.waitForIdle()
+        val envs = session.receive("mapEnvs")
+        session.send(EngineMessages.envs(envs, 257 to "#ff0000", 200 to "#0a141e"))
+        val swatch = hasContentDescription(string(R.string.room_edit_env_item, 200))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(swatch).fetchSemanticsNodes().isNotEmpty() }
+        // The room's own environment, not among the map's, leads the list, picked
+        compose.onNode(hasContentDescription(string(R.string.room_edit_env_item, -1))).assertIsSelected()
+        activateInDialog(swatch)
+        type(R.string.room_edit_name, "Great Kitchen")
+        type(R.string.room_edit_weight, "3")
+        activateInDialog(hasText(string(R.string.room_edit_locked)))
+        activateInDialog(hasText(string(R.string.room_edit_save)))
+        val edit = session.receive("editRoom")
+        assertEquals(
+            mapOf("room" to 2, "name" to "Great Kitchen", "env" to 200, "weight" to 3, "locked" to true),
+            edit.keys().asSequence().filter { it !in setOf("t", "id") }.associateWith { edit.get(it) },
+        )
+        session.send(room(edit, 2, "Great Kitchen", steps = 1, exits = listOf(exit("w", 1, "Great Hall")), env = 200, weight = 3, locked = true))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Great Kitchen")).fetchSemanticsNodes().isNotEmpty() }
+
+        // Its exits: one led to a room by number both ways, which closes the dialog for the room shown anew, then locked
+        tapInCard(R.string.room_edit_exits)
+        activateInDialog(hasText(string(R.string.exit_north)))
+        type(R.string.room_edit_exit_to, "5")
+        activateInDialog(hasText(string(R.string.room_edit_exit_set)))
+        val led = session.receive("setRoomExit")
+        assertEquals(listOf(2, "n", 5, true), listOf(led.getInt("room"), led.getString("direction"), led.getInt("to"), led.getBoolean("bothWays")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        session.send(room(led, 2, "Great Kitchen", steps = 1, exits = listOf(exit("n", 5, "Tower"), exit("w", 1, "Great Hall"))))
+        tapInCard(R.string.room_edit_exits)
+        val tower = hasText(string(R.string.room_exit, string(R.string.exit_north), "Tower"))
+        activateInDialog(hasText(string(R.string.exit_north)))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tower and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+        activateInDialog(hasText(string(R.string.room_edit_exit_lock)))
+        val lock = session.receive("lockRoomExit")
+        assertEquals(listOf(2, "n", true), listOf(lock.getInt("room"), lock.getString("direction"), lock.getBoolean("locked")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+
+        // Or to the room tapped next on the map, which picks no room and presses nothing: TalkBack's select of the room in
+        // the middle, as the banner, the place bar and the card can cover the middle of a map as short as the emulator's
+        tapInCard(R.string.room_edit_exits)
+        activateInDialog(hasText(string(R.string.exit_east)))
+        activateInDialog(hasText(string(R.string.room_edit_exit_pick)))
+        val prompt = hasText(string(R.string.room_edit_link_prompt, string(R.string.exit_east)))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(prompt).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(prompt).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        val read = session.received.size
+        compose.onNode(map).performSemanticsAction(SemanticsActions.OnClick)
+        val linked = session.receive("setRoomExit")
+        assertEquals(listOf(2, "e", 1, true), listOf(linked.getInt("room"), linked.getString("direction"), linked.getInt("to"), linked.getBoolean("bothWays")))
+        assertTrue("the tap pressed or asked: ${session.received.drop(read)}", session.received.drop(read).none { it.optString("t") in setOf("mapPointer", "roomInfo") })
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(prompt).fetchSemanticsNodes().isEmpty() }
+
+        // Viewing the map: no edits, and an exit waiting for its room no longer waits
+        tapInCard(R.string.room_edit_exits)
+        activateInDialog(hasText(string(R.string.exit_up)))
+        activateInDialog(hasText(string(R.string.room_edit_exit_pick)))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.room_edit_link_prompt, string(R.string.exit_up)))).fetchSemanticsNodes().isNotEmpty() }
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = true, view = mapView(MAP_W, MAP_H, rooms = rooms)))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.room_edit_exits))).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(map).performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, session.receive("roomInfo").getInt("room"))
+        session.assertNoRequest("setRoomExit", QUIET_MS)
+    }
+
+    @Test
+    fun aRoomIsAddedMovedDraggedPlacedAndDeletedOnAnEditedMapAndItsAreaRenamed() {
+        val rooms = mapOf(1 to (200.0 to 150.0), 3 to (120.0 to 45.0))
+        session.windows(listOf(mapper()), full = true)
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms)))
+        val map = drawnMap()
+        val drawn = bounds(map)
+        compose.onNode(map).performTouchInput { click(at(drawn, 200.0, 150.0)) }
+        val ask = session.receive("roomInfo")
+        session.send(room(ask, 1, "Great Hall", steps = 0))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Great Hall")).fetchSemanticsNodes().isNotEmpty() }
+        val placeMe = hasText(string(R.string.room_edit_player_here)) and hasClickAction()
+        compose.onNode(placeMe).performScrollTo().assertIsNotEnabled()
+
+        // A room beside it, a way no exit goes, which shows once made
+        tapInCard(R.string.room_edit_add)
+        activateInDialog(hasText(string(R.string.exit_north)))
+        val add = session.receive("addRoom")
+        assertEquals(1 to "n", add.getInt("room") to add.getString("direction"))
+        session.send(room(add, 3, "", steps = 1, exits = listOf(exit("s", 1, "Great Hall")), y = 1))
+        val added = hasText(string(R.string.room_unnamed, 3))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(added).fetchSemanticsNodes().isNotEmpty() }
+
+        // Moved a place east, as the dialog then says
+        tapInCard(R.string.room_edit_move)
+        activateInDialog(hasText(string(R.string.exit_east)))
+        val nudge = session.receive("editRoom")
+        assertEquals(listOf(3, 1, 1, 0), listOf("room", "x", "y", "z").map { nudge.getInt(it) })
+        session.send(room(nudge, 3, "", steps = 1, x = 1, y = 1))
+        val position = hasText(string(R.string.room_edit_position, 1, 1, 0))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(position).fetchSemanticsNodes().isNotEmpty() }
+        activateInDialog(hasText(string(R.string.room_edit_done)))
+
+        // A drag of the room picked moves it by the whole rooms it went: two east and one south, and the map stays.
+        // The room drawn anew where the buttons, the place bar and the card leave the map free, which on a map as short
+        // as the emulator's is a corner; picked by a tap there, so a drag that misses says whether a touch reaches it
+        val scale = shownScale(drawn)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        val start = clearPoint(map)
+        val place = (start.x - at(drawn, 0.0, 0.0).x) / scale to (start.y - at(drawn, 0.0, 0.0).y) / scale
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = rooms + (3 to place))))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.mapMover.view?.rooms?.any { it.id == 3 && abs(it.x - place.first) < 0.01 } == true } }
+        val tapped = session.received.size
+        compose.onNode(map).performTouchInput {
+            // Each long enough after the touch before that it is not a double tap's second touch, which walks or zooms
+            advanceEventTime(1_000)
+            click(start)
+        }
+        val pick = receiveTouched("roomInfo", tapped, map, start)
+        assertEquals("the tap at $start asked for room ${pick.getInt("room")}; ${mapState(map, start)}", 3, pick.getInt("room"))
+        session.send(room(pick, 3, "", steps = 1, x = 1, y = 1))
+        val read = session.received.size
+        compose.onNode(map).performTouchInput {
+            advanceEventTime(1_000)
+            down(start)
+            repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), (1.5 * scale).toFloat())) }
+            advanceEventTime(300)
+            up()
+        }
+        val dragged = receiveTouched("editRoom", read, map, start)
+        assertEquals(listOf(3, 3, 0, 0), listOf("room", "x", "y", "z").map { dragged.getInt(it) })
+        assertTrue("the drag moved the map: ${session.received.drop(read)}", session.received.drop(read).none { it.optString("t") == "moveMap" })
+        session.send(room(dragged, 3, "", steps = 1, x = 3))
+
+        // A drag off the room picked pans the map as when it is viewed
+        val off = clearPoint(map, away = start)
+        compose.onNode(map).performTouchInput {
+            down(off)
+            repeat(DRAG_STEPS) { moveBy(Offset((3.0 * scale).toFloat(), 0f)) }
+            advanceEventTime(300)
+            up()
+        }
+        session.receive("moveMap")
+        session.assertNoRequest("editRoom", QUIET_MS)
+
+        tapInCard(R.string.room_edit_player_here)
+        assertEquals(3, session.receive("setPlayerRoom").getInt("room"))
+
+        // Its area renamed, and the room asked for again, as its area's name changed
+        tapInCard(R.string.room_edit_rename_area)
+        type(R.string.room_edit_area_name, "  Keep ")
+        activateInDialog(hasText(string(R.string.room_edit_save)))
+        val renamed = session.receive("renameArea")
+        assertEquals(1 to "Keep", renamed.getInt("area") to renamed.getString("name"))
+        assertEquals(3, session.receive("roomInfo").getInt("room"))
+
+        // Deleted once the player says so, and no longer shown
+        tapInCard(R.string.room_edit_delete)
+        activateInDialog(hasText(string(R.string.room_edit_delete_confirm)) and hasAnyAncestor(isDialog()))
+        assertEquals(3, session.receive("deleteRoom").getInt("room"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(added).fetchSemanticsNodes().isEmpty() }
+    }
+
     private fun mapper() = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = MAP_W, h = MAP_H)
+
+    // A button of the room picked, scrolled to in its card
+    private fun tapInCard(@StringRes label: Int) {
+        val button = hasText(string(label)) and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(button).performScrollTo()
+        activate(button)
+    }
+
+    // A text field of the dialog open, by its label
+    private fun field(@StringRes label: Int): SemanticsNodeInteraction {
+        val node = hasSetTextAction() and hasText(string(label)) and hasAnyAncestor(isDialog())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+        return compose.onNode(node)
+    }
+
+    /** As [activate], in the dialog open over the screen: the checks are of the dialog's window. */
+    private fun activateInDialog(label: SemanticsMatcher) {
+        val node = label and hasClickAction() and hasAnyAncestor(isDialog())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(node).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodes(isRoot()).onLast().tryPerformAccessibilityChecks()
+        // performScrollTo fails where no scroller holds the node: a dialog's buttons, and the dialogs that do not scroll
+        if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) compose.onNode(node).performScrollTo()
+        compose.onNode(node).assertIsDisplayed().assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    // [text] typed into the dialog's field [label]; Compose checks the screen, keyboard and all, as it focuses the field
+    private fun type(@StringRes label: Int, text: String) {
+        field(label).performTextReplacement(text)
+    }
+
+    /**
+     * A point of the map's node, in its own pixels, on the frame and clear of all drawn over the map by at least
+     * [CLEAR_MARGIN], and, with [away], further from it than a finger's reach of a room.
+     */
+    private fun clearPoint(map: SemanticsMatcher, away: Offset? = null): Offset {
+        val bounds = bounds(map)
+        val over = overMap(bounds)
+        val first = at(bounds, 0.0, 0.0)
+        val last = at(bounds, MAP_W.toDouble(), MAP_H.toDouble())
+        // As ScriptMap's TAP_REACH
+        val reach = with(compose.density) { 24.dp.toPx() }
+        var y = first.y + CLEAR_MARGIN
+        while (y < last.y - CLEAR_MARGIN) {
+            var x = first.x + CLEAR_MARGIN
+            while (x < last.x - CLEAR_MARGIN) {
+                val point = Offset(x, y)
+                val root = bounds.topLeft + point
+                val clear = over.none { it.inflate(CLEAR_MARGIN).contains(root) }
+                if (clear && (away == null || (point - away).getDistance() > reach + CLEAR_MARGIN)) return point
+                x += CLEAR_STEP
+            }
+            y += CLEAR_STEP
+        }
+        throw AssertionError("no point of the map at $bounds clear of $over")
+    }
+
+    // The bounds, in the root, of each node over the map at [bounds] but its own and those it lies within
+    private fun overMap(bounds: Rect): List<Rect> = compose.onAllNodes(SemanticsMatcher("any node") { true }, useUnmergedTree = true).fetchSemanticsNodes()
+        .map { it.boundsInRoot }
+        .filter { it.overlaps(bounds) && !(it.contains(bounds.topLeft) && it.contains(bounds.bottomRight - Offset(1f, 1f))) }
+
+    // What the UI sent next of [type], or else what it sent since [read] and what the map had for the touch at [at]
+    private fun receiveTouched(type: String, read: Int, map: SemanticsMatcher, at: Offset): JSONObject = try {
+        session.receive(type)
+    } catch (e: AssertionError) {
+        throw AssertionError("the touch at $at sent no '$type' but ${session.received.drop(read)}; ${mapState(map, at)}", e)
+    }
+
+    // The room picked, the rooms the last frame drew and how they are moved, and what lies over the map at [at]
+    private fun mapState(map: SemanticsMatcher, at: Offset): String {
+        val bounds = bounds(map)
+        val point = bounds.topLeft + at
+        val over = overMap(bounds).filter { it.contains(point) }
+        val shown = compose.runOnIdle {
+            val windows = EngineClient.front.windows
+            "picked ${windows.mapRooms.room?.id}, frame rooms ${windows.mapMover.view?.rooms}, shift ${windows.mapMover.shift}"
+        }
+        return "map at $bounds, $shown, over it there $over"
+    }
 
     // The mapper in the top right quarter of Mudlet's main window, and its map
     private fun showMap(view: JSONObject? = null) {
@@ -597,6 +859,11 @@ class ScriptMapTest {
         // A drag of 10 steps of 10 of the frame's pixels
         const val DRAG_STEPS = 10
         const val DRAG_STEP = 10.0
+
+        // How far a point is kept from what is drawn over the map, and the steps it is looked for in, in pixels
+        const val CLEAR_MARGIN = 4f
+        const val CLEAR_STEP = 2f
+
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L
 

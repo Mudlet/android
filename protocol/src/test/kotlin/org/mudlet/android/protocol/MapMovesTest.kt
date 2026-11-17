@@ -143,4 +143,19 @@ class MapMovesTest {
         assertEquals(hall, moves.roomAt(MapPoint(230.0, 150.0), 1.0))
         assertPoint(MapPoint(260.0, 150.0), moves.shown(kitchen))
     }
+
+    @Test
+    fun aDragOfARoomGoesByWholeRoomsAsShown() {
+        val moves = MapMoves()
+        assertNull(moves.roomsMoved(middle, MapPoint(260.0, 150.0)))
+        moves.onFrame(view())
+        // Rooms 15 pixels apart: 37 to the right and 22 up is 2 east and 1 north, the frame's y going down
+        assertEquals(2 to 1, moves.roomsMoved(middle, MapPoint(237.0, 128.0)))
+        assertEquals(-1 to -3, moves.roomsMoved(middle, MapPoint(185.0, 195.0)))
+        // Less than half a room is no move
+        assertNull(moves.roomsMoved(middle, MapPoint(207.0, 143.0)))
+        // Zoomed in twice as shown, rooms are 30 apart
+        moves.move(0.0, 0.0, 2.0, middle, middle)
+        assertEquals(1 to 0, moves.roomsMoved(middle, MapPoint(237.0, 150.0)))
+    }
 }

@@ -12,6 +12,7 @@
 #include <QString>
 #include <QVariant>
 
+#include <array>
 #include <optional>
 #include <variant>
 
@@ -131,6 +132,30 @@ public:
     virtual QString walkToRoom(int room) = 0;
     // The map's areas that have rooms, by name
     virtual std::variant<QList<MapAreaInfo>, QString> mapAreas() const = 0;
+    // What editRoom() sets of a room: each left empty is kept; position is x, y (north up) and z
+    struct RoomEdit
+    {
+        std::optional<QString> name;
+        std::optional<QString> symbol;
+        std::optional<int> env;
+        std::optional<int> weight;
+        std::optional<bool> locked;
+        std::optional<std::array<int, 3>> position;
+    };
+    // Edits of the map, as the desktop mapper's editing makes them: each that gives a room gives the one to show after
+    // it, the room edited or the one made
+    virtual std::variant<RoomDetails, QString> editRoom(int room, const RoomEdit& edit) = 0;
+    // One of the room's twelve exits led to the room to, or removed for 0, and with bothWays the exit back too
+    virtual std::variant<RoomDetails, QString> setRoomExit(int room, const QString& direction, int to, bool bothWays) = 0;
+    virtual std::variant<RoomDetails, QString> lockRoomExit(int room, const QString& direction, bool locked) = 0;
+    // A new room one place from that room that way, with exits both ways
+    virtual std::variant<RoomDetails, QString> addRoom(int beside, const QString& direction) = 0;
+    virtual QString deleteRoom(int room) = 0;
+    // The player placed in that room, as a script's centerview() does
+    virtual QString setPlayerRoom(int room) = 0;
+    virtual QString renameArea(int area, const QString& name) = 0;
+    // The environments a room can be given, by number
+    virtual std::variant<QList<MapEnvInfo>, QString> mapEnvs() const = 0;
     // Downloads the map the game offered and loads it in place of the profile's, as IFrontend::mapDownload() follows
     virtual QString downloadMap() = 0;
     // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be

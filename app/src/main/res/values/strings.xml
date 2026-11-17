@@ -751,6 +751,83 @@
     <!-- A direction of a room's exit: out of somewhere -->
     <string name="exit_out">out</string>
 
+    <!-- What can be done to the room picked on a map while the map is edited, each a button under the room: the first
+         opens a dialog of its name, symbol, colour, weight and lock -->
+    <string name="room_edit_properties">Room details</string>
+    <!-- The button that opens a dialog of the room's exits, to add, change, lock or remove one -->
+    <string name="room_edit_exits">Exits</string>
+    <!-- The button that opens a dialog to add a new room beside this one, with exits both ways -->
+    <string name="room_edit_add">Add a room</string>
+    <!-- The button that opens a dialog to move the room on the map, one place at a time -->
+    <string name="room_edit_move">Move</string>
+    <!-- The button that places the player's character in this room on the map, as when the map has lost them -->
+    <string name="room_edit_player_here">Place me here</string>
+    <!-- The button that opens a dialog to rename the area the room is in -->
+    <string name="room_edit_rename_area">Rename the area</string>
+    <!-- The button that asks whether to delete the room -->
+    <string name="room_edit_delete">Delete</string>
+    <!-- Shown over the map once the player chose to pick the room an exit leads to by tapping it: %1$s is the exit's
+         direction, as the room's exits name it (north) -->
+    <string name="room_edit_link_prompt">Tap the room the exit %1$s leads to</string>
+    <!-- The button that closes a dialog of the map's editing without changing anything, or stops picking a room -->
+    <string name="room_edit_cancel">Cancel</string>
+    <!-- The button that saves what a dialog of the map's editing changed -->
+    <string name="room_edit_save">Save</string>
+    <!-- The button that closes a dialog of the map's editing whose changes are made as they are chosen -->
+    <string name="room_edit_done">Done</string>
+    <!-- The field of the room's name, in the dialog of its details -->
+    <string name="room_edit_name">Name</string>
+    <!-- The field of the room's symbol, a letter or two the map draws on the room -->
+    <string name="room_edit_symbol">Symbol</string>
+    <!-- The field of the room's weight: how costly a walk through it is, 1 or more -->
+    <string name="room_edit_weight">Weight</string>
+    <!-- Under the room's weight field: what the weight does -->
+    <string name="room_edit_weight_hint">1 or more: walks avoid rooms of a higher weight</string>
+    <!-- The check box that locks the room, which walks then never go through -->
+    <string name="room_edit_locked">Locked: walks never go through it</string>
+    <!-- Over the swatches of colours a room can be drawn in, each one of the map's environments -->
+    <string name="room_edit_env">Colour</string>
+    <!-- Shown in place of the colours until the game's map has listed them -->
+    <string name="room_edit_envs_loading">Loading colours…</string>
+    <!-- Read by a screen reader for a colour swatch: %1$d is the number of the map's environment it draws -->
+    <string name="room_edit_env_item">Environment %1$d</string>
+    <!-- The title of the dialog of a room's exits: %1$s is the room's name, or "Room 12" where it has none -->
+    <string name="room_edit_exits_title">Exits of %1$s</string>
+    <!-- In the dialog of a room's exits, for a direction none leads: %1$s is the direction (north) -->
+    <string name="room_edit_no_exit">%1$s: no exit</string>
+    <!-- The field of the number of the room an exit leads to -->
+    <string name="room_edit_exit_to">Room number it leads to</string>
+    <!-- The check box that also makes, or removes, the exit back from the other room, the opposite way -->
+    <string name="room_edit_both_ways">Both ways</string>
+    <!-- The button that leads the exit to the room whose number was typed -->
+    <string name="room_edit_exit_set">Lead there</string>
+    <!-- The button that closes the dialog so that the next room tapped on the map is the one the exit leads to -->
+    <string name="room_edit_exit_pick">Pick on the map</string>
+    <!-- The button that locks the exit, which walks then never take -->
+    <string name="room_edit_exit_lock">Lock</string>
+    <!-- The button that unlocks a locked exit -->
+    <string name="room_edit_exit_unlock">Unlock</string>
+    <!-- The button that removes the exit -->
+    <string name="room_edit_exit_remove">Remove</string>
+    <!-- The title of the dialog that adds a room beside this one, which a direction picks: %1$s is the room's name -->
+    <string name="room_edit_add_title">Add a room beside %1$s</string>
+    <!-- The title of the dialog that moves a room, a place at each direction picked: %1$s is the room's name -->
+    <string name="room_edit_move_title">Move %1$s</string>
+    <!-- Where the room is in its area, each number after its label so no plural is needed: %1$d its place east, %2$d north, %3$d its level -->
+    <string name="room_edit_position">Place: east %1$d, north %2$d, level %3$d</string>
+    <!-- Under the buttons that move a room: the other way to move it -->
+    <string name="room_edit_move_hint">Or drag the room on the map, while it is picked</string>
+    <!-- The title of the dialog that renames the room's area -->
+    <string name="room_edit_rename_area_title">Rename the area</string>
+    <!-- The field of the area's name -->
+    <string name="room_edit_area_name">Area name</string>
+    <!-- The title of the dialog that asks whether to delete a room: %1$s is the room's name -->
+    <string name="room_edit_delete_title">Delete %1$s?</string>
+    <!-- What deleting a room does, under the title asking whether to -->
+    <string name="room_edit_delete_text">The room and every exit to or from it are removed from the map.</string>
+    <!-- The button that deletes the room -->
+    <string name="room_edit_delete_confirm">Delete</string>
+
     <!-- The game screen's own map, brought to the front over the game's text by a button in the title bar: the button,
          which TalkBack reads with its state (on while the map is in front), the search for rooms by name or number
          above the map, and its results, each a room's name over its area's and its number -->

@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **20**.
+The current version is **21**.
 
 ## Transport
 
@@ -95,6 +95,14 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `roomInfo` | `room`, `id`? | Asks for a room of the map, whose id is `room` (`THeadlessSession::roomInfo()`), answered by `room`. |
 | `walkToRoom` | `room` | Walks the player to the room whose id is `room`, as a double-click on it on the desktop mapper does (`THeadlessSession::walkToRoom()`), with the profile's `doSpeedWalk()` or the shortest path by known exits. |
 | `mapAreas` | `id`? | Asks for the map's areas that have rooms (`THeadlessSession::mapAreas()`), answered by `areas`. |
+| `editRoom` | `room`, `name`?, `symbol`?, `env`?, `weight`?, `locked`?, `x`?, `y`?, `z`?, `id`? | Sets what it carries of the room whose id is `room`, as the desktop mapper's room properties and drag do (`THeadlessSession::editRoom()`): its `name`, `symbol` (empty clears it), environment `env`, `weight` (from 1), whether it is `locked`, and its place `x`, `y` (north up) and `z`, all three or none. Answered by `room`, the room as it now is. |
+| `setRoomExit` | `room`, `direction`, `to`, `bothWays`?, `id`? | Leads the room's exit `direction`, one of the twelve as `room` names them, to the room whose id is `to`, or removes it for 0 (`THeadlessSession::setRoomExit()`); with `bothWays` true the exit back from that room the other way too (`in` for `out`, `up` for `down`), and when removing, the exit back that led to the room. Answered by `room`. |
+| `lockRoomExit` | `room`, `direction`, `locked`, `id`? | Locks the room's exit `direction`, which the speedwalk then avoids, or unlocks it (`THeadlessSession::lockRoomExit()`). Answered by `room`. |
+| `addRoom` | `room`, `direction`, `id`? | Makes a room one place from the room whose id is `room`, `direction` one of the twelve but `in` and `out`, in its area, with exits between them both ways (`THeadlessSession::addRoomBeside()`). Answered by `room`, the new room. |
+| `deleteRoom` | `room` | Deletes the room and its exits (`THeadlessSession::deleteRoom()`). |
+| `setPlayerRoom` | `room` | Places the player in the room, as a script's `centerview()` does (`THeadlessSession::setPlayerRoom()`): the maps follow them there. |
+| `renameArea` | `area`, `name` | Renames the area whose id is `area` (`THeadlessSession::renameArea()`); spaces are trimmed from the ends of `name`. |
+| `mapEnvs` | `id`? | Asks for the environments a room can be given (`THeadlessSession::mapEnvs()`), answered by `envs`. |
 | `followPlayer` | `map` | Centres the map `map` (`app` or `mapper`, as in `moveMap`) on the player's room, following the player again (`THeadlessSession::followPlayerOnMap()`). |
 | `closeProfile` | `name`, `id`? | Saves and closes that open profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles`, or `error` (`closeProfile: "<name>" is not open`). |
 | `setFront` | `name` | The open profile the player is looking at: a UI that left out `profileSockets` sees it and its requests go to it. |
@@ -159,6 +167,17 @@ map or with no rooms; `walkToRoom` and `roomInfo` for a `room` that is not a who
 `walkToRoom` while the map has no room for the player. A walk that finds no path is not refused: Mudlet says so in the
 console, as on the desktop. The stand-in has no map and refuses all five.
 
+`deleteRoom`, `setPlayerRoom` and `renameArea` too are answered only when refused, and `editRoom`, `setRoomExit`,
+`lockRoomExit` and `addRoom` by `room` or `error`, `mapEnvs` by `envs` or `error`, as above; a refused edit changes
+nothing. libmudlet refuses all eight while no profile is open, and the edits for a `room` or `to` that is not a whole
+number or not in the map, an `area` not in the map or the default area, and as `THeadlessSession` does: `editRoom` for
+a `weight` below 1, for fields of the wrong kind, for only some of `x`, `y` and `z`, and for none of its fields;
+`setRoomExit` and `lockRoomExit` for a `direction` that is not one of the twelve, `lockRoomExit` also for one the room
+has no exit in; `addRoom` for `in`, `out` or another `direction`, and where the area already has a room in that
+place; `deleteRoom` while a script's map callback runs; `setPlayerRoom` while no map is open (no script's and not the
+app's); `renameArea` for a `name` that is empty once trimmed or another area's. The stand-in has no map and refuses
+all eight.
+
 `downloadMap` and `cancelMapDownload` too are answered only when refused, with `error` as above. libmudlet refuses both
 while no profile is open; `downloadMap` while the game offers no map, and while the map downloads; `cancelMapDownload`
 while no map downloads, and once the map has arrived and is being loaded. A script's map import or export runs within
@@ -206,8 +225,9 @@ stand-in keeps the values it is given, with no meaning, so it reads back what a 
 | `appMap` | `png`, `w`, `h`, `viewOnly`, `view`?: `area`, `areaName`, `level`, `zoom`, `minZoom`, `maxZoom`, `following`, `player`, `roomSize`, `moved`, `rooms`: `id`, `x`, `y`, `name`; `levels` | The app's own map, as `setAppMapSize` asked for it ("The app's map" below): `png` is a PNG, in base64, of `w` by `h` of the map's pixels at the scale asked for, so of `w` times `scale` by `h` times `scale` pixels, and `viewOnly` as in `map`. While there is nothing to draw, with no profile open or a map with no rooms, `png` is empty and `w` and `h` are 0. Sent when it changes, and only while asked for: not to a UI that attaches until it asks. |
 | `settings` | `values`, `refused`?, `re`? | The answer to `getSettings` or `setSettings`: `values` holds each key it asked for or set with the value the profile holds now, as `getConfig()` gives it with `true` for its second argument: true or false, a number, or a string, an option of several by its name (`showSentText` as `never`, `always` or `script`). A key the engine does not know is left out. `refused`, only after `setSettings`, holds each key not changed with why: `setConfig()`'s message, its Lua error for a value of the wrong type, or that the value was not true or false, a number or a string. |
 | `rooms` | `text`, `rooms`: `id`, `name`, `areaId`, `area`, `match`, `steps`; `more`, `re`? | The answer to `findRooms`: the `text` it looked for, and up to 100 rooms, each with its `id`, `name`, its area's id `areaId` and name `area`, how it matched in `match` (`exact` for a name that is the text ignoring case, `prefix` for one that starts with it, `contains`, or `id` for the room whose id the text is and whose name does not hold it) and `steps`, the fewest exits from the player's room to it by rooms and exits that are not locked, as the speedwalk goes (0 for the player's room, -1 for no way there or no room for the player). Best first: `exact` and `id`, then `prefix`, then `contains`; within each, the rooms in the player's area first, then by `steps` with -1 last, then by name ignoring case, then id. `more` is true when more rooms matched than were sent. |
-| `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `re`? | The answer to `roomInfo`: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`. |
+| `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `symbol`, `env`, `color`, `weight`, `locked`; `re`? | The answer to `roomInfo` and the edits that give a room: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`; then what `editRoom` sets: its `symbol`, environment `env` and the colour that draws it `color`, as `#rrggbb`, its `weight` and whether it is `locked`. |
 | `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
+| `envs` | `envs`: `env`, `color`; `re`? | The answer to `mapEnvs`: the environments the map gives a colour of its own, by number, as Mudlet's room colour dialog lists them (the profile's sixteen colours as 257 to 272, and those a script or the player added), each with the colour it draws rooms in as `#rrggbb`. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. Only libmudlet sends it. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 
@@ -422,6 +442,19 @@ a Mudlet patch the app carries until Mudlet has it).
   zoom about the middle keeps following. The zoom is the area's, as with a wheel turn.
 - A `zoom` that would go past `minZoom` or `maxZoom` stops there.
 
+### Editing a map
+
+The pencil on a map switches it to editing (`setMapViewOnly`), as on the desktop, where the mapper then moves rooms
+by drag and edits them by its menus and dialogs, none of which the phone has. The UI edits the room the player picked
+instead, with the edits above, which act whether the map is edited or viewed, as Mudlet's Lua API does:
+
+- Each edit that gives a room answers with it as it now is, so the UI shows what the engine made of it; a new room
+  from `addRoom` is the one the UI then shows, so a chain of rooms is a tap each.
+- The map is drawn again after each, as on `mapRepaintRequested`, and marked unsaved: the profile's save keeps it, as
+  on the desktop.
+- `editRoom`'s place is the room's, in its area: a drag of the picked room on an edited map moves it there, a whole
+  number of rooms from where it was by the frame's `roomSize`.
+
 ### Downloading the map
 
 A game offers its map with GMCP's `Client.Map`, `{"url": "..."}` (the MMP's map location), which the desktop's mapper
@@ -614,7 +647,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 20, which added a room's details and the map's levels and areas (`roomInfo`, `room`,
+As implemented in version 21, which added editing the map (`editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom`,
+`deleteRoom`, `setPlayerRoom`, `renameArea`, `mapEnvs`, `envs`, and `symbol`, `env`, `color`, `weight` and `locked`
+in `room`); version 20 added a room's details and the map's levels and areas (`roomInfo`, `room`,
 `walkToRoom`, `showMapLevel`, `showMapArea`, `mapAreas`, `areas`, `levels` in `view`, and `areaId`, `match` and
 `steps` in `rooms`, which come best first); version 19 added a profile's settings (`getSettings`, `setSettings`,
 `settings`); version 18 added moving a map by touch (`moveMap`, `followPlayer`, and `view` in `map` and `appMap`);

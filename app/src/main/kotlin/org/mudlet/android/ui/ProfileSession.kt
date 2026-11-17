@@ -179,6 +179,9 @@ class ProfileSession internal constructor(
     /** Its triggers, aliases, scripts, timers, keys and buttons, as the script library shows and edits them. */
     internal val scripts = ScriptItemsClient(::newRequestId, ::send)
 
+    /** Its error console: the Lua errors its scripts raised, each with the item that raised it. */
+    internal val errors = ErrorConsoleClient(::send)
+
     /** The text sizes the player pinched this profile's script consoles to. */
     internal val consoleZoom = ConsoleZoomClient(name, ::prefs, ::runAppLua)
 
@@ -574,6 +577,7 @@ class ProfileSession internal constructor(
                 windows.onAttached(sameInstance, connection)
                 links.onAttached(sameInstance, linesAdded)
                 scripts.onAttached(sameInstance)
+                errors.onAttached(sameInstance)
             }
         }
 
@@ -689,6 +693,8 @@ class ProfileSession internal constructor(
                 is EngineMessage.LuaCheck -> post { scripts.onLuaCheck(message) }
 
                 is EngineMessage.ScriptSearch -> post { scripts.onSearch(message) }
+
+                is EngineMessage.ErrorConsole -> post { errors.onMessage(message) }
 
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 

@@ -258,6 +258,9 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("a toolbar's page")
         assertAtStart("the toolbar's heading", hasText(string(R.string.scripts_bar_place)))
         activate(hasContentDescription(string(R.string.navigate_back)))
+        // In en-XA the title bar's title takes more lines beside its buttons, which can leave the toolbar's button below
+        // the fold; TalkBack scrolls to it as well
+        compose.onNode(hasText("Greet") and hasClickAction()).performScrollTo()
         activate(hasText("Greet"))
         open("button", JSONObject(button.toString()).put("id", 2).put("parent", 1))
         waitFor(hasText(string(R.string.scripts_button_push_down_hint)))

@@ -28,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -84,6 +85,10 @@ internal class LuaFieldState(
     /** Whether the field has the keyboard: what goes over the keyboard for it shows only then. */
     var focused by mutableStateOf(false)
 
+    /** How many times [goTo] was asked, for the field to show the cursor's line again when the cursor was on it already. */
+    var wentTo by mutableIntStateOf(0)
+        private set
+
     /** The code with its cursor. What changes the item elsewhere, as an Undo does, shows with the cursor at its start. */
     val value: TextFieldValue get() = typed.takeIf { it.text == script() } ?: TextFieldValue(script())
 
@@ -108,7 +113,10 @@ internal class LuaFieldState(
     fun complete(function: LuaFunction) = value.let { show(complete(it.text, it.selection.start, function)) }
 
     /** Puts the cursor at the start of line [line], from 1. */
-    fun goTo(line: Int) = value.let { show(it.copy(selection = TextRange(lineStart(it.text, line)))) }
+    fun goTo(line: Int) {
+        value.let { show(it.copy(selection = TextRange(lineStart(it.text, line)))) }
+        wentTo++
+    }
 
     private fun show(edit: LuaEdit) = show(TextFieldValue(edit.text, TextRange(edit.cursor)))
 
@@ -139,9 +147,9 @@ internal fun rememberLuaFieldState(scripts: ScriptItemsClient, key: ScriptItemKe
 /**
  * The item's Lua in its page: each line numbered beside it and none wrapped, so the numbers stay with their lines. It
  * is as tall as its lines and scrolls with the page, whose scroll [page] is: the cursor's line is kept in what shows
- * of the page as the player types, as the keyboard comes, and when [focus] is asked for it after a
- * [LuaFieldState.goTo]. A long line scrolls sideways. The field's name is its first line, where a screen reader finds
- * it; the numbers are not read.
+ * of the page as the player types, as the keyboard comes, and at each [LuaFieldState.goTo] once [focus] is asked for
+ * it. A long line scrolls sideways. The field's name is its first line, where a screen reader finds it; the numbers
+ * are not read.
  */
 @Composable
 internal fun LuaField(state: LuaFieldState, page: ScrollState, focus: FocusRequester, modifier: Modifier = Modifier) {
@@ -155,12 +163,12 @@ internal fun LuaField(state: LuaFieldState, page: ScrollState, focus: FocusReque
     val cursorInView = remember { BringIntoViewRequester() }
     val margin = with(LocalDensity.current) { CURSOR_MARGIN.toPx() }
     // Asked again as what shows of the page changes, as when the keyboard comes over it, but not as the player scrolls
-    LaunchedEffect(cursor, page.viewportSize, state.focused) {
+    LaunchedEffect(cursor, page.viewportSize, state.focused, state.wentTo) {
         if (state.focused && cursor != null) cursorInView.bringIntoView(cursor.inflate(margin))
     }
 
-    val outlined = if (state.focused) Modifier.border(2.dp, colors.primary, MaterialTheme.shapes.extraSmall) else Modifier.border(1.dp, colors.outline, MaterialTheme.shapes.extraSmall)
-    Row(modifier.then(outlined).padding(vertical = 8.dp)) {
+    val outline = if (state.focused) colors.primary else colors.outline
+    Row(modifier.border(if (state.focused) 2.dp else 1.dp, outline, MaterialTheme.shapes.extraSmall).padding(vertical = 8.dp)) {
         Column(Modifier.padding(start = 8.dp, end = 8.dp).clearAndSetSemantics {}, horizontalAlignment = Alignment.End) {
             // As tall as the name beside it, so that each number is beside its line
             Text("", style = MaterialTheme.typography.labelMedium)

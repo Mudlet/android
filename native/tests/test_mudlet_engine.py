@@ -3585,7 +3585,7 @@ def script_items():
     check(m.get("message") == f"enableScriptItem: {error}", f"and refused when switched on, with its error: {m}")
     patterns = [{"text": "^You hit the (\\w+)$", "type": "regex"}, {"text": "1", "type": "spacer"}, {"text": "rat", "type": "substring"}]
     m = edit("trigger", hit, script='echo("struck " .. matches[2] .. "\\n")', patterns=patterns[:1], highlight=True,
-             highlightFg="#FF0000", lineDelta=3, fireLength=2)
+             highlightFg="#FF0000", highlightBg="", lineDelta=3, fireLength=2)
     fields = m.get("fields", {})
     check({k: fields.get(k) for k in ("error", "enabled", "active", "patterns", "highlight", "highlightFg", "highlightBg",
                                        "lineDelta", "fireLength")} == {

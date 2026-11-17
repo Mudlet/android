@@ -479,8 +479,6 @@ std::optional<SessionStore::Session> MudletProfile::kept() const
 void MudletProfile::connectSession()
 {
     THeadlessSession* session = mSession.get();
-    // The UI shows the box as text over the map: a picture of it is not read by TalkBack and moves with a drag
-    session->setMapInfoPainted(false);
     connect(session, &THeadlessSession::startFinished, this, [this](THeadlessSession::StartResult result, const QString& error) {
         onStartFinished(int(result), error);
     });

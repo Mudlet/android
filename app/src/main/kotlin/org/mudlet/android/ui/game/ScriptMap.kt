@@ -307,10 +307,6 @@ internal fun MapView(
             if (frame != null) drawFrame(frame, fit, shift = mover.shift)
             roomDrag?.let { drawRoomGhost(it, fit, mover, ghost) }
         }
-        if (frame != null && info != null) {
-            // Under the buttons' row, which it would otherwise share the top of a narrow map with
-            MapInfoBox(info, Modifier.align(Alignment.TopStart).padding(top = if (controls) CONTROLS_SPACE else 0.dp).heightIn(max = maxHeight * INFO_FRACTION))
-        }
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
         val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }
         val roomCardHeight = maxHeight * ROOM_CARD_FRACTION

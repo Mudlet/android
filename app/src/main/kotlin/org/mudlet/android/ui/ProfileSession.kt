@@ -118,6 +118,18 @@ class ProfileSession internal constructor(
     var hiddenInput by mutableStateOf(false)
         private set
 
+    /** The game offers its secure port and waits for [answerSecureOffer], as desktop Mudlet asks. */
+    var secureOffer by mutableStateOf(false)
+        private set
+
+    /** The player put that offer off without answering: not asked again until the game offers it again. */
+    var secureOfferPutOff by mutableStateOf(false)
+        private set
+
+    /** Why the engine did not take the last [answerSecureOffer], until [secureOfferRefusalShown]. */
+    var secureOfferRefusal by mutableStateOf<String?>(null)
+        private set
+
     /** The input line's history, newest first: the engine's, with the commands [sendCommand] sent since it last said. */
     var history by mutableStateOf<List<String>>(emptyList())
         private set
@@ -287,6 +299,24 @@ class ProfileSession internal constructor(
 
     fun typedLineMoved() {
         moveTypedLine = false
+    }
+
+    /**
+     * Answers [secureOffer] as desktop Mudlet's Yes and No do. Either closes the connection, which is then the player's
+     * doing, not a drop; a yes moves the profile to the secure port, which Reconnect then goes to. False as for [send].
+     */
+    fun answerSecureOffer(accept: Boolean): Boolean {
+        if (!sendConnection(Requests.answerSecureOffer(accept), disconnecting = true)) return false
+        if (accept) forgetAddress()
+        return true
+    }
+
+    fun putOffSecureOffer() {
+        secureOfferPutOff = true
+    }
+
+    fun secureOfferRefusalShown() {
+        secureOfferRefusal = null
     }
 
     /** Connects the profile to a game and remembers the address for [reconnect]. False as for [send]. */
@@ -531,6 +561,11 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.HiddenInput -> post { hiddenInput = message.wanted }
 
+                is EngineMessage.SecureOffer -> post {
+                    if (message.offered && !secureOffer) secureOfferPutOff = false
+                    secureOffer = message.offered
+                }
+
                 is EngineMessage.History -> post { history = message.lines }
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
@@ -603,6 +638,10 @@ class ProfileSession internal constructor(
                         // The settings shown stay as they were; the next load, attach or page asks again
                         defaultsRequests.remove(id)
                         Log.w(TAG, "Mudlet's settings: ${message.message}")
+                    } else if (message.message.substringBefore(':') == ANSWER_SECURE_OFFER) {
+                        // The connection stays as it was, so a drop after this is no answer's doing
+                        disconnectAsked = false
+                        secureOfferRefusal = message.message.substringAfter(':').trim()
                     } else if (message.message.substringBefore(':') in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(message.message.substringBefore(':'), message.message.substringAfter(':').trim(), message.replyTo)
                     } else {
@@ -722,6 +761,7 @@ class ProfileSession internal constructor(
 
     companion object {
         const val MAX_LINES = 2000
+        private const val ANSWER_SECURE_OFFER = "answerSecureOffer"
 
         /** As [ProfileSession.forgetAddress], for the profile [name] while it has no session. */
         internal fun forgetAddress(prefs: SharedPreferences, name: String) = prefs.edit {

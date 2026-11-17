@@ -139,7 +139,7 @@ The screen-reader pull request adds:
 - A package manager screen. Until then `lua installPackage("<url>")` works from the input line.
 - More than one profile at once, with a profile switcher: upstream allows one profile pool per process, so it needs
   upstream work; the plan and its pull requests are in [`multi-profile.md`](multi-profile.md).
-- The game's secure-port offer (`secureConnectionOffered`), the dialogs for a bad TLS certificate, a proxy, logging,
+- The dialog for a bad TLS certificate, a proxy, logging,
   replays, the debug console, the error console as a screen, spell-check, Discord, IRC.
 - Tablets' and Chromebooks' layouts beyond what a resizable phone layout gives, hardware keyboard bindings
   (`pressKey()`), a custom key bar.

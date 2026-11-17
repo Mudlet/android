@@ -163,6 +163,9 @@ public:
     virtual QString downloadMap() = 0;
     // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be
     virtual QString cancelMapDownload() = 0;
+    // Answers IFrontend::secureOffer() as the GUI's Yes and No do: yes stores the secure port with TLS on and connects
+    // there; no connects again where it was and stops the profile asking. Else why it was not taken.
+    virtual QString answerSecureOffer(bool accept) = 0;
     // The profile's settings named in keys, by the keys Lua's getConfig() takes, each a bool, a double or a string; a
     // key the engine does not know is left out. Else why none were read.
     virtual std::variant<QVariantMap, QString> settings(const QStringList& keys) = 0;

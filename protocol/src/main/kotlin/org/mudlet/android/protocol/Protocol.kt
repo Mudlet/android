@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 26
+const val PROTOCOL_VERSION = 27
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -598,6 +598,9 @@ sealed interface EngineMessage {
     /** The game hides what the player types, as for a password ([wanted]), or has stopped. */
     data class HiddenInput(val wanted: Boolean) : EngineMessage
 
+    /** The game's offer of a secure port waits for the player's answer ([Requests.answerSecureOffer]), or no longer does. */
+    data class SecureOffer(val offered: Boolean) : EngineMessage
+
     /** The input line's history, newest first. */
     data class History(val lines: List<String>) : EngineMessage
 
@@ -1020,6 +1023,13 @@ object Requests {
     /** Stops that download while it is cancelable. Answered only by an Error, when refused. */
     fun cancelMapDownload(): JSONObject = JSONObject().put("t", "cancelMapDownload")
 
+    /**
+     * The player's answer to [EngineMessage.SecureOffer], as desktop Mudlet's Yes and No: [accept] stores the secure port
+     * with TLS on and connects there, else connects again where it was and asks no more. Answered only by an Error, when
+     * refused.
+     */
+    fun answerSecureOffer(accept: Boolean): JSONObject = JSONObject().put("t", "answerSecureOffer").put("accept", accept)
+
     /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
     fun getSettings(keys: List<String>, id: Long): JSONObject {
         require(keys.isNotEmpty()) { "getSettings takes at least one key" }
@@ -1125,6 +1135,8 @@ class FrameReader(input: InputStream) {
             "openProfiles" -> EngineMessage.OpenProfiles(objects(o.optJSONArray("profiles")).map(::parseOpenProfile), o.opt("re"))
 
             "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
+
+            "secureOffer" -> EngineMessage.SecureOffer(o.optBoolean("offered"))
 
             "history" -> EngineMessage.History(parseStrings(o.optJSONArray("lines")))
 

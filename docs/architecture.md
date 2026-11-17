@@ -1386,6 +1386,15 @@ with the profile), connects anyway. The app has no screen for those boxes yet, s
 profile from the GUI or edited by hand. A secure connection needs the game's name, not an IP address, as Mudlet
 refuses TLS to a raw address.
 
+**The game's secure port.** A game connected without TLS may say in MSSP that it has a secure port. Mudlet then
+asks, as its GUI does, whether to move there, unless the profile's "Offer a secure connection" (`askTlsAvailable`) is
+off or its server is an address; the engine passes the question on (`secureOffer`) and the game screen asks it in a
+dialog of the app's own words, as Mudlet's are not translated in the engine. "Connect securely" stores the port with
+TLS on and connects there; "No, don't ask again" connects again where it was and turns the setting off, both as on
+the desktop (`answerSecureOffer`). Back answers neither, and the offer is asked again with the game's next one
+(divergences.md). The engine sends `profiles` after a yes, so the UI's next connect asks for the new port with TLS,
+and the UI forgets the address it remembered for Reconnect.
+
 On Android Qt does not read a certificate folder. The first TLS connection asks Java's default `TrustManagerFactory`
 for its accepted issuers (`QtNative.getSSLCertificates()`), Android's system CAs, and Qt keeps them for the process.
 Whether CAs the user installed are among them is for a device to show. On the desktop Qt reads the system's
@@ -1406,6 +1415,9 @@ against `fake_telnet.py` behind Python's `ssl` with a certificate it makes with 
 - a `connect` without TLS to the running TLS profile is refused;
 - after the profile's `mSslIgnoreSelfSigned` is set in its save, the same server's banner arrives and the game sees
   a TLS 1.x connection.
+- the game's offer of its secure port (`fake_telnet.py`'s `mssp`) is passed on, lapses with its connection, and is
+  answered: no reconnects and turns `askTlsAvailable` off, after which an offer is not passed on; yes stores the port
+  with TLS on, says so in `profiles` and connects there over TLS.
 
 CI's APK check (`.github/actions/check-apk`) looks in each APK for the files Qt will load: `libcrypto_3.so`,
 `libssl_3.so` and Qt's OpenSSL plugin, that plugin's `_3` suffix, the SONAMEs, `libssl_3.so`'s dependency on

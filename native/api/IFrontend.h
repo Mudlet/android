@@ -455,4 +455,7 @@ public:
     virtual void appMap(const std::optional<MapFrame>& frame) = 0;
     // The map the game offers and the download of it, on each change; as none offered once a profile closes
     virtual void mapDownload(const MapDownload& download) = 0;
+    // The game offers its secure port while the connection is not encrypted, for IEngine::answerSecureOffer(); not
+    // offered once answered, once its connection ends and with no profile open
+    virtual void secureOffer(bool offered) = 0;
 };

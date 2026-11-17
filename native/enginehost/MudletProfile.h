@@ -95,6 +95,7 @@ public:
     std::variant<QList<MapEnvInfo>, QString> mapEnvs() const override;
     QString downloadMap() override;
     QString cancelMapDownload() override;
+    QString answerSecureOffer(bool accept) override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
     QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) override;
     std::variant<QList<ScriptItemInfo>, QString> scriptItems(ScriptItemKind kind) const override;
@@ -177,6 +178,7 @@ private:
     bool takesChanges(const std::function<void()>& again);
     void applySaved();
     void applyPassword();
+    void setSecureOffer(bool offered);
     // Why the running profile cannot be connected, with this TLS choice if one is given; empty if it can
     QString connectProblem(std::optional<bool> tls) const;
     // The profile has closed or did not start
@@ -281,6 +283,8 @@ private:
     int mMapDownloadPercent = -1;
     // cancelMapDownload() stopped the download, so its end is a cancel rather than a failure
     bool mMapDownloadCancelled = false;
+    // The game's offer of its secure port waits for the player's answer
+    bool mSecureOffer = false;
     // The download's own progress has started: Mudlet's progress before then is the end of a map import or export a
     // script began
     bool mMapDownloadProgressStarted = false;

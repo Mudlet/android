@@ -6,6 +6,7 @@ import java.io.DataInputStream
 import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
 import java.util.Base64
 import kotlin.math.roundToInt
 
@@ -13,6 +14,14 @@ import kotlin.math.roundToInt
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
 const val PROTOCOL_VERSION = 24
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
+
+private const val QUOTE = '"'.code.toByte()
+private const val BACKSLASH = '\\'.code.toByte()
+private const val OPEN_BRACE = '{'.code.toByte()
+private const val CLOSE_BRACE = '}'.code.toByte()
+private const val OPEN_BRACKET = '['.code.toByte()
+private const val CLOSE_BRACKET = ']'.code.toByte()
+private val PNG_KEY = "\"png\":\"".toByteArray()
 
 // A run's colours: -1 default, 0-15 ANSI palette, RUN_RGB | 0xRRGGBB exact
 // Flattened runs: start, length, fg, bg, attributes, link (0 for none)
@@ -1056,11 +1065,24 @@ class FrameReader(input: InputStream) {
         if (n < 0 || n > MAX_FRAME_BYTES) throw EOFException("bad frame length $n")
         val payload = ByteArray(n)
         data.readFully(payload)
-        return parse(JSONObject(String(payload, Charsets.UTF_8)))
+        return parse(payload)
     }
 
     companion object {
-        fun parse(o: JSONObject): EngineMessage = when (val t = o.optString("t")) {
+        /** A frame's payload, as [read] takes it off the socket. */
+        fun parse(payload: ByteArray): EngineMessage {
+            // A map's picture is most of its frame, and read as part of the JSON's text it is copied several times over
+            // before it is decoded, which takes several times as long as the rest of the read
+            val picture = pictureIn(payload) ?: return parse(JSONObject(String(payload, Charsets.UTF_8)))
+            val after = picture.last + 1
+            val around = String(payload, 0, picture.first, Charsets.UTF_8) + String(payload, after, payload.size - after, Charsets.UTF_8)
+            return parse(JSONObject(around), decodeBase64(payload, picture.first, after))
+        }
+
+        fun parse(o: JSONObject): EngineMessage = parse(o, null)
+
+        /** [png] is the frame's picture where [parse] took it out of the frame's bytes, and "png" in [o] is then empty. */
+        private fun parse(o: JSONObject, png: ByteArray?): EngineMessage = when (val t = o.optString("t")) {
             "hello" -> EngineMessage.Hello(o.getInt("v"), o.optInt("pid"), o.optString("instance"), o.optString("profile").ifEmpty { null })
 
             "line" -> EngineMessage.Line(
@@ -1165,14 +1187,14 @@ class FrameReader(input: InputStream) {
                 o.optInt("typed"),
             )
 
-            "image" -> EngineMessage.Image(o.optString("path"), decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.opt("re"))
+            "image" -> EngineMessage.Image(o.optString("path"), png ?: decodeBase64(o.optString("png")), o.optInt("w"), o.optInt("h"), o.opt("re"))
 
             "buttonBars" -> EngineMessage.ButtonBars(objects(o.optJSONArray("bars")).mapNotNull(::parseButtonBar))
 
             "commands" -> EngineMessage.Commands(objects(o.optJSONArray("commands")).map(::parseCommand))
 
             "map" -> EngineMessage.Map(
-                decodeBase64(o.optString("png")),
+                png ?: decodeBase64(o.optString("png")),
                 o.optInt("w"),
                 o.optInt("h"),
                 o.optBoolean("viewOnly", true),
@@ -1181,7 +1203,7 @@ class FrameReader(input: InputStream) {
             )
 
             "appMap" -> EngineMessage.AppMap(
-                decodeBase64(o.optString("png")),
+                png ?: decodeBase64(o.optString("png")),
                 o.optInt("w"),
                 o.optInt("h"),
                 o.optBoolean("viewOnly", true),
@@ -1487,6 +1509,59 @@ class FrameReader(input: InputStream) {
             Base64.getDecoder().decode(text)
         } catch (_: IllegalArgumentException) {
             ByteArray(0)
+        }
+
+        private fun decodeBase64(text: ByteArray, from: Int, to: Int): ByteArray = try {
+            val decoded = Base64.getDecoder().decode(ByteBuffer.wrap(text, from, to - from))
+            val bytes = decoded.array()
+            if (bytes.size == decoded.limit()) bytes else bytes.copyOf(decoded.limit())
+        } catch (_: IllegalArgumentException) {
+            ByteArray(0)
+        }
+
+        /**
+         * Where the base64 of the frame's own "png" lies in its bytes: null unless it is text with no escape in it,
+         * written with no space around the colon, as the engine writes it.
+         */
+        private fun pictureIn(frame: ByteArray): IntRange? {
+            var depth = 0
+            var at = 0
+            while (at < frame.size) {
+                when (frame[at]) {
+                    QUOTE -> {
+                        if (depth == 1 && frame.startsWith(PNG_KEY, at)) {
+                            val from = at + PNG_KEY.size
+                            var to = from
+                            while (to < frame.size && frame[to] != QUOTE) {
+                                if (frame[to] == BACKSLASH) return null
+                                to++
+                            }
+                            return if (to < frame.size) from until to else null
+                        }
+                        at = stringEnd(frame, at + 1)
+                    }
+
+                    OPEN_BRACE, OPEN_BRACKET -> depth++
+
+                    // What follows the frame's object is not in it
+                    CLOSE_BRACE, CLOSE_BRACKET -> if (--depth <= 0) return null
+                }
+                at++
+            }
+            return null
+        }
+
+        /** The closing quote of the text whose first byte is at [from]; at or past the frame's end if it does not close. */
+        private fun stringEnd(frame: ByteArray, from: Int): Int {
+            var at = from
+            while (at < frame.size && frame[at] != QUOTE) at += if (frame[at] == BACKSLASH) 2 else 1
+            return at
+        }
+
+        private fun ByteArray.startsWith(bytes: ByteArray, at: Int): Boolean {
+            if (at + bytes.size > size) return false
+            for (i in bytes.indices) if (this[at + i] != bytes[i]) return false
+            return true
         }
 
         private fun parseStrings(strings: JSONArray?): List<String> = if (strings == null) emptyList() else List(strings.length()) { strings.optString(it) }

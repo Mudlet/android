@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, and the script library and an item's page in `ui/scripts/` ("The script library" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases and scripts the library edits in `ui/ScriptItemsClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with Mudlet's version and commit (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go, what their buttons draw of their style sheets and the commands' menu (`ButtonBarLayout`, `ButtonStyle`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -548,6 +548,30 @@ drawn by `ui/game/AppMap.kt`):
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled.
+
+### The script library
+The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
+(`ui/scripts/ScriptLibraryScreen.kt`), over the requests in `docs/protocol.md`, "Editing triggers, aliases and scripts",
+kept by `ScriptItemsClient`:
+- A chip for each kind (triggers, aliases, scripts) with how many items it has; the kind's items one folder at a time
+  under a breadcrumb, where Back goes up a folder, each row with its name, then why it does not run (Mudlet's error), how many items a folder has,
+  that it is off, that it is on but not running (in a folder that is off, or new and not applied yet) or the package it
+  came with, and a switch that sends `enableScriptItem`. A search finds names of every kind, with the folders each is
+  in. New items and folders go last in the folder shown; a new item opens, and a new folder is gone into. At the foot, the game's last two lines go back to the game.
+- An item's page (`ScriptItemScreen.kt`) edits its name, its Lua, and what its kind has: a trigger's patterns, each
+  with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
+  Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
+  an alias's pattern and what it sends; a script's event handlers. A colour pattern is shown, not edited. The edit is
+  a draft kept by `ScriptItemsClient` until Apply sends `editScriptItem`, whose snackbar offers Undo: a rotation keeps
+  it, and so does the page's Game button, which goes to the game to come back from, the library marking the item
+  "Draft" meanwhile; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
+  `deleteScriptItem` once the snackbar goes or the library does.
+- On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
+  snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
+  reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.
+- Not yet: a search of patterns and Lua, and a row's pattern under its name (`scriptItems` lists no text of either), a
+  colour pattern's picker, moving an item to another folder (`moveScriptItem` is there for it), and timers, keys and
+  buttons.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the
@@ -1638,6 +1662,22 @@ Item 13 of the on-device checklist covers this.
     - A tap on "site" opens the page in the browser, and the link stays green.
     - With TalkBack on: the label's actions offer "Follow link: look" and the others, which do the same as the taps;
       after "Follow link: say", TalkBack is on the input line.
+
+31. The script library, with the libmudlet APK: on the game screen, tap Scripts.
+    - The triggers' chip shows how many there are; a folder opens with a breadcrumb back; a switch turns an item off
+      and its row says "Off", and the trigger no longer fires. The game's last lines show at the foot, and a tap on
+      them goes back to the game.
+    - Tap New trigger: its page opens. Add a pattern "You see", type `echo("seen\n")` as its Lua and Apply: "seen" shows
+      after a line with "You see"; Undo puts back what it had. Type `if` as the Lua and Apply: the page says why it is
+      not running, and the library's row does too.
+    - Change the name and tap Game: the game shows; back in Scripts the item is marked "Draft" and its page has the
+      change. Press Back there: a dialog asks to discard; Keep editing keeps the change. Delete: the item goes, with
+      Undo bringing it back; let the snackbar go and reopen the library: it is gone.
+    - Rotate on an item's page with a change not applied: the change is still there. On a tablet in landscape, an item
+      opens beside the library.
+    - With TalkBack on: the title bar's button reads "Scripts of" and the game's name; each row reads its name and
+      state, its switch is read by the item's name, a pattern's type button reads "Type of pattern 1: Substring", and the
+      move and remove buttons say which pattern.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

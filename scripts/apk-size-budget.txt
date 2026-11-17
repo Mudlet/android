@@ -6,8 +6,8 @@ lower-below-percent 10
 
 # name                               total        libraries    dex
 # the debug APKs with libmudlet, built from Mudlet's development (libmudlet.yml)
-libmudlet-arm64-v8a                  106298978    75545608     29634016
-libmudlet-x86_64                     109624265    78850424     29634016
+libmudlet-arm64-v8a                  106298978    75545608     31120816
+libmudlet-x86_64                     109624265    78850424     31120816
 # the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
 ptb-arm64-v8a                        80203037     75925824     3395488
 ptb-x86_64                           83512052     79230984     3395488

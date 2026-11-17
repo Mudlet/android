@@ -19,18 +19,24 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -38,11 +44,13 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
 import org.mudlet.android.ui.theme.MudletTheme
 
 /**
  * On an expanded screen, a profile's editor opens beside the profile list, and Back closes it there, a back gesture
- * that is let go of keeping it open; when the screen narrows, the open editor becomes a screen of its own. The phone
+ * that is let go of keeping it open; when the screen narrows, the open editor becomes a screen of its own. A script
+ * item opens beside the script library the same way, and another opened in its place leaves its change a draft. The phone
  * the tests run on is made expanded by laying the app out at a smaller density, so these do not run the accessibility
  * checks: at that density, the touch targets are smaller in pixels than the checks allow.
  */
@@ -138,6 +146,49 @@ class ListDetailTest {
         displayed(hasContentDescription(string(R.string.detail_close, OTHER.name)) and hasClickAction())
         compose.onNode(hasText(string(R.string.profiles_pick))).assertDoesNotExist()
     }
+
+    @Test
+    fun aScriptItemOpensBesideTheLibraryWhichMarksItsDraft() {
+        activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
+        session.profiles(PROFILES, session.receive("openProfile"))
+        activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
+        val triggers = JSONArray().put(scriptNode(1, "Greet")).put(scriptNode(2, "Wave"))
+        // The library asks as it opens, and an item's page too, from their composition, which goes on while the test waits on it
+        compose.waitForIdle()
+        for (kind in listOf("trigger", "alias", "script")) {
+            val ask = session.receive("scriptItems")
+            session.send(JSONObject().put("t", "scriptItems").put("kind", kind).put("items", if (kind == "trigger") triggers else JSONArray()).put("re", ask.get("id")))
+        }
+        val inLibrary = hasAnyAncestor(hasTestTag(SCRIPT_LIBRARY_TAG))
+        displayed(hasText(string(R.string.scripts_pick)))
+
+        activate(hasText("Greet") and inLibrary)
+        compose.waitForIdle()
+        val open = session.receive("scriptItem")
+        assertEquals(1, open.getInt("item"))
+        val fields = scriptNode(1, "Greet").put("script", "").put("patterns", JSONArray()).put("command", "").put("lineDelta", -1).put("matchAll", false)
+            .put("filter", false).put("fireLength", 0).put("sound", false).put("soundFile", "").put("highlight", false).put("highlightFg", "").put("highlightBg", "")
+        session.send(JSONObject().put("t", "scriptItem").put("kind", "trigger").put("fields", fields).put("re", open.get("id")))
+        val name = hasSetTextAction() and hasText(string(R.string.scripts_name))
+        displayed(name)
+        // Beside the library, still there
+        displayed(hasText("Wave") and inLibrary)
+        compose.onNode(hasText(string(R.string.scripts_pick))).assertDoesNotExist()
+
+        // Another item takes its place with no question asked: the change stays a draft, which the library marks
+        compose.onNode(name).performTextInput("!")
+        activate(hasText("Wave") and inLibrary)
+        compose.waitForIdle()
+        assertEquals(2, session.receive("scriptItem").getInt("item"))
+        displayed(hasText("Greet") and hasText(string(R.string.scripts_draft)) and inLibrary)
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        displayed(hasText(string(R.string.scripts_pick)))
+        displayed(hasText("Wave") and inLibrary)
+    }
+
+    private fun scriptNode(id: Int, name: String): JSONObject = JSONObject().put("id", id).put("parent", 0).put("name", name).put("folder", false)
+        .put("enabled", true).put("active", true).put("package", "").put("error", "")
 
     /** The editor of [GAME], beside the list, with a Close button at its top in place of Back. */
     private fun editorShown() {

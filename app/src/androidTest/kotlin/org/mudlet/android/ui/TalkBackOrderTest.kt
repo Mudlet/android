@@ -95,6 +95,7 @@ class TalkBackOrderTest {
         val reading = TalkBackReading(compose)
         val window = hasContentDescription(string(R.string.window_description, "chat"))
         val expected = listOf(
+            "the title bar's scripts button" to (hasContentDescription(string(R.string.scripts_open, GAME.name)) and hasClickAction()),
             "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
             "the console" to hasText(CONSOLE_LINE),
             "the input line" to hasSetTextAction(),
@@ -110,7 +111,7 @@ class TalkBackOrderTest {
 
         // The map behind the text adds nothing between the console's lines and the input line
         val console = compose.onNode(hasScrollToIndexAction() and !hasAnyAncestor(window)).fetchSemanticsNode().id
-        val beforeInput = reading.order.subList(places[1].second, places[2].second)
+        val beforeInput = reading.order.subList(places[2].second, places[3].second)
         assertTrue("only the console's lines before the input line: ${reading.read}", beforeInput.all { console in reading.nodes.getValue(it).ancestorIds() })
 
         reading.assertEveryControlRead()

@@ -23,6 +23,8 @@ import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -39,7 +41,8 @@ import kotlin.math.abs
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, the settings and the game screen, with the connection chip's states and the password field, no text is
+ * editor, the settings, the game screen, with the connection chip's states and the password field, the script library
+ * and a trigger's page, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
  */
@@ -119,6 +122,35 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
         assertTextFits("the password field")
         session.hiddenInput(false)
+
+        activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
+        val node = JSONObject().put("id", 1).put("parent", 0).put("name", "Greet").put("folder", false).put("enabled", false)
+            .put("active", false).put("package", "").put("error", "")
+        // The library asks as it opens, from its composition, which goes on while the test waits on it
+        compose.waitForIdle()
+        for (kind in listOf("trigger", "alias", "script")) {
+            val ask = session.receive("scriptItems")
+            val items = if (ask.getString("kind") == "trigger") JSONArray().put(node) else JSONArray()
+            session.send(JSONObject().put("t", "scriptItems").put("kind", ask.getString("kind")).put("items", items).put("re", ask.get("id")))
+        }
+        waitFor(hasText(string(R.string.scripts_off)))
+        assertTextFits("the script library")
+        assertAtStart("the triggers' chip", hasText(string(R.string.scripts_kind_count, string(R.string.scripts_triggers), 1)))
+
+        activate(hasText("Greet"))
+        compose.waitForIdle()
+        val open = session.receive("scriptItem")
+        val trigger = JSONObject(node.toString()).put("script", "").put("command", "").put("lineDelta", 2).put("matchAll", true)
+            .put("filter", false).put("fireLength", 0).put("sound", true).put("soundFile", "").put("highlight", true).put("highlightFg", "#ff0000")
+            .put("highlightBg", "").put("patterns", JSONArray().put(JSONObject().put("text", "You wave").put("type", "substring")))
+        session.send(JSONObject().put("t", "scriptItem").put("kind", "trigger").put("fields", trigger).put("re", open.get("id")))
+        waitFor(hasText(string(R.string.scripts_pattern, 1)))
+        assertTextFits("a trigger's page")
+        assertAtStart("the patterns' heading", hasText(string(R.string.scripts_patterns)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.scripts_off)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.game_title)))
 
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))

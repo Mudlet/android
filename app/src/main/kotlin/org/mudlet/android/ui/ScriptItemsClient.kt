@@ -1,0 +1,253 @@
+package org.mudlet.android.ui
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.setValue
+import org.json.JSONObject
+import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.Requests
+import org.mudlet.android.protocol.ScriptItem
+import org.mudlet.android.protocol.ScriptItemKind
+import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.ui.scripts.ScriptItemKey
+import org.mudlet.android.ui.scripts.changedFrom
+import org.mudlet.android.ui.scripts.key
+
+/**
+ * The profile's triggers, aliases and scripts as the script library shows and edits them (docs/protocol.md, "Editing
+ * triggers, aliases and scripts"): each kind's items as the engine last listed them, the fields of the items opened,
+ * and the drafts of those, which live here so that a rotation or a trip to the game keeps them. Requests go with
+ * [send], each answer's `id` from [newId]. What it holds is Compose state, changed only here. Main thread only.
+ */
+internal class ScriptItemsClient(private val newId: () -> Long, private val send: (JSONObject) -> Boolean) {
+    private val listed = mutableStateMapOf<ScriptItemKind, List<ScriptItemNode>>()
+    private val opened = mutableStateMapOf<ScriptItemKey, ScriptItem>()
+    private val edited = mutableStateMapOf<ScriptItemKey, ScriptItem>()
+    private val refused = mutableStateMapOf<ScriptItemKey, String>()
+    private val hidden = mutableStateListOf<ScriptItemKey>()
+    private val queued = mutableStateListOf<ScriptNotice>()
+
+    /** Each kind's items, as the engine last listed them; absent until it first does. */
+    val lists: Map<ScriptItemKind, List<ScriptItemNode>> get() = listed
+
+    /** The items opened, as the engine last gave them. */
+    val saved: Map<ScriptItemKey, ScriptItem> get() = opened
+
+    /** What the player has changed of the items opened and not applied ([edit]): each differs from what [saved] has. */
+    val drafts: Map<ScriptItemKey, ScriptItem> get() = edited
+
+    /** Why the engine would not give the fields of an item asked for, in English, until it is asked for again. */
+    val unopened: Map<ScriptItemKey, String> get() = refused
+
+    /** The items deleted whose Undo is still offered: hidden from the lists, and deleted once [commitDelete]. */
+    val deleting: List<ScriptItemKey> get() = hidden
+
+    /** What the screens are to tell the player, the oldest first; each is taken off once [shown]. */
+    val notices: List<ScriptNotice> get() = queued
+
+    /** How many times the engine has been attached to: what was asked before the last is asked again. */
+    var attaches by mutableIntStateOf(0)
+        private set
+
+    private sealed interface Pending {
+        data class List(val kind: ScriptItemKind) : Pending
+
+        data class Item(val key: ScriptItemKey) : Pending
+
+        /** An editScriptItem of [sent]; [previous] is what Undo puts back, null for an Undo itself. */
+        data class Apply(val key: ScriptItemKey, val sent: ScriptItem, val previous: ScriptItem?) : Pending
+
+        data class Add(val kind: ScriptItemKind) : Pending
+
+        data class Enable(val kind: ScriptItemKind) : Pending
+    }
+
+    private val pending = HashMap<Long, Pending>()
+
+    /** Asks for [kind]'s items. False as for [ProfileSession.send]. */
+    fun ask(kind: ScriptItemKind): Boolean = request(Pending.List(kind)) { Requests.scriptItems(kind, it) }
+
+    /** Asks for the fields of [key], which [saved] then has, or [unopened] why not. False as for [ProfileSession.send]. */
+    fun open(key: ScriptItemKey): Boolean {
+        refused.remove(key)
+        return request(Pending.Item(key)) { Requests.scriptItem(key.kind, key.id, it) }
+    }
+
+    /** [changed] is what the player has made of its item: its draft, or none when it is as [saved] has the item. */
+    fun edit(changed: ScriptItem) {
+        if (changed.changedFrom(opened[changed.key])) edited[changed.key] = changed else edited.remove(changed.key)
+    }
+
+    /** Drops [key]'s draft. */
+    fun discard(key: ScriptItemKey) {
+        edited.remove(key)
+    }
+
+    /** Saves [key]'s draft; [notices] then has [ScriptNotice.Applied], whose Undo is [undo]. False when there is no draft, or as for [ProfileSession.send]. */
+    fun apply(key: ScriptItemKey): Boolean {
+        val draft = edited[key] ?: return false
+        return request(Pending.Apply(key, draft, opened[key])) { Requests.editScriptItem(draft, it) }
+    }
+
+    /**
+     * Saves [previous] over what an apply saved, as the Undo of [ScriptNotice.Applied]; what the player changed since
+     * that apply stays a draft. False as for [ProfileSession.send].
+     */
+    fun undo(previous: ScriptItem): Boolean = request(Pending.Apply(previous.key, previous, null)) { Requests.editScriptItem(previous, it) }
+
+    /**
+     * Makes an item of [kind], or a folder, named [name], last in [parent]; [notices] then has [ScriptNotice.Added]. False
+     * as for [ProfileSession.send].
+     */
+    fun add(kind: ScriptItemKind, parent: Int, folder: Boolean, name: String): Boolean {
+        val position = listed[kind].orEmpty().count { it.parent == parent }
+        if (!request(Pending.Add(kind)) { Requests.addScriptItem(kind, parent, position, folder, name, it) }) return false
+        return ask(kind)
+    }
+
+    /** Switches [key] on or off, and asks for its kind's items again, as those in a folder follow it. False as for [ProfileSession.send]. */
+    fun enable(key: ScriptItemKey, enabled: Boolean): Boolean {
+        if (!request(Pending.Enable(key.kind)) { Requests.enableScriptItem(key.kind, key.id, enabled, it) }) return false
+        return ask(key.kind)
+    }
+
+    /** Hides [key] from the lists, with [ScriptNotice.Deleted] offering Undo; it is deleted at [commitDelete]. */
+    fun deleteLater(key: ScriptItemKey, name: String) {
+        if (key !in hidden) hidden.add(key)
+        tell(ScriptNotice.Deleted(key, name))
+    }
+
+    /** Undo of [deleteLater]: [key] shows again. */
+    fun keep(key: ScriptItemKey) {
+        hidden.remove(key)
+    }
+
+    /** Deletes [key], if its Undo was still offered, and asks for its kind's items again. */
+    fun commitDelete(key: ScriptItemKey) {
+        if (!hidden.remove(key)) return
+        opened.remove(key)
+        edited.remove(key)
+        if (send(Requests.deleteScriptItem(key.kind, key.id))) ask(key.kind) else tell(ScriptNotice.NotSent)
+    }
+
+    /** Deletes every item whose Undo is still offered, as the screen that offered it goes. */
+    fun commitDeletes() = hidden.toList().forEach(::commitDelete)
+
+    /** Takes [notice] off [notices], once a screen has shown it. */
+    fun shown(notice: ScriptNotice) {
+        queued.remove(notice)
+    }
+
+    // Sends what [request] makes of a new id, whose answer [onItems] or [onItem] takes as [what]
+    private fun request(what: Pending, request: (Long) -> JSONObject): Boolean {
+        val id = newId()
+        if (!send(request(id))) {
+            tell(ScriptNotice.NotSent)
+            return false
+        }
+        pending[id] = what
+        return true
+    }
+
+    // The screens show the first notice until it is taken off, so one that equals the one before it would never show
+    private fun tell(notice: ScriptNotice) {
+        if (queued.lastOrNull() != notice) queued.add(notice)
+    }
+
+    /** The engine's answer to [ask]: false when this did not ask it. */
+    fun onItems(message: EngineMessage.ScriptItems): Boolean {
+        val asked = pending.remove(message.replyTo.asId()) as? Pending.List ?: return false
+        listed[asked.kind] = message.items
+        return true
+    }
+
+    /** The engine's answer to [open], [apply], [undo], [add] or [enable]: false when this did not ask it. */
+    fun onItem(message: EngineMessage.ScriptItemFields): Boolean {
+        val asked = pending.remove(message.replyTo.asId()) ?: return false
+        val item = message.item ?: return true
+        val key = item.key
+        when (asked) {
+            is Pending.Item -> store(item)
+
+            is Pending.Apply -> {
+                // What the player changed while the engine saved stays a draft
+                if (edited[key] == asked.sent) edited.remove(key)
+                store(item)
+                // The engine keeps a name as the player gave it, trimmed, or an alias's pattern for none
+                ask(key.kind)
+                // An Undo of an earlier apply of this item would lose this one
+                queued.removeAll { it is ScriptNotice.Applied && it.item.key == key }
+                if (asked.previous != null) tell(ScriptNotice.Applied(item, asked.previous))
+            }
+
+            is Pending.Add -> {
+                store(item)
+                tell(ScriptNotice.Added(key, item.node.folder))
+            }
+
+            is Pending.Enable, is Pending.List -> if (key in opened) store(item)
+        }
+        return true
+    }
+
+    // A draft the engine's item no longer differs from, as after an apply whose answer the last link lost, is none
+    private fun store(item: ScriptItem) {
+        opened[item.key] = item
+        if (edited[item.key]?.changedFrom(item) == false) edited.remove(item.key)
+    }
+
+    /**
+     * An `error` for [request], one of [REQUESTS], answering [replyTo]: [notices] has the engine's [reason], or [unopened]
+     * for an item it would not open, whose kind's items are asked for again, as it is likely gone from them.
+     */
+    fun onRefused(request: String, reason: String, replyTo: Any?) {
+        val asked = pending.remove(replyTo.asId())
+        if (asked is Pending.Item) {
+            opened.remove(asked.key)
+            refused[asked.key] = reason
+            ask(asked.key.kind)
+        } else {
+            tell(ScriptNotice.Refused(request, reason))
+        }
+    }
+
+    /** What the last link did not answer is not answered; a new engine instance loaded the profile again, with new ids. */
+    fun onAttached(sameInstance: Boolean) {
+        pending.clear()
+        if (!sameInstance) {
+            listed.clear()
+            opened.clear()
+            edited.clear()
+            refused.clear()
+            hidden.clear()
+        }
+        attaches++
+    }
+
+    private fun Any?.asId() = (this as? Number)?.toLong()
+
+    companion object {
+        /** The requests sent from here, whose refusal goes to [onRefused]. */
+        val REQUESTS = setOf("scriptItems", "scriptItem", "addScriptItem", "editScriptItem", "enableScriptItem", "moveScriptItem", "deleteScriptItem")
+    }
+}
+
+/** What the script library has to tell the player, through a snackbar. */
+internal sealed interface ScriptNotice {
+    /** [item] as an apply saved it; Undo saves [previous] again. */
+    data class Applied(val item: ScriptItem, val previous: ScriptItem) : ScriptNotice
+
+    /** A new item or folder, [key], to open. */
+    data class Added(val key: ScriptItemKey, val folder: Boolean) : ScriptNotice
+
+    /** [key], named [name], hidden until its Undo times out. */
+    data class Deleted(val key: ScriptItemKey, val name: String) : ScriptNotice
+
+    /** The engine refused [request] for [reason], in English. */
+    data class Refused(val request: String, val reason: String) : ScriptNotice
+
+    /** A request could not be sent, as there was no engine to send it to. */
+    data object NotSent : ScriptNotice
+}

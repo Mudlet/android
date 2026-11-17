@@ -4260,8 +4260,8 @@ def packages():
     # The Package Manager refuses a removal while the profile saves, as each install's own save may still be doing from
     # the event loop: one read with the save that leaving the front starts is refused, and one after the save goes
     since = len(seen)
-    send_together(c, {"t": "setAppState", "active": False, "minimized": True},
-                  {"t": "uninstallPackage", "name": "Pack Test", "id": "during save"})
+    send_together(c, {"t": "uninstallPackage", "name": "Pack Test", "id": "during save"},
+                  {"t": "setAppState", "active": False, "minimized": True})
     m = seen_or_next(c, lambda m: m.get("re") == "during save", seen, since)
     check(m.get("message") == 'uninstallPackage: The package "Pack Test" could not be removed while the profile is being saved. '
                               'Please try again in a moment.', f"a removal while the profile saves is refused: {m}")

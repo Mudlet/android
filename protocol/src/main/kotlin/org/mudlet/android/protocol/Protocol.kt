@@ -1046,7 +1046,7 @@ object Requests {
 
             is ScriptItemDetails.Script -> fields.put("eventHandlers", JSONArray(details.eventHandlers))
 
-            is ScriptItemDetails.Timer -> fields.put("command", details.command).put("time", details.time)
+            is ScriptItemDetails.Timer -> fields.put("command", details.command).put("time", details.time / 1000)
 
             is ScriptItemDetails.Key -> fields.put("command", details.command).put("key", details.key).put("modifiers", details.modifiers)
 
@@ -1393,7 +1393,7 @@ class FrameReader(input: InputStream) {
             active = i.optBoolean("active"),
             packageName = i.optString("package"),
             error = i.optString("error"),
-            summary = i.optString("summary"),
+            summary = "",
         )
 
         private fun parseScriptItem(kind: ScriptItemKind, f: JSONObject): ScriptItem {
@@ -1418,7 +1418,7 @@ class FrameReader(input: InputStream) {
 
                 ScriptItemKind.TIMER -> ScriptItemDetails.Timer(f.optString("command"), f.optInt("time"), f.optBoolean("offset"))
 
-                ScriptItemKind.KEY -> ScriptItemDetails.Key(f.optString("command"), f.optInt("key"), f.optInt("modifiers"), f.optString("keyName"))
+                ScriptItemKind.KEY -> ScriptItemDetails.Key(f.optString("command"), f.optInt("key"), f.optInt("modifier"), f.optString("keyName"))
 
                 ScriptItemKind.BUTTON -> ScriptItemDetails.Button(
                     commandDown = f.optString("commandDown"),

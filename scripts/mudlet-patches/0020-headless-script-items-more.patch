@@ -444,7 +444,7 @@ index 106fc74..0920fef 100644
 +QString summaryOf(TTimer* pItem)
 +{
 +    // A new timer's time is a null QTime, which toString() gives as empty
-+    return pItem->isFolder() ? QString() : QTime::fromMSecsSinceStartOfDay(pItem->getTime().msecsSinceStartOfDay()).toString(qsl("hh:mm:ss.zzz"));
++    return pItem->isFolder() ? QString() : QTime::fromMSecsSinceStartOfDay(pItem->getTime().msecsSinceStartOfDay()).toString(qsl("hh:mm:ss"));
 +}
 +
 +bool hasKey(const TKey* pItem)
@@ -655,7 +655,7 @@ index 106fc74..0920fef 100644
 +        pItem->setCommandButtonDown(QString());
 +        pItem->setIsPushDownButton(false);
 +        // Not the 1 the GUI's add gives it, which no strip is drawn for: its editor's first save makes that 0
-+        pItem->mLocation = 0;
++        pItem->mLocation = 1;
 +        pItem->mOrientation = 0;
      }
      pItem->setScript(QString());

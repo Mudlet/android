@@ -441,13 +441,16 @@ private fun WindowConsole(
 /**
  * A window's command line: what is typed there goes to the engine with `sendWindowCommandLine`, and a script's
  * [scriptText] replaces it. The engine's emptying of the line after a send is not taken as a script's, as the player
- * may already be typing the next.
+ * may already be typing the next. In a game that keeps a sent command on its input line, this line keeps its own too,
+ * selected whole, as desktop Mudlet's does.
  */
 @Composable
 private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modifier = Modifier) {
     var text by rememberSaveable(name, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var notSent by remember { mutableStateOf(false) }
     var awaitingClear by remember { mutableStateOf(false) }
+    // The line as it was sent and kept
+    var kept by rememberSaveable(name) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(scriptText) {
         if (scriptText == null) return@LaunchedEffect
@@ -460,10 +463,11 @@ private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modif
     fun submit() {
         val sent = EngineClient.front.windows.sendWindowCommandLine(name, text.text)
         notSent = !sent
-        if (sent) {
-            text = TextFieldValue()
-            awaitingClear = true
-        }
+        if (!sent) return
+        val clears = EngineClient.front.setting(Settings.clearInputAfterSend)
+        kept = text.text.takeUnless { clears || it.isEmpty() }
+        text = if (clears) TextFieldValue() else TextFieldValue(text.text, TextRange(0, text.text.length))
+        awaitingClear = clears
     }
 
     Row(modifier.background(MaterialTheme.colorScheme.surface), verticalAlignment = Alignment.CenterVertically) {
@@ -473,7 +477,8 @@ private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modif
                 text = it
                 notSent = false
             },
-            modifier = Modifier.weight(1f).padding(start = 4.dp),
+            modifier = Modifier.weight(1f).padding(start = 4.dp)
+                .keptCommand(text.text == kept && text.selection == TextRange(0, text.text.length), text.text.length, stringResource(R.string.input_kept)),
             label = { Text(stringResource(R.string.window_command_line, name)) },
             supportingText = if (notSent) {
                 { Text(stringResource(R.string.input_not_sent), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }

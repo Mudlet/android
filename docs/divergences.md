@@ -49,6 +49,18 @@ profile that loads is given the app's values, over its own, so a script's `getCo
 phone they belong with the player and the device, as TalkBack itself does: kept per profile, every new profile would
 start without the player's choice.
 
+## A new game's input line is emptied after a send
+
+A game added in the app starts with "Clear the input line after sending" on, and so does every game that was there
+before the app had the setting (`Settings.clearInputAfterSend`, `ProfileSession.onLoaded`; `docs/architecture.md`,
+"Settings"). The desktop starts a profile with "Auto clear the input line after you sent text" off: the command stays,
+selected, for Enter to send again or the next key to replace. With a keyboard that is one key to repeat a command. On
+a phone the on-screen keyboard's suggestions and the app's greyed completion work on what is typed after the cursor,
+a tap on the line to fix a word drops the selection and leaves the old command to delete, and the up button and the
+history sheet already repeat a command. The setting is the profile's own (`autoClearInputLine`), so a player who
+wants the desktop's way turns it off for a game, or for new games, and a profile copied from the desktop keeps what
+it had.
+
 ## A game's details changed while it is open
 
 What the editor saves reaches a game that is open, and the game stays open. Its next connection logs in with the

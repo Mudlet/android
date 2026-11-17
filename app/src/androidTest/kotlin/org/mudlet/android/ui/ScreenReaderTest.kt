@@ -90,6 +90,7 @@ class ScreenReaderTest {
         Announcer.touchExplorationOverride = null
         for (setting in Settings.mudletSettings + Settings.screenReaderOffered) setting.reset()
         Settings.setAwaitsDefaults(GAME.name, false)
+        Settings.setAwaitsInputClear(GAME.name, false)
         EngineClient.sessions.forEach { it.settings.clear() }
     }
 
@@ -158,7 +159,8 @@ class ScreenReaderTest {
         }
         session.status("profile", "Test loaded")
         val defaults = session.receive("setSettings")
-        assertEquals("only what the player changed for new games", mapOf("blankLinesBehaviour" to "hide"), values(defaults))
+        val own = mapOf("blankLinesBehaviour" to "hide", "autoClearInputLine" to true)
+        assertEquals("what the player changed for new games, and the app's value where Mudlet starts with another", own, values(defaults))
         session.settings(values(defaults), defaults.getLong("id"))
         val loaded = session.receive("getSettings")
         assertEquals(Settings.mudletSettings.map { it.key }, (0 until loaded.getJSONArray("keys").length()).map { loaded.getJSONArray("keys").getString(it) })
@@ -183,14 +185,51 @@ class ScreenReaderTest {
         }
     }
 
-    // Mudlet picks some settings for the game it knows, which the app's unchanged values would undo
+    // Mudlet picks some settings for the game it knows, which the app's unchanged values would undo. Mudlet starts a
+    // profile keeping the command sent on its input line, which the app does not
     @Test
-    fun aGameAddedHereWithNothingChangedForNewGamesKeepsMudletsOwn() {
+    fun aGameAddedHereWithNothingChangedForNewGamesKeepsMudletsOwnButForTheInputLine() {
         compose.runOnIdle { Settings.setAwaitsDefaults(GAME.name, true) }
+        session.status("profile", "Test loaded")
+        val defaults = session.receive("setSettings")
+        assertEquals(mapOf("autoClearInputLine" to true), values(defaults))
+        session.settings(values(defaults), defaults.getLong("id"))
+        session.receive("getSettings")
+        session.assertNoRequest("setSettings", 500)
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !Settings.awaitsDefaults(GAME.name) } }
+    }
+
+    @Test
+    fun aGameAddedHereKeepsTheCommandSentWhenNewGamesDo() {
+        compose.runOnIdle {
+            Settings.setAwaitsDefaults(GAME.name, true)
+            Settings.clearInputAfterSend.set(false)
+        }
         session.status("profile", "Test loaded")
         session.receive("getSettings")
         session.assertNoRequest("setSettings", 500)
+        assertFalse("nothing was given before its settings were asked for", session.received.any { it.optString("t") == "setSettings" })
         compose.runOnIdle { assertFalse(Settings.awaitsDefaults(GAME.name)) }
+    }
+
+    // The app emptied the input line of every game before it had the setting, whatever the game's profile said
+    @Test
+    fun aGameFromBeforeTheInputLineCouldKeepACommandIsToldOnceToGoOnClearingIt() {
+        compose.runOnIdle { Settings.setAwaitsInputClear(GAME.name, true) }
+        session.status("profile", "Test loaded")
+        val told = session.receive("setSettings")
+        assertEquals(mapOf("autoClearInputLine" to true), values(told))
+        compose.runOnIdle { assertTrue("until Mudlet answers, it is still to be told", Settings.awaitsInputClear(GAME.name)) }
+        session.settings(values(told), told.getLong("id"))
+        session.settings(APP_VALUES + ("autoClearInputLine" to true), session.receive("getSettings").getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !Settings.awaitsInputClear(GAME.name) } }
+
+        // The next load leaves the game's own value alone: the player may have turned it off since
+        val givenOnce = session.received.count { it.optString("t") == "setSettings" }
+        session.status("profile", "Test loaded")
+        session.receive("getSettings")
+        session.assertNoRequest("setSettings", 500)
+        assertEquals(givenOnce, session.received.count { it.optString("t") == "setSettings" })
     }
 
     // As one copied from desktop Mudlet: a profile the app did not add has settings of its own already
@@ -258,6 +297,9 @@ class ScreenReaderTest {
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_sent_text_never)), scroll = true)
         assertEquals(mapOf("showSentText" to "never"), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_clear_input)), scroll = true)
+        assertEquals(mapOf("autoClearInputLine" to false), values(session.receive("setSettings")))
+        compose.runOnIdle { assertEquals("new games keep it", true, Settings.clearInputAfterSend.value) }
     }
 
     @Test

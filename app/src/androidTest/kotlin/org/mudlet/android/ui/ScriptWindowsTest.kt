@@ -35,6 +35,7 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -110,6 +111,7 @@ class ScriptWindowsTest {
             EngineClient.front.consoleZoom.reset("chat", 0)
             ScriptWindowsClient.layoutMode = LayoutMode.AUTO
             Settings.blankLines.reset()
+            EngineClient.sessions.forEach { it.settings.clear() }
             Announcer.touchExplorationOverride = null
         }
     }
@@ -232,6 +234,24 @@ class ScriptWindowsTest {
         session.windowCommandLine("chat", "tell bob ")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(field and editableText("tell bob ")).fetchSemanticsNodes().isNotEmpty() }
         compose.onRoot().tryPerformAccessibilityChecks()
+
+        // In a game that keeps the command sent, a window's line keeps its own too, selected: typing replaces it
+        compose.runOnIdle { EngineClient.front.settings[Settings.clearInputAfterSend.key] = false }
+        compose.onNode(field).performTextInput("hello")
+        compose.onNode(field).performImeAction()
+        assertEquals("tell bob hello", session.receive("sendWindowCommandLine").getString("text"))
+        val kept = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.input_kept))
+        compose.onNode(field).assert(editableText("tell bob hello")).assert(kept)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(14)))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        // A script still sets the line: nothing of Mudlet's own is awaited after a send that keeps it
+        session.windowCommandLine("chat", "")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(field and editableText("")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(field).performTextInput("say hi")
+        compose.onNode(field).performImeAction()
+        session.receive("sendWindowCommandLine")
+        compose.onNode(field).performTextInput("n")
+        compose.onNode(field).assert(editableText("n")).assert(!kept)
     }
 
     @Test

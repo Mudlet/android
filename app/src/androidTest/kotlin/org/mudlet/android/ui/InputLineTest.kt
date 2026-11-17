@@ -29,8 +29,10 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.TextRange
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -40,12 +42,14 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 
 /**
  * The input line's engine features against a fake engine: the masked field while the game hides input, the engine's
- * history, a line a script sets, completion, and why the engine could not send. Controls are found by the labels TalkBack reads and activated through
- * their accessibility actions.
+ * history, a line a script sets, completion, why the engine could not send, and the command sent kept on the line in
+ * a game that keeps it. Controls are found by the labels TalkBack reads and activated through their accessibility
+ * actions.
  */
 @RunWith(AndroidJUnit4::class)
 class InputLineTest {
@@ -74,6 +78,10 @@ class InputLineTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
     }
+
+    // EngineClient lives as long as the process, and with it a game's settings
+    @After
+    fun forgetTheGamesSettings() = compose.runOnIdle { EngineClient.sessions.forEach { it.settings.clear() } }
 
     @Test
     fun theMaskedFieldTakesTheLinesPlaceWhileTheGameHidesInput() {
@@ -143,6 +151,81 @@ class InputLineTest {
         compose.waitUntil(WAIT_MS) { hasEditableText("") }
     }
 
+    @Test
+    fun aGameThatKeepsTheCommandSentLeavesItOnTheLineSelected() {
+        session.history(listOf("north"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.history } == listOf("north") }
+        // Until the game has a value of its own the app's is used, which empties the line
+        compose.onNode(input).performTextInput("first")
+        compose.onNode(input).performImeAction()
+        assertEquals("first", session.receive("send").getString("text"))
+        compose.onNode(input).assert(editableText("")).assert(!keptState)
+
+        gameKeepsTheCommandSent()
+        compose.onNode(input).performTextInput("look")
+        compose.onNode(input).performImeAction()
+        assertEquals("look", session.receive("send").getString("text"))
+        // TalkBack reads a selection as it is made, which would be the command again after every send: it is told
+        // of a cursor at the end, and of the line's state
+        compose.onNode(input).assertIsFocused().assert(editableText("look")).assert(keptState)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(4)))
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        // Send sends it again, and it stays
+        activate(hasContentDescription(string(R.string.input_send)))
+        assertEquals("look", session.receive("send").getString("text"))
+        compose.onNode(input).assert(editableText("look")).assert(keptState)
+
+        // It is selected whole: what is typed takes its place
+        compose.onNode(input).performTextInput("n")
+        compose.onNode(input).assert(editableText("n")).assert(!keptState)
+        compose.onNode(input).performImeAction()
+        assertEquals("n", session.receive("send").getString("text"))
+        compose.onNode(input).assert(editableText("n")).assert(keptState)
+
+        // The line is the history's newest, so the way back from it starts at the command before
+        previous()
+        compose.onNode(input).assert(editableText("look")).assert(!keptState)
+        previous()
+        compose.onNode(input).assert(editableText("first"))
+        next()
+        next()
+        compose.onNode(input).assert(editableText("n"))
+        next()
+        compose.onNode(input).assert(editableText(""))
+
+        // An empty line sent has nothing to keep, and a script's line takes a kept one's place
+        compose.onNode(input).performImeAction()
+        assertEquals("", session.receive("send").getString("text"))
+        compose.onNode(input).assert(editableText("")).assert(!keptState)
+        compose.onNode(input).performTextInput("east")
+        compose.onNode(input).performImeAction()
+        session.receive("send")
+        session.commandLine("say hello")
+        compose.waitUntil(WAIT_MS) { hasEditableText("say hello") }
+        compose.onNode(input).assert(!keptState)
+        compose.onNode(input).performTextInput("!")
+        compose.onNode(input).assert(editableText("say hello!"))
+    }
+
+    @Test
+    fun theMaskedFieldStillEmptiesInAGameThatKeepsTheCommandSent() {
+        gameKeepsTheCommandSent()
+        compose.onNode(input).performTextInput("connect bob")
+        compose.onNode(input).performImeAction()
+        session.receive("send")
+        session.hiddenInput(true)
+        waitFor(password)
+        compose.onNode(password).performTextInput("hunter2")
+        compose.onNode(password).performImeAction()
+        assertEquals("hunter2", session.receive("sendHidden").getString("text"))
+        compose.onNode(password).assert(editableText(""))
+
+        session.hiddenInput(false)
+        waitFor(input)
+        compose.onNode(input).assert(editableText("connect bob")).assert(keptState)
+    }
+
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun theCompletionButtonAndTabCompleteTheLine() {
@@ -192,6 +275,17 @@ class InputLineTest {
     }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
+
+    // What TalkBack reads of a line whose sent command is still on it
+    private val keptState get() = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, string(R.string.input_kept))
+
+    // The game's profile loads with desktop Mudlet's "Auto clear the input line after you sent text" off. The name is
+    // its own, so the commands sent here are suggested to no other test
+    private fun gameKeepsTheCommandSent() {
+        session.status("profile", "Kept commands loaded")
+        session.settings(mapOf(Settings.clearInputAfterSend.key to false), session.receive("getSettings").getLong("id"))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !EngineClient.front.setting(Settings.clearInputAfterSend) } }
+    }
 
     private fun previous() = activate(hasContentDescription(string(R.string.input_history_previous)))
 

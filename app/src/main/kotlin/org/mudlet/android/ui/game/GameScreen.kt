@@ -279,6 +279,7 @@ private fun ProfileGameScreen(
                     onFocusTaken = c.windows::inputFocusTaken,
                     mapInFront = mapOpen,
                     focusOnStart = switched,
+                    clearAfterSend = c.setting(Settings.clearInputAfterSend),
                 )
             }
             QuickBar(

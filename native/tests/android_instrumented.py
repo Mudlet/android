@@ -206,6 +206,15 @@ def main():
             text = "\n\n".join(failures)[:4000] + "\n(the instrumentation output and logcat are in the job's artifact)"
             text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title=Instrumented tests::{text}", flush=True)
+            import re
+            brief = []
+            for failure in failures:
+                lines = failure.splitlines()
+                frames = [line.strip()[3:] for line in lines if re.search(r"org\.mudlet\.android\.ui\.\w+Test\.\w+\(\w+\.kt:\d+\)", line)]
+                brief.append((lines[0][:260] + " | " + " ".join(lines[1:3])[:420] + " @ " + (frames[-1] if frames else ""))
+                             .replace("%", "%25").replace("\r", " "))
+            for start in range(0, len(brief), 4):
+                print("::error title=Failed tests::" + "%0A".join(brief[start:start + 4]), flush=True)
         sys.exit(1)
     log("\nall passed")
 

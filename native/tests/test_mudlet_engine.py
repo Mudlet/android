@@ -3623,6 +3623,20 @@ def script_items():
           f"a script is saved with its event handlers: {m}")
     wait_text("script ran", since)
     wait_text("pinged testPing", lua('raiseEvent("testPing")'))
+    broken = add("script", 0, 9999, "Broken").get("fields", {}).get("id")
+    m = edit("script", broken, script="function (")
+    check(m.get("fields", {}).get("error") and m.get("fields", {}).get("active") is False,
+          f"a script that does not compile is saved with its error, and does not run: {m}")
+    c.send({"t": "deleteScriptItem", "kind": "script", "item": broken})
+
+    # The temporary trigger made above sits among the top level's items, between "Lua made" and "Combat"
+    last = add("trigger", 0, 9999, "Last").get("fields", {}).get("id")
+    top = children("trigger", 0)
+    between = add("trigger", 0, top.index("Last") if "Last" in top else 0, "Between").get("fields", {}).get("id")
+    check(children("trigger", 0)[-3:] == ["Combat", "Between", "Last"],
+          f"a place among the top level's items counts only those shown, not the temporary ones: {listed('trigger')}")
+    for item in (between, last):
+        c.send({"t": "deleteScriptItem", "kind": "trigger", "item": item})
 
     for request, message in (
             ({"t": "scriptItems", "kind": "timer"}, "kind must be trigger, alias or script"),

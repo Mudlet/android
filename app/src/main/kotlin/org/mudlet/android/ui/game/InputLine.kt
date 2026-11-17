@@ -187,7 +187,7 @@ fun InputLine(
     fun move(moved: HistoryPosition) {
         at = moved
         show(moved.shown(history))
-        if (!highlightHistory || moved.position < 0) return
+        if (moved.position < 0) return
         text.edit { selection = TextRange(0, length) }
         recalled = text.text.toString()
     }

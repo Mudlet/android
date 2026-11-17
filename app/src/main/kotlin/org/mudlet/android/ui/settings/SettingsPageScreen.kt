@@ -237,7 +237,7 @@ private fun PickRow(entry: SettingEntry.Pick, owner: SettingsOwner) {
                         Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             .selectable(choice == chosen, role = Role.RadioButton) {
                                 picking = false
-                                owner.change(entry.setting, choice)
+                                owner.change(entry.setting, chosen)
                             },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

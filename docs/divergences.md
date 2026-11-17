@@ -259,6 +259,16 @@ on even at the end of its range, and so is a tap that stops its fling:
 the label gets neither, not even `enter`, which comes once the touch is the label's rather than as the finger lands. A
 drag the box has not taken by twice the touch slop, as along an axis it does not scroll on, is the label's.
 
+## The error console
+
+The error console keeps the last 1000 entries since the profile loaded or was cleared, fewer once their texts pass a
+million characters, and cuts a text over 10000 characters with `…` (`docs/protocol.md`, `errorConsole`;
+`docs/architecture.md`, "The error console"). Each entry shows when it came, and one raised by a trigger, alias,
+script, timer, key or button opens that item's page. The desktop's console keeps what its buffer holds, as text, with
+no time or way to the item. Unbounded, the list the engine gives each UI that attaches could outgrow the socket's
+frame; on a phone, scrolling to the item by hand from a name in a message is slow with a finger and slower with
+TalkBack.
+
 ## Button bars
 
 A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f.md`, "Button bars and commands").

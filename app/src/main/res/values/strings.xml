@@ -2069,6 +2069,58 @@
     <!-- A snackbar when the engine refuses to delete a script item; %1$s is its reason, in English -->
     <string name="scripts_refused_delete">Not deleted: %1$s</string>
 
+    <!-- The error console's title, as desktop Mudlet's editor calls the list of a profile's Lua errors; %1$s is the
+         profile's name, such as "Achaea" -->
+    <string name="errors_title">Errors of %1$s</string>
+    <!-- The script library's title bar button, read by a screen reader, that opens the error console -->
+    <string name="errors_open">Errors</string>
+    <!-- A button's name, read by a screen reader, with how many errors came since the player last looked at the error
+         console; %1$s is the button's own name, such as "Scripts of Achaea", %2$d how many -->
+    <plurals name="errors_unseen">
+        <item quantity="one">%1$s, %2$d new error</item>
+        <item quantity="other">%1$s, %2$d new errors</item>
+    </plurals>
+    <!-- The count on the error console's buttons once it is over 99: keep it as short -->
+    <string name="errors_badge_many">99+</string>
+    <!-- The error console's title bar button, read by a screen reader, that copies every entry as text -->
+    <string name="errors_copy">Copy all</string>
+    <!-- The error console's title bar button, read by a screen reader, that empties it -->
+    <string name="errors_clear">Clear</string>
+    <!-- A snackbar once the error console's entries are copied, on Android versions that do not say so themselves -->
+    <string name="errors_copied">Copied</string>
+    <!-- A snackbar once only the newest of the error console's entries could be copied, as the clipboard takes no
+         more; %1$d is how many were copied -->
+    <plurals name="errors_copied_newest">
+        <item quantity="one">Copied the newest %1$d entry</item>
+        <item quantity="other">Copied the newest %1$d entries</item>
+    </plurals>
+    <!-- What the error console shows while it has no entries -->
+    <string name="errors_none">No errors</string>
+    <!-- The first line of an error console entry for a Lua error: %1$s is when it came, such as "21:04:13" -->
+    <string name="errors_error_at">Error, %1$s</string>
+    <!-- The first line of an error console entry from a script's debugc(), which desktop Mudlet shows among the
+         errors: %1$s is when it came, such as "21:04:13" -->
+    <string name="errors_debug_at">Debug, %1$s</string>
+    <!-- What raised an error console entry, the part after the item's name and Lua function: %1$s is the event
+         whose handler raised it, such as "sysLoadEvent" -->
+    <string name="errors_event">event %1$s</string>
+    <!-- What raised an error console entry, its last part: %1$d is the line of the item's Lua that the message
+         names -->
+    <string name="errors_line">line %1$d</string>
+    <!-- Between the parts of what raised an error console entry, such as "Greet · Trigger12 · line 2" -->
+    <string name="errors_separator">" · "</string>
+    <!-- What TalkBack says, for an entry with an item, its tap does: open the trigger, alias, script, timer, key or
+         button that raised the error -->
+    <string name="errors_open_item">Open the item</string>
+    <!-- What TalkBack says once a new error comes in while the error console shows: %1$s is the error's message -->
+    <string name="errors_announce">New error: %1$s</string>
+    <!-- What TalkBack says once several errors come in at once while the error console shows: %1$d is how many,
+         %2$s the last one's message -->
+    <plurals name="errors_announce_many">
+        <item quantity="one">%1$d new error, the last: %2$s</item>
+        <item quantity="other">%1$d new errors, the last: %2$s</item>
+    </plurals>
+
 
     <!-- The self-test: debug builds only, for developers, so not translated -->
     <string name="selftest_title" translatable="false">Self-test</string>

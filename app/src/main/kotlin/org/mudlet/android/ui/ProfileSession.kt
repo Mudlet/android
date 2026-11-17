@@ -147,7 +147,7 @@ class ProfileSession internal constructor(
     /** The app's own map of this profile. */
     internal val appMap = AppMapClient(this)
 
-    /** Its triggers, aliases and scripts, as the script library shows and edits them. */
+    /** Its triggers, aliases, scripts, timers, keys and buttons, as the script library shows and edits them. */
     internal val scripts = ScriptItemsClient(::newRequestId, ::send)
 
     /** The text sizes the player pinched this profile's script consoles to. */

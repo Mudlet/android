@@ -87,7 +87,7 @@ class ProtocolSpecTest {
                         Map::class.java -> mapOf("x" to true)
                         RoomEdit::class.java -> RoomEdit("x", "x", 1, 1, true, Triple(1, 1, 1))
                         ScriptItemKind::class.java -> ScriptItemKind.TRIGGER
-                        ScriptItem::class.java -> ScriptItem(ScriptItemNode(1, 0, "x", false, true, true, "", ""), "x", ScriptItemDetails.Alias("x", "x"))
+                        ScriptItem::class.java -> ScriptItem(ScriptItemNode(1, 0, "x", false, true, true, "", "", ""), "x", ScriptItemDetails.Alias("x", "x"))
                         else -> error("Requests.${method.name} takes a ${type.name}: teach ProtocolSpecTest about it")
                     }
                 }

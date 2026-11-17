@@ -3741,11 +3741,12 @@ def profile_settings():
 
 
 def script_items():
-    """Triggers, aliases and scripts as the desktop's script editor edits them: checkLua saying whether Lua compiles,
+    """Triggers, aliases, scripts, timers, keys and buttons as the desktop's script editor edits them: checkLua saying whether Lua compiles,
     and where it does not, without running it; scriptItems listing them as it does,
     without the temporary ones; addScriptItem at a place among a folder's items; editScriptItem saving as its save does,
     a trigger that does not compile switched off with its error, a trigger that runs, an alias given no name and one
-    that would call itself refused, a script run with its event handler; enableScriptItem, moveScriptItem and
+    that would call itself refused, a script run with its event handler, a timer firing, an offset timer, a key named by
+    its key, a button on its bar, and what a list shows under each name; enableScriptItem, moveScriptItem and
     deleteScriptItem; the edits kept by the save and read back once the profile is opened again; and the refusals."""
     profile = "Script Items Test"
     proc, c = start_engine(profile)
@@ -3899,6 +3900,102 @@ def script_items():
           f"a script that does not compile is saved with its error, and does not run: {m}")
     c.send({"t": "deleteScriptItem", "kind": "script", "item": broken})
 
+    summaries = {i["id"]: i["summary"] for i in listed("trigger")}
+    check((summaries.get(miss), summaries.get(combat)) == ("^You hit the (\\w+)$\n1\nrat", ""),
+          f"a trigger's summary is its patterns, one a line: {summaries}")
+    check([i["summary"] for i in listed("alias") if i["id"] == alias] == ["^k (\\w+)$"]
+          and [i["summary"] for i in listed("script") if i["id"] == script] == ["testPing"],
+          "an alias's is its pattern and a script's its event handlers")
+
+    m = add("timer", 0, 9999, "Ticks", folder=True)
+    fields = m.get("fields", {})
+    ticks = fields.get("id")
+    check(m.get("kind") == "timer" and {k: fields.get(k) for k in ("folder", "enabled", "active", "summary")} == {
+        "folder": True, "enabled": False, "active": False, "summary": ""}, f"a new timer folder is switched off: {m}")
+    m = add("timer", ticks, 0, "Tick")
+    fields = m.get("fields", {})
+    tick = fields.get("id")
+    check({k: fields.get(k) for k in ("parent", "enabled", "active", "command", "time", "offset", "summary")} == {
+        "parent": ticks, "enabled": False, "active": False, "command": "", "time": 0, "offset": False, "summary": "00:00:00.000"},
+        f"and so is a new timer, with no time: {m}")
+    m = edit("timer", tick, script='echo("tick\\n")')
+    error = m.get("fields", {}).get("error")
+    check(bool(error) and m.get("fields", {}).get("active") is False, f"a timer saved with no time has that for its error: {m}")
+    m = ask({"t": "enableScriptItem", "kind": "timer", "item": tick, "enabled": True})
+    check(m.get("message") == f"enableScriptItem: {error}", f"and is refused when switched on: {m}")
+    m = edit("timer", tick, time=300, command="")
+    fields = m.get("fields", {})
+    check((fields.get("time"), fields.get("summary"), fields.get("error"), fields.get("enabled")) == (300, "00:00:00.300", "", False),
+          f"one given a time keeps it, and stays off: {m}")
+    ask({"t": "enableScriptItem", "kind": "timer", "item": ticks, "enabled": True})
+    m = ask({"t": "enableScriptItem", "kind": "timer", "item": tick, "enabled": True})
+    check((m.get("fields", {}).get("enabled"), m.get("fields", {}).get("active")) == (True, True), f"switched on in a folder that is on, it runs: {m}")
+    wait_text("tick", len(seen))
+    ask({"t": "enableScriptItem", "kind": "timer", "item": tick, "enabled": False})
+    since = lua('permTimer("Tock", "Tick", 0.1, [[echo("tock\\n")]])')
+    tock = [i for i in listed("timer") if i["name"] == "Tock"]
+    m = ask({"t": "scriptItem", "kind": "timer", "item": tock[0]["id"] if tock else 1})
+    check(tock and tock[0]["parent"] == tick and m.get("fields", {}).get("offset") is True,
+          f"a timer inside another timer is an offset timer: {m}")
+    m = edit("timer", tock[0]["id"] if tock else 1, offset=False)
+    check(m.get("message") == 'editScriptItem: "offset" is not a field of that kind that can be changed.', f"which is only read: {m}")
+
+    m = add("key", 0, 9999, "")
+    fields = m.get("fields", {})
+    key = fields.get("id")
+    check(m.get("kind") == "key" and {k: fields.get(k) for k in ("enabled", "active", "key", "modifiers", "keyName", "summary")} == {
+        "enabled": True, "active": False, "key": 0, "modifiers": 0, "keyName": "", "summary": ""},
+        f"a new key is switched on, with no key chosen: {m}")
+    m = edit("key", key, command="north")
+    check(m.get("fields", {}).get("error") and m.get("fields", {}).get("active") is False, f"saved with none, that is its error: {m}")
+    # Qt::Key_8 with Control and the number pad
+    m = edit("key", key, key=0x38, modifiers=0x24000000)
+    fields = m.get("fields", {})
+    check(fields.get("keyName") and (fields.get("name"), fields.get("summary")) == (fields.get("keyName"),) * 2
+          and (fields.get("key"), fields.get("modifiers"), fields.get("error"), fields.get("active")) == (0x38, 0x24000000, "", True),
+          f"given a key, one with no name takes the key's, and runs: {m}")
+    key_name = fields.get("keyName")
+
+    m = add("button", 0, 9999, "Bar", folder=True)
+    fields = m.get("fields", {})
+    bar = fields.get("id")
+    check(m.get("kind") == "button" and (fields.get("enabled"), fields.get("location"), fields.get("orientation")) == (
+        False, "top", "horizontal"), f"a new toolbar is switched off, at the top, its buttons side by side: {m}")
+    sword = add("button", bar, 0, "Sword").get("fields", {}).get("id")
+    m = edit("button", sword, commandDown="wield sword", commandUp="remove sword", pushDown=True)
+    fields = m.get("fields", {})
+    check((fields.get("commandDown"), fields.get("commandUp"), fields.get("pushDown"), fields.get("summary")) == (
+        "wield sword", "remove sword", True, "wield sword"), f"a button keeps its commands, and shows the one it sends: {m}")
+    m = edit("button", bar, location="left", orientation="horizontal", columns=2, css="QToolBar { color: red; }")
+    fields = m.get("fields", {})
+    check((fields.get("location"), fields.get("orientation"), fields.get("columns"), fields.get("css")) == (
+        "left", "horizontal", 2, "QToolBar { color: red; }"), f"a toolbar keeps its place, direction, columns and style: {m}")
+    since = len(seen)
+    ask({"t": "enableScriptItem", "kind": "button", "item": sword, "enabled": True})
+    ask({"t": "enableScriptItem", "kind": "button", "item": bar, "enabled": True})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "buttonBars" and bar_named(m, "Bar"), seen, since, timeout=10)
+        shown = bar_named(m, "Bar")
+        check((shown["place"], shown["vertical"], shown["columns"]) == ("left", False, 2)
+              and [(b["name"], b["pushDown"]) for b in shown["buttons"]] == [("Sword", True)],
+              f"switched on, the toolbar is sent in buttonBars as it was set: {shown}")
+    except TimeoutError as e:
+        check(False, f"switching a toolbar on sends buttonBars: {e}")
+    quick = add("button", 0, 9999, "Quick", folder=True).get("fields", {}).get("id")
+    look = add("button", quick, 0, "Look").get("fields", {}).get("id")
+    since = len(seen)
+    ask({"t": "enableScriptItem", "kind": "button", "item": look, "enabled": True})
+    ask({"t": "enableScriptItem", "kind": "button", "item": quick, "enabled": True})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "buttonBars" and bar_named(m, "Quick"), seen, since, timeout=10)
+        shown = bar_named(m, "Quick")
+        check((shown["place"], shown["vertical"]) == ("top", False) and [b["name"] for b in shown["buttons"]] == ["Look"],
+              f"a new toolbar is drawn as soon as it is switched on, without an edit: {shown}")
+    except TimeoutError as e:
+        check(False, f"switching on a toolbar that was never edited sends buttonBars: {e}")
+    for item in (look, quick):
+        c.send({"t": "deleteScriptItem", "kind": "button", "item": item})
+
     # The temporary trigger made above sits among the top level's items, between "Lua made" and "Combat"
     last = add("trigger", 0, 9999, "Last").get("fields", {}).get("id")
     top = children("trigger", 0)
@@ -3909,7 +4006,7 @@ def script_items():
         c.send({"t": "deleteScriptItem", "kind": "trigger", "item": item})
 
     for request, message in (
-            ({"t": "scriptItems", "kind": "timer"}, "kind must be trigger, alias or script"),
+            ({"t": "scriptItems", "kind": "gauge"}, "kind must be trigger, alias, script, timer, key or button"),
             ({"t": "scriptItem", "kind": "alias", "item": 0}, "item must be a whole number from 1"),
             ({"t": "scriptItem", "kind": "alias", "item": hit + 999}, f"There is no item {hit + 999} of that kind."),
             ({"t": "addScriptItem", "kind": "trigger", "parent": -1, "position": 0, "folder": False, "name": "x"},
@@ -3928,6 +4025,13 @@ def script_items():
              'The value given for "patterns" is not one it takes.'),
             ({"t": "editScriptItem", "kind": "script", "item": script, "fields": {"eventHandlers": "testPing"}},
              'The value given for "eventHandlers" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "timer", "item": tick, "fields": {"time": 86400000}}, 'The value given for "time" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "key", "item": key, "fields": {"modifiers": 1}}, 'The value given for "modifiers" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "key", "item": key, "fields": {"keyName": "F1"}}, '"keyName" is not a field of that kind that can be changed.'),
+            ({"t": "editScriptItem", "kind": "button", "item": bar, "fields": {"location": "bottom"}}, 'The value given for "location" is not one it takes.'),
+            ({"t": "editScriptItem", "kind": "button", "item": bar, "fields": {"columns": 0}}, 'The value given for "columns" is not one it takes.'),
+            ({"t": "addScriptItem", "kind": "timer", "parent": tick, "position": 0, "folder": False, "name": "x"},
+             f"There is no folder {tick} of that kind."),
             ({"t": "enableScriptItem", "kind": "trigger", "item": hit, "enabled": 1}, "enabled must be true or false"),
             ({"t": "moveScriptItem", "kind": "trigger", "item": combat, "parent": combat, "position": 0},
              "A folder cannot be moved into itself or into a folder inside it."),
@@ -3954,6 +4058,14 @@ def script_items():
     m = ask({"t": "scriptItem", "kind": "script", "item": scripts[0] if scripts else 1})
     check(m.get("fields", {}).get("eventHandlers") == ["testPing"], f"and the script its event handlers: {m}")
     check([i["name"] for i in listed("alias")].count("^k (\\w+)$") == 1, "and the alias")
+    timers = {i["name"]: i for i in listed("timer")}
+    check(timers.get("Tick", {}).get("summary") == "00:00:00.300" and timers.get("Tick", {}).get("parent") == timers.get("Ticks", {}).get("id")
+          and timers.get("Tock", {}).get("parent") == timers.get("Tick", {}).get("id"), f"and the timers: {timers}")
+    check([i["summary"] for i in listed("key") if i["name"] == key_name] == [key_name], "and the key")
+    buttons = {i["name"]: i for i in listed("button")}
+    m = ask({"t": "scriptItem", "kind": "button", "item": buttons.get("Bar", {}).get("id", 1)})
+    check(buttons.get("Sword", {}).get("enabled") is True and (m.get("fields", {}).get("location"), m.get("fields", {}).get("columns")) == ("left", 2),
+          f"and the buttons: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

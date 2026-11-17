@@ -260,9 +260,7 @@ QByteArray mapPng(QImage image)
     // half a frame of the protocol (SocketBridge's maxFrameBytes), where the PNG is base64 and the map's rooms follow.
     const qsizetype budget = std::min<qsizetype>(pixels.sizeInBytes() / 4, 8 * 1024 * 1024);
     QByteArray png = runPng(pixels, budget);
-    if (!png.isEmpty()) {
-        return png;
-    }
+    png.clear();
     QBuffer buffer(&png);
     buffer.open(QIODevice::WriteOnly);
     if (!pixels.save(&buffer, "PNG")) {

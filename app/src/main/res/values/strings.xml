@@ -349,7 +349,7 @@
          Communication Protocol) with the game. Keep "GMCP". -->
     <string name="settings_gmcp">GMCP</string>
     <!-- Under "GMCP", what the protocol carries -->
-    <string name="settings_gmcp_hint">Game data for scripts, such as your health and the room you are in.</string>
+    <string name="settings_gmcp_hint">Game data for scripts, such as your health and the room you are in. From the next connection.</string>
     <!-- A switch on a game's Connection page, named after the protocol: whether Mudlet speaks MSDP (MUD Server Data
          Protocol) with the game. Keep "MSDP". -->
     <string name="settings_msdp">MSDP</string>

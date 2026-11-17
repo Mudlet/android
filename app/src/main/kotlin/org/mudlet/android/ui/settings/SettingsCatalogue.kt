@@ -133,7 +133,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_advertise_screen_reader_hint,
             R.string.settings_advertise_screen_reader_keywords,
         ),
-        SettingEntry.Choice(SettingsCategory.ACCESSIBILITY, Settings.blankLines, R.string.settings_blank_lines, R.string.settings_blank_lines_keywords) {
+        SettingEntry.Choice(SettingsCategory.DISPLAY, Settings.blankLines, R.string.settings_blank_lines, R.string.settings_blank_lines_keywords) {
             when (it) {
                 Settings.BlankLines.SHOW -> R.string.settings_blank_lines_show
                 Settings.BlankLines.HIDE -> R.string.settings_blank_lines_hide
@@ -199,7 +199,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_force_ga_off_keywords,
         ),
         SettingEntry.Switch(
-            SettingsCategory.ADVANCED,
+            SettingsCategory.DISPLAY,
             Settings.fixLinebreaks,
             R.string.settings_fix_linebreaks,
             R.string.settings_fix_linebreaks_hint,

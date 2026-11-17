@@ -358,7 +358,7 @@ class ProfileSession internal constructor(
         val mudletValue = setting.toMudlet(value)
         if (!sendSettings(Requests.setSettings(mapOf(setting.key to mudletValue), newRequestId()))) return false
         settings[setting.key] = mudletValue
-        if (setting in Settings.readAsItConnects && status["connection"] == CONNECTED) settingAwaitsConnection = true
+        if (setting in Settings.readAsItConnects && status["connection"] != CONNECTED) settingAwaitsConnection = true
         return true
     }
 

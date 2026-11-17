@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
 /**
  * What the player typed and what the game sent stay out of this app's logcat, which About > Report a problem shows
  * and the player may send: a command, the game's lines, the engine's refusals of a link or a text box's typing (whose
- * reasons quote the link, the label or the box) and a tell that could not be posted as notifications are off.
+ * reasons quote the link, the label, the frame or the box) and a tell that could not be posted as notifications are off.
  */
 @RunWith(AndroidJUnit4::class)
 class LogKeepsOutPlayerTextTest {
@@ -73,7 +73,7 @@ class LogKeepsOutPlayerTextTest {
         compose.onNode(input).performImeAction()
         assertEquals(TYPED, session.receive("send").getString("text"))
 
-        for (request in listOf("getLink", "followLink", "followLabelLink", "setTextBoxText")) {
+        for (request in listOf("getLink", "followLink", "followLabelLink", "selectFrameTab", "setTextBoxText")) {
             session.send(JSONObject().put("t", "error").put("message", "$request: The label \"$LINK\" has no link to \"$LINK\"."))
         }
         if (Build.VERSION.SDK_INT >= 33) EngineNotifications.postTell(app, GAME.name, TELL, TELL)

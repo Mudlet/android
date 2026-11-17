@@ -12,6 +12,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/ptb.yml
+      - .github/workflows/release-build.yml
       - app/**
       - protocol/**
       - engine-service/**
@@ -148,296 +149,55 @@ jobs:
             echo "build: $build, publish: $PUBLISH"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # libmudlet and the engine for each ABI, staged as scripts/build-apk.sh stages them (STAGE_ONLY=1), with the
-  # dependency and ccache caches libmudlet.yml keeps
-  engine:
-    name: engine (${{ matrix.abi }})
+  # The engine, the source bundle, the signed AAB and APKs, their checks and the smoke test (release-build.yml, which
+  # release.yml shares)
+  build:
     needs: plan
     if: needs.plan.outputs.build == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
     permissions:
       contents: read
-    strategy:
-      matrix:
-        include:
-          - abi: arm64-v8a
-            qt-arch: android_arm64_v8a
-            deps-key: mudlet-deps
-          - abi: x86_64
-            qt-arch: android_x86_64
-            deps-key: mudlet-deps-x86_64
-    env:
-      ANDROID_ABI: ${{ matrix.abi }}
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
-      CCACHE_MAXSIZE: 1500M
-      CCACHE_COMPILERCHECK: content
-    steps:
-      - uses: actions/checkout@v7
+    uses: ./.github/workflows/release-build.yml
+    with:
+      channel: ptb
+      title: PTB
+      package: org.mudlet.mudlet.ptb
+      file-base: mudlet-ptb
+      docs: docs/ptb.md
+      publish: ${{ needs.plan.outputs.publish == 'true' }}
+      mudlet-sha: ${{ needs.plan.outputs.mudlet-sha }}
+      # as Mudlet's own PTBs set it (CI/set-build-info.sh): the engine then calls itself "<APP_VERSION>-ptb-<date>-<commit>"
+      mudlet-version-build: -ptb-${{ needs.plan.outputs.date }}
+      version-code: ${{ needs.plan.outputs.version-code }}
+      version-name: ${{ needs.plan.outputs.version-name }}
+    secrets:
+      UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+      UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD }}
+      UPLOAD_KEY_ALIAS: ${{ secrets.PLAY_UPLOAD_KEY_ALIAS }}
+      UPLOAD_KEY_PASSWORD: ${{ secrets.PLAY_UPLOAD_KEY_PASSWORD }}
 
-      - uses: actions/checkout@v7
-        with:
-          repository: Mudlet/Mudlet
-          ref: ${{ needs.plan.outputs.mudlet-sha }}
-          path: mudlet
-
-      - id: toolchain
-        uses: ./.github/actions/android-toolchain
-        with:
-          qt-android-arch: ${{ matrix.qt-arch }}
-          apt-packages: lua5.1
-
-      - name: Restore dependencies
-        id: deps-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: deps/prefix
-          key: ${{ matrix.deps-key }}-qt${{ steps.toolchain.outputs.qt-version }}-ndk${{ steps.toolchain.outputs.ndk-version }}-${{ hashFiles('scripts/build-mudlet-deps.sh') }}
-
-      - name: Build dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
-        run: scripts/build-mudlet-deps.sh deps/prefix
-
-      - name: Save dependencies
-        if: steps.deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: deps/prefix
-          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
-
-      - name: Restore ccache
-        uses: actions/cache/restore@v6
-        with:
-          path: .ccache
-          key: ccache-libmudlet-${{ matrix.abi }}-${{ github.run_id }}
-          restore-keys: ccache-libmudlet-${{ matrix.abi }}-
-
-      # MUDLET_VERSION_BUILD as Mudlet's own PTBs set it (CI/set-build-info.sh): the engine then calls itself
-      # "<APP_VERSION>-ptb-<date>-<commit>"
-      - name: Build libmudlet
-        env:
-          MUDLET_VERSION_BUILD: -ptb-${{ needs.plan.outputs.date }}
-        run: |
-          ccache -z > /dev/null
-          scripts/build-libmudlet.sh mudlet build deps/prefix
-
-      - name: Save ccache
-        if: ${{ !cancelled() }}
-        uses: actions/cache/save@v6
-        with:
-          path: .ccache
-          key: ccache-libmudlet-${{ matrix.abi }}-${{ github.run_id }}
-
-      - uses: ./.github/actions/android-openssl
-        with:
-          abi: ${{ matrix.abi }}
-          ndk-version: ${{ steps.toolchain.outputs.ndk-version }}
-
-      - name: Stage the engine
-        run: STAGE_ONLY=1 DEPLOY_DIR="staged/$ANDROID_ABI" LIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build" scripts/build-apk.sh
-
-      # unstripped: the app's build strips them and keeps their symbol tables for Play
-      - uses: actions/upload-artifact@v7
-        with:
-          name: engine-${{ matrix.abi }}
-          path: staged/${{ matrix.abi }}
-          if-no-files-found: error
-          retention-days: 3
-
-  # The source code the release is built from (scripts/build-source-bundle.sh), which the GitHub pre-release carries
-  # beside the APKs: this repository and the Mudlet checkout at the commits built, the Lua modules Mudlet fetches, the
-  # dependencies' sources and Qt's modules. Every run builds it; only one that publishes keeps it
-  source:
-    needs: plan
-    if: needs.plan.outputs.build == 'true'
+  # What the GitHub pre-release and Play say: the notes with both commits, whose markers the next run's plan reads, and
+  # Play's "what's new" (two lines of at most 240, under Play's 500)
+  notes:
+    needs: [plan, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v7
-        with:
-          repository: Mudlet/Mudlet
-          ref: ${{ needs.plan.outputs.mudlet-sha }}
-          path: mudlet
-
-      - name: Build the source bundle
-        run: |
-          scripts/build-source-bundle.sh mudlet dist/mudlet-ptb-source.tar
-          tar -xOf dist/mudlet-ptb-source.tar mudlet-ptb-source/SOURCES.txt
-          echo "Source bundle: $(du -h dist/mudlet-ptb-source.tar | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v7
-        if: needs.plan.outputs.publish == 'true'
-        with:
-          name: ptb-source
-          path: dist/mudlet-ptb-source.tar
-          if-no-files-found: error
-          retention-days: 3
-          # its archives are compressed already
-          compression-level: 0
-
-  # The AAB, an APK for each ABI and the smoke build (scripts/build-release.sh), signed with the upload key from the
-  # secrets when publishing, otherwise with a key made here and thrown away
-  package:
-    needs: [plan, engine]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    outputs:
-      # A boolean, not the key's kind: GitHub drops a job output that contains a secret's value, and the alias
-      # docs/ptb.md gives the upload key, `upload`, is one
-      signed-with-upload-key: ${{ steps.key.outputs.kind == 'upload' }}
-    env:
-      VERSION_CODE: ${{ needs.plan.outputs.version-code }}
-      VERSION_NAME: ${{ needs.plan.outputs.version-name }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - id: toolchain
-        uses: ./.github/actions/android-toolchain
-
-      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
-      - uses: gradle/actions/setup-gradle@v6
-
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: engine-*
-          path: staged
-
-      # The only step that reads the signing secrets, and only when publishing (all three, or none); it hands the
-      # keystore and its passwords to the build through GITHUB_ENV
-      - name: Signing key
-        id: key
+      - name: Release notes
         env:
-          KEYSTORE_BASE64: ${{ needs.plan.outputs.publish == 'true' && secrets.PLAY_UPLOAD_KEYSTORE_BASE64 || '' }}
-          KEYSTORE_PASSWORD: ${{ needs.plan.outputs.publish == 'true' && secrets.PLAY_UPLOAD_KEYSTORE_PASSWORD || '' }}
-          KEY_ALIAS: ${{ needs.plan.outputs.publish == 'true' && secrets.PLAY_UPLOAD_KEY_ALIAS || '' }}
-          KEY_PASSWORD: ${{ needs.plan.outputs.publish == 'true' && secrets.PLAY_UPLOAD_KEY_PASSWORD || '' }}
-          PUBLISH: ${{ needs.plan.outputs.publish }}
-        run: |
-          keystore="$RUNNER_TEMP/upload.jks"
-          if [ -n "$KEYSTORE_BASE64$KEYSTORE_PASSWORD$KEY_ALIAS" ]; then
-            [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] || {
-              echo "::error::Set all of PLAY_UPLOAD_KEYSTORE_BASE64, PLAY_UPLOAD_KEYSTORE_PASSWORD and PLAY_UPLOAD_KEY_ALIAS, or none (docs/ptb.md)"
-              exit 1
-            }
-            base64 -d <<< "$KEYSTORE_BASE64" > "$keystore"
-            password=$KEYSTORE_PASSWORD
-            alias=$KEY_ALIAS
-            key_password=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
-            kind=upload
-          else
-            password=$(openssl rand -hex 24)
-            echo "::add-mask::$password"
-            alias=throwaway
-            key_password=$password
-            keytool -genkeypair -keystore "$keystore" -storetype PKCS12 -storepass "$password" -alias "$alias" \
-              -keyalg RSA -keysize 4096 -validity 30 -dname "CN=Mudlet PTB throwaway key"
-            kind=throwaway
-            if [ "$PUBLISH" = true ]; then
-              echo "::notice::No upload key in the secrets: signed with a throwaway key, and nothing will be published (docs/ptb.md)"
-            else
-              echo "::notice::A dry run: signed with a throwaway key, and nothing will be published"
-            fi
-          fi
-          keytool -list -keystore "$keystore" -storepass "$password" -alias "$alias" > /dev/null \
-            || { echo "::error::the keystore does not open with its password, or has no key '$alias'"; exit 1; }
-          # the certificate the AAB and the APKs must carry, as apksigner prints its digest
-          digest=$(keytool -exportcert -keystore "$keystore" -storepass "$password" -alias "$alias" | sha256sum | cut -d' ' -f1)
-          {
-            echo "MUDLET_KEYSTORE=$keystore"
-            echo "MUDLET_KEYSTORE_PASSWORD=$password"
-            echo "MUDLET_KEY_ALIAS=$alias"
-            echo "MUDLET_KEY_PASSWORD=$key_password"
-          } >> "$GITHUB_ENV"
-          echo "kind=$kind" >> "$GITHUB_OUTPUT"
-          echo "CERT_SHA256=$digest" >> "$GITHUB_ENV"
-
-      - name: Build the AAB and the APKs
-        run: |
-          scripts/build-release.sh staged/engine-arm64-v8a staged/engine-x86_64 -- \
-            -PreleaseChannel=ptb -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME"
-
-      - name: Check the version and the signatures
-        env:
-          BUILD_TOOLS: ${{ steps.toolchain.outputs.build-tools-dir }}
-          SIGNED_WITH: ${{ steps.key.outputs.kind }}
-        run: |
-          aab=app/build/outputs/bundle/release/app-release.aab
-          for abi in arm64-v8a x86_64; do
-            apk=app/build/outputs/apk/release/app-$abi-release.apk
-            badging=$("$BUILD_TOOLS/aapt2" dump badging "$apk")
-            want="package: name='$PACKAGE' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'"
-            grep -qF "$want" <<< "$badging" || { echo "::error::$apk is not $want: $(head -1 <<< "$badging")"; exit 1; }
-            grep -qxF "native-code: '$abi'" <<< "$badging" || { echo "::error::$apk is not for $abi only"; exit 1; }
-            # the Baseline Profiles Compose and AndroidX ship, which AGP merges in, for ART to compile their code ahead
-            grep -qxF assets/dexopt/baseline.prof <<< "$(unzip -Z1 "$apk")" \
-              || { echo "::error::$apk has no assets/dexopt/baseline.prof"; exit 1; }
-            certs=$("$BUILD_TOOLS/apksigner" verify --print-certs "$apk")
-            digests=$(sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' <<< "$certs" | sort -u)
-            [ "$digests" = "$CERT_SHA256" ] \
-              || { echo "::error::$apk is not signed with the key: $certs"; exit 1; }
-          done
-          jarsigner -verify "$aab" > /dev/null || { echo "::error::the AAB's signature does not verify"; exit 1; }
-          aab_cert=$(keytool -printcert -jarfile "$aab" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d : | tr '[:upper:]' '[:lower:]')
-          [ "$aab_cert" = "$CERT_SHA256" ] || { echo "::error::the AAB is signed by $aab_cert, not the key ($CERT_SHA256)"; exit 1; }
-          entries=$(unzip -Z1 "$aab")
-          libs=$(sed -n 's|^base/lib/\([^/]*\)/.*|\1|p' <<< "$entries" | sort -u | paste -sd' ')
-          [ "$libs" = "arm64-v8a x86_64" ] || { echo "::error::the AAB has libraries for '$libs', not arm64-v8a and x86_64"; exit 1; }
-          # what Play reads to name the functions in its crash reports (play job)
-          for meta in com.android.tools.build.obfuscation/proguard.map com.android.tools.build.debugsymbols/; do
-            grep -q "^BUNDLE-METADATA/$meta" <<< "$entries" || { echo "::error::the AAB has no BUNDLE-METADATA/$meta"; exit 1; }
-          done
-          # the Baseline Profiles in the AAB, which Play delivers with each APK it serves
-          grep -qxF BUNDLE-METADATA/com.android.tools.build.profiles/baseline.prof <<< "$entries" \
-            || { echo "::error::the AAB has no Baseline Profile (BUNDLE-METADATA/com.android.tools.build.profiles/baseline.prof)"; exit 1; }
-          echo "Signed with the $SIGNED_WITH key, certificate SHA-256 $CERT_SHA256" >> "$GITHUB_STEP_SUMMARY"
-
-      # scripts/check-apk.sh, as on every APK CI builds; it takes a directory of APKs of one ABI
-      - name: Check the APKs
-        env:
-          BUILD_TOOLS: ${{ steps.toolchain.outputs.build-tools-dir }}
-        run: |
-          for abi in arm64-v8a x86_64; do
-            mkdir -p "check/$abi"
-            cp "app/build/outputs/apk/release/app-$abi-release.apk" "check/$abi/"
-            ABI=$abi TITLE="PTB APK ($abi)" scripts/check-apk.sh "check/$abi"
-          done
-
-      # The APKs' and the AAB's size budgets (scripts/apk-size-budget.txt). They fail a pull request; a nightly or
-      # manual PTB still publishes past them, with the error in its summary: libmudlet growing with Mudlet's
-      # development already fails the libmudlet nightly in ci.yml, which opens an issue.
-      - name: Size budgets
-        continue-on-error: ${{ github.event_name != 'pull_request' }}
-        run: |
-          status=0
-          for abi in arm64-v8a x86_64; do
-            scripts/check-apk-size.sh "ptb-$abi" "app/build/outputs/apk/release/app-$abi-release.apk" || status=1
-          done
-          scripts/check-apk-size.sh ptb-aab app/build/outputs/bundle/release/app-release.aab || status=1
-          exit $status
-
-      # What the GitHub pre-release and Play get: fixed file names, so a download link stays the same, checksums,
-      # the notes with both commits, and Play's "what's new" (two lines of at most 240, under Play's 500)
-      - name: Release files
-        env:
+          VERSION_CODE: ${{ needs.plan.outputs.version-code }}
+          VERSION_NAME: ${{ needs.plan.outputs.version-name }}
           MUDLET_SHA: ${{ needs.plan.outputs.mudlet-sha }}
           MUDLET_SUBJECT: ${{ needs.plan.outputs.mudlet-subject }}
           LAST_MUDLET_SHA: ${{ needs.plan.outputs.last-mudlet-sha }}
           LAST_ANDROID_SHA: ${{ needs.plan.outputs.last-android-sha }}
           DATE: ${{ needs.plan.outputs.date }}
-          SIGNED_WITH: ${{ steps.key.outputs.kind }}
+          CERT_SHA256: ${{ needs.build.outputs.cert-sha256 }}
         run: |
           mkdir -p dist/whatsnew
-          for abi in arm64-v8a x86_64; do
-            cp "app/build/outputs/apk/release/app-$abi-release.apk" "dist/mudlet-ptb-$abi.apk"
-          done
-          (cd dist && sha256sum ./*.apk | sed 's| \./| |' > SHA256SUMS.txt)
-          cp app/build/outputs/bundle/release/app-release.aab "dist/mudlet-ptb.aab"
           android_sha=$(git rev-parse HEAD)
           android_subject=$(git log -1 --format=%s)
           mudlet="https://github.com/Mudlet/Mudlet"
@@ -467,127 +227,18 @@ jobs:
             "$MUDLET_REF" "${MUDLET_SHA:0:7}" "$MUDLET_SUBJECT" "${android_sha:0:7}" "$android_subject" \
             | cut -c1-240 > dist/whatsnew/whatsnew-en-US
           cat dist/release-notes.md >> "$GITHUB_STEP_SUMMARY"
-          ls -l dist
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ptb
-          path: |
-            dist
-            app/build/outputs/mapping/release/mapping.txt
+          name: ptb-notes
+          path: dist
           if-no-files-found: error
           retention-days: 14
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: ptb-smoke-apk
-          path: app/build/outputs/apk/smoke/app-x86_64-smoke.apk
-          if-no-files-found: error
-          retention-days: 3
-
-  # The minified x86_64 build, with the smoke test's hook, on an emulator: native/tests/android_smoke.py, as
-  # libmudlet.yml's emulator job runs it on the debug build. It shows that R8 kept what Qt and the engine reach by name
-  smoke:
-    needs: package
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    env:
-      EMULATOR_API: 35
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: ptb-smoke-apk
-          path: smoke-apk
-
-      # the unstripped engine, for ndk-stack should it crash
-      - uses: actions/download-artifact@v8
-        with:
-          name: engine-x86_64
-          path: engine-x86_64
-
-      # the runner's SDK, which the emulator runs from; the env context sees only what a workflow set
-      - name: Android SDK
-        run: echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" >> "$GITHUB_ENV"
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm4all.rules > /dev/null
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Restore the system image
-        id: image-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
-          key: system-image-${{ env.EMULATOR_API }}-google_apis-x86_64-v2
-
-      - name: Smoke test on the emulator
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
-        with:
-          api-level: ${{ env.EMULATOR_API }}
-          target: google_apis
-          arch: x86_64
-          cores: 4
-          ram-size: 4096M
-          disk-size: 6G
-          # one line: the action runs each line of a script in a shell of its own
-          script: >-
-            python3 native/tests/android_smoke.py --apk smoke-apk/app-x86_64-smoke.apk --out smoke-test
-            --package org.mudlet.mudlet.ptb --symbols engine-x86_64/libs/x86_64
-
-      # A failed download still leaves the image's directory behind, which would otherwise be cached and restored
-      - name: Check the system image installed
-        id: image-installed
-        if: ${{ !cancelled() && steps.image-cache.outputs.cache-hit != 'true' }}
-        env:
-          IMAGE_DIR: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
-        run: |
-          if [ -s "$IMAGE_DIR/package.xml" ] && [ -s "$IMAGE_DIR/system.img" ]; then
-            echo "installed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::$IMAGE_DIR lacks package.xml or system.img: the image did not install, so it is not cached"
-          fi
-
-      - name: Save the system image
-        if: ${{ !cancelled() && steps.image-installed.outputs.installed == 'true' }}
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ env.ANDROID_SDK_ROOT }}/system-images/android-${{ env.EMULATOR_API }}/google_apis/x86_64
-          key: ${{ steps.image-cache.outputs.cache-primary-key }}
-
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: ptb-smoke-test
-          path: smoke-test
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Summary
-        if: always()
-        run: |
-          {
-            echo "### Smoke test of the minified PTB (x86_64, API $EMULATOR_API)"
-            echo
-            if [ -f smoke-test/smoke.log ]; then
-              echo '```'
-              cat smoke-test/smoke.log
-              echo '```'
-            else
-              echo "The smoke test did not run."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
 
   # Google Play's open testing track ("beta" in the API), from main, once the smoke test passed and the source bundle
   # is built. The service account's key is best kept in the `play` environment, limited to main (docs/ptb.md)
   play:
-    needs: [plan, package, smoke, source]
+    needs: [plan, build, notes]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -598,7 +249,7 @@ jobs:
         id: creds
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          SIGNED_WITH_UPLOAD_KEY: ${{ needs.package.outputs.signed-with-upload-key }}
+          SIGNED_WITH_UPLOAD_KEY: ${{ needs.build.outputs.signed-with-upload-key }}
         run: |
           if [ -z "$SERVICE_ACCOUNT_JSON" ]; then
             echo "::notice::No PLAY_SERVICE_ACCOUNT_JSON: not uploading to Google Play (docs/ptb.md)"
@@ -614,6 +265,12 @@ jobs:
         if: steps.creds.outputs.upload == 'true'
         with:
           name: ptb
+
+      - uses: actions/download-artifact@v8
+        if: steps.creds.outputs.upload == 'true'
+        with:
+          name: ptb-notes
+          path: dist
 
       # The AAB carries R8's mapping and the native symbol tables, which Play reads from it
       - name: Upload to the open testing track
@@ -632,8 +289,8 @@ jobs:
   # whose markers the next run's plan reads. Only for an APK signed with the upload key: a throwaway key would change
   # every night, and no installed PTB could take the next one
   github-release:
-    needs: [plan, package, smoke, play, source]
-    if: needs.plan.outputs.publish == 'true' && needs.package.outputs.signed-with-upload-key == 'true'
+    needs: [plan, build, notes, play]
+    if: needs.plan.outputs.publish == 'true' && needs.build.outputs.signed-with-upload-key == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -642,6 +299,11 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: ptb
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ptb-notes
+          path: dist
 
       - uses: actions/download-artifact@v8
         with:
@@ -665,7 +327,7 @@ jobs:
 
   # GitHub mails a failed scheduled run only to whoever last edited the cron line
   report-nightly-failure:
-    needs: [plan, engine, source, package, smoke, play, github-release]
+    needs: [plan, build, notes, play, github-release]
     # a job that hits timeout-minutes is cancelled, not failed; a job skipped because neither commit changed is fine
     if: >-
       always() && github.event_name == 'schedule'

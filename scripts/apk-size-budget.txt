@@ -12,3 +12,7 @@ libmudlet-x86_64                     109624265    78850424     31120816
 ptb-arm64-v8a                        80203037     75925824     3586516
 ptb-x86_64                           83512052     79230984     3586516
 ptb-aab                              112257315    71954059     1754825
+# the stable release's, the same build as the PTB's under its own application id (release.yml)
+stable-arm64-v8a                     80203037     75925824     3586516
+stable-x86_64                        83512052     79230984     3586516
+stable-aab                           112257315    71954059     1754825

@@ -1,7 +1,8 @@
 name: Checks
 
 # The static checks in scripts/lint.sh: ktlint, clang-format, ShellCheck, actionlint, the strings check, the
-# conflict-marker check, the vendored check and the games check, each called by ci.yml when a file it covers changed.
+# conflict-marker check, the vendored check, the games check and the release-plan tests, each called by ci.yml when a
+# file it covers changed.
 # Android lint needs the staged Qt jars, so it runs in libmudlet.yml after the arm64 APK is built.
 on:
   workflow_call:
@@ -13,7 +14,7 @@ on:
       lint-checks:
         description: The other checks to run, a JSON list of scripts/lint.sh's names
         type: string
-        default: '["clang-format", "shellcheck", "actionlint", "strings", "conflict-markers", "vendored", "games"]'
+        default: '["clang-format", "shellcheck", "actionlint", "strings", "conflict-markers", "vendored", "games", "release-plan"]'
 
 permissions:
   contents: read

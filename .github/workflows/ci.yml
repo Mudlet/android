@@ -11,6 +11,8 @@ name: CI
 #   Mudlet patches                the vendored check (scripts/lint.sh vendored)
 #   the games list and Lua functions (app/src/main/assets/games and lua), scripts/sync-mudlet-games.py
 #                                 the games check (scripts/lint.sh games)
+#   scripts/release-plan.sh and its test
+#                                 the release-plan check (scripts/lint.sh release-plan)
 #   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the real engine on the host,
 #                                 whose ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
@@ -143,6 +145,11 @@ jobs:
               - scripts/sync-mudlet-games.py
               - *lint-tools
               - *everything
+            release-plan:
+              - scripts/release-plan.sh
+              - scripts/test-release-plan.sh
+              - *lint-tools
+              - *everything
             libmudlet-android:
               - *kotlin
               - native/**
@@ -187,7 +194,7 @@ jobs:
             esac
           }
           checks=()
-          for check in clang-format shellcheck actionlint strings conflict-markers vendored games; do
+          for check in clang-format shellcheck actionlint strings conflict-markers vendored games release-plan; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {

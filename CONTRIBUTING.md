@@ -12,11 +12,11 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `protocol/` | `:protocol`, plain Kotlin/JVM: the socket protocol and `EngineLink`, the script windows' state and layout, what a label draws, with the JVM tests |
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the host tests (`tests/`) |
-| `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and the strings check it runs, `check-strings.py`, `launcher-icons.py`, and `sync-mudlet-games.py`, which copies Mudlet's games into the profile list |
-| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`device-pass.md`](docs/device-pass.md) (trying the app on a real phone, for testers), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`plan.md`](docs/plan.md) (what the app still needs, lane by lane), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
+| `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `release-plan.sh` (what a stable release publishes) with its test, `lint.sh` and the strings check it runs, `check-strings.py`, `launcher-icons.py`, and `sync-mudlet-games.py`, which copies Mudlet's games into the profile list |
+| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`release.md`](docs/release.md) and its [`release-notes.md`](docs/release-notes.md), [`device-pass.md`](docs/device-pass.md) (trying the app on a real phone, for testers), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`plan.md`](docs/plan.md) (what the app still needs, lane by lane), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
 | `.agents/skills/` | Longer procedures for coding agents (running on the emulator, bumping Qt); `.claude/skills` links to it |
 | `crowdin.yml` | What Crowdin translates and where the translations go ([`docs/translations.md`](docs/translations.md)) |
-| `.github/` | The workflows (`ci.yml`, which calls `checks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
+| `.github/` | The workflows (`ci.yml`, which calls `checks.yml` and `libmudlet.yml` as the changes need, `ptb.yml` and `release.yml`, which share `release-build.yml`), the actions they share, Dependabot |
 | `gradle/libs.versions.toml` | Every Gradle module's versions, and the SDK, NDK and build-tools levels |
 
 ## Setting up
@@ -149,7 +149,7 @@ names the Mudlet commits.
 ## Lint
 
 ```sh
-scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored code and games, as CI's Checks workflow
+scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored code, games and the release plan's tests, as CI's Checks workflow
 ./gradlew ktlintFormat           # fix the Kotlin
 FIX=1 scripts/lint.sh clang-format   # fix native/
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after scripts/build-apk.sh

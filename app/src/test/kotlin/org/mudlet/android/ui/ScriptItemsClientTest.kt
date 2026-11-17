@@ -218,20 +218,108 @@ class ScriptItemsClientTest {
         assertNull("asked again", scripts.unopened[key])
     }
 
-    @Test
-    fun aLuaCheckIsKeptWithTheCodeItChecked() {
-        assertTrue(scripts.checkLua("x = = 1"))
-        val check = take("checkLua")
-        assertEquals("x = = 1", check.getString("code"))
-        assertNull(scripts.luaCheck)
-        val problem = LuaProblem(1, "unexpected symbol near '='")
-        assertTrue(scripts.onLuaCheck(EngineMessage.LuaCheck(problem, check.getLong("id"))))
-        assertEquals(LuaChecked("x = = 1", problem), scripts.luaCheck)
-        assertFalse("answered once", scripts.onLuaCheck(EngineMessage.LuaCheck(null, check.getLong("id"))))
+    private fun broken(code: String) = alias("kick").copy(script = code)
 
+    /** [code] applied over the alias "kick": the check's request, with the save's in [save], both still to answer. */
+    private fun applied(code: String): JSONObject {
+        opened(alias("kick"))
+        scripts.edit(broken(code))
+        assertTrue(sent.isEmpty())
+        assertTrue(scripts.apply(key))
+        save = take("editScriptItem")
+        assertEquals(code, save.getJSONObject("fields").getString("script"))
+        val check = take("checkLua")
+        assertEquals(code, check.getString("code"))
+        assertTrue("asked once", sent.isEmpty())
+        return check
+    }
+
+    private var save = JSONObject()
+    private val problem = LuaProblem(1, "unexpected symbol near '='")
+
+    private fun checked(check: JSONObject, found: LuaProblem?) = scripts.onLuaCheck(EngineMessage.LuaCheck(found, check.getLong("id")))
+
+    @Test
+    fun anApplyChecksTheLuaAndKeepsWhatIsWrongWithIt() {
+        val check = applied("x = = 1")
+        assertNull("not until the engine has said", scripts.luaProblem(key))
+        assertTrue(checked(check, problem))
+        assertEquals(problem, scripts.luaProblem(key))
+        assertFalse("answered once", checked(check, null))
+        assertEquals(problem, scripts.luaProblem(key))
+        assertNull("another item's", scripts.luaProblem(ScriptItemKey(ScriptItemKind.ALIAS, 8)))
+
+        answer(save, broken("x = = 1"))
+        take("scriptItems")
+        assertFalse(scripts.apply(key))
+        assertTrue("nothing to apply, so nothing to check", sent.isEmpty())
+    }
+
+    @Test
+    fun theProblemStaysOnceTheEngineHasSavedTheCode() {
+        assertTrue(checked(applied("x = = 1"), problem))
+        answer(save, broken("x = = 1"))
+        assertNull(scripts.drafts[key])
+        assertEquals("the code is still what was checked", problem, scripts.luaProblem(key))
+    }
+
+    @Test
+    fun editingTheCodeDropsItsProblemUntilTheNextApply() {
+        assertTrue(checked(applied("x = = 1"), problem))
+        scripts.edit(broken("x = = 1").let { it.copy(node = it.node.copy(name = "punch")) })
+        assertEquals("the code is as it was checked", problem, scripts.luaProblem(key))
+
+        scripts.edit(broken("x = = 12"))
+        assertNull("it described code that is no longer there", scripts.luaProblem(key))
+        assertTrue("typing asks the engine nothing", sent.isEmpty())
+        scripts.edit(broken("x = = 1"))
+        assertNull("gone until the next apply", scripts.luaProblem(key))
+
+        assertTrue(scripts.apply(key))
+        take("editScriptItem")
+        assertTrue(checked(take("checkLua"), problem))
+        assertEquals(problem, scripts.luaProblem(key))
+    }
+
+    @Test
+    fun aProblemInCodeChangedSinceIsNotKept() {
+        val check = applied("x = = 1")
+        scripts.edit(broken("x = 1"))
+        assertTrue(checked(check, problem))
+        assertNull("the answer is for code the player has since changed", scripts.luaProblem(key))
+    }
+
+    @Test
+    fun aProblemGoesWithItsCode() {
+        assertTrue(checked(applied("x = = 1"), problem))
+        scripts.discard(key)
+        assertNull("discarded with the draft", scripts.luaProblem(key))
+
+        assertTrue(checked(applied("x = = 1"), problem))
+        answer(save, broken("x = = 1"))
+        assertEquals(problem, scripts.luaProblem(key))
+        scripts.undo(alias("kick"))
+        answer(take("editScriptItem"), alias("kick"))
+        assertNull("an Undo put the old code back", scripts.luaProblem(key))
+    }
+
+    @Test
+    fun codeThatCompilesHasNoProblem() {
+        assertTrue(checked(applied("x = = 1"), problem))
+        scripts.edit(broken("x = = 1").let { it.copy(node = it.node.copy(name = "punch")) })
+        assertTrue(scripts.apply(key))
+        take("editScriptItem")
+        assertTrue(checked(take("checkLua"), null))
+        assertNull(scripts.luaProblem(key))
+    }
+
+    @Test
+    fun aCheckThatCannotBeSentIsNotSaidOnItsOwn() {
+        opened(alias("kick"))
+        scripts.edit(broken("x = = 1"))
         attached = false
-        assertFalse(scripts.checkLua("x = 1"))
-        assertTrue("it is asked as the player types, so one that cannot be sent is not said", scripts.notices.isEmpty())
+        assertFalse(scripts.apply(key))
+        assertEquals("said once, for the save", listOf<ScriptNotice>(ScriptNotice.NotSent), scripts.notices.toList())
     }
 
     @Test

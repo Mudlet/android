@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -23,10 +24,14 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -40,6 +45,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -50,8 +56,9 @@ import java.util.concurrent.CompletableFuture
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
  * settings (the hub, a search and four pages, and in light mode the hub and a page side by side on a tablet), the
  * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
- * part of a name, and the game sheet with two games open, light and dark, against a fake engine, for a pull request
- * that changes how they look. Each is saved in the app's
+ * part of a name, the game sheet with two games open, and a trigger's page, at its top, at its Lua, with the keyboard
+ * up and the Lua being typed, and with what is wrong with the Lua applied, light and dark, against a fake engine, for a
+ * pull request that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */
@@ -211,6 +218,85 @@ class ScreenshotTest {
         }
     }
 
+    @Test
+    fun itemPageLight() = takeItemPageScreenshots("light")
+
+    @Test
+    fun itemPageDark() = takeItemPageScreenshots("dark")
+
+    private fun takeItemPageScreenshots(mode: String) {
+        if (Build.VERSION.SDK_INT < 31) return
+        compose.runOnIdle { Settings.setAwaitsDefaults(PROFILES[0].name, false) }
+        val first = fake.engine.nextSession()
+        fake.engine.instance = "fake-screenshots-${System.nanoTime()}"
+        first.close()
+        val session = fake.engine.nextSession()
+        session.clear()
+        GAME_LINES.forEachIndexed { i, (text, runs) -> session.line(i + 1L, text, runs) }
+        session.synced(GAME_LINES.size.toLong())
+        session.profiles(PROFILES, session.receive("listProfiles"))
+        compose.waitUntil(WAIT_MS) { EngineClient.profiles == PROFILES }
+        activate(hasContentDescription(string(R.string.profile_connect_to, PROFILES[0].name)))
+        session.profiles(PROFILES, session.receive("openProfile"))
+        waitFor(hasText(GAME_LINES.last().first))
+
+        activate(hasContentDescription(string(R.string.scripts_open, PROFILES[0].name)))
+        compose.waitForIdle()
+        val greet = JSONObject().put("id", 1).put("parent", 0).put("name", "Wave back").put("folder", false).put("enabled", true).put("active", true)
+            .put("package", "").put("error", "")
+        repeat(3) {
+            val ask = session.receive("scriptItems")
+            val items = if (ask.getString("kind") == "trigger") JSONArray().put(greet) else JSONArray()
+            session.send(JSONObject().put("t", "scriptItems").put("kind", ask.getString("kind")).put("items", items).put("re", ask.get("id")))
+        }
+        activate(hasText("Wave back"))
+        compose.waitForIdle()
+
+        fun fields(script: String, error: String = "") = JSONObject(greet.toString()).put("script", script).put("error", error).put("command", "").put("lineDelta", -1)
+            .put("matchAll", false).put("filter", false).put("fireLength", 0).put("sound", false).put("soundFile", "").put("highlight", false)
+            .put("highlightFg", "").put("highlightBg", "").put("patterns", JSONArray().put(JSONObject().put("text", "^(\\w+) waves at you").put("type", "regex")))
+
+        fun answer(script: String, request: JSONObject, error: String = "") = session.send(JSONObject().put("t", "scriptItem").put("kind", "trigger").put("fields", fields(script, error)).put("re", request.get("id")))
+        answer(ITEM_LUA, session.receive("scriptItem"))
+        val lua = hasTestTag(LUA_EDITOR_TAG)
+        waitFor(lua)
+        save("script-item-$mode")
+
+        compose.onNode(lua).performScrollTo()
+        save("script-item-lua-$mode")
+
+        // A name half typed, for Mudlet's functions to be offered over the keyboard's row of symbols
+        val at = ITEM_LUA.indexOf("\n", ITEM_LUA.indexOf("send("))
+        compose.onNode(lua).performSemanticsAction(SemanticsActions.SetSelection) { it(at, at, true) }
+        compose.onNode(lua).performTextInput("\n")
+        compose.onNode(lua).performTextInput("sen")
+        waitFor(hasContentDescription(string(R.string.lua_indent)))
+        try {
+            compose.waitUntil(WAIT_MS) { keyboardShown() }
+        } catch (_: ComposeTimeoutException) {
+        }
+        assumeTrue("a keyboard on the screen", keyboardShown())
+        save("script-item-keyboard-$mode")
+
+        activate(hasText(string(R.string.scripts_apply)))
+        compose.waitForIdle()
+        val check = session.receive("checkLua")
+        val message = "'=' expected near 'cecho'"
+        val line = check.getString("code").substring(0, at).count { it == '\n' } + 3
+        session.send(JSONObject().put("t", "luaCheck").put("ok", false).put("line", line).put("message", message).put("re", check.get("id")))
+        answer(check.getString("code"), session.receive("editScriptItem"), error = message)
+        waitFor(hasText(string(R.string.lua_go_to_line)))
+        // Once the snackbar that says it is applied has gone from over the buttons
+        waitFor(hasText(string(R.string.scripts_applied, "Wave back")))
+        compose.waitUntil(SNACKBAR_MS) { compose.onAllNodes(hasText(string(R.string.scripts_applied, "Wave back"))).fetchSemanticsNodes().isEmpty() }
+        save("script-item-problem-$mode")
+    }
+
+    private fun keyboardShown(): Boolean {
+        val view = compose.activity.window.decorView
+        return compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+    }
+
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 
     /** [block] on a screen the size of a 10-inch tablet's, on its side; the activity is recreated each way, as on a real resize. */
@@ -352,7 +438,20 @@ class ScreenshotTest {
 
         const val ROOM_NAME = "A weapons vault / 56721 (Nu Second Circle of)"
 
+        val ITEM_LUA = """
+            -- Waves back at whoever waves, once
+            local who = matches[2]
+            if who ~= "you" and not waved[who] then
+              send("wave " .. who)
+              cecho("<green>Waved back at " .. who .. ", as anyone polite would on a road this empty\n")
+              waved[who] = true
+            end
+        """.trimIndent()
+
         const val WAIT_MS = 10_000L
+
+        // Longer than a snackbar with an action stays
+        const val SNACKBAR_MS = 15_000L
 
         // For the window to show the last frame drawn, which compose's idle does not wait for
         const val SETTLE_MS = 750L

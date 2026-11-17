@@ -117,7 +117,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `enableScriptItem` | `kind`, `item`, `enabled`, `id`? | Switches the item on or off, as the desktop editor's checkbox does (`THeadlessSession::setScriptItemEnabled()`). Answered by `scriptItem`. |
 | `moveScriptItem` | `kind`, `item`, `parent`, `position` | Moves the item into the folder whose id is `parent`, or to the top level for 0, at `position` among the items shown there, as a drag in the desktop editor does (`THeadlessSession::moveScriptItem()`). |
 | `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
-| `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, as a script editor checks what is typed (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
+| `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, for a script editor to say what is wrong with it (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
 

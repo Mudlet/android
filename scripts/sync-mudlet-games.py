@@ -175,16 +175,16 @@ def parse_games(header):
         # Desktop's dialog draws a game only as its logo, so one without (the self-test profile) is not shown there either
         if not string_value(f[5]):
             continue
+        name = string_value(f[0])
         game = {
-            "name": string_value(f[0]),
+            "name": name,
             "host": string_value(f[1]),
             "port": int(f[2]),
             "tls": f[3] == "true",
-            "links": [],
+            "links": links_of(string_value(f[4]), name),
             "description": string_value(f[6]).strip(),
             "icon": string_value(f[5]),
         }
-        game["links"] = links_of(string_value(f[4]), game["name"])
         # After the seven, GameDetail's optional ownUi, which the engine reads itself, then alternateHostUrls
         for extra in f[7:]:
             if extra.startswith("{"):
@@ -294,7 +294,8 @@ def write(checkout):
 
 
 def check(checkout):
-    committed = json.loads(OUT_JSON.read_text(encoding="utf-8"))
+    text = OUT_JSON.read_text(encoding="utf-8")
+    committed = json.loads(text)
     commit = committed.get("mudletCommit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         die(f"{OUT_JSON.relative_to(ROOT)} names no Mudlet commit")
@@ -302,7 +303,7 @@ def check(checkout):
         die(f"{checkout} is not at {commit}, the commit games.json is from")
     expected, logos = catalogue(Source(checkout, commit))
     problems = []
-    if encode(committed) != OUT_JSON.read_text(encoding="utf-8") or committed != expected:
+    if encode(committed) != text or committed != expected:
         problems.append(f"{OUT_JSON.relative_to(ROOT)} is not what the script writes from Mudlet at {commit[:9]}")
     present = {p.name for p in ICON_DIR.iterdir()} if ICON_DIR.is_dir() else set()
     for name in sorted(present ^ set(logos)):

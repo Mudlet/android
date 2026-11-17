@@ -43,7 +43,7 @@ object DefaultGames {
                 host = g.getString("host"),
                 port = g.getInt("port"),
                 tls = g.getBoolean("tls"),
-                links = (0 until links.length()).map { links.getJSONObject(it).let { l -> GameLink(l.getString("label"), l.getString("url")) } },
+                links = (0 until links.length()).map { links.getJSONObject(it) }.map { GameLink(it.getString("label"), it.getString("url")) },
                 description = g.getString("description"),
                 icon = g.getString("icon"),
                 alternateHosts = g.optJSONArray("alternateHosts").strings(),

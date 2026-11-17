@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONException
 import org.mudlet.android.R
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.about.openLink
@@ -54,7 +55,7 @@ private const val TAG = "DefaultGames"
 private val LOGO_WIDTH = 96.dp
 private val LOGO_HEIGHT = 24.dp
 
-/** Mudlet's games from the APK's assets, by name in the player's language; empty, and logged, if they cannot be read. */
+/** Mudlet's games from the APK's assets, sorted by name for the player's language; empty, and logged, if unreadable. */
 @Composable
 fun rememberDefaultGames(): List<DefaultGame> {
     val context = LocalContext.current
@@ -146,16 +147,24 @@ private object GameAssets {
     fun loadGames(context: Context): List<DefaultGame> = try {
         val collator = Collator.getInstance()
         DefaultGames.parse(readAsset(context, DefaultGames.FILE)).sortedWith(compareBy(collator) { it.name }).also { games = it }
-    } catch (e: Exception) {
-        // A broken APK: scripts/sync-mudlet-games.py --check and DefaultGamesTest check the file
+    } catch (e: IOException) {
+        unreadable(e)
+    } catch (e: JSONException) {
+        unreadable(e)
+    }
+
+    // A broken APK: scripts/sync-mudlet-games.py --check and DefaultGamesTest check the file
+    private fun unreadable(e: Exception): List<DefaultGame> {
         Log.e(TAG, "Could not read ${DefaultGames.FILE}", e)
-        emptyList()
+        return emptyList()
     }
 
     fun cachedLogo(file: String): ImageBitmap? = logos.get(file)
 
     fun loadLogo(context: Context, file: String): ImageBitmap? = try {
-        context.assets.open("${DefaultGames.ICON_DIR}/$file").use { BitmapFactory.decodeStream(it) }?.asImageBitmap()?.also { logos.put(file, it) }
+        val bitmap = context.assets.open("${DefaultGames.ICON_DIR}/$file").use { BitmapFactory.decodeStream(it) }
+        if (bitmap == null) Log.e(TAG, "Could not decode the logo $file")
+        bitmap?.asImageBitmap()?.also { logos.put(file, it) }
     } catch (e: IOException) {
         Log.e(TAG, "Could not read the logo $file", e)
         null

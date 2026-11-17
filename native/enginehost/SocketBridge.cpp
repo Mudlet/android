@@ -447,6 +447,7 @@ void SocketBridge::sendState()
     }
     sendFrame(mButtonBars);
     sendFrame(mCommands);
+    sendFrame(mKeyBindings);
     if (!mEngine) {
         return;
     }
@@ -649,6 +650,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         checkLua(message);
     } else if (type == QLatin1String("clearErrorConsole")) {
         mEngine->clearErrorConsole();
+    } else if (type == QLatin1String("pressKey")) {
+        pressKey(message);
     } else if (type == QLatin1String("getSettings")) {
         getSettings(message);
     } else if (type == QLatin1String("setSettings")) {
@@ -1313,6 +1316,48 @@ void SocketBridge::checkLua(const QJsonObject& message)
     sendReply(reply);
 }
 
+void SocketBridge::pressKey(const QJsonObject& message)
+{
+    const std::optional<int> key = wholeNumber(message.value(QLatin1String("key")), 0);
+    const QJsonValue modifiersValue = message.value(QLatin1String("modifiers"));
+    const std::optional<int> modifiers = modifiersValue.isUndefined() ? std::optional<int>(0) : wholeNumber(modifiersValue, 0);
+    const QJsonValue textValue = message.value(QLatin1String("text"));
+    if (!key) {
+        sendError(QStringLiteral("pressKey: key must be a whole number from 0"));
+        return;
+    }
+    if (!modifiers) {
+        sendError(QStringLiteral("pressKey: modifiers must be a whole number from 0"));
+        return;
+    }
+    if (!textValue.isUndefined() && !textValue.isString()) {
+        sendError(QStringLiteral("pressKey: text must be a string"));
+        return;
+    }
+    const std::optional<QString> text = textValue.isString() ? std::optional<QString>(textValue.toString()) : std::nullopt;
+    const std::variant<IEngine::KeyPress, QString> pressed = mEngine->pressKey(*key, *modifiers, text);
+    if (const QString* problem = std::get_if<QString>(&pressed)) {
+        sendError(QStringLiteral("pressKey: %1").arg(*problem));
+        return;
+    }
+    QString result;
+    switch (std::get<IEngine::KeyPress>(pressed)) {
+    case IEngine::KeyPress::bindingRan:
+        result = QStringLiteral("bindingRan");
+        break;
+    case IEngine::KeyPress::commandRan:
+        result = QStringLiteral("commandRan");
+        break;
+    case IEngine::KeyPress::noBinding:
+        result = QStringLiteral("noBinding");
+        break;
+    case IEngine::KeyPress::keyKept:
+        result = QStringLiteral("keyKept");
+        break;
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("keyPressed")}, {QStringLiteral("result"), result}});
+}
+
 QString SocketBridge::deleteScriptItem(const QJsonObject& message)
 {
     const std::variant<std::pair<IEngine::ScriptItemKind, int>, QString> target = scriptItemTarget(message);
@@ -1643,6 +1688,15 @@ QJsonObject SocketBridge::commandsMessage(const QList<AddonCommandInfo>& command
                                 {QStringLiteral("pulse"), command.pulse}});
     }
     return {{QStringLiteral("t"), QStringLiteral("commands")}, {QStringLiteral("commands"), json}};
+}
+
+QJsonObject SocketBridge::keyBindingsMessage(const QList<KeyBinding>& bindings)
+{
+    QJsonArray json;
+    for (const KeyBinding& binding : bindings) {
+        json.append(QJsonObject{{QStringLiteral("key"), binding.key}, {QStringLiteral("modifiers"), binding.modifiers}});
+    }
+    return {{QStringLiteral("t"), QStringLiteral("keyBindings")}, {QStringLiteral("keys"), json}};
 }
 
 QJsonObject SocketBridge::windowTextMessage(const QString& window, const WindowText& text)
@@ -2019,6 +2073,14 @@ void SocketBridge::errorConsoleCleared()
     if (outputLive()) {
         sendFrame(errorConsoleMessage({}, true));
     }
+}
+
+void SocketBridge::keyBindings(const QList<KeyBinding>& bindings)
+{
+    if (mMirror) {
+        mMirror->keyBindings(bindings);
+    }
+    sendIfChanged(mKeyBindings, keyBindingsMessage(bindings));
 }
 
 void SocketBridge::map(const std::optional<MapFrame>& frame)

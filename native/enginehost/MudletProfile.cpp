@@ -629,6 +629,7 @@ void MudletProfile::connectSession()
         pushWindows(true);
         pushButtonBars();
         pushCommands();
+        pushKeyBindings();
         pushAppMap();
         setMapDownloadState(MapDownload::State::none);
         takeOfferedMap(mSession->offeredMapUrl());
@@ -679,6 +680,7 @@ void MudletProfile::connectSession()
     connect(session, &THeadlessSession::packageInstallFinished, this, [this](const QString& path, THeadlessSession::PackageResult result, const QString& error) {
         mFrontend->packageInstalled(path, packageInstallResult(result), error);
     });
+    connect(session, &THeadlessSession::keyBindingsChanged, this, &MudletProfile::pushKeyBindings);
     // A repaint comes from the event loop, once a turn; the view-only flag is in each frame
     const auto pushShownMap = [this] {
         pushMap(shownMapperSize(mSession->scriptWindows()));
@@ -1430,6 +1432,7 @@ void MudletProfile::onProfileClosed()
     mFrontend->windows({}, {}, {});
     mFrontend->buttonBars({});
     mFrontend->commands({});
+    mFrontend->keyBindings({});
     pushMap(std::nullopt);
     pushAppMap();
     setMapDownloadState(MapDownload::State::none);
@@ -1503,6 +1506,15 @@ void MudletProfile::pushCommands()
         commands.append(addonCommandInfo(command));
     }
     mFrontend->commands(commands);
+}
+
+void MudletProfile::pushKeyBindings()
+{
+    QList<KeyBinding> bindings;
+    for (const QKeyCombination combination : mSession->keyBindings()) {
+        bindings.append({combination.key(), static_cast<int>(combination.keyboardModifiers().toInt())});
+    }
+    mFrontend->keyBindings(bindings);
 }
 
 void MudletProfile::pushMap(const std::optional<QSize>& mapperSize)
@@ -1805,6 +1817,28 @@ QString MudletProfile::pressButton(int id)
         return QStringLiteral("no profile running");
     }
     return mSession->pressButton(id) ? QString() : mSession->errorString();
+}
+
+std::variant<IEngine::KeyPress, QString> MudletProfile::pressKey(int key, int modifiers, const std::optional<QString>& text)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    const auto qtKey = static_cast<Qt::Key>(key);
+    const Qt::KeyboardModifiers qtModifiers = Qt::KeyboardModifiers::fromInt(modifiers);
+    switch (text ? mSession->pressKey(qtKey, qtModifiers, *text) : mSession->pressKey(qtKey, qtModifiers)) {
+    case THeadlessSession::KeyResult::bindingRan:
+        return KeyPress::bindingRan;
+    case THeadlessSession::KeyResult::commandRan:
+        return KeyPress::commandRan;
+    case THeadlessSession::KeyResult::noBinding:
+        return KeyPress::noBinding;
+    case THeadlessSession::KeyResult::keyKept:
+        return KeyPress::keyKept;
+    case THeadlessSession::KeyResult::refused:
+        break;
+    }
+    return mSession->errorString();
 }
 
 QString MudletProfile::activateCommand(int id)

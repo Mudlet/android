@@ -659,6 +659,29 @@ class ProtocolTest {
     }
 
     @Test
+    fun theKeyBindingsAndAKeyPressDecode() {
+        assertEquals(
+            EngineMessage.KeyBindings(listOf(KeyBinding(0x38, KeyModifier.KEYPAD.bit), KeyBinding(0x01000030, 0))),
+            FrameReader.parse(JSONObject("""{"t":"keyBindings","keys":[{"key":56,"modifiers":536870912},{"key":16777264,"modifiers":0}]}""")),
+        )
+        assertEquals("none with no profile", EngineMessage.KeyBindings(emptyList()), FrameReader.parse(JSONObject("""{"t":"keyBindings","keys":[]}""")))
+        fun pressed(json: String) = FrameReader.parse(JSONObject(json)) as EngineMessage.KeyPressed
+        assertEquals(EngineMessage.KeyPressed(KeyPressResult.BINDING_RAN, 4), pressed("""{"t":"keyPressed","result":"bindingRan","re":4}"""))
+        assertEquals(KeyPressResult.COMMAND_RAN, pressed("""{"t":"keyPressed","result":"commandRan"}""").result)
+        assertEquals(KeyPressResult.KEY_KEPT, pressed("""{"t":"keyPressed","result":"keyKept"}""").result)
+        assertEquals("one this client does not know", KeyPressResult.NO_BINDING, pressed("""{"t":"keyPressed","result":"later"}""").result)
+    }
+
+    @Test
+    fun aKeyPressCarriesItsTextOnlyWhereKnown() {
+        assertEquals(
+            mapOf("t" to "pressKey", "key" to 0x38, "modifiers" to KeyModifier.KEYPAD.bit, "text" to "8", "id" to 5L),
+            Requests.pressKey(0x38, KeyModifier.KEYPAD.bit, "8", 5).toMap(),
+        )
+        assertEquals(mapOf("t" to "pressKey", "key" to 0x01000030, "modifiers" to 0, "id" to 6L), Requests.pressKey(0x01000030, 0, null, 6).toMap())
+    }
+
+    @Test
     fun aLuaCheckCarriesTheCodeAsItIs() {
         val request = Requests.checkLua("if x then\n  send(\"hi\")\nend", 9)
         assertEquals("checkLua", request.getString("t"))

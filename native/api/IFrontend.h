@@ -184,6 +184,14 @@ struct BarButton
     QList<BarButton> children;
 };
 
+// A key and its modifiers as Qt's key event gives them, as THeadlessSession::keyBindings() lists them
+struct KeyBinding
+{
+    int key = 0;
+    int modifiers = 0;
+    bool operator==(const KeyBinding&) const = default;
+};
+
 // A bar of buttons a profile's scripts or packages made, as THeadlessSession::ButtonBar describes it
 struct ButtonBar
 {
@@ -513,6 +521,9 @@ public:
     // The commands the profile's packages added, in the order they were added: whole each time, empty with no profile
     // open
     virtual void commands(const QList<AddonCommandInfo>& commands) = 0;
+    // The keys IEngine::pressKey() gives a binding of the profile now, each once: whole each time, empty with no
+    // profile open
+    virtual void keyBindings(const QList<KeyBinding>& bindings) = 0;
     // The map drawn again while the mapper window shows; none once it hides or goes, or the map could not be drawn
     virtual void map(const std::optional<MapFrame>& frame) = 0;
     // The app's own map (IEngine::setAppMapSize()) drawn again, as it was asked for or as it changed; none while

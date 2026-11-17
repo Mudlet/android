@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 30;
+    static constexpr int protocolVersion = 31;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -79,6 +79,7 @@ public:
     void windowCommandLine(const QString& name, const QString& text) override;
     void buttonBars(const QList<ButtonBar>& bars) override;
     void commands(const QList<AddonCommandInfo>& commands) override;
+    void keyBindings(const QList<KeyBinding>& bindings) override;
     void map(const std::optional<MapFrame>& frame) override;
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
@@ -154,6 +155,7 @@ protected:
     QString moveScriptItem(const QJsonObject& message);
     QString deleteScriptItem(const QJsonObject& message);
     void checkLua(const QJsonObject& message);
+    void pressKey(const QJsonObject& message);
     // The item of message's kind, as the answer to request, or an error naming request
     void sendScriptItem(const QString& request, const QJsonObject& message, int item);
     void getImage(const QJsonObject& message);
@@ -183,6 +185,7 @@ protected:
     static QJsonObject commandsMessage(const QList<AddonCommandInfo>& commands);
     // The error console's entries: all it holds for full, else ones to add to those
     static QJsonObject errorConsoleMessage(const QList<ErrorConsoleEntry>& entries, bool full);
+    static QJsonObject keyBindingsMessage(const QList<KeyBinding>& bindings);
     // The fields of a map or appMap message, all but its type; empty for a frame too large to send
     static QJsonObject mapMessage(const MapFrame& frame);
     static QJsonObject mapViewMessage(const MapViewInfo& view);
@@ -217,9 +220,10 @@ protected:
     QHash<QString, int> mTextBoxTyped;
     // None until the engine has sent one
     std::optional<MainArea> mMainArea;
-    // As IFrontend::buttonBars() and commands() last gave them, as sent
+    // As IFrontend::buttonBars(), commands() and keyBindings() last gave them, as sent
     QJsonObject mButtonBars = buttonBarsMessage({});
     QJsonObject mCommands = commandsMessage({});
+    QJsonObject mKeyBindings = keyBindingsMessage({});
     // A map's message as last sent, and the frame it was made for, none where that was no frame: the engine draws
     // the map again for much that leaves the frame as it was, and that frame would make that message again
     struct KeptMap

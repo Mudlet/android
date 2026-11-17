@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **30**.
+The current version is **31**.
 
 ## Transport
 
@@ -82,6 +82,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | What the UI's pointer did at `x`, `y` (numbers, which may have fractions) in the pixels of the window `window`, from its top left; `main` is the main console's area (`THeadlessSession::pointer()`). `type` is `press`, `release`, `doubleClick`, `move`, `enter`, `leave` or `wheel`. `button` is the one that changed, for a press, release or double-click, and `buttons` those held after it, as Qt's flags: 1 left, 2 right, 4 middle. `modifiers` are Qt's: 0x02000000 Shift, 0x04000000 Control, 0x08000000 Alt, 0x10000000 Meta. `wheelY` is the wheel's turn in eighths of a degree, 120 a notch, positive away from the player. Each of those four is 0 when absent. A label's callback runs as the GUI's would, with the event table it gives (`button` `LeftButton` and the rest, `x`, `y`); a press or release no label takes goes on to the console under it. |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
 | `pressButton` | `button` | A click on the button or menu entry of `buttonBars` whose `id` is `button`, a whole number (`THeadlessSession::pressButton()`): it sends the button's command through the aliases and runs its script, as the GUI's button does, and a push-down button goes down, or up if it was down. To pick an entry of a folder's menu, the UI presses the entry, then the folder, as the GUI does. |
+| `pressKey` | `key`, `modifiers`?, `text`?, `id`? | A key pressed on the UI's input line, as on Mudlet's (`THeadlessSession::pressKey()`): `key` and `modifiers` as Qt's key event gives them, whole numbers, `modifiers` 0 when absent, as for `pointer` with 0x20000000 for a key on the keypad, and `text`, what the key typed, empty when it typed nothing, where the UI knows it. A binding of it runs, or the command whose shortcut it is ("Key bindings" below). Answered by `keyPressed`. |
 | `activateCommand` | `command` | A click on the command of `commands` whose `id` is `command`, a whole number (`THeadlessSession::activateAddonCommand()`): a checkable command is ticked or unticked, then the event `sysCommandClicked` is raised with its id. Refused for a disabled command. |
 | `mapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | What the UI's pointer did on the map at `x`, `y`, in the pixels of the last `map` from its top left (`THeadlessSession::mapPointer()`, "The map" below). `type` is `press`, `doubleClick` or `wheel`; `button`, `modifiers` and `wheelY` are as for `pointer`, and 0 when absent. |
 | `setMapViewOnly` | `viewOnly` | `true` to only view the map, `false` to edit it, as the GUI's mapper menu does (`THeadlessSession::setMapViewOnly()`): the event `mapModeChangeEvent` is raised with `viewing` or `editing`. |
@@ -127,7 +128,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `uninstallPackage` | `name`, `id`? | Removes the package `name` as the Package Manager's Remove does (`THeadlessSession::uninstallPackage()`): its items go, `sysUninstall` and `sysUninstallPackage` are raised, and the profile is saved. Answered by `packages`, the packages left. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `luaCheck`, `packages` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `luaCheck`, `packages`, `keyPressed` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -217,6 +218,10 @@ empty `path` or `name`, and `uninstallPackage` as `THeadlessSession::uninstallPa
 not installed and while the profile is being saved. A file that cannot be installed is no refusal: `packageInstalled`
 says `failed` and why, as it does for an install sent before the last one has answered.
 
+`pressKey` is answered by `keyPressed`, or by `error` whose `message` is the request's name, a colon and why: a `key` or
+`modifiers` that is not a whole number from 0, a `text` that is not a string, and in libmudlet no profile loaded
+(`no profile running`) and as `THeadlessSession::pressKey()` refuses.
+
 `checkLua` is answered by `luaCheck`, or by `error` for a `code` that is not a string. Code that does not compile is
 no refusal: `luaCheck` says what is wrong with it.
 
@@ -271,6 +276,8 @@ no refusal: `luaCheck` says what is wrong with it.
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 | `sounds` | `played`, `scriptsMuted`, `gameMuted` | Whether the profile has set a sound, music or video going since it loaded (`played`; libmudlet's `THeadlessSession::soundStarted`, carried in `scripts/mudlet-patches/`), and desktop Mudlet's mutes, which are for every profile: `scriptsMuted` for the sounds scripts and triggers play, `gameMuted` for those the game sends over MSP or GMCP (MCMP), as `getConfig()` gives `muteMediaAPI` and `muteMediaGame`, which `setSettings` changes. Sent as the profile loads, on each change and to each UI that attaches, once the engine has sent one; with none played and nothing muted once the profile closes. |
+| `keyBindings` | `keys`: `key`, `modifiers` | The keys whose press goes to a key binding of the profile now ("Key bindings" below), each once: to each UI that attaches, and on each change. Empty with no profile open. |
+| `keyPressed` | `result`; `re`? | The answer to `pressKey`: `result` is `bindingRan`, `commandRan`, `noBinding` or `keyKept` ("Key bindings" below). |
 
 ### Script windows
 
@@ -415,6 +422,23 @@ draws them.
   `pulse` is true while `setCommandPulse()` makes its toolbar button flash; its colours and interval are not sent.
 
 The engine keeps both lists and sends each whole, only when it differs from what it last sent.
+
+### Key bindings
+
+`keyBindings` is libmudlet's `THeadlessSession::keyBindings()`: the keys whose press on Mudlet's input line goes to a
+key binding of the profile now, each as its `key` and `modifiers`, once, so the UI can tell as a key goes down whether
+to send it with `pressKey` or to type it. A key is listed while a binding of it is switched on, in folders that are
+switched on, and Mudlet's input line, or while `hiddenInput` holds its password box, does not keep it for itself:
+Return, Up, Tab, a printable key while the game hides input and the rest that `docs/headless.md` in Mudlet lists. So
+the list changes when a script, a package, `addScriptItem`, `editScriptItem`, `enableScriptItem` or
+`deleteScriptItem` changes a binding, and when `hiddenInput` turns on or off. The engine sends it whole, only when it differs from what it last
+sent, and empty with no profile open.
+
+`keyPressed`'s `result` says what came of a `pressKey`: `bindingRan`, a binding took it; `commandRan`, it is the
+shortcut of one of `commands`, which ran; `noBinding`, no binding took it, and `keyKept`, Mudlet's line keeps it for
+itself, for both of which the UI handles the key as its input line does. `keyBindings` judges a key by its
+code, as `pressKey` does a key sent with no `text`, so a listed key can still get `keyKept` while `hiddenInput` holds
+if its `text` is printable, and any listed key can get `noBinding` if the bindings changed after the list was sent.
 
 ### The map
 
@@ -719,7 +743,7 @@ a UI says `hello`, the engine sends, in this order:
 2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput`, `history` and
    `errorConsole` with `full` true, and `linksChanged` with empty `ids` if a change of a link went to no UI since the
    last attach, then `mainArea` if the engine has sent one, `windows` with `full` true, a `label` for each label, a
-   `textBox` for each text box, `map` while the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, and a `windowText` of each
+   `textBox` for each text box, `map` while the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, `keyBindings`, and a `windowText` of each
    console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
@@ -759,7 +783,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 30, which added the game's offer of a secure port (`secureOffer`, `answerSecureOffer`)
+As implemented in version 31, which added the keys the profile's key bindings take and pressing one (`keyBindings`,
+`pressKey`, `keyPressed`); version 30 added the game's offer of a secure port (`secureOffer`, `answerSecureOffer`)
 and the game's certificate a secure connection was refused for (`certificateRefused`); version 29 added the error
 console (`errorConsole`, `clearErrorConsole`); version 28 added the profile's packages (`packages`, `installPackage`,
 `uninstallPackage`, `packagesChanged`, `packageInstalled`); version 27 added timers, keys and buttons to the script

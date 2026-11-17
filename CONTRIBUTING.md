@@ -13,7 +13,7 @@ What the app is and how it is built is in [`README.md`](README.md) and [`docs/ar
 | `suggest/` | `:suggest`, plain Kotlin/JVM with no dependencies: the input line's command suggestions and the session that loads, feeds and saves them, with the JVM tests |
 | `native/` | C++: the engine host (`enginehost/`), the engine interface (`api/`), the host tests (`tests/`) |
 | `scripts/` | Builds (APK, release and its source bundle, OpenSSL, libmudlet and its dependencies), `check-apk.sh`, `check-apk-size.sh` with the size budget `apk-size-budget.txt`, `check-licences.py`, `lint.sh` and the strings check it runs, `check-strings.py`, `launcher-icons.py`, and `sync-mudlet-games.py`, which copies Mudlet's games into the profile list |
-| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`plan.md`](docs/plan.md) (what the app still needs, lane by lane), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
+| `docs/` | [`architecture.md`](docs/architecture.md), [`protocol.md`](docs/protocol.md), [`ptb.md`](docs/ptb.md), [`device-pass.md`](docs/device-pass.md) (trying the app on a real phone, for testers), [`translations.md`](docs/translations.md), [`launcher-icon.md`](docs/launcher-icon.md), [`store-listing.md`](docs/store-listing.md), [`privacy-policy.md`](docs/privacy-policy.md), [`licences.md`](docs/licences.md), [`decisions/`](docs/decisions), [`foundation-checklist.md`](docs/foundation-checklist.md), [`roadmap.md`](docs/roadmap.md), [`plan.md`](docs/plan.md) (what the app still needs, lane by lane), [`phase-f.md`](docs/phase-f.md), [`multi-profile.md`](docs/multi-profile.md), [`divergences.md`](docs/divergences.md) (where the app differs from Mudlet desktop on purpose), [`ai-instructions.md`](docs/ai-instructions.md) (coding agents' instructions, which `CLAUDE.md` and `AGENTS.md` link to) |
 | `.agents/skills/` | Longer procedures for coding agents (running on the emulator, bumping Qt); `.claude/skills` links to it |
 | `crowdin.yml` | What Crowdin translates and where the translations go ([`docs/translations.md`](docs/translations.md)) |
 | `.github/` | The workflows (`ci.yml`, which calls `checks.yml` and `libmudlet.yml` as the changes need, and `ptb.yml`), the actions they share, Dependabot |
@@ -128,7 +128,8 @@ the map behind its text, the settings, the map in front and a trigger's page, li
 later) into `<out>/screenshots/`, which CI's emulator jobs upload with their results: before and after shots for a pull
 request that changes how the app looks.
 
-The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist).
+The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist); its plain-words version
+for testers, by kind of phone, is [`docs/device-pass.md`](docs/device-pass.md).
 
 ### APK size budget
 

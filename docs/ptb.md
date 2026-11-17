@@ -226,6 +226,7 @@ for you to publish them.
   it. It cannot update an install from Play, or be updated by one: uninstall first.
 
 Either way it installs beside Mudlet, as "Mudlet PTB", with its own profiles. Report problems as issues here.
+[`device-pass.md`](device-pass.md) is what to try on a real phone, and its report form.
 
 ## Rolling back
 

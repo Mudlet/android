@@ -1439,6 +1439,12 @@ trusted.
 Item 13 of the on-device checklist covers this.
 
 ## On-device checklist
+
+For developers with `adb` and the debug APK. [`device-pass.md`](device-pass.md) is the plain-words version for
+testers, and says which parts each kind of phone needs. A `lua ...` command typed on the game screen needs the `lua`
+alias from its Part 2 first: the engine installs none of desktop Mudlet's default packages. The Self-test takes
+`lua ...` itself.
+
 1. Install the APK with libmudlet (CI's `mudlet-libmudlet-debug-apk`) with `adb install -r app-debug.apk`. Open it
    and allow notifications. It opens on "Profiles"; tap "Self-test" for the checks below (debug builds only: a release
    build has no self-test).
@@ -1798,7 +1804,7 @@ Item 13 of the on-device checklist covers this.
       state, its switch is read by the item's name, a pattern's type button reads "Type of pattern 1: Substring", and the
       move and remove buttons say which pattern.
 
-25. How the app looks, on Android 12 or later, in light and in dark mode.
+32. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives
       Mudlet's own (sandstone) at once, and on again the wallpaper's. The game's text keeps its colours either way.
     - Back from any screen, with the predictive gesture, shows the screen it goes back to as the finger moves; let go
@@ -1817,9 +1823,9 @@ Item 13 of the on-device checklist covers this.
     - With TalkBack on: the settings' section titles read as headings, and the editor beside the list has
       "Close <name>" at its top.
 
-28. Several profiles, with the libmudlet debug APK, until the app can open one beside another: connect one game, then
-    open two more beside it, each with `adb shell am broadcast -n org.mudlet.mudlet/org.mudlet.android.debug.SmokeTestReceiver
-    --es cmd openAlongside --es profile <name> --es host <host> --ei port <port>`.
+33. Several profiles, with the libmudlet debug APK: connect one game, then open two more beside it with the game sheet's
+    "Open another game" (or each with `adb shell am broadcast -n org.mudlet.mudlet/org.mudlet.android.debug.SmokeTestReceiver
+    --es cmd openAlongside --es profile <name> --es host <host> --ei port <port>`).
     - After each loads, note `adb shell dumpsys meminfo org.mudlet.mudlet:engine`'s TOTAL PSS, against
       "Memory per profile"; a real game's scripts and map weigh more than the smoke test's.
     - `lua raiseGlobalEvent("x")` in one reaches a handler for `x` in each of the others.

@@ -263,6 +263,26 @@ struct MapDownload
     bool operator==(const MapDownload&) const = default;
 };
 
+// A map file IEngine::loadMapFile() or saveMapFile() loads or saves, which runs within that call, and how it ended
+struct MapFile
+{
+    enum class Operation { load, save };
+    enum class State { running, done, failed, cancelled };
+    Operation operation = Operation::load;
+    State state = State::running;
+    // While running, what Mudlet's progress dialog says and how many rooms of maximum it has gone through: empty and
+    // 0 for a binary map, which shows none, and until a JSON or XML map's progress starts
+    QString label;
+    int value = 0;
+    int maximum = 0;
+    // While running, once a JSON map's progress has started: an XML or binary map cannot be stopped
+    bool cancelable = false;
+    // Why it failed, as Mudlet says; the main console says more
+    QString error;
+
+    bool operator==(const MapFile&) const = default;
+};
+
 // Whether the profile has set a sound, music or video going since it loaded, and the main window's mutes, which are
 // every profile's: the sounds scripts play (Mudlet's muteMediaAPI) and those the game sends (muteMediaGame)
 struct Sounds
@@ -532,6 +552,8 @@ public:
     virtual void appMap(const std::optional<MapFrame>& frame) = 0;
     // The map the game offers and the download of it, on each change; as none offered once a profile closes
     virtual void mapDownload(const MapDownload& download) = 0;
+    // A map file being loaded or saved, from inside the call that does it, so each is written out before it returns
+    virtual void mapFile(const MapFile& file) = 0;
     // On each change; as none played and nothing muted once a profile closes
     virtual void sounds(const Sounds& sounds) = 0;
     // A package was installed or removed, by the UI, a script or the profile's default packages

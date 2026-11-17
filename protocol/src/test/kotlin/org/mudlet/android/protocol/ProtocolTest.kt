@@ -1056,6 +1056,32 @@ class ProtocolTest {
     }
 
     @Test
+    fun aMapFileDecodesAndAnUnknownStateEndsIt() {
+        val going = FrameReader.parse(
+            JSONObject("""{"t":"mapFile","op":"save","state":"running","label":"Exporting JSON map file from Test","value":3,"maximum":7,"cancelable":true,"error":""}"""),
+        ) as EngineMessage.MapFile
+        assertEquals(
+            EngineMessage.MapFile(MapFileOperation.SAVE, MapFileState.RUNNING, "Exporting JSON map file from Test", 3, 7, true, ""),
+            going,
+        )
+        val failed = FrameReader.parse(
+            JSONObject("""{"t":"mapFile","op":"load","state":"failed","error":"Could not load map from map.dat."}"""),
+        ) as EngineMessage.MapFile
+        assertEquals(EngineMessage.MapFile(MapFileOperation.LOAD, MapFileState.FAILED, "", 0, 0, false, "Could not load map from map.dat."), failed)
+        val later = FrameReader.parse(JSONObject("""{"t":"mapFile","op":"merge","state":"verifying"}""")) as EngineMessage.MapFile
+        assertEquals(MapFileOperation.LOAD to MapFileState.FAILED, later.operation to later.state)
+        assertEquals(listOf("running", "done", "failed", "cancelled"), MapFileState.entries.map { it.wire })
+        assertEquals(listOf("load", "save"), MapFileOperation.entries.map { it.wire })
+    }
+
+    @Test
+    fun theMapFileRequestsCarryThePathAlone() {
+        assertEquals(mapOf("t" to "loadMapFile", "path" to "/data/map.json"), Requests.loadMapFile("/data/map.json").toMap())
+        assertEquals(mapOf("t" to "saveMapFile", "path" to "/data/map.dat"), Requests.saveMapFile("/data/map.dat").toMap())
+        assertEquals(mapOf("t" to "cancelMapFile"), Requests.cancelMapFile().toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

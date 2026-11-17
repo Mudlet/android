@@ -706,7 +706,24 @@ void MudletProfile::connectSession()
     connect(session, &THeadlessSession::mapProgressChanged, this, [this](const QString&, const QString& label, int value, int maximum) {
         takeMapDownloadProgress(label, value, maximum, label != mMapDownload.label || maximum != mMapDownload.maximum);
     });
+    // A map file runs within its call, whose progress is relayed at its steps; the end, relayed after it returns, is
+    // the call's own
+    connect(session, &THeadlessSession::mapProgressStarted, this, [this](const QString&, const QString&, const QString& label, int maximum) {
+        // Mudlet's JSON map alone can be stopped, which a start says only to the session
+        if (mMapFile) {
+            takeMapFileProgress(label, 0, maximum, mMapFile->json);
+        }
+    });
+    connect(session, &THeadlessSession::mapProgressChanged, this, [this](const QString&, const QString& label, int value, int maximum) {
+        if (mMapFile) {
+            takeMapFileProgress(label, value, maximum, mMapFile->file.cancelable);
+        }
+    });
     connect(session, &THeadlessSession::mapProgressCancelDisabled, this, [this] {
+        if (mMapFile) {
+            const MapFile& file = mMapFile->file;
+            takeMapFileProgress(file.label, file.value, file.maximum, false);
+        }
         if (mMapDownloadProgressStarted && std::exchange(mMapDownload.cancelable, false)) {
             pushMapDownloadProgress(true);
         }
@@ -2196,6 +2213,58 @@ QString MudletProfile::cancelMapDownload()
     }
     mMapDownloadCancelled = true;
     return {};
+}
+
+QString MudletProfile::loadMapFile(const QString& path, const std::function<bool()>& cancelAsked)
+{
+    return runMapFile(MapFile::Operation::load, path, cancelAsked);
+}
+
+QString MudletProfile::saveMapFile(const QString& path, const std::function<bool()>& cancelAsked)
+{
+    return runMapFile(MapFile::Operation::save, path, cancelAsked);
+}
+
+QString MudletProfile::runMapFile(MapFile::Operation operation, const QString& path, const std::function<bool()>& cancelAsked)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (mMapDownload.state == MapDownload::State::downloading) {
+        return QStringLiteral("the map is downloading");
+    }
+    if (!QFileInfo(path).isAbsolute()) {
+        return QStringLiteral("the map file must be given by its whole path");
+    }
+    mMapFile = RunningMapFile{MapFile{operation}, cancelAsked, false, path.endsWith(QLatin1String(".json"), Qt::CaseInsensitive)};
+    mFrontend->mapFile(mMapFile->file);
+    const bool done = operation == MapFile::Operation::load ? mSession->loadMapFile(path) : mSession->saveMapFile(path);
+    MapFile ended{operation, done ? MapFile::State::done : mMapFile->cancelled ? MapFile::State::cancelled : MapFile::State::failed};
+    if (ended.state == MapFile::State::failed) {
+        ended.error = mSession->errorString();
+        qWarning("MudletEngine: the map file was not %s: %s", operation == MapFile::Operation::load ? "loaded" : "saved", qPrintable(ended.error));
+    }
+    mMapFile.reset();
+    mFrontend->mapFile(ended);
+    return {};
+}
+
+void MudletProfile::takeMapFileProgress(const QString& label, int value, int maximum, bool cancelable)
+{
+    MapFile& file = mMapFile->file;
+    file.label = label;
+    file.value = value;
+    file.maximum = maximum;
+    file.cancelable = cancelable && !mMapFile->cancelled;
+    if (file.cancelable && mMapFile->cancelAsked && mMapFile->cancelAsked()) {
+        if (mSession->cancelMapOperation()) {
+            mMapFile->cancelled = true;
+            file.cancelable = false;
+        } else {
+            qWarning("MudletEngine: the map file could not be stopped: %s", qPrintable(mSession->errorString()));
+        }
+    }
+    mFrontend->mapFile(file);
 }
 
 std::variant<QVariantMap, QString> MudletProfile::settings(const QStringList& keys)

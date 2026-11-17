@@ -1,0 +1,180 @@
+Let a frontend with no window load and save the map as a file
+
+The desktop's Map settings load another map file (Mudlet's own, JSON or XML) and save the map as Mudlet's own format
+or JSON. A frontend with no window has no such dialog, and Lua's loadMap() and saveMap() say nothing of why a load
+failed nor let the player stop it.
+
+- THeadlessSession::loadMapFile() loads a file as dlgProfilePreferences::loadMap() does: a .xml file through
+  Host::importMapFile(), a .json one through TMap::importJsonMapFile(), with its reason posted to the console, and
+  anything else through Host::loadMapFile(), then TMap::audit() but for JSON.
+- THeadlessSession::saveMapFile() saves as slot_saveMap() does: a .json file through TMap::writeJsonMapFile(), with its
+  reason posted to the console, and anything else through Host::saveMapFile() at the current format.
+- Both take only a whole path, refuse while a map download or import or another export runs, and say which file failed
+  in errorString(). Their progress is the map progress signals the session already relays, which
+  cancelMapOperation() can stop for a JSON file.
+- TMap::importRunning() tells the session a download or XML import is under way.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_files: saved as .dat and .json and loaded back,
+an XML map loaded, a file that is no map failing and keeping the map, a large JSON load cancelled, and the refusals).
+The desktop is unchanged: nothing calls them there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 4f6c3cf..89ac2d0 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -391,6 +391,13 @@ steps, where only the session's own signals are delivered, so its start and chan
+ the `start()` that loads a JSON map, still runs, but its end arrives only once that has returned. A map download, which only an app can begin,
+ through `host()`, carries on after its script returns.
+ 
++`loadMapFile()` and `saveMapFile()` are the Mapper tab's Load and Save buttons of the GUI's preferences, for an
++app that has no such tab: the file's ending picks Mudlet's XML, JSON or binary map, as the GUI's file dialog does,
++a binary map is saved in the format the profile saves its maps in, and the main console says how it went, as in
++the GUI. They run within their call, as a script's `loadMap()` does, so a JSON or XML map's progress arrives as
++for a script's import, and `cancelMapOperation()` from a handler of it aborts a JSON one, leaving the profile's map
++as it was. They take only a whole path, and refuse while a map download, import or export runs.
++
+ A map operation or package download still open when its profile closes, or when `shutdown()` or a later
+ `start()` lets the profile go, gets its end there, so every start an app is sent is followed by one end.
+ A session that is deleted sends none.
+diff --git a/src/TMap.h b/src/TMap.h
+index 56127bd..7cb5c1a 100644
+--- a/src/TMap.h
++++ b/src/TMap.h
+@@ -255,6 +255,8 @@ public:
+     // and destroying this map's Host from there would free the operation's own
+     // "this" (#9520). Whoever would do that has to wait for this to go false.
+     bool mapOperationInProgress() const { return mMapOperationDepth > 0; }
++    // A map download or XML import is under way, which downloadMap() and importMap() refuse a second of
++    bool importRunning() const { return mImportRunning; }
+     // Ask an operation that is in progress to stop at its next opportunity, so
+     // that a caller waiting on the above does not wait for a whole map. Only the
+     // JSON import and export poll this; an XML import or a download runs to its
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 7bfbf5a..9f20bec 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -1782,6 +1782,88 @@ bool THeadlessSession::downloadOfferedMap()
+     return true;
+ }
+ 
++// What loadMapFile() and saveMapFile() refuse before touching the map, and the file's name, for their errors
++std::optional<QString> THeadlessSession::mapFileUsable(const QString& fileName)
++{
++    if (!usable()) {
++        return std::nullopt;
++    }
++    if (!QFileInfo(fileName).isAbsolute()) {
++        //: Error from a frontend with no window that was asked to load or save the map with a file that is not given by its whole path
++        mErrorString = tr("The map file must be given by its whole path.");
++        return std::nullopt;
++    }
++    if (mpHost->mpMap->importRunning() || mpHost->mpMap->hasActiveTransferProgress()) {
++        //: Error from a frontend with no window that was asked to load or save the map while a map download, import or export runs
++        mErrorString = tr("A map download, import or export is running; wait for it to end.");
++        return std::nullopt;
++    }
++    return QFileInfo(fileName).fileName();
++}
++
++bool THeadlessSession::loadMapFile(const QString& fileName)
++{
++    const std::optional<QString> name = mapFileUsable(fileName);
++    if (!name) {
++        return false;
++    }
++    bool loaded = false;
++    const bool json = fileName.endsWith(qsl(".json"), Qt::CaseInsensitive);
++    if (fileName.endsWith(qsl(".xml"), Qt::CaseInsensitive)) {
++        loaded = mpHost->importMapFile(fileName);
++    } else if (json) {
++        auto [jsonLoaded, reason] = mpHost->mpMap->importJsonMapFile(fileName);
++        loaded = jsonLoaded;
++        if (!loaded) {
++            mpHost->postMessage(tr("[ ERROR ] - Unable to load JSON map file: %1\n"
++                                   "reason: %2.")
++                                        .arg(fileName, reason));
++        } else {
++            // As loadJsonMap() does, so the map is drawn again as for the other two
++            mpHost->mpMap->announceMapLoaded(true);
++        }
++    } else {
++        loaded = mpHost->loadMapFile(fileName);
++    }
++    if (!loaded) {
++        //: Error from a frontend with no window whose map file did not load; the main console says why. %1 is the file's name.
++        mErrorString = tr("Could not load map from %1.").arg(*name);
++        return false;
++    }
++    // TMap::audit() is what says "[  OK  ]" in the console for the map's load
++    if (!json) {
++        mpHost->mpMap->audit();
++    }
++    return true;
++}
++
++bool THeadlessSession::saveMapFile(const QString& fileName)
++{
++    const std::optional<QString> name = mapFileUsable(fileName);
++    if (!name) {
++        return false;
++    }
++    bool saved = false;
++    if (!fileName.endsWith(qsl(".json"), Qt::CaseInsensitive)) {
++        saved = mpHost->saveMapFile(fileName, 0);
++    } else {
++        auto [jsonSaved, reason] = mpHost->mpMap->writeJsonMapFile(fileName);
++        saved = jsonSaved;
++        if (!saved) {
++            //: %1 is the file the map was being exported to, %2 why it could not be
++            mpHost->postMessage(tr("[ ERROR ] - Unable to save JSON map file: %1\n"
++                                   "reason: %2.")
++                                        .arg(fileName, reason));
++        }
++    }
++    if (!saved) {
++        //: Error from a frontend with no window whose map could not be saved to a file. %1 is the file's name.
++        mErrorString = tr("Could not save map to %1.").arg(*name);
++        return false;
++    }
++    return true;
++}
++
+ namespace {
+ 
+ // The combinations TCommandLine::event() acts on without offering them to a binding, or for a keypad key, once
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 09fb649..6bd215f 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -402,6 +402,18 @@ public:
+     // and mapDownloadFinished says how it ended. False, with errorString() saying why, with no map offered, while a
+     // map download, import or export runs, and where submit() is refused.
+     bool downloadOfferedMap();
++    // Loads a map file in place of the profile's map, as the Mapper tab of the GUI's preferences does: a path that ends
++    // in .xml, in any case, as Mudlet's XML map, .json as its JSON map, and anything else as its binary map, each
++    // checked, said in the main console and shown as there. A JSON or XML map's progress is shown with
++    // mapProgressStarted, mapProgressChanged and mapProgressFinished while this runs, and a JSON one's is aborted by
++    // cancelMapOperation() from a handler of them, leaving the profile's map as it was, as a file that is not such a map
++    // does. False, with errorString() saying why, for a path that is not absolute, a map that did not load, an aborted
++    // JSON import, while a map download, import or export runs, and where submit() is refused.
++    bool loadMapFile(const QString& fileName);
++    // Saves the profile's map to a file, as that tab does: a path that ends in .json, in any case, as Mudlet's JSON map,
++    // with its progress as above, and anything else as its binary map in the format the profile saves its maps in.
++    // False, with errorString() saying why, as for loadMapFile(), and for a file that could not be written.
++    bool saveMapFile(const QString& fileName);
+     // A key pressed as on the GUI's input line, which offers it to the profile's key bindings where that line
+     // would: the first that matches runs, or each one when the profile runs them all. The key and modifiers are
+     // those of Qt's key event, which a binding must match exactly, so a key on the keypad carries
+@@ -1593,6 +1605,9 @@ private:
+     // duringLoad takes a call while a profile loads, which only one that cannot reach the pool may do
+     bool refused(bool duringLoad = false);
+     bool usable(bool duringLoad = false);
++    // usable() for loadMapFile() and saveMapFile(), which also refuse a path that is not absolute and a map download,
++    // import or export under way: the file's name, for their errors, or none, with mErrorString saying why
++    std::optional<QString> mapFileUsable(const QString& fileName);
+     // Lua's own message, out of what the GUI's error console shows of it
+     static QString luaErrorOf(const QString& consoleText);
+     static QList<TextRun> textRuns(const QString& text, const TLineFormat& format, const QColor& consoleForeground, const QColor& consoleBackground);

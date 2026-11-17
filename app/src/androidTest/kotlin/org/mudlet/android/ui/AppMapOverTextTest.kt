@@ -5,7 +5,9 @@ import android.graphics.ColorSpace
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -54,16 +56,32 @@ class AppMapOverTextTest {
         val sixteenBits = checkNotNull(Bitmap.createBitmap(frame(), WIDTH, HEIGHT, Bitmap.Config.ARGB_8888).copy(Bitmap.Config.RGB_565, false)) { "a copy at 16 bits a pixel" }
         val displayP3 = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888, true, ColorSpace.get(ColorSpace.Named.DISPLAY_P3))
         displayP3.setPixels(frame(), 0, WIDTH, 0, 0, WIDTH, HEIGHT)
-        for ((what, source) in listOf("16 bits a pixel" to sixteenBits, "Display P3" to displayP3)) {
+        val notPremultiplied = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
+        notPremultiplied.isPremultiplied = false
+        notPremultiplied.setPixels(frame(), 0, WIDTH, 0, 0, WIDTH, HEIGHT)
+        for ((what, source) in listOf("16 bits a pixel" to sixteenBits, "Display P3" to displayP3, "not premultiplied" to notPremultiplied)) {
             val overText = checkNotNull(AppMapClient.overText(source)) { what }
-            assertEquals(what, TextBehindMap.ground(pixels(source), WIDTH, HEIGHT), overText.ground)
+            val expected = pixels(source)
+            assertEquals(what, TextBehindMap.ground(expected, WIDTH, HEIGHT), overText.ground)
             val background = checkNotNull(overText.ground.background) { "$what: a background" }
-            assertCutOut("$what: the colours", pixels(source), pixels(overText.frame.asAndroidBitmap()), OPAQUE or background)
+            assertTrue("$what: the background is in the frame", OPAQUE or background in expected)
+            TextBehindMap.cutOut(expected, background)
+            val cut = Bitmap.createBitmap(expected, WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
+            assertTrue("$what: the frame of its colours with the background's cut out", cut.sameAs(overText.frame.asAndroidBitmap()))
         }
     }
 
-    // [cut] is [source] with each pixel that is [background] transparent. A copy at 16 bits a pixel may be dithered, so
-    // not every pixel of the background has the one colour
+    @Test
+    fun aFrameIsCutOutInTheArrayKeptFromTheLast() {
+        val source = Bitmap.createBitmap(frame(), WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
+        val before = AppMapClient.cutOutPixels.use(WIDTH * HEIGHT) { it.apply { fill(0) } }
+        val cut = checkNotNull(AppMapClient.overText(source)) { "the frame is cut out" }.frame.asAndroidBitmap()
+        val after = AppMapClient.cutOutPixels.use(WIDTH * HEIGHT) { it }
+        assertSame("no array is made for a frame of the last one's size", before, after)
+        assertArrayEquals("the frame was cut out in it", kept(cut), after)
+    }
+
+    // [cut] is [source] with each pixel that is [background] transparent
     private fun assertCutOut(what: String, source: IntArray, cut: IntArray, background: Int) {
         assertTrue("$what: the background ${hex(background)} is in the frame", background in source)
         for (i in source.indices) {

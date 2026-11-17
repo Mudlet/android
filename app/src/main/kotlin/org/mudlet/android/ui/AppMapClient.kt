@@ -449,7 +449,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             return Decoded(bitmap?.asImageBitmap(), tones, bitmap?.takeIf { textBehind }?.let(::overText))
         }
 
-        internal fun overText(bitmap: Bitmap): OverText? = cutOutPixels.use(bitmap.width * bitmap.height) { cutOutIn(it, bitmap) }
+        internal fun overText(bitmap: Bitmap): OverText? = cutOutIn(IntArray(bitmap.width * bitmap.height), bitmap)
 
         private fun cutOutIn(pixels: IntArray, bitmap: Bitmap): OverText? {
             val width = bitmap.width
@@ -457,12 +457,12 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             // A decoded frame's pixels are copied as the bitmap keeps them, and the cut frame's copied back, which
             // getPixels and createBitmap(pixels) would convert one by one. A bitmap that keeps anything but sRGB
             // colours, premultiplied, a pixel to an Int, is converted
-            val own = bitmap.config == Bitmap.Config.ARGB_8888 && bitmap.isPremultiplied && bitmap.colorSpace?.isSrgb == true
+            val own = bitmap.config == Bitmap.Config.ARGB_8888
             val layout = if (own) TextBehindMap.Layout.ABGR else TextBehindMap.Layout.ARGB
             if (own) bitmap.copyPixelsToBuffer(IntBuffer.wrap(pixels)) else bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
             val ground = TextBehindMap.ground(pixels, width, height, layout) ?: return null
             val background = ground.background ?: return OverText(ground, bitmap.asImageBitmap())
-            TextBehindMap.cutOut(pixels, background, layout)
+            TextBehindMap.cutOut(pixels, background)
             val frame = if (own) {
                 createBitmap(width, height).apply { copyPixelsFromBuffer(IntBuffer.wrap(pixels)) }
             } else {

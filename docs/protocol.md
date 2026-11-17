@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **29**.
+The current version is **30**.
 
 ## Transport
 
@@ -758,8 +758,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 29, which added the error console (`errorConsole`, `clearErrorConsole`); version 28 added
-the profile's packages (`packages`, `installPackage`, `uninstallPackage`,
+As implemented in version 30, which added the game's offer of a secure port (`secureOffer`, `answerSecureOffer`);
+version 29 added the error console (`errorConsole`, `clearErrorConsole`); version 28 added the profile's packages
+(`packages`, `installPackage`, `uninstallPackage`,
 `packagesChanged`, `packageInstalled`); version 27 added timers, keys and buttons to the script items (`timer`, `key`
 and `button` for `kind`) and `summary` to `scriptItems`; version 26 added whether an open profile was given a password
 (`passwordGiven` in `openProfiles`); version 25 added checking that Lua compiles (`checkLua`, `luaCheck`);

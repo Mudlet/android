@@ -82,8 +82,11 @@ fun DefaultGameItem(game: DefaultGame, index: Int, count: Int, enabled: Boolean,
             // TalkBack reads the whole summary, which the row may cut short
             Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = description }) {
                 Text(game.name, style = MaterialTheme.typography.titleMedium)
+                // Cut short on purpose, and the game's own untranslated English: kept out of the semantics, even the
+                // unmerged tree, so PseudoLocaleTest checks only the app's text; the row's description reads it whole
                 Text(
                     summary,
+                    Modifier.clearAndSetSemantics {},
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,

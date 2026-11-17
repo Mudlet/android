@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -82,13 +84,13 @@ private val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 /**
  * The page of the item [key]: its name, what its kind has (a trigger's patterns and options, an alias's pattern and
- * command, a script's event handlers) and its Lua. What the player changes is a draft, kept by [scripts] until Apply
+ * command, a script's event handlers) and its Lua, which [onEditCode] opens in the Lua editor. What the player changes is a draft, kept by [scripts] until Apply
  * saves it as the desktop editor's save does: [onGame] goes to the game and keeps it, to come back to, and Back asks
  * whether to discard it. Why the item does not run shows at the top. Delete hides it with Undo offered by the library,
  * and goes [onBack].
  */
 @Composable
-internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, onBack: () -> Unit, onGame: () -> Unit) {
+internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, onBack: () -> Unit, onGame: () -> Unit, onEditCode: () -> Unit) {
     // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
     LaunchedEffect(key, scripts.attaches) { scripts.open(key) }
     val saved = scripts.saved[key]
@@ -121,7 +123,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
             ) {
                 val refusal = scripts.unopened[key]
                 when {
-                    item != null -> Fields(item, saved?.node?.error.orEmpty(), scripts::edit)
+                    item != null -> Fields(item, saved?.node?.error.orEmpty(), scripts::edit, onEditCode)
                     refusal != null -> Text(stringResource(R.string.scripts_refused_open, refusal), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.error)
                     else -> Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -159,7 +161,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
 }
 
 @Composable
-private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (ScriptItem) -> Unit) {
+private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (ScriptItem) -> Unit, onEditCode: () -> Unit) {
     if (error.isNotEmpty()) {
         Surface(fieldWidth.padding(top = 8.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
             Text(stringResource(R.string.scripts_not_running, error), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
@@ -178,14 +180,24 @@ private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (Scrip
         is ScriptItemDetails.Script -> EventHandlers(details) { onChange(item.copy(details = it)) }
     }
     SectionHeader(stringResource(R.string.scripts_code), fieldWidth)
-    OutlinedTextField(
-        item.script,
-        { onChange(item.copy(script = it)) },
-        fieldWidth.padding(bottom = 16.dp),
-        label = { Text(stringResource(R.string.scripts_lua)) },
-        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-        minLines = 6,
-    )
+    ListSegment(0, 1, fieldWidth.padding(bottom = 16.dp)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClickLabel = stringResource(R.string.scripts_lua_edit), onClick = onEditCode)
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.scripts_lua), style = MaterialTheme.typography.bodyLarge)
+                val lines = if (item.script.isBlank()) 0 else lineCount(item.script)
+                Text(
+                    if (lines == 0) stringResource(R.string.scripts_lua_empty) else pluralStringResource(R.plurals.scripts_lua_lines, lines, lines),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @Composable

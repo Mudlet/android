@@ -184,4 +184,13 @@ public:
     virtual QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) = 0;
     virtual QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) = 0;
     virtual QString deleteScriptItem(ScriptItemKind kind, int item) = 0;
+    // What is wrong with Lua that does not compile (THeadlessSession::checkLua()): the line Lua names, from 1, or 0
+    // where it names none, and its message
+    struct LuaProblem
+    {
+        int line = 0;
+        QString message;
+    };
+    // Nothing for code that compiles. The code is not run, and no profile need be open
+    virtual std::optional<LuaProblem> checkLua(const QString& code) const = 0;
 };

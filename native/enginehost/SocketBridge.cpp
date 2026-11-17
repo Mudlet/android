@@ -612,6 +612,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, moveScriptItem(message));
     } else if (type == QLatin1String("deleteScriptItem")) {
         refuse(type, deleteScriptItem(message));
+    } else if (type == QLatin1String("checkLua")) {
+        checkLua(message);
     } else if (type == QLatin1String("getSettings")) {
         getSettings(message);
     } else if (type == QLatin1String("setSettings")) {
@@ -1224,6 +1226,22 @@ QString SocketBridge::moveScriptItem(const QJsonObject& message)
         return QStringLiteral("position must be a whole number from 0");
     }
     return mEngine->moveScriptItem(std::get<0>(target).first, std::get<0>(target).second, *parent, *position);
+}
+
+void SocketBridge::checkLua(const QJsonObject& message)
+{
+    const QJsonValue code = message.value(QLatin1String("code"));
+    if (!code.isString()) {
+        sendError(QStringLiteral("checkLua: code must be a string"));
+        return;
+    }
+    const std::optional<IEngine::LuaProblem> problem = mEngine->checkLua(code.toString());
+    QJsonObject reply{{QStringLiteral("t"), QStringLiteral("luaCheck")}, {QStringLiteral("ok"), !problem}};
+    if (problem) {
+        reply.insert(QStringLiteral("line"), problem->line);
+        reply.insert(QStringLiteral("message"), problem->message);
+    }
+    sendReply(reply);
 }
 
 QString SocketBridge::deleteScriptItem(const QJsonObject& message)

@@ -13,11 +13,13 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -35,14 +37,15 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.util.Locale
 import kotlin.math.abs
 
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, the settings, the game screen, with the connection chip's states and the password field, the script library
- * and a trigger's page, no text is
+ * editor, the settings, the game screen, with the connection chip's states and the password field, the script library,
+ * a trigger's page and the Lua editor, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
  */
@@ -147,6 +150,14 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.scripts_pattern, 1)))
         assertTextFits("a trigger's page")
         assertAtStart("the patterns' heading", hasText(string(R.string.scripts_patterns)))
+
+        val lua = hasText(string(R.string.scripts_lua)) and hasClickAction()
+        compose.onNode(lua).performScrollTo()
+        activate(lua)
+        waitFor(hasTestTag(LUA_EDITOR_TAG))
+        assertTextFits("the Lua editor")
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.scripts_pattern, 1)))
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.scripts_off)))
         activate(hasContentDescription(string(R.string.navigate_back)))

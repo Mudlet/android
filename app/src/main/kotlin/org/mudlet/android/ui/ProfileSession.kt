@@ -547,6 +547,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ScriptItemFields -> post { scripts.onItem(message) }
 
+                is EngineMessage.LuaCheck -> post { scripts.onLuaCheck(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }

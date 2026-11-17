@@ -8,7 +8,8 @@
 #     in strings.xml (docs/translations.md)
 #   - conflict-markers: no line left from a merge conflict (<<<<<<<, =======, >>>>>>>) in a text file
 #   - vendored: each scripts/mudlet-patches/*.patch has an "Upstream:" line naming its Mudlet/Mudlet pull request
-#   - games: app/src/main/assets/games is what scripts/sync-mudlet-games.py makes from Mudlet at its pinned commit
+#   - games: app/src/main/assets/games and assets/lua are what scripts/sync-mudlet-games.py makes from Mudlet at its
+#     pinned commit
 #     (fetched from GitHub)
 # Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in libmudlet.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug

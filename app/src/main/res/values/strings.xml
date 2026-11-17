@@ -1131,8 +1131,18 @@
     <string name="scripts_name">Name</string>
     <!-- A heading on a script item's page, over its Lua -->
     <string name="scripts_code">Code</string>
-    <!-- The field of a script item's Lua code -->
+    <!-- On a script item's page, the row that opens its Lua code in the Lua editor. "Lua" is the language's name, not
+         translated -->
     <string name="scripts_lua">Lua</string>
+    <!-- Under "Lua" on a script item's page: how many lines of code the item has -->
+    <plurals name="scripts_lua_lines">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
+    <!-- Under "Lua" on a script item's page, for an item with no code -->
+    <string name="scripts_lua_empty">No code yet</string>
+    <!-- What a screen reader says a tap on the "Lua" row of a script item's page does -->
+    <string name="scripts_lua_edit">edit the code</string>
     <!-- A heading on a trigger's or alias's page, over what it matches -->
     <string name="scripts_patterns">Patterns</string>
     <!-- A trigger pattern's field; %1$d is its number, from 1 -->
@@ -1261,6 +1271,27 @@
     <string name="scripts_refused_enable">Not switched: %1$s</string>
     <!-- A snackbar when the engine refuses to move a script item; %1$s is its reason, in English -->
     <string name="scripts_refused_move">Not moved: %1$s</string>
+    <!-- The Lua editor's title; %1$s is the name of the trigger, alias or script whose Lua it is. "Lua" is the
+         language's name, not translated -->
+    <string name="lua_title">Lua: %1$s</string>
+    <!-- The Lua editor's text field's label, its first line: the code is compiled, not run, as the player types, and
+         what is wrong with it shows above -->
+    <string name="lua_label">Lua, checked as you type</string>
+    <!-- Atop the Lua editor: what is wrong with the code; %1$d is the line's number, %2$s Lua's message, in English,
+         such as "')' expected near 'end'" -->
+    <string name="lua_problem_at">Line %1$d: %2$s</string>
+    <!-- The button beside what is wrong with the Lua, which puts the cursor on that line -->
+    <string name="lua_go_to_line">Go to</string>
+    <!-- What a screen reader says of a function offered as its name is typed in the Lua editor; %1$s is how the
+         function is called, such as "send(command, [echo])" -->
+    <string name="lua_complete">Complete to %1$s</string>
+    <!-- What a screen reader says of a key in the row over the keyboard in the Lua editor; %1$s is what it types,
+         such as "(" or "end" -->
+    <string name="lua_type">Type %1$s</string>
+    <!-- What a screen reader says of the key that indents, in the row over the keyboard in the Lua editor -->
+    <string name="lua_indent">Indent</string>
+    <!-- The face of the key that indents, in the row over the keyboard in the Lua editor: an arrow, not a word -->
+    <string name="lua_indent_key">⇥</string>
     <!-- A snackbar when the engine refuses to delete a script item; %1$s is its reason, in English -->
     <string name="scripts_refused_delete">Not deleted: %1$s</string>
 

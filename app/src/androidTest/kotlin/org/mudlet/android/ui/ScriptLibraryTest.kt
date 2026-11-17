@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.TextRange
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONArray
@@ -39,6 +40,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import org.mudlet.android.ui.scripts.MAX_MATCH_LINES
 import org.mudlet.android.ui.scripts.SCRIPT_ITEM_TAG
 import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
@@ -49,7 +51,8 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
  * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
  * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
  * draft over a trip to the game, edits a trigger's patterns and options, an alias's command and a script's events, and deletes with
- * Undo, sent only once the library goes; and what the engine refuses is said. Controls are found by the labels TalkBack
+ * Undo, sent only once the library goes; the Lua editor indents a new line, completes a function's name, types Lua's
+ * symbols, pins what the engine finds wrong with a way to its line, and applies; and what the engine refuses is said. Controls are found by the labels TalkBack
  * reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
@@ -323,11 +326,10 @@ class ScriptLibraryTest {
         compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_event_new))).performTextInput("sysDisconnectionEvent")
         activate(hasContentDescription(string(R.string.scripts_event_add)))
         activate(hasContentDescription(string(R.string.scripts_event_remove, "sysConnectionEvent")))
-        // To the page's end, so that the empty Lua field is not cut off at the foot of what shows: Material's outlined
-        // field has 8 dp over its outline, and an empty one is named to accessibility services only by its label, a
-        // child that is left out while it is scrolled out of sight (Compose gives the field's own node its text, which
-        // is empty). With only that strip showing, the checks find an edit box with no name, as TalkBack would. By
-        // the scroll action itself: performScrollTo() runs the checks first, on the page as it is
+        // To the page's end, so that no empty field is cut off at the foot of what shows, as the event's can be with
+        // the keyboard up: with only the 8 dp over its outline showing, an empty labelled field is an edit box with no
+        // name (docs/roadmap.md, "A known gap, the toolkit's"). By the scroll action itself: performScrollTo() runs
+        // the checks first, on the page as it is
         compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
         activate(apply)
         val events = received("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")
@@ -357,6 +359,43 @@ class ScriptLibraryTest {
     }
 
     @Test
+    fun theLuaEditorIndentsCompletesChecksAndApplies() {
+        openGreet(script = "if x then")
+        activate(hasText(string(R.string.scripts_lua)) and hasText(compose.activity.resources.getQuantityString(R.plurals.scripts_lua_lines, 1, 1)))
+        val editor = hasTestTag(LUA_EDITOR_TAG)
+        waitFor(editor and hasText("if x then"))
+
+        // Enter at the end of a line that opens a block indents the next
+        compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(9, 9, true) }
+        compose.onNode(editor).performTextInput("\n")
+        waitFor(editor and hasText("if x then\n  "))
+        // A name typed is completed from Mudlet's functions, and the row over the keyboard types what Lua needs
+        compose.onNode(editor).performTextInput("sen")
+        activate(hasContentDescription(string(R.string.lua_complete, "send(command, showOnScreen)")))
+        activate(hasContentDescription(string(R.string.lua_type, ")")))
+        val code = "if x then\n  send()"
+        waitFor(editor and hasText(code))
+
+        // The engine is asked whether it compiles once the typing stops, and what it finds is pinned, with its line
+        compose.mainClock.advanceTimeBy(1_000)
+        var check = received("checkLua")
+        while (check.getString("code") != code) check = received("checkLua")
+        val message = "'end' expected near '<eof>'"
+        session.send(JSONObject().put("t", "luaCheck").put("ok", false).put("line", 2).put("message", message).put("re", check.get("id")))
+        waitFor(hasText(string(R.string.lua_problem_at, 2, message)))
+        compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(0, 0, true) }
+        activate(hasText(string(R.string.lua_go_to_line)))
+        waitFor(editor and SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(10)))
+
+        activate(apply)
+        assertEquals(code, received("editScriptItem").getJSONObject("fields").getString("script"))
+        // Back is the item's page, with the draft
+        back()
+        waitFor(hasText(compose.activity.resources.getQuantityString(R.plurals.scripts_lua_lines, 2, 2)))
+        compose.onNode(apply).assertIsEnabled()
+    }
+
+    @Test
     fun whatTheEngineRefusesIsSaid() {
         openGreet()
         compose.onNode(name).performTextInput("!")
@@ -378,12 +417,12 @@ class ScriptLibraryTest {
         compose.onNode(row("Greet")).assertDoesNotExist()
     }
 
-    /** Opens Greet from the library; [shown] is the name its page shows, a draft's when it has one. */
-    private fun openGreet(shown: String = "Greet") {
+    /** Opens Greet from the library; [shown] is the name its page shows, a draft's when it has one, and [script] its Lua. */
+    private fun openGreet(shown: String = "Greet", script: String = "") {
         activate(row("Greet"))
         val open = received("scriptItem")
         assertEquals(3, open.getInt("item"))
-        session.send(fields("trigger", trigger(3, 0, "Greet"), open))
+        session.send(fields("trigger", trigger(3, 0, "Greet").put("script", script), open))
         waitFor(hasText(shown) and hasSetTextAction() and hasAnyAncestor(page))
     }
 

@@ -144,6 +144,9 @@ class ProfileSession internal constructor(
     /** The windows, button bars, commands and map window its scripts draw. */
     val windows = ScriptWindowsClient(this)
 
+    /** The main console's links. */
+    val links = ConsoleLinksClient(::newRequestId, ::send) { windows.flushTyping() }
+
     /** The app's own map of this profile. */
     internal val appMap = AppMapClient(this)
 
@@ -484,6 +487,7 @@ class ProfileSession internal constructor(
                 }
                 linkState = "attached (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 windows.onAttached(sameInstance, connection)
+                links.onAttached(sameInstance, linesAdded)
                 scripts.onAttached(sameInstance)
             }
         }
@@ -545,8 +549,15 @@ class ProfileSession internal constructor(
                 }
 
                 is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
-                is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.Link,
+                is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands,
                 -> post { windows.onMessage(message) }
+
+                is EngineMessage.Link -> post {
+                    windows.onMessage(message)
+                    links.onLink(message)
+                }
+
+                is EngineMessage.LinksChanged -> post { links.onLinksChanged(message.ids) }
 
                 is EngineMessage.Image -> {
                     val bitmap = ScriptWindowsClient.decode(message)
@@ -605,7 +616,7 @@ class ProfileSession internal constructor(
                         Log.w(TAG, "Mudlet's settings: ${message.message}")
                     } else if (message.message.substringBefore(':') in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(message.message.substringBefore(':'), message.message.substringAfter(':').trim(), message.replyTo)
-                    } else {
+                    } else if (!links.onError(message)) {
                         windows.onError(message)
                     }
                 }
@@ -696,6 +707,7 @@ class ProfileSession internal constructor(
         if (clear) lines.clear()
         addLines(newLines)
         if (tailSet) tail = newTail
+        links.pruneTo(lines, tail)
         // Only the front profile's new lines are read out, as desktop Mudlet reads only the profile in front
         if (news.isNotEmpty() && front()) Announcer.newLines(news)
         // Also when an attach resends the profile status: a setting may have changed while the link was down

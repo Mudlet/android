@@ -50,7 +50,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import org.mudlet.android.R
+import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.ConsoleColors
+import org.mudlet.android.ui.ConsoleLinksClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
 import kotlin.math.roundToInt
@@ -69,7 +71,8 @@ private const val CELLS_MEASURED = 100
  * bottom it follows new lines; scrolled up, it stays where it is and offers a button back to the bottom that counts the
  * lines that came meanwhile. [linesAdded] is the profile session's count, which numbers the lines.
  *
- * Each line is one node for TalkBack, whose text is the line's without its styles.
+ * Each line is one node for TalkBack, whose text is the line's without its styles. Its [links] are followed as
+ * [ConsoleLine] offers them, each asked about once its line is shown, and again after the engine says it changed.
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
@@ -84,6 +87,7 @@ fun Console(
     onTextSize: (Int) -> Unit,
     onScreenSize: (columns: Int, rows: Int) -> Unit,
     modifier: Modifier = Modifier,
+    links: ConsoleLinksClient? = null,
     behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -151,7 +155,16 @@ fun Console(
             items(itemCount, key = { i -> if (i < lines.size) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lines.size) lines[i] else tail ?: return@items
                 val text = remember(line, colors) { ansiText(line, colors) }
-                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground)
+                val spans = remember(line) { linkSpans(line.runs, line.text.length) }
+                // A line from before a new engine instance names links that instance does not hold; the tail is its own
+                val lineLinks = if (links == null || spans.isEmpty() || (i < lines.size && firstLine + i < links.firstLine)) {
+                    null
+                } else {
+                    val changes = links.changes
+                    LaunchedEffect(spans, changes) { for (span in spans) links.request(span.link) }
+                    LineLinks(spans, links::info, links::follow)
+                }
+                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks)
             }
         }
         if (!following) {

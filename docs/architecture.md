@@ -317,8 +317,21 @@ both read alike:
   has the link. TalkBack offers each link not disabled as an action, "Follow link:" and its tool tip, or its text where
   it has none, and one with a menu as another that opens it, as an inline link is too small for a 48 dp target. A tap,
   pick or action while no engine is attached says the link was not sent.
-- The main console's links are not followed yet: its lines have their link runs, but no tap or action uses them.
-  `ConsoleLine` takes them as it does a window's, once the main console asks the engine about them.
+
+### The main console's links
+The game's links in the main console (MXP `<SEND>`, OSC 8, `echoLink()`, `insertLink()`) are followed as a script
+window's are, through the same `ConsoleLine`: a tap, a long press for the menu, TalkBack's actions. The session's
+`ConsoleLinksClient` keeps what `getLink` (with no `window`) last said of each:
+- A line asks about its links once it is shown. `linksChanged` names the links whose state changed, or with no ids any
+  of them; those are asked again by the lines that show them, and the last answer stands until the new one comes. An
+  attach asks again too, and a new engine instance forgets every answer. Lines from before a new instance offer no
+  links, as it counts its links from 1 again and their ids would name its own.
+- A link the engine no longer holds (`getLink: unknown`) loses its answer; that, and a refused `followLink`, only goes to
+  the log, as a link a script let go of or one tapped as it changed is no fault of the player's. Once many links are
+  kept, those no line holds any more are let go of.
+- What a link runs is the engine's: an OSC 8 `send:` link sends its command, and a `prompt:` link runs
+  `sendCmdLine()`, whose `commandLine` puts the text in the input line (dropped while the game hides input, as for any
+  `commandLine`). An OSC 8 web link runs `openUrl()`, which the engine, a service, cannot open yet.
 
 ### Script windows' text size
 A two-finger pinch on a mini console, user window or MXP frame sets its font size as a script's `setFontSize(name,

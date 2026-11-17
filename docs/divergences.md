@@ -99,7 +99,8 @@ that points at the desktop's menus and windows, which the app does not have.
   of its own in the patch and a way to ask for it in the protocol, for a colour.
 - A `prompt:` link in a label is refused while the game hides input (`docs/protocol.md`, "Labels"); the desktop puts
   its text in the password box. The app's input line takes no text from the engine in that mode, so following the link
-  would mark it visited and do nothing the player can see.
+  would mark it visited and do nothing the player can see. A `prompt:` link in the game's text is followed then, as
+  the engine follows it, but its text does not reach the masked field either.
 - A link Qt draws in a label's text is followed when tapped, also in a label where Mudlet's own check
   (`containsAnchorTag()`) finds no link, as when every link in it has a raw `<` in its quoted `href` or a space after
   the tag's `<`: the desktop draws those as links but does not make them clickable (`docs/protocol.md`, "Labels"). A

@@ -658,9 +658,10 @@ kept by `ScriptItemsClient`:
   in: not where it is, nor into itself, and among the buttons a button only into a toolbar or a menu; a package's
   own folder stays put. The snackbar says where it went once the list after the move has come.
 - Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item onto another
-  to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the Lua field colours for Lua's words and what
-  each function does (Mudlet's list has only how each is called). A key binding is edited but does not run here: the
-  app passes no key of a keyboard on to the profile yet, and the key's page says so.
+  to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the
+  Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called). A key
+  binding is edited but does not run here: the app passes no key of a keyboard on to the profile yet, and the key's
+  page says so.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the

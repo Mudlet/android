@@ -171,6 +171,9 @@ fun ProfileListScreen(
                     )
                 }
             }
+            if (onOpenSelfTest != null) {
+                item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
+            }
             // Only once the profiles are known, as those already added are left out
             val offered = profiles?.let { DefaultGames.offered(defaultGames, it) }.orEmpty()
             if (offered.isNotEmpty()) {
@@ -178,9 +181,6 @@ fun ProfileListScreen(
                 itemsIndexed(offered, key = { _, game -> "default:" + game.name }) { i, game ->
                     DefaultGameItem(game, i, offered.size, enabled = !adding, onConnect = { connectGame(game) }, onInfo = { info = game.name })
                 }
-            }
-            if (onOpenSelfTest != null) {
-                item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
             }
         }
     }

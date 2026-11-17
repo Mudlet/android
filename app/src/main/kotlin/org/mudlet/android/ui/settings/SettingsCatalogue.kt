@@ -46,6 +46,7 @@ enum class SettingsCategory(val forGame: Boolean, @StringRes val title: Int, @St
     ACCESSIBILITY(true, R.string.settings_accessibility, R.string.settings_accessibility_summary, R.drawable.ic_accessibility),
     INPUT(true, R.string.settings_input, R.string.settings_input_summary, R.drawable.ic_keyboard),
     CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
+    SOUND(true, R.string.settings_sound, R.string.settings_sound_summary, R.drawable.ic_volume_up),
     SECURITY(true, R.string.settings_security, R.string.settings_security_summary, R.drawable.ic_security),
     ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
@@ -191,6 +192,8 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_new_environ_hint,
             R.string.settings_protocol_keywords,
         ),
+        SettingEntry.Switch(SettingsCategory.SOUND, Settings.muteScripts, R.string.settings_mute_scripts, R.string.settings_mute_scripts_hint, R.string.settings_mute_keywords),
+        SettingEntry.Switch(SettingsCategory.SOUND, Settings.muteGame, R.string.settings_mute_game, R.string.settings_mute_game_hint, R.string.settings_mute_keywords),
         SettingEntry.Switch(
             SettingsCategory.ADVANCED,
             Settings.forceCompressionOff,

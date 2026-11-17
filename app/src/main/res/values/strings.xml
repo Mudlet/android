@@ -323,6 +323,26 @@
     <string name="settings_connection">Connection</string>
     <!-- Under "Connection" in the list of settings pages, what that page holds -->
     <string name="settings_connection_summary">Game protocols and secure connections</string>
+    <!-- A page of each game's own settings: muting sounds and music, named after desktop Mudlet's toolbar button
+         "Sound" -->
+    <string name="settings_sound">Sound</string>
+    <!-- Under "Sound" in the list of settings pages, what that page holds -->
+    <string name="settings_sound_summary">Mute sounds and music</string>
+    <!-- A switch on the Sound page, desktop Mudlet's menu item of the same name: silence the sounds and music that
+         the game's scripts and triggers play. Use desktop Mudlet's translation where your language has one. -->
+    <string name="settings_mute_scripts">Mute sounds from Mudlet (triggers, scripts, etc.)</string>
+    <!-- Under "Mute sounds from Mudlet (triggers, scripts, etc.)", what the switch does -->
+    <string name="settings_mute_scripts_hint">Sounds keep playing, silently. Every game shares this, as in desktop Mudlet.</string>
+    <!-- A switch on the Sound page, desktop Mudlet's menu item of the same name: silence the sounds and music the
+         game sends. MCMP and MSP are game protocols and stay as they are. Use desktop Mudlet's translation where your
+         language has one. -->
+    <string name="settings_mute_game">Mute sounds from the game (MCMP, MSP)</string>
+    <!-- Under "Mute sounds from the game (MCMP, MSP)", what the switch does -->
+    <string name="settings_mute_game_hint">Sounds keep playing, silently. Every game shares this, as in desktop Mudlet.</string>
+    <!-- Words a player might search the settings for to find the switches on the Sound page, besides the words of
+         their names and descriptions, separated by commas. Use the words a player of your language would search
+         for. -->
+    <string name="settings_mute_keywords">audio, music, quiet, silence, volume</string>
     <!-- A page of each game's own settings: workarounds for games that need them, which most players leave alone -->
     <string name="settings_advanced">Advanced</string>
     <!-- Under "Advanced" in the list of settings pages, what that page holds -->
@@ -602,6 +622,11 @@
          the line, does); %1$s is the whole line it gives -->
     <string name="input_accept_suggestion">Accept the suggestion: %1$s</string>
 
+    <!-- The button on the game screen's bottom row, shown once the game has played a sound, desktop Mudlet's toolbar
+         action of the same name: TalkBack reads it as a checkbox, checked while everything is muted. A tap mutes the
+         sounds of the game and of its scripts, or unmutes both when both are muted. Use desktop Mudlet's translation
+         where your language has one. -->
+    <string name="sound_mute_all">Mute all media</string>
     <!-- The row of buttons below the input line: the button that opens the command history, then a button for each
          command the player pinned, which sends it; %1$s is the command -->
     <string name="history_open">History</string>

@@ -96,6 +96,10 @@ object Settings {
     val gameInstallsPackages = BoolSetting("acceptServerGUI", default = true, mudlet = true)
     val gamePlaysMedia = BoolSetting("acceptServerMedia", default = true, mudlet = true)
 
+    // Desktop Mudlet's mutes, under its toolbar's Sound button: Mudlet's own, so every open game shares them
+    val muteScripts = BoolSetting("muteMediaAPI", default = false, mudlet = true)
+    val muteGame = BoolSetting("muteMediaGame", default = false, mudlet = true)
+
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
 
@@ -139,6 +143,8 @@ object Settings {
         acceptAnyCertificate,
         gameInstallsPackages,
         gamePlaysMedia,
+        muteScripts,
+        muteGame,
         screenReaderOffered,
         mapBehindText,
         wallpaperColours,

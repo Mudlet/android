@@ -36,6 +36,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.util.Locale
 import kotlin.math.abs
@@ -127,6 +128,9 @@ class PseudoLocaleTest(private val locale: String) {
         session.status("connection", "error: $REASON")
         waitFor(hasText(string(R.string.connection_try_again)))
         assertTextFits("the game pill's row, failed")
+        session.send(JSONObject().put("t", "sounds").put("played", true).put("scriptsMuted", false).put("gameMuted", false))
+        waitFor(hasTestTag(SOUND_BUTTON_TAG) and hasContentDescription(string(R.string.sound_mute_all)))
+        assertTextFits("the game pill's row with the Sound button")
 
         session.hiddenInput(true)
         waitFor(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))

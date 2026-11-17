@@ -709,11 +709,7 @@ void SocketBridge::getWindowText(const QJsonObject& message)
     }
     // An empty name would be the main console's in Mudlet
     const std::optional<WindowText> text = window.isEmpty() ? std::nullopt : mEngine->windowText(window, *first, std::min(*count, maxWindowTextRows));
-    if (!text) {
-        sendError(QStringLiteral("getWindowText: there is no console named \"%1\"").arg(window));
-        return;
-    }
-    sendReply(windowTextMessage(window, *text));
+    sendReply(windowTextMessage(window, text.value_or(WindowText{})));
 }
 
 QString SocketBridge::placeUserWindow(const QJsonObject& message)

@@ -56,6 +56,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
 import kotlin.math.abs
@@ -285,6 +286,69 @@ class GameScreenTest {
     }
 
     @Test
+    fun aRefusedCertificateIsShownAndAcceptingTurnsOnItsSettingAndConnectsAgain() {
+        compose.runOnIdle { EngineClient.front.connect(GAME.host, GAME.port, true) }
+        session.receive("connect")
+        session.status("connection", "disconnected")
+        waitForPill(R.string.connection_disconnected)
+
+        // Before the profile has loaded its settings cannot change: said, and still asked
+        session.certificateRefused(SELF_SIGNED)
+        activate(hasText(string(R.string.certificate_accept)))
+        waitUntilDisplayed(compose.activity.getString(R.string.certificate_not_accepted, string(R.string.profiles_error_not_attached)))
+        compose.onNodeWithText(string(R.string.certificate_refused_title)).assertIsDisplayed()
+        session.assertNoRequest(setOf("setSettings", "connect"), 500)
+
+        session.status("profile", "Game loaded")
+        for (fact in listOf(
+            compose.activity.getString(R.string.certificate_error, SELF_SIGNED.errors.single()),
+            compose.activity.getString(R.string.certificate_issued_to, "localhost"),
+            compose.activity.getString(R.string.certificate_issuer, "localhost"),
+            compose.activity.getString(R.string.certificate_serial, SELF_SIGNED.serial),
+            compose.activity.getString(R.string.certificate_turns_on, string(R.string.settings_accept_self_signed_certificate)),
+        )) {
+            compose.onNodeWithText(fact).assertIsDisplayed()
+        }
+        assertFalse(
+            "only the switch this certificate needs",
+            displayed(compose.activity.getString(R.string.certificate_turns_on, string(R.string.settings_accept_expired_certificate))),
+        )
+
+        activate(hasText(string(R.string.certificate_accept)))
+        val accepted = generateSequence { session.receive("setSettings") }.first { it.getJSONObject("values").has("sslIgnoreSelfSigned") }
+        assertEquals("sslIgnoreSelfSigned", accepted.getJSONObject("values").keys().asSequence().single())
+        assertEquals(true, accepted.getJSONObject("values").getBoolean("sslIgnoreSelfSigned"))
+        val again = session.receive("connect")
+        assertEquals(GAME.port, again.getInt("port"))
+        assertTrue(again.getBoolean("tls"))
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.certificate_refused_title)) }
+    }
+
+    @Test
+    fun aCertificateOnlyIgnoringAllLetsPastSendsThePlayerToTheGamesSettings() {
+        session.status("connection", "disconnected")
+        val elsewhere = SELF_SIGNED.copy(issuedTo = "elsewhere.invalid", selfSigned = false, others = true, errors = listOf("The host name did not match any of the valid hosts for this certificate"))
+        session.certificateRefused(elsewhere)
+        waitUntilDisplayed(string(R.string.certificate_only_ignore_all))
+        assertFalse("nothing to accept here", displayed(string(R.string.certificate_accept)))
+
+        // Cancel puts it off; the same certificate, told again as an attach tells it, is not asked about again
+        activate(hasText(string(R.string.certificate_cancel)))
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.certificate_refused_title)) }
+        session.certificateRefused(elsewhere)
+        session.line(1, "after")
+        waitUntilDisplayed("after")
+        assertFalse(displayed(string(R.string.certificate_refused_title)))
+
+        // Refused again after another try, it is asked about again
+        session.certificateRefused(null)
+        session.certificateRefused(elsewhere)
+        activate(hasText(string(R.string.certificate_open_settings)))
+        waitUntilDisplayed(string(R.string.settings_title))
+        session.assertNoRequest("setSettings", 500)
+    }
+
+    @Test
     fun reconnectConnectsTheRunningProfileAndOpensItWithItsPasswordOnAnEngineThatHasLostIt() {
         val passwords = PasswordStore(compose.activity)
         assertTrue(passwords.set(GAME.name, "game secret"))
@@ -473,6 +537,7 @@ class GameScreenTest {
 
     private companion object {
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+        val SELF_SIGNED = RefusedCertificate("localhost", "localhost", "2030-01-02T00:00:00Z", "4A:2B", false, true, false, listOf("The certificate is self-signed, and untrusted"))
 
         // More lines than any emulator screen shows
         const val MANY = 200

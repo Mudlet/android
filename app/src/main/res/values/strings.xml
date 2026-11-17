@@ -1105,6 +1105,38 @@
     <!-- Shown when the answer to the secure-port question was not taken; %1$s is why, as Mudlet says it (in English) or
          as the app says it -->
     <string name="secure_offer_refused">Not answered: %1$s</string>
+    <!-- The title of the dialog shown when a game's secure connection ended because its TLS certificate failed the check -->
+    <string name="certificate_refused_title">Certificate not trusted</string>
+    <!-- The first line of that dialog, followed by the reasons, one per line -->
+    <string name="certificate_refused_text">The secure connection was closed because this game\'s certificate did not pass the check:</string>
+    <!-- One reason a certificate failed the check, in a list; %1$s is the reason as the engine gives it, in English -->
+    <string name="certificate_error">• %1$s</string>
+    <!-- A fact about the refused certificate: %1$s is the name (common name) the certificate was issued to -->
+    <string name="certificate_issued_to">Issued to: %1$s</string>
+    <!-- A fact about the refused certificate: %1$s is the name (common name) of whoever issued it -->
+    <string name="certificate_issuer">Issued by: %1$s</string>
+    <!-- A fact about the refused certificate: %1$s is the date and time it runs out, or ran out -->
+    <string name="certificate_expires">Expires: %1$s</string>
+    <!-- Shown as the expiry date when the certificate does not say when it runs out -->
+    <string name="certificate_expiry_unknown">not given</string>
+    <!-- A fact about the refused certificate: %1$s is its serial number -->
+    <string name="certificate_serial">Serial number: %1$s</string>
+    <!-- In the refused-certificate dialog: %1$s is the name of a switch on the game's Security settings page, such as
+         "Accept a self-signed certificate", which accepting turns on -->
+    <string name="certificate_turns_on">Accepting turns on “%1$s” in this game\'s Security settings, where you can turn it off again.</string>
+    <!-- In the refused-certificate dialog, why accepting is a risk -->
+    <string name="certificate_risk">Accept only if you trust this game: someone could pretend to be it.</string>
+    <!-- In the refused-certificate dialog, when the certificate has an error only the game's "Ignore all certificate
+         errors" switch lets past, such as one issued for another server -->
+    <string name="certificate_only_ignore_all">Only “Ignore all certificate errors”, in this game\'s Security settings, lets this certificate through. The connection would still be encrypted, but nothing would check that it goes to the game.</string>
+    <!-- A button in the refused-certificate dialog: accept this kind of certificate for this game and connect again -->
+    <string name="certificate_accept">Accept and connect</string>
+    <!-- A button in the refused-certificate dialog: open this game's settings, where its Security page is -->
+    <string name="certificate_open_settings">Game settings</string>
+    <!-- A button in the refused-certificate dialog: close it without accepting anything -->
+    <string name="certificate_cancel">Cancel</string>
+    <!-- A message after accepting a refused certificate could not be done; %1$s says why -->
+    <string name="certificate_not_accepted">Not accepted: %1$s</string>
     <!-- The title of the question before a connected game closes; %1$s is the game's (profile's) name -->
     <string name="game_close_title">Close %1$s?</string>
     <!-- The question before a connected game closes -->

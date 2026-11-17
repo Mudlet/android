@@ -18,7 +18,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollTo
@@ -68,8 +67,7 @@ class LineTriggerTest {
 
     @Before
     fun openTheGame() {
-        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.enableAccessibilityChecksOfWhatShows()
         // A new engine instance for each test, so no line of an earlier test is kept
         val first = fake.engine.nextSession()
         fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
@@ -77,10 +75,9 @@ class LineTriggerTest {
         session = fake.engine.nextSession()
         session.clear()
         session.line(1, "You hit the rat.")
-        session.line(2, "")
-        session.line(3, "A bat bites you.")
-        session.line(4, LINE)
-        session.synced(4)
+        session.line(2, "A bat bites you.")
+        session.line(3, LINE)
+        session.synced(3)
         session.profiles(listOf(game), session.receive("listProfiles"))
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
@@ -141,6 +138,9 @@ class LineTriggerTest {
     @Test
     fun talkBacksActionOnALineOpensThePageWhoseWordsSayWhatTheyAreAndARefusalIsSaid() {
         val label = string(R.string.console_make_trigger)
+        // Only here: a blank line shown as the game sent it is a row with no text, which the checks before a touch report
+        session.line(4, "")
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.lines.any { it.text.isEmpty() } } }
         // Each line with text, and not the blank one
         compose.onAllNodes(SemanticsMatcher("offers a trigger") { node -> node.config.getOrNull(SemanticsActions.CustomActions).orEmpty().any { it.label == label } }).assertCountEquals(3)
         val action = compose.onNode(hasText(LINE)).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == label }
@@ -182,7 +182,7 @@ class LineTriggerTest {
         checkAccessibility()
     }
 
-    /** What the page says when [count] of the game's lines match: the four the engine sent, and none of the app's own. */
+    /** What the page says when [count] of the game's lines match: the three the engine sent, and none of the app's own. */
     private fun matched(count: Int) = compose.activity.resources.getQuantityString(R.plurals.line_trigger_scrollback, count, count, LINES)
 
     /** A word of the line on the builder's page, as it shows there. */
@@ -231,7 +231,7 @@ class LineTriggerTest {
         const val INSTANCE = "fake-line-trigger"
         const val LINE = "A rat bites you."
         const val PATTERN = """A (\w+) bites you\."""
-        const val LINES = 4
+        const val LINES = 3
         const val WAIT_MS = 10_000L
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first

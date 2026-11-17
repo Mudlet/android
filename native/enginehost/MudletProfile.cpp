@@ -570,7 +570,6 @@ void MudletProfile::connectSession()
     });
     connect(session, &THeadlessSession::secureConnectionOffered, this, [this] {
         qInfo("MudletEngine: %s's game offers its secure port", qPrintable(mProfile));
-        setSecureOffer(true);
     });
     connect(session, &THeadlessSession::hiddenInputWanted, this, [this](const QString&, bool wanted) {
         mFrontend->hiddenInput(wanted);

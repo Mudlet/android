@@ -561,10 +561,7 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.HiddenInput -> post { hiddenInput = message.wanted }
 
-                is EngineMessage.SecureOffer -> post {
-                    if (message.offered && !secureOffer) secureOfferPutOff = false
-                    secureOffer = message.offered
-                }
+                is EngineMessage.SecureOffer -> {}
 
                 is EngineMessage.History -> post { history = message.lines }
 

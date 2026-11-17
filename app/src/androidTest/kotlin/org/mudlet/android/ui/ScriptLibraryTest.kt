@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -51,9 +53,10 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
  * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
  * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
  * draft over a trip to the game, edits a trigger's patterns and options, an alias's command and a script's events, and deletes with
- * Undo, sent only once the library goes; the Lua editor indents a new line, completes a function's name, types Lua's
- * symbols, pins what the engine finds wrong with a way to its line, and applies; and what the engine refuses is said. Controls are found by the labels TalkBack
- * reads and activated through their accessibility actions.
+ * Undo, sent only once the library goes; its Lua is edited in the page, which indents a new line, completes a
+ * function's name and types Lua's symbols, is checked only when applied, when what the engine finds wrong shows with a
+ * way to its line until the code is changed, and is kept or asked about as the other fields are; and what the engine
+ * refuses is said. Controls are found by the labels TalkBack reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLibraryTest {
@@ -359,11 +362,16 @@ class ScriptLibraryTest {
     }
 
     @Test
-    fun theLuaEditorIndentsCompletesChecksAndApplies() {
+    fun anItemsLuaIsEditedInItsPageAndCheckedOnlyWhenApplied() {
         openGreet(script = "if x then")
-        activate(hasText(string(R.string.scripts_lua)) and hasText(compose.activity.resources.getQuantityString(R.plurals.scripts_lua_lines, 1, 1)))
+        // In the page itself, among its other fields: nothing else there is named for the Lua, as a row that opened it was
         val editor = hasTestTag(LUA_EDITOR_TAG)
-        waitFor(editor and hasText("if x then"))
+        waitFor(editor and hasText("if x then") and hasSetTextAction() and hasAnyAncestor(page))
+        compose.onNode(name).assertExists()
+        compose.onAllNodes(hasText(string(R.string.scripts_lua)) and !editor).assertCountEquals(0)
+        // The keys over the keyboard are the code's: they come once it is typed in
+        val closeBracket = hasContentDescription(string(R.string.lua_type, ")"))
+        compose.onNode(closeBracket).assertDoesNotExist()
 
         // Enter at the end of a line that opens a block indents the next
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(9, 9, true) }
@@ -372,27 +380,92 @@ class ScriptLibraryTest {
         // A name typed is completed from Mudlet's functions, and the row over the keyboard types what Lua needs
         compose.onNode(editor).performTextInput("sen")
         activate(hasContentDescription(string(R.string.lua_complete, "send(command, showOnScreen)")))
-        activate(hasContentDescription(string(R.string.lua_type, ")")))
-        val code = "if x then\n  send()"
-        waitFor(editor and hasText(code))
+        activate(closeBracket)
+        val broken = "if x then\n  send()"
+        waitFor(editor and hasText(broken))
 
-        // The engine is asked whether it compiles once the typing stops, and what it finds is pinned, with its line
+        // Code that does not compile is not checked as it is typed: the engine is asked nothing, and no problem shows
         compose.mainClock.advanceTimeBy(1_000)
-        var check = received("checkLua")
-        while (check.getString("code") != code) check = received("checkLua")
+        session.assertNoRequest("checkLua", 1_000)
+        val goTo = hasText(string(R.string.lua_go_to_line)) and hasClickAction()
+        compose.onNode(goTo).assertDoesNotExist()
+
+        // Apply asks the engine what is wrong with it, and saves it all the same, as the desktop's editor does
+        activate(apply)
+        val check = received("checkLua")
+        assertEquals(broken, check.getString("code"))
+        val save = received("editScriptItem")
+        assertEquals(broken, save.getJSONObject("fields").getString("script"))
         val message = "'end' expected near '<eof>'"
         session.send(JSONObject().put("t", "luaCheck").put("ok", false).put("line", 2).put("message", message).put("re", check.get("id")))
-        waitFor(hasText(string(R.string.lua_problem_at, 2, message)))
+        val problem = hasText(string(R.string.lua_problem_at, 2, message))
+        waitFor(problem)
+        session.send(fields("trigger", trigger(3, 0, "Greet").put("script", broken).put("error", message), save))
+        items("trigger", triggers, received("scriptItems"))
+        waitFor(hasText(string(R.string.scripts_applied, "Greet")))
+        compose.onNode(problem).assertExists()
+        compose.onNode(apply).assertIsNotEnabled()
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(0, 0, true) }
-        activate(hasText(string(R.string.lua_go_to_line)))
+        activate(goTo)
         waitFor(editor and SemanticsMatcher.expectValue(SemanticsProperties.TextSelectionRange, TextRange(10)))
 
+        // The problem was of the code as applied: it goes with the first key, and typing still asks the engine nothing
+        compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(18, 18, true) }
+        compose.onNode(editor).performTextInput("\nend")
+        val mended = "$broken\nend"
+        waitFor(editor and hasText(mended))
+        compose.onNode(problem).assertDoesNotExist()
+        compose.onNode(goTo).assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(1_000)
+        session.assertNoRequest("checkLua", 1_000)
+
         activate(apply)
-        assertEquals(code, received("editScriptItem").getJSONObject("fields").getString("script"))
-        // Back is the item's page, with the draft
-        back()
-        waitFor(hasText(compose.activity.resources.getQuantityString(R.plurals.scripts_lua_lines, 2, 2)))
+        val again = received("checkLua")
+        assertEquals(mended, again.getString("code"))
+        val saved = received("editScriptItem").also { session.send(JSONObject().put("t", "luaCheck").put("ok", true).put("re", again.get("id"))) }
+        val kept = saved.getJSONObject("fields").getString("script")
+        session.send(fields("trigger", trigger(3, 0, "Greet").put("script", kept), saved))
+        items("trigger", triggers, received("scriptItems"))
+        waitFor(apply and !isEnabled())
+        compose.onNode(problem).assertDoesNotExist()
+
+        // Nothing is left to apply, so the page goes without asking, and the code comes back as the engine has it
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(row("Greet"))
+        val engines = "$kept\n-- as the engine keeps it"
+        openGreet(script = engines)
+        waitFor(editor and hasText(engines) and hasAnyAncestor(page))
+        compose.onNode(apply).assertIsNotEnabled()
+    }
+
+    @Test
+    fun luaTypedAndNotAppliedIsKeptOrAskedAbout() {
+        openGreet(script = "x = 1")
+        val editor = hasTestTag(LUA_EDITOR_TAG)
+        waitFor(editor and hasText("x = 1"))
+        compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(5, 5, true) }
+        compose.onNode(editor).performTextInput("2")
+        waitFor(editor and hasText("x = 12"))
         compose.onNode(apply).assertIsEnabled()
+
+        // Back asks before the code typed is dropped, and from the page: there is no screen of the code's to leave first
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText(string(R.string.scripts_keep_editing)) and hasClickAction())
+        compose.onNode(editor and hasText("x = 12")).assertExists()
+
+        // A trip to the game keeps it
+        activate(hasContentDescription(string(R.string.scripts_back_to_game)))
+        waitFor(hasText(string(R.string.game_title)))
+        openTheLibraryFromTheGame()
+        openGreet(script = "x = 1")
+        waitFor(editor and hasText("x = 12") and hasAnyAncestor(page))
+
+        back()
+        activate(hasText(string(R.string.scripts_discard)) and hasClickAction())
+        waitFor(row("Greet"))
+        openGreet(script = "x = 1")
+        waitFor(editor and hasText("x = 1") and hasAnyAncestor(page))
+        compose.onNode(apply).assertIsNotEnabled()
     }
 
     @Test

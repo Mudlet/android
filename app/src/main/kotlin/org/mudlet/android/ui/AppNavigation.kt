@@ -43,7 +43,7 @@ import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.scripts.LUA_FUNCTIONS_ASSET
-import org.mudlet.android.ui.scripts.LuaEditorScreen
+import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.ScriptItemScreen
 import org.mudlet.android.ui.scripts.ScriptLibraryScreen
@@ -71,7 +71,6 @@ private object Routes {
     const val LICENCE = "licence/{id}"
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
-    const val SCRIPT_CODE = "scriptCode/{key}"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
@@ -82,8 +81,6 @@ private object Routes {
     fun settingsPage(page: SettingsPage) = "settingsPage/${Uri.encode(page.encode())}"
 
     fun scriptItem(key: ScriptItemKey) = "scriptItem/${Uri.encode(key.encode())}"
-
-    fun scriptCode(key: ScriptItemKey) = "scriptCode/${Uri.encode(key.encode())}"
 }
 
 /**
@@ -213,7 +210,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                     },
                     detailContent = { key ->
                         ScriptItemKey.decode(key)?.let {
-                            ScriptItemScreen(front.scripts, it, onBack = { if (open == key) open = null }, onGame = toGame, onEditCode = { nav.navigate(Routes.scriptCode(it)) { launchSingleTop = true } })
+                            ScriptItemScreen(front.scripts, it, rememberLuaFunctions(), onBack = { if (open == key) open = null }, onGame = toGame)
                         }
                     },
                     empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
@@ -226,20 +223,13 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                     ScriptItemScreen(
                         EngineClient.front.scripts,
                         key,
+                        rememberLuaFunctions(),
                         onBack = back,
                         onGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) },
-                        onEditCode = entry.whileShown { nav.navigate(Routes.scriptCode(key)) { launchSingleTop = true } },
                     )
                 } else {
                     LaunchedEffect(Unit) { back() }
                 }
-            }
-            composable(Routes.SCRIPT_CODE, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
-                val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
-                val back = entry.whileShown { nav.navigateUp() }
-                val assets = LocalContext.current.assets
-                val functions = remember { runCatching { assets.open(LUA_FUNCTIONS_ASSET).bufferedReader().use { it.readText() } }.map(::parseLuaFunctions).getOrDefault(emptyList()) }
-                if (key != null) LuaEditorScreen(EngineClient.front.scripts, key, functions, onBack = back) else LaunchedEffect(Unit) { back() }
             }
             val game = navArgument("game") {
                 type = NavType.StringType
@@ -288,6 +278,13 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
 private fun slideInFrom(side: Int) = slideInHorizontally(MudletMotion.slide) { side * it / SLIDE_FRACTION } + fadeIn(MudletMotion.effects())
 
 private fun slideOutTo(side: Int) = slideOutHorizontally(MudletMotion.slide) { side * it / SLIDE_FRACTION } + fadeOut(MudletMotion.effects())
+
+/** Mudlet's functions, for the Lua field to offer: none when their list cannot be read. */
+@Composable
+private fun rememberLuaFunctions(): List<LuaFunction> {
+    val assets = LocalContext.current.assets
+    return remember { runCatching { assets.open(LUA_FUNCTIONS_ASSET).bufferedReader().use { it.readText() } }.map(::parseLuaFunctions).getOrDefault(emptyList()) }
+}
 
 /** Asks once whether games are to be told a screen reader is in use; the answer is the setting, which can change later. */
 @Composable

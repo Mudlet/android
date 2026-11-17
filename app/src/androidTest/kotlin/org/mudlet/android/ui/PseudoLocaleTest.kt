@@ -43,7 +43,7 @@ import kotlin.math.abs
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, the settings, the game screen, with the connection chip's states and the password field, the script library,
+ * editor, new and at a profile's Export, the settings, the game screen, with the connection chip's states and the password field, the script library,
  * and a trigger's page, with its Lua being typed, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
@@ -105,6 +105,14 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         assertTextFits("the profile list")
         assertAtStart("a profile", hasContentDescription(string(R.string.profile_description, GAME.name, GAME.host, GAME.port)))
+
+        activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        waitFor(hasText(string(R.string.profile_export_text)))
+        compose.onNodeWithText(string(R.string.profile_export_text)).performScrollTo()
+        assertTextFits("a profile's editor, at its Export")
+        assertAtStart("the Export heading", hasText(string(R.string.profile_export_title)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
 
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))

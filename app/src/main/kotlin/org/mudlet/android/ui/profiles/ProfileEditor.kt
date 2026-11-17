@@ -166,6 +166,9 @@ fun ProfileEditor(name: String?, onClose: () -> Unit) {
                     OutlinedButton({ confirmDelete = true }, enabled = !waiting) { Text(stringResource(R.string.profile_delete)) }
                 }
             }
+            if (name != null) {
+                ProfileExport(name, open = EngineClient.session(name) != null)
+            }
         }
     }
 

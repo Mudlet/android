@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.Role
@@ -9,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -34,6 +36,8 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -42,10 +46,15 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
+import org.mudlet.android.data.ProfileArchive
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.profiles.DefaultGame
 import org.mudlet.android.ui.profiles.DefaultGames
+import org.mudlet.android.ui.profiles.Exports
+import org.mudlet.android.ui.profiles.exportProfile
+import java.io.File
+import java.util.zip.ZipFile
 
 /**
  * The profile list and editor against a fake engine, as a TalkBack user drives them: each control found by the label
@@ -221,6 +230,76 @@ class ProfilesTest {
         fake.engine.passwordGiven("Alpha", false)
         engine.openProfiles()
         assertEquals("alpha secret", engine.receive("openProfile").getString("password"))
+    }
+
+    @Test
+    fun offersToExportAProfileSayingItsPasswordsAreLeftOut() {
+        listed(ALPHA)
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        scrollIntoView(hasText(string(R.string.profile_export)) and hasClickAction())
+        compose.onNodeWithText(string(R.string.profile_export_text)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profile_export)) and hasClickAction()).assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithText(string(R.string.profile_export_close_first)).assertDoesNotExist()
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun anOpenGameIsExportedOnlyOnceItHasClosed() {
+        listed(ALPHA)
+        fake.engine.openAlongside("Alpha")
+        engine.openProfiles()
+        compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        scrollIntoView(hasText(string(R.string.profile_export)) and hasClickAction())
+        compose.onNodeWithText(string(R.string.profile_export_close_first)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profile_export)) and hasClickAction()).assertIsNotEnabled()
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun exportsTheEnginesFolderForTheProfileWithoutItsPassword() {
+        val context = compose.activity
+        val folder = ProfileArchive.folder(context.filesDir, EXPORTED)
+        val target = File(context.cacheDir, "export-test.zip")
+        try {
+            File(folder, "current").mkdirs()
+            File(folder, "current/save.xml").writeText("<MudletPackage/>")
+            File(folder, "password").writeText("hunter2")
+            assertNull(exportProfile(context, EXPORTED, Uri.fromFile(target)))
+            val names = ZipFile(target).use { zip -> zip.entries().toList().map { it.name } }
+            assertEquals(listOf("$EXPORTED/", "$EXPORTED/current/", "$EXPORTED/current/save.xml"), names)
+
+            folder.deleteRecursively()
+            assertNotNull("a profile with no folder is refused", exportProfile(context, EXPORTED, Uri.fromFile(target)))
+        } finally {
+            folder.deleteRecursively()
+            target.delete()
+        }
+    }
+
+    @Test
+    fun saysWhenTheExportIsDoneOrWhyItFailed() {
+        val context = compose.activity
+        val folder = ProfileArchive.folder(context.filesDir, EXPORTED)
+        val target = File(context.cacheDir, "export-status-test.zip")
+        try {
+            File(folder, "current").mkdirs()
+            File(folder, "current/save.xml").writeText("<MudletPackage/>")
+            listed(Profile(EXPORTED, "e.example", 23, false, "", false))
+            activate(hasContentDescription(string(R.string.profile_edit, EXPORTED)))
+            compose.runOnUiThread { Exports.start(context.applicationContext, EXPORTED, Uri.fromFile(target)) }
+            waitFor(hasText(string(R.string.profile_exported)))
+            compose.onNodeWithText(string(R.string.profile_exported)).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+            compose.onRoot().tryPerformAccessibilityChecks()
+
+            folder.deleteRecursively()
+            compose.runOnUiThread { Exports.start(context.applicationContext, EXPORTED, Uri.fromFile(target)) }
+            waitFor(hasText(string(R.string.profile_export_failed, ""), substring = true))
+            compose.onNode(hasText(string(R.string.profile_export)) and hasClickAction()).assertIsEnabled()
+        } finally {
+            folder.deleteRecursively()
+            target.delete()
+        }
     }
 
     @Test
@@ -435,6 +514,9 @@ class ProfilesTest {
         // Two of Mudlet's games (app/src/main/assets/games), StickMUD's connection secure
         const val ACHAEA = "Achaea"
         const val STICKMUD = "StickMUD"
+
+        // A profile folder the fake engine knows nothing of, made and removed by the export test
+        const val EXPORTED = "Export Test"
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

@@ -26,10 +26,10 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 18e5e6a..1119d01 100644
+index 1f73624..385d9fe 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
-@@ -1747,17 +1747,20 @@ the globals changes nothing. They are false, reading or changing nothing, where
+@@ -1759,17 +1759,20 @@ the globals changes nothing. They are false, reading or changing nothing, where
  
  ## Embedding it: triggers, aliases and scripts
  
@@ -57,7 +57,7 @@ index 18e5e6a..1119d01 100644
  
  - a trigger's `patterns`, each a map of `text` and `type`, one of `substring`, `regex`, `startOfLine`,
    `exact`, `lua`, `spacer` (its text the number of lines), `color` (its text as the profile keeps it,
-@@ -1766,23 +1769,40 @@ getter, so it may be called from any handler. `scriptItem()` gives all of one it
+@@ -1778,23 +1781,40 @@ getter, so it may be called from any handler. `scriptItem()` gives all of one it
    `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`,
    `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour;
  - an alias's `pattern` and `command`;
@@ -117,10 +117,10 @@ index 1d18598..a5f37c8 100644
      int getNewID();
      void uninstall(const QString&);
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 8820d42..94bafe8 100644
+index 31f7e5e..e612e82 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
-@@ -877,9 +877,9 @@ public:
+@@ -886,9 +886,9 @@ public:
      // The environments the map gives a colour of its own, by number, as the GUI's room colour dialog lists them; none with no profile
      // open. A getter, so it may be called from any handler.
      QList<MapEnv> mapEnvs() const;
@@ -133,7 +133,7 @@ index 8820d42..94bafe8 100644
      Q_ENUM(ScriptItemKind)
      struct ScriptItemNode
      {
-@@ -890,12 +890,18 @@ public:
+@@ -899,12 +899,18 @@ public:
          bool folder = false;
          // Switched on, as the editor's checkbox shows it, whether or not it can run
          bool enabled = false;
@@ -154,7 +154,7 @@ index 8820d42..94bafe8 100644
      };
      // Each item of that kind, depth first, a folder before what is in it, in the editor's order; none with no profile
      // open. A getter, so it may be called from any handler.
-@@ -905,17 +911,17 @@ public:
+@@ -914,17 +920,17 @@ public:
      // with errorString() saying why, for an id not of that kind or temporary.
      bool scriptItem(ScriptItemKind kind, int id, QVariantMap& item);
      // The writes below are each false, with errorString() saying why and nothing changed, where submit() is refused,

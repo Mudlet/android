@@ -632,7 +632,7 @@ picture (`0016-headless-map-info.patch`; see "The map info"), Lua compiled witho
 check it as it is typed (`checkLua()`, `0017-headless-check-lua.patch`), a running profile's login and password
 changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`), and the timers,
 keys and buttons edited as the triggers are, with what each item's row shows under its name
-(`0019-headless-script-items-more.patch`).
+(`0020-headless-script-items-more.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

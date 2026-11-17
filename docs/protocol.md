@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **26**.
+The current version is **27**.
 
 ## Transport
 
@@ -741,7 +741,7 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 26, which added timers, keys and buttons to the script items (`timer`, `key` and `button`
+As implemented in version 27, which added timers, keys and buttons to the script items (`timer`, `key` and `button`
 for `kind`) and `summary` to `scriptItems`; version 25 added checking that Lua compiles (`checkLua`, `luaCheck`);
 version 24 took the map info box out of the map's picture and sends it as text (`info` in
 `map` and `appMap`); version 23 added editing the triggers, aliases and scripts (`scriptItems`, `scriptItem`,

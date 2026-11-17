@@ -135,7 +135,7 @@ class PseudoLocaleTest(private val locale: String) {
         }
         waitFor(hasText(string(R.string.scripts_off)))
         assertTextFits("the script library")
-        assertAtStart("a script item", hasText("Greet"))
+        assertAtStart("the library's heading", hasText(string(R.string.scripts_all, string(R.string.scripts_triggers))))
 
         activate(hasText("Greet"))
         compose.waitForIdle()

@@ -1146,6 +1146,8 @@
     <string name="scripts_add_pattern">Add pattern</string>
     <!-- The title of the sheet that picks a trigger pattern's type -->
     <string name="scripts_pattern_type">Pattern type</string>
+    <!-- The button, read by a screen reader, that closes the sheet that picks a trigger pattern's type -->
+    <string name="scripts_pattern_type_close">Close the pattern types</string>
     <!-- A colour trigger pattern, which the app shows but does not edit yet; %1$s is the text colour, %2$s the
          background's, each an ANSI colour number or one of scripts_color_any and scripts_color_default -->
     <string name="scripts_color_pattern">Text colour %1$s on %2$s</string>

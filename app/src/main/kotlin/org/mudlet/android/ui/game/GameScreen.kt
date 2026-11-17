@@ -249,6 +249,7 @@ private fun ProfileGameScreen(
                             onTextSize = Settings.textSize::set,
                             onScreenSize = EngineClient::setScreenSize,
                             consoleModifier,
+                            links = c.links,
                         ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {

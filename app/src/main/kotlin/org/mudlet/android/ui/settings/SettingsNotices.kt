@@ -11,8 +11,8 @@ import org.mudlet.android.ui.EngineClient
 
 /**
  * Says that a setting changed in one of [games] while it is connected takes effect at its next connection: once for
- * the settings changed while it shows, and not again on the next screen where the player left this one meanwhile. Only
- * one of these is shown at a time, or it would be said twice.
+ * the settings changed while it shows, and not again on the next screen where the player left this one meanwhile. Of
+ * two screens shown side by side only one has this, or both would say it.
  */
 @Composable
 internal fun SettingsNotices(games: List<String>) {

@@ -1,0 +1,115 @@
+Tell a frontend with no window when its profile starts playing a sound
+
+The GUI's mute button is always on its toolbar. An app on a phone has little room and wants to show one only once
+the game, or a script, plays something there is to mute; nothing in THeadlessSession said when that happened.
+
+- TMedia::signal_mediaStarted is sent as play() sets a sound, music or video going, not for a preload, saying
+  whether a script or the game (GMCP, MSP) played it.
+- THeadlessSession::soundStarted relays it for the session's own profile, from the event loop, with the
+  SoundSource that setSoundsMuted() takes.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (sounds: nothing reported before a sound plays, a
+preload not taken for one, and the first a script plays reported). The desktop is unchanged: nothing listens there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 1f73624..f574e25 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -846,7 +846,7 @@ delete the session.
+ **Sent from the event loop.** Every other signal but the two below is queued, and sent once the event
+ loop runs, after the script or call that caused it has returned: `connecting`, `connected`,
+ `disconnected`, `quitRequested`, `loggingChanged`, `latencyChanged`, `secureConnectionOffered`,
+-`soundsMutedChanged`, `mappingScriptMissing`, `mainWindowResizeRequested`, `configSaved`, the package
++`soundsMutedChanged`, `soundStarted`, `mappingScriptMissing`, `mainWindowResizeRequested`, `configSaved`, the package
+ download's, map progress's and replay's signals, and the ones that follow a state. Their handlers may
+ call the session, except while `shutdown()` sends them from inside itself, as the order below has it:
+ the session refuses their calls then as it does any made during the shutdown, a `start()` with
+@@ -1741,6 +1741,11 @@ and also a call that left it as it was, so an app's mute buttons can follow it a
+ once the session's own profile has closed, as the session's other signals do, even while profiles its
+ scripts opened live on. They are refused where `submit()` is.
+ 
++`soundStarted` is sent each time the session's own profile sets a sound, music or video going, from a
++script (`SoundSource::scripts`) or from the game over GMCP or MSP (`SoundSource::game`), where the GUI
++raises `sysMediaStarted`, but as `play()` starts it rather than once it is heard, and not for a preload,
++which plays nothing: an app can keep its mute button out of sight until there is something to mute.
++
+ ## Embedding it: the profile's settings
+ 
+ An app with its own settings screen reads and changes a profile's settings with `settings()` and
+diff --git a/src/TMedia.cpp b/src/TMedia.cpp
+index 3ec8f78..9a5bd47 100644
+--- a/src/TMedia.cpp
++++ b/src/TMedia.cpp
+@@ -2590,6 +2590,9 @@ void TMedia::play(TMediaData& mediaData)
+ 
+     pPlayer->mediaPlayer()->play();
+     updateMediaPlayerList(std::move(pPlayer));
++    if (mediaData.mediaVolume() != TMediaData::MediaVolumePreload) {
++        emit signal_mediaStarted(mediaData.mediaProtocol() == TMediaData::MediaProtocolAPI);
++    }
+ }
+ 
+ // Documentation: https://wiki.mudlet.org/w/Manual:Scripting#type:_sound
+diff --git a/src/TMedia.h b/src/TMedia.h
+index ac7cfe2..ebf1aea 100644
+--- a/src/TMedia.h
++++ b/src/TMedia.h
+@@ -447,6 +447,8 @@ public:
+ signals:
+     void signal_setupVideoOutput(TMediaPlayer* player, bool& setupSucceeded);
+     void signal_hideVideoOutput(TMediaPlayer* player);
++    // play() set a sound, music or video going, not a preload; apiNotGame for one a script played, else the game's
++    void signal_mediaStarted(bool apiNotGame);
+ 
+ private slots:
+     void slot_writeFile(QNetworkReply* reply);
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 31f7e5e..408f3bf 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -1431,6 +1431,10 @@ signals:
+     // Not for a profile, as muting is for all of them, but no longer sent once the session's own profile has closed.
+     // From the event loop.
+     void soundsMutedChanged(THeadlessSession::SoundSource source, bool muted);
++    // The session's profile set a sound, music or video going, from a script or from the game, each time it does, as
++    // the GUI raises sysMediaStarted, so an app can show its mute button once there is something to mute. Not for
++    // a preload, which plays nothing. From the event loop.
++    void soundStarted(THeadlessSession::SoundSource source);
+     // A command of the profile was added, removed or changed in what addonCommands() gives, by a script, a click, a
+     // package's removal or the profile's reset, for the app to read them again. One for all the changes made before the event
+     // loop runs, from the event loop.
+diff --git a/src/headless/THeadlessSessionInput.cpp b/src/headless/THeadlessSessionInput.cpp
+index 2bd21a4..33b6bdc 100644
+--- a/src/headless/THeadlessSessionInput.cpp
++++ b/src/headless/THeadlessSessionInput.cpp
+@@ -24,6 +24,7 @@
+ #include "Host.h"
+ #include "HostManager.h"
+ #include "MudletMedia.h"
++#include "TMedia.h"
+ #include "TEvent.h"
+ 
+ #include <QFileInfo>
+@@ -143,6 +144,19 @@ void THeadlessSession::connectInputRelays(const unsigned int run)
+                 },
+                 Qt::QueuedConnection);
+     }
++    if (mpHost && mpHost->mpMedia) {
++        // Queued, as play() runs inside a script or the game's text
++        connect(
++                mpHost->mpMedia.data(),
++                &TMedia::signal_mediaStarted,
++                this,
++                [this, run](const bool apiNotGame) {
++                    if (run == mRun && mpHost) {
++                        emit soundStarted(apiNotGame ? SoundSource::scripts : SoundSource::game);
++                    }
++                },
++                Qt::QueuedConnection);
++    }
+ }
+ 
+ bool THeadlessSession::setSoundsMuted(const SoundSource source, const bool muted)

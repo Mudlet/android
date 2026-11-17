@@ -424,6 +424,9 @@ void SocketBridge::sendState()
     if (!mMapDownload.isEmpty()) {
         sendFrame(mMapDownload);
     }
+    if (!mSounds.isEmpty()) {
+        sendFrame(mSounds);
+    }
     sendFrame(mButtonBars);
     sendFrame(mCommands);
     if (!mEngine) {
@@ -1919,6 +1922,18 @@ void SocketBridge::mapDownload(const MapDownload& download)
                    {QStringLiteral("maximum"), download.maximum},
                    {QStringLiteral("cancelable"), download.cancelable},
                    {QStringLiteral("error"), download.error}});
+}
+
+void SocketBridge::sounds(const Sounds& sounds)
+{
+    if (mMirror) {
+        mMirror->sounds(sounds);
+    }
+    sendIfChanged(mSounds,
+                  {{QStringLiteral("t"), QStringLiteral("sounds")},
+                   {QStringLiteral("played"), sounds.played},
+                   {QStringLiteral("scriptsMuted"), sounds.scriptsMuted},
+                   {QStringLiteral("gameMuted"), sounds.gameMuted}});
 }
 
 QJsonObject SocketBridge::mapMessage(const MapFrame& frame)

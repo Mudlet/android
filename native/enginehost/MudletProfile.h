@@ -275,6 +275,7 @@ private:
     // The map the game offers, and the download of it, as the engine knows it: progress within a percent of what was
     // last sent is held back (pushMapDownloadProgress())
     MapDownload mMapDownload;
+    Sounds mSounds;
     // The URL being downloaded, as the game may offer another meanwhile: for its password to mask, never sent or logged
     QString mMapDownloadUrl;
     // The percentage of the download last sent, -1 while its size is unknown

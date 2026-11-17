@@ -157,6 +157,7 @@ class PseudoLocaleTest(private val locale: String) {
         compose.onNode(lua).performSemanticsAction(SemanticsActions.RequestFocus)
         waitFor(hasContentDescription(string(R.string.lua_indent)))
         assertTextFits("a trigger's page with its Lua being typed")
+        diag()
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.scripts_off)))
         activate(hasContentDescription(string(R.string.navigate_back)))
@@ -243,6 +244,87 @@ class PseudoLocaleTest(private val locale: String) {
             val right = width - layout.getLineRight(line)
             if (rtl) right <= left + SLACK_PX else left <= right + SLACK_PX
         }
+    }
+
+    private fun diag() {
+        compose.waitForIdle()
+        Thread.sleep(1500)
+        compose.waitForIdle()
+        val out = StringBuilder("DIAG $locale\n")
+        val decor = compose.activity.window.decorView
+        compose.runOnUiThread {
+            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(decor)
+            out.append("decor=${decor.width}x${decor.height} density=${decor.resources.displayMetrics.density}")
+            out.append(" ime=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())}")
+            out.append(" imeVisible=${insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())}")
+            out.append(" bars=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())}\n")
+            fun views(view: android.view.View, depth: Int) {
+                val at = IntArray(2)
+                view.getLocationOnScreen(at)
+                out.append(" ".repeat(depth)).append("V ").append(view.javaClass.name).append(" [${at[0]},${at[1]}][${at[0] + view.width},${at[1] + view.height}]")
+                    .append(" vis=${view.visibility} a11y=${view.importantForAccessibility}\n")
+                if (view is android.view.ViewGroup) for (i in 0 until view.childCount) views(view.getChildAt(i), depth + 1)
+            }
+            views(decor.rootView, 0)
+        }
+        fun Any.call(name: String): Any? = try {
+            javaClass.getMethod(name).invoke(this)
+        } catch (e: Throwable) {
+            "<$name: $e>"
+        }
+        fun element(el: Any, depth: Int) {
+            out.append(" ".repeat(depth)).append("E")
+            for (m in listOf(
+                "getClassName", "getAccessibilityClassName", "getText", "getContentDescription", "getStateDescription", "getHintText", "getBoundsInScreen", "isClickable",
+                "isFocusable", "isEditable", "isScrollable", "isVisibleToUser", "isImportantForAccessibility", "isScreenReaderFocusable", "getChildViewCount", "getResourceName",
+            )) {
+                out.append(' ').append(m.removePrefix("get")).append('=').append(el.call(m).toString().take(60))
+            }
+            out.append('\n')
+        }
+        try {
+            compose.onRoot().tryPerformAccessibilityChecks()
+            out.append("ATF passed\n")
+        } catch (e: Throwable) {
+            out.append("ATF: ${e.javaClass.name}: ${e.message}\n")
+            val results = e.call("getResults") as? List<*>
+            out.append("results=${results?.size}\n")
+            for (r in results.orEmpty()) {
+                if (r == null) continue
+                out.append("result view=${r.call("getView")}\n")
+                val h = r.call("getAccessibilityHierarchyCheckResult")
+                out.append("hierarchy result=${h.toString().take(300)}\n")
+                val el = h?.call("getElement")
+                if (el != null && el !is String) {
+                    element(el, 0)
+                    val count = el.call("getChildViewCount") as? Int ?: 0
+                    for (i in 0 until count) {
+                        val child = try {
+                            el.javaClass.getMethod("getChildView", Int::class.javaPrimitiveType).invoke(el, i)
+                        } catch (x: Throwable) {
+                            null
+                        }
+                        if (child != null) element(child, 2)
+                    }
+                    var up = el.call("getParentView")
+                    var n = 0
+                    while (up != null && up !is String && n < 12) {
+                        out.append("parent ")
+                        element(up, 0)
+                        up = up.call("getParentView")
+                        n++
+                    }
+                }
+            }
+        }
+        fun node(n: SemanticsNode, depth: Int) {
+            out.append(" ".repeat(depth)).append('#').append(n.id).append(' ').append(n.boundsInWindow.toString().removePrefix("Rect.fromLTRB")).append(" size=").append(n.size)
+            for ((key, value) in n.config) out.append(' ').append(key.name).append('=').append(value.toString().replace('\n', '|').take(36))
+            out.append('\n')
+            n.children.forEach { node(it, depth + 1) }
+        }
+        for (root in compose.onAllNodes(androidx.compose.ui.test.isRoot(), useUnmergedTree = true).fetchSemanticsNodes()) node(root, 0)
+        throw AssertionError(out.toString())
     }
 
     /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */

@@ -271,7 +271,8 @@ class ScreenshotTest {
         compose.onNode(lua).performTextInput("sen")
         waitFor(hasContentDescription(string(R.string.lua_indent)))
         // An emulator set up with keys of its own shows no keyboard, and this screenshot is then not taken
-        if (keyboardComes()) save("script-item-keyboard-$mode")
+        org.junit.Assert.assertTrue("DIAG keyboard did not come", keyboardComes())
+        save("script-item-keyboard-$mode")
 
         activate(hasText(string(R.string.scripts_apply)))
         compose.waitForIdle()

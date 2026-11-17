@@ -98,7 +98,6 @@ internal class PackagesClient(
 
     /** A script, an install or the profile's default packages changed them: asked again once the list has been shown. */
     fun onChanged() {
-        if (listed != null) ask()
     }
 
     /** The answer to an [install]. */

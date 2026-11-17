@@ -603,7 +603,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 7 Hardware keyboards and keys | expected | not started | |
 | 8 Display and input settings 2 | expected | not started | |
 | 9 Sound, music, TTS | expected | not started | |
-| 10 Map files, settings, areas | expected | not started | |
+| 10 Map files, settings, areas | expected | in flight | |
 | 11 Editor beyond items | expected | not started | |
 | 12 Lua functions needing the app | expected | not started | |
 | 13 Emergency stop and replays | expected / nice later | not started | |

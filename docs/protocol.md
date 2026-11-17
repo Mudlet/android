@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **27**.
+The current version is **32**.
 
 ## Transport
 
@@ -110,6 +110,9 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `markSeen` | `name`, `seq` | The player has seen that open profile's lines up to `seq`: its `attention` clears, and its `unread` counts from there. |
 | `downloadMap` | | Downloads the map the game offers, which `mapDownload` tells of, and loads it in place of the profile's, as the desktop mapper's "Download from game" does (`THeadlessSession::downloadOfferedMap()`, "Downloading the map" below). `mapDownload` follows how it goes. |
 | `cancelMapDownload` | | Stops that download, as the Abort of Mudlet's progress dialog does (`THeadlessSession::cancelMapOperation()`), while `mapDownload`'s `cancelable` holds: `mapDownload` with `state` `cancelled` follows. |
+| `loadMapFile` | `path` | Loads the map file at `path`, the whole path of a file the engine can read, in place of the profile's map, as the desktop's Map settings' "Load another map file" does (`THeadlessSession::loadMapFile()`, "Map files" below): a `.xml` file as an XML map, a `.json` file as a JSON map, anything else as Mudlet's own map. `mapFile` follows how it goes. |
+| `saveMapFile` | `path` | Saves the profile's map to `path`, as the desktop's "Save map as" does (`THeadlessSession::saveMapFile()`): a `.json` file as a JSON map, anything else as Mudlet's own map at its current format. `mapFile` follows how it goes. |
+| `cancelMapFile` | | Stops the JSON load or save under way while `mapFile`'s `cancelable` holds, as the Abort of Mudlet's progress dialog does: `mapFile` with `state` `cancelled` follows. It is read while the load or save runs, from the socket that asked for it. |
 | `scriptItems` | `kind`, `id`? | Asks for the open profile's triggers, aliases, scripts, timers, keys or buttons, `kind` `trigger`, `alias`, `script`, `timer`, `key` or `button`, as the desktop's script editor lists them (`THeadlessSession::scriptItems()`), answered by `scriptItems`. |
 | `scriptItem` | `kind`, `item`, `id`? | Asks for all the fields of the item of that kind whose id is `item` (`THeadlessSession::scriptItem()`), answered by `scriptItem`. |
 | `addScriptItem` | `kind`, `parent`, `position`, `folder`, `name`, `id`? | Makes an item of that kind, or a folder for `folder` true, named `name`, as the desktop editor's add does (`THeadlessSession::addScriptItem()`): in the folder whose id is `parent`, or at the top level for 0, at `position` among the items shown there (0 first; past the end appends); switched on, but not running until its first `editScriptItem`, or switched off for a timer or a button. Answered by `scriptItem`, the new item. |
@@ -188,6 +191,10 @@ while no map downloads, and once the map has arrived and is being loaded. A scri
 its Lua call, so none is under way when a request is read; its progress is not sent as `mapDownload`, not even the last
 of it, which Mudlet relays after a `downloadMap` read in the same pass.
 
+`loadMapFile`, `saveMapFile` and `cancelMapFile` too are answered only when refused. libmudlet refuses the first two
+while no profile is open, while the map downloads, and for a `path` that is not a whole path; a load or save that runs and fails is told by `mapFile`, not by
+`error`. `cancelMapFile` is refused unless it comes while a JSON load or save runs.
+
 `getSettings` and `setSettings` are answered by `settings`, or by `error` whose `message` is the request's name, a colon
 and why: a `keys` or `values` that is not as above, and in libmudlet no profile loaded (`no profile running`). A value in
 `setSettings` that is not true or false, a number or a string is refused in `settings`, and the rest are set.
@@ -252,6 +259,7 @@ no refusal: `luaCheck` says what is wrong with it.
 | `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
 | `envs` | `envs`: `env`, `color`; `re`? | The answer to `mapEnvs`: the environments the map gives a colour of its own, by number, as Mudlet's room colour dialog lists them (the profile's sixteen colours as 257 to 272, and those a script or the player added), each with the colour it draws rooms in as `#rrggbb`. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. |
+| `mapFile` | `op`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | How a `loadMapFile` or `saveMapFile` goes ("Map files" below): `op` is `load` or `save`; `state` is `running`, then `done`, `failed` or `cancelled`. While `running`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (both 0 until Mudlet's progress starts), and `cancelable` true while `cancelMapFile` can stop it, which only a JSON file's can; `error` is why it `failed`, else empty. Sent on the profile's socket, and on the control socket while that profile is the front one and the UI left out `profileSockets`; a UI that attaches during it is not told. |
 | `commands` | `commands`: `id`, `package`, `name`, `icon`, `tooltip`, `menuPath`, `shortcut`, `onMenu`, `onToolbar`, `enabled`, `checkable`, `checked`, `pinned`, `pulse` | The commands the profile's packages added with `addCommand()`, whole ("Button bars and commands" below): to each UI that attaches, and on each change. Empty with no profile open. |
 | `sounds` | `played`, `scriptsMuted`, `gameMuted` | Whether the profile has set a sound, music or video going since it loaded (`played`; libmudlet's `THeadlessSession::soundStarted`, carried in `scripts/mudlet-patches/`), and desktop Mudlet's mutes, which are for every profile: `scriptsMuted` for the sounds scripts and triggers play, `gameMuted` for those the game sends over MSP or GMCP (MCMP), as `getConfig()` gives `muteMediaAPI` and `muteMediaGame`, which `setSettings` changes. Sent as the profile loads, on each change and to each UI that attaches, once the engine has sent one; with none played and nothing muted once the profile closes. |
 
@@ -590,6 +598,25 @@ and `downloadOfferedMap()`, a Mudlet patch the app carries in `scripts/mudlet-pa
 - A profile starts at `none`, offered or not as the game has offered by then, and `offered` false and `none` follow
   its close.
 
+### Map files
+
+`loadMapFile` and `saveMapFile` take and give a map as a file, as the desktop's Map settings do (a Mudlet patch the app
+carries in `scripts/mudlet-patches/`). The file is named by its whole path, which the engine refuses otherwise; on
+Android the app copies a file the player picked into its own cache first, and copies a saved one out to where the
+player chose, so the engine reads and writes only the app's own directories.
+
+- Mudlet runs the load or save on the engine's main thread and reads no request until it ends. `mapFile` with `state`
+  `running` comes first, then Mudlet's progress at its steps, flushed as it is sent, and the end once the call returns.
+  While a JSON file is read or written, the socket that asked is read at each step for a `cancelMapFile`, which is
+  taken out of the requests waiting there; the others wait for the end. An XML import and Mudlet's own format cannot
+  be stopped, and their `cancelable` stays false; a JSON save cannot be stopped once it writes its file.
+- A load ends `done` once the map is in place, and `appMap` and `map` then show it; Mudlet writes its usual lines
+  about it to the main console. It ends `failed` with `error` "Could not load map from" the file's name, and the main
+  console says why. A JSON load that failed or was stopped leaves the profile's map as it was; any other leaves it as
+  Mudlet's loader did, as on the desktop.
+- A save ends `done` once the file is written, or `failed` with "Could not save map to" the file's name.
+- Both are refused while a script's map download or import runs.
+
 ### Status keys
 
 `status` is how the engine reports everything that is not a line. The keys are not part of the protocol's version:
@@ -742,7 +769,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 27, which added timers, keys and buttons to the script items (`timer`, `key` and `button`
+As implemented in version 32, which added loading and saving the map as a file (`loadMapFile`, `saveMapFile`,
+`cancelMapFile`, `mapFile`); version 27 added timers, keys and buttons to the script items (`timer`, `key` and `button`
 for `kind`) and `summary` to `scriptItems`; version 26 added whether an open profile was given a password
 (`passwordGiven` in `openProfiles`); version 25 added checking that Lua compiles (`checkLua`, `luaCheck`);
 version 24 took the map info box out of the map's picture and sends it as text (`info` in

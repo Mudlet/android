@@ -13,6 +13,7 @@
 #include <QVariant>
 
 #include <array>
+#include <functional>
 #include <optional>
 #include <variant>
 
@@ -163,6 +164,12 @@ public:
     virtual QString downloadMap() = 0;
     // Aborts that download, as the Abort of Mudlet's progress dialog does, while it still can be
     virtual QString cancelMapDownload() = 0;
+    // Loads the map file at that whole path in place of the profile's map, or saves the map to it, as the Mapper tab of
+    // Mudlet's preferences does, within the call, with IFrontend::mapFile() saying how it goes and how it ended; at
+    // each step of its progress while it can be stopped, cancelAsked() says whether to stop it. Else why it did not
+    // begin.
+    virtual QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) = 0;
+    virtual QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) = 0;
     // The profile's settings named in keys, by the keys Lua's getConfig() takes, each a bool, a double or a string; a
     // key the engine does not know is left out. Else why none were read.
     virtual std::variant<QVariantMap, QString> settings(const QStringList& keys) = 0;

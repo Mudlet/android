@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 27
+const val PROTOCOL_VERSION = 32
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -527,6 +527,29 @@ data class MapViewInfo(
 )
 
 /** How the download of the map the game offers goes (docs/protocol.md, `mapDownload`); a state this client does not know is [NONE]. */
+enum class MapFileOperation(val wire: String) {
+    LOAD("load"),
+    SAVE("save"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String): MapFileOperation = entries.firstOrNull { it.wire == wire } ?: LOAD
+    }
+}
+
+enum class MapFileState(val wire: String) {
+    RUNNING("running"),
+    DONE("done"),
+    FAILED("failed"),
+    CANCELLED("cancelled"),
+    ;
+
+    companion object {
+        // A state this app does not know ends the operation rather than leave its progress showing
+        fun fromWire(wire: String): MapFileState = entries.firstOrNull { it.wire == wire } ?: FAILED
+    }
+}
+
 enum class MapDownloadState(val wire: String) {
     NONE("none"),
     DOWNLOADING("downloading"),
@@ -782,6 +805,21 @@ sealed interface EngineMessage {
         val offered: Boolean,
         val host: String,
         val state: MapDownloadState,
+        val label: String,
+        val value: Int,
+        val maximum: Int,
+        val cancelable: Boolean,
+        val error: String,
+    ) : EngineMessage
+
+    /**
+     * How a Requests.loadMapFile or saveMapFile goes: while [MapFileState.RUNNING], Mudlet's progress [label] and
+     * [value] of [maximum] (0 until it starts), and [cancelable] while Requests.cancelMapFile can stop it, which only a
+     * JSON file's can; [error] is why it failed. Only libmudlet sends it, to the socket that asked.
+     */
+    data class MapFile(
+        val operation: MapFileOperation,
+        val state: MapFileState,
         val label: String,
         val value: Int,
         val maximum: Int,
@@ -1091,6 +1129,15 @@ object Requests {
     /** Stops that download while it is cancelable. Answered only by an Error, when refused. */
     fun cancelMapDownload(): JSONObject = JSONObject().put("t", "cancelMapDownload")
 
+    /** Loads the map file at the whole [path] in place of the profile's map, as [EngineMessage.MapFile] follows. Answered only by an Error, when refused. */
+    fun loadMapFile(path: String): JSONObject = JSONObject().put("t", "loadMapFile").put("path", path)
+
+    /** Saves the profile's map to the whole [path], as [EngineMessage.MapFile] follows. Answered only by an Error, when refused. */
+    fun saveMapFile(path: String): JSONObject = JSONObject().put("t", "saveMapFile").put("path", path)
+
+    /** Stops a JSON load or save while it is cancelable. Answered only by an Error, when refused. */
+    fun cancelMapFile(): JSONObject = JSONObject().put("t", "cancelMapFile")
+
     /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
     fun getSettings(keys: List<String>, id: Long): JSONObject {
         require(keys.isNotEmpty()) { "getSettings takes at least one key" }
@@ -1350,6 +1397,16 @@ class FrameReader(input: InputStream) {
                 o.optBoolean("offered"),
                 o.optString("host"),
                 MapDownloadState.fromWire(o.optString("state")),
+                o.optString("label"),
+                o.optInt("value"),
+                o.optInt("maximum"),
+                o.optBoolean("cancelable"),
+                o.optString("error"),
+            )
+
+            "mapFile" -> EngineMessage.MapFile(
+                MapFileOperation.fromWire(o.optString("op")),
+                MapFileState.fromWire(o.optString("state")),
                 o.optString("label"),
                 o.optInt("value"),
                 o.optInt("maximum"),

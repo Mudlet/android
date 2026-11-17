@@ -396,6 +396,7 @@ void SocketBridge::sendState()
     }
     sendFrame(hiddenInputMessage());
     sendFrame(secureOfferMessage());
+    sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
     }
@@ -1371,6 +1372,23 @@ QJsonObject SocketBridge::secureOfferMessage() const
     return {{QStringLiteral("t"), QStringLiteral("secureOffer")}, {QStringLiteral("offered"), mSecureOffer}};
 }
 
+QJsonObject SocketBridge::certificateMessage() const
+{
+    QJsonObject message{{QStringLiteral("t"), QStringLiteral("certificateRefused")}, {QStringLiteral("refused"), mRefusedCertificate.has_value()}};
+    if (mRefusedCertificate) {
+        const RefusedCertificate& certificate = *mRefusedCertificate;
+        message.insert(QStringLiteral("issuedTo"), certificate.issuedTo);
+        message.insert(QStringLiteral("issuer"), certificate.issuer);
+        message.insert(QStringLiteral("expires"), certificate.expires.isValid() ? certificate.expires.toUTC().toString(Qt::ISODate) : QString());
+        message.insert(QStringLiteral("serial"), certificate.serial);
+        message.insert(QStringLiteral("expired"), certificate.expired);
+        message.insert(QStringLiteral("selfSigned"), certificate.selfSigned);
+        message.insert(QStringLiteral("others"), certificate.others);
+        message.insert(QStringLiteral("errors"), QJsonArray::fromStringList(certificate.errors));
+    }
+    return message;
+}
+
 QJsonObject SocketBridge::historyMessage(const QStringList& lines)
 {
     return {{QStringLiteral("t"), QStringLiteral("history")}, {QStringLiteral("lines"), QJsonArray::fromStringList(lines)}};
@@ -1691,6 +1709,20 @@ void SocketBridge::secureOffer(bool offered)
     mSecureOffer = offered;
     if (outputLive()) {
         sendFrame(secureOfferMessage());
+    }
+}
+
+void SocketBridge::certificateRefused(const std::optional<RefusedCertificate>& certificate)
+{
+    if (mMirror) {
+        mMirror->certificateRefused(certificate);
+    }
+    if (certificate == mRefusedCertificate) {
+        return;
+    }
+    mRefusedCertificate = certificate;
+    if (outputLive()) {
+        sendFrame(certificateMessage());
     }
 }
 

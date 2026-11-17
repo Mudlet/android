@@ -315,12 +315,35 @@ def engine_basics(port):
     check(bool(saves), f"the profile was saved at exit: {saves}")
 
 
-def self_signed_context():
-    """A TLS server context with a new self-signed certificate for localhost, as many games have."""
-    key, cert = os.path.join(TMP, "server.key"), os.path.join(TMP, "server.crt")
-    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=localhost",
-                    "-addext", "subjectAltName=DNS:localhost", "-keyout", key, "-out", cert],
+def self_signed_context(host="localhost"):
+    """A TLS server context with a new self-signed certificate for host, as many games have."""
+    key, cert = os.path.join(TMP, f"{host}.key"), os.path.join(TMP, f"{host}.crt")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", f"/CN={host}",
+                    "-addext", f"subjectAltName=DNS:{host}", "-keyout", key, "-out", cert],
                    check=True, capture_output=True)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert, key)
+    return ctx
+
+
+def expired_context():
+    """A TLS server context with a self-signed certificate for localhost that ran out on 2 January 2020."""
+    folder = os.path.join(TMP, "expired")
+    os.makedirs(folder, exist_ok=True)
+    key, csr, cert = (os.path.join(folder, n) for n in ("server.key", "server.csr", "server.crt"))
+    with open(os.path.join(folder, "index.txt"), "w", encoding="utf-8"):
+        pass
+    with open(os.path.join(folder, "serial"), "w", encoding="utf-8") as f:
+        f.write("01\n")
+    config = os.path.join(folder, "ca.cnf")
+    with open(config, "w", encoding="utf-8") as f:
+        f.write(f"[ca]\ndefault_ca = d\n[d]\ndatabase = {folder}/index.txt\nnew_certs_dir = {folder}\nserial = {folder}/serial\n"
+                "default_md = sha256\npolicy = p\ncopy_extensions = copy\nunique_subject = no\n[p]\ncommonName = supplied\n")
+    subprocess.run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost",
+                    "-addext", "subjectAltName=DNS:localhost", "-keyout", key, "-out", csr], check=True, capture_output=True)
+    # openssl req takes no date in the past; openssl ca does
+    subprocess.run(["openssl", "ca", "-batch", "-config", config, "-selfsign", "-keyfile", key, "-in", csr, "-out", cert,
+                    "-startdate", "20200101000000Z", "-enddate", "20200102000000Z"], check=True, capture_output=True)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
     return ctx
@@ -329,11 +352,18 @@ def self_signed_context():
 def tls_checks(plain_port):
     """TLS through the engine's Qt and OpenSSL. Certificates are checked as in Mudlet's GUI: one that is not trusted ends
     the connection with the reasons, unless the profile accepts what is wrong with it (the GUI's "Accept self-signed
-    certificates" and its other two boxes, which the app does not offer yet)."""
+    certificates" and its other two boxes). The certificate refused is passed on, certificateRefused, with what the
+    GUI's preferences show of it: a self-signed one, then, once self-signed ones are accepted, an expired one and one
+    for another server."""
     tls_port = fake_telnet.start_in_thread(tls=self_signed_context())
+    expired_port = fake_telnet.start_in_thread(tls=expired_context())
+    elsewhere_port = fake_telnet.start_in_thread(tls=self_signed_context("elsewhere.invalid"))
     profile = "TLS Test"
     proc, c = start_engine(profile)
-    c.wait_for(lambda m: m["t"] == "synced")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    told = [m for m in seen if m["t"] == "certificateRefused"]
+    check(told == [{"t": "certificateRefused", "refused": False}], f"an attach is told no certificate was refused: {told}")
 
     # Refused: the certificate is self-signed. A secure connection needs the server's name, as its certificate names it.
     msgs = []
@@ -346,12 +376,21 @@ def tls_checks(plain_port):
     check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
     check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed"],
           f"the server saw the handshake end unfinished: {fake_telnet.TLS_HANDSHAKES}")
+    m = c.wait_for(lambda m: m["t"] == "certificateRefused", timeout=10, collect=msgs)
+    check(m.get("refused") is True and m.get("selfSigned") is True and m.get("expired") is False and m.get("others") is False,
+          f"the self-signed certificate is passed on as refused: {m}")
+    check(m.get("issuedTo") == "localhost" and m.get("issuer") == "localhost" and m.get("serial", "") != ""
+          and m.get("expires", "").endswith("Z"), f"with what the GUI's preferences show of it: {m}")
+    check(any("self-signed" in e for e in m.get("errors", [])), f"and Mudlet's reasons: {m.get('errors')}")
 
     # TLS to a port that does not speak it
     msgs = []
     c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": True})
     c.wait_for(lambda m: m["t"] in ("line", "tail") and "Secure handshake failed" in m["text"], timeout=30, collect=msgs)
     check(not any("Red bold" in t for t in texts_of(msgs)), "TLS to a plain port: the handshake fails, no game text")
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs, timeout=10)
+    told = [m["refused"] for m in msgs if m["t"] == "certificateRefused"]
+    check(told == [False], f"the refused certificate is forgotten as the next connection is tried, which had none: {told}")
 
     # The profile keeps the TLS it started with
     c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": False})
@@ -384,6 +423,27 @@ def tls_checks(plain_port):
     m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
     check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")
     check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed", "ok"], f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
+
+    # An expired certificate is still refused: accepting self-signed ones lets only that error past
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", [], timeout=10)
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": expired_port, "tls": True})
+    m = c.wait_for(lambda m: m["t"] == "certificateRefused" and m["refused"], timeout=30, collect=msgs)
+    check(m.get("expired") is True and m.get("selfSigned") is False and m.get("others") is False,
+          f"refused for its expiry alone, the self-signed error let past: {m}")
+    check(m.get("expires") == "2020-01-02T00:00:00Z", f"it ran out on 2 January 2020: {m.get('expires')}")
+    check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
+
+    # A certificate for another server: an error only "Accept all certificate errors" lets past
+    if ("connection", "disconnected") not in [(m["key"], m["value"]) for m in msgs if m["t"] == "status"]:
+        wait_status(c, "connection", lambda v: v == "disconnected", msgs, timeout=10)
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": elsewhere_port, "tls": True})
+    m = c.wait_for(lambda m: m["t"] == "certificateRefused" and m["refused"], timeout=30, collect=msgs)
+    check(m.get("others") is True and m.get("expired") is False and m.get("selfSigned") is False
+          and m.get("issuedTo") == "elsewhere.invalid", f"refused for naming another server: {m}")
+    check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

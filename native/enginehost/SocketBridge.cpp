@@ -1875,7 +1875,7 @@ void SocketBridge::appMap(const std::optional<MapFrame>& frame)
         return;
     }
     QJsonObject message = frame ? mapMessage(*frame) : QJsonObject();
-    mAppMap.frame = message.isEmpty() ? std::nullopt : frame;
+    mAppMap.frame = frame;
     if (message.isEmpty()) {
         message = mapMessage(MapFrame{{}, QSize(0, 0), true});
     }
@@ -1902,6 +1902,7 @@ void SocketBridge::mapDownload(const MapDownload& download)
 
 QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
 {
+    ++sMapMessagesMade;
     const QByteArray base64 = frame.png.toBase64();
     const QJsonObject view = frame.view ? mapViewMessage(*frame.view) : QJsonObject();
     const QJsonObject info = frame.info.lines.isEmpty() ? QJsonObject() : mapInfoMessage(frame.info);

@@ -57,6 +57,9 @@ public:
     qint64 lastSeq() const { return mNextSeq - 1; }
     QString connection() const { return mStatus.value(QStringLiteral("connection")); }
     const QHash<QString, QString>& statuses() const { return mStatus; }
+    // How many messages every bridge has made of map frames so far, which nothing but its test reads
+    // (tests/map_frames_test.cpp): a frame given again is to have none made of it
+    static int mapMessagesMade() { return sMapMessagesMade; }
 
     void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
     void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
@@ -170,6 +173,7 @@ protected:
     static QJsonObject mapMessage(const MapFrame& frame);
     static QJsonObject mapViewMessage(const MapViewInfo& view);
     static QJsonObject mapInfoMessage(const MapInfo& info);
+    static inline int sMapMessagesMade = 0;
 
     ControlBridge* mControl = nullptr;
     SocketBridge* mMirror = nullptr;
@@ -200,8 +204,8 @@ protected:
     // As IFrontend::buttonBars() and commands() last gave them, as sent
     QJsonObject mButtonBars = buttonBarsMessage({});
     QJsonObject mCommands = commandsMessage({});
-    // A map's message as last sent, and the frame it was made of, none where it was made of no frame: the engine
-    // draws the map again for much that leaves the frame as it was, and that frame would make that message again
+    // A map's message as last sent, and the frame it was made for, none where that was no frame: the engine draws
+    // the map again for much that leaves the frame as it was, and that frame would make that message again
     struct KeptMap
     {
         std::optional<MapFrame> frame;

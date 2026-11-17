@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import org.json.JSONObject
 import org.mudlet.android.R
+import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.engine.EngineSession
@@ -28,6 +29,7 @@ import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
 import org.mudlet.android.protocol.OpenProfile
+import org.mudlet.android.protocol.OpenProfileState
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.Transport
@@ -105,6 +107,10 @@ object EngineClient {
 
     // Whether sessions is the engine's word on what is open: from its openProfiles until the link goes down
     private var openProfilesKnown = false
+
+    // The open profiles the engine said hold no password, each given its stored one, if any, the first time it said
+    // so: the store is not read, nor the password sent, at every openProfiles
+    private val passwordOffered = HashSet<String>()
 
     // The app's own lines that came while no profile was open, for the first to open
     private val heldMarkers = ArrayList<String>()
@@ -184,6 +190,7 @@ object EngineClient {
         if (!attached) return
         attached = false
         openProfilesKnown = false
+        passwordOffered.clear()
         link.stop()
         sessions.forEach(ProfileSession::stop)
         linkState = "detached (UI stopped)"
@@ -316,6 +323,17 @@ object EngineClient {
         profileRequest({}) { Requests.openProfile(name, password, connect = false, alongside = true, id = it) }
     }
 
+    // A profile the engine brought back after it was killed has no password, as the engine keeps none: its stored one
+    // goes to it again, for the login of its next connection, and of the restored one if that is still to come
+    private fun givePasswords(open: List<OpenProfile>) {
+        val without = open.filter { !it.passwordGiven }
+        passwordOffered.retainAll(without.map { it.name }.toSet())
+        for (profile in without) {
+            if (profile.state == OpenProfileState.CLOSING || !passwordOffered.add(profile.name)) continue
+            PasswordStore(app).get(profile.name)?.let { givePassword(profile.name, it) }
+        }
+    }
+
     /** Saves and closes the open profile [name], as Mudlet closes a profile; the next to its right, else its left, takes the front. */
     fun closeProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.closeProfile(name, it) }
 
@@ -364,6 +382,7 @@ object EngineClient {
         moveFront(requested ?: engineFront ?: kept.firstOrNull())
         // After the front has moved, so that only a game in the background is said to want attention
         for ((session, profile) in kept.zip(open)) session.counted(profile)
+        givePasswords(open)
         markFrontSeen()
         wantedFront?.let { (name, onShown) ->
             wantedFront = null
@@ -488,6 +507,7 @@ object EngineClient {
         override fun onDetached(reason: String) {
             main.post {
                 openProfilesKnown = false
+                passwordOffered.clear()
                 engineStatus.clear()
                 engineLosses++
                 lostAt = SystemClock.elapsedRealtime()

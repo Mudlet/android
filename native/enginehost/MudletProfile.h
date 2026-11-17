@@ -3,6 +3,7 @@
 #include "IEngine.h"
 #include "IFrontend.h"
 #include "MapPng.h"
+#include "Profile.h"
 #include "SessionStore.h"
 
 #include <QElapsedTimer>
@@ -129,8 +130,9 @@ public:
     // openProfile for the running profile: it takes the password for its next connection, an empty one for none,
     // and connects if connect
     void openAgain(const QString& password, bool connect);
-    // The login saveProfile stored for the running profile, for its next connection
-    void setLogin(const QString& login);
+    // What saveProfile stored for the running profile, for its next connection. addressChanged: its host, port or TLS
+    // choice is not the one stored before, so a restart of the engine is to bring the profile back at the stored one
+    void profileSaved(const Profile& stored, bool addressChanged);
     // Saves and closes it, as Mudlet's own close does, now or once its start is over; forSwitch, for the profile
     // openProfile opens in place of the others
     void close(bool forSwitch);
@@ -172,7 +174,11 @@ private:
     bool takesInput();
     void requestShutdown();
     void onShutdownFinished(bool saved, const QString& error);
-    void applyLogin();
+    bool takesChanges(const std::function<void()>& again);
+    void applySaved();
+    void applyPassword();
+    // Why the running profile cannot be connected, with this TLS choice if one is given; empty if it can
+    QString connectProblem(std::optional<bool> tls) const;
     // The profile has closed or did not start
     void closed();
     void restoreStatus(const QString& phase, const QString& detail = {});
@@ -278,12 +284,15 @@ private:
     // The download's own progress has started: Mudlet's progress before then is the end of a map import or export a
     // script began
     bool mMapDownloadProgressStarted = false;
-    // The TLS choice the profile was started with, unset when that start made none
+    // The TLS choice the running profile connects with: the one it was started with, unset when that start made
+    // none, then the one of a saved profile once Mudlet has taken it
     std::optional<bool> mProfileTls;
-    // A login and a password for the running profile that THeadlessSession has yet to take, as it refuses them
-    // while the profile, or another of the pool, loads
-    std::optional<QString> mNewLogin;
+    // The saved profile and a password for the running profile that THeadlessSession has yet to take, as it refuses
+    // them while the profile, or another of the pool, loads
+    std::optional<Profile> mSaved;
     std::optional<QString> mNewPassword;
+    // Why Mudlet refused the address last saved for the running profile, which keeps the one it had
+    QString mAddressProblem;
     // Lua (connects included) asked for while the profile starts, run once it has
     QStringList mPendingLua;
     QString mErrorPending;

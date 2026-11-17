@@ -95,6 +95,10 @@ class ProtocolTest {
                 ),
             ),
         )
+        // An engine that does not say is not given a password it may hold already
+        assertEquals(true, beta.passwordGiven)
+        val restored = FrameReader.parse(JSONObject("""{"t":"openProfiles","profiles":[{"name":"Beta","state":"restoring","passwordGiven":false}]}"""))
+        assertEquals(listOf(false), (restored as EngineMessage.OpenProfiles).profiles.map { it.passwordGiven })
         assertEquals(OpenProfileState.LOADED, OpenProfileState.fromWire("someday"))
     }
 

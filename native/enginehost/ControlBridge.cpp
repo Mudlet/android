@@ -289,7 +289,7 @@ void ControlBridge::setFront(qsizetype index)
     }
 }
 
-IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, ProfileState state)
+IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, ProfileState state, bool passwordGiven)
 {
     int slot = 1;
     while (std::any_of(mOpen.cbegin(), mOpen.cend(), [slot](const OpenProfile& open) {
@@ -300,7 +300,7 @@ IFrontend* ControlBridge::profileOpened(const QString& name, IEngine* session, P
     auto* bridge = new SocketBridge(this, this, name, slot);
     bridge->setEngine(session);
     listenFor(bridge);
-    mOpen.append({bridge, state});
+    mOpen.append({bridge, state, passwordGiven});
     // A restore brings the front profile back first, and the others behind it
     if (state != ProfileState::restoring || mFront < 0) {
         setFront(mOpen.size() - 1);
@@ -315,6 +315,15 @@ void ControlBridge::profileState(const QString& name, ProfileState state)
     const qsizetype index = openIndex(name);
     if (index >= 0 && mOpen.at(index).state != state) {
         mOpen[index].state = state;
+        sendOpenProfiles(true);
+    }
+}
+
+void ControlBridge::profilePasswordGiven(const QString& name, bool given)
+{
+    const qsizetype index = openIndex(name);
+    if (index >= 0 && mOpen.at(index).passwordGiven != given) {
+        mOpen[index].passwordGiven = given;
         sendOpenProfiles(true);
     }
 }
@@ -394,6 +403,7 @@ QJsonObject ControlBridge::openProfilesMessage() const
                                     {QStringLiteral("slot"), open.bridge->slot()},
                                     {QStringLiteral("socket"), open.bridge->socketPath()},
                                     {QStringLiteral("state"), wireName(open.state)},
+                                    {QStringLiteral("passwordGiven"), open.passwordGiven},
                                     {QStringLiteral("connection"), open.bridge->connection()},
                                     {QStringLiteral("lastSeq"), open.bridge->lastSeq()},
                                     {QStringLiteral("unread"), open.bridge->lastSeq() - open.seenSeq},

@@ -1,0 +1,199 @@
+Let a frontend with no window change the running profile's server, TLS and automatic reconnect
+
+A profile reads its server, its port, whether it connects securely and whether it reconnects automatically once, as
+it loads. The connection dialog only writes the profile's files, so one that is open keeps what it loaded: its
+automatic reconnect and the retry after a failed connection go to the server last connected to, a connection is
+made with the TLS choice the profile started with, and it goes on reconnecting, or not, as it did. The GUI's player
+closes the profile and opens it again; an app's player who edited the profile found the game reconnecting to the old
+server until the app had closed the profile too.
+
+- THeadlessSession::setAddress() stores the server, the port and the TLS choice as Options::host, port and tls are
+  stored, checked as start() checks them, and gives them to the running Host.
+- THeadlessSession::setAutoReconnect() stores the dialog's "Reconnect automatically" and gives it to the running
+  Host.
+- Host::changeAddress() takes the address, and has cTelnet::reconnect() and the automatic reconnect go to it instead
+  of the server last connected to (cTelnet::mHostAddressChanged, until the next dial). An address that has not changed
+  leaves them alone, so a server a script connected to with connectToServer() is still reconnected to.
+- A connection that is open stays as it is. The automatic reconnect choice counts from the next time the connection
+  is lost or fails; a retry already waiting is still made.
+- Both calls are refused with errorString() where submit() is.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (running_profile_details: a port changed while the
+game is connected and where the automatic reconnect then goes, one changed while it is not and where Lua's
+reconnect() goes, the automatic reconnect turned off and on, TLS turned on and off between connections, and TLS
+to an IP address refused, the profile never closing for any). The desktop is unchanged: its dialog still does not
+reach an open profile, and nothing else sets the flag.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 18e5e6a..1f73624 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -213,6 +213,18 @@ only, as `options.password` is, and nothing stores it; an empty one withdraws th
+ password stored for the profile, if any, is read again. Both are false, with `errorString()` saying why,
+ where `submit()` is refused, and `setLogin()` also when the name could not be stored.
+ 
++`setAddress()` and `setAutoReconnect()` do the same for the rest of what the connection dialog holds, which a
++running profile also reads only as it loads. `setAddress()` takes the server, its port and whether it is
++reached securely, and stores them as `options.host`, `options.port` and `options.tls` are stored, so an empty
++host or a port of 0 leaves the profile's. Lua's `reconnect()`, the retry after a failed connection and the
++automatic reconnect go to the new address from then on, where they would have gone to the one last connected
++to, and every later connection takes the TLS choice, `connectToServer()`'s included. A connection that is open
++stays as it is, and one still looking its server up takes the TLS choice as it is when the lookup ends, as it
++does a change made in the profile preferences. `setAutoReconnect()` is the dialog's "Reconnect automatically",
++stored with the profile: it counts from the next time the connection is lost or fails, so a retry that is
++already waiting is still made, and disconnecting calls that off. Both are false where `submit()` is refused
++and when a detail could not be stored, and `setAddress()` also for details `start()` would refuse.
++
+ Each of `outputLine`'s runs covers part of the line, in order, with the colours and styles the game
+ asked for (`THeadlessSession::TextStyle`: bold, italic, underline, overline, strike-out, reverse, blink,
+ fast blink, concealed), and says whether each colour is the profile's own, which a frontend may swap
+diff --git a/src/Host.cpp b/src/Host.cpp
+index a483510..015e40d 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -6604,6 +6604,19 @@ void Host::loadStoredPassword()
+     }
+ }
+ 
++void Host::changeAddress(const QString& url, const int port, const bool tls)
++{
++    if (url == mUrl && port == mPort && tls == mSslTsl) {
++        return;
++    }
++    mUrl = url;
++    mPort = port;
++    mSslTsl = tls;
++    // A telnets:// link asked for the server it named
++    mUseTlsThisSession = false;
++    mTelnet.mHostAddressChanged = true;
++}
++
+ void Host::changeLogin(const QString& login)
+ {
+     if (login == mLogin) {
+diff --git a/src/Host.h b/src/Host.h
+index 1db6f9d..0e88822 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -224,6 +224,9 @@ public:
+     int getPort() { return mPort; }
+     void setPort(const int port) { mPort = port; }
+     void setAutoReconnect(const bool reconnect) { mTelnet.setAutoReconnect(reconnect); }
++    // The server and whether it is reached securely, changed while the profile runs: the next connect, reconnect
++    // or automatic reconnect goes there, and a connection that is open stays where it is
++    void changeAddress(const QString& url, int port, bool tls);
+     QString& getLogin() { return mLogin; }
+     void setLogin(const QString& login) { mLogin = login; }
+     // The login name, changed while the profile runs: the automatic login reads it at its login step, so it is for
+diff --git a/src/ctelnet.cpp b/src/ctelnet.cpp
+index 8257825..3027780 100644
+--- a/src/ctelnet.cpp
++++ b/src/ctelnet.cpp
+@@ -849,6 +849,7 @@ void cTelnet::connectIt(const QString& address, int port)
+ 
+     mHostUrl = address;
+     mHostPort = port;
++    mHostAddressChanged = false;
+     if (mpTransport) {
+         dialTransport();
+         return;
+@@ -875,7 +876,7 @@ void cTelnet::reconnect()
+ 
+     // if we've opened the profile offline and wish to connect, the last
+     // connection parameters aren't yet set
+-    if (mHostUrl.isEmpty() || mHostPort == 0) {
++    if (mHostUrl.isEmpty() || mHostPort == 0 || mHostAddressChanged) {
+         connectIt(mpHost->getUrl(), mpHost->getPort());
+     } else {
+         connectIt(mHostUrl, mHostPort);
+@@ -1751,7 +1752,11 @@ void cTelnet::finishDisconnection()
+     // And if the conditions are right start the reconnection attempt straight
+     // away:
+     if (mAutoReconnect && !mDontReconnect && timeOffset >= 5000) {
+-        connectIt(mHostUrl, mHostPort);
++        if (mHostAddressChanged && mpHost) {
++            connectIt(mpHost->getUrl(), mpHost->getPort());
++        } else {
++            connectIt(mHostUrl, mHostPort);
++        }
+     }
+     mDontReconnect = false;
+     mDisconnectRequested = false;
+diff --git a/src/ctelnet.h b/src/ctelnet.h
+index 2072fe3..60bcbb1 100644
+--- a/src/ctelnet.h
++++ b/src/ctelnet.h
+@@ -591,6 +591,9 @@ private:
+     // IPv6 address ("2001:db8::1"):
+     QString mHostUrl;
+     int mHostPort = 0;
++    // The profile's own address was changed since the last dial, so reconnect() and the automatic reconnect go to
++    // it instead of where that dial went
++    bool mHostAddressChanged = false;
+     bool mWaitingForResponse = false;
+     // True between connectIt() and slot_socketHostFound, so
+     // getConnectionState() reports HostLookupState during DNS lookup.
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index be06705..7bfbf5a 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -1412,6 +1412,35 @@ bool THeadlessSession::setPassword(const QString& password)
+     return true;
+ }
+ 
++bool THeadlessSession::setAddress(const QString& host, const int port, const bool tls)
++{
++    if (!usable()) {
++        return false;
++    }
++    Options details;
++    details.host = host.trimmed();
++    details.port = port;
++    details.tls = tls;
++    if (const QString problem = MudletApp::connectionDetailsProblem(hostToConnectTo(mProfileName, details.host), port, tls); !problem.isEmpty()) {
++        mErrorString = problem;
++        return false;
++    }
++    if (!storeConnectionDetails(details, tls)) {
++        return false;
++    }
++    mpHost->changeAddress(details.host.isEmpty() ? mpHost->getUrl() : details.host, port > 0 ? port : mpHost->getPort(), tls);
++    return true;
++}
++
++bool THeadlessSession::setAutoReconnect(const bool reconnect)
++{
++    if (!usable() || !storeConnectionDetail(qsl("autoreconnect"), QString::number(reconnect ? Qt::Checked : Qt::Unchecked))) {
++        return false;
++    }
++    mpHost->setAutoReconnect(reconnect);
++    return true;
++}
++
+ bool THeadlessSession::runLua(const QString& code)
+ {
+     if (!usable()) {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 8820d42..31f7e5e 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -226,6 +226,15 @@ public:
+     // name could not be stored, which leaves the profile's as it was.
+     bool setLogin(const QString& login);
+     bool setPassword(const QString& password);
++    // The server, its port and whether it is reached securely, changed in the running profile and stored with it
++    // as Options::host, port and tls are: an empty host or a port of 0 leaves the profile's. Lua's reconnect(),
++    // the retry after a failed connection and the automatic reconnect go there from then on, and every later
++    // connection takes the TLS choice; a connection that is open stays as it is. setAutoReconnect() is the
++    // connection dialog's "Reconnect automatically", stored too: it counts from the next time the connection is
++    // lost or fails, and a retry already waiting is still made. Both are false where submit() is refused, and
++    // when a detail could not be stored; setAddress() also where start() would refuse the details.
++    bool setAddress(const QString& host, int port, bool tls);
++    bool setAutoReconnect(bool reconnect);
+     bool runLua(const QString& code);
+     // The profile's settings named in keys, as Lua's getConfig() gives them, into values: a bool, a number or a
+     // string each, an option of several by its name (showSentText as "never", "always" or "script"). A key

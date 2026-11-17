@@ -789,8 +789,9 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mStartTls = tls;
     // For this run only: THeadlessSession stores none, and a restore has none
     mStartPassword = password;
-    mNewLogin.reset();
+    mSaved.reset();
     mNewPassword.reset();
+    mAddressProblem.clear();
     mProfileTls = tls;
     if (const QString folder = mEngine.mProfiles.find(mProfile); !tls.has_value() && !folder.isEmpty()) {
         mProfileTls = mEngine.mProfiles.read(folder).tls;
@@ -811,7 +812,7 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mCloseWhenStarted = false;
     mForSwitch = false;
     mEngine.profileStarting(this);
-    mFrontend = mEngine.mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting);
+    mFrontend = mEngine.mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting, !password.isEmpty());
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
     beginLoad();
@@ -875,10 +876,12 @@ void MudletProfile::onStartFinished(int result, const QString& error)
         restoreStatus(QStringLiteral("restored"), mProfile);
     }
     // Before a connect that waited for the start
-    applyLogin();
+    applyPassword();
     for (const QString& code : pending) {
         runNow(code);
     }
+    // After it: no connect is taken while a save waits, so one that waited was asked for with the details loaded
+    applySaved();
     if (mCloseWhenStarted) {
         close(mForSwitch);
     }
@@ -914,14 +917,9 @@ void MudletProfile::connectTo(const QString& host, quint16 port, std::optional<b
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: the profile is closing"));
         return;
     }
-    // A running profile connects as it was started: THeadlessSession takes the TLS choice only in start(), and
-    // connectToServer() keeps the profile's. A connect refused for that changes nothing, a restore included.
-    if (mState != State::idle && tls.has_value() && tls != mProfileTls) {
-        QString started = QStringLiteral("with its stored choice");
-        if (mProfileTls.has_value()) {
-            started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
-        }
-        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it").arg(started));
+    // A connect refused changes nothing, a restore included
+    if (const QString problem = connectProblem(tls); !problem.isEmpty()) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(problem));
         return;
     }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
@@ -948,6 +946,30 @@ void MudletProfile::connectTo(const QString& host, quint16 port, std::optional<b
     case State::stopping:
         return;
     }
+}
+
+// connectToServer() dials with the TLS choice Mudlet holds for the running profile, which only its start and a save
+// of the profile set: a connect made while that is not the one asked for, or not the one stored, could send the
+// login over a connection the player did not choose.
+QString MudletProfile::connectProblem(std::optional<bool> tls) const
+{
+    if (mState == State::idle) {
+        return {};
+    }
+    if (mSaved) {
+        return QStringLiteral("the profile has yet to take the details saved for it; connect again in a moment");
+    }
+    if (!mAddressProblem.isEmpty()) {
+        return QStringLiteral("Mudlet refused the address saved for the profile: %1").arg(mAddressProblem);
+    }
+    if (tls.has_value() && tls != mProfileTls) {
+        QString connects = QStringLiteral("with its stored TLS choice");
+        if (mProfileTls.has_value()) {
+            connects = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
+        }
+        return QStringLiteral("the profile connects %1; save it with the other choice to change that").arg(connects);
+    }
+    return {};
 }
 
 bool MudletProfile::takesInput()
@@ -1068,6 +1090,10 @@ void MudletProfile::connectProfile()
     if (mKept.connect || !running()) {
         return;
     }
+    if (const QString problem = connectProblem(std::nullopt); !problem.isEmpty()) {
+        mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: %1").arg(problem));
+        return;
+    }
     const Profile profile = mEngine.mProfiles.read(mProfile);
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(profile.host)).arg(profile.port);
     mDisconnectRequested = false;
@@ -1092,50 +1118,91 @@ void MudletProfile::openAgain(const QString& password, bool connect)
         mStartPassword = password;
     } else {
         mNewPassword = password;
-        applyLogin();
+        applyPassword();
     }
+    mEngine.mHost->profilePasswordGiven(mProfile, !password.isEmpty());
     if (connect) {
         connectProfile();
     }
 }
 
-void MudletProfile::setLogin(const QString& login)
+void MudletProfile::profileSaved(const Profile& stored, bool addressChanged)
 {
-    // A load still to begin reads the stored one itself
+    if (addressChanged) {
+        // What it last connected to was the address this one replaces
+        mKept.host.clear();
+        mKept.port = 0;
+        mKept.tls.reset();
+        mEngine.persist();
+    }
+    // A load still to begin reads the stored details itself, in place of the address it was to start with
     if (mState == State::starting && !mLoadBegun) {
+        if (addressChanged) {
+            mStartHost.clear();
+            mStartPort = 0;
+            mStartTls.reset();
+            mProfileTls = stored.tls;
+        }
         return;
     }
-    mNewLogin = login;
-    applyLogin();
+    mSaved = stored;
+    applySaved();
 }
 
-// Mudlet reads a profile's login and password as it loads, so a running one is handed them: its next connection logs
-// in with them. Neither is ever logged.
-void MudletProfile::applyLogin()
+// THeadlessSession refuses a change to the profile while it, or another of the pool, loads. Starting or closing:
+// onStartFinished() and a close that is refused hand it over; another loading: again does, once that load is over.
+bool MudletProfile::takesChanges(const std::function<void()>& again)
 {
-    // Starting or closing: onStartFinished() and a close that is refused call this again
-    if (mState != State::started || (!mNewLogin && !mNewPassword)) {
-        return;
+    if (mState != State::started) {
+        return false;
     }
     if (mEngine.loadingOther(this)) {
-        mEngine.later(this, [this] {
-            applyLogin();
-        });
+        mEngine.later(this, again);
+        return false;
+    }
+    return true;
+}
+
+// Mudlet reads a profile's address, TLS choice, automatic reconnect and login as it loads, so a running one is handed
+// what was saved: its next connection is made and logged in with it, and the one that is open stays as it is. The
+// login is never logged.
+void MudletProfile::applySaved()
+{
+    if (!mSaved || !takesChanges([this] {
+            applySaved();
+        })) {
         return;
     }
-    if (const auto login = std::exchange(mNewLogin, std::nullopt)) {
-        if (mSession->setLogin(*login)) {
-            qInfo("MudletEngine: %s is given its login for its next connection", qPrintable(mProfile));
-        } else {
-            qWarning("MudletEngine: %s did not take its new login: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
-        }
+    const Profile saved = *std::exchange(mSaved, std::nullopt);
+    if (mSession->setLogin(saved.login)) {
+        qInfo("MudletEngine: %s is given its login for its next connection", qPrintable(mProfile));
+    } else {
+        qWarning("MudletEngine: %s did not take its new login: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
     }
-    if (const auto password = std::exchange(mNewPassword, std::nullopt)) {
-        if (mSession->setPassword(*password)) {
-            qInfo("MudletEngine: %s is given a password, or none, for its next connection", qPrintable(mProfile));
-        } else {
-            qWarning("MudletEngine: %s did not take the password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
-        }
+    if (mSession->setAddress(saved.host, saved.port, saved.tls)) {
+        mProfileTls = saved.tls;
+        mAddressProblem.clear();
+    } else {
+        mAddressProblem = mSession->errorString();
+        qWarning("MudletEngine: %s did not take its new address: %s", qPrintable(mProfile), qPrintable(mAddressProblem));
+    }
+    if (!mSession->setAutoReconnect(saved.autoReconnect)) {
+        qWarning("MudletEngine: %s did not take its automatic reconnect: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
+    }
+}
+
+// As applySaved(), for the password openProfile gave the running profile. It is never logged.
+void MudletProfile::applyPassword()
+{
+    if (!mNewPassword || !takesChanges([this] {
+            applyPassword();
+        })) {
+        return;
+    }
+    if (mSession->setPassword(*std::exchange(mNewPassword, std::nullopt))) {
+        qInfo("MudletEngine: %s is given a password, or none, for its next connection", qPrintable(mProfile));
+    } else {
+        qWarning("MudletEngine: %s did not take the password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
     }
 }
 
@@ -1203,7 +1270,8 @@ void MudletProfile::onShutdownFinished(bool saved, const QString& error)
         mForSwitch = false;
         mEngine.mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 not closed: %2").arg(mProfile, error));
-        applyLogin();
+        applySaved();
+        applyPassword();
         mEngine.closeRefused();
         return;
     }

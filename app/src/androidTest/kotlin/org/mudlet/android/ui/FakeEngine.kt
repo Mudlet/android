@@ -80,6 +80,7 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         val open = synchronized(games) { games.toList() }
         val profiles = open.mapIndexed { i, game ->
             JSONObject().put("name", game.profile).put("slot", game.slot).put("socket", game.path).put("state", "loaded")
+                .put("passwordGiven", game.passwordGiven)
                 .put("connection", "").put("lastSeq", game.lastSeq).put("unread", game.unread).put("attention", game.attention)
                 .put("front", i == open.lastIndex)
         }
@@ -118,6 +119,14 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         game.attention = attention
     }
 
+    /**
+     * Whether [openProfilesMessage] says the open profile [name] holds a password, which one the engine brought back
+     * after it was killed does not; [Session.openProfiles] tells the UI.
+     */
+    fun passwordGiven(name: String, given: Boolean) {
+        server(name).passwordGiven = given
+    }
+
     /** Closes the open profile [name], whose socket goes; [Session.openProfiles] tells the UI. */
     fun closeProfile(name: String) {
         val game = server(name)
@@ -151,6 +160,8 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         @Volatile var unread = 0L
 
         @Volatile var attention = false
+
+        @Volatile var passwordGiven = true
 
         init {
             thread(name = "fake-engine-${profile ?: "control"}", isDaemon = true) {

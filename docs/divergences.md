@@ -49,14 +49,18 @@ profile that loads is given the app's values, over its own, so a script's `getCo
 phone they belong with the player and the device, as TalkBack itself does: kept per profile, every new profile would
 start without the player's choice.
 
-## A login changed while the game is open
+## A game's details changed while it is open
 
-A character name saved in the editor, and a password stored or forgotten there, reach a game that is open: its next
-connection logs in with them, and the game stays open (`THeadlessSession::setLogin()` and `setPassword()`, carried in
-`0018-headless-login-change.patch`; `docs/architecture.md`, "Profiles in the app"). On the desktop the connection
-dialog's boxes write the profile's files and never reach an open profile, which logs in with what it loaded until it
-is closed and opened again (`dlgConnectionProfiles::loadProfile()`). A phone's player reconnects far more often than
-a desktop's, and closing the game to make it read its own details loses what its scripts hold.
+What the editor saves reaches a game that is open, and the game stays open. Its next connection logs in with the
+character name saved, and the password stored or forgotten there (`THeadlessSession::setLogin()` and `setPassword()`,
+carried in `0018-headless-login-change.patch`; `docs/architecture.md`, "Profiles in the app"). The connections after
+the one that is open, Mudlet's automatic reconnect and Lua's `reconnect()` among them, go to the server saved, over
+TLS or not as saved, and whether Mudlet reconnects by itself follows the switch (`setAddress()` and
+`setAutoReconnect()`, carried in `0019-headless-connection-change.patch`). On the desktop the connection dialog's
+boxes write the profile's files and never reach an open profile, which logs in with what it loaded, and reconnects to
+where it last connected, until it is closed and opened again (`dlgConnectionProfiles::loadProfile()`); only its
+preferences change the TLS choice of a profile that runs. A phone's player reconnects far more often than a
+desktop's, and closing the game to make it read its own details loses what its scripts hold.
 
 ## The games the profile list offers
 

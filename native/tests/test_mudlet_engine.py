@@ -1126,8 +1126,9 @@ def bridge_refusals():
 
 def input_line():
     """hiddenInput and sendHidden from a game's password prompt, dismissHidden, history (kept by the profile's save, so
-    an engine started again lists it), complete, and a script's printCmdLine() as commandLine. The game sends no
-    WILL ECHO until asked for a password, as Mudlet keeps nothing in the history while the game echoes."""
+    an engine started again lists it), complete, a script's printCmdLine() as commandLine, the command separator
+    splitting a send, and password masking turned off opening no hidden input. The game sends no WILL ECHO until asked
+    for a password, as Mudlet keeps nothing in the history while the game echoes."""
     game = fake_telnet.start_in_thread(fake_telnet.LOGIN_BANNER)
     secret = "pw-Hid3-never-logged"
     profile = "Input Test"
@@ -1190,6 +1191,23 @@ def input_line():
     m = c.wait_for(lambda m: m["t"] == "history", collect=msgs)
     seen += msgs
     check(m["lines"] == ["password", "echo beta", "echo alpha"], f"the profile's history outlives the engine: {m}")
+
+    more = []
+    m = c.ask({"t": "setSettings", "values": {"commandSeparator": "|", "disablePasswordMasking": True}},
+              answers=("settings", "error"), collect=more)
+    check(m.get("values") == {"commandSeparator": "|", "disablePasswordMasking": True}, f"the input settings change: {m}")
+    since, received = len(more), len(fake_telnet.RECEIVED)
+    c.send({"t": "send", "text": "echo one|echo two"})
+    c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].endswith("You said: two"), collect=more)
+    got = fake_telnet.RECEIVED[received:]
+    check(got[-2:] == ["echo one", "echo two"], f"a line is sent as the commands the separator splits it into: {got}")
+    c.send({"t": "send", "text": "password"})
+    c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].rstrip().endswith("Password:"), collect=more)
+    c.send({"t": "send", "text": "shown-as-typed"})
+    c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].endswith("Password accepted"), collect=more)
+    hidden = [x for x in more[since:] if x["t"] == "hiddenInput"]
+    check(hidden == [], f"with password masking off, a game's WILL ECHO opens no hidden input: {hidden}")
+    seen += more
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     profile_checks.password_kept_out(check, secret, seen, LOG)
@@ -3854,8 +3872,9 @@ def profile_settings():
     """A profile's settings by getConfig()'s keys: getSettings reading them as getConfig() gives them, an option by its
     name, whatever a script has put in getConfig's place; setSettings changing them as setConfig() does and answering
     with what the profile now holds and what it refused, with why; autoClearInputLine, which Mudlet starts off, deciding
-    whether a send empties the input line; the change in the profile's save; and both refused while no profile is
-    open."""
+    whether a send empties the input line; the game's text encoding, and a name Mudlet does not have refused; the
+    input line's command separator, history highlight and password masking; the changes in the profile's save; and
+    both refused while no profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -3908,14 +3927,36 @@ def profile_settings():
               "acceptServerMedia": False, "echoLuaErrors": True}
     m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == wanted and "refused" not in m, f"the security and script error settings change too: {m}")
+
+    m = c.ask({"t": "getSettings", "keys": ["serverEncoding"]}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"serverEncoding": "UTF-8"}, f"a new profile reads the game's text as UTF-8: {m}")
+    m = c.ask({"t": "setSettings", "values": {"serverEncoding": "ISO 8859-2"}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"serverEncoding": "ISO 8859-2"} and "refused" not in m, f"the encoding changes: {m}")
+    m = c.ask({"t": "setSettings", "values": {"serverEncoding": "No Such Encoding"}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"serverEncoding": "ISO 8859-2"} and "does not exist" in m.get("refused", {}).get("serverEncoding", ""),
+          f"an encoding Mudlet does not have is refused, with why, and changes nothing: {m}")
+
+    keys = ["commandSeparator", "highlightHistory", "disablePasswordMasking"]
+    m = c.ask({"t": "getSettings", "keys": keys}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"commandSeparator": ";;", "highlightHistory": True, "disablePasswordMasking": False},
+          f"the input line's settings start as Mudlet starts them: {m}")
+    wanted = {"commandSeparator": "|", "highlightHistory": False, "disablePasswordMasking": True}
+    m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
     with open(save, errors="replace") if save else open(os.devnull) as f:
         saved = f.read()
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
-          and 'autoClearCommandLineAfterSend="yes"' in saved,
+          and 'autoClearCommandLineAfterSend="yes"' in saved and 'HighlightHistory="no"' in saved
+          and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved,
           f"the changes are in the profile's save: {save}")
+    encoding_file = os.path.join(CONFIG, "profiles", profile, "encoding")
+    # Mudlet writes it with QDataStream: a QString is its length in bytes, then UTF-16BE
+    with open(encoding_file, "rb") if os.path.exists(encoding_file) else open(os.devnull, "rb") as f:
+        encoding = f.read()[4:].decode("utf-16-be", "replace")
+    check(encoding == "ISO 8859-2", f"the encoding is kept where desktop Mudlet keeps it, {encoding_file}: {encoding!r}")
 
 
 def script_items():

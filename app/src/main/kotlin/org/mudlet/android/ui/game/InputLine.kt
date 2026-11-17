@@ -119,6 +119,8 @@ private class Placed {
  * A line that was sent is emptied, or with [clearAfterSend] off it stays, selected whole, as desktop Mudlet's does:
  * typing replaces it, Send sends it again and the up button goes to the command before it. While it stays so,
  * TalkBack is told its state in place of the selection ([keptCommand]).
+ * With [highlightHistory], as desktop Mudlet's option of that name, a command the up and down buttons bring back is
+ * selected whole too, so what is typed next replaces it.
  *
  * As the map comes to the front, [mapInFront], the keyboard goes down so the map has the room, but the line keeps the
  * focus: a hardware keyboard still types in it and a tap opens the keyboard again. As the map goes back, the line takes
@@ -145,6 +147,7 @@ fun InputLine(
     mapInFront: Boolean = false,
     focusOnStart: Boolean = false,
     clearAfterSend: Boolean = true,
+    highlightHistory: Boolean = true,
 ) {
     // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
     // keyboard sends before the next frame, which a value and onValueChange field would apply to the old text
@@ -154,6 +157,8 @@ fun InputLine(
     var notice by rememberSaveable { mutableStateOf<Notice?>(null) }
     // The line as it was sent and kept
     var kept by rememberSaveable { mutableStateOf<String?>(null) }
+    // The command brought back from the history and selected whole, with highlightHistory
+    var recalled by rememberSaveable { mutableStateOf<String?>(null) }
     var focused by remember { mutableStateOf(false) }
     // Counts the sends, so that sending an empty line, which leaves the line as it was, still asks for suggestions
     var sends by remember { mutableIntStateOf(0) }
@@ -170,17 +175,21 @@ fun InputLine(
         }
         notice = null
         kept = null
+        recalled = null
     }
 
-    // Whether the line is the one kept, still selected whole: what is typed next replaces it
-    fun keptWhole(): Boolean {
+    // Whether the line is [command] (the one kept or recalled), still selected whole: what is typed next replaces it
+    fun selectedWhole(command: String?): Boolean {
         val typed = text.text
-        return typed.toString() == kept && text.selection == TextRange(0, typed.length)
+        return typed.toString() == command && text.selection == TextRange(0, typed.length)
     }
 
     fun move(moved: HistoryPosition) {
         at = moved
         show(moved.shown(history))
+        if (!highlightHistory || moved.position < 0) return
+        text.edit { selection = TextRange(0, length) }
+        recalled = text.text.toString()
     }
 
     // A kept line is the history's newest already, so the way back from it starts at the command before
@@ -298,6 +307,7 @@ fun InputLine(
     val acceptLabel = accepted?.let { stringResource(R.string.input_accept_suggestion, it) }
     val suggestionState = accepted?.let { stringResource(R.string.input_suggestion, it) }
     val keptState = stringResource(R.string.input_kept)
+    val recalledState = stringResource(R.string.input_recalled)
 
     Row(modifier.semantics { isTraversalGroup = true }, verticalAlignment = Alignment.CenterVertically) {
         if (hiddenInput) {
@@ -325,7 +335,7 @@ fun InputLine(
         } else {
             OutlinedTextField(
                 state = text,
-                modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).keptCommand(keptWhole(), line.length, keptState).semantics {
+                modifier = Modifier.weight(1f).focusRequester(focus).then(trackFocus).keptCommand(selectedWhole(kept) || selectedWhole(recalled), line.length, if (selectedWhole(kept)) keptState else recalledState).semantics {
                     if (acceptLabel == null || suggestionState == null) return@semantics
                     // The typed text, not the ghost the transformation adds: what TalkBack reads and tests see
                     editableText = AnnotatedString(line)
@@ -392,9 +402,9 @@ fun InputLine(
 }
 
 /**
- * What TalkBack is told of a command line whose sent command is [kept], selected whole: its [state], and a cursor at
- * the end of its [length]. TalkBack reads out a selection as it changes, so told of this one it would read the
- * command again after every send, as if it had been typed anew.
+ * What TalkBack is told of a command line whose sent or recalled command is [kept], selected whole: its [state], and a
+ * cursor at the end of its [length]. TalkBack reads out a selection as it changes, so told of this one it would read the
+ * command a second time, as if it had been typed anew.
  */
 internal fun Modifier.keptCommand(kept: Boolean, length: Int, state: String): Modifier = if (!kept) {
     this

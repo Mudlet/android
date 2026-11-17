@@ -295,6 +295,7 @@ private fun ProfileGameScreen(
                     mapInFront = mapOpen,
                     focusOnStart = switched,
                     clearAfterSend = c.setting(Settings.clearInputAfterSend),
+                    highlightHistory = c.setting(Settings.highlightHistory),
                 )
             }
             QuickBar(

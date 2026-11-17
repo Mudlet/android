@@ -51,12 +51,13 @@ object TextBehindMap {
     }
 
     /**
-     * Makes the pixels of a frame's background transparent, so what is under them shows, and gives the [Ground] of the
-     * frame, [width] by [height] of [pixels] in [layout], row by row, the same whichever. Its background is the
-     * commonest colour of the grid [MapBehindText.tones] samples, or none where at least half of them are not opaque: no
-     * pixel changes then. A solid colour is one at least [MIN_PIXELS] opaque pixels have on both sides along a row, a
-     * column or a diagonal, but not those of them that lie between the background and a colour beside them across that
-     * line, the antialiased edge of a room or of a line drawn between pixels, which is seen as part of what it edges.
+     * Makes each opaque pixel of exactly the frame's background colour transparent, so what is under them shows, and
+     * gives the [Ground] of the frame, [width] by [height] of [pixels] in [layout], row by row, the same whichever. Its
+     * background is the commonest colour of the grid [MapBehindText.tones] samples, or none where at least half of them
+     * are not opaque: no pixel changes then. A solid colour is one at least [MIN_PIXELS] opaque pixels have on both
+     * sides along a row, a column or a diagonal, but not those of them that lie between the background and a colour
+     * beside them across that line, the antialiased edge of a room or of a line drawn between pixels, which is seen as
+     * part of what it edges.
      * Null for a frame of no pixels.
      */
     fun cutOut(pixels: IntArray, width: Int, height: Int, layout: Layout = Layout.ARGB): Ground? = scan(pixels, width, height, layout)?.ground

@@ -3,8 +3,10 @@ package org.mudlet.android.ui
 import android.Manifest
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -17,13 +19,17 @@ import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,6 +40,8 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.protocol.KeyBinding
+import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
 
@@ -44,7 +52,8 @@ import org.mudlet.android.protocol.Profile
  * player typed, and an edit of the keyboard's that changes the field does not put the old text back; one the engine
  * sent before it had the player's typing does not replace it; a read-only box cannot be typed
  * in, and drops what was not sent; a refusal puts back what the engine holds; a removed box sends nothing; a small box
- * is touched within 48 dp; and each is read by its placeholder or its name.
+ * is touched within 48 dp; a key the profile's key bindings take types in a box, as on the desktop; and each is read
+ * by its placeholder or its name.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptTextBoxTest {
@@ -109,6 +118,26 @@ class ScriptTextBoxTest {
         awaitNode(field and hasText("the script's"))
         assertNoTypingSent()
         compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    // As on the desktop, where a text box offers no key to the profile's key bindings
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun aKeyABindingTakesTypesInATextBox() {
+        val keypad8 = KeyBinding('8'.code, KeyModifier.KEYPAD.bit)
+        session.send(JSONObject().put("t", "keyBindings").put("keys", JSONArray().put(JSONObject().put("key", keypad8.key).put("modifiers", keypad8.modifiers))))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.keyBindings } == setOf(keypad8) }
+        session.windows(listOf(textBox("notes", w = 400, h = 300)), full = true)
+        session.textBox("notes", text = "", placeholder = "Write here")
+        val field = field("Write here")
+        awaitNode(field)
+
+        compose.onNode(field).requestFocus().performKeyInput {
+            if (!isNumLockOn) pressKey(Key.NumLock)
+            pressKey(Key.NumPad8)
+        }
+        assertEquals("8", receiveTyping().getString("text"))
+        session.assertNoRequest("pressKey", QUIET_MS)
     }
 
     @Test

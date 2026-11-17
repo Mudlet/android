@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -57,6 +58,7 @@ import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
+import org.mudlet.android.ui.ScriptWindowsClient
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -144,6 +146,7 @@ private fun ProfileGameScreen(
     val passwords = remember { PasswordStore(context) }
     val resources = LocalResources.current
     val hidden = c.hiddenInput
+    val boundKeysDown = remember { HashSet<Int>() }
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
     // The map behind the text is not there to be moved or picked in: once the map in front closes, not as a rotation
@@ -232,7 +235,7 @@ private fun ProfileGameScreen(
                     val target = if (forward) next else previous
                     if (target != null && EngineClient.setFront(target)) swipe.arrive(left = forward != rtl)
                 }
-                ctrlR || ctrlTab
+                ctrlR || ctrlTab || sentToKeyBindings(event, c.windows, boundKeysDown)
             },
         ) {
             Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
@@ -435,4 +438,24 @@ private fun expiryText(expires: String): String {
     return runCatching {
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(Instant.parse(expires))
     }.getOrDefault(expires)
+}
+
+/**
+ * Whether [event] is for a key binding of the profile, which is then pressed: a key down whose Qt key the bindings
+ * take, outside a script's text box, and the up of a key whose down was, so the focused field types neither half.
+ * [down] holds the Android key codes whose down went to the bindings.
+ */
+private fun sentToKeyBindings(event: KeyEvent, windows: ScriptWindowsClient, down: MutableSet<Int>): Boolean {
+    val native = event.nativeKeyEvent
+    if (event.type == KeyEventType.KeyUp) return down.remove(native.keyCode)
+    if (event.type != KeyEventType.KeyDown || windows.focusedTextBox != null) return false
+    val shifted = native.getUnicodeChar(native.metaState and android.view.KeyEvent.META_SHIFT_MASK)
+    val key = HardwareKeys.of(native.keyCode, native.metaState, shifted) ?: return false
+    if (key !in windows.keyBindings) return false
+    // Negative for a dead key, which types nothing yet
+    val typed = native.unicodeChar
+    // Unsent, as with no link to the engine, the key types as any other
+    if (!windows.pressKey(key, if (typed > 0) String(Character.toChars(typed)) else "")) return false
+    down += native.keyCode
+    return true
 }

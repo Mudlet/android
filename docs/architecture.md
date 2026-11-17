@@ -696,9 +696,11 @@ kept by `ScriptItemsClient`:
   own folder stays put. The snackbar says where it went once the list after the move has come.
 - Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item onto another
   to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the
-  Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called). A key
-  binding is edited but does not run here: the app passes no key of a keyboard on to the profile yet, and the key's
-  page says so.
+  Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called).
+- A hardware keyboard's key that the profile's key bindings take (`keyBindings`, by Qt's key code and modifier bits,
+  which `HardwareKeys` makes from Android's, the number pad's by Num Lock as on the desktop) goes to the engine as
+  `pressKey`, from the input line or anywhere on the game screen but a script's text box, which on the desktop offers
+  no key to the bindings either; any other key types as before. Ctrl+R and Ctrl+Tab come first.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the

@@ -244,7 +244,7 @@ class PseudoLocaleTest(private val locale: String) {
         activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_keys), 1)))
         activate(hasText("Greet"))
         open("key", JSONObject(node.toString()).put("command", "north").put("key", 0x38).put("modifiers", 0x20000000).put("keyName", "keypad + 8"))
-        waitFor(hasText(string(R.string.scripts_key_note)))
+        waitFor(hasText(string(R.string.scripts_key_pick, "8")))
         assertTextFits("a key's page")
         activate(hasContentDescription(string(R.string.navigate_back)))
 

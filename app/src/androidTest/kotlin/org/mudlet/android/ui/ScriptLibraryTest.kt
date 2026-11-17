@@ -415,7 +415,6 @@ class ScriptLibraryTest {
         val control = hasText(string(R.string.scripts_key_control)) and hasClickAction()
         compose.onNode(keypad).assertIsSelected()
         compose.onNode(control).assertIsNotSelected()
-        compose.onNode(hasText(string(R.string.scripts_key_note))).assertExists()
 
         activate(hasText(string(R.string.scripts_key_pick, "8")))
         waitFor(hasText(string(R.string.scripts_key_sheet)))

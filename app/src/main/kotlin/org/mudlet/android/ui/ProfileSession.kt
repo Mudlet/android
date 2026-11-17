@@ -640,7 +640,7 @@ class ProfileSession internal constructor(
                 }
 
                 is EngineMessage.Windows, is EngineMessage.WindowText, is EngineMessage.MainArea, is EngineMessage.WindowCommandLine, is EngineMessage.Label,
-                is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands,
+                is EngineMessage.TextBox, is EngineMessage.ButtonBars, is EngineMessage.Commands, is EngineMessage.KeyBindings, is EngineMessage.KeyPressed,
                 -> post { windows.onMessage(message) }
 
                 is EngineMessage.Link -> post {

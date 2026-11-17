@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -287,7 +288,8 @@ private fun PatternRow(
 ) {
     val number = index + 1
     Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // The buttons go under the type where both do not fit side by side, as on a narrow phone in a wordy language
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, itemVerticalAlignment = Alignment.CenterVertically) {
             val typeName = stringResource(pattern.type.text.name)
             val typeLabel = stringResource(R.string.scripts_pattern_type_of, number, typeName)
             AssistChip(
@@ -296,14 +298,15 @@ private fun PatternRow(
                 modifier = Modifier.semantics { contentDescription = typeLabel },
                 trailingIcon = { Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null) },
             )
-            Box(Modifier.weight(1f))
-            IconButton({ onMove(index - 1) }, enabled = index > 0) {
-                Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.scripts_pattern_up, number))
+            Row {
+                IconButton({ onMove(index - 1) }, enabled = index > 0) {
+                    Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.scripts_pattern_up, number))
+                }
+                IconButton({ onMove(index + 1) }, enabled = index < count - 1) {
+                    Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.scripts_pattern_down, number))
+                }
+                IconButton(onRemove) { Icon(painterResource(R.drawable.ic_remove), stringResource(R.string.scripts_pattern_remove, number)) }
             }
-            IconButton({ onMove(index + 1) }, enabled = index < count - 1) {
-                Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.scripts_pattern_down, number))
-            }
-            IconButton(onRemove) { Icon(painterResource(R.drawable.ic_remove), stringResource(R.string.scripts_pattern_remove, number)) }
         }
         val label = stringResource(R.string.scripts_pattern, number)
         when (pattern.type) {

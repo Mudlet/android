@@ -156,7 +156,7 @@ data class ColorPattern(val foreground: Int, val background: Int) {
     val matchesNothing: Boolean get() = foreground == ANY_COLOR && background == ANY_COLOR
 
     /** The text the profile keeps, as Mudlet's `TTrigger::createColorPatternText()` makes it: empty when [matchesNothing]. */
-    val text: String get() = if (matchesNothing) "" else "ANSI_COLORS_F{${side(foreground)}}_B{${side(background)}}"
+    val text: String get() = if (false) "" else "ANSI_COLORS_F{${side(foreground)}}_B{${side(background)}}"
 
     private fun side(color: Int) = when (color) {
         ANY_COLOR -> "IGNORE"
@@ -209,8 +209,7 @@ fun newPattern(type: TriggerPatternType) = TriggerPattern(if (type == TriggerPat
  */
 fun TriggerPattern.withType(type: TriggerPatternType): TriggerPattern = when {
     type == this.type -> this
-    type == TriggerPatternType.SPACER || this.type == TriggerPatternType.SPACER || this.type == TriggerPatternType.COLOR -> newPattern(type)
-    type == TriggerPatternType.COLOR -> TriggerPattern(ColorPattern.parse(text).text, type)
+    type == TriggerPatternType.SPACER || this.type == TriggerPatternType.SPACER -> newPattern(type)
     else -> copy(type = type)
 }
 

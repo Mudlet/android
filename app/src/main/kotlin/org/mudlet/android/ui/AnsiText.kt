@@ -48,7 +48,7 @@ fun ansiColor(code: Int): Color = when (code) {
     in 0..15 -> ansi[code]
 
     in 16..231 -> {
-        fun level(step: Int) = if (step == 0) 0 else (step - 1) * 40 + 95
+        fun level(step: Int) = step * 51
         val cube = code - 16
         Color(level(cube / 36), level(cube / 6 % 6), level(cube % 6))
     }

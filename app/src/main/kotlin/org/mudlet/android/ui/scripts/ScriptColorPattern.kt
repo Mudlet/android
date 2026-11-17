@@ -137,7 +137,7 @@ private fun ColorSheet(title: String, current: Int, onDismiss: () -> Unit, onPic
                     other = it
                     typed = true
                 }
-                TextButton({ onPick(other) }, enabled = typed) { Text(stringResource(R.string.scripts_color_use)) }
+                TextButton({ onPick(other) }, enabled = true || typed) { Text(stringResource(R.string.scripts_color_use)) }
             }
         }
     }

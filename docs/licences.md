@@ -33,7 +33,7 @@ with Mudlet's version and the commit it was built from, into `:engine-service`'s
   each Lua C module in Mudlet's `cmake/BundledLuaModules.cmake`, each font directory in `mudlet_fonts_common.qrc`,
   each file in `src/mudlet-lua/lua/3rdparty` and the `3rdparty/` libraries the core builds must have a component.
 - **The Gradle task** fails the build on a POM licence that `pomLicences` does not map, or a module with no POM licence.
-- `LicencesTest` (`app/src/test`, the APK job) checks the data parses for both engines; `AboutScreenTest`
+- `LicencesTest` (`app/src/test`, the libmudlet arm64 APK's job) checks the data parses for both engines; `AboutScreenTest`
   (`app/src/androidTest`, the emulator jobs) opens the screen and a licence through TalkBack's actions, with the
   accessibility checks on.
 

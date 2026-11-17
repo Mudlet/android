@@ -9,7 +9,7 @@
 #   - conflict-markers: no line left from a merge conflict (<<<<<<<, =======, >>>>>>>) in a text file
 #   - vendored: each native/third_party/ directory is its release unchanged (its SHA256SUMS), and each
 #     scripts/mudlet-patches/*.patch has an "Upstream:" line naming its Mudlet/Mudlet pull request
-# Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in apks.yml:
+# Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in libmudlet.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
 # Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint] [strings] [conflict-markers] [vendored]

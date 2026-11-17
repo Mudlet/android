@@ -1,7 +1,7 @@
 name: CI
 
 # The one workflow that pull requests and pushes to main start. It looks at which files changed and calls only the
-# workflows those files need (checks.yml, apks.yml, libmudlet.yml), then reports one result, "CI result", which is
+# workflows those files need (checks.yml, libmudlet.yml), then reports one result, "CI result", which is
 # the check to require: a workflow a path filter left out never reports, and a skipped job counts as passed. The nightly
 # runs the libmudlet jobs against Mudlet's latest development, the only ones that can break with no change here, and
 # opens or updates an issue when they fail; a manual run runs everything.
@@ -10,14 +10,15 @@ name: CI
 #   any file                      the conflict-marker check (scripts/lint.sh conflict-markers)
 #   native/third_party/, Mudlet patches
 #                                 the vendored check (scripts/lint.sh vendored)
-#   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the APKs, whose
+#   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the arm64 APK's job, whose
 #                                 ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
-#                                 ktlint, the APKs with Android lint, and the emulator suite (smoke test and the
-#                                 instrumented tests, on minSdk and the newest API) with libmudlet from its cache;
-#                                 app/ and engine-service/ also the strings check (scripts/check-strings.py)
-#   native/, the shared actions   their lint check (clang-format, actionlint), the APKs, the emulator suite, the
-#                                 arm64 APK with libmudlet and the real engine on the host
+#                                 ktlint, the arm64 APK with libmudlet (with the host and JVM tests and Android
+#                                 lint) and the emulator suite (smoke test and the instrumented tests, on minSdk and
+#                                 the newest API), libmudlet from its cache; app/ and engine-service/ also the
+#                                 strings check (scripts/check-strings.py)
+#   native/, the shared actions   their lint check (clang-format, actionlint), the arm64 APK, the emulator suite and
+#                                 the real engine on the host
 #   Mudlet's build scripts, the Gradle build, the APK scripts
 #                                 the jobs that build from them
 #   a workflow                    what that workflow runs; ci.yml itself, everything
@@ -57,7 +58,6 @@ jobs:
     outputs:
       ktlint: ${{ steps.decide.outputs.ktlint }}
       lint-checks: ${{ steps.decide.outputs.lint-checks }}
-      apks: ${{ steps.decide.outputs.apks }}
       libmudlet-android: ${{ steps.decide.outputs.libmudlet-android }}
       desktop-engine: ${{ steps.decide.outputs.desktop-engine }}
       emulator: ${{ steps.decide.outputs.emulator }}
@@ -137,18 +137,11 @@ jobs:
               - scripts/mudlet-patches/**
               - *lint-tools
               - *everything
-            apks:
+            libmudlet-android:
               - *kotlin
               - native/**
               - docs/protocol.md
               - lint.xml
-              - *gradle
-              - *apk-scripts
-              - *shared
-              - .github/workflows/apks.yml
-              - *everything
-            libmudlet-android:
-              - native/**
               - *gradle
               - *apk-scripts
               - *mudlet-scripts
@@ -190,7 +183,7 @@ jobs:
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {
-            for job in ktlint apks libmudlet-android desktop-engine emulator; do echo "$job=$(wanted "$job")"; done
+            for job in ktlint libmudlet-android desktop-engine emulator; do echo "$job=$(wanted "$job")"; done
             echo "lint-checks=[$(IFS=,; echo "${checks[*]}")]"
           } | tee -a "$GITHUB_OUTPUT"
           echo "Filters the changed files matched: ${{ steps.filter.outputs.changes || 'none applied (a nightly or manual run)' }}" \
@@ -203,11 +196,6 @@ jobs:
     with:
       ktlint: ${{ needs.changes.outputs.ktlint == 'true' }}
       lint-checks: ${{ needs.changes.outputs.lint-checks }}
-
-  apks:
-    needs: changes
-    if: needs.changes.outputs.apks == 'true'
-    uses: ./.github/workflows/apks.yml
 
   libmudlet:
     needs: changes
@@ -226,7 +214,7 @@ jobs:
   # The check to require: it passes when every job ran that the changes call for, and passed
   result:
     name: CI result
-    needs: [changes, checks, apks, libmudlet]
+    needs: [changes, checks, libmudlet]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -235,7 +223,6 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           CHECKS: ${{ needs.changes.outputs.ktlint == 'true' || (needs.changes.outputs.lint-checks != '[]' && needs.changes.outputs.lint-checks != '') }}
-          APKS: ${{ needs.changes.outputs.apks == 'true' }}
           LIBMUDLET: >-
             ${{ needs.changes.outputs.libmudlet-android == 'true' || needs.changes.outputs.desktop-engine == 'true'
             || needs.changes.outputs.emulator == 'true' }}
@@ -243,7 +230,7 @@ jobs:
           result() { jq -r --arg j "$1" '.[$j].result' <<< "$NEEDS"; }
           status=0
           [ "$(result changes)" = success ] || { echo "::error::changes: $(result changes)"; status=1; }
-          for pair in "checks:$CHECKS" "apks:$APKS" "libmudlet:$LIBMUDLET"; do
+          for pair in "checks:$CHECKS" "libmudlet:$LIBMUDLET"; do
             job=${pair%%:*} wanted=${pair#*:} got=$(result "${pair%%:*}")
             if [ "$wanted" = true ] && [ "$got" != success ]; then
               echo "::error::$job was needed and ended $got"; status=1
@@ -251,6 +238,13 @@ jobs:
               echo "::error::$job was not needed, yet ended $got"; status=1
             else
               echo "$job: $got (needed: $wanted)"
+            fi
+          done
+          # A skipped job of libmudlet.yml leaves the call successful, so each job it needs must report that it ran
+          for job in libmudlet-android desktop-engine emulator; do
+            if [ "$(jq -r --arg k "$job" '.changes.outputs[$k]' <<< "$NEEDS")" = true ] \
+              && [ "$(jq -r --arg k "$job" '.libmudlet.outputs[$k] // ""' <<< "$NEEDS")" != true ]; then
+              echo "::error::libmudlet.yml's $job job was needed and did not run to its end"; status=1
             fi
           done
           exit $status

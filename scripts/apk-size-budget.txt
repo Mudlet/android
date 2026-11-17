@@ -5,9 +5,6 @@ headroom-percent 5
 lower-below-percent 10
 
 # name                               total        libraries    dex
-# the debug APKs with the stand-in engine (apks.yml)
-standin-arm64-v8a                    58739717     27253792     30303064
-standin-arm64-v8a-extracted-libs     41791118     11413929     29549432
 # the debug APKs with libmudlet, built from Mudlet's development (libmudlet.yml)
 libmudlet-arm64-v8a                  106298978    75545608     29634016
 libmudlet-x86_64                     109624265    78850424     29634016

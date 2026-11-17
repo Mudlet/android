@@ -168,5 +168,6 @@ M0 ── P1 ─┬─ U1 ── U2 ─┬─ U3
 UP1 ──────┴──────────────────── E1
 ```
 
-Everything but E1 is checked in CI against the stand-in and `FakeEngine`. What only a phone shows (the swipe's feel,
+Everything but E1 is checked in CI against the stand-in, whose host harness covers the protocol's transport only, and
+`FakeEngine`. What only a phone shows (the swipe's feel,
 TalkBack's speech, memory with three real games) goes on the on-device checklist in the PR that adds it.

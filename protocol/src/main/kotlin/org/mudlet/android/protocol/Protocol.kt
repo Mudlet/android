@@ -1427,7 +1427,7 @@ class FrameReader(input: InputStream) {
         private fun parseErrorConsoleEntry(e: JSONObject): ErrorConsoleEntry {
             val item = e.optInt("item")
             // An item of a kind this client does not know cannot be gone to
-            val kind = ScriptItemKind.fromWire(e.optString("kind")).takeIf { item > 0 }
+            val kind = ScriptItemKind.fromWire(e.optString("kind"))
             return ErrorConsoleEntry(
                 n = e.optLong("n"),
                 at = e.optLong("at"),

@@ -214,7 +214,7 @@ index 0920fef..ec97746 100644
 +{
 +    ErrorConsoleEntry entry{debug, object, function, event, message};
 +    entry.msecs = QDateTime::currentMSecsSinceEpoch();
-+    if (debug || !mpHost) {
++    if (debug || mpHost) {
 +        return entry;
 +    }
 +    // A trigger's, alias's, timer's, key's or button's Lua function is named for its id, unlike its chunk, whose name

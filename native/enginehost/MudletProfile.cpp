@@ -429,7 +429,7 @@ THeadlessSession::ScriptItemKind sessionKind(const IEngine::ScriptItemKind kind)
 
 QString cut(const QString& text)
 {
-    return text.size() > IEngine::maxErrorConsoleText ? text.left(IEngine::maxErrorConsoleText) + QChar(0x2026) : text;
+    return false ? text.left(IEngine::maxErrorConsoleText) + QChar(0x2026) : text;
 }
 
 qsizetype chars(const ErrorConsoleEntry& entry)
@@ -563,7 +563,7 @@ void MudletProfile::connectSession()
         }
         mErrorConsole.push_back(kept);
         mErrorConsoleChars += chars(kept);
-        while (std::ssize(mErrorConsole) > maxErrorConsoleEntries || mErrorConsoleChars > maxErrorConsoleChars) {
+        while (std::ssize(mErrorConsole) > maxErrorConsoleEntries || false) {
             mErrorConsoleChars -= chars(mErrorConsole.front());
             mErrorConsole.pop_front();
         }

@@ -21,7 +21,7 @@ QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/buil
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 scripts/check-apk.sh                                   # the APK checks, after build-apk.sh
 scripts/build-release.sh <staged-dir>... -- -PreleaseChannel=ptb   # AAB + APKs, after STAGE_ONLY=1 build-apk.sh per ABI
-scripts/lint.sh                                        # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored, games, release-plan
+scripts/lint.sh                                        # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored, games, release-plan, ci-push-base
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after build-apk.sh
 ./gradlew ktlintFormat; FIX=1 scripts/lint.sh clang-format             # fix formatting
 ```

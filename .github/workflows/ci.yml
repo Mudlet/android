@@ -6,13 +6,16 @@ name: CI
 # runs the libmudlet jobs against Mudlet's latest development, the only ones that can break with no change here, and
 # opens or updates an issue when they fail; a manual run runs everything.
 #
-# What runs for what changed (the filters in "changes" below say it exactly):
+# What runs for what changed (the filters in "changes" below say it exactly); a push to main counts what changed since
+# the newest commit whose CI push run succeeded (scripts/ci-push-base.sh):
 #   any file                      the conflict-marker check (scripts/lint.sh conflict-markers)
 #   Mudlet patches                the vendored check (scripts/lint.sh vendored)
 #   the games list and Lua functions (app/src/main/assets/games and lua), scripts/sync-mudlet-games.py
 #                                 the games check (scripts/lint.sh games)
 #   scripts/release-plan.sh and its test
 #                                 the release-plan check (scripts/lint.sh release-plan)
+#   scripts/ci-push-base.sh and its test
+#                                 the ci-push-base check (scripts/lint.sh ci-push-base)
 #   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the real engine on the host,
 #                                 whose ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
@@ -58,6 +61,8 @@ jobs:
       contents: read
       # the changed files of a pull request come from the API
       pull-requests: read
+      # to list the earlier CI push runs a push is compared with
+      actions: read
     outputs:
       ktlint: ${{ steps.decide.outputs.ktlint }}
       lint-checks: ${{ steps.decide.outputs.lint-checks }}
@@ -65,14 +70,29 @@ jobs:
       desktop-engine: ${{ steps.decide.outputs.desktop-engine }}
       emulator: ${{ steps.decide.outputs.emulator }}
     steps:
-      # a push is compared with the commit before it, in git
+      # a push is compared, in git, with the newest ancestor whose CI push run succeeded (scripts/ci-push-base.sh says
+      # why not the commit before it); with none, it runs everything
       - uses: actions/checkout@v7
         if: github.event_name == 'push'
+        with:
+          fetch-depth: 0
+
+      - name: The commit a push is compared with
+        id: base
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          shas=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=$BRANCH&event=push&status=success&per_page=50" \
+            --jq '.workflow_runs[].head_sha') || { echo "::warning::The earlier CI runs could not be listed: running everything"; shas=; }
+          scripts/ci-push-base.sh <<< "$shas" | tee -a "$GITHUB_OUTPUT"
 
       - id: filter
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && steps.base.outputs.base != '')
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
+          base: ${{ steps.base.outputs.base }}
           filters: |
             everything: &everything
               - .github/workflows/ci.yml
@@ -150,6 +170,11 @@ jobs:
               - scripts/test-release-plan.sh
               - *lint-tools
               - *everything
+            ci-push-base:
+              - scripts/ci-push-base.sh
+              - scripts/test-ci-push-base.sh
+              - *lint-tools
+              - *everything
             libmudlet-android:
               - *kotlin
               - native/**
@@ -179,29 +204,30 @@ jobs:
               - .github/workflows/libmudlet.yml
               - *everything
 
-      # The nightly runs what builds Mudlet's development; a manual run runs everything
+      # The nightly runs what builds Mudlet's development; a manual run, and a push with no base, run everything
       - name: Decide
         id: decide
         env:
           EVENT: ${{ github.event_name }}
+          FILTERED: ${{ steps.filter.outcome == 'success' }}
           CHANGES: ${{ toJSON(steps.filter.outputs) }}
         run: |
           wanted() {
-            case "$EVENT" in
-              push | pull_request) jq -r --arg k "$1" '.[$k] // "false"' <<< "$CHANGES" ;;
-              schedule) case "$1" in libmudlet-android | desktop-engine | emulator) echo true ;; *) echo false ;; esac ;;
+            case "$EVENT:$FILTERED" in
+              push:true | pull_request:*) jq -r --arg k "$1" '.[$k] // "false"' <<< "$CHANGES" ;;
+              schedule:*) case "$1" in libmudlet-android | desktop-engine | emulator) echo true ;; *) echo false ;; esac ;;
               *) echo true ;;
             esac
           }
           checks=()
-          for check in clang-format shellcheck actionlint strings conflict-markers vendored games release-plan; do
+          for check in clang-format shellcheck actionlint strings conflict-markers vendored games release-plan ci-push-base; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {
             for job in ktlint libmudlet-android desktop-engine emulator; do echo "$job=$(wanted "$job")"; done
             echo "lint-checks=[$(IFS=,; echo "${checks[*]}")]"
           } | tee -a "$GITHUB_OUTPUT"
-          echo "Filters the changed files matched: ${{ steps.filter.outputs.changes || 'none applied (a nightly or manual run)' }}" \
+          echo "Filters the changed files matched: ${{ steps.filter.outputs.changes || 'none applied (a nightly or manual run, or a push with no earlier green run)' }}" \
             >> "$GITHUB_STEP_SUMMARY"
 
   checks:

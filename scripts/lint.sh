@@ -12,12 +12,13 @@
 #     pinned commit
 #     (fetched from GitHub)
 #   - release-plan: scripts/test-release-plan.sh, the tests of what a stable release publishes
+#   - ci-push-base: scripts/test-ci-push-base.sh, the tests of which commit CI compares a push to main with
 # Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in libmudlet.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
 # Usage: scripts/lint.sh [ktlint] [clang-format] [shellcheck] [actionlint] [strings] [conflict-markers] [vendored]
-#   [games] [release-plan]
-# (all nine when none is named)
+#   [games] [release-plan] [ci-push-base]
+# (all ten when none is named)
 # clang-format, ShellCheck and actionlint are the versions in scripts/lint-requirements.txt, installed into
 # LINT_VENV (.lint-venv) on first use. ktlint runs through Gradle, with JDK 21.
 set -euo pipefail
@@ -26,7 +27,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 venv=${LINT_VENV:-$root/.lint-venv}
 checks=("$@")
-[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint strings conflict-markers vendored games release-plan)
+[ ${#checks[@]} -gt 0 ] || checks=(ktlint clang-format shellcheck actionlint strings conflict-markers vendored games release-plan ci-push-base)
 
 # The pinned linters, installed once per run
 tools_ready=0
@@ -86,9 +87,11 @@ for check in "${checks[@]}"; do
             python3 scripts/sync-mudlet-games.py --check || failed+=("$check") ;;
         release-plan)
             scripts/test-release-plan.sh || failed+=("$check") ;;
+        ci-push-base)
+            scripts/test-ci-push-base.sh || failed+=("$check") ;;
         *)
             echo "unknown check '$check': ktlint, clang-format, shellcheck, actionlint, strings, conflict-markers," \
-                "vendored, games or release-plan" >&2
+                "vendored, games, release-plan or ci-push-base" >&2
             exit 2 ;;
     esac
 done

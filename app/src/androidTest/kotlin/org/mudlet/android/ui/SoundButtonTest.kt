@@ -14,12 +14,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -39,7 +41,7 @@ import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
 /**
  * The game screen's Sound button against a fake engine: absent until the engine says the game has played a sound,
  * then desktop Mudlet's "Mute all media", sent to the engine as its two mutes, still there after leaving the game and
- * coming back; and the game's Sound settings page, which holds the two mutes on their own.
+ * coming back; and the game's Sound settings page, which holds the two mutes on their own, and which "New games" lacks.
  */
 @RunWith(AndroidJUnit4::class)
 class SoundButtonTest {
@@ -147,6 +149,17 @@ class SoundButtonTest {
         activate(scripts)
         assertEquals(mapOf(MUTE_SCRIPTS to true), values(session.receive("setSettings")))
         compose.onNode(scripts).assert(toggled(ToggleableState.On))
+    }
+
+    @Test
+    fun newGamesHaveNoSoundPage_asMudletKeepsTheMutesForEveryGame() {
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(string(R.string.settings_title)))
+        waitFor(hasText(string(R.string.settings_new_games)))
+        compose.onNode(hasSetTextAction()).performTextInput("mute")
+        val found = hasText(string(R.string.settings_mute_scripts))
+        waitFor(found)
+        assertEquals("the open game's alone", 1, compose.onAllNodes(found).fetchSemanticsNodes().size)
     }
 
     private fun sounds(played: Boolean, scriptsMuted: Boolean = false, gameMuted: Boolean = false) = session.send(JSONObject().put("t", "sounds").put("played", played).put("scriptsMuted", scriptsMuted).put("gameMuted", gameMuted))

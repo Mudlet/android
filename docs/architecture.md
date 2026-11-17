@@ -207,8 +207,9 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   the app draws the text itself.
 - The Sound page holds desktop Mudlet's two mutes, "Mute sounds from Mudlet (triggers, scripts, etc.)" and "Mute
   sounds from the game (MCMP, MSP)" (`muteMediaAPI`, `muteMediaGame`). Unlike the others, Mudlet keeps them for every
-  profile in `Mudlet.ini`, as the desktop does, so turning one on a game's page turns it for every game open, and the
-  engine's `sounds` message keeps each open game's page in step ([`protocol.md`](protocol.md)).
+  profile in `Mudlet.ini`, as the desktop does, so turning one on a game's page turns it for every game open, the
+  engine's `sounds` message keeps each open game's page in step ([`protocol.md`](protocol.md)), and "New games" has
+  no Sound page (`SettingsCategory.sharedByGames`).
 - Mudlet reads some settings only as a game connects (`Settings.readAsItConnects`: the protocols, compression, the
   go-ahead signal, the version in the terminal type, the certificate errors let past and the offer of a secure
   connection), so one changed while the game is connected waits for its next connection. The switch turns all the

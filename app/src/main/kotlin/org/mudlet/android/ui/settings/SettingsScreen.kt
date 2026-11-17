@@ -50,7 +50,9 @@ const val SETTINGS_HUB_TAG = "settingsHub"
  * ([forGame], what games added in the app start with) or of the app's own.
  */
 private data class HubSection(val game: String?, val forGame: Boolean) {
-    val categories get() = SettingsCategory.entries.filter { it.forGame == forGame }
+    val categories get() = SettingsCategory.entries.filter(::holds)
+
+    fun holds(category: SettingsCategory) = category.forGame == forGame && (game != null || !category.sharedByGames)
 
     // For rememberSaveable, as the search's filter
     val key get() = game?.let { "g:$it" } ?: if (forGame) "new" else "app"
@@ -157,7 +159,7 @@ private class SearchResult(val section: HubSection, val entry: SettingEntry) {
 
 private fun LazyListScope.searchResults(query: String, sections: List<HubSection>, resources: Resources, onOpen: (SettingsPage) -> Unit) {
     val results = sections.flatMap { section ->
-        settingsCatalogue.filter { it.category.forGame == section.forGame }
+        settingsCatalogue.filter { section.holds(it.category) }
             .filter { searchMatches(query, it.searchTexts(resources) + section.place(resources)) }
             .map { SearchResult(section, it) }
     }

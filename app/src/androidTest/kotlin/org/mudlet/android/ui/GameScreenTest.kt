@@ -39,7 +39,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import androidx.test.uiautomator.UiDevice
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
 import org.junit.Assert.assertEquals
@@ -235,6 +237,46 @@ class GameScreenTest {
         activate(hasTestTag(GAME_PILL_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
+    }
+
+    @Test
+    fun theGamesOfferOfASecurePortIsAskedAboutAndAnswered() {
+        session.status("connection", "connected")
+        waitForPill(string(R.string.connection_connected))
+        assertFalse("no question before the game offers", displayed(string(R.string.secure_offer_title)))
+
+        session.secureOffer(true)
+        waitUntilDisplayed(string(R.string.secure_offer_title))
+        activate(hasText(string(R.string.secure_offer_accept)))
+        assertEquals(true, session.receive("answerSecureOffer").getBoolean("accept"))
+        session.secureOffer(false)
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.secure_offer_title)) }
+
+        // A refusal is said, and the offer, still standing, is asked about again
+        session.secureOffer(true)
+        activate(hasText(string(R.string.secure_offer_decline)))
+        val no = session.receive("answerSecureOffer")
+        assertEquals(false, no.getBoolean("accept"))
+        session.refuse(no, "the profile is busy; answer again in a moment")
+        waitUntilDisplayed(compose.activity.getString(R.string.secure_offer_refused, "the profile is busy; answer again in a moment"))
+        compose.onNodeWithText(string(R.string.secure_offer_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun backPutsTheSecurePortOffAndItIsAskedAgainOnlyWhenOfferedAgain() {
+        session.status("connection", "connected")
+        session.secureOffer(true)
+        waitUntilDisplayed(string(R.string.secure_offer_title))
+        // The system's Back, which the dialog's own window takes
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.secure_offer_title)) }
+        session.assertNoRequest("answerSecureOffer", 1_000)
+        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+
+        // Mudlet takes the offer back with its connection, and makes it again on the next
+        session.secureOffer(false)
+        session.secureOffer(true)
+        waitUntilDisplayed(string(R.string.secure_offer_title))
     }
 
     @Test

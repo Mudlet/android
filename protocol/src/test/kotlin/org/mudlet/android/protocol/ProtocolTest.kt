@@ -940,6 +940,14 @@ class ProtocolTest {
     }
 
     @Test
+    fun theSecureOfferAndItsAnswer() {
+        assertEquals(EngineMessage.SecureOffer(true), FrameReader.parse(JSONObject("""{"t":"secureOffer","offered":true}""")))
+        assertEquals(EngineMessage.SecureOffer(false), FrameReader.parse(JSONObject("""{"t":"secureOffer"}""")))
+        assertEquals(mapOf("t" to "answerSecureOffer", "accept" to true), Requests.answerSecureOffer(true).toMap())
+        assertEquals(mapOf("t" to "answerSecureOffer", "accept" to false), Requests.answerSecureOffer(false).toMap())
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

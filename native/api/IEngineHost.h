@@ -19,6 +19,9 @@ public:
     // The open profile was given a password for this run, or the one it had was withdrawn
     virtual void profilePasswordGiven(const QString& name, bool given) = 0;
     virtual void profileClosed(const QString& name) = 0;
+    // What the engine lists of a profile changed other than by a saveProfile, as when the player took the game's
+    // secure port
+    virtual void profilesChanged() = 0;
     // A status of the whole engine, as its heartbeat or font, apart from any profile
     virtual void engineStatus(const QString& key, const QString& value) = 0;
     // Where what an engine shows with no profile open goes

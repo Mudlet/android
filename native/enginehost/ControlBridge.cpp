@@ -328,6 +328,14 @@ void ControlBridge::profilePasswordGiven(const QString& name, bool given)
     }
 }
 
+// A UI that misses it, lagging or detached, asks for the list as it attaches
+void ControlBridge::profilesChanged()
+{
+    if (clientLive() && mEngineControl) {
+        sendProfiles();
+    }
+}
+
 // The front goes to the next profile, else the one before
 void ControlBridge::profileClosed(const QString& name)
 {

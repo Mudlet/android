@@ -335,6 +335,8 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         fun hiddenInput(wanted: Boolean) = send(JSONObject().put("t", "hiddenInput").put("wanted", wanted))
 
+        fun secureOffer(offered: Boolean) = send(JSONObject().put("t", "secureOffer").put("offered", offered))
+
         /** [lines]: newest first. */
         fun history(lines: List<String>) = send(JSONObject().put("t", "history").put("lines", JSONArray(lines)))
 

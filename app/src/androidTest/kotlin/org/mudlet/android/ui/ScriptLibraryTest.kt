@@ -73,6 +73,7 @@ class ScriptLibraryTest {
 
     private val library = hasTestTag(SCRIPT_LIBRARY_TAG)
     private val page = hasTestTag(SCRIPT_ITEM_TAG)
+    private val editor = hasTestTag(LUA_EDITOR_TAG)
 
     // An item page's name field and Apply button, once the activity's strings can be read
     private val name by lazy { hasSetTextAction() and hasText(string(R.string.scripts_name)) }
@@ -362,10 +363,9 @@ class ScriptLibraryTest {
     }
 
     @Test
-    fun anItemsLuaIsEditedInItsPageAndCheckedOnlyWhenApplied() {
+    fun anItemsLuaIsAFieldOfItsPageThatIndentsCompletesAndTypesLuasSymbols() {
         openGreet(script = "if x then")
         // In the page itself, among its other fields: nothing else there is named for the Lua, as a row that opened it was
-        val editor = hasTestTag(LUA_EDITOR_TAG)
         waitFor(editor and hasText("if x then") and hasSetTextAction() and hasAnyAncestor(page))
         compose.onNode(name).assertExists()
         compose.onAllNodes(hasText(string(R.string.scripts_lua)) and !editor).assertCountEquals(0)
@@ -381,6 +381,17 @@ class ScriptLibraryTest {
         compose.onNode(editor).performTextInput("sen")
         activate(hasContentDescription(string(R.string.lua_complete, "send(command, showOnScreen)")))
         activate(closeBracket)
+        waitFor(editor and hasText("if x then\n  send()"))
+        // What is typed is the item's draft, as in its other fields
+        compose.onNode(apply).assertIsEnabled()
+    }
+
+    @Test
+    fun luaIsCheckedOnlyWhenAppliedAndWhatIsWrongGoesOnceTheCodeIsChanged() {
+        openGreet(script = "if x then")
+        waitFor(editor and hasText("if x then"))
+        compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(9, 9, true) }
+        compose.onNode(editor).performTextInput("\n  send()")
         val broken = "if x then\n  send()"
         waitFor(editor and hasText(broken))
 
@@ -422,7 +433,8 @@ class ScriptLibraryTest {
         activate(apply)
         val again = received("checkLua")
         assertEquals(mended, again.getString("code"))
-        val saved = received("editScriptItem").also { session.send(JSONObject().put("t", "luaCheck").put("ok", true).put("re", again.get("id"))) }
+        val saved = received("editScriptItem")
+        session.send(JSONObject().put("t", "luaCheck").put("ok", true).put("re", again.get("id")))
         val kept = saved.getJSONObject("fields").getString("script")
         session.send(fields("trigger", trigger(3, 0, "Greet").put("script", kept), saved))
         items("trigger", triggers, received("scriptItems"))
@@ -441,7 +453,6 @@ class ScriptLibraryTest {
     @Test
     fun luaTypedAndNotAppliedIsKeptOrAskedAbout() {
         openGreet(script = "x = 1")
-        val editor = hasTestTag(LUA_EDITOR_TAG)
         waitFor(editor and hasText("x = 1"))
         compose.onNode(editor).performSemanticsAction(SemanticsActions.SetSelection) { it(5, 5, true) }
         compose.onNode(editor).performTextInput("2")

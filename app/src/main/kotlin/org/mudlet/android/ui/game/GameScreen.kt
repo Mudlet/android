@@ -313,10 +313,11 @@ private fun ProfileGameScreen(
                     ConnectionAction.STOP -> if (c.name.isNotEmpty()) ConnectionChip(action, name, onClick = ::disconnect)
                     else -> if (canReconnect) ConnectionChip(action, reconnectName, onClick = ::reconnect)
                 }
-                val sounds = c.sounds
-                if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {
-                    SoundButton(sounds.scriptsMuted && sounds.gameMuted, onToggle = { c.toggleAllSoundsMuted() })
-                }
+                var shownMuted by remember { mutableStateOf(false) }
+                SoundButton(shownMuted, onToggle = {
+                    c.toggleAllSoundsMuted()
+                    shownMuted = !shownMuted
+                })
             }
         }
     }

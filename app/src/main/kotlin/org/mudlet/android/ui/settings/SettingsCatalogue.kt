@@ -201,8 +201,8 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_new_environ_hint,
             R.string.settings_protocol_keywords,
         ),
-        SettingEntry.Switch(SettingsCategory.SOUND, Settings.muteScripts, R.string.settings_mute_scripts, R.string.settings_mute_scripts_hint, R.string.settings_mute_keywords),
-        SettingEntry.Switch(SettingsCategory.SOUND, Settings.muteGame, R.string.settings_mute_game, R.string.settings_mute_game_hint, R.string.settings_mute_keywords),
+        SettingEntry.Switch(SettingsCategory.ADVANCED, Settings.muteScripts, R.string.settings_mute_scripts, R.string.settings_mute_scripts_hint, R.string.settings_mute_keywords),
+        SettingEntry.Switch(SettingsCategory.ADVANCED, Settings.muteGame, R.string.settings_mute_game, R.string.settings_mute_game_hint, R.string.settings_mute_keywords),
         SettingEntry.Switch(
             SettingsCategory.ADVANCED,
             Settings.forceCompressionOff,

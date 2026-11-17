@@ -429,7 +429,7 @@ class ProfileSession internal constructor(
     fun toggleAllSoundsMuted(): Boolean {
         if (!settingsAvailable) return false
         val mute = !(sounds.scriptsMuted && sounds.gameMuted)
-        if (!sendSettings(Requests.setSettings(mapOf(Settings.muteScripts.key to mute, Settings.muteGame.key to mute), newRequestId()))) return false
+        if (!sendSettings(Requests.setSettings(mapOf(Settings.muteGame.key to mute), newRequestId()))) return false
         onSounds(sounds.copy(scriptsMuted = mute, gameMuted = mute))
         return true
     }

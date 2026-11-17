@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 25
+const val PROTOCOL_VERSION = 26
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -65,7 +65,8 @@ enum class OpenProfileState(val wire: String) {
 /**
  * An open profile, served on its own [socket] (docs/protocol.md, "Several profiles"). [connection] is its last
  * `connection` status; [unread] counts its lines after the last Requests.markSeen, and [attention] says it asked for
- * the player since.
+ * the player since. [passwordGiven] is false for one the engine holds no password for, as it does for a profile it
+ * restored: the password is the UI's to keep, and to give again.
  */
 data class OpenProfile(
     val name: String,
@@ -77,6 +78,7 @@ data class OpenProfile(
     val unread: Long,
     val attention: Boolean,
     val front: Boolean,
+    val passwordGiven: Boolean = true,
 )
 
 /** An item of a link's menu; a [separator] has no label. */
@@ -1305,6 +1307,7 @@ class FrameReader(input: InputStream) {
             p.optLong("unread"),
             p.optBoolean("attention"),
             p.optBoolean("front"),
+            p.optBoolean("passwordGiven", true),
         )
 
         private fun parseLinkItems(items: JSONArray?): List<LinkItem> {

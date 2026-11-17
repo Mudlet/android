@@ -272,7 +272,12 @@ shows a stored password: a new one replaces it, Forget password removes it, and 
 can no longer be decrypted is forgotten, and the player types it again. The engine is told a password only in an
 `openProfile`, and the game screen's Reconnect is a bare `connect`, so a password stored or forgotten for a game that
 is open goes to it at once (`EngineClient.givePassword`: `openProfile` with `alongside` and `connect` false), for its
-next connection.
+next connection. A profile the engine restores after it was killed comes back without one, so `openProfiles` says of
+each open profile whether it holds a password (`passwordGiven`), and the UI gives a game that holds none its stored
+one the same way, once for each time the engine says so (`EngineClient.givePasswords`). Mudlet reads the password two
+seconds into a connection, at its login step, so a restore the UI is attached for logs in with it; one made with no
+UI attached, as when Android has stopped the app too, connects without logging in, and the password is for the
+connection after it. Keeping the password where the engine could read it alone would close that, and is not done.
 
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
@@ -620,8 +625,10 @@ a room added beside another or deleted, the player placed, an area renamed and t
 moved and deleted as the desktop's script editor does (`0015-headless-script-items.patch`; see "Editing triggers,
 aliases and scripts" in [`protocol.md`](protocol.md)), the map info box as its parts, left out of the map's
 picture (`0016-headless-map-info.patch`; see "The map info"), Lua compiled without being run, for an editor to
-say what is wrong with it (`checkLua()`, `0017-headless-check-lua.patch`), and a running profile's login and password
-changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`).
+say what is wrong with it (`checkLua()`, `0017-headless-check-lua.patch`), a running profile's login and password
+changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`), and its server,
+TLS choice and automatic reconnect changed for the connections after the one that is open (`setAddress()`,
+`setAutoReconnect()`, `0019-headless-connection-change.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -739,7 +746,10 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
   through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log; a new login and
   password for the running profile, which its next connect logs in with, without closing it, neither typed into
-  the connection it has, and a password withdrawn or a login cleared left out of the next;
+  the connection it has, and a password withdrawn or a login cleared left out of the next; a port, a TLS choice and
+  the automatic reconnect saved for the running profile, which Mudlet's own reconnect, Lua's `reconnect()` and the
+  next `connect` are made with, without closing it, and an address Mudlet refuses, which its `connect` then reports;
+  `passwordGiven` as a password is given and withdrawn, and a password handed over leaving the list's order;
 - several profiles: a second opened `alongside` the first, on a game of its own, with its own socket; a trigger in the
   profile behind whose `raiseGlobalEvent()` reaches the other's script; `setFront` raising
   `sysProfileFocusChangeEvent` in both; `setAppState` raising `sysApplicationFocusChangeEvent` once in each, with
@@ -829,7 +839,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   certificate accepted once the profile accepts self-signed ones.
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL, with
-one profile open and with two.
+one profile open and with two: a profile opened with a password comes back without it (`passwordGiven`), the
+password handed to it while it is restored cancels nothing and logs the restored connection in, and an address saved
+for a running profile is the one kept for its restore.
 `native/tests/profile_checks.py` holds the profile requests `test_mudlet_engine.py` runs.
 
 `native/tests/android_smoke.py` runs the debug APK, built for x86_64 with this engine, on an emulator
@@ -877,8 +889,9 @@ device shows, below the UI's debug hook:
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
   host:port", adding, editing, deleting only once confirmed, the engine's refusals, Connect sending
-  `openProfile` with the stored password, and a password stored or forgotten for an open game given to it, and to
-  no game that is not open; the password field, which TalkBack does not read aloud; `PasswordStore`
+  `openProfile` with the stored password, a password stored or forgotten for an open game given to it, and to
+  no game that is not open, and a game the engine says holds no password given its stored one, once; the password
+  field, which TalkBack does not read aloud; `PasswordStore`
   (`PasswordStoreTest`), whose passwords outlast a new store, go with Forget, are never in the clear, and are excluded
   from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
@@ -948,10 +961,19 @@ CI runs both on API 28, the app's minSdk, and on API 36.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
 - No bundled fonts.
-- TLS is chosen when the profile starts (see "TLS" below).
-- Mudlet reads a profile's details as it loads, so a change `saveProfile` makes to the running profile takes effect at
-  its next start, but for the login, and the password `openProfile` gives it: libmudlet hands the profile both as it
-  runs (`THeadlessSession::setLogin()` and `setPassword()`), and its next connection logs in with them.
+- TLS is chosen when the profile starts, and by a `saveProfile` of it after that (see "TLS" below).
+- Mudlet reads a profile's details as it loads, so libmudlet hands a running profile the ones `saveProfile` changes,
+  and the password `openProfile` gives it (`THeadlessSession::setLogin()`, `setPassword()`, `setAddress()` and
+  `setAutoReconnect()`). None closes the profile or touches a connection that is open. The next connection logs in
+  with the login and password, and is made to the saved server with the saved TLS choice, whoever makes it: the UI's
+  `connect`, Mudlet's automatic reconnect and its retry of a connection that failed, or Lua's `reconnect()`. A
+  connection still looking its server up takes the TLS choice as it is when the lookup ends, as on the desktop when
+  the profile preferences change it. The automatic reconnect counts from the next time the connection is lost or
+  fails: a retry Mudlet is already waiting to make is still made, and Disconnect calls it off. Mudlet refuses an
+  address its connection dialog would, such as TLS to an IP address: the files keep what was saved, the running
+  profile the address it had, and its `connect` is refused with the reason until the profile is saved with one
+  Mudlet takes. A profile that waits for its restore, in the seconds after the engine was killed, is not running
+  yet, and that restore still connects to the address the UI last connected it to.
 - `saveProfile` makes a new profile's folder before its first start, so that start does not remove the passwords an
   earlier profile of the same name may have left in the credential store, as Mudlet does for a new name, and
   `deleteProfile` does not remove them either. The engine stores no password (the app keeps its own, encrypted, and
@@ -972,12 +994,14 @@ start each open profile again on disk, and a new engine restores them.
 still read). It holds, for each profile open, in the order opened:
 - the profile, the one `openProfile` named included, which is the only `THeadlessSession::Options`
   field the engine sets besides the connection's and an `openProfile`'s password, which is never kept, so a restored
-  profile does not log in (`configDir` comes from the app's files, as at any start);
+  profile has none until the UI gives it the one it stores (see "Profiles in the app"; `configDir` comes from the
+  app's files, as at any start);
 - the host and port the UI last connected it to, passed again as `Options::host` and `port` (an empty host leaves
   the address stored in the profile);
 - whether the connection is wanted;
 - the TLS choice the profile was started with, if the `connect` that started it made one, passed again as
-  `Options::tls`, so that the UI's next `connect` with that choice is not refused;
+  `Options::tls`, so that the UI's next `connect` with that choice is not refused. A `saveProfile` that changes the
+  running profile's host, port or TLS choice forgets all three, so a restore connects to what is stored;
 
 and once for the engine:
 - the front profile;
@@ -1343,8 +1367,10 @@ certificate folders, such as `/etc/ssl/certs`.
 
 **The protocol.** `connect` carries `tls`, which libmudlet passes to `THeadlessSession::Options::tls` when that
 connect starts the profile; Mudlet stores it with the profile, as its connection dialog does. `THeadlessSession`
-takes the choice only at start, so while the profile runs a `connect` with a different `tls` is refused with status
-`connection` `error: ...`; stopping and starting the engine changes it. An engine restored after a kill starts
+takes the choice at start, and from `setAddress()` once it runs, which the engine calls for a `saveProfile` of the
+profile and for nothing else: a `connect` with a `tls` other than the one the running profile connects with is
+refused with status `connection` `error: ...`, so a login is never sent over a connection the stored profile does
+not ask for, and saving the profile with the other choice changes it. An engine restored after a kill starts
 the profile with the choice it was started with (see "Restoring the session"). The self-test screen has a TLS box beside the port.
 
 **Tests.** `native/tests/test_mudlet_engine.py` runs the real engine on the host, with the host's Qt and OpenSSL,
@@ -1450,6 +1476,11 @@ Item 13 of the on-device checklist covers this.
       system's settings, reopen it and Connect: it logs in again. Forget password, then Connect: the game asks for it.
     - With the game open and disconnected, edit it from the list: change the character name and password, Save, go
       back to the game and Reconnect: Mudlet logs in with the new ones, and the game's text so far is still there.
+    - With the game open and connected, edit it from the list: change the port to another game's, Save and go back:
+      the connection is as it was. Disconnect and Reconnect: the other game answers, below the text so far. Turn
+      "Secure connection (TLS)" on for a game that offers it, Save and Reconnect: it connects.
+    - With a game that has a character name and password open and connected, "Kill engine process" in the self-test:
+      the game comes back, connects and logs in again.
     - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
     - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
 15. The game screen, connected to a game (Connect on one of the start screen's games).

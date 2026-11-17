@@ -209,12 +209,14 @@ QString MudletEngine::saveProfile(const Profile& profile)
     } else if (const QString problem = Profile::newNameProblem(profile.name); !problem.isEmpty()) {
         return problem;
     }
+    MudletProfile* open = openNamed(stored.name);
+    const Profile before = open ? mProfiles.read(stored.name) : stored;
     if (const QString problem = mProfiles.save(stored, folder.isEmpty()); !problem.isEmpty()) {
         return QStringLiteral("could not store \"%1\": %2").arg(stored.name, problem);
     }
-    // A running profile read these when it started: the login it is given now, the rest take effect at its next start
-    if (MudletProfile* open = openNamed(stored.name)) {
-        open->setLogin(stored.login);
+    // A running profile read these when it started
+    if (open) {
+        open->profileSaved(stored, before.host != stored.host || before.port != stored.port || before.tls != stored.tls);
     }
     return {};
 }
@@ -285,6 +287,12 @@ QString MudletEngine::openProfile(const QString& name, const QString& password, 
     }
     if (alongside && open && open->stopping()) {
         return QStringLiteral("\"%1\" is closing: open it again once it has closed").arg(folder);
+    }
+    // Only a password for a profile that runs, as the UI hands one over: the order of the list and a restore under
+    // way are for the player's own opening of a profile to change
+    if (alongside && !connect && open && open->running()) {
+        open->openAgain(password, false);
+        return {};
     }
     mProfiles.markOpened(folder);
     if (!alongside) {

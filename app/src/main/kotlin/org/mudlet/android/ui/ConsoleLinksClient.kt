@@ -89,7 +89,8 @@ class ConsoleLinksClient internal constructor(
         if (link == null && !follows.remove(id)) return false
         // The last answer stands while the link can still be asked about; one the console no longer holds goes
         if (link != null && message.message.substringAfter(':').trim() == UNKNOWN) links.remove(link)
-        Log.w(TAG, "a link of the main console: ${message.message}")
+        // No reason: it can quote the link, which the game or a script sent
+        Log.w(TAG, "a link of the main console was refused")
         return true
     }
 

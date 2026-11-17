@@ -85,12 +85,8 @@ class AboutScreenTest {
 
         compose.onNodeWithText(compose.activity.getString(R.string.about_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
             .assertIsDisplayed()
-        val engine = if (string(EngineR.string.engine_kind) == "mudlet") {
-            compose.activity.getString(R.string.about_engine_mudlet, string(EngineR.string.engine_version))
-        } else {
-            string(R.string.about_engine_standin)
-        }
-        compose.onNodeWithText(engine).assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.about_engine_mudlet, string(EngineR.string.engine_version)))
+            .assertIsDisplayed()
 
         // the licence list, where Qt, near its top, opens its licence screen with the texts of the LGPL and the GPL
         scrollTo(hasText("Qt") and hasClickAction())

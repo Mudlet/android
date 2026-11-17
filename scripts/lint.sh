@@ -1,14 +1,13 @@
 #!/bin/bash
 # The static checks CI runs (.github/workflows/checks.yml), each on the files it covers:
 #   - ktlint: the Kotlin sources and Gradle scripts, with .editorconfig (./gradlew ktlintFormat fixes them)
-#   - clang-format: native/'s C and C++, but not native/third_party, with .clang-format (FIX=1 rewrites the files)
+#   - clang-format: native/'s C and C++, with .clang-format (FIX=1 rewrites the files)
 #   - shellcheck: the shell scripts
 #   - actionlint: the workflows, and ShellCheck on their run: steps
 #   - strings: scripts/check-strings.py, no hard-coded text in the Kotlin UI and a translator's comment on each string
 #     in strings.xml (docs/translations.md)
 #   - conflict-markers: no line left from a merge conflict (<<<<<<<, =======, >>>>>>>) in a text file
-#   - vendored: each native/third_party/ directory is its release unchanged (its SHA256SUMS), and each
-#     scripts/mudlet-patches/*.patch has an "Upstream:" line naming its Mudlet/Mudlet pull request
+#   - vendored: each scripts/mudlet-patches/*.patch has an "Upstream:" line naming its Mudlet/Mudlet pull request
 # Android lint needs the Qt jars that scripts/build-apk.sh stages, so it runs after that script, in libmudlet.yml:
 #   ./gradlew :app:lintDebug :engine-service:lintDebug
 #
@@ -35,28 +34,7 @@ tools() {
 
 # Tracked files and new ones not ignored, matching the given pathspecs
 files() { git ls-files -z --cached --others --exclude-standard -- "$@"; }
-native_files() { files 'native/*.c' 'native/*.cpp' 'native/*.h' ':!native/third_party'; }
-
-# A release as published: SHA256SUMS, made from the release's own files, lists every file but itself and
-# VENDORED.txt, which the release does not have
-release_unchanged() {
-    local dir=$1 listed present unlisted
-    if [ ! -f "$dir/SHA256SUMS" ]; then
-        echo "$dir: no SHA256SUMS" >&2
-        return 1
-    fi
-    if ! (cd "$dir" && sha256sum --quiet --strict -c SHA256SUMS); then
-        echo "$dir: differs from the release's files in its SHA256SUMS" >&2
-        return 1
-    fi
-    listed=$(sed -E 's/^[0-9a-f]{64} [ *]//' "$dir/SHA256SUMS" | LC_ALL=C sort) || return 1
-    present=$(cd "$dir" && files . ':!SHA256SUMS' ':!VENDORED.txt' | tr '\0' '\n' | LC_ALL=C sort) || return 1
-    unlisted=$(LC_ALL=C comm -23 <(echo "$present") <(echo "$listed"))
-    if [ -n "$unlisted" ]; then
-        printf '%s: not in the release:\n%s\n' "$dir" "$unlisted" >&2
-        return 1
-    fi
-}
+native_files() { files 'native/*.c' 'native/*.cpp' 'native/*.h'; }
 
 # One "Upstream:" line before the diff, which git apply ignores
 patch_upstream() {
@@ -97,7 +75,6 @@ for check in "${checks[@]}"; do
             [ "$status" = 1 ] || failed+=("$check") ;;
         vendored)
             status=0
-            for dir in native/third_party/*/; do release_unchanged "${dir%/}" || status=1; done
             for patch in scripts/mudlet-patches/*.patch; do patch_upstream "$patch" || status=1; done
             [ "$status" = 0 ] || failed+=("$check") ;;
         *)

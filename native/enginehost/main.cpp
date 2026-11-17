@@ -1,9 +1,5 @@
 #include "ControlBridge.h"
-#ifdef ENGINE_LIBMUDLET
 #include "MudletEngine.h"
-#else
-#include "StandIn.h"
-#endif
 #ifdef Q_OS_ANDROID
 #include "AndroidServiceSetup.h"
 #endif
@@ -91,11 +87,7 @@ int main(int argc, char* argv[])
             parser.value(QStringLiteral("heartbeat-ms")).isEmpty() ? envOr("MUDLET_HEARTBEAT_MS", QStringLiteral("30000")).toInt() : parser.value(QStringLiteral("heartbeat-ms")).toInt();
 
     ControlBridge bridge;
-#ifdef ENGINE_LIBMUDLET
     MudletEngine engine(&bridge, heartbeatMs);
-#else
-    StandIn engine(&bridge, heartbeatMs, QFileInfo(socketPath).absoluteDir().filePath(QStringLiteral("profiles.json")));
-#endif
     bridge.setEngineControl(&engine);
 #ifdef Q_OS_ANDROID
     // EngineService.onTrimMemory(): short of memory, the system may kill the engine next, with no save

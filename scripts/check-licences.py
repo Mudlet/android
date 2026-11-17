@@ -9,11 +9,11 @@ of the licence listed for this app's own code.
 --mudlet-source DIR: also that every Lua C module, font and third-party Lua file Mudlet's checkout builds into
 libmudlet has a component.
 
---apk APK --abi ABI --aapt2 AAPT2: also the APK: that it carries the same licence files, and android.json, which :app
-writes from the Gradle runtime dependencies, with a text for each of their licences; and that every native library
-in lib/ABI is claimed by a component for the engine the APK carries (res string engine_kind, from build-apk.sh).
+--apk APK --abi ABI: also the APK: that it carries the same licence files, and android.json, which :app writes from
+the Gradle runtime dependencies, with a text for each of their licences; and that every native library in lib/ABI is
+claimed by a component.
 
-usage: check-licences.py [--mudlet-source DIR] [--apk APK --abi ABI --aapt2 AAPT2]
+usage: check-licences.py [--mudlet-source DIR] [--apk APK --abi ABI]
 """
 import argparse
 import fnmatch
@@ -21,13 +21,11 @@ import glob
 import json
 import os
 import re
-import subprocess
 import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "app", "src", "main", "assets", "licences")
-ENGINES = {"standin", "mudlet"}
 GROUPS = {"app", "native"}
 # the component for this repository's own code, whose licence is in LICENSE
 APP_COMPONENT = "mudlet-android"
@@ -69,9 +67,6 @@ def check_data(notices, qt, text_names, where):
         for key in ("name", "licence"):
             if not c.get(key):
                 error(f"{where}: {cid} has no {key}")
-        engines = set(c.get("engines", ENGINES))
-        if not engines or not engines <= ENGINES:
-            error(f"{where}: {cid} has the engines {sorted(engines)}, not some of {sorted(ENGINES)}")
         missing = sorted(t for t in texts_of(c) if t not in text_names)
         if missing:
             error(f"{where}: {cid} names licences with no texts/<id>.txt: {missing}")
@@ -137,9 +132,6 @@ def check_repository():
                   "scripts/qt-attributions.py (docs/licences.md)")
         if version_of("libcxx") != f"NDK {ndk_version[0]}":
             error(f"notices.json lists libc++ of {version_of('libcxx')}, the build uses NDK {ndk_version[0]}")
-    vendored = pinned("native/third_party/lua-5.1.5/VENDORED.txt", r"^Lua (\S+) from")
-    if vendored != [version_of("lua51-standin")]:
-        error(f"notices.json lists the stand-in's Lua {version_of('lua51-standin')}, native/third_party has {vendored}")
     return notices, components
 
 
@@ -164,23 +156,11 @@ def check_mudlet_source(src, components):
             error(f"Mudlet has no 3rdparty/{directory} any more: drop {cid} from notices.json and MUDLET_3RDPARTY")
         wanted[cid] = f"3rdparty/{directory}"
     for cid, what in sorted(wanted.items()):
-        component = components.get(cid)
-        if component is None:
+        if cid not in components:
             error(f"Mudlet builds {what} into libmudlet, but notices.json has no component '{cid}'")
-        elif "mudlet" not in component.get("engines", ENGINES):
-            error(f"{cid} is not listed for the mudlet engine, which builds {what} in")
 
 
-def engine_kind(apk, aapt2):
-    dump = subprocess.run([aapt2, "dump", "resources", apk], check=True, capture_output=True, text=True).stdout
-    found = re.findall(r'string/engine_kind[^\n]*\n\s*\([^)]*\)\s*"([^"]*)"', dump)
-    if len(found) != 1 or found[0] not in ENGINES:
-        sys.exit(f"check-licences: {apk}: no single engine_kind string of {sorted(ENGINES)} in its resources "
-                 f"(found {found}): did scripts/build-apk.sh stage the engine?")
-    return found[0]
-
-
-def check_apk(apk, abi, aapt2, notices, components):
+def check_apk(apk, abi, notices):
     with zipfile.ZipFile(apk) as z:
         names = set(z.namelist())
 
@@ -209,17 +189,14 @@ def check_apk(apk, abi, aapt2, notices, components):
         missing = sorted(texts_of(c) - texts)
         if missing:
             error(f"{apk}: {c['name']} is under {c['licence']}, whose texts are not in the APK: {missing}")
-    kind = engine_kind(apk, aapt2)
     if not libs:
         error(f"{apk} has no lib/{abi}/*.so")
     for lib in libs:
-        claims = [cid for pattern, ids in notices["libraries"].items() if fnmatch.fnmatchcase(lib, pattern)
-                  for cid in ids if kind in components[cid].get("engines", ENGINES)]
-        if not claims:
-            error(f"{apk}: lib/{abi}/{lib} is no component's (engine {kind}): add it to notices.json's libraries, "
-                  "with a component for its licence")
+        if not any(fnmatch.fnmatchcase(lib, pattern) for pattern in notices["libraries"]):
+            error(f"{apk}: lib/{abi}/{lib} is no component's: add it to notices.json's libraries, with a component for "
+                  "its licence")
     if not errors:
-        print(f"{os.path.basename(apk)}: {len(libs)} native libraries of the {kind} engine ({', '.join(libs)}) and "
+        print(f"{os.path.basename(apk)}: {len(libs)} native libraries ({', '.join(libs)}) and "
               f"{len(android)} Gradle modules, each with its licence")
 
 
@@ -228,15 +205,14 @@ def main():
     parser.add_argument("--mudlet-source")
     parser.add_argument("--apk")
     parser.add_argument("--abi")
-    parser.add_argument("--aapt2")
     args = parser.parse_args()
-    if args.apk and not (args.abi and args.aapt2):
-        parser.error("--apk needs --abi and --aapt2")
+    if args.apk and not args.abi:
+        parser.error("--apk needs --abi")
     notices, components = check_repository()
     if args.mudlet_source:
         check_mudlet_source(args.mudlet_source, components)
     if args.apk and not errors:
-        check_apk(args.apk, args.abi, args.aapt2, notices, components)
+        check_apk(args.apk, args.abi, notices)
     for e in errors:
         print(f"::error::{e}" if os.environ.get("GITHUB_ACTIONS") else f"error: {e}", file=sys.stderr)
     if errors:

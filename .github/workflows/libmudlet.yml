@@ -1,10 +1,9 @@
 name: libmudlet for Android
 
 # Cross-compiles Mudlet's core (mudlet_core, mudlet_headless and the mudlet-headless runner) for arm64-v8a, then
-# builds the app's APK with libmudlet as its engine, the one APK to install, with the app's JVM tests and Android lint.
-# Before that, the same job runs the host tests that need no Mudlet: the stand-in engine, a test harness of the socket
-# protocol and never the app, with its desktop test and :protocol's tests against it, and :suggest's tests. A second
-# job builds libmudlet for the host and runs the real engine against the fake game server through the socket protocol.
+# builds the app's APK with libmudlet as its engine, the one APK to install, with the app's JVM tests and Android lint;
+# before that, :suggest's tests, which need no Mudlet. A second job builds libmudlet for the host and runs the engine
+# against the fake game server through the socket protocol, from Python and from :protocol's Kotlin client.
 # The emulator jobs build it all for x86_64 once, then run the APK on an emulator at the app's minSdk (28) and at the
 # newest API (36), one boot each: first the smoke test (native/tests/android_smoke.py), then the instrumented tests
 # (native/tests/android_instrumented.py). They are the only jobs that run the real engine on Android.
@@ -77,31 +76,14 @@ jobs:
       - id: toolchain
         uses: ./.github/actions/android-toolchain
         with:
-          # lua5.1 writes the translation statistics that mudlet.qrc embeds; host Qt Gui, which the stand-in's desktop
-          # engine links, needs the OpenGL headers to configure and the rest to run
-          apt-packages: lua5.1 libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1
+          # lua5.1 writes the translation statistics that mudlet.qrc embeds
+          apt-packages: lua5.1
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies, and checks the wrapper jar
       - uses: gradle/actions/setup-gradle@v6
 
-      # The host tests first, as they need no Mudlet and so report even when Mudlet's development fails to build
-      - name: Stand-in engine desktop test
-        working-directory: native
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          cmake -S . -B build-desktop -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64"
-          cmake --build build-desktop --target engine
-          python3 tests/test_engine.py build-desktop/enginehost/engine
-
-      # :protocol's tests: the spec check, the run encoding, and the app's EngineLink against the stand-in's desktop
-      # engine, which fails rather than skips here when it has no engine (CI=true)
-      - name: Kotlin protocol tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
-
-      # :suggest's tests: ranking, prediction, the saved form and file, the session's timing, hidden input never stored
+      # :suggest's tests (ranking, prediction, the saved form and file, the session's timing, hidden input never
+      # stored) first, as they need no Mudlet and so report even when Mudlet's development fails to build
       - name: Kotlin suggestion tests
         run: ./gradlew -PqtRoot="$QT_ROOT" :suggest:test
 
@@ -262,6 +244,16 @@ jobs:
           cmake --build build-desktop-mudlet --target engine
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
           python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
+
+      # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies
+      - uses: gradle/actions/setup-gradle@v6
+
+      # :protocol's tests: the spec check, the run encoding, and the app's EngineLink against the engine just built,
+      # which fails rather than skips here when it has no engine (CI=true)
+      - name: Kotlin protocol tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: native/tests/run_jvm_client_test.sh -PqtRoot="$QT_ROOT" -PandroidAbi=arm64-v8a
 
       - id: done
         run: echo "done=true" >> "$GITHUB_OUTPUT"

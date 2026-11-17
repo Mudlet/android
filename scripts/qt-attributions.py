@@ -3,12 +3,12 @@
 
 Reads every qt_attribution.json in a source checkout of each Qt module given, at the Qt version the build pins, and
 writes app/src/main/assets/licences/qt-third-party.json: one entry for each attribution the Android libraries can
-carry, with the engines whose APKs carry that module. Copies each licence the entries name from the module's
+carry. Copies each licence the entries name from the module's
 LICENSES/ into app/src/main/assets/licences/texts/ unless a text of that name is there already. Run it again when Qt is
 bumped; scripts/check-licences.py fails while the file names another Qt version. See docs/licences.md.
 
-usage: qt-attributions.py <qt-version> <module-checkout>=<engines>...
-  e.g. qt-attributions.py 6.12.0 ../qtbase=standin,mudlet ../qtsvg=mudlet ../qtmultimedia=mudlet
+usage: qt-attributions.py <qt-version> <module-checkout>...
+  e.g. qt-attributions.py 6.12.0 ../qtbase ../qtsvg ../qtmultimedia
 """
 import glob
 import json
@@ -18,7 +18,6 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "app", "src", "main", "assets", "licences")
-ENGINES = {"standin", "mudlet"}
 
 # Attributions of what no Android library of Qt holds: other platforms, the build, tests and examples
 SKIPPED_PATHS = re.compile(r"(^|/)(cmake|tests?|testlib|testinternal|examples|wayland|xcb|wintab|wasm|dbus|"
@@ -35,7 +34,7 @@ def licence_ids(expression):
     return sorted(set(re.findall(r"[A-Za-z0-9.+-]+", expression)) - {"AND", "OR", "WITH"})
 
 
-def entries_of(checkout, module, engines):
+def entries_of(checkout, module):
     found = []
     for path in sorted(glob.glob(os.path.join(checkout, "**", "qt_attribution.json"), recursive=True)):
         rel = os.path.relpath(os.path.dirname(path), checkout).replace(os.sep, "/")
@@ -61,7 +60,6 @@ def entries_of(checkout, module, engines):
                 "copyright": copyright_.strip(),
                 "url": e.get("Homepage", ""),
                 "source": e.get("DownloadLocation", ""),
-                "engines": engines,
             })
     return found
 
@@ -72,13 +70,9 @@ def main():
     qt_version, args = sys.argv[1], sys.argv[2:]
     entries = []
     licence_dirs = []
-    for arg in args:
-        checkout, _, engines = arg.partition("=")
-        engines = sorted(engines.split(",")) if engines else []
-        if not engines or not set(engines) <= ENGINES:
-            fail(f"'{arg}': give the engines whose APKs carry the module, from {sorted(ENGINES)}")
+    for checkout in args:
         module = os.path.basename(os.path.normpath(checkout))
-        found = entries_of(checkout, module, engines)
+        found = entries_of(checkout, module)
         if not found and module == "qtbase":
             fail(f"no qt_attribution.json in {checkout}")
         entries += found

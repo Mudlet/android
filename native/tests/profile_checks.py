@@ -1,5 +1,5 @@
-"""The profile requests (listProfiles, saveProfile, deleteProfile, openProfile) through the protocol, as both host
-tests run them: the stand-in's (test_engine.py) and libmudlet's (test_mudlet_engine.py)."""
+"""The profile requests (listProfiles, saveProfile, deleteProfile, openProfile) through the protocol, as
+test_mudlet_engine.py runs them on the engine."""
 import time
 
 

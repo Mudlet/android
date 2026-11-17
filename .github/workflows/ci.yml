@@ -8,15 +8,14 @@ name: CI
 #
 # What runs for what changed (the filters in "changes" below say it exactly):
 #   any file                      the conflict-marker check (scripts/lint.sh conflict-markers)
-#   native/third_party/, Mudlet patches
-#                                 the vendored check (scripts/lint.sh vendored)
-#   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the arm64 APK's job, whose
-#                                 ProtocolSpecTest reads it)
+#   Mudlet patches                the vendored check (scripts/lint.sh vendored)
+#   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the real engine on the host,
+#                                 whose ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
-#                                 ktlint, the arm64 APK with libmudlet (with the host and JVM tests and Android
-#                                 lint) and the emulator suite (smoke test and the instrumented tests, on minSdk and
-#                                 the newest API), libmudlet from its cache; app/ and engine-service/ also the
-#                                 strings check (scripts/check-strings.py)
+#                                 ktlint, the arm64 APK with libmudlet (with the JVM tests and Android lint) and the
+#                                 emulator suite (smoke test and the instrumented tests, on minSdk and the newest API),
+#                                 libmudlet from its cache; protocol/ also the real engine on the host, which runs its
+#                                 tests; app/ and engine-service/ also the strings check (scripts/check-strings.py)
 #   native/, the shared actions   their lint check (clang-format, actionlint), the arm64 APK, the emulator suite and
 #                                 the real engine on the host
 #   Mudlet's build scripts, the Gradle build, the APK scripts
@@ -133,14 +132,12 @@ jobs:
             conflict-markers:
               - "**"
             vendored:
-              - native/third_party/**
               - scripts/mudlet-patches/**
               - *lint-tools
               - *everything
             libmudlet-android:
               - *kotlin
               - native/**
-              - docs/protocol.md
               - lint.xml
               - *gradle
               - *apk-scripts
@@ -150,6 +147,9 @@ jobs:
               - *everything
             desktop-engine:
               - native/**
+              - protocol/**
+              - docs/protocol.md
+              - *gradle
               - *mudlet-scripts
               - *shared
               - .github/workflows/libmudlet.yml

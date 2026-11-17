@@ -1,8 +1,9 @@
 # Several games at once
 
-Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 has landed
-protocol 15 and the stand-in engine runs several profiles. E1 has libmudlet run several, each in a `THeadlessSession`
-of its own sharing the pool (UP1, carried as `0007-headless-shared-pool.patch`), restored together. U1 has the app
+Status: in progress, November 2026; the pull request plan at the end says what lands in which order. P1 landed
+protocol 15, with the stand-in engine (since removed) running several profiles. E1 has libmudlet run several, each in
+a `THeadlessSession` of its own sharing the pool (UP1, carried as `0007-headless-shared-pool.patch`), restored
+together. U1 has the app
 attach to the control socket and to each open profile's socket, with a `ProfileSession` for each. U2 has the game
 pill and its sheet: several games open, switching, closing, "Open another game", the TalkBack actions and
 announcements, and the profile list's "Open games". U3 has the swipe on the pill and Ctrl+Tab. U4 has the unread and
@@ -56,8 +57,8 @@ upstream change and isolates a crash to one game, but:
 - N processes write one config dir (`Mudlet.ini`, `profile-order.json`), which needs cross-process locks.
 - `raiseGlobalEvent()` and module sync don't cross processes.
 
-With a socket per profile (below), the UI does not depend on which layout serves it. The stand-in engine ran several
-profiles before libmudlet did, so the protocol and the UI landed and were tested first.
+With a socket per profile (below), the UI does not depend on which layout serves it. The stand-in engine (since
+removed) ran several profiles before libmudlet did, so the protocol and the UI landed and were tested first.
 
 ## Protocol (version 15)
 
@@ -141,8 +142,7 @@ there gets `error`, as a control request sent on a profile socket does.
   tap makes that profile the front and shows the game screen. The foreground notification reads "Keeping 3 games
   connected" with a line per game and its connection, and with one game looks as it did with one profile. With no game
   connected it says so ("Achaea is not connected"), and stays until the last game closes.
-  `ControlBridge` gives `AndroidNotifier::showProfiles` the open profiles as they change, for the stand-in and libmudlet
-  alike.
+  `ControlBridge` gives `AndroidNotifier::showProfiles` the open profiles as they change.
 
 ## Pull request plan
 
@@ -168,6 +168,6 @@ M0 ── P1 ─┬─ U1 ── U2 ─┬─ U3
 UP1 ──────┴──────────────────── E1
 ```
 
-Everything but E1 is checked in CI against the stand-in, whose host harness covers the protocol's transport only, and
+Each is checked in CI against libmudlet on the host (`test_mudlet_engine.py` and `EngineLinkJvmTest`) and
 `FakeEngine`. What only a phone shows (the swipe's feel,
 TalkBack's speech, memory with three real games) goes on the on-device checklist in the PR that adds it.

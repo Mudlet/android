@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scripted fake telnet game server for the stand-in engine.
+"""Scripted fake telnet game server for the engine host tests.
 
 Commands a client may send (one per line):
   echo <text>     -> "You said: <text>"

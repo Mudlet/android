@@ -1,7 +1,7 @@
 {
-  "_comment": "What the APK bundles and under which licences, for the About screen; docs/licences.md says how it is kept true. qt-third-party.json (scripts/qt-attributions.py) and android.json (built by :app from the Gradle runtime dependencies) add to it. A licence is an SPDX expression; each identifier in it, and in texts, has its text in texts/<id>.txt. engines: the APKs that carry it (standin, mudlet); all when left out.",
+  "_comment": "What the APK bundles and under which licences, for the About screen; docs/licences.md says how it is kept true. qt-third-party.json (scripts/qt-attributions.py) and android.json (built by :app from the Gradle runtime dependencies) add to it. A licence is an SPDX expression; each identifier in it, and in texts, has its text in texts/<id>.txt.",
   "libraries": {
-    "libengine_*.so": ["lua51-standin", "mudlet"],
+    "libengine_*.so": ["mudlet"],
     "libQt6Core_*.so": ["qt"],
     "libQt6Gui_*.so": ["qt"],
     "libQt6Network_*.so": ["qt"],
@@ -52,8 +52,7 @@
       "texts": ["GPL-3.0-only"],
       "copyright": "Copyright (C) 2008-2026 Heiko Köhn and the Mudlet developers",
       "url": "https://www.mudlet.org/",
-      "source": "https://github.com/Mudlet/Mudlet",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet"
     },
     {
       "id": "qt",
@@ -105,17 +104,6 @@
       "source": "https://android.googlesource.com/platform/frameworks/support"
     },
     {
-      "id": "lua51-standin",
-      "group": "native",
-      "name": "Lua (in the stand-in engine)",
-      "version": "5.1.5",
-      "licence": "MIT",
-      "copyright": "Copyright (C) 1994-2012 Lua.org, PUC-Rio",
-      "url": "https://www.lua.org/",
-      "source": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
-      "engines": ["standin"]
-    },
-    {
       "id": "lua51",
       "group": "native",
       "name": "Lua",
@@ -123,8 +111,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 1994-2012 Lua.org, PUC-Rio",
       "url": "https://www.lua.org/",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/3rdparty/lua51",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/3rdparty/lua51"
     },
     {
       "id": "pcre2",
@@ -134,8 +121,7 @@
       "licence": "BSD-3-Clause WITH PCRE2-exception",
       "copyright": "Copyright (c) 1997-2007 University of Cambridge\nCopyright (c) 2007-2024 Philip Hazel\nCopyright (c) 2010-2024 Zoltan Herczeg (JIT)\nCopyright (c) 2009-2024 Zoltan Herczeg (stack-less JIT compiler)",
       "url": "https://pcre2project.github.io/pcre2/",
-      "source": "https://github.com/PCRE2Project/pcre2/releases/tag/pcre2-10.45",
-      "engines": ["mudlet"]
+      "source": "https://github.com/PCRE2Project/pcre2/releases/tag/pcre2-10.45"
     },
     {
       "id": "pugixml",
@@ -145,8 +131,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2006-2025 Arseny Kapoulkine",
       "url": "https://pugixml.org/",
-      "source": "https://github.com/zeux/pugixml/releases/tag/v1.15",
-      "engines": ["mudlet"]
+      "source": "https://github.com/zeux/pugixml/releases/tag/v1.15"
     },
     {
       "id": "libzip",
@@ -156,8 +141,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright (C) 1999-2020 Dieter Baron and Thomas Klausner",
       "url": "https://libzip.org/",
-      "source": "https://github.com/nih-at/libzip/releases/tag/v1.11.4",
-      "engines": ["mudlet"]
+      "source": "https://github.com/nih-at/libzip/releases/tag/v1.11.4"
     },
     {
       "id": "yajl",
@@ -167,8 +151,7 @@
       "licence": "ISC",
       "copyright": "Copyright (c) 2007-2011, Lloyd Hilaiel <lloyd@hilaiel.com>",
       "url": "https://lloyd.github.io/yajl/",
-      "source": "https://github.com/lloyd/yajl/tree/2.1.0",
-      "engines": ["mudlet"]
+      "source": "https://github.com/lloyd/yajl/tree/2.1.0"
     },
     {
       "id": "hunspell",
@@ -178,8 +161,7 @@
       "licence": "MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.1-or-later",
       "copyright": "Copyright (C) 2002-2022 Németh László and the Hunspell contributors",
       "url": "https://hunspell.github.io/",
-      "source": "https://github.com/hunspell/hunspell/releases/tag/v1.7.2",
-      "engines": ["mudlet"]
+      "source": "https://github.com/hunspell/hunspell/releases/tag/v1.7.2"
     },
     {
       "id": "sqlite",
@@ -189,8 +171,7 @@
       "licence": "blessing",
       "copyright": "The authors disclaim copyright to the source code (public domain)",
       "url": "https://www.sqlite.org/",
-      "source": "https://www.sqlite.org/2025/sqlite-amalgamation-3500400.zip",
-      "engines": ["mudlet"]
+      "source": "https://www.sqlite.org/2025/sqlite-amalgamation-3500400.zip"
     },
     {
       "id": "qtkeychain",
@@ -200,8 +181,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright (C) 2011-2026 Frank Osterfeld <frank.osterfeld@gmail.com>",
       "url": "https://github.com/frankosterfeld/qtkeychain",
-      "source": "https://github.com/frankosterfeld/qtkeychain/tree/0.17.0",
-      "engines": ["mudlet"]
+      "source": "https://github.com/frankosterfeld/qtkeychain/tree/0.17.0"
     },
     {
       "id": "boost",
@@ -211,8 +191,7 @@
       "licence": "BSL-1.0",
       "copyright": "Copyright the Boost authors",
       "url": "https://www.boost.org/",
-      "source": "https://archives.boost.io/release/1.89.0/source/",
-      "engines": ["mudlet"]
+      "source": "https://archives.boost.io/release/1.89.0/source/"
     },
     {
       "id": "communi",
@@ -221,8 +200,7 @@
       "licence": "BSD-3-Clause",
       "copyright": "Copyright (C) 2008-2020 The Communi Project\nParts of irctextformat.cpp: Copyright (C) 2002 Dario Abatianni, (C) 2004 Peter Simonsson, (C) 2006-2008 Eike Hein, (C) 2004-2009 Eli Mackenzie",
       "url": "https://communi.github.io/",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/3rdparty/communi",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/3rdparty/communi"
     },
     {
       "id": "lfs",
@@ -231,8 +209,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 2003-2010 Kepler Project\nCopyright (C) 2010-2022 The LuaFileSystem authors",
       "url": "https://lunarmodules.github.io/luafilesystem/",
-      "source": "https://github.com/lunarmodules/luafilesystem",
-      "engines": ["mudlet"]
+      "source": "https://github.com/lunarmodules/luafilesystem"
     },
     {
       "id": "lpeg",
@@ -241,8 +218,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 2007-2023 Lua.org, PUC-Rio",
       "url": "https://www.inf.puc-rio.br/~roberto/lpeg/",
-      "source": "https://github.com/roberto-ieru/LPeg",
-      "engines": ["mudlet"]
+      "source": "https://github.com/roberto-ieru/LPeg"
     },
     {
       "id": "lrexlib",
@@ -251,8 +227,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) Reuben Thomas 2000-2026\nCopyright (C) Shmuel Zeigerman 2004-2024",
       "url": "https://github.com/rrthomas/lrexlib",
-      "source": "https://github.com/rrthomas/lrexlib",
-      "engines": ["mudlet"]
+      "source": "https://github.com/rrthomas/lrexlib"
     },
     {
       "id": "luautf8",
@@ -261,8 +236,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2018 Xavier Wang",
       "url": "https://github.com/starwing/luautf8",
-      "source": "https://github.com/starwing/luautf8",
-      "engines": ["mudlet"]
+      "source": "https://github.com/starwing/luautf8"
     },
     {
       "id": "lua_zip",
@@ -271,8 +245,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2009 Brian Maher",
       "url": "https://github.com/brimworks/lua-zip",
-      "source": "https://github.com/brimworks/lua-zip",
-      "engines": ["mudlet"]
+      "source": "https://github.com/brimworks/lua-zip"
     },
     {
       "id": "lua_yajl",
@@ -281,8 +254,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2009 Brian Maher",
       "url": "https://github.com/brimworks/lua-yajl",
-      "source": "https://github.com/brimworks/lua-yajl",
-      "engines": ["mudlet"]
+      "source": "https://github.com/brimworks/lua-yajl"
     },
     {
       "id": "luasql",
@@ -291,8 +263,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 2003-2019 The Kepler Project",
       "url": "https://lunarmodules.github.io/luasql/",
-      "source": "https://github.com/lunarmodules/luasql",
-      "engines": ["mudlet"]
+      "source": "https://github.com/lunarmodules/luasql"
     },
     {
       "id": "inspect-lua",
@@ -301,8 +272,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2013 Enrique García Cota",
       "url": "https://github.com/kikito/inspect.lua",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/mudlet-lua/lua/3rdparty",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/mudlet-lua/lua/3rdparty"
     },
     {
       "id": "utf8-filenames-lua",
@@ -311,8 +281,7 @@
       "licence": "MIT",
       "copyright": "Copyright (c) 2019 Egor-Skriptunoff",
       "url": "https://gist.github.com/Egor-Skriptunoff/2458547aa3b9210a8b5f686ac08ecbf0",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/mudlet-lua/lua",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/mudlet-lua/lua"
     },
     {
       "id": "kdtoolbox",
@@ -321,8 +290,7 @@
       "licence": "MIT",
       "copyright": "Copyright (C) 2020-2021 Klarälvdalens Datakonsult AB, a KDAB Group company <info@kdab.com>",
       "url": "https://github.com/KDAB/KDToolBox",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/3rdparty/kdtoolbox",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/3rdparty/kdtoolbox"
     },
     {
       "id": "lucide",
@@ -331,8 +299,7 @@
       "licence": "ISC AND MIT",
       "copyright": "Copyright (c) 2026 Lucide Icons and Contributors\nIcons derived from Feather: Copyright (c) 2013-present Cole Bemis",
       "url": "https://lucide.dev/",
-      "source": "https://github.com/lucide-icons/lucide",
-      "engines": ["mudlet"]
+      "source": "https://github.com/lucide-icons/lucide"
     },
     {
       "id": "ttf-bitstream-vera-1.10",
@@ -342,8 +309,7 @@
       "licence": "Bitstream-Vera",
       "copyright": "Copyright (c) 2003 by Bitstream, Inc.",
       "url": "https://www.gnome.org/fonts/",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/fonts",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/fonts"
     },
     {
       "id": "ubuntu-font-family-0.83",
@@ -353,8 +319,7 @@
       "licence": "Ubuntu-font-1.0",
       "copyright": "Copyright 2010, 2011 Canonical Ltd.",
       "url": "https://design.ubuntu.com/font",
-      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/fonts",
-      "engines": ["mudlet"]
+      "source": "https://github.com/Mudlet/Mudlet/tree/development/src/fonts"
     }
   ]
 }

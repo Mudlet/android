@@ -18,7 +18,7 @@
 #include <memory>
 #include <optional>
 
-// libmudlet behind the same host protocol as the stand-in: each open profile a MudletProfile, in a THeadlessSession of
+// libmudlet behind the host protocol: each open profile a MudletProfile, in a THeadlessSession of
 // its own that shares the process's pool of profiles (docs/multi-profile.md). Profiles start by openProfile, on a
 // version 13 UI's first connect or Lua call, or at start-up to restore those the engine before it ran when that engine
 // was killed. What is the whole engine's is here: the profiles' store, the app's state, the save and the restore.

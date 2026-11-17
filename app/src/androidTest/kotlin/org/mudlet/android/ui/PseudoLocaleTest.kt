@@ -43,8 +43,9 @@ import kotlin.math.abs
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, new and at a profile's Export, the settings, the game screen, with the connection chip's states and the password field, the script library,
- * and a trigger's page, with its Lua being typed, no text is
+ * editor, new and at a profile's Export, the settings, the game screen, with the connection chip's states and the
+ * password field, the page that makes a trigger from a line, the script library, and a trigger's page, with its Lua
+ * being typed, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
  */
@@ -131,6 +132,20 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
         assertTextFits("the password field")
         session.hiddenInput(false)
+
+        session.line(1, LINE)
+        waitFor(hasText(LINE))
+        val makeTrigger = compose.onNode(hasText(LINE)).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == string(R.string.console_make_trigger) }
+        compose.runOnIdle { makeTrigger.action() }
+        waitFor(hasText(string(R.string.line_trigger_words)))
+        // A captured word, for the page to say what it captures
+        activate(hasText("rat"))
+        waitFor(hasText(string(R.string.line_trigger_match, 2, "rat")))
+        assertTextFits("the page that makes a trigger from a line")
+        assertAtStart("the words' heading", hasText(string(R.string.line_trigger_words)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.game_title)))
+        session.clear()
 
         activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
         val node = JSONObject().put("id", 1).put("parent", 0).put("name", "Greet").put("folder", false).put("enabled", false)
@@ -309,6 +324,7 @@ class PseudoLocaleTest(private val locale: String) {
         private const val ADDRESS = "mud.example.org:4000"
         private val GAME = Profile("Game", "mud.example.org", 4000, false, "", false)
         private const val REASON = "Connection refused by the remote host"
+        private const val LINE = "A rat bites you."
 
         // Rounding of the bounds to pixels
         private const val SLACK_PX = 1f

@@ -47,6 +47,7 @@ import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.ScriptItemScreen
 import org.mudlet.android.ui.scripts.ScriptLibraryScreen
+import org.mudlet.android.ui.scripts.TriggerFromLineScreen
 import org.mudlet.android.ui.scripts.parseLuaFunctions
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsPage
@@ -71,6 +72,7 @@ private object Routes {
     const val LICENCE = "licence/{id}"
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
+    const val TRIGGER_FROM_LINE = "triggerFromLine/{line}"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
@@ -81,6 +83,8 @@ private object Routes {
     fun settingsPage(page: SettingsPage) = "settingsPage/${Uri.encode(page.encode())}"
 
     fun scriptItem(key: ScriptItemKey) = "scriptItem/${Uri.encode(key.encode())}"
+
+    fun triggerFromLine(line: String) = "triggerFromLine/${Uri.encode(line)}"
 }
 
 /**
@@ -180,6 +184,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                     onBack = { nav.navigateUp() },
                     onOpenSettings = { nav.navigate(Routes.settings(EngineClient.front.name.ifEmpty { null })) { launchSingleTop = true } },
                     onOpenScripts = { nav.navigate(Routes.SCRIPTS) { launchSingleTop = true } },
+                    onMakeTrigger = { nav.navigate(Routes.triggerFromLine(it)) { launchSingleTop = true } },
                 )
             }
             composable(Routes.SCRIPTS) { entry ->
@@ -230,6 +235,17 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 } else {
                     LaunchedEffect(Unit) { back() }
                 }
+            }
+            composable(Routes.TRIGGER_FROM_LINE, listOf(navArgument("line") { type = NavType.StringType })) { entry ->
+                val front = EngineClient.front
+                TriggerFromLineScreen(
+                    front.scripts,
+                    entry.arguments?.getString("line").orEmpty(),
+                    recent = { front.lines.filterNot { it.marker }.map { it.text } },
+                    onBack = entry.whileShown { nav.navigateUp() },
+                    // The trigger's page takes the builder's place: Back from it is the game
+                    onMade = { key -> entry.whileShown { nav.navigate(Routes.scriptItem(key)) { popUpTo(Routes.TRIGGER_FROM_LINE) { inclusive = true } } }() },
+                )
             }
             val game = navArgument("game") {
                 type = NavType.StringType

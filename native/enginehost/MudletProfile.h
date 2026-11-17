@@ -185,6 +185,7 @@ private:
     void applySaved();
     void applyPassword();
     void setSecureOffer(bool offered);
+    void pushRefusedCertificate();
     // Why the running profile cannot be connected, with this TLS choice if one is given; empty if it can
     QString connectProblem(std::optional<bool> tls) const;
     // The profile has closed or did not start

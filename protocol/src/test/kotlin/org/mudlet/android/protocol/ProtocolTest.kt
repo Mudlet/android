@@ -1020,6 +1020,19 @@ class ProtocolTest {
     }
 
     @Test
+    fun aRefusedCertificate() {
+        val refused = JSONObject(
+            """{"t":"certificateRefused","refused":true,"issuedTo":"localhost","issuer":"Test CA","expires":"2020-01-02T00:00:00Z",
+            "serial":"01","expired":true,"selfSigned":false,"others":false,"errors":["The certificate has expired"]}""",
+        )
+        assertEquals(
+            EngineMessage.CertificateRefused(RefusedCertificate("localhost", "Test CA", "2020-01-02T00:00:00Z", "01", true, false, false, listOf("The certificate has expired"))),
+            FrameReader.parse(refused),
+        )
+        assertEquals(EngineMessage.CertificateRefused(null), FrameReader.parse(JSONObject("""{"t":"certificateRefused","refused":false}""")))
+    }
+
+    @Test
     fun aFrameIsOneWriteAndNeverFlushed() {
         val writes = ArrayList<ByteArray>()
         val out = object : OutputStream() {

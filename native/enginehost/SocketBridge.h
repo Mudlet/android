@@ -88,6 +88,7 @@ public:
     void errorConsoleEntry(const ErrorConsoleEntry& entry) override;
     void errorConsoleCleared() override;
     void secureOffer(bool offered) override;
+    void certificateRefused(const std::optional<RefusedCertificate>& certificate) override;
 
 protected:
     struct StoredLine
@@ -169,6 +170,7 @@ protected:
     QJsonObject tailMessage() const;
     QJsonObject hiddenInputMessage() const;
     QJsonObject secureOfferMessage() const;
+    QJsonObject certificateMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
     static QJsonObject linksChangedMessage(const QList<int>& ids);
     static QJsonObject windowJson(const ScriptWindowInfo& window);
@@ -203,6 +205,7 @@ protected:
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;
     bool mSecureOffer = false;
+    std::optional<RefusedCertificate> mRefusedCertificate;
     // A linksChanged went to no live UI, so the next to attach or catch up is told any link may have changed
     bool mLinksMissed = false;
     // As IFrontend::windows() last gave them

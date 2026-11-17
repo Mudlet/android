@@ -738,6 +738,8 @@ void MudletProfile::connectSession()
         mFrontend->mainArea({mMainWindowSize, grid, textRect});
     });
     connect(session, &THeadlessSession::connecting, this, [this] {
+        // Mudlet forgets the refused certificate as it dials
+        mFrontend->certificateRefused(std::nullopt);
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connecting"));
     });
     connect(session, &THeadlessSession::connected, this, [this] {
@@ -756,6 +758,7 @@ void MudletProfile::connectSession()
     connect(session, &THeadlessSession::disconnected, this, [this] {
         // Mudlet takes the offer back with its connection
         setSecureOffer(false);
+        pushRefusedCertificate();
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
         if (mState == State::stopping) {
             return;
@@ -1435,6 +1438,7 @@ void MudletProfile::onProfileClosed()
     mSounds = {};
     mFrontend->sounds(mSounds);
     setSecureOffer(false);
+    mFrontend->certificateRefused(std::nullopt);
 }
 
 void MudletProfile::pushWindows(bool withText)
@@ -2090,6 +2094,17 @@ QString MudletProfile::downloadMap()
     qInfo("MudletEngine: downloading the map from %s", qPrintable(mMapDownload.host));
     pushMapDownloadProgress(true);
     return {};
+}
+
+void MudletProfile::pushRefusedCertificate()
+{
+    const auto refused = mSession->refusedCertificate();
+    if (!refused) {
+        mFrontend->certificateRefused(std::nullopt);
+        return;
+    }
+    qInfo("MudletEngine: %s's secure connection was refused for its certificate", qPrintable(mProfile));
+    mFrontend->certificateRefused(RefusedCertificate{refused->issuedTo, refused->issuer, refused->expires, refused->serial, refused->expired, refused->selfSigned, refused->others, refused->errors});
 }
 
 void MudletProfile::setSecureOffer(bool offered)

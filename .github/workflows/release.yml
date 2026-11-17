@@ -1,0 +1,341 @@
+name: Release
+
+# The stable app, org.mudlet.mudlet (docs/release.md): pushing a tag android-v<version> on a commit of main builds the
+# Mudlet commit scripts/release-mudlet-ref.txt names, as release-build.yml builds the PTB, uploads the AAB to a Google
+# Play track (open testing unless the PLAY_STABLE_TRACK variable or the run says otherwise) and makes the GitHub release
+# android-v<version> with the APKs and the source code. Any other run, by hand on a branch or on a pull request that
+# changes the release, is a dry run: it builds, signs with a throwaway key, runs the smoke test, keeps the AAB and the
+# APKs as the run's artifact and publishes nothing. So is a tag without the stable upload key's secrets.
+on:
+  push:
+    tags: ["android-v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-build.yml
+      - scripts/release-plan.sh
+      - scripts/release-mudlet-ref.txt
+      - docs/release-notes.md
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version, x.y.z; on a tag, empty or the tag's
+        default: ""
+      mudlet_ref:
+        description: Mudlet/Mudlet tag or full commit SHA to build; empty for scripts/release-mudlet-ref.txt
+        default: ""
+      track:
+        description: "Google Play track: internal, alpha (closed testing), beta (open testing) or production; empty for the PLAY_STABLE_TRACK variable, or beta"
+        default: ""
+      rollout:
+        description: "Production only: the fraction of users who get it at first, above 0 and at most 1; empty for the PLAY_STABLE_ROLLOUT variable, or 0.1"
+        default: ""
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+# Never cancelled but on a pull request: a cancelled publish could leave Play and the GitHub release apart
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PACKAGE: org.mudlet.mudlet
+
+jobs:
+  # Whether this run publishes, its version and track, and the Mudlet commit (scripts/release-plan.sh)
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      reason: ${{ steps.plan.outputs.reason }}
+      version-name: ${{ steps.plan.outputs.version-name }}
+      version-code: ${{ steps.plan.outputs.version-code }}
+      track: ${{ steps.plan.outputs.track }}
+      status: ${{ steps.plan.outputs.status }}
+      user-fraction: ${{ steps.plan.outputs.user-fraction }}
+      mudlet-version-build: ${{ steps.plan.outputs.mudlet-version-build }}
+      mudlet-ref: ${{ steps.ref.outputs.ref }}
+      mudlet-sha: ${{ steps.mudlet.outputs.sha }}
+      mudlet-subject: ${{ steps.mudlet.outputs.subject }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The Mudlet to build
+        id: ref
+        env:
+          INPUT: ${{ inputs.mudlet_ref }}
+        run: |
+          ref=${INPUT:-$(grep -m1 -v -e '^#' -e '^[[:space:]]*$' scripts/release-mudlet-ref.txt || true)}
+          [ -n "$ref" ] || { echo "::error::scripts/release-mudlet-ref.txt names no Mudlet commit"; exit 1; }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      # only Mudlet's top-level CMakeLists.txt, for its commit and subject
+      - uses: actions/checkout@v7
+        with:
+          repository: Mudlet/Mudlet
+          ref: ${{ steps.ref.outputs.ref }}
+          path: mudlet
+          sparse-checkout: CMakeLists.txt
+          sparse-checkout-cone-mode: false
+
+      - name: Mudlet's commit
+        id: mudlet
+        run: |
+          echo "sha=$(git -C mudlet rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "subject=$(git -C mudlet log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+
+      # A tag publishes only from a commit of main; GitHub's compare says "behind" or "identical" for one
+      - name: Is the commit on main
+        id: main
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)
+          case $status in behind | identical) echo "on-main=true" ;; *) echo "on-main=false" ;; esac >> "$GITHUB_OUTPUT"
+
+      - id: plan
+        env:
+          REF: ${{ github.ref }}
+          ON_MAIN: ${{ steps.main.outputs.on-main }}
+          VERSION_INPUT: ${{ inputs.version }}
+          TRACK: ${{ inputs.track || vars.PLAY_STABLE_TRACK || 'beta' }}
+          ROLLOUT: ${{ inputs.rollout || vars.PLAY_STABLE_ROLLOUT || '0.1' }}
+          MUDLET_REF: ${{ steps.ref.outputs.ref }}
+          NOTES: docs/release-notes.md
+          OUT_DIR: dist/whatsnew
+        run: scripts/release-plan.sh | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stable-whatsnew
+          path: dist/whatsnew
+          if-no-files-found: error
+          retention-days: 14
+
+  build:
+    needs: plan
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-build.yml
+    with:
+      channel: stable
+      title: Stable
+      package: org.mudlet.mudlet
+      file-base: mudlet
+      docs: docs/release.md
+      publish: ${{ needs.plan.outputs.publish == 'true' }}
+      mudlet-sha: ${{ needs.plan.outputs.mudlet-sha }}
+      mudlet-version-build: ${{ needs.plan.outputs.mudlet-version-build }}
+      version-code: ${{ needs.plan.outputs.version-code }}
+      version-name: ${{ needs.plan.outputs.version-name }}
+    secrets:
+      UPLOAD_KEYSTORE_BASE64: ${{ secrets.STABLE_UPLOAD_KEYSTORE_BASE64 }}
+      UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.STABLE_UPLOAD_KEYSTORE_PASSWORD }}
+      UPLOAD_KEY_ALIAS: ${{ secrets.STABLE_UPLOAD_KEY_ALIAS }}
+      UPLOAD_KEY_PASSWORD: ${{ secrets.STABLE_UPLOAD_KEY_PASSWORD }}
+
+  # The GitHub release's notes: docs/release-notes.md's section, the commits built and the signing certificate
+  notes:
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: stable-whatsnew
+          path: dist/whatsnew
+
+      - name: Release notes
+        env:
+          VERSION_CODE: ${{ needs.plan.outputs.version-code }}
+          VERSION_NAME: ${{ needs.plan.outputs.version-name }}
+          MUDLET_REF: ${{ needs.plan.outputs.mudlet-ref }}
+          MUDLET_SHA: ${{ needs.plan.outputs.mudlet-sha }}
+          MUDLET_SUBJECT: ${{ needs.plan.outputs.mudlet-subject }}
+          CERT_SHA256: ${{ needs.build.outputs.cert-sha256 }}
+        run: |
+          android_sha=$(git rev-parse HEAD)
+          mudlet="https://github.com/Mudlet/Mudlet"
+          android="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          {
+            cat dist/whatsnew/whatsnew-en-US
+            echo
+            echo "Mudlet for Android **$VERSION_NAME** (versionCode $VERSION_CODE), built from:"
+            echo
+            echo "- Mudlet \`$MUDLET_REF\`: [\`${MUDLET_SHA:0:7}\`]($mudlet/commit/$MUDLET_SHA) $MUDLET_SUBJECT"
+            echo "- Mudlet/android: [\`${android_sha:0:7}\`]($android/commit/$android_sha) $(git log -1 --format=%s)"
+            echo
+            echo "Get it from Google Play: <https://play.google.com/store/apps/details?id=$PACKAGE>."
+            echo "Or install an APK: \`mudlet-arm64-v8a.apk\` for phones and tablets, \`mudlet-x86_64.apk\` for Chromebooks"
+            echo "with Intel or AMD chips and emulators; \`SHA256SUMS.txt\` has their checksums. The APKs are signed with"
+            echo "the upload key (certificate SHA-256 \`$CERT_SHA256\`), Play's copy with Play's key, so one cannot update"
+            echo "the other: uninstall Mudlet before switching. More in [docs/release.md]($android/blob/main/docs/release.md)."
+            echo
+            echo "\`mudlet-source.tar\` is the source code this build is made from, Qt's and the dependencies' included;"
+            echo "its \`SOURCES.txt\` says what is in it. The app is free software under the GNU GPL version 3."
+          } > dist/release-notes.md
+          cat dist/release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stable-notes
+          path: dist
+          if-no-files-found: error
+          retention-days: 14
+
+  # The Play track, once the smoke test passed and the source bundle is built. The service account's key lives in the
+  # `play-stable` environment, limited to the release tags (docs/release.md)
+  play:
+    needs: [plan, build, notes]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: play-stable
+    permissions: {}
+    outputs:
+      uploaded: ${{ steps.creds.outputs.upload }}
+    steps:
+      - name: Play credentials
+        id: creds
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          SIGNED_WITH_UPLOAD_KEY: ${{ needs.build.outputs.signed-with-upload-key }}
+        run: |
+          if [ -z "$SERVICE_ACCOUNT_JSON" ]; then
+            echo "::notice::No PLAY_SERVICE_ACCOUNT_JSON in the play-stable environment: not uploading to Google Play (docs/release.md)"
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          elif [ "$SIGNED_WITH_UPLOAD_KEY" != true ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is set, but the stable upload key's secrets are not, so Play would refuse the AAB (docs/release.md)"
+            exit 1
+          else
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v8
+        if: steps.creds.outputs.upload == 'true'
+        with:
+          name: stable
+
+      - uses: actions/download-artifact@v8
+        if: steps.creds.outputs.upload == 'true'
+        with:
+          name: stable-notes
+          path: dist
+
+      # The AAB carries R8's mapping and the native symbol tables, which Play reads from it
+      - name: Upload to Google Play
+        if: steps.creds.outputs.upload == 'true'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.PACKAGE }}
+          releaseFiles: dist/mudlet.aab
+          releaseName: ${{ needs.plan.outputs.version-name }}
+          tracks: ${{ needs.plan.outputs.track }}
+          status: ${{ needs.plan.outputs.status }}
+          userFraction: ${{ needs.plan.outputs.user-fraction }}
+          whatsNewDirectory: dist/whatsnew
+
+  # The GitHub release android-v<version>: the APKs, the source bundle and their checksums, as the PTB's pre-release
+  # has them. A pre-release while the version is on a testing track. Only for an APK signed with the upload key
+  github-release:
+    needs: [plan, build, notes, play]
+    if: needs.plan.outputs.publish == 'true' && needs.build.outputs.signed-with-upload-key == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: stable
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: stable-notes
+          path: dist
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: stable-source
+          path: dist
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_NAME: ${{ needs.plan.outputs.version-name }}
+          TRACK: ${{ needs.plan.outputs.track }}
+        run: |
+          (cd dist && sha256sum mudlet-source.tar >> SHA256SUMS.txt)
+          if [ "$TRACK" = production ]; then kind=(--latest); else kind=(--prerelease --latest=false); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag "${kind[@]}" \
+            --title "Mudlet for Android $VERSION_NAME" --notes-file dist/release-notes.md \
+            dist/mudlet-arm64-v8a.apk dist/mudlet-x86_64.apk dist/mudlet-source.tar dist/SHA256SUMS.txt
+          echo "Published $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+
+  # What the run published, or why nothing, in plain words
+  result:
+    needs: [plan, build, notes, play, github-release]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Summary
+        env:
+          PLAN: ${{ needs.plan.result }}
+          PUBLISH: ${{ needs.plan.outputs.publish }}
+          REASON: ${{ needs.plan.outputs.reason }}
+          VERSION_NAME: ${{ needs.plan.outputs.version-name }}
+          TRACK: ${{ needs.plan.outputs.track }}
+          BUILD: ${{ needs.build.result }}
+          SIGNED_WITH_UPLOAD_KEY: ${{ needs.build.outputs.signed-with-upload-key }}
+          PLAY: ${{ needs.play.result }}
+          UPLOADED: ${{ needs.play.outputs.uploaded }}
+          GITHUB_RELEASE: ${{ needs.github-release.result }}
+        run: |
+          {
+            echo "### Stable release ${VERSION_NAME:-(no version)}"
+            echo
+            if [ "$PLAN" != success ]; then
+              echo "Nothing was published: the plan refused this run; its error says why."
+            elif [ "$PUBLISH" != true ]; then
+              echo "Nothing was published, and nothing could be: $REASON, which never reads the upload key or the"
+              echo "Play credentials."
+              if [ "$BUILD" = success ]; then
+                echo "The AAB and the APKs, signed with a throwaway key, are this run's \`stable\` artifact."
+              else
+                echo "The build, its checks or the smoke test failed ($BUILD)."
+              fi
+            elif [ "$BUILD" != success ]; then
+              echo "Nothing was published: the build, its checks or the smoke test failed ($BUILD)."
+            elif [ "$SIGNED_WITH_UPLOAD_KEY" != true ]; then
+              echo "Nothing was published: the STABLE_UPLOAD_KEYSTORE_BASE64, STABLE_UPLOAD_KEYSTORE_PASSWORD and"
+              echo "STABLE_UPLOAD_KEY_ALIAS secrets are not set, so it was signed with a throwaway key (docs/release.md)."
+            else
+              case "$PLAY:$UPLOADED" in
+                success:true) echo "- Google Play: uploaded to the \`$TRACK\` track." ;;
+                success:false) echo "- Google Play: not uploaded, as the play-stable environment has no PLAY_SERVICE_ACCOUNT_JSON." ;;
+                *) echo "- Google Play: the upload failed ($PLAY)." ;;
+              esac
+              if [ "$GITHUB_RELEASE" = success ]; then
+                echo "- GitHub: the release $GITHUB_REF_NAME."
+              else
+                echo "- GitHub: no release ($GITHUB_RELEASE)."
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"

@@ -13,7 +13,8 @@ how testers join, and how to roll a bad PTB back.
 
 ## How a PTB is made
 
-Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up), and when run by hand:
+Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up), and when run by hand (steps 2 to 5 are
+`release-build.yml`, a reusable workflow the stable release, [`release.md`](release.md), calls too):
 
 1. **plan**: resolves Mudlet's `development` to a commit, and reads the last PTB's commits from the markers in the
    `ptb` pre-release's notes. If neither Mudlet's commit nor this repository's changed, it stops there (a manual run
@@ -88,8 +89,9 @@ track of the stable `org.mudlet.mudlet`:
   the PTB's Android vitals, not the stable app's, whose vitals affect how Play shows it;
 - its versions need not fit around the stable app's.
 
-The cost: a second listing to fill in (below), and its own profiles: Android keeps each app's data apart. A stable
-listing does not exist yet; when it does, its open testing track can still carry release candidates.
+The cost: a second listing to fill in (below), and its own profiles: Android keeps each app's data apart. The stable
+app, made by `release.yml` ([`release.md`](release.md)), gets a listing of its own, whose open testing track can carry
+release candidates.
 
 The build takes `-PreleaseChannel=ptb` (`app/build.gradle.kts`), which adds `.ptb` to the application id, names
 the app "Mudlet PTB" and gives it its own launcher icon: Mudlet's arch at night, as on the desktop PTB's icon

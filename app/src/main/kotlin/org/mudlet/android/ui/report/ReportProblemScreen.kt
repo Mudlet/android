@@ -1,12 +1,6 @@
 package org.mudlet.android.ui.report
 
-import android.content.ActivityNotFoundException
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -42,6 +36,8 @@ import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.about.Heading
 import org.mudlet.android.ui.about.Paragraph
 import org.mudlet.android.ui.about.openLink
+import org.mudlet.android.ui.copyText
+import org.mudlet.android.ui.shareText
 
 /**
  * What a problem report holds, shown whole before the player sends it, and the ways to send it: Android's share
@@ -104,23 +100,12 @@ fun ReportProblemScreen(onBack: () -> Unit) {
     }
 }
 
-private fun share(context: Context, text: String) {
-    val send = Intent(Intent.ACTION_SEND)
-        .setType("text/plain")
-        .putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.report_subject))
-        .putExtra(Intent.EXTRA_TEXT, text)
-    try {
-        context.startActivity(Intent.createChooser(send, context.getString(R.string.report_share)))
-    } catch (e: ActivityNotFoundException) {
-        Toast.makeText(context, context.getString(R.string.report_no_share), Toast.LENGTH_LONG).show()
-    }
-}
+private fun share(context: Context, text: String) = shareText(
+    context,
+    text,
+    context.getString(R.string.report_share),
+    context.getString(R.string.report_no_share),
+    subject = context.getString(R.string.report_subject),
+)
 
-private fun copy(context: Context, text: String) {
-    val clipboard = context.getSystemService(ClipboardManager::class.java)
-    clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.report_title), text))
-    // From Android 13 the system shows what was copied
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        Toast.makeText(context, context.getString(R.string.report_copied), Toast.LENGTH_SHORT).show()
-    }
-}
+private fun copy(context: Context, text: String) = copyText(context, context.getString(R.string.report_title), text, context.getString(R.string.report_copied))

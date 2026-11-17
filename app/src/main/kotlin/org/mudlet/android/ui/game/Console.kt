@@ -79,8 +79,8 @@ private const val CELLS_MEASURED = 100
  * drawn as the engine last said it looks: visited or chosen in its colours, which TalkBack's actions also say, and a
  * concealed one as blanks.
  *
- * A long press on a line, but on a link with a menu, which opens that, or TalkBack's action on it, hands the line's
- * text to [onMakeTrigger], to make a trigger from.
+ * A long press on a line, but on a link with a menu, which opens that, offers to copy or share the line as it reads,
+ * and to hand its text to [onMakeTrigger], to make a trigger from; TalkBack has actions to copy it and make the trigger.
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
@@ -178,7 +178,7 @@ fun Console(
                 }
                 // The app's own markers are not the game's text: no trigger sees them
                 val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
-                ConsoleLine(text, plain, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger)
+                ConsoleLine(text, plain, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger, copyable = true)
             }
         }
         if (!following) {

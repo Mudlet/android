@@ -679,6 +679,14 @@
     <string name="console_link_menu">Menu of link: %1$s</string>
     <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: opens a page that makes a trigger matching the line -->
     <string name="console_make_trigger">Make a trigger from this line</string>
+    <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: puts the line, as it reads, on the clipboard -->
+    <string name="console_copy_line">Copy line</string>
+    <!-- In the menu a long press on a line of the game's text opens: offers the line, as it reads, to Android's share sheet, which this also titles -->
+    <string name="console_share_line">Share line</string>
+    <!-- A short message once a line of the game's text is on the clipboard (before Android 13, which says so itself) -->
+    <string name="console_line_copied">Line copied</string>
+    <!-- A message when no app on the device can take a shared line of the game's text -->
+    <string name="console_line_no_share">No app here can take the line: copy it instead</string>
     <!-- How TalkBack's actions name a link of the main console that has been followed, as desktop Mudlet's screen
          reader announcement does: %1$s is the link's tool tip or text -->
     <string name="console_link_visited">%1$s, visited</string>

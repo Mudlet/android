@@ -153,7 +153,9 @@ class ScreenshotTest {
 
         // Dragged off the player, shown moved before the engine draws it, with the button that centres it on them
         session.send(appMap(size, roomName = ROOM_NAME, view = EngineMessages.mapView(size.getInt("w"), size.getInt("h"))))
-        compose.waitForIdle()
+        // Decoded on the reader's thread, and cut out there for the text behind it, which idle Compose does not wait for:
+        // dragged before it comes, the map has no view to move off the player
+        compose.waitUntil(WAIT_MS) { EngineClient.front.appMap.mover.view != null }
         compose.onNode(map).performTouchInput {
             down(center)
             repeat(10) { moveBy(Offset(width * 0.02f, height * 0.015f)) }

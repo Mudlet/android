@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -16,6 +17,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,10 +64,10 @@ import kotlin.reflect.KClass
  * ([rememberEngineSuggestions]), which learns from what is sent. The History button, or Ctrl+R on a hardware keyboard,
  * opens the command history ([HistorySheet]). While the game hides input the row has only the pill and its chip, and
  * there is no history. Why the engine could not send something shows over the console's foot, where the keyboard does
- * not hide it. The map is behind the console's text while the setting has it there ([BackgroundMap]), and the title
- * bar's map button brings it to the front over the console and the input line ([FullScreenMap]), until Back or the
- * button again, and for the game switched to; the row stays below it, without History, as the command it picks would
- * go to the covered line.
+ * not hide it. The title bar's map button swaps the map and the console ([FullScreenMap]), until Back or the button
+ * again, and for the game switched to: with the setting, the map is faint behind the text ([BackgroundMap]) and the
+ * text faint behind the map in front ([textBehindMap]); without it there is no map behind the text and the map in front
+ * covers the console. The input line and the row stay below the map in front, to type and pick commands in.
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
@@ -205,7 +207,7 @@ private fun ProfileGameScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
-                val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden && !mapOpen
+                val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
                 // Both halves of the press, so the focused field types no "r" and the focus stays where it is
                 if (ctrlR && event.type == KeyEventType.KeyDown) historyOpen = true
@@ -217,57 +219,68 @@ private fun ProfileGameScreen(
                 ctrlR || ctrlTab
             },
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
-                // Drawn on under the map in front, which a predictive back gesture shrinks to show it, but neither read
-                // by TalkBack nor reached by a hardware keyboard's focus; the input line lets go of the keyboard
-                val covered = if (mapOpen) Modifier.clearAndSetSemantics {}.focusProperties { canFocus = false } else Modifier
-                Column(Modifier.fillMaxSize().then(covered)) {
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        val textSizeSp = Settings.textSize.value
-                        val colors = ConsoleColors.of(c.status["consoleColors"])
-                        // One map on the screen: none behind the text while a script's mapper window is drawn
-                        ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize()) { consoleModifier, mapperDrawn ->
-                            Console(
-                                c.lines,
-                                c.tail,
-                                c.linesAdded,
-                                textSizeSp = textSizeSp,
-                                colors = colors,
-                                onTextSize = Settings.textSize::set,
-                                onScreenSize = EngineClient::setScreenSize,
-                                consoleModifier,
-                            ) { if (Settings.mapBehindText.value && !mapperDrawn) BackgroundMap(colors) }
-                        }
-                        if (!mapOpen) SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
+            Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    val textSizeSp = Settings.textSize.value
+                    val colors = ConsoleColors.of(c.status["consoleColors"])
+                    val behind = Settings.mapBehindText.value
+                    var backProgress by remember { mutableFloatStateOf(0f) }
+                    val textBehind = if (mapOpen && behind) textBehindMap(c.appMap, colors) else null
+                    // Under the map in front: faint with the setting, or drawn on for a predictive back gesture to show,
+                    // but neither read by TalkBack nor reached by a hardware keyboard's focus
+                    val covered = if (!mapOpen) Modifier else Modifier.clearAndSetSemantics {}.focusProperties { canFocus = false }
+                    val faint = if (textBehind == null) {
+                        Modifier
+                    } else {
+                        Modifier.background(textBehind.ground).graphicsLayer { alpha = textBehind.alpha().let { it + (1f - it) * backProgress } }
                     }
-                    InputLine(
-                        hiddenInput = hidden,
-                        history = c.history,
-                        commandLine = c.commandLine,
-                        onCommandLineShown = c::commandLineShown,
-                        onSend = { line -> c.sendCommand(line).also { if (it) suggestions.sent(line) } },
-                        onSendHidden = { secret -> c.sendHidden(secret).also { if (it) suggestions.sentHidden() } },
-                        onDismissHidden = c::dismissHidden,
-                        onComplete = c::complete,
-                        modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
-                        suggestions = suggestions.answer,
-                        onInputChanged = suggestions::inputChanged,
-                        picked = picked,
-                        onPickedShown = { picked = null },
-                        takeFocus = c.windows.focusInput,
-                        onFocusTaken = c.windows::inputFocusTaken,
-                        covered = mapOpen,
-                        focusOnStart = switched,
-                    )
-                }
-                if (mapOpen) {
-                    FullScreenMap(onClose = { onMapOpen(false) }, Modifier.fillMaxSize())
+                    // One map on the screen: none behind the text while a script's mapper window is drawn, or while the
+                    // map is in front
+                    ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered).then(faint)) { consoleModifier, mapperDrawn ->
+                        Console(
+                            c.lines,
+                            c.tail,
+                            c.linesAdded,
+                            textSizeSp = textSizeSp,
+                            colors = colors,
+                            onTextSize = Settings.textSize::set,
+                            onScreenSize = EngineClient::setScreenSize,
+                            consoleModifier,
+                        ) { if (behind && !mapperDrawn && !mapOpen) BackgroundMap(colors) }
+                    }
+                    if (mapOpen) {
+                        FullScreenMap(
+                            onClose = { onMapOpen(false) },
+                            textBehind = textBehind != null,
+                            onBackProgress = { backProgress = it },
+                            Modifier.fillMaxSize(),
+                        )
+                    }
                     SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter))
                 }
+                InputLine(
+                    hiddenInput = hidden,
+                    history = c.history,
+                    commandLine = c.commandLine,
+                    onCommandLineShown = c::commandLineShown,
+                    onSend = { line -> c.sendCommand(line).also { if (it) suggestions.sent(line) } },
+                    onSendHidden = { secret -> c.sendHidden(secret).also { if (it) suggestions.sentHidden() } },
+                    onDismissHidden = c::dismissHidden,
+                    onComplete = c::complete,
+                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
+                    suggestions = suggestions.answer,
+                    onInputChanged = suggestions::inputChanged,
+                    picked = picked,
+                    onPickedShown = { picked = null },
+                    takeFocus = c.windows.focusInput,
+                    onFocusTaken = c.windows::inputFocusTaken,
+                    mapInFront = mapOpen,
+                    focusOnStart = switched,
+                )
             }
             QuickBar(
                 if (hidden) emptyList() else suggestions.pinned,
-                onHistory = if (hidden || mapOpen) null else ({ historyOpen = true }),
+                onHistory = if (hidden) null else ({ historyOpen = true }),
                 onSend = ::sendNow,
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             ) {

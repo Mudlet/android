@@ -1,6 +1,8 @@
 package org.mudlet.android.ui
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -29,10 +31,19 @@ object EngineMessages {
 
     /**
      * An `appMap` message: a map [w] by [h] of the map's pixels all in [colour], white unless given, at [scale] device
-     * pixels to each, laid out as [view] says.
+     * pixels to each, laid out as [view] says; with [rooms], squares of that colour a tenth of its narrow side across, a
+     * gap as wide between them, on [colour] as the map's background.
      */
-    fun appMap(w: Int, h: Int, scale: Double = 1.0, viewOnly: Boolean = true, view: JSONObject? = null, colour: Int = android.graphics.Color.WHITE): JSONObject = JSONObject()
-        .put("t", "appMap").put("png", Base64.getEncoder().encodeToString(png((w * scale).toInt(), (h * scale).toInt(), colour))).put("w", w).put("h", h)
+    fun appMap(
+        w: Int,
+        h: Int,
+        scale: Double = 1.0,
+        viewOnly: Boolean = true,
+        view: JSONObject? = null,
+        colour: Int = android.graphics.Color.WHITE,
+        rooms: Int? = null,
+    ): JSONObject = JSONObject()
+        .put("t", "appMap").put("png", Base64.getEncoder().encodeToString(png((w * scale).toInt(), (h * scale).toInt(), colour, rooms))).put("w", w).put("h", h)
         .put("viewOnly", viewOnly).apply { if (view != null) put("view", view) }
 
     /**
@@ -95,10 +106,18 @@ object EngineMessages {
         return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", more).put("re", request.get("id"))
     }
 
-    private fun png(w: Int, h: Int, colour: Int): ByteArray {
+    private fun png(w: Int, h: Int, colour: Int, rooms: Int?): ByteArray {
         val out = ByteArrayOutputStream()
-        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(colour) }
-            .compress(Bitmap.CompressFormat.PNG, 100, out)
+        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(colour) }
+        if (rooms != null) {
+            val side = maxOf(1, minOf(w, h) / 10)
+            val paint = Paint().apply { color = rooms }
+            val canvas = Canvas(bitmap)
+            for (y in side until h - side step 2 * side) {
+                for (x in side until w - side step 2 * side) canvas.drawRect(x.toFloat(), y.toFloat(), (x + side).toFloat(), (y + side).toFloat(), paint)
+            }
+        }
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
         return out.toByteArray()
     }
 }

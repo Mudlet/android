@@ -120,7 +120,7 @@ def main():
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds,
+                       map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
                        packages, error_console, key_bindings):
             checks()
         checks = secure_offer
@@ -3866,6 +3866,126 @@ def map_download():
             check(not any(secret in repr(m) for m in frames), f"no frame but the console's carries {label} the server's reason repeats")
             check(secret not in log, f"the engine's log does not have {label} the server's reason repeats")
     server.shutdown()
+
+
+def map_files():
+    """loadMapFile and saveMapFile: a map saved as Mudlet's own format and as JSON, and loaded back from each and from
+    an XML map, mapFile running first and done last, with Mudlet's progress, cancelable only for JSON; a file that does
+    not load failing with why, a JSON one leaving the map as it was; cancelMapFile read while a large JSON map loads,
+    stopping it and keeping the map; and the refusals."""
+    profile = "Map Files Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    folder = os.path.join(TMP, "map-files")
+    os.makedirs(folder, exist_ok=True)
+    dat, js, xml, bad = (os.path.join(folder, name) for name in ("map.dat", "map.json", "map.xml", "bad.json"))
+    for request in ({"t": "loadMapFile", "path": dat}, {"t": "saveMapFile", "path": dat}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+    refused_cancel = "cancelMapFile: no map file is being loaded or saved that can be cancelled"
+    m = c.ask({"t": "cancelMapFile"}, answers=("error",), collect=seen)
+    check(m["message"] == refused_cancel, f"cancelMapFile with nothing running is refused: {m}")
+    c.ask(dict(profile_checks.profile(profile, 1), t="saveProfile"), collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen, timeout=60)
+
+    def lua(tag, code, timeout=60):
+        since = len(seen)
+        c.send({"t": "runLua", "code": code + f'\necho("{tag} " .. tostring(result) .. "\\n")'})
+        m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith(f"{tag} "), seen, since, timeout=timeout)
+        return m["text"][len(tag) + 1:]
+
+    def run(request, timeout=60):
+        """The mapFile frames the request brings, up to its end, and any error."""
+        since = len(seen)
+        c.send(request)
+        seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "mapFile" and m["state"] != "running"), seen, since,
+                     timeout=timeout)
+        return [m for m in seen[since:] if m["t"] in ("mapFile", "error")]
+
+    rooms = 'local n = 0 for _ in pairs(getRooms()) do n = n + 1 end'
+    lua("made", "\n".join([
+        'local area = addAreaName("File Area")',
+        "for id = 1, 3 do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, id * 2, 0, 0)",
+        '  setRoomName(id, "File room " .. id)',
+        "end",
+        "result = true",
+    ]))
+    for path, op in ((dat, "save"), (js, "save")):
+        frames = run({"t": "saveMapFile", "path": path})
+        check(frames and frames[0] == {"t": "mapFile", "op": op, "state": "running", "label": "", "value": 0, "maximum": 0,
+                                       "cancelable": False, "error": ""}, f"saveMapFile to {os.path.basename(path)} starts running: {frames[:1]}")
+        check(frames[-1] == dict(frames[0], state="done"), f"and ends done: {frames[-1:]}")
+        check(os.path.getsize(path) > 0, f"and writes {os.path.basename(path)}")
+        if path == dat:
+            check(not any(m.get("cancelable") for m in frames), f"Mudlet's own format cannot be cancelled: {frames}")
+
+    for path in (dat, js):
+        check(lua("gone", "for id = 1, 3 do deleteRoom(id) end " + rooms + " result = n") == "0", "the rooms are deleted")
+        frames = run({"t": "loadMapFile", "path": path})
+        check(frames[-1]["op"] == "load" and frames[-1]["state"] == "done", f"loadMapFile from {os.path.basename(path)} is done: {frames[-1:]}")
+        got = lua("back", 'result = getRoomName(1) .. "," .. getRoomName(3)')
+        check(got == "File room 1,File room 3", f"and brings the rooms back: {got}")
+
+    with open(xml, "wb") as f:
+        f.write(b'<?xml version="1.0" encoding="UTF-8"?>\n<map><areas><area id="5" name="Xml Area"/></areas>'
+                b'<rooms><room id="7" area="5" title="Xml room"><coord x="0" y="0" z="0"/></room></rooms></map>\n')
+    frames = run({"t": "loadMapFile", "path": xml})
+    check(frames[-1]["state"] == "done", f"an XML map loads: {frames[-1:]}")
+    check(not any(m.get("cancelable") for m in frames), f"and cannot be cancelled: {frames}")
+    check(lua("xml", "result = getRoomName(7)") == "Xml room", "and is the profile's map")
+
+    with open(bad, "wb") as f:
+        f.write(b'{"not": "a map"')
+    frames = run({"t": "loadMapFile", "path": bad})
+    check(frames[-1] == {"t": "mapFile", "op": "load", "state": "failed", "label": "", "value": 0, "maximum": 0,
+                         "cancelable": False, "error": "Could not load map from bad.json."}, f"a file that is no map fails: {frames[-1:]}")
+    check(lua("kept", "result = getRoomName(7)") == "Xml room", "and the map is as it was")
+    for request in ({"t": "loadMapFile", "path": "map.dat"}, {"t": "saveMapFile", "path": "map.dat"}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: the map file must be given by its whole path", f"a relative path is refused: {m}")
+
+    # Large enough that Mudlet's JSON import reaches its progress steps, where the cancel is read
+    big = os.path.join(folder, "big.json")
+    lua("big", "\n".join([
+        'local area = addAreaName("Big Area")',
+        "for id = 100, 50099 do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, id % 100, math.floor(id / 100), 0)",
+        "end",
+        "result = true",
+    ]), timeout=120)
+    frames = run({"t": "saveMapFile", "path": big}, timeout=120)
+    check(frames[-1]["state"] == "done", f"a large map is saved as JSON: {frames[-1:]}")
+    progress = [m for m in frames if m["t"] == "mapFile" and m["state"] == "running" and m["maximum"] > 0]
+    check(progress and all(m["label"] for m in progress) and progress[0]["cancelable"],
+          f"with Mudlet's progress, cancelable until it writes the file: {progress[:2]}")
+    # The progress has to reach the UI while the load holds the engine's thread, or Cancel could never be pressed. A
+    # cancel sent after it is not tested here: a fast machine finishes the load before the cancel arrives
+    since = len(seen)
+    c.send({"t": "loadMapFile", "path": big})
+    m = seen_or_next(c, lambda m: m["t"] == "mapFile" and (m["maximum"] > 0 or m["state"] != "running"), seen, since, timeout=120)
+    check(m["state"] == "running" and m["cancelable"], f"a JSON load's progress comes while it runs: {m}")
+    m = seen_or_next(c, lambda m: m["t"] == "mapFile" and m["state"] != "running", seen, since, timeout=120)
+    check(m["state"] == "done", f"and it ends done: {m}")
+    count = lua("before", "deleteRoom(100) " + rooms + " result = n")
+    since = len(seen)
+    send_together(c, {"t": "loadMapFile", "path": big}, {"t": "cancelMapFile"})
+    m = seen_or_next(c, lambda m: m["t"] == "error" or (m["t"] == "mapFile" and m["state"] != "running"), seen, since, timeout=120)
+    check(m == {"t": "mapFile", "op": "load", "state": "cancelled", "label": "", "value": 0, "maximum": 0, "cancelable": False,
+                "error": ""}, f"cancelMapFile stops a JSON load: {m}")
+    after = lua("after", rooms + " result = n")
+    check(after == count and lua("still", "result = tostring(roomExists(100))") == "false", f"and keeps the map: {count} {after}")
+    check(not any(m["t"] == "error" for m in seen[since:]), f"and the cancel is taken, not refused: {seen[since:][-3:]}")
+    m = c.ask({"t": "cancelMapFile"}, answers=("error",), collect=seen)
+    check(m["message"] == refused_cancel, f"a cancelMapFile after it ended is refused: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def profile_settings():

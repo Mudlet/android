@@ -1,15 +1,20 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.view.inputmethod.EditorInfo
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -51,6 +56,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import kotlin.math.abs
 import androidx.compose.ui.R as ComposeUiR
 
 /**
@@ -311,6 +317,60 @@ class GameScreenTest {
         assertEquals(Color(0xFF102030), image[space.x.toInt(), space.y.toInt()])
     }
 
+    @Test
+    fun theScriptsButtonShowsAWandAndSparkles() {
+        val button = hasContentDescription(compose.activity.getString(R.string.scripts_open, GAME.name)) and hasClickAction()
+        var shared = 0f
+        try {
+            // Waited for: compose's idle does not wait for the window to show the last frame drawn
+            compose.waitUntil(WAIT_MS) {
+                shared = sharedShape(compose.onNode(button).captureToImage().toPixelMap(), R.drawable.ic_auto_fix_high)
+                shared >= SAME_SHAPE
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("the Scripts button's icon shares $shared of its shape with the wand and sparkles, of at least $SAME_SHAPE", e)
+        }
+    }
+
+    /**
+     * How alike the icon in the middle of [shown] and [drawable] are: of the pixels either inks, the share both do, from
+     * 0 to 1. The best of the placements within a pixel, as [shown]'s layout may round the middle the other way.
+     */
+    private fun sharedShape(shown: PixelMap, @DrawableRes drawable: Int): Float {
+        val width = shown.width
+        val height = shown.height
+        val icon = checkNotNull(compose.activity.getDrawable(drawable))
+        val left = (width - icon.intrinsicWidth) / 2
+        val top = (height - icon.intrinsicHeight) / 2
+        icon.setBounds(left, top, left + icon.intrinsicWidth, top + icon.intrinsicHeight)
+        val expected = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        icon.draw(Canvas(expected))
+
+        // The button's corner is the bar's colour, and the icon's the colour furthest from it: ink is nearer the icon's
+        val bar = shown[0, 0]
+        val fromBar = Array(height) { y ->
+            FloatArray(width) { x -> shown[x, y].let { abs(it.red - bar.red) + abs(it.green - bar.green) + abs(it.blue - bar.blue) } }
+        }
+        val furthest = fromBar.maxOf { it.max() }
+
+        fun inked(x: Int, y: Int) = x in 0 until width && y in 0 until height && fromBar[y][x] * 2 > furthest
+        return (-1..1).maxOf { dy ->
+            (-1..1).maxOf { dx ->
+                var both = 0
+                var either = 0
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        val shows = inked(x + dx, y + dy)
+                        val wanted = expected.getPixel(x, y) ushr 24 >= 128
+                        if (shows && wanted) both++
+                        if (shows || wanted) either++
+                    }
+                }
+                if (either == 0) 0f else both.toFloat() / either
+            }
+        }
+    }
+
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
 
     private fun waitForPill(@StringRes state: Int) = waitForPill(string(state))
@@ -370,6 +430,10 @@ class GameScreenTest {
         // More lines than any emulator screen shows
         const val MANY = 200
         const val WAIT_MS = 10_000L
+
+        // Of 1 for the same shape, and 0.71 at worst when drawn part of a pixel off; the pencil, the most like the wand
+        // of the app's other icons, shares 0.6 with it
+        const val SAME_SHAPE = 0.65f
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L

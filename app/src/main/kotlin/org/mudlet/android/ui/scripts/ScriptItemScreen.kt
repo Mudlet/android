@@ -90,22 +90,25 @@ internal val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
  * the keyboard while the code has it. What the player changes is a draft, kept by [scripts] until Apply saves it as the
  * desktop editor's save does, Lua that does not compile too: what is wrong with it then shows over the buttons until
  * the code is changed, with a button that goes to its line. [onGame] goes to the game and keeps the draft, to come back
- * to, and Back asks whether to discard it. Why the item does not run shows at the top. Delete hides it with Undo
- * offered by the library, and goes [onBack].
+ * to, and Back asks whether to discard it. Why the item does not run shows at the top. Move puts it last in a folder
+ * picked from [moveTargets]. Delete hides it with Undo offered by the library, and goes [onBack].
  */
 @Composable
 internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, functions: List<LuaFunction>, onBack: () -> Unit, onGame: () -> Unit) {
     // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
     LaunchedEffect(key, scripts.attaches) {
         scripts.open(key)
-        // What a button's page asks depends on where the button is, which only the list says
-        if (key.kind == ScriptItemKind.BUTTON && scripts.lists[key.kind] == null) scripts.ask(key.kind)
+        // Where the item is, which a button's fields and the folders it can move to depend on, only the list says
+        if (scripts.lists[key.kind] == null) scripts.ask(key.kind)
     }
     val saved = scripts.saved[key]
     val draft = scripts.drafts[key]
     val item = draft ?: saved
     val dirty = draft != null
     var leaving by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
+    val listed = scripts.lists[key.kind].orEmpty()
+    val targets = listed.firstOrNull { it.id == key.id }?.let { listed.moveTargets(key.kind, it) }.orEmpty()
     BackHandler(enabled = dirty) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
@@ -119,6 +122,9 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
         // Beside the library, the library's show them
         snackbarHost = { if (!LocalInDetailPane.current) ScriptNotices(scripts) {} },
         actions = {
+            if (item != null && targets.isNotEmpty()) {
+                IconButton({ moving = true }) { Icon(painterResource(R.drawable.ic_drive_file_move), stringResource(R.string.scripts_move, name.orEmpty())) }
+            }
             if (item != null) {
                 IconButton({
                     scripts.deleteLater(key, name.orEmpty())
@@ -135,7 +141,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
                 val refusal = scripts.unopened[key]
                 when {
                     item != null -> {
-                        Fields(item, scripts.lists[key.kind].orEmpty(), saved?.node?.error.orEmpty(), scripts::edit)
+                        Fields(item, listed, saved?.node?.error.orEmpty(), scripts::edit)
                         LuaField(lua, scroll, luaFocus, fieldWidth.padding(vertical = 16.dp))
                     }
 
@@ -165,6 +171,13 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
                     if (item != null && lua.focused) LuaKeys(lua)
                 }
             }
+        }
+    }
+
+    if (moving && targets.isNotEmpty()) {
+        MoveSheet(name.orEmpty(), listed, targets, onDismiss = { moving = false }) { parent ->
+            moving = false
+            scripts.move(key, parent)
         }
     }
 

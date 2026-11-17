@@ -60,6 +60,48 @@ class ScriptItemsClientTest {
         assertFalse("answered once", scripts.onItems(EngineMessage.ScriptItems(emptyList(), asked.getLong("id"))))
     }
 
+    private fun node(id: Int, parent: Int, name: String, folder: Boolean = false) = ScriptItemNode(id, parent, name, folder, true, true, "", "", "")
+
+    @Test
+    fun aMoveGoesLastInItsFolderAndSaysSoOnceListedAgain() {
+        listed(listOf(node(1, 0, "Combat", folder = true), node(2, 1, "Hit"), node(7, 0, "kick")))
+        assertTrue(scripts.move(key, 1))
+        val list = take("scriptItems")
+        val move = take("moveScriptItem")
+        assertEquals(listOf("alias", 7, 1, 1), listOf(move.getString("kind"), move.getInt("item"), move.getInt("parent"), move.getInt("position")))
+        assertEquals("not before the engine has it", emptyList<ScriptNotice>(), scripts.notices)
+        val moved = listOf(node(1, 0, "Combat", folder = true), node(2, 1, "Hit"), node(7, 1, "kick"))
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(moved, list.getLong("id"))))
+        assertEquals(listOf(ScriptNotice.Moved("kick", "Combat")), scripts.notices)
+    }
+
+    @Test
+    fun aMoveToTheTopLevelGoesAfterWhatIsThere() {
+        listed(listOf(node(1, 0, "Combat", folder = true), node(7, 1, "kick"), node(3, 0, "Greet")))
+        assertTrue(scripts.move(key, 0))
+        val list = take("scriptItems")
+        assertEquals(2, take("moveScriptItem").getInt("position"))
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(emptyList(), list.getLong("id"))))
+        assertEquals(listOf(ScriptNotice.Moved("kick", null)), scripts.notices)
+    }
+
+    @Test
+    fun aMoveRefusedSaysWhyAndNotThatItMoved() {
+        listed(listOf(node(1, 0, "Combat", folder = true), node(7, 0, "kick")))
+        assertTrue(scripts.move(key, 1))
+        val list = take("scriptItems")
+        scripts.onRefused("moveScriptItem", "no such folder", null)
+        assertTrue(scripts.onItems(EngineMessage.ScriptItems(emptyList(), list.getLong("id"))))
+        assertEquals(listOf(ScriptNotice.Refused("moveScriptItem", "no such folder")), scripts.notices)
+    }
+
+    @Test
+    fun aMoveNotSentSaysSo() {
+        attached = false
+        assertFalse(scripts.move(key, 0))
+        assertEquals(listOf(ScriptNotice.NotSent), scripts.notices)
+    }
+
     @Test
     fun anApplySavesTheDraftAndOffersWhatItHadAsItsUndo() {
         val before = alias("kick")

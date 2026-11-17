@@ -15,7 +15,7 @@ import org.mudlet.android.ui.ScriptNotice
 
 /**
  * Shows [scripts]' notices one at a time, each taken off once shown: an apply or a delete with its Undo, which a delete
- * is committed without once its snackbar goes, and a refusal with the engine's reason. A new item or folder goes to
+ * is committed without once its snackbar goes, a move, and a refusal with the engine's reason. A new item or folder goes to
  * [onAdded] instead. Only one of these is shown at a time, or each notice would show twice.
  */
 @Composable
@@ -37,6 +37,15 @@ internal fun ScriptNotices(scripts: ScriptItemsClient, onAdded: (ScriptNotice.Ad
             is ScriptNotice.Deleted -> if (notice.key in scripts.deleting) {
                 val name = notice.name.ifEmpty { resources.getString(R.string.scripts_unnamed) }
                 if (host.undoable(resources.getString(R.string.scripts_deleted, name), resources)) scripts.keep(notice.key) else scripts.commitDelete(notice.key)
+            }
+
+            is ScriptNotice.Moved -> {
+                val name = notice.name.ifEmpty { resources.getString(R.string.scripts_unnamed) }
+                val message = when (val into = notice.into) {
+                    null -> resources.getString(R.string.scripts_moved_top, name)
+                    else -> resources.getString(R.string.scripts_moved, name, into.ifEmpty { resources.getString(R.string.scripts_unnamed) })
+                }
+                host.showSnackbar(message, withDismissAction = true)
             }
 
             is ScriptNotice.Refused -> host.showSnackbar(resources.refusal(notice), withDismissAction = true, duration = SnackbarDuration.Long)

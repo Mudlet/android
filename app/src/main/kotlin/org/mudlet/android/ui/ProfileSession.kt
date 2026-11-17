@@ -215,12 +215,11 @@ class ProfileSession internal constructor(
     /** The profile is now served on [path]: a link to the old socket is dropped, and one that runs reconnects there. */
     internal fun moveTo(path: String, running: Boolean) {
         if (path == socket) return
+        // Stopped first: the link's thread reads the socket at each try, and one still trying would say hello on the new one
+        if (running) stop()
         socket = path
         misdirected = false
-        if (running) {
-            stop()
-            start()
-        }
+        if (running) start()
     }
 
     /** The `id` for a request on this profile's socket, whoever sends it: see [EngineLink.newRequestId]. */

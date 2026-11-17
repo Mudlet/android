@@ -1,5 +1,7 @@
 package org.mudlet.android.ui
 
+import android.os.Handler
+import android.os.Looper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
@@ -12,8 +14,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /** What EngineClient holds for the UI from the engine's messages, read on the main thread as the UI reads it. */
 @RunWith(AndroidJUnit4::class)
@@ -78,6 +82,64 @@ class EngineClientTest {
     }
 
     @Test
+    fun aLinkBeingMovedKeepsItsOldThreadOffTheNewSocket() {
+        waitUntil("the profile's link attached") { EngineClient.front.linkState.startsWith("attached") }
+        val front = onMain { EngineClient.front }
+        val served = fake.engine.openProfilesMessage().getJSONArray("profiles").getJSONObject(0).getString("socket")
+        val unserved = fake.engine.unservedPath
+        val tried = LinkedBlockingQueue<String>()
+        val connect = EngineClient.connector
+        onMain {
+            EngineClient.connector = { path ->
+                tried.add(path)
+                connect(path)
+            }
+            // As a kept session's link, which keeps trying the socket of an earlier engine until openProfiles moves it
+            front.moveTo(unserved, running = true)
+        }
+        assertEquals(unserved, tried.poll(WAIT_S, TimeUnit.SECONDS))
+        // stop() is synchronized on the link: held, it keeps the main thread inside moveTo(), where a busy device may
+        val link = ProfileSession::class.java.getDeclaredField("link").apply { isAccessible = true }.get(front)!!
+        val held = CountDownLatch(1)
+        val moving = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = thread {
+            synchronized(link) {
+                held.countDown()
+                release.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            }
+        }
+        val tries = try {
+            assertTrue(held.await(WAIT_S, TimeUnit.SECONDS))
+            val main = Looper.getMainLooper()
+            Handler(main).post {
+                moving.countDown()
+                front.moveTo(served, running = true)
+            }
+            assertTrue(moving.await(WAIT_S, TimeUnit.SECONDS))
+            val deadline = System.currentTimeMillis() + WAIT_S * 1000
+            while (main.thread.state != Thread.State.BLOCKED) {
+                if (System.currentTimeMillis() > deadline) throw AssertionError("moveTo() did not wait for the link")
+                Thread.sleep(1)
+            }
+            tried.clear()
+            // Woken as the control link's attach wakes it, just before openProfiles moves the session
+            List(2) {
+                front.wake()
+                tried.poll(WAIT_S, TimeUnit.SECONDS)
+            }
+        } finally {
+            release.countDown()
+            holder.join()
+        }
+        assertEquals("what the link's thread tried while it was being moved", listOf<String?>(unserved, unserved), tries)
+        val moved = session.forProfile(PROFILE)
+        moved.send(JSONObject().put("t", "moveTypedLine"))
+        waitUntil("moveTypedLine set by the first connection to the new socket") { EngineClient.front.moveTypedLine }
+        onMain { EngineClient.front.typedLineMoved() }
+    }
+
+    @Test
     fun theMapSearchsRefusalIsNoProfileRequestsAnswer() {
         // The fake has answered the hellos before the links have read them, and a request sent sooner is dropped
         waitUntil("the links attached") { EngineClient.linkState.startsWith("attached to pid") && EngineClient.front.linkState.startsWith("attached") }
@@ -125,6 +187,7 @@ class EngineClientTest {
 
     companion object {
         const val TIMEOUT_MS = 60_000L
+        const val WAIT_S = 5L
         const val PROFILE = "Client"
     }
 }

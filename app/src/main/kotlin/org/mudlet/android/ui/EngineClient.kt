@@ -293,7 +293,6 @@ object EngineClient {
     fun deleteProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) {
             Settings.setAwaitsDefaults(name, false)
-            Settings.setAwaitsInputClear(name, false)
         }
         onAnswer(error)
     }) { Requests.deleteProfile(name, it) }

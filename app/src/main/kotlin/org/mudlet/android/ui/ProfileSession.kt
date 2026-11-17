@@ -367,7 +367,6 @@ class ProfileSession internal constructor(
     private fun onLoaded() {
         when {
             Settings.awaitsDefaults(name) -> giveDefaults()
-            Settings.awaitsInputClear(name) -> give(mapOf(Settings.clearInputAfterSend.key to true))
         }
         refreshSettings()
     }

@@ -477,8 +477,7 @@ private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modif
                 text = it
                 notSent = false
             },
-            modifier = Modifier.weight(1f).padding(start = 4.dp)
-                .keptCommand(text.text == kept && text.selection == TextRange(0, text.text.length), text.text.length, stringResource(R.string.input_kept)),
+            modifier = Modifier.weight(1f).padding(start = 4.dp),
             label = { Text(stringResource(R.string.window_command_line, name)) },
             supportingText = if (notSent) {
                 { Text(stringResource(R.string.input_not_sent), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }

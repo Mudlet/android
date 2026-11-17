@@ -54,7 +54,7 @@ object Settings {
      * Desktop Mudlet's "Auto clear the input line after you sent text": off, the command sent stays on the input line,
      * selected. Mudlet starts a profile with it off; the app starts a game with it on (docs/divergences.md).
      */
-    val clearInputAfterSend = BoolSetting("autoClearInputLine", default = true, mudlet = true, mudletDefault = false)
+    val clearInputAfterSend = BoolSetting("autoClearInputLine", default = true, mudlet = true)
 
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
@@ -187,7 +187,6 @@ object Settings {
      */
     @VisibleForTesting
     internal fun noteGamesBeforeInputClear(prefs: SharedPreferences, profiles: File) {
-        if (prefs.contains(GAMES_AWAITING_INPUT_CLEAR)) return
         prefs.edit { putStringSet(GAMES_AWAITING_INPUT_CLEAR, profiles.list()?.toSet().orEmpty()) }
     }
 

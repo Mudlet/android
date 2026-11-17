@@ -96,6 +96,11 @@ public:
     virtual QString pressButton(int id) = 0;
     // A click on a command of IFrontend::commands(), by its id
     virtual QString activateCommand(int id) = 0;
+    // A key pressed on the UI's input line, key and modifiers as Qt's key event gives them, and text what it typed
+    // where the UI knows (THeadlessSession::pressKey()): a binding of it ran, a command whose shortcut it is ran, no
+    // binding took it, or Mudlet's line keeps it for itself, for the UI to handle; else why it was refused
+    enum class KeyPress { bindingRan, commandRan, noBinding, keyKept };
+    virtual std::variant<KeyPress, QString> pressKey(int key, int modifiers, const std::optional<QString>& text) = 0;
     // What the UI's pointer did on the map, at a point of the last IFrontend::map() frame: a press, a double-click or
     // a wheel turn; its buttons are not read
     virtual QString mapPointer(const PointerEvent& event) = 0;

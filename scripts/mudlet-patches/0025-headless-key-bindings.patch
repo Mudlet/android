@@ -1,0 +1,267 @@
+Tell a frontend which keys the profile's key bindings take
+
+pressKey() offers a key to the profile's bindings where the GUI's input line would, but a frontend that is not
+built on Qt has to decide as the key goes down whether it is for its own input line: waiting for pressKey() to
+answer each key would hold up typing, and a key handed over and then found unbound cannot be typed back. The
+GUI reads KeyUnit directly; a frontend with no window had nothing to read.
+
+- THeadlessSession::keyBindings() gives the combinations of key and modifiers that pressKey() offers a binding
+  now: those of the bindings that match, as KeyUnit::firstMatch() finds them (switched on, in folders switched
+  on), less those the GUI's line, or while hidden input is wanted its box, keeps for itself, as pressKey()
+  judges them. Each once, sorted.
+- keyBindingsChanged follows each change to that list, from the event loop: a binding added, removed, edited or
+  switched, by a script, a package, the editor or the emergency stop, hidden input wanted or no longer, or the
+  caret-mode key changed. Nothing in Mudlet tells of all of those, so the session compares the matching
+  bindings each time the event loop is about to wait (QAbstractEventDispatcher::aboutToBlock), a walk over the
+  profile's keys, and works the list out again only when they differ.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (key_bindings: the list at load, after
+tempKey() and permKey(), a folder switched off and on, killKey() and hidden input, each change told once, and
+pressKey() running a listed binding, keeping Return and finding no binding). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 4020ec4..c9cc440 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -496,6 +496,17 @@ not built on Qt has to copy:
+   `Qt::ShiftModifier`.
+ - AltGr arrives as Ctrl+Alt on Windows, and on X11 it can carry `Qt::GroupSwitchModifier`.
+ 
++A frontend has to tell as a key goes down whether it is for its own input line, and waiting for
++`pressKey()` to answer would hold up the typing. `keyBindings()` gives the combinations `pressKey()`
++offers a binding now: those of the bindings that match, switched on in folders that are switched on,
++less the keys the line or the hidden-input box keeps for itself, as listed above. A frontend sends
++`pressKey()` only those, and handles every other key as its line does. `keyBindingsChanged` follows,
++from the event loop, each change to that list: a binding added, removed, edited or switched by a
++script, a package, the editor or the emergency stop, hidden input wanted or no longer, or the
++caret-mode key changed. As nothing in Mudlet tells of all of those, the session compares the bindings
++that match each time the event loop is about to wait, which costs a walk over the profile's keys, and
++works out the list again only when they differ.
++
+ `commandLineTextRequested` carries the whole of the main command line each time a script's
+ `printCmdLine()`, `appendCmdLine()`, `clearCmdLine()` or `sendCmdLine()` sets it, for the app's input
+ line to show as the GUI's command line does; `clearCmdLine()` sends an empty line. As the GUI's line does,
+@@ -861,7 +872,8 @@ the session refuses their calls then as it does any made during the shutdown, a
+ `poolClosing`. Of those that follow a state, some are sent once a turn however many changes it held,
+ naming what changed, for the app to read again: `scriptWindowsChanged`, `windowTextChanged`,
+ `windowCommandLineTextChanged`, `linksChanged`, `addonCommandsChanged`, `buttonsChanged` and
+-`mapRepaintRequested`. The others carry the value as it is when they are sent, and only when it differs
++`mapRepaintRequested`; and `keyBindingsChanged`, only when `keyBindings()` differs from what it gave
++at `profileLoaded` or the last one sent. The others carry the value as it is when they are sent, and only when it differs
+ from the one last sent or the one read at `profileLoaded`: `consoleFontChanged`, `consoleWrapChanged`,
+ `consoleColorsChanged`, `timeStampsShownChanged` and `mainConsoleAreaChanged`. So a change made and
+ undone within a turn sends nothing, and nothing follows `profileLoaded` for what the load did. A map
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index d654b53..5cc5d87 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -32,11 +32,13 @@
+ #include "TEvent.h"
+ #include "TGameDetails.h"
+ #include "TGameTransport.h"
++#include "TKey.h"
+ #include "TLuaInterpreter.h"
+ #include "TMap.h"
+ #include "TNullAppFrontend.h"
+ #include "TNullConsoleFrontend.h"
+ 
++#include <QAbstractEventDispatcher>
+ #include <QCoreApplication>
+ #include <QDebug>
+ #include <QDir>
+@@ -434,6 +436,9 @@ THeadlessSession::THeadlessSession(QObject* parent)
+     if (auto* pView = dynamic_cast<TNullAppFrontend*>(TAppFrontend::instance())) {
+         connect(&pView->mNotifier, &TNullAppFrontendNotifier::configWritten, this, &THeadlessSession::noteConfigWritten);
+     }
++    if (auto* pDispatcher = QAbstractEventDispatcher::instance(thread())) {
++        connect(pDispatcher, &QAbstractEventDispatcher::aboutToBlock, this, &THeadlessSession::checkKeyBindings);
++    }
+     smSessions.append(this);
+ }
+ 
+@@ -1223,6 +1228,7 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+     noteOutputStateAtLoad();
+     noteAreaAtLoad();
+     noteWindowsAtLoad();
++    noteKeyBindingsAtLoad();
+     // A copy, as a handler may delete the session while its argument is in use
+     const QString profile = mProfileName;
+     emit profileLoaded(profile);
+@@ -2017,6 +2023,46 @@ bool hiddenInputKeepsKey(const Host& host, const QKeyEvent& event, const QString
+     return printable && (modifierKeys == Qt::NoModifier || layoutModifier);
+ }
+ 
++// The bindings KeyUnit::firstMatch() can reach: each switched on, in folders switched on
++void appendMatchedKeys(Host& host, std::vector<int>& combinations)
++{
++    if (host.isClosingDown()) {
++        return;
++    }
++    const QMap<int, TKey*> keys = host.getKeyUnit()->getKeyList();
++    for (const TKey* pKey : keys) {
++        if (!pKey || pKey->isFolder() || !pKey->isActive()) {
++            continue;
++        }
++        bool reached = true;
++        for (const TKey* pFolder = pKey->getParent(); pFolder && reached; pFolder = pFolder->getParent()) {
++            reached = pFolder->isActive();
++        }
++        if (reached) {
++            combinations.push_back(QKeyCombination(pKey->getKeyModifiers(), pKey->getKeyCode()).toCombined());
++        }
++    }
++}
++
++// What keyBindings() follows from, cheaper to compare than it: the matching keys, hidden input and the caret-mode key
++void noteKeyBindingsState(Host& host, std::vector<int>& state)
++{
++    state.clear();
++    appendMatchedKeys(host, state);
++    state.push_back(host.passwordEntryWanted());
++    state.push_back(static_cast<int>(host.mCaretShortcut));
++}
++
++// Whether offerKey() offers the bindings a key given no text, ahead of the line's own keys or after them
++bool bindingsOffered(const Host& host, const QKeyCombination combination, const bool hiddenInput)
++{
++    const QKeyEvent event(QEvent::KeyPress, combination.key(), combination.keyboardModifiers());
++    if (hiddenInput) {
++        return !hiddenInputKeepsKey(host, event, nullptr);
++    }
++    return (combination.keyboardModifiers() & Qt::KeypadModifier) || !commandLineKeepsKey(host, event);
++}
++
+ } // namespace
+ 
+ THeadlessSession::KeyResult THeadlessSession::pressKey(const Qt::Key key, const Qt::KeyboardModifiers modifiers)
+@@ -2085,6 +2131,62 @@ THeadlessSession::KeyResult THeadlessSession::offerKey(const Qt::Key key, const
+     return KeyResult::noBinding;
+ }
+ 
++QList<QKeyCombination> THeadlessSession::keyBindings() const
++{
++    QList<QKeyCombination> result;
++    if (!mpHost) {
++        return result;
++    }
++    std::vector<int> combinations;
++    appendMatchedKeys(*mpHost, combinations);
++    std::sort(combinations.begin(), combinations.end());
++    combinations.erase(std::unique(combinations.begin(), combinations.end()), combinations.end());
++    const bool hiddenInput = mpHost->passwordEntryWanted();
++    for (const int combined : combinations) {
++        const QKeyCombination combination = QKeyCombination::fromCombined(combined);
++        if (bindingsOffered(*mpHost, combination, hiddenInput)) {
++            result.append(combination);
++        }
++    }
++    return result;
++}
++
++void THeadlessSession::noteKeyBindingsAtLoad()
++{
++    mKeyBindingsRun = mRun;
++    noteKeyBindingsState(*mpHost, mKeyBindingsMatched);
++    mKeyBindingsTold = keyBindings();
++}
++
++// A binding can change by a script, a package, the editor, a folder's switch or the emergency stop, and what is
++// offered by the game hiding input, none of which tells of it, so what they come to is compared instead
++void THeadlessSession::checkKeyBindings()
++{
++    if (mKeyBindingsRun != mRun || !mpHost || mpHost->closeStarted()) {
++        return;
++    }
++    noteKeyBindingsState(*mpHost, mKeyBindingsMatchedNow);
++    if (mKeyBindingsMatchedNow == mKeyBindingsMatched) {
++        return;
++    }
++    std::swap(mKeyBindingsMatched, mKeyBindingsMatchedNow);
++    QList<QKeyCombination> bindings = keyBindings();
++    if (bindings == mKeyBindingsTold) {
++        return;
++    }
++    mKeyBindingsTold = std::move(bindings);
++    // Not as the loop is about to wait, which a handler that runs the event loop would make re-entrant
++    QMetaObject::invokeMethod(
++            this,
++            [this, run = mRun]() {
++                if (run == mRun) {
++                    const QString profile = mProfileName;
++                    emit keyBindingsChanged(profile);
++                }
++            },
++            Qt::QueuedConnection);
++}
++
+ bool THeadlessSession::setCommandLineText(const QString& text, const CommandLineEdit edit)
+ {
+     if (!usable()) {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index f6b25ed..7909e58 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -46,6 +46,7 @@
+ #include <memory>
+ #include <optional>
+ #include <utility>
++#include <vector>
+ 
+ struct lua_State;
+ class Host;
+@@ -461,6 +462,13 @@ public:
+     // With what the key typed, as QKeyEvent::text(), even if empty, by which the hidden-input box judges it as
+     // the GUI's does
+     KeyResult pressKey(Qt::Key key, Qt::KeyboardModifiers modifiers, const QString& text);
++    // The combinations of key and modifiers that pressKey() offers a binding of the profile now, for a frontend
++    // that must tell as the key goes down whether it is for its input line: those of each binding switched on in
++    // folders switched on, as KeyUnit matches them, less those the GUI's line, or while hidden input is wanted
++    // its box, keeps for itself, as pressKey() judges a key given no text. Each once, in the order of
++    // QKeyCombination::toCombined(). The shortcut of a command addonCommands() lists runs the command instead.
++    // Empty with no profile open. A getter, so it may be called from any handler.
++    QList<QKeyCombination> keyBindings() const;
+     // typed: the player typed it. notTyped: the app set it itself, as the GUI's line does for a history recall
+     // or Tab completion, or put back text from a script that it set aside while hidden input was wanted.
+     enum class CommandLineEdit { typed, notTyped };
+@@ -1514,6 +1522,12 @@ signals:
+     // A package was installed or removed, by the session, a script or the profile's own default packages, for the app
+     // to read installedPackages() again. One for all the changes made before the event loop runs, from the event loop.
+     void packagesChanged(const QString& profile);
++
++    // What keyBindings() gives differs from what it gave as profileLoaded was sent, or at the last of these: a
++    // binding added, removed, edited or switched on or off, by a script, a package, the editor or the emergency
++    // stop, hidden input wanted or no longer, or the caret-mode key changed. From the event loop, which checks
++    // each time it is about to wait.
++    void keyBindingsChanged(const QString& profile);
+     // With Options::supplyTransport, the profile wants a connection to host:port, as it starts, reconnects or a script
+     // connects: answer with transportConnected(), or transportClosed() if it cannot be made, passing connection, its
+     // id. tlsRequested is the profile's secure connection setting, for the app to honour as it can; the profile calls
+@@ -1627,6 +1641,8 @@ private:
+     void connectWindowRelays(Host*, unsigned int run);
+     void connectPackageRelays(Host*, unsigned int run);
+     void noteWindowsAtLoad();
++    void noteKeyBindingsAtLoad();
++    void checkKeyBindings();
+     struct WindowsTold;
+     WindowsTold windowsNow() const;
+     // pWindow is null for the main console; pressedOnText is the grab's, where one has the event. False where the
+@@ -1743,6 +1759,15 @@ private:
+     unsigned int mAddonCommandsQueuedRun = 0;
+     // The same for buttonsChanged
+     unsigned int mButtonsQueuedRun = 0;
++    // The run whose keyBindings() checkKeyBindings() compares, from its profileLoaded on; 0 for none
++    unsigned int mKeyBindingsRun = 0;
++    // What it compares first, as the event loop is about to wait each time: the combined key and modifiers of the
++    // bindings that match, in KeyUnit's order, then the hidden input and caret-mode key, which keyBindings()
++    // depends on too; keyBindings() is worked out only when this changes.
++    std::vector<int> mKeyBindingsMatched;
++    // Each check's, kept so the check at every wait allocates nothing
++    std::vector<int> mKeyBindingsMatchedNow;
++    QList<QKeyCombination> mKeyBindingsTold;
+     // Shared by every session of the process, so the pool goes with the last one to let it go
+     std::shared_ptr<HostManager> mpPool;
+     // A save() another session of the pool asked for while this one's ran, answered with this one's answer

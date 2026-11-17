@@ -723,8 +723,10 @@ TLS choice and automatic reconnect changed for the connections after the one tha
 `setAutoReconnect()`, `0019-headless-connection-change.patch`), and the timers,
 keys and buttons edited as the triggers are, with what each item's row shows under its name
 (`0020-headless-script-items-more.patch`), the error console's entries, each with the item that raised it
-(`0023-headless-error-console-entries.patch`), and the certificate a secure connection was refused for
-(`refusedCertificate()`, `0024-headless-refused-certificate.patch`).
+(`0023-headless-error-console-entries.patch`), the certificate a secure connection was refused for
+(`refusedCertificate()`, `0024-headless-refused-certificate.patch`), and the keys the profile's key bindings take, told
+again as they change, for a keyboard's key to go to the engine or to the input line (`keyBindings()`,
+`0025-headless-key-bindings.patch`; see "Key bindings" in [`protocol.md`](protocol.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

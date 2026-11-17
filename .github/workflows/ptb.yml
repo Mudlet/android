@@ -288,7 +288,9 @@ jobs:
     permissions:
       contents: read
     outputs:
-      signed-with: ${{ steps.key.outputs.kind }}
+      # A boolean, not the key's kind: GitHub drops a job output that contains a secret's value, and the alias
+      # docs/ptb.md gives the upload key, `upload`, is one
+      signed-with-upload-key: ${{ steps.key.outputs.kind == 'upload' }}
     env:
       VERSION_CODE: ${{ needs.plan.outputs.version-code }}
       VERSION_NAME: ${{ needs.plan.outputs.version-name }}
@@ -596,12 +598,12 @@ jobs:
         id: creds
         env:
           SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          SIGNED_WITH: ${{ needs.package.outputs.signed-with }}
+          SIGNED_WITH_UPLOAD_KEY: ${{ needs.package.outputs.signed-with-upload-key }}
         run: |
           if [ -z "$SERVICE_ACCOUNT_JSON" ]; then
             echo "::notice::No PLAY_SERVICE_ACCOUNT_JSON: not uploading to Google Play (docs/ptb.md)"
             echo "upload=false" >> "$GITHUB_OUTPUT"
-          elif [ "$SIGNED_WITH" != upload ]; then
+          elif [ "$SIGNED_WITH_UPLOAD_KEY" != true ]; then
             echo "::error::PLAY_SERVICE_ACCOUNT_JSON is set, but the upload key's secrets are not, so Play would refuse the AAB (docs/ptb.md)"
             exit 1
           else
@@ -631,7 +633,7 @@ jobs:
   # every night, and no installed PTB could take the next one
   github-release:
     needs: [plan, package, smoke, play, source]
-    if: needs.plan.outputs.publish == 'true' && needs.package.outputs.signed-with == 'upload'
+    if: needs.plan.outputs.publish == 'true' && needs.package.outputs.signed-with-upload-key == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

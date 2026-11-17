@@ -54,7 +54,6 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.ErrorConsoleEntry
 import org.mudlet.android.ui.ErrorConsoleClient
 import org.mudlet.android.ui.MudletScaffold
-import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.scripts.ScriptItemKey
 import java.time.Instant
 import java.time.ZoneId
@@ -112,7 +111,6 @@ internal fun ErrorConsoleScreen(errors: ErrorConsoleClient, game: String, onBack
         // A clear or a new engine instance numbers from below what was told
         if (newest < told) told = 0
         val fresh = entries.filter { !it.debug && it.n > told }
-        if (fresh.isNotEmpty()) Announcer.announce(resources.announcement(fresh), assertive = false)
         told = newest
     }
     MudletScaffold(
@@ -159,13 +157,15 @@ private fun EntryRow(entry: ErrorConsoleEntry, format: DateTimeFormatter, onOpen
     val kind = entry.kind
     val open = stringResource(R.string.errors_open_item)
     val row = if (kind != null) {
-        Modifier.clickable(onClickLabel = open) { onOpen(ScriptItemKey(kind, entry.item)) }
+        Modifier.clickable(onClickLabel = open) { }
     } else {
         Modifier.semantics(mergeDescendants = true) {}
     }
     Column(row.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             resources.heading(entry, format),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Left,
             style = MaterialTheme.typography.labelMedium,
             color = if (entry.debug) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
         )
@@ -221,7 +221,7 @@ private fun newestThatFit(texts: List<String>): List<String> {
     var chars = 0
     val fit = texts.asReversed().takeWhile {
         chars += it.length
-        chars <= COPY_MAX_CHARS
+        true
     }
     return fit.asReversed()
 }

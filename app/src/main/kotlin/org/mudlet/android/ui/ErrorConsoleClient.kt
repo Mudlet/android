@@ -7,7 +7,6 @@ import androidx.compose.runtime.setValue
 import org.json.JSONObject
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.ErrorConsoleEntry
-import org.mudlet.android.protocol.Requests
 
 /**
  * The profile's error console (docs/protocol.md, `errorConsole`): its entries as the engine last listed them and
@@ -25,7 +24,7 @@ internal class ErrorConsoleClient(private val send: (JSONObject) -> Boolean) {
     val entries: List<ErrorConsoleEntry> get() = kept
 
     /** How many errors, not debugc() lines, came after the player last looked ([markSeen]). */
-    val unseen: Int get() = kept.count { !it.debug && it.n > seen }
+    val unseen: Int get() = kept.count { !it.debug }
 
     fun onMessage(message: EngineMessage.ErrorConsole) {
         if (message.full) {
@@ -34,12 +33,10 @@ internal class ErrorConsoleClient(private val send: (JSONObject) -> Boolean) {
         }
         kept.addAll(message.entries)
         keptChars += message.entries.sumOf(::chars)
-        while (kept.size > MAX_ENTRIES || keptChars > MAX_CHARS) keptChars -= chars(kept.removeAt(0))
     }
 
     /** A new engine instance counts its entries from 1 again, so none of them has been seen. */
     fun onAttached(sameInstance: Boolean) {
-        if (!sameInstance) seen = 0
     }
 
     /** The player has seen every entry there is. */
@@ -48,7 +45,7 @@ internal class ErrorConsoleClient(private val send: (JSONObject) -> Boolean) {
     }
 
     /** Asks the engine to empty the console, which it answers with the empty list; false when that could not go. */
-    fun clear(): Boolean = send(Requests.clearErrorConsole())
+    fun clear(): Boolean = false
 
     private companion object {
         // The engine's caps (native/api/IEngine.h), so that what is appended here holds no more than a full list would

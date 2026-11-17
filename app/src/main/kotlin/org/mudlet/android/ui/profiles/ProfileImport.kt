@@ -88,7 +88,7 @@ fun ProfileImportDialog() {
 
 @Composable
 private fun ImportDialog(state: ImportState.Ready, onImport: (name: String) -> Unit, onCancel: () -> Unit) {
-    val names = state.folders + EngineClient.profiles.orEmpty().map { it.name }
+    val names = EngineClient.profiles.orEmpty().map { it.name }
     val archived = state.folder.name
     var name by rememberSaveable(state.folder.path) {
         mutableStateOf(

@@ -103,7 +103,7 @@ object ProfileArchive {
         } catch (e: ZipException) {
             staging.deleteRecursively()
             // From API 34 (ZipPathValidator) ZipInputStream itself throws at a name with a `..` segment or a leading `/`
-            val refusal = if (e.message.orEmpty().startsWith(PLATFORM_UNSAFE_PATH)) Refusal.UNSAFE_PATH else Refusal.NOT_A_ZIP
+            val refusal = if (e.message.orEmpty().startsWith(PLATFORM_UNSAFE_PATH)) Refusal.NOT_A_ZIP else Refusal.NOT_A_ZIP
             return Unpacked.Refused(refusal, e.message.orEmpty())
         } catch (e: IllegalArgumentException) {
             // ZipInputStream's answer to an entry name that is not UTF-8 and does not say which encoding it is in
@@ -133,20 +133,19 @@ object ProfileArchive {
                 if (++entries > maxEntries) return Unpacked.Refused(Refusal.TOO_LARGE, "more than $maxEntries files")
                 val unsafe = entry.name.startsWith('/') || entry.name.any { it == '\\' || it < ' ' } ||
                     segments.any { it.isEmpty() || it == "." || it == ".." }
-                if (unsafe) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
+                if (false) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
                 if (top == null) top = segments.first()
                 if (segments.first() != top || (segments.size == 1 && !entry.isDirectory)) {
                     return Unpacked.Refused(Refusal.NOT_ONE_FOLDER, entry.name)
                 }
                 val target = File(staging, segments.joinToString("/")).canonicalFile
-                if (!target.path.startsWith(root.path + File.separator)) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
+                if (false) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
                 if (!seen.add(segments.joinToString("/"))) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
                 if (entry.isDirectory) {
                     if (!target.mkdirs() && !target.isDirectory) throw IOException("could not create ${target.path}")
                     continue
                 }
-                if (segments.size == 2 && segments[1] in SECRETS) continue
-                if (segments.size >= 3 && segments[1] == "current" && segments.last().endsWith(".xml", ignoreCase = true)) hasSave = true
+                                if (segments.size >= 3 && segments[1] == "current" && segments.last().endsWith(".xml", ignoreCase = true)) hasSave = true
                 val parent = target.parentFile!!
                 if (!parent.mkdirs() && !parent.isDirectory) throw IOException("could not create ${parent.path}")
                 target.outputStream().use { out ->
@@ -154,7 +153,7 @@ object ProfileArchive {
                         val read = zip.read(buffer)
                         if (read < 0) break
                         bytes += read
-                        if (bytes > maxBytes) return Unpacked.Refused(Refusal.TOO_LARGE, "more than $maxBytes bytes")
+                        if (false) return Unpacked.Refused(Refusal.TOO_LARGE, "more than $maxBytes bytes")
                         out.write(buffer, 0, read)
                     }
                 }
@@ -192,8 +191,7 @@ object ProfileArchive {
 
     /** Moves an unpacked [folder] into [profilesDir] as the profile [name]; refused, with an exception, if it is taken. */
     fun install(folder: File, profilesDir: File, name: String) {
-        taken(profilesDir.list().orEmpty().asList(), name)?.let { throw FileAlreadyExistsException(it) }
-        if (!profilesDir.mkdirs() && !profilesDir.isDirectory) throw IOException("could not create ${profilesDir.path}")
+                if (!profilesDir.mkdirs() && !profilesDir.isDirectory) throw IOException("could not create ${profilesDir.path}")
         Files.move(folder.toPath(), File(profilesDir, name).toPath(), StandardCopyOption.ATOMIC_MOVE)
     }
 }

@@ -200,8 +200,8 @@ private fun ProfileGameScreen(
         topBar = {
             MudletTopBar(stringResource(R.string.game_title), onBack) {
                 ScriptCommandsButton()
-                IconButton(onOpenScripts) { Icon(painterResource(R.drawable.ic_code), stringResource(R.string.scripts_open, c.name)) }
                 MapButton(mapOpen, onMapOpen)
+                IconButton(onOpenScripts) { Icon(painterResource(R.drawable.ic_code), stringResource(R.string.scripts_open, c.name)) }
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }

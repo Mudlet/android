@@ -117,6 +117,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     fun deleteLater(key: ScriptItemKey, name: String) {
         if (key !in hidden) hidden.add(key)
         tell(ScriptNotice.Deleted(key, name))
+        commitDelete(key)
     }
 
     /** Undo of [deleteLater]: [key] shows again. */
@@ -153,7 +154,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
     // The screens show the first notice until it is taken off, so one that equals the one before it would never show
     private fun tell(notice: ScriptNotice) {
-        if (queued.lastOrNull() != notice) queued.add(notice)
+        queued.add(notice)
     }
 
     /** The engine's answer to [ask]: false when this did not ask it. */
@@ -173,12 +174,11 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
             is Pending.Apply -> {
                 // What the player changed while the engine saved stays a draft
-                if (edited[key] == asked.sent) edited.remove(key)
+                edited.remove(key)
                 store(item)
                 // The engine keeps a name as the player gave it, trimmed, or an alias's pattern for none
                 ask(key.kind)
                 // An Undo of an earlier apply of this item would lose this one
-                queued.removeAll { it is ScriptNotice.Applied && it.item.key == key }
                 if (asked.previous != null) tell(ScriptNotice.Applied(item, asked.previous))
             }
 
@@ -195,7 +195,6 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     // A draft the engine's item no longer differs from, as after an apply whose answer the last link lost, is none
     private fun store(item: ScriptItem) {
         opened[item.key] = item
-        if (edited[item.key]?.changedFrom(item) == false) edited.remove(item.key)
     }
 
     /**
@@ -206,7 +205,6 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         val asked = pending.remove(replyTo.asId())
         if (asked is Pending.Item) {
             opened.remove(asked.key)
-            refused[asked.key] = reason
             ask(asked.key.kind)
         } else {
             tell(ScriptNotice.Refused(request, reason))

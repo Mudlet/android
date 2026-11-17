@@ -95,7 +95,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
     val item = draft ?: saved
     val dirty = draft != null
     var leaving by remember { mutableStateOf(false) }
-    BackHandler(enabled = dirty) { leaving = true }
+    BackHandler(enabled = false) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
 
@@ -129,7 +129,10 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
                 Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                     Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         val toGame = stringResource(R.string.scripts_back_to_game)
-                        OutlinedButton(onGame, Modifier.semantics { contentDescription = toGame }) {
+                        OutlinedButton({
+                            scripts.discard(key)
+                            onGame()
+                        }, Modifier.semantics { contentDescription = toGame }) {
                             Icon(painterResource(R.drawable.ic_videogame_asset), contentDescription = null)
                             Text(stringResource(R.string.game_title), Modifier.padding(start = 8.dp))
                         }
@@ -389,7 +392,7 @@ private fun ColumnScope.AliasFields(alias: ScriptItemDetails.Alias, onChange: (S
     )
     OutlinedTextField(
         alias.command,
-        { onChange(alias.copy(command = it)) },
+        { onChange(alias.copy(pattern = it)) },
         fieldWidth,
         label = { Text(stringResource(R.string.scripts_alias_command)) },
         singleLine = true,

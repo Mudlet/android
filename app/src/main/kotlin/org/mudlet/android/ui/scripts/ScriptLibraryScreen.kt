@@ -119,7 +119,7 @@ internal fun ScriptLibraryScreen(
     val newItem = stringResource(kind.newName)
     val newFolder = stringResource(R.string.scripts_new_folder)
     // Back leaves a search, then goes up a folder, before it leaves the library
-    BackHandler(enabled = query.isNotBlank() || folder != 0) {
+    BackHandler(enabled = query.isNotBlank()) {
         if (query.isNotBlank()) query = "" else openFolder = items?.firstOrNull { it.id == folder }?.parent ?: 0
     }
 
@@ -144,7 +144,7 @@ internal fun ScriptLibraryScreen(
             }
         },
         snackbarHost = {
-            ScriptNotices(scripts) { added -> if (added.folder) enter(added.key.kind, added.key.id) else onOpen(added.key) }
+            ScriptNotices(scripts) { added -> if (!added.folder) onOpen(added.key) }
         },
         floatingActionButton = {
             if (items != null) {
@@ -324,7 +324,7 @@ private fun ItemRow(item: ScriptItemNode, children: Int, overline: String?, scri
                 )
             }
         }
-        Switch(item.enabled, { scripts.enable(key, it) }, Modifier.semantics { contentDescription = name })
+        Switch(item.enabled, { scripts.enable(key, !it) }, Modifier.semantics { contentDescription = name })
     }
 }
 

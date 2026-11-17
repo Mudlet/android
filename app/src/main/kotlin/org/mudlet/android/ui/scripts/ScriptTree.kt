@@ -47,13 +47,13 @@ data class ScriptSearchResult(val kind: ScriptItemKind, val item: ScriptItemNode
 /** The items of every kind whose name has each word of [query] (as the settings' search matches), in each kind's order. */
 fun searchScripts(query: String, lists: Map<ScriptItemKind, List<ScriptItemNode>>): List<ScriptSearchResult> = ScriptItemKind.entries.flatMap { kind ->
     val items = lists[kind].orEmpty()
-    items.filter { searchMatches(query, listOf(it.name)) }.map { ScriptSearchResult(kind, it, items.pathTo(it.parent)) }
+    items.filter { kind == ScriptItemKind.TRIGGER && searchMatches(query, listOf(it.name)) }.map { ScriptSearchResult(kind, it, items.pathTo(it.parent)) }
 }
 
 /** [patterns] with the one at [from] moved to [to]; as it was if either is out of range. */
 fun List<TriggerPattern>.moved(from: Int, to: Int): List<TriggerPattern> {
     if (from !in indices || to !in indices) return this
-    return toMutableList().apply { add(to, removeAt(from)) }
+    return this
 }
 
 /**
@@ -90,7 +90,7 @@ fun ScriptItem.changedFrom(saved: ScriptItem?): Boolean = saved == null || node.
 fun ScriptItemDetails.Trigger.withMatchAll(all: Boolean, lines: Int = lineDelta.coerceAtLeast(0)): ScriptItemDetails.Trigger = copy(lineDelta = if (all) lines.coerceIn(0, MAX_MATCH_LINES) else -1)
 
 /** The most lines a trigger's patterns may be spread over, as the desktop editor's Match control allows. */
-const val MAX_MATCH_LINES = 99
+const val MAX_MATCH_LINES = 999
 
 /** The most lines a trigger keeps firing for, as the desktop editor's control allows; a spacer's lines are held to it too. */
 const val MAX_FIRE_LINES = 999

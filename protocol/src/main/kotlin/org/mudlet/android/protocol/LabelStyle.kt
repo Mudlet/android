@@ -59,16 +59,24 @@ data class LabelStyle(
          * order. A rule with any other selector, a state or a sub-control is skipped, as is a declaration the app does
          * not draw. With [selectors] [TEXT_BOX_SELECTORS], a text box's sheet, the same way.
          */
-        fun parse(sheet: String, selectors: Set<String> = LABEL_SELECTORS): LabelStyle {
-            var style = LabelStyle()
-            for ((property, value) in declarations(sheet, selectors)) style = style.with(property, value)
-            return style
-        }
+        fun parse(sheet: String, selectors: Set<String> = LABEL_SELECTORS): LabelStyle = of(declarations(sheet, selectors))
 
-        /** The declarations of [sheet] that apply to a label, or [selectors]' widget, in order, each its lower-case property and its value. */
-        fun declarations(sheet: String, selectors: Set<String> = LABEL_SELECTORS): List<Pair<String, String>> {
+        /** [declarations], each over those before it, over [start]. */
+        fun of(declarations: List<Pair<String, String>>, start: LabelStyle = LabelStyle()): LabelStyle = declarations.fold(start) { style, (property, value) -> style.with(property, value) }
+
+        /**
+         * The declarations of [sheet] that apply to a label, or [selectors]' widget, each its lower-case property and
+         * its value, in order. With [states], the pseudo-states the widget is or is not in by name, a rule with
+         * pseudo-states applies where it is in each one named (`:checked`) and not in each one negated (`:!checked`),
+         * and the declarations come in the order Qt ranks them: a rule with more pseudo-states and classes
+         * (`.QPushButton`) after one with fewer, then one naming a type after one for `*`, and in order where they
+         * tie, so each overrides those before it. A rule naming a pseudo-state not in [states] is skipped, as is any
+         * with one without [states].
+         */
+        fun declarations(sheet: String, selectors: Set<String> = LABEL_SELECTORS, states: Map<String, Boolean>? = null): List<Pair<String, String>> {
             val text = COMMENT.replace(sheet, " ")
-            val out = ArrayList<Pair<String, String>>()
+            // Each block's declarations with the specificity of its selector; bare ones are Qt's `* { }`
+            val blocks = ArrayList<Pair<Int, List<Pair<String, String>>>>()
             var i = 0
             var start = 0
             while (i < text.length) {
@@ -77,9 +85,9 @@ data class LabelStyle(
                         // What is before the brace since the last declaration is the selector
                         val head = text.substring(start, i)
                         val selector = head.substringAfterLast(';')
-                        out.addAll(parseDeclarations(head.substring(0, head.length - selector.length)))
+                        blocks.add(0 to parseDeclarations(head.substring(0, head.length - selector.length)))
                         val end = text.indexOf('}', i + 1).let { if (it < 0) text.length else it }
-                        if (selector.split(',').any { it.trim() in selectors }) out.addAll(parseDeclarations(text.substring(i + 1, end)))
+                        selector.split(',').mapNotNull { specificity(it.trim(), selectors, states) }.maxOrNull()?.let { blocks.add(it to parseDeclarations(text.substring(i + 1, end))) }
                         i = end + 1
                         start = i
                         continue
@@ -91,8 +99,32 @@ data class LabelStyle(
                 }
                 i++
             }
-            out.addAll(parseDeclarations(text.substring(start.coerceAtMost(text.length))))
-            return out
+            blocks.add(0 to parseDeclarations(text.substring(start.coerceAtMost(text.length))))
+            return (if (states == null) blocks else blocks.sortedBy { it.first }).flatMap { it.second }
+        }
+
+        /**
+         * How [selector] ranks among the rules that apply to a widget of [selectors] in [states], as Qt counts it: ten
+         * for each pseudo-state or class (`.QPushButton`), one for a type; null where it does not apply to it.
+         */
+        private fun specificity(selector: String, selectors: Set<String>, states: Map<String, Boolean>?): Int? {
+            if ("::" in selector) return null
+            val parts = selector.split(':').map { it.trim() }
+            val pseudo = parts.drop(1)
+            // `:checked` alone is `*:checked`
+            val type = parts[0].ifEmpty { if (pseudo.isEmpty()) return null else "*" }
+            if (type !in selectors) return null
+            for (state in pseudo) {
+                val negated = state.startsWith('!')
+                val inState = states?.get(state.removePrefix("!").lowercase()) ?: return null
+                if (inState == negated) return null
+            }
+            val typeRank = when {
+                type == "*" -> 0
+                type.startsWith('.') -> 10
+                else -> 1
+            }
+            return pseudo.size * 10 + typeRank
         }
 
         /** `a: b; c: d`, as a style sheet's block or a rich text's `style` attribute has them. */
@@ -105,18 +137,26 @@ data class LabelStyle(
         }
 
         /**
-         * A length in Mudlet's pixels: `px` or none, or `pt` at Qt's 96 dots per inch; null for another unit, or for
-         * what is not a length.
+         * A length in Mudlet's pixels: `px` or none, or `pt` at Qt's 96 dots per inch, [MAX_LENGTH] at most either
+         * way; null for another unit, or for what is not a length.
          */
         fun length(value: String): Float? {
             val match = LENGTH.matchEntire(value.trim().lowercase()) ?: return null
             val n = match.groupValues[1].toFloatOrNull() ?: return null
             return when (match.groupValues[2]) {
-                "", "px" -> n
-                "pt" -> n * PX_PER_PT
+                "", "px" -> bounded(n)
+                "pt" -> bounded(n * PX_PER_PT)
                 else -> null
             }
         }
+
+        /**
+         * [n] as a number of a sheet's the app can draw with: null for one that is not a number, and [MAX_LENGTH] at
+         * most either way. Every length and gradient coordinate the parser reads comes through here, as Compose and
+         * Android throw on a size, a corner or a gradient that is infinite or not a number, which a length of
+         * dozens of digits becomes once it is multiplied into the screen's pixels.
+         */
+        private fun bounded(n: Float?): Float? = n?.takeUnless { it.isNaN() }?.coerceIn(-MAX_LENGTH, MAX_LENGTH)
 
         /** A CSS `font-weight`: a keyword or a number from 100 to 900. */
         fun fontWeight(value: String): Int? = when (val v = value.trim().lowercase()) {
@@ -169,13 +209,14 @@ data class LabelStyle(
 
         private fun LabelStyle.with(property: String, value: String): LabelStyle = when (property) {
             "background", "background-color" -> {
-                var s = this
+                // The shorthand sets what it does not name back to none, as Qt's does, and its `none` is the image's
+                var s = if (property == "background") copy(background = null, backgroundImage = null) else this
                 for (part in splitTopLevel(value, ' ')) {
                     val fill = fill(part)
                     when {
                         fill != null -> s = s.copy(background = fill)
                         property == "background" && part.startsWith("url(", ignoreCase = true) -> s = s.copy(backgroundImage = url(part))
-                        part.equals("none", ignoreCase = true) -> s = s.copy(background = null)
+                        property == "background-color" && part.equals("none", ignoreCase = true) -> s = s.copy(background = null)
                     }
                 }
                 s
@@ -184,7 +225,8 @@ data class LabelStyle(
             "color" -> CssColor.parse(value)?.let { copy(color = it) } ?: this
 
             "border" -> {
-                var s = this
+                // The shorthand sets what it does not name back to none, as Qt's does
+                var s = copy(borderWidth = 0f, borderStyled = false, borderColor = null)
                 for (part in splitTopLevel(value, ' ')) {
                     val width = length(part)
                     val color = CssColor.parse(part)
@@ -203,13 +245,17 @@ data class LabelStyle(
 
             "border-color" -> CssColor.parse(splitTopLevel(value, ' ').first())?.let { copy(borderColor = it) } ?: this
 
-            "border-radius" -> length(splitTopLevel(value, ' ').first())?.let { copy(borderRadius = it) } ?: this
+            // Qt draws a negative radius as none, and a shape's corner may not be negative
+            "border-radius" -> length(splitTopLevel(value, ' ').first())?.let { copy(borderRadius = it.coerceAtLeast(0f)) } ?: this
 
             "padding" -> edges(value)?.let { copy(padding = it) } ?: this
 
             "margin" -> edges(value)?.let { copy(margin = it) } ?: this
 
-            "font-size" -> length(value)?.let { copy(fontSizePx = it) } ?: this
+            // Qt reads a size in px as a whole number, and keeps the size it had for one of 0 or less, which would
+            // hide the text
+            "font-size" -> length(value)?.let { if (value.trim().endsWith("pt", ignoreCase = true)) it else it.roundToInt().toFloat() }
+                ?.takeIf { it > 0f }?.let { copy(fontSizePx = it) } ?: this
 
             "font-weight" -> fontWeight(value)?.let { copy(fontWeight = it) } ?: this
 
@@ -221,7 +267,8 @@ data class LabelStyle(
 
             "border-image" -> copy(borderImage = url(value))
 
-            "background-image" -> copy(backgroundImage = url(value))
+            // Qt takes only a `url()` here, so `none` leaves the image a rule before it set
+            "background-image" -> url(value)?.let { copy(backgroundImage = it) } ?: this
 
             else -> this
         }
@@ -245,7 +292,7 @@ data class LabelStyle(
 
         private fun gradientStops(value: String): List<Pair<Float, Int>> = gradientArguments(value).filter { it.first == "stop" }.mapNotNull { (_, stop) ->
             val parts = splitTopLevel(stop, ' ')
-            val position = parts.firstOrNull()?.toFloatOrNull() ?: return@mapNotNull null
+            val position = bounded(parts.firstOrNull()?.toFloatOrNull()) ?: return@mapNotNull null
             val color = CssColor.parse(parts.drop(1).joinToString(" ")) ?: return@mapNotNull null
             position.coerceIn(0f, 1f) to color
         }
@@ -254,7 +301,9 @@ data class LabelStyle(
             val args = gradientArguments(value).toMap()
             val stops = gradientStops(value)
             if (stops.isEmpty()) return null
-            fun coordinate(name: String) = args[name]?.toFloatOrNull() ?: 0f
+            // Qt fills with the one colour, and Android's gradient needs two
+            if (stops.size == 1) return LabelFill.Solid(stops[0].second)
+            fun coordinate(name: String) = bounded(args[name]?.toFloatOrNull()) ?: 0f
             return LabelFill.Gradient(coordinate("x1"), coordinate("y1"), coordinate("x2"), coordinate("y2"), stops)
         }
 
@@ -286,6 +335,9 @@ data class LabelStyle(
 
         /** Mudlet's pixels per point, at the 96 dots per inch Qt takes. */
         const val PX_PER_PT = 96f / 72f
+
+        /** No length of a sheet's is longer than this, in Mudlet's pixels: past the side of any screen the app has. */
+        const val MAX_LENGTH = 4096f
 
         private val LABEL_SELECTORS = setOf("QLabel", "TLabel", "*")
 

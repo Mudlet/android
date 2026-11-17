@@ -193,13 +193,17 @@ title.
 
 A `label` is a `Box` at its geometry, drawn in this order:
 
-- **Style sheet**, a subset of Qt's for `QLabel`, parsed by the app: `background-color` and `background` (named,
-  `#rgb`, `#rrggbb`, `rgb()`, `rgba()`, and `qlineargradient` as a gradient of its stops), `color`, `border`,
-  `border-width`, `border-style` (solid only), `border-color`, `border-radius`, `padding`, `margin`, `font-size`
-  (pt and px, scaled by `s`), `font-weight`, `font-style`, `font-family`, `qproperty-alignment`, and `border-image`
-  or `background-image` with `url()` (through `getImage`). Bare declarations and a `QLabel { }` block apply; a rule
-  with any other selector, state or pseudo-element is skipped. A user window's or the profile's sheet does not reach
-  the app: only the label's own sheet is in `LabelContent`.
+- **Style sheet**, a subset of Qt's for `QLabel`, parsed by the app: `background-color` and `background` (named, `#rgb`,
+  `#rrggbb`, `rgb()`, `rgba()`, and `qlineargradient` as a gradient of its stops), `color`, `border`, `border-width`,
+  `border-style` (solid only), `border-color`, `border-radius`, `padding`, `margin`, `font-size` (pt and px, scaled by
+  `s`), `font-weight`, `font-style`, `font-family`, `qproperty-alignment`, and `border-image` or `background-image` with
+  `url()` (through `getImage`). As in Qt, the `background` and `border` shorthands set what they do not name back to
+  none, `background-image: none` leaves the image set before it, a `font-size` in px is a whole number and one of 0 or
+  less is ignored, a negative `border-radius` is none, and a gradient of one stop is its colour. No length is longer
+  than 4096 px, and of a gradient's numbers a coordinate that is not one is 0 and such a stop is left out
+  ([`divergences.md`](divergences.md), "Labels and TalkBack"). Bare declarations and a `QLabel { }` block apply; a rule
+  with any other selector, state or pseudo-element is skipped. A user window's or the profile's sheet does not reach the
+  app: only the label's own sheet is in `LabelContent`.
 - **Image**: the raster image fills the label as `QLabel` scales it; an SVG one is drawn under the text with its tint,
   rotation and shear; a playing movie is an `AnimatedImageDrawable` (API 28, the app's minSdk). That cannot seek or
   change speed, so a paused movie shows `movieFrame` as a still the engine renders (`getImage` with `frame`), and a
@@ -251,14 +255,37 @@ against the back label's, as for a gauge drawn by a Mudlet without the patch or 
 
 ### Button bars and commands
 
-Bars with `place` `top` are a horizontally scrolling row above the console, `left`, `right` and `floating` ones pages
-of the window switcher, each laid out by `columns` and `fillerOffset` as upstream describes. A button is a Material
-button with its icon and name, drawn with its style sheet's subset as a label's; a push-down button is a toggle; a
-folder opens a menu of its `children`, and an entry picked there is pressed, then the folder, as upstream says the
-GUI does. Commands `onMenu` go into the top bar's overflow menu under "Extensions", nested by `menuPath`; those
-`onToolbar` are icon buttons in the top bar, three at most, the rest in the overflow menu. A pulsing command shows a
-dot instead of flashing. Shortcuts wait for hardware keyboard support (`pressKey()`), when the app's own keys go to
+Bars with `place` `top` are a row above the console, `left` and `right` ones strips beside it, and a `floating` one a
+row below it, or a strip at its end when vertical; on a narrow screen a `left` one joins the row above and the others
+the row below (`docs/architecture.md`, "Button bars and commands"). Each is laid out by `columns` and `fillerOffset` as
+upstream describes. A button is a Material button with its icon and name; a push-down button is a toggle; a folder opens
+a menu of its `children`, and an entry picked there is pressed, then the folder, as upstream says the GUI does. Commands
+go into the menu of the top bar's Extensions button in the order they were added: those `onMenu` nested by `menuPath`,
+and those only `onToolbar` in the menu itself. A pulsing command shows a dot, on its entry and on the button, instead of
+flashing. Shortcuts wait for hardware keyboard support (`pressKey()`), when the app's own keys go to
 `setReservedShortcuts()`.
+
+A bar and its buttons draw their `styleSheet`s as Mudlet's `TFlipButton` does, read by `ButtonStyle` in `:protocol` with
+the label's parser. Mudlet puts a bar's sheet on the bar and on the plain `QWidget` inside it (`TEasyButtonBar.cpp`,
+`TToolBar.cpp`), so the sheet's bare declarations and its `QWidget` and `*` rules draw the bar, and those with its
+`QPushButton`, `QAbstractButton` and `.QPushButton` rules reach each button, under the button's own sheet, which Qt
+ranks over one it inherits whatever the selectors. `TFlipButton` has no `Q_OBJECT`, so a `TFlipButton` selector matches
+nothing, on the desktop as here. Within a sheet a rule with more pseudo-states and classes (`.QPushButton`) wins, then
+one naming a type over `*`, then the later one. A button draws a label's subset: its background (colour, gradient or
+`background-image`), `border`, `border-radius` and `border-image`, `color`, the font, and `padding` and `margin`, one
+pixel of the sheet's to a dp, and its `font-size` one to an sp, so that a button's name follows the system's font size.
+Of the pseudo-states, `:checked` (`:on`) applies while a push-down button is down, `:pressed` while it is touched or its
+menu is open, `:open` while either, `:disabled` while no engine is attached, `:vertical` and `:active` always, as the
+desktop has them for a `TFlipButton` in an active window, and `:hover` and `:focus` never. The `background` and `border`
+shorthands set what they do not name back to none, as Qt's do. A bar draws its background, images and border. Where the
+sheets set no background colour and no border property, the button keeps the app's look, as the desktop keeps its native
+one, under their `background-image` where they set one; once they set a border, only their background is drawn, and the
+bar shows through the rest. Its text is the sheets' `color` on a colour or image of theirs, black or white, whichever
+reads, on a colour of theirs without one, and on the app's colour the sheets' `color` only where it reads; where a
+colour of theirs that is mostly see-through tints the app's, the app's text colour too only where it reads, and black or
+white where neither does. No button is bigger than the game area: its margin, border and padding shrink by one share to
+leave its content 48 dp of it, and a name too long for it ends in an ellipsis. What else is not drawn, and why, is in
+[`divergences.md`](divergences.md), "Button bars".
 
 ### The map
 
@@ -301,7 +328,8 @@ Phase E's requirements apply to every pull request here; in short, and what they
   read, which leaves an empty field nothing to say. Their keyboard capitalises sentences.
 - **Button bars and commands** are buttons with their names; push-down buttons and checkable commands are toggles
   (`Role.Switch` with `toggleableState`); a folder says it opens a menu. An icon-only one has its name as its content
-  description.
+  description. Whatever its style sheet asks, a button is 48 dp at least, and a down push-down button keeps its state
+  and its tick, so neither TalkBack nor a player who cannot tell its colours apart depends on the sheet's colours.
 - **Mini consoles** are lists TalkBack moves through line by line, as the main console after U6. Their new lines are
   not announced: Mudlet announces only the main console's (`announceIncomingText`).
 - **48 dp.** Script geometry can make a clickable label or a text box small: its touch bounds grow to 48 dp around

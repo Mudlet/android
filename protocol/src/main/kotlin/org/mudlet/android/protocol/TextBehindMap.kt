@@ -51,30 +51,66 @@ object TextBehindMap {
     }
 
     /**
-     * The [Ground] of a frame [width] by [height] of [pixels] in [layout], row by row, the same whichever. Its background
-     * is the commonest colour of the grid [MapBehindText.tones] samples, or none where at least half of them are not
-     * opaque. A solid colour is one at least [MIN_PIXELS] opaque pixels have on both sides along a row, a column or a
-     * diagonal, but not those of them that lie between the background and a colour beside them across that line, the
-     * antialiased edge of a room or of a line drawn between pixels, which is seen as part of what it edges. Null for a
-     * frame of no pixels.
+     * Makes the pixels of a frame's background transparent, so what is under them shows, and gives the [Ground] of the
+     * frame, [width] by [height] of [pixels] in [layout], row by row, the same whichever. Its background is the
+     * commonest colour of the grid [MapBehindText.tones] samples, or none where at least half of them are not opaque: no
+     * pixel changes then. A solid colour is one at least [MIN_PIXELS] opaque pixels have on both sides along a row, a
+     * column or a diagonal, but not those of them that lie between the background and a colour beside them across that
+     * line, the antialiased edge of a room or of a line drawn between pixels, which is seen as part of what it edges.
+     * Null for a frame of no pixels.
      */
-    fun ground(pixels: IntArray, width: Int, height: Int, layout: Layout = Layout.ARGB): Ground? {
+    fun cutOut(pixels: IntArray, width: Int, height: Int, layout: Layout = Layout.ARGB): Ground? = scan(pixels, width, height, layout)?.ground
+
+    /**
+     * What [cutOut] found, and what it took: [steps], the times its pass went on, once for each run of the background
+     * along a row and once for each other pixel, and [weighed], the pixels it tried line by line, which those within a
+     * room are not.
+     */
+    internal class Scan(val ground: Ground, val steps: Int, val weighed: Int)
+
+    // One pass for the colours and the cut: a frame is ten megabytes, and a second pass over it costs as much again as
+    // passing its background does. A pixel that was cut counts for those after it as the background did: it is not
+    // their colour, and edges nothing
+    internal fun scan(pixels: IntArray, width: Int, height: Int, layout: Layout): Scan? {
         if (width <= 0 || height <= 0) return null
         val background = background(pixels, width, height, layout)
         // No colour's, so that no pixel is taken for the background of a frame that has none
         val ground = background?.let(layout::rgb) ?: NO_COLOUR
+        // The pixel that is passed and cut: with no background the transparent one, which stays what it is
+        val skip = if (background != null) OPAQUE or ground else 0
         val counts = Counts()
         // Counted a run at a time, as a room's pixels come one after another
         var run = 0
         var runColour = 0
+        var steps = 0
+        var weighed = 0
+        // The pixels at a frame's sides have none on both sides of them, so they are only cut
+        cut(pixels, 0, width, skip)
+        cut(pixels, (height - 1) * width, height * width, skip)
         for (y in 1 until height - 1) {
-            for (i in y * width + 1 until y * width + width - 1) {
+            val row = y * width
+            val end = row + width - 1
+            if (pixels[row] == skip) pixels[row] = 0
+            if (pixels[end] == skip) pixels[end] = 0
+            var i = row + 1
+            while (i < end) {
+                steps++
                 val pixel = pixels[i]
-                if (pixel ushr 24 != 0xFF || pixel and 0xFFFFFF == ground) continue
-                // A row, the two diagonals and a column, each with the one across it
-                val along = solid(pixels, i, 1, width, ground, layout) || solid(pixels, i, width + 1, width - 1, ground, layout) ||
-                    solid(pixels, i, width - 1, width + 1, ground, layout) || solid(pixels, i, width, 1, ground, layout)
-                if (!along) continue
+                if (pixel == skip) {
+                    // Most of a map is its background, so a run of it is passed with one comparison a pixel
+                    do pixels[i++] = 0 while (i < end && pixels[i] == skip)
+                    continue
+                }
+                val at = i++
+                if (pixel ushr 24 != 0xFF) continue
+                // Within a room, its colour above, below and on both sides, it is solid along the row with no edge to
+                // weigh. Else a row, the two diagonals and a column, each with the one across it
+                if (pixels[at - 1] != pixel || pixels[at + 1] != pixel || pixels[at - width] != pixel || pixels[at + width] != pixel) {
+                    weighed++
+                    val along = solid(pixels, at, 1, width, ground, layout) || solid(pixels, at, width + 1, width - 1, ground, layout) ||
+                        solid(pixels, at, width - 1, width + 1, ground, layout) || solid(pixels, at, width, 1, ground, layout)
+                    if (!along) continue
+                }
                 if (pixel != runColour && run > 0) {
                     counts.add(layout.rgb(runColour), run)
                     run = 0
@@ -84,7 +120,7 @@ object TextBehindMap {
             }
         }
         if (run > 0) counts.add(layout.rgb(runColour), run)
-        return Ground(background, counts.atLeast(MIN_PIXELS))
+        return Scan(Ground(background, counts.atLeast(MIN_PIXELS)), steps, weighed)
     }
 
     /**
@@ -119,10 +155,8 @@ object TextBehindMap {
         return 0f
     }
 
-    /** Makes the [pixels], in [layout], of exactly the opaque [background] transparent, so what is under them shows. */
-    fun cutOut(pixels: IntArray, background: Int, layout: Layout = Layout.ARGB) {
-        val opaque = OPAQUE or layout.rgb(background)
-        for (i in pixels.indices) if (pixels[i] == opaque) pixels[i] = 0
+    private fun cut(pixels: IntArray, from: Int, until: Int, skip: Int) {
+        for (i in from until until) if (pixels[i] == skip) pixels[i] = 0
     }
 
     // The commonest colour of the sampled grid's opaque pixels, or null where at least half are not opaque
@@ -156,7 +190,7 @@ object TextBehindMap {
 
     // Whether the pixel at [i] has its colour on both sides [along] a line, and is not the blend of [background], if any,
     // and the pixel on either side [across] it, all in [layout]. This runs for every pixel of a frame that is not its
-    // background, so it makes no object
+    // background or within a room, so it makes no object
     private fun solid(pixels: IntArray, i: Int, along: Int, across: Int, background: Int, layout: Layout): Boolean {
         val pixel = pixels[i]
         if (pixels[i - along] != pixel || pixels[i + along] != pixel) return false

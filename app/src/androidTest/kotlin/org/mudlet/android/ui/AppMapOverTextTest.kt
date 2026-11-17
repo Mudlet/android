@@ -62,10 +62,10 @@ class AppMapOverTextTest {
         for ((what, source) in listOf("16 bits a pixel" to sixteenBits, "Display P3" to displayP3, "not premultiplied" to notPremultiplied)) {
             val overText = checkNotNull(AppMapClient.overText(source)) { what }
             val expected = pixels(source)
-            assertEquals(what, TextBehindMap.ground(expected, WIDTH, HEIGHT), overText.ground)
-            val background = checkNotNull(overText.ground.background) { "$what: a background" }
-            assertTrue("$what: the background is in the frame", OPAQUE or background in expected)
-            TextBehindMap.cutOut(expected, background)
+            val background = expected[0]
+            assertEquals(what, TextBehindMap.cutOut(expected.copyOf(), WIDTH, HEIGHT), overText.ground)
+            assertEquals("$what: the frame's first pixel is its background's", background, OPAQUE or checkNotNull(overText.ground.background) { "$what: a background" })
+            for (i in expected.indices) if (expected[i] == background) expected[i] = 0
             val cut = Bitmap.createBitmap(expected, WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
             assertTrue("$what: the frame of its colours with the background's cut out", cut.sameAs(overText.frame.asAndroidBitmap()))
         }

@@ -1,6 +1,7 @@
 package org.mudlet.android.protocol
 
 import com.sun.management.ThreadMXBean
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -19,11 +20,25 @@ class TextBehindMapTest {
             for (row in y until y + h) for (column in x until x + w) pixels[row * width + column] = colour
         }
 
-        fun ground() = TextBehindMap.ground(pixels, width, height)
+        // Of a copy, as the frame is cut out while its ground is found
+        fun ground() = TextBehindMap.cutOut(pixels.copyOf(), width, height)
 
         fun kept() = IntArray(pixels.size) { kept(pixels[it]) }
 
-        fun keptGround() = TextBehindMap.ground(kept(), width, height, TextBehindMap.Layout.ABGR)
+        fun keptGround() = TextBehindMap.cutOut(kept(), width, height, TextBehindMap.Layout.ABGR)
+
+        // The steps a pass takes: one for each run of the background along a row within the frame's sides, and one for
+        // each other pixel there
+        fun steps(background: Int): Int {
+            var steps = 0
+            for (y in 1 until height - 1) {
+                for (x in 1 until width - 1) {
+                    val pixel = pixels[y * width + x]
+                    if (pixel != background || x == 1 || pixels[y * width + x - 1] != background) steps++
+                }
+            }
+            return steps
+        }
     }
 
     // Mudlet's default map: DarkGreen and DarkCyan rooms on its black background, joined by exits in LightGray a
@@ -100,7 +115,7 @@ class TextBehindMapTest {
     @Test
     fun noFrameShowsNoTextAndAnEmptyOneTheMost() {
         assertEquals(0f, TextBehindMap.alpha(null, CONSOLE_FOREGROUND, CONSOLE_BACKGROUND), 0f)
-        assertNull(TextBehindMap.ground(IntArray(0), 0, 10))
+        assertNull(TextBehindMap.cutOut(IntArray(0), 0, 10))
         val empty = Frame(200, 100, OPAQUE or 0x102030).ground()!!
         assertEquals(TextBehindMap.Ground(0x102030, emptyList()), empty)
         assertEquals(TextBehindMap.MAX_ALPHA, TextBehindMap.alpha(empty, CONSOLE_FOREGROUND, CONSOLE_BACKGROUND), 0f)
@@ -166,7 +181,7 @@ class TextBehindMapTest {
         val thread = ManagementFactory.getThreadMXBean() as ThreadMXBean
         val id = Thread.currentThread().id
         val before = thread.getThreadAllocatedBytes(id)
-        val ground = frame.ground()
+        val ground = TextBehindMap.cutOut(frame.pixels, frame.width, frame.height)
         val allocated = thread.getThreadAllocatedBytes(id) - before
         assertEquals(listOf(DARK_GREEN, DARK_CYAN, DARK_RED, LIGHT_GRAY), ground?.solid)
         assertTrue("$allocated bytes for a frame of ${frame.pixels.size} pixels", allocated < frame.pixels.size / 4)
@@ -181,19 +196,95 @@ class TextBehindMapTest {
         assertEquals(colours, frame.ground()!!.solid)
     }
 
-    @Test
-    fun theCutOutClearsTheBackgroundAlone() {
-        val pixels = intArrayOf(OPAQUE or 0x102030, OPAQUE or 0x102031, 0x7F102030, OPAQUE or LIGHT_GRAY, OPAQUE or 0x102030)
-        TextBehindMap.cutOut(pixels, 0x102030)
-        assertEquals(listOf(0, OPAQUE or 0x102031, 0x7F102030, OPAQUE or LIGHT_GRAY, 0), pixels.toList())
+    // [frame] cut out is [frame] with each pixel of [background] transparent and no other changed, in either layout
+    private fun assertCutOut(what: String, frame: Frame, background: Int?) {
+        val expected = IntArray(frame.pixels.size) { if (frame.pixels[it] == background) 0 else frame.pixels[it] }
+        val cut = frame.pixels.copyOf()
+        assertEquals(what, background?.and(0xFFFFFF), TextBehindMap.cutOut(cut, frame.width, frame.height)?.background)
+        assertArrayEquals(what, expected, cut)
+        val kept = frame.kept()
+        TextBehindMap.cutOut(kept, frame.width, frame.height, TextBehindMap.Layout.ABGR)
+        assertArrayEquals("$what, as a bitmap keeps it", IntArray(expected.size) { kept(expected[it]) }, kept)
     }
 
     @Test
-    fun theCutOutClearsTheBackgroundAloneOfABitmapsOwnPixelsToo() {
-        val pixels = intArrayOf(OPAQUE or 0x102030, OPAQUE or 0x302010, OPAQUE or 0x102031, 0x7F102030, OPAQUE or LIGHT_GRAY, OPAQUE or 0x102030)
-        val kept = IntArray(pixels.size) { kept(pixels[it]) }
-        TextBehindMap.cutOut(kept, 0x102030, TextBehindMap.Layout.ABGR)
-        assertEquals(listOf(0, kept(pixels[1]), kept(pixels[2]), kept(pixels[3]), kept(pixels[4]), 0), kept.toList())
+    fun theCutOutClearsTheBackgroundAlone() {
+        val background = OPAQUE or 0x102030
+        val map = mudletMap(background = background)
+        // What is not the background, at the frame's sides and in its corners too: a colour next to it, a colour with
+        // red and blue the other way about, its colour translucent, and a room's
+        val others = intArrayOf(OPAQUE or 0x102031, OPAQUE or 0x302010, 0x7F102030, OPAQUE or DARK_GREEN)
+        others.forEachIndexed { i, other ->
+            map.rect(0, 200 * i, 3, 90, other)
+            map.rect(map.width - 2, 200 * i + 100, 2, 90, other)
+            map.rect(250 * i, 0, 125, 2, other)
+            map.rect(250 * i + 125, map.height - 1, 125, 1, other)
+            map.rect(400, 300 + 200 * i, 200, 90, other)
+        }
+        assertCutOut("a map", map, background)
+
+        // Frames too small to have a pixel within their sides, or a row or a column of them
+        for ((width, height) in listOf(1 to 1, 2 to 2, 7 to 1, 1 to 7, 7 to 2, 2 to 7, 3 to 3, 7 to 3, 3 to 7)) {
+            val frame = Frame(width, height, background)
+            frame.pixels[0] = OPAQUE or 0x102031
+            if (width * height > 4) frame.pixels[frame.pixels.size - 1] = 0x7F102030
+            assertCutOut("$width by $height", frame, if (width * height == 1) OPAQUE or 0x102031 else background)
+        }
+    }
+
+    @Test
+    fun aFrameWithNoBackgroundIsNotCut() {
+        val frame = mudletMap(background = 0)
+        frame.rect(0, 0, 200, 200, 0x80FFFFFF.toInt())
+        // Opaque black and white, the nearest there is to a colour that no pixel has
+        frame.rect(300, 60, 90, 3, OPAQUE)
+        frame.rect(300, 180, 90, 3, OPAQUE or 0xFFFFFF)
+        frame.rect(0, 300, 1, 90, OPAQUE or 0xFFFFFF)
+        assertCutOut("a transparent frame", frame, null)
+    }
+
+    @Test
+    fun aRunOfTheBackgroundIsPassedInOneStep() {
+        // A frame is weighed and cut out as each comes, two and a half million pixels of it on a phone, and most of
+        // them the map's background
+        val background = OPAQUE or 0x102030
+        val empty = Frame(1000, 800, background)
+        assertEquals(798, TextBehindMap.scan(empty.pixels, 1000, 800, TextBehindMap.Layout.ARGB)?.steps)
+        val map = mudletMap(background = background)
+        val steps = map.steps(background)
+        assertTrue("$steps steps for a map of ${map.pixels.size} pixels", steps < map.pixels.size / 5)
+        assertEquals(steps, TextBehindMap.scan(map.pixels.copyOf(), map.width, map.height, TextBehindMap.Layout.ARGB)?.steps)
+        assertEquals(steps, TextBehindMap.scan(map.kept(), map.width, map.height, TextBehindMap.Layout.ABGR)?.steps)
+        // and a transparent frame's, with nothing to cut
+        val transparent = mudletMap(background = 0)
+        assertEquals(steps, TextBehindMap.scan(transparent.pixels, transparent.width, transparent.height, TextBehindMap.Layout.ARGB)?.steps)
+    }
+
+    @Test
+    fun aPixelWithinARoomIsNotTriedLineByLine() {
+        // Rooms are most of what a map draws, and a pixel's lines cost several times what passing it does
+        val frame = Frame(300, 300, OPAQUE or 0x102030)
+        frame.rect(100, 100, 100, 100, OPAQUE or DARK_GREEN)
+        val scan = TextBehindMap.scan(frame.pixels, frame.width, frame.height, TextBehindMap.Layout.ARGB)
+        assertEquals(TextBehindMap.Ground(0x102030, listOf(DARK_GREEN)), scan?.ground)
+        assertEquals("the room's outermost pixels alone", 4 * 99, scan?.weighed)
+    }
+
+    @Test
+    fun anEdgeTwoPixelsWideIsNoRoomWhereItHasItsColourOnThreeSides() {
+        // A room with an edge two pixels wide on each side, each a share of its grey: the outer pixels of each count,
+        // 38 of them, and the inner ones, with the room on their fourth side, do not, or each edge would have 76
+        val frame = Frame(200, 200, OPAQUE)
+        frame.rect(78, 80, 2, 40, OPAQUE or 0x303030)
+        frame.rect(120, 80, 2, 40, OPAQUE or 0x404040)
+        frame.rect(80, 78, 40, 2, OPAQUE or 0x505050)
+        frame.rect(80, 120, 40, 2, OPAQUE or 0x606060)
+        frame.rect(80, 80, 40, 40, OPAQUE or LIGHT_GRAY)
+        assertEquals(TextBehindMap.Ground(0x000000, listOf(LIGHT_GRAY)), frame.ground())
+        assertEquals(frame.ground(), frame.keptGround())
+        // Long enough for its outer pixels alone, each edge counts
+        frame.rect(78, 60, 2, 80, OPAQUE or 0x303030)
+        assertEquals(listOf(0x303030, LIGHT_GRAY), frame.ground()!!.solid)
     }
 
     @Test
@@ -231,6 +322,7 @@ class TextBehindMapTest {
                 frame.rect(x, y - 1, w, 1, edge)
             }
             assertEquals("frame $it", frame.ground(), frame.keptGround())
+            assertCutOut("frame $it", frame, colours[0])
         }
     }
 

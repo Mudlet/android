@@ -9,7 +9,6 @@ import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -24,8 +23,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -269,9 +266,10 @@ class ScreenshotTest {
         compose.onNode(lua).performSemanticsAction(SemanticsActions.SetSelection) { it(at, at, true) }
         compose.onNode(lua).performTextInput("\n")
         compose.onNode(lua).performTextInput("sen")
-        waitFor(hasContentDescription(string(R.string.lua_indent)))
+        val keys = hasContentDescription(string(R.string.lua_indent))
+        waitFor(keys)
         // An emulator set up with keys of its own shows no keyboard, and this screenshot is then not taken
-        if (keyboardComes()) save("script-item-keyboard-$mode")
+        if (compose.keyboardHasCome(keys, WAIT_MS)) save("script-item-keyboard-$mode")
 
         activate(hasText(string(R.string.scripts_apply)))
         compose.waitForIdle()
@@ -285,16 +283,6 @@ class ScreenshotTest {
         waitFor(hasText(string(R.string.scripts_applied, "Wave back")))
         compose.waitUntil(SNACKBAR_MS) { compose.onAllNodes(hasText(string(R.string.scripts_applied, "Wave back"))).fetchSemanticsNodes().isEmpty() }
         save("script-item-problem-$mode")
-    }
-
-    private fun keyboardComes(): Boolean {
-        val view = compose.activity.window.decorView
-        return try {
-            compose.waitUntil(WAIT_MS) { compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true } }
-            true
-        } catch (_: ComposeTimeoutException) {
-            false
-        }
     }
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }

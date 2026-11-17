@@ -402,6 +402,10 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
 - The engine draws the map again on upstream's `mapRepaintRequested`, at most once a turn of its event loop, when
   `viewOnly` changes, when the mapper shows or changes size, and on a new `setMapScale`. It sends `map` only when the PNG, `viewOnly`, `view`
   or `info` differs from what it last sent.
+- Much that has Mudlet ask for the map again leaves its picture as it was, as a change to `info` does, and the engine
+  then draws both `map` and `appMap`, whichever changed; it can tell only once it has drawn them. So it keeps the
+  pixels it last drew of each, 4 bytes a pixel, while that map shows: a map that comes out as those pixels is not
+  made a PNG again, and a frame that is the last one over again is not made a message to compare with the last.
 - The PNG of `map` and of `appMap` is the engine's own (`MapPng.cpp`), as Qt's writer took several times as long as
   drawing the map did: the pixels Qt's PNG would have, unfiltered, in a deflate stream that only says where a pixel
   repeats the one before it or the one above it. It is some three times as large and made in a tenth of the time. A

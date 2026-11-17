@@ -2,6 +2,7 @@
 
 #include "IEngine.h"
 #include "IFrontend.h"
+#include "MapPng.h"
 #include "SessionStore.h"
 
 #include <QElapsedTimer>
@@ -258,6 +259,9 @@ private:
     std::optional<QSize> mMapSize;
     // Device pixels to each of the mapper window's, as setMapScale() asked
     double mMapScale = 1;
+    // The mapper's and the app's map as last drawn
+    MapPicture mMapPicture;
+    MapPicture mAppMapPicture;
     // The seq of the last moveMap() each map took, which the frames drawn since carry
     qint64 mMapMoved = 0;
     qint64 mAppMapMoved = 0;

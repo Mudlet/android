@@ -221,6 +221,37 @@ QImage filled(int width, int height, const QColor& colour, QImage::Format format
     return image;
 }
 
+// A map drawn again that came out as it was gets the PNG made of it the first time, which is told by where its bytes
+// are. Each picture is drawn anew, as the engine's are, so it is the pixels that are told apart
+void checkPictureKept()
+{
+    const char* name = "a map drawn again";
+    const auto drawn = [](const QColor& background = Qt::black, const QSize& size = QSize(200, 120)) {
+        return mapLike(size, 1, background);
+    };
+    MapPicture kept;
+    check(kept.png(QImage()).isEmpty(), name, "a PNG of no picture");
+    const QByteArray first = kept.png(drawn());
+    check(first == mapPng(drawn()), name, "the first picture's PNG is not the writer's");
+    check(kept.png(drawn()).constData() == first.constData(), name, "a PNG was made of the picture it had");
+    check(kept.png(drawn().convertToFormat(QImage::Format_RGBA8888)).constData() == first.constData(), name, "a PNG was made of the pixels it had, in another format");
+
+    QImage dotted = drawn();
+    dotted.setPixel(dotted.width() - 1, dotted.height() - 1, qRgb(1, 2, 3));
+    const QByteArray second = kept.png(dotted);
+    check(second == mapPng(dotted) && second != first, name, "a picture with one pixel changed has not its own PNG");
+    check(kept.png(drawn()) == first, name, "the first picture after another has not its own PNG");
+    check(kept.png(drawn(Qt::black, QSize(120, 200))) == mapPng(drawn(Qt::black, QSize(120, 200))), name, "a picture of another size has not its own PNG");
+    check(kept.png(drawn(Qt::transparent)) == mapPng(drawn(Qt::transparent)), name, "a picture on another background has not its own PNG");
+
+    check(kept.png(QImage()).isEmpty(), name, "a PNG of no picture, after one");
+    const QByteArray third = kept.png(drawn());
+    check(third == first, name, "the picture after no picture has not its own PNG");
+    kept.clear();
+    const QByteArray fourth = kept.png(drawn());
+    check(fourth == first && fourth.constData() != third.constData(), name, "the picture was kept past clear()");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -248,6 +279,7 @@ int main(int argc, char** argv)
     // 12 MB as the cheap stream: under a quarter of the picture's 64 MiB, over the half of a frame the writer keeps to
     checkPicture("the largest map, too large for a frame as the cheap stream", sloped(filled(4096, 4096, Qt::black), 700), Writer::qt);
     check(mapPng(QImage()).isEmpty(), "no picture", "a PNG of it");
+    checkPictureKept();
 
     // The engine's thread pays for each byte, and the app's for parsing it: a phone's screen of one colour, 10 MB of
     // pixels, is runs alone

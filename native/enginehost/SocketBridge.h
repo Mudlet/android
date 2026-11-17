@@ -200,11 +200,18 @@ protected:
     // As IFrontend::buttonBars() and commands() last gave them, as sent
     QJsonObject mButtonBars = buttonBarsMessage({});
     QJsonObject mCommands = commandsMessage({});
+    // A map's message as last sent, and the frame it was made of, none where it was made of no frame: the engine
+    // draws the map again for much that leaves the frame as it was, and that frame would make that message again
+    struct KeptMap
+    {
+        std::optional<MapFrame> frame;
+        QJsonObject message;
+    };
     // The map message last sent, empty while no mapper shows
-    QJsonObject mMap;
+    KeptMap mMap;
     // The appMap message last sent to this UI, empty until the engine has drawn the app's map or said there is nothing to
     // draw
-    QJsonObject mAppMap;
+    KeptMap mAppMap;
     // The mapDownload message last sent, empty until the engine has sent one
     QJsonObject mMapDownload;
     std::deque<StoredLine> mScrollback;

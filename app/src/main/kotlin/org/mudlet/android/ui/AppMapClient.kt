@@ -10,8 +10,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.createBitmap
 import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.KeptPixels
 import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapPoint
@@ -23,6 +25,7 @@ import org.mudlet.android.protocol.RoomMatch
 import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.MapSource
+import java.nio.IntBuffer
 import java.util.EnumMap
 import java.util.concurrent.Executors
 import kotlin.math.floor
@@ -396,6 +399,9 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         // What has the map, whichever profile is the front: the game screen's, which the front's map follows
         private val wanted = EnumMap<Owner, Size?>(Owner::class.java)
 
+        /** The pixels [overText] cuts a frame out in, on the reader's thread or the cutter's. */
+        internal val cutOutPixels = KeptPixels()
+
         // One thread, under the others: a cut-out ahead of the swap is worth no stutter of what is on the screen
         private val cutter = Executors.newSingleThreadExecutor {
             Thread(it, "AppMapCutOut").apply {
@@ -443,13 +449,26 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             return Decoded(bitmap?.asImageBitmap(), tones, bitmap?.takeIf { textBehind }?.let(::overText))
         }
 
-        private fun overText(bitmap: Bitmap): OverText? {
-            val pixels = IntArray(bitmap.width * bitmap.height)
-            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            val ground = TextBehindMap.ground(pixels, bitmap.width, bitmap.height) ?: return null
+        internal fun overText(bitmap: Bitmap): OverText? = cutOutPixels.use(bitmap.width * bitmap.height) { cutOutIn(it, bitmap) }
+
+        private fun cutOutIn(pixels: IntArray, bitmap: Bitmap): OverText? {
+            val width = bitmap.width
+            val height = bitmap.height
+            // A decoded frame's pixels are copied as the bitmap keeps them, and the cut frame's copied back, which
+            // getPixels and createBitmap(pixels) would convert one by one. A bitmap that keeps anything but sRGB
+            // colours, premultiplied, a pixel to an Int, is converted
+            val own = bitmap.config == Bitmap.Config.ARGB_8888 && bitmap.isPremultiplied && bitmap.colorSpace?.isSrgb == true
+            val layout = if (own) TextBehindMap.Layout.ABGR else TextBehindMap.Layout.ARGB
+            if (own) bitmap.copyPixelsToBuffer(IntBuffer.wrap(pixels)) else bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            val ground = TextBehindMap.ground(pixels, width, height, layout) ?: return null
             val background = ground.background ?: return OverText(ground, bitmap.asImageBitmap())
-            TextBehindMap.cutOut(pixels, background)
-            return OverText(ground, Bitmap.createBitmap(pixels, bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888).asImageBitmap())
+            TextBehindMap.cutOut(pixels, background, layout)
+            val frame = if (own) {
+                createBitmap(width, height).apply { copyPixelsFromBuffer(IntBuffer.wrap(pixels)) }
+            } else {
+                Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+            }
+            return OverText(ground, frame.asImageBitmap())
         }
 
         /** What [end] says to the player of how a download ended; null while none has ended. */

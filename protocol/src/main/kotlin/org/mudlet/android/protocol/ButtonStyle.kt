@@ -115,7 +115,6 @@ data class ButtonStyle(val style: LabelStyle, val padding: Edges?, val margin: E
                 "focus" to false,
                 "flat" to false,
                 "default" to false,
-                "vertical" to true,
                 "horizontal" to false,
                 "active" to true,
             )

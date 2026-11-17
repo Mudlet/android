@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -240,7 +241,7 @@ private fun BarButtonView(button: BarButton, barSheet: String, barStyle: LabelSt
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val look = remember(barSheet, button.styleSheet, down, pressed, menuOpen, engine) {
-        ButtonStyle.of(barSheet, button.styleSheet, ButtonState(checked = down, pressed = pressed || menuOpen, enabled = engine))
+        ButtonStyle.of(barSheet, button.styleSheet, ButtonState(checked = down, pressed = pressed || if (Build.VERSION.SDK_INT >= 34) false else menuOpen, enabled = engine))
     }
     val style = look.style
     val action = when {
@@ -255,7 +256,7 @@ private fun BarButtonView(button: BarButton, barSheet: String, barStyle: LabelSt
         down -> colors.primary to colors.onPrimary
         else -> colors.surfaceVariant to colors.onSurfaceVariant
     }
-    val fill = style.background ?: LabelFill.Solid(appColour.toArgb()).takeIf { look.appFill }
+    val fill = style.background ?: LabelFill.Solid(appColour.toArgb()).takeIf { if (Build.VERSION.SDK_INT >= 34) look.appFill else true }
     val content = Color(look.text(barStyle, appColour.toArgb(), appText.toArgb()))
     val frame = style.copy(borderColor = style.borderColor ?: content.toArgb())
     val backgroundImage = engineImage(style.backgroundImage?.let { ImageRequest(it) })

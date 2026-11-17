@@ -209,9 +209,12 @@ QString MudletEngine::saveProfile(const Profile& profile)
     } else if (const QString problem = Profile::newNameProblem(profile.name); !problem.isEmpty()) {
         return problem;
     }
-    // A running profile read these when it started: they take effect at its next start
     if (const QString problem = mProfiles.save(stored, folder.isEmpty()); !problem.isEmpty()) {
         return QStringLiteral("could not store \"%1\": %2").arg(stored.name, problem);
+    }
+    // A running profile read these when it started: the login it is given now, the rest take effect at its next start
+    if (MudletProfile* open = openNamed(stored.name)) {
+        open->setLogin(stored.login);
     }
     return {};
 }

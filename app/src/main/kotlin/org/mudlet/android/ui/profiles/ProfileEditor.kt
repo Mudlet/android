@@ -81,8 +81,15 @@ fun ProfileEditor(name: String?, onClose: () -> Unit) {
             waiting = false
             when {
                 refused != null -> error = refused
-                password.isNotEmpty() && !passwords.set(profile.name, password) -> error = passwordNotStored
-                else -> onClose()
+
+                password.isEmpty() -> onClose()
+
+                !passwords.set(profile.name, password) -> error = passwordNotStored
+
+                else -> {
+                    EngineClient.givePassword(profile.name, password)
+                    onClose()
+                }
             }
         }
     }
@@ -141,7 +148,12 @@ fun ProfileEditor(name: String?, onClose: () -> Unit) {
             )
             if (passwordStored && name != null) {
                 TextButton({
-                    if (passwords.forget(name)) passwordStored = false else error = passwordNotForgotten
+                    if (passwords.forget(name)) {
+                        passwordStored = false
+                        EngineClient.givePassword(name, null)
+                    } else {
+                        error = passwordNotForgotten
+                    }
                 }) { Text(stringResource(R.string.profile_password_forget)) }
             }
             SwitchRow(stringResource(R.string.profile_auto_reconnect), autoReconnect) { autoReconnect = it }

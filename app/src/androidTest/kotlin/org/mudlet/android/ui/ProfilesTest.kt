@@ -128,6 +128,8 @@ class ProfilesTest {
             assertEquals("gamma secret", passwords.get("Gamma"))
             assertTrue("a game added here is given the app's settings as it first loads", Settings.awaitsDefaults("Gamma"))
         }
+        // Only a game that is open is given its password: for one that is not, the request would open it
+        engine.assertNoRequest(setOf("openProfile"), 500)
     }
 
     @Test
@@ -160,6 +162,34 @@ class ProfilesTest {
         activate(hasText(string(R.string.profile_password_forget)))
         compose.onNodeWithText(string(R.string.profile_password_stored)).assertDoesNotExist()
         compose.runOnIdle { assertFalse(passwords.has("Alpha")) }
+    }
+
+    @Test
+    fun givesAnOpenGameThePasswordSavedOrForgottenForIt() {
+        listed(ALPHA)
+        fake.engine.openAlongside("Alpha")
+        engine.openProfiles()
+        compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
+
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        type(R.string.profile_password, "alpha secret")
+        activate(hasText(string(R.string.profile_save)))
+        engine.profiles(listOf(ALPHA), engine.receive("saveProfile"))
+        // The engine has a profile's password only from an openProfile, and the game's Reconnect sends none
+        val given = engine.receive("openProfile")
+        assertEquals("Alpha", given.getString("name"))
+        assertEquals("alpha secret", given.getString("password"))
+        assertFalse("the game is not connected for it", given.getBoolean("connect"))
+        assertTrue("nor the other games closed", given.getBoolean("alongside"))
+
+        waitFor(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        activate(hasText(string(R.string.profile_password_forget)))
+        val withdrawn = engine.receive("openProfile")
+        assertEquals("Alpha", withdrawn.getString("name"))
+        assertFalse("the game is not left with a password the player had the app forget", withdrawn.has("password"))
+        assertFalse(withdrawn.getBoolean("connect"))
+        assertTrue(withdrawn.getBoolean("alongside"))
     }
 
     @Test

@@ -160,6 +160,28 @@
     <string name="about_load_failed">The licence list could not be read: %1$s</string>
     <!-- Shown when a link cannot be opened; %1$s is the web address -->
     <string name="about_no_browser">No app here can open %1$s</string>
+    <!-- About: the button that opens the screen for sending the developers a problem report; desktop Mudlet's Help menu has "Report an issue" -->
+    <string name="about_report">Report a problem</string>
+    <!-- Title of the problem report screen -->
+    <string name="report_title">Report a problem</string>
+    <!-- Problem report screen: what it is, above the report itself -->
+    <string name="report_intro">Below is everything a report holds: the app\'s and the engine\'s recent log, the versions and this device. Saved passwords and your characters\' logins are taken out. Nothing leaves your device until you send it: Share opens Android\'s share sheet, and Open a GitHub issue copies the report and opens your browser.</string>
+    <!-- Problem report screen: the button that opens Android's share sheet with the report as text -->
+    <string name="report_share">Share</string>
+    <!-- Problem report screen: the button that copies the report to the clipboard -->
+    <string name="report_copy">Copy</string>
+    <!-- Problem report screen: the button that copies the report and opens a new issue on the app's GitHub in the browser, with the versions filled in -->
+    <string name="report_github">Open a GitHub issue</string>
+    <!-- Problem report screen: heading above the report's text -->
+    <string name="report_contents_heading">What will be sent</string>
+    <!-- Problem report screen: shown while the log is read -->
+    <string name="report_collecting">Collecting…</string>
+    <!-- The subject a shared problem report is given, as an email's -->
+    <string name="report_subject">Mudlet for Android: problem report</string>
+    <!-- A message when no app on the device can take a shared problem report -->
+    <string name="report_no_share">No app here can take the report: copy it instead</string>
+    <!-- A short message once the problem report is on the clipboard (before Android 13, which says so itself) -->
+    <string name="report_copied">Report copied</string>
 
     <!-- The screen of one component of the licence list: its version, licence and copyright, then the licence texts -->
     <!-- %1$s is the component's version -->

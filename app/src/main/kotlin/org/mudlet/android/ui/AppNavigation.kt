@@ -42,6 +42,7 @@ import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
+import org.mudlet.android.ui.report.ReportProblemScreen
 import org.mudlet.android.ui.scripts.LUA_FUNCTIONS_ASSET
 import org.mudlet.android.ui.scripts.LuaFunction
 import org.mudlet.android.ui.scripts.ScriptItemKey
@@ -69,6 +70,7 @@ private object Routes {
     const val PROFILE = "profile?name={name}"
     const val ABOUT = "about"
     const val LICENCE = "licence/{id}"
+    const val REPORT = "report"
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
 
@@ -159,12 +161,14 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                             onBack = { nav.navigateUp() },
                             onOpenComponent = { if (twoPane) open = it else nav.navigate(Routes.licence(it)) { launchSingleTop = true } },
                             selected = open,
+                            onReportProblem = { nav.navigate(Routes.REPORT) { launchSingleTop = true } },
                         )
                     },
                     detailContent = { LicenceScreen(it, onBack = { open = null }) },
                     empty = { DetailPlaceholder(stringResource(R.string.about_pick)) },
                 )
             }
+            composable(Routes.REPORT) { ReportProblemScreen(onBack = { nav.navigateUp() }) }
             composable(Routes.LICENCE, listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 LicenceScreen(componentId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.navigateUp() })
             }

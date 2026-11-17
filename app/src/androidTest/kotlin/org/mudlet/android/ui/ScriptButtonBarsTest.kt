@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -14,6 +17,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
@@ -27,8 +31,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -49,12 +55,15 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.EngineMessages.bar
 import org.mudlet.android.ui.EngineMessages.button
 import java.io.ByteArrayOutputStream
+import kotlin.math.abs
 
 /**
  * The button bars and commands a profile's scripts and packages add (docs/architecture.md, "Button bars and commands"),
  * against a fake engine: a bar's buttons as 48 dp buttons read after the script windows, whose tap sends `pressButton`,
  * a push-down button as a switch, a folder's menu, where bars go beside or above the console, an unnamed icon button,
- * and the Extensions menu of commands, whose tap sends `activateCommand`.
+ * the style sheets of a bar and its buttons drawn (docs/phase-f.md, "Button bars and commands") with a 48 dp button,
+ * a switch's state and a down button's tick kept whatever they ask, a button no bigger than the game area whatever
+ * its sheet's lengths or its name ask, and the Extensions menu of commands, whose tap sends `activateCommand`.
  *
  * A menu is a popup, a root of its own, so the checks on the whole screen run only while none is open.
  */
@@ -231,6 +240,185 @@ class ScriptButtonBarsTest {
     }
 
     @Test
+    fun aBarsStyleSheetColoursItsButtonsAndAButtonsOwnIsOverIt() {
+        // Its `*` rule is the bar's, and its buttons' below their QPushButton rule, which ranks over it
+        val sheet = "* { background-color: #202020; } QPushButton { background-color: #000080; color: #ffff00; }"
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North"), button(11, "South", styleSheet = "background-color: #800000")), styleSheet = sheet))
+        val north = hasText("North") and hasClickAction()
+        val south = hasText("South") and hasClickAction()
+        waitFor(north)
+        waitFor(south)
+
+        assertEdgeColour(NAVY, north)
+        assertTextIn(YELLOW, north)
+        // Its own sheet's background over the bar's, the bar's colour where its own sets none
+        assertEdgeColour(MAROON, south)
+        assertTextIn(YELLOW, south)
+        // In the button's margin, the bar's own
+        val bar = compose.onNode(hasContentDescription(string(R.string.bar_description, "Moves"))).captureToImage().toPixelMap()
+        assertColour(DARK_GREY, bar[1, 1])
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aDownPushDownButtonDrawsItsCheckedStyleAndStaysOn() {
+        val sheet = "QPushButton:checked { background-color: #006400; } QPushButton { background-color: #000080; color: #ffffff; }"
+        session.buttonBars(bar(1, "Modes", "top", listOf(button(20, "Sneak", pushDown = true, styleSheet = sheet))))
+        val sneak = hasText("Sneak") and hasClickAction()
+        waitFor(sneak)
+        compose.onNode(sneak).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
+        assertEdgeColour(NAVY, sneak)
+
+        session.buttonBars(bar(1, "Modes", "top", listOf(button(20, "Sneak", pushDown = true, checked = true, styleSheet = sheet))))
+        // Whatever its colours, it is said to be on
+        waitFor(sneak and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        assertEdgeColour(GREEN, sneak)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aStyleSheetThatAsksForLessStillLeavesA48DpButton() {
+        val sheet = "padding: 0px; margin: 0px; border: none; max-height: 16px; background-color: #000080; color: #ffffff"
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "N", styleSheet = sheet))))
+        val n = hasText("N") and hasClickAction()
+        waitFor(n)
+        val button = bounds(n)
+        val min = with(compose.density) { 48.dp.toPx() }
+        assertTrue("width ${button.width} < $min", button.width >= min - 1)
+        assertTrue("height ${button.height} < $min", button.height >= min - 1)
+        // Filled to its corners, as a sheet that sets a background and no radius has it, all of its 48 dp
+        compose.waitForIdle()
+        val image = compose.onNode(n).captureToImage().toPixelMap()
+        assertColour(NAVY, image[1, 1])
+        assertColour(NAVY, image[image.width - 2, image.height - 2])
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aSheetsOwnFrameShowsTheBarThroughAndItsTextReadsOnIt() {
+        // The button's own sheet takes back the background the bar's QWidget rule gives it, and draws a frame of its own
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North", styleSheet = "background: none; border: none")), styleSheet = "QWidget { background-color: #202020; }"))
+        val north = hasText("North") and hasClickAction()
+        waitFor(north)
+        // As on the desktop, no button's colour under it: the bar's dark grey, and white text on that
+        assertEdgeColour(DARK_GREY, north)
+        assertTextIn(WHITE, north)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aDownButtonWithNothingButItsTickStillShowsIt() {
+        val sheet = "background-color: #000080; color: #ffffff"
+        session.buttonBars(bar(1, "Modes", "top", listOf(button(20, "", pushDown = true, checked = true, styleSheet = sheet))))
+        val sneak = hasContentDescription(string(R.string.bar_button_unnamed, 1, "Modes")) and hasClickAction()
+        waitFor(sneak and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        // The tick is all there is to draw in the sheet's colour
+        assertTextIn(WHITE, sneak)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aSheetsPaddingBorderAndMarginAreTheButtonsRoom() {
+        val sheet = "padding: 0px 40px; border: 10px solid #ffffff; margin: 20px; background-color: #000080; color: #ffffff"
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "N", styleSheet = sheet), button(11, "S"))))
+        val n = hasText("N") and hasClickAction()
+        val south = hasText("S") and hasClickAction()
+        waitFor(n)
+        waitFor(south)
+        // Its padding inside its border, which is drawn at its edge
+        val padded = with(compose.density) { 100.dp.toPx() }
+        assertTrue("width ${bounds(n).width} < $padded", bounds(n).width >= padded - PIXELS)
+        assertEdgeColour(WHITE, n)
+        // Its margin, then the next button's own of 2 dp
+        val gap = with(compose.density) { 22.dp.toPx() }
+        assertTrue("gap ${bounds(south).left - bounds(n).right} < $gap", bounds(south).left - bounds(n).right >= gap - PIXELS)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aButtonIsPressedWhileAFingerIsOnIt() {
+        val sheet = "QPushButton:pressed { background-color: #006400; } QPushButton { background-color: #000080; color: #ffffff; }"
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "North", styleSheet = sheet))))
+        val north = hasText("North") and hasClickAction()
+        waitFor(north)
+        assertEdgeColour(NAVY, north)
+
+        compose.onNode(north).performTouchInput { down(center) }
+        // After the wait that tells a press from a scroll of the row; the app's ripple tints it, so not the green
+        // itself
+        compose.waitUntil(WAIT_MS) { edgeColour(north).let { it.green > it.blue } }
+        compose.onNode(north).performTouchInput { up() }
+        assertEquals(10, session.receive("pressButton").getInt("button"))
+        compose.waitUntil(WAIT_MS) { edgeColour(north).let { it.blue > it.green } }
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aSheetsLargeFontMakesItsButtonTallEnoughForItsLetters() {
+        val sheet = "font-size: 60px; background-color: #000080; color: #ffffff"
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "N", styleSheet = sheet))))
+        val n = hasText("N") and hasClickAction()
+        waitFor(n)
+        // The line is as high as the sheet's font, not the theme's 24 sp, at which the button's 48 dp would cut the
+        // letters off
+        val font = with(compose.density) { 60.sp.toPx() }
+        val height = compose.onNode(n).fetchSemanticsNode().size.height
+        assertTrue("height $height < $font", height >= font)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun lengthsNoScreenCouldShowLeaveABarOfButtonsToPress() {
+        // Its buttons' margin and padding at their longest are thousands of dp across, and seventeen such places in a
+        // row of a vertical bar are wider than Compose can measure
+        val sheet = "margin: 0px 99999px; padding: 0px 99999px; background-color: #000080; color: #ffffff"
+        session.buttonBars(bar(1, "Wide", "top", (1..17).map { button(100 + it, "W$it", styleSheet = sheet) }, vertical = true, columns = 17))
+        val first = hasText("W1") and hasClickAction()
+        waitFor(first)
+        compose.onNodeWithText("the main console").assertIsDisplayed()
+        // Cut down to the game area, of which the button keeps its 48 dp
+        val size = compose.onNode(first).fetchSemanticsNode().size
+        val min = with(compose.density) { 48.dp.toPx() }
+        val screen = compose.onRoot().fetchSemanticsNode().size.width
+        assertTrue("width ${size.width} < $min", size.width >= min - 1)
+        assertTrue("height ${size.height} < $min", size.height >= min - 1)
+        assertTrue("width ${size.width} > $screen", size.width <= screen)
+        activate(first)
+        assertEquals(101, session.receive("pressButton").getInt("button"))
+    }
+
+    @Test
+    fun aButtonIsNoWiderThanTheGameAreaHoweverLongItsName() {
+        val name = (1..60).joinToString(" ") { "North" }
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, name))))
+        // TalkBack has all of the name; on the screen it is cut to the area's width
+        val north = hasText(name) and hasClickAction()
+        waitFor(north)
+        val width = compose.onNode(north).fetchSemanticsNode().size.width
+        val screen = compose.onRoot().fetchSemanticsNode().size.width
+        assertTrue("width $width > $screen", width <= screen)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aFolderIsPressedWhileItsMenuIsOpen() {
+        val sheet = "QPushButton:pressed { background-color: #006400; } QPushButton { background-color: #000080; color: #ffffff; }"
+        session.buttonBars(bar(1, "Spells", "top", listOf(button(30, "Cast", styleSheet = sheet, children = listOf(button(31, "Fireball"))))))
+        val cast = hasText("Cast") and hasClickAction()
+        waitFor(cast)
+        assertEdgeColour(NAVY, cast)
+
+        activate(cast)
+        waitFor(hasText("Fireball") and hasClickAction())
+        assertEdgeColour(GREEN, cast)
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Fireball")).fetchSemanticsNodes().isEmpty() }
+        assertEquals(30, session.receive("pressButton").getInt("button"))
+        assertEdgeColour(NAVY, cast)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
     fun theExtensionsMenuListsTheCommandsByMenuPathAndTheEngineGetsTheOnePicked() {
         val extensions = hasContentDescription(string(R.string.commands_menu)) and hasClickAction()
         // No command, no button
@@ -262,6 +450,30 @@ class ScriptButtonBarsTest {
         commands(command(2, "Mapper", onMenu = false, onToolbar = true, pulse = true))
         waitFor(hasContentDescription(string(R.string.commands_menu_attention)) and hasClickAction())
         compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    /** The colour [node] is drawn in at its start edge, clear of its content. */
+    private fun edgeColour(node: SemanticsMatcher): Color {
+        compose.waitForIdle()
+        val image = compose.onNode(node).captureToImage().toPixelMap()
+        return image[EDGE_PX, image.height / 2]
+    }
+
+    private fun assertEdgeColour(expected: Color, node: SemanticsMatcher) = assertColour(expected, edgeColour(node))
+
+    private fun assertColour(expected: Color, drawn: Color) = assertEquals("ARGB %08x, then %08x".format(expected.toArgb(), drawn.toArgb()), expected.toArgb(), drawn.toArgb())
+
+    /** That some of [node] is drawn in [text]'s colour, as the middle of its letters' strokes are. */
+    private fun assertTextIn(text: Color, node: SemanticsMatcher) {
+        compose.waitForIdle()
+        val image = compose.onNode(node).captureToImage().toPixelMap()
+        val drawn = (0 until image.width).any { x ->
+            (0 until image.height).any { y ->
+                val c = image[x, y]
+                abs(c.red - text.red) < NEAR && abs(c.green - text.green) < NEAR && abs(c.blue - text.blue) < NEAR
+            }
+        }
+        assertTrue("no pixel of %08x".format(text.toArgb()), drawn)
     }
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
@@ -314,6 +526,20 @@ class ScriptButtonBarsTest {
 
         // Rounding to whole pixels
         const val PIXELS = 2f
+
+        // In from a button's start, clear of its content, which starts 12 dp in
+        const val EDGE_PX = 4
+
+        // How far from a colour a pixel of text drawn in it may be, of each channel's 1
+        const val NEAR = 0.1f
+
+        // Each far from the others and from the theme's own, and text on them reads
+        val NAVY = Color(0xFF000080)
+        val MAROON = Color(0xFF800000)
+        val GREEN = Color(0xFF006400)
+        val DARK_GREY = Color(0xFF202020)
+        val YELLOW = Color(0xFFFFFF00)
+        val WHITE = Color(0xFFFFFFFF)
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L
     }

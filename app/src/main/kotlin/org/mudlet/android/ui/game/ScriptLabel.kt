@@ -522,12 +522,7 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
     val borderImage = engineImage(style.borderImage?.let { ImageRequest(it) })
     val backgroundImage = engineImage(style.backgroundImage?.let { ImageRequest(it) })
     val border = style.drawnBorderWidth * scale
-    val inner = Edges(
-        style.padding.top + style.drawnBorderWidth,
-        style.padding.right + style.drawnBorderWidth,
-        style.padding.bottom + style.drawnBorderWidth,
-        style.padding.left + style.drawnBorderWidth,
-    )
+    val inner = style.padding + style.drawnBorderWidth
     val alignment = BiasAlignment(
         when (style.hAlign) {
             HAlign.CENTER -> 0f
@@ -581,6 +576,9 @@ private fun rasterRequest(content: LabelContent): ImageRequest? = when {
 
     else -> null
 }
+
+/** [this] with [width] more on each side, as a border adds to a padding. */
+internal operator fun Edges.plus(width: Float): Edges = Edges(top + width, right + width, bottom + width, left + width)
 
 internal fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: Density): Modifier = with(density) {
     absolutePadding(

@@ -13,12 +13,20 @@ fun FakeEngine.Session.buttonBars(vararg bars: JSONObject) = send(JSONObject().p
 
 /** Messages of docs/protocol.md that the tests of more than one part of the game screen send through the fake engine. */
 object EngineMessages {
-    /** A bar of a `buttonBars` message, at [place] (top, bottom, left, right or floating). */
-    fun bar(id: Int, name: String, place: String, buttons: List<JSONObject>, vertical: Boolean = false, columns: Int = 1): JSONObject = JSONObject()
-        .put("id", id).put("name", name).put("styleSheet", "").put("place", place).put("vertical", vertical).put("columns", columns)
+    /** A bar of a `buttonBars` message, at [place] (top, bottom, left, right or floating), with the style sheet [styleSheet]. */
+    fun bar(
+        id: Int,
+        name: String,
+        place: String,
+        buttons: List<JSONObject>,
+        vertical: Boolean = false,
+        columns: Int = 1,
+        styleSheet: String = "",
+    ): JSONObject = JSONObject()
+        .put("id", id).put("name", name).put("styleSheet", styleSheet).put("place", place).put("vertical", vertical).put("columns", columns)
         .put("fillerOffset", 0).put("buttons", JSONArray(buttons))
 
-    /** A button of a bar; [children] make it a menu. */
+    /** A button of a bar, with the style sheet [styleSheet]; [children] make it a menu. */
     fun button(
         id: Int,
         name: String,
@@ -26,7 +34,8 @@ object EngineMessages {
         pushDown: Boolean = false,
         checked: Boolean = false,
         children: List<JSONObject> = emptyList(),
-    ): JSONObject = JSONObject().put("id", id).put("name", name).put("icon", icon).put("styleSheet", "").put("pushDown", pushDown)
+        styleSheet: String = "",
+    ): JSONObject = JSONObject().put("id", id).put("name", name).put("icon", icon).put("styleSheet", styleSheet).put("pushDown", pushDown)
         .put("checked", checked).put("menu", children.isNotEmpty()).put("children", JSONArray(children))
 
     /**

@@ -20,7 +20,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
@@ -84,10 +84,10 @@ class LogKeepsOutPlayerTextTest {
         Log.w(TAG, SENTINEL)
 
         val log = readLog()
-        assertFalse("the log was not read", log.none { it.contains(SENTINEL) })
+        assertTrue("the log was not read", log.any { it.contains(SENTINEL) })
         for ((text, what) in listOf(TYPED to "the command", GAME_TEXT to "the game's text", LINK to "a link or label", TELL to "a tell")) {
             val found = log.filter { it.contains(text) }
-            assertFalse("$what is in the log:\n${found.joinToString("\n")}", found.isNotEmpty())
+            assertTrue("$what is in the log:\n${found.joinToString("\n")}", found.isEmpty())
         }
     }
 

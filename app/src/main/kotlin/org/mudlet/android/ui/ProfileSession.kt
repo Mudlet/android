@@ -609,7 +609,7 @@ class ProfileSession internal constructor(
         scheduleFlush()
     }
 
-    internal fun post(block: () -> Unit) {
+    private fun post(block: () -> Unit) {
         main.post(block)
     }
 

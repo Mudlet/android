@@ -637,9 +637,10 @@ class ScriptMapTest {
         activateInDialog(hasText(string(R.string.exit_south)))
 
         // Part of a name looks for the rooms that have it once the typing pauses, listing the first five of those found
+        type(R.string.room_edit_exit_to, "ha")
         type(R.string.room_edit_exit_to, "hall")
         val find = receiveComposing("findRooms")
-        assertEquals("hall", find.getString("text"))
+        assertEquals("only what was typed when the typing paused is looked for", "hall", find.getString("text"))
         session.send(EngineMessages.rooms(find, "hall", (1..6).map { Triple(10 + it, "Hall $it", "Keep") }))
         val count = hasText(compose.activity.resources.getQuantityString(R.plurals.app_map_results_count, 6, 6)) and hasAnyAncestor(isDialog())
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(count).fetchSemanticsNodes().isNotEmpty() }

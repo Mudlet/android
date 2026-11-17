@@ -1,5 +1,6 @@
 #include "MudletProfile.h"
 
+#include "MapPng.h"
 #include "MudletEngine.h"
 #include "THeadlessSession.h"
 
@@ -17,6 +18,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -1387,10 +1389,8 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
         qWarning("MudletEngine: the map was not drawn: %s", qPrintable(mSession->errorString()));
         return std::nullopt;
     }
-    QByteArray png;
-    QBuffer buffer(&png);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "PNG")) {
+    const QByteArray png = mapPng(std::move(image));
+    if (png.isEmpty()) {
         qWarning("MudletEngine: the map could not be made a PNG");
         return std::nullopt;
     }
@@ -1423,10 +1423,8 @@ std::optional<MapFrame> MudletProfile::drawAppMap()
         warnAppMapUndrawn(mSession->errorString());
         return std::nullopt;
     }
-    QByteArray png;
-    QBuffer buffer(&png);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "PNG")) {
+    const QByteArray png = mapPng(std::move(image));
+    if (png.isEmpty()) {
         warnAppMapUndrawn(QStringLiteral("it could not be made a PNG"));
         return std::nullopt;
     }

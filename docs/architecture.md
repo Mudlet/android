@@ -877,8 +877,9 @@ device shows, below the UI's debug hook:
   Cancel, how it ended (cancelled, failed, read out at once and not again to a UI that comes back, until dismissed,
   and loaded, the map then drawn, saying so for a moment, with no download offered over it), a refusal, and a new UI
   showing neither the last load nor the offer; a failure while the UI was away read out as it comes back, and a
-  restarted engine's UI showing neither it nor the offer; and the notification permission, explained and then asked on
-  Android 13 and later, on a fresh install.
+  restarted engine's UI showing neither it nor the offer; the notification permission, explained and then asked on
+  Android 13 and later, on a fresh install; and a PNG from the engine's own writer for maps read by Android's decoder,
+  each pixel as the writer was given it (`MapPngTest`).
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only.

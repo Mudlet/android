@@ -240,7 +240,7 @@ jobs:
         run: |
           cmake -S . -B build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64" \
             -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
-          cmake --build build-desktop-mudlet --target engine
+          cmake --build build-desktop-mudlet --target engine map_png_test
 
       - name: Test the real engine
         working-directory: native
@@ -249,6 +249,13 @@ jobs:
         run: |
           python3 tests/test_mudlet_engine.py build-desktop-mudlet/enginehost/engine
           python3 tests/test_mudlet_restore.py build-desktop-mudlet/enginehost/engine
+
+      # Runs when the Python tests failed too, so one run shows both
+      - name: Test the map's PNG writer
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: native/build-desktop-mudlet/map_png_test app/src/androidTest/assets/map-picture.png
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies
       - uses: gradle/actions/setup-gradle@v6

@@ -126,10 +126,11 @@ public:
     void open(const Open& open);
     // The running profile, started without connecting or since disconnected, connects to its own address
     void connectProfile();
-    // openProfile for the running profile: it connects if connect, unless its login or password changed, as
-    // THeadlessSession takes them only at a start: it then starts again with them, at once if it is not connected,
-    // else at its next connect
+    // openProfile for the running profile: it takes the password for its next connection, an empty one for none,
+    // and connects if connect
     void openAgain(const QString& password, bool connect);
+    // The login saveProfile stored for the running profile, for its next connection
+    void setLogin(const QString& login);
     // Saves and closes it, as Mudlet's own close does, now or once its start is over; forSwitch, for the profile
     // openProfile opens in place of the others
     void close(bool forSwitch);
@@ -171,11 +172,7 @@ private:
     bool takesInput();
     void requestShutdown();
     void onShutdownFinished(bool saved, const QString& error);
-    // Closes it, then starts it with open on the socket it has
-    void startAgain(const Open& open);
-    // The close startAgain() asked for has ended: false if it asked for none
-    bool startIfAgain();
-    static QByteArray passwordDigest(const QString& password);
+    void applyLogin();
     // The profile has closed or did not start
     void closed();
     void restoreStatus(const QString& phase, const QString& detail = {});
@@ -247,8 +244,6 @@ private:
     bool mCloseWhenStarted = false;
     // Closing for the profile openProfile opens in place of this one, which connect, disconnect and Lua are then for
     bool mForSwitch = false;
-    // Closing to start again with this, as with a new login
-    std::optional<Open> mAgain;
     // Its shutdownAsync() has been called and not yet answered
     bool mShutdownAsked = false;
     // The profile has loaded, since its start
@@ -285,12 +280,10 @@ private:
     bool mMapDownloadProgressStarted = false;
     // The TLS choice the profile was started with, unset when that start made none
     std::optional<bool> mProfileTls;
-    // The login, and the password's digest, the profile was started with: THeadlessSession takes them only at a start
-    QString mStartedLogin;
-    QByteArray mStartedPassword;
-    // Its login or password changed while it was connected: the password it starts again with at its next connect
+    // A login and a password for the running profile that THeadlessSession has yet to take, as it refuses them
+    // while the profile, or another of the pool, loads
+    std::optional<QString> mNewLogin;
     std::optional<QString> mNewPassword;
-    bool mConnected = false;
     // Lua (connects included) asked for while the profile starts, run once it has
     QStringList mPendingLua;
     QString mErrorPending;

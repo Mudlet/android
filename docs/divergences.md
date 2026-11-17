@@ -49,6 +49,15 @@ profile that loads is given the app's values, over its own, so a script's `getCo
 phone they belong with the player and the device, as TalkBack itself does: kept per profile, every new profile would
 start without the player's choice.
 
+## A login changed while the game is open
+
+A character name saved in the editor, and a password stored or forgotten there, reach a game that is open: its next
+connection logs in with them, and the game stays open (`THeadlessSession::setLogin()` and `setPassword()`, carried in
+`0018-headless-login-change.patch`; `docs/architecture.md`, "Profiles in the app"). On the desktop the connection
+dialog's boxes write the profile's files and never reach an open profile, which logs in with what it loaded until it
+is closed and opened again (`dlgConnectionProfiles::loadProfile()`). A phone's player reconnects far more often than
+a desktop's, and closing the game to make it read its own details loses what its scripts hold.
+
 ## The games the profile list offers
 
 The profile list offers each of the games in Mudlet's connection dialog (`src/TGameDetails.h`, copied by

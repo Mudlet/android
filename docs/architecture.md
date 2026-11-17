@@ -269,7 +269,10 @@ name as associated data, so one profile's cannot be moved to another's. The ciph
 `files/passwords/profiles.json`, which `data_extraction_rules.xml` excludes from cloud backup and device transfer
 (`android:allowBackup="false"` covers older releases), and no other device has the key to decrypt it. The editor never
 shows a stored password: a new one replaces it, Forget password removes it, and so does deleting the profile. One that
-can no longer be decrypted is forgotten, and the player types it again.
+can no longer be decrypted is forgotten, and the player types it again. The engine is told a password only in an
+`openProfile`, and the game screen's Reconnect is a bare `connect`, so a password stored or forgotten for a game that
+is open goes to it at once (`EngineClient.givePassword`: `openProfile` with `alongside` and `connect` false), for its
+next connection.
 
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
@@ -612,8 +615,9 @@ a room added beside another or deleted, the player placed, an area renamed and t
 `0014-headless-label-links.patch`), the triggers, aliases and scripts listed, added, saved, switched on or off,
 moved and deleted as the desktop's script editor does (`0015-headless-script-items.patch`; see "Editing triggers,
 aliases and scripts" in [`protocol.md`](protocol.md)), the map info box as its parts, left out of the map's
-picture (`0016-headless-map-info.patch`; see "The map info"), and Lua compiled without being run, for an editor to
-check it as it is typed (`checkLua()`, `0017-headless-check-lua.patch`).
+picture (`0016-headless-map-info.patch`; see "The map info"), Lua compiled without being run, for an editor to
+check it as it is typed (`checkLua()`, `0017-headless-check-lua.patch`), and a running profile's login and password
+changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -730,7 +734,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the profile requests: each answered with `profiles` or `error`; profiles written in Mudlet's own files; a switch
   of profiles while connected; the running profile refused to `deleteProfile`; a password that reaches the game
   through Mudlet's auto-login, after the profile's login, but no frame and not the engine's log; a new login and
-  password for the running profile, which starts again with them on the socket it had, but not while it is connected;
+  password for the running profile, which its next connect logs in with, without closing it, neither typed into
+  the connection it has, and a password withdrawn or a login cleared left out of the next;
 - several profiles: a second opened `alongside` the first, on a game of its own, with its own socket; a trigger in the
   profile behind whose `raiseGlobalEvent()` reaches the other's script; `setFront` raising
   `sysProfileFocusChangeEvent` in both; `setAppState` raising `sysApplicationFocusChangeEvent` once in each, with
@@ -867,8 +872,9 @@ device shows, below the UI's debug hook:
   said politely after its name; the
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
-  host:port", adding, editing, deleting only once confirmed, the engine's refusals, and Connect sending
-  `openProfile` with the stored password; the password field, which TalkBack does not read aloud; `PasswordStore`
+  host:port", adding, editing, deleting only once confirmed, the engine's refusals, Connect sending
+  `openProfile` with the stored password, and a password stored or forgotten for an open game given to it, and to
+  no game that is not open; the password field, which TalkBack does not read aloud; `PasswordStore`
   (`PasswordStoreTest`), whose passwords outlast a new store, go with Forget, are never in the clear, and are excluded
   from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
@@ -939,8 +945,9 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   sets what a game that asks is told.
 - No bundled fonts.
 - TLS is chosen when the profile starts (see "TLS" below).
-- A change `saveProfile` makes to the running profile takes effect at its next start, as Mudlet read its details then;
-  a new login or password from `openProfile` starts it again, at once if it is not connected, else at its next connect.
+- Mudlet reads a profile's details as it loads, so a change `saveProfile` makes to the running profile takes effect at
+  its next start, but for the login, and the password `openProfile` gives it: libmudlet hands the profile both as it
+  runs (`THeadlessSession::setLogin()` and `setPassword()`), and its next connection logs in with them.
 - `saveProfile` makes a new profile's folder before its first start, so that start does not remove the passwords an
   earlier profile of the same name may have left in the credential store, as Mudlet does for a new name, and
   `deleteProfile` does not remove them either. The engine stores no password (the app keeps its own, encrypted, and
@@ -1437,6 +1444,8 @@ Item 13 of the on-device checklist covers this.
     - After a refused save (a name with a `/`, say), TalkBack reads the engine's reason without moving focus.
     - Add your own game with its character name and password, and Connect: Mudlet logs in. Force-stop the app in the
       system's settings, reopen it and Connect: it logs in again. Forget password, then Connect: the game asks for it.
+    - With the game open and disconnected, edit it from the list: change the character name and password, Save, go
+      back to the game and Reconnect: Mudlet logs in with the new ones, and the game's text so far is still there.
     - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
     - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
 15. The game screen, connected to a game (Connect on one of the start screen's games).

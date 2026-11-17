@@ -4,7 +4,6 @@
 #include "THeadlessSession.h"
 
 #include <QBuffer>
-#include <QCryptographicHash>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QHash>
@@ -656,7 +655,6 @@ void MudletProfile::connectSession()
     });
     connect(session, &THeadlessSession::connected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("connected"));
-        mConnected = true;
         // Closing: not to be brought back
         if (mState == State::stopping) {
             return;
@@ -670,7 +668,6 @@ void MudletProfile::connectSession()
     });
     connect(session, &THeadlessSession::disconnected, this, [this] {
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
-        mConnected = false;
         if (mState == State::stopping) {
             return;
         }
@@ -792,10 +789,8 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mStartTls = tls;
     // For this run only: THeadlessSession stores none, and a restore has none
     mStartPassword = password;
-    mStartedLogin = mEngine.mProfiles.read(mProfile).login;
-    mStartedPassword = passwordDigest(password);
+    mNewLogin.reset();
     mNewPassword.reset();
-    mConnected = false;
     mProfileTls = tls;
     if (const QString folder = mEngine.mProfiles.find(mProfile); !tls.has_value() && !folder.isEmpty()) {
         mProfileTls = mEngine.mProfiles.read(folder).tls;
@@ -816,13 +811,7 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mCloseWhenStarted = false;
     mForSwitch = false;
     mEngine.profileStarting(this);
-    const auto state = mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting;
-    if (mFrontend == mEngine.mHost->controlFrontend()) {
-        mFrontend = mEngine.mHost->profileOpened(mProfile, this, state);
-    } else {
-        // Started again, as with a new login, on the socket it had
-        mEngine.mHost->profileState(mProfile, state);
-    }
+    mFrontend = mEngine.mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting);
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
     beginLoad();
@@ -885,6 +874,8 @@ void MudletProfile::onStartFinished(int result, const QString& error)
         mRestoring = false;
         restoreStatus(QStringLiteral("restored"), mProfile);
     }
+    // Before a connect that waited for the start
+    applyLogin();
     for (const QString& code : pending) {
         runNow(code);
     }
@@ -931,18 +922,6 @@ void MudletProfile::connectTo(const QString& host, quint16 port, std::optional<b
             started = *mProfileTls ? QStringLiteral("with TLS") : QStringLiteral("without TLS");
         }
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("error: TLS is chosen when the profile starts, and it started %1; stop the engine to change it").arg(started));
-        return;
-    }
-    if (mNewPassword && running() && !mConnected) {
-        qInfo("MudletEngine: %s starts again to connect with its new login or password", qPrintable(mProfile));
-        cancelRestore();
-        Open again;
-        again.profile = mProfile;
-        again.password = *mNewPassword;
-        again.host = host;
-        again.port = port;
-        again.tls = tls;
-        startAgain(again);
         return;
     }
     const QString code = QStringLiteral("connectToServer(%1, %2)").arg(luaLongString(host)).arg(port);
@@ -1109,44 +1088,55 @@ void MudletProfile::connectProfile()
 
 void MudletProfile::openAgain(const QString& password, bool connect)
 {
-    if (mEngine.mProfiles.read(mProfile).login == mStartedLogin && passwordDigest(password) == mStartedPassword) {
-        mNewPassword.reset();
-        if (connect) {
-            connectProfile();
-        }
-        return;
-    }
-    if (mConnected || !connect) {
-        qInfo("MudletEngine: %s has a new login or password, for its next connect", qPrintable(mProfile));
+    if (mState == State::starting && !mLoadBegun) {
+        mStartPassword = password;
+    } else {
         mNewPassword = password;
+        applyLogin();
+    }
+    if (connect) {
+        connectProfile();
+    }
+}
+
+void MudletProfile::setLogin(const QString& login)
+{
+    // A load still to begin reads the stored one itself
+    if (mState == State::starting && !mLoadBegun) {
         return;
     }
-    qInfo("MudletEngine: %s starts again with its new login or password", qPrintable(mProfile));
-    Open again;
-    again.profile = mProfile;
-    again.password = password;
-    startAgain(again);
+    mNewLogin = login;
+    applyLogin();
 }
 
-void MudletProfile::startAgain(const Open& open)
+// Mudlet reads a profile's login and password as it loads, so a running one is handed them: its next connection logs
+// in with them. Neither is ever logged.
+void MudletProfile::applyLogin()
 {
-    mAgain = open;
-    close(false);
-}
-
-bool MudletProfile::startIfAgain()
-{
-    if (!mAgain) {
-        return false;
+    // Starting or closing: onStartFinished() and a close that is refused call this again
+    if (mState != State::started || (!mNewLogin && !mNewPassword)) {
+        return;
     }
-    const Open again = *std::exchange(mAgain, std::nullopt);
-    this->open(again);
-    return true;
-}
-
-QByteArray MudletProfile::passwordDigest(const QString& password)
-{
-    return QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Sha256);
+    if (mEngine.loadingOther(this)) {
+        mEngine.later(this, [this] {
+            applyLogin();
+        });
+        return;
+    }
+    if (const auto login = std::exchange(mNewLogin, std::nullopt)) {
+        if (mSession->setLogin(*login)) {
+            qInfo("MudletEngine: %s is given its login for its next connection", qPrintable(mProfile));
+        } else {
+            qWarning("MudletEngine: %s did not take its new login: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
+        }
+    }
+    if (const auto password = std::exchange(mNewPassword, std::nullopt)) {
+        if (mSession->setPassword(*password)) {
+            qInfo("MudletEngine: %s is given a password, or none, for its next connection", qPrintable(mProfile));
+        } else {
+            qWarning("MudletEngine: %s did not take the password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
+        }
+    }
 }
 
 void MudletProfile::close(bool forSwitch)
@@ -1165,9 +1155,7 @@ void MudletProfile::close(bool forSwitch)
         // Its load waited for another's, and is not to begin
         mState = State::idle;
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed").arg(mProfile));
-        if (!startIfAgain()) {
-            closed();
-        }
+        closed();
         return;
     case State::started:
         break;
@@ -1213,9 +1201,9 @@ void MudletProfile::onShutdownFinished(bool saved, const QString& error)
     if (mSession->host()) {
         mState = State::started;
         mForSwitch = false;
-        mAgain.reset();
         mEngine.mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 not closed: %2").arg(mProfile, error));
+        applyLogin();
         mEngine.closeRefused();
         return;
     }
@@ -1227,9 +1215,7 @@ void MudletProfile::onShutdownFinished(bool saved, const QString& error)
         qWarning("MudletEngine: %s closed without its save: %s", qPrintable(mProfile), qPrintable(error));
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 closed without its save: %2").arg(mProfile, error));
     }
-    if (!startIfAgain()) {
-        closed();
-    }
+    closed();
 }
 
 // What it showed goes to the control socket again, as the profile socket goes

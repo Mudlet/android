@@ -1,0 +1,228 @@
+Let a frontend with no window change the running profile's login and password
+
+A profile reads its login name and its password once, as it loads. The connection dialog's boxes only write the
+profile's files, so one that is open keeps logging in with what it loaded: the GUI's player closes the profile and
+opens it again, and an app's player who edited the profile was logged in with the old name and password, or with none,
+at every reconnect until the app had closed the profile too.
+
+- THeadlessSession::setLogin() trims the name, stores it with the profile as Options::login is, an empty one
+  included, and gives it to the running Host.
+- THeadlessSession::setPassword() replaces the password given for the run; an empty one withdraws it, and the
+  profile's stored one, if any, is read again. Nothing stores it.
+- Host::changeLogin() and Host::changeGivenPass() do that, the second clearing the password it held;
+  Host::loadStoredPassword() is what the constructor did to read the stored one.
+- The automatic login reads both at its own steps, so they are for the next connection, and for the open one only
+  while its login is still to come.
+- Both calls are refused with errorString() where submit() is.
+- docs/headless.md describes them.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (running_profile_login: a login and a password given
+to the running profile and what the game is then sent at the next connect, changed ones, a withdrawn password, a
+cleared login, and the profile never closing for any). The desktop is unchanged: its dialog still does not reach an
+open profile.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index b3147f5..a421948 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -205,6 +205,14 @@ With no Java VM registered with Qt - `mudlet-headless` run as a bare executable,
+ load Qt Core through `System.loadLibrary` - the KeyStore cannot be reached, so the folder keeps them all
+ under `credentials/`, and the log says so.
+ 
++`setLogin()` and `setPassword()` change the automatic login's name and password in the profile that is
++running, which reads both only as it loads: the next connection logs in with them, with no close and load
++of the profile, and so does the one that is open if its login is still to come. The name is trimmed and
++stored with the profile, as `options.login` is, and an empty one clears it. The password is for this run
++only, as `options.password` is, and nothing stores it; an empty one withdraws the one given, and the
++password stored for the profile, if any, is read again. Both are false, with `errorString()` saying why,
++where `submit()` is refused, and `setLogin()` also when the name could not be stored.
++
+ Each of `outputLine`'s runs covers part of the line, in order, with the colours and styles the game
+ asked for (`THeadlessSession::TextStyle`: bold, italic, underline, overline, strike-out, reverse, blink,
+ fast blink, concealed), and says whether each colour is the profile's own, which a frontend may swap
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 6e2f946..a483510 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -406,15 +406,7 @@ Host::Host(int port, const QString& hostname, const QString& login, const QStrin
+         }
+     }
+ 
+-    if (MudletApp::storingPasswordsSecurely()) {
+-        loadSecuredPassword();
+-    } else {
+-        QString password{readProfileData(qsl("password"))};
+-        if (!password.isEmpty()) {
+-            setPass(password);
+-            password.clear();
+-        }
+-    }
++    loadStoredPassword();
+ 
+     if (MudletApp::publicTest()) {
+         thankForUsingPTB();
+@@ -6599,6 +6591,43 @@ std::unique_ptr<QNetworkProxy>& Host::getConnectionProxy()
+     return mpConnectionProxy;
+ }
+ 
++void Host::loadStoredPassword()
++{
++    if (MudletApp::storingPasswordsSecurely()) {
++        loadSecuredPassword();
++        return;
++    }
++    QString password{readProfileData(qsl("password"))};
++    if (!password.isEmpty()) {
++        setPass(password);
++        password.clear();
++    }
++}
++
++void Host::changeLogin(const QString& login)
++{
++    if (login == mLogin) {
++        return;
++    }
++    mLogin = login;
++    mTelnet.setAutoLoginPending(hasAutoLoginCredentials() && mTelnet.autoLoginTimersRunning());
++}
++
++void Host::changeGivenPass(const QString& password)
++{
++    if (password.isEmpty() && !mPassGiven) {
++        return;
++    }
++    SecureStringUtils::secureStringClear(mPass);
++    mPassGiven = false;
++    if (password.isEmpty()) {
++        loadStoredPassword();
++    } else {
++        givePass(password);
++    }
++    mTelnet.setAutoLoginPending(hasAutoLoginCredentials() && mTelnet.autoLoginTimersRunning());
++}
++
+ void Host::loadSecuredPassword()
+ {
+     // Use async API for QtKeychain integration with file fallback
+diff --git a/src/Host.h b/src/Host.h
+index 83ef13d..1db6f9d 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -226,6 +226,9 @@ public:
+     void setAutoReconnect(const bool reconnect) { mTelnet.setAutoReconnect(reconnect); }
+     QString& getLogin() { return mLogin; }
+     void setLogin(const QString& login) { mLogin = login; }
++    // The login name, changed while the profile runs: the automatic login reads it at its login step, so it is for
++    // the next connection unless this one's login is still to come
++    void changeLogin(const QString& login);
+     QString& getPass() { return mPass; }
+     void setPass(const QString& password) { mPass = password; }
+     // One given for this run, as a headless frontend's option is, which the stored one does not replace; an
+@@ -239,6 +242,10 @@ public:
+         mPass = QString(password.constData(), password.size());
+         mPassGiven = true;
+     }
++    // The one given for this run, changed while the profile runs: an empty one withdraws it, and the stored one,
++    // if any, is read again as at the load. The automatic login reads it at its password step, so it is for the
++    // next connection unless this one's password step is still to come.
++    void changeGivenPass(const QString& password);
+     // A password still being fetched from the keychain counts: the auto-login is timer based, so
+     // the password step has to be armed before the read that answers it comes back, or there is
+     // no prompt left for a late answer to be typed at.
+@@ -1552,6 +1559,8 @@ private:
+     bool installPackageFonts(const QString& packageName);
+     void processGMCPDiscordStatus(const QJsonObject& discordInfo);
+     void processGMCPDiscordInfo(const QJsonObject& discordInfo);
++    // The password stored for the profile, from the keychain or the profile's own file
++    void loadStoredPassword();
+     void loadSecuredPassword();
+     // The lookup loadSecuredPassword() starts, on a manager of its own that this deletes once the
+     // lookup has answered. Apart so that a test can hand in a manager that stands in for the keychain.
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index eb405f6..be06705 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -1239,15 +1239,23 @@ bool THeadlessSession::storeConnectionDetails(const Options& options, const std:
+         items.append({qsl("login"), options.login});
+     }
+     for (const auto& [item, value] : items) {
+-        if (const auto [stored, reason] = MudletApp::writeProfileData(mProfileName, item, value); !stored) {
+-            //: %1 is the internal name of a profile setting, such as url or port, %2 a profile name, %3 the reason it could not be written
+-            mErrorString = tr("The %1 of the profile \"%2\" could not be stored: %3").arg(item, mProfileName, reason);
++        if (!storeConnectionDetail(item, value)) {
+             return false;
+         }
+     }
+     return true;
+ }
+ 
++bool THeadlessSession::storeConnectionDetail(const QString& item, const QString& value)
++{
++    const auto [stored, reason] = MudletApp::writeProfileData(mProfileName, item, value);
++    if (!stored) {
++        //: %1 is the internal name of a profile setting, such as url or port, %2 a profile name, %3 the reason it could not be written
++        mErrorString = tr("The %1 of the profile \"%2\" could not be stored: %3").arg(item, mProfileName, reason);
++    }
++    return stored;
++}
++
+ Host* THeadlessSession::host() const
+ {
+     return mpHost.data();
+@@ -1385,6 +1393,25 @@ bool THeadlessSession::inputHidden(const bool sending)
+     return false;
+ }
+ 
++bool THeadlessSession::setLogin(const QString& login)
++{
++    const QString name = login.trimmed();
++    if (!usable() || !storeConnectionDetail(qsl("login"), name)) {
++        return false;
++    }
++    mpHost->changeLogin(name);
++    return true;
++}
++
++bool THeadlessSession::setPassword(const QString& password)
++{
++    if (!usable()) {
++        return false;
++    }
++    mpHost->changeGivenPass(password);
++    return true;
++}
++
+ bool THeadlessSession::runLua(const QString& code)
+ {
+     if (!usable()) {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 0459f7e..3d4ea56 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -218,6 +218,14 @@ public:
+     // dismissing it then lasts until the game stops hiding input. False while the box would not be open, and
+     // where submit() is refused.
+     bool dismissHiddenInput();
++    // The automatic login's name and password, changed in the running profile, which the connection dialog's
++    // boxes do not reach: the next connection logs in with them, and this one too if its login is still to come.
++    // setLogin() trims the name and stores it with the profile, as Options::login is, but an empty one clears it.
++    // setPassword() is for this run only, as Options::password is: an empty one withdraws the one given, and the
++    // profile's stored one, if any, is read again. False where submit() is refused, and from setLogin() when the
++    // name could not be stored, which leaves the profile's as it was.
++    bool setLogin(const QString& login);
++    bool setPassword(const QString& password);
+     bool runLua(const QString& code);
+     // The profile's settings named in keys, as Lua's getConfig() gives them, into values: a bool, a number or a
+     // string each, an option of several by its name (showSentText as "never", "always" or "script"). A key
+@@ -1483,6 +1491,7 @@ private:
+     void beginSave(std::function<void(bool)> done);
+     void saveEach(QList<QPointer<Host>> profiles, qsizetype closesUnsavedBefore, QStringList unsaved, std::function<void(bool)> done);
+     bool storeConnectionDetails(const Options&, std::optional<bool> tls);
++    bool storeConnectionDetail(const QString& item, const QString& value);
+     void detachFromHost();
+     void connectInputRelays(unsigned int run);
+     void connectCommandRelays(unsigned int run);

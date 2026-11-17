@@ -306,6 +306,16 @@ object EngineClient {
         onAnswer(error)
     }) { Requests.openProfile(name, password, connect = true, alongside = true, id = it) }
 
+    /**
+     * Gives the open profile [name] its [password], null for none, for its next connection: the engine is told a
+     * profile's password only as it opens it, and keeps none. A profile that is not open gets it when it opens.
+     */
+    fun givePassword(name: String, password: String?) {
+        if (session(name) == null) return
+        // Not answered to the player: an engine that refuses is closing the profile, whose next start has it
+        profileRequest({}) { Requests.openProfile(name, password, connect = false, alongside = true, id = it) }
+    }
+
     /** Saves and closes the open profile [name], as Mudlet closes a profile; the next to its right, else its left, takes the front. */
     fun closeProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.closeProfile(name, it) }
 

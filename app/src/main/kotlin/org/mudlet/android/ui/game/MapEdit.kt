@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -303,24 +302,25 @@ private fun ExitGrid(exits: Map<String, RoomExit>, chosen: String?, onPick: (Str
             contentDescription = reading
         }
         val padding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-        val colors = MaterialTheme.colorScheme
-        val content: @Composable ColumnScope.() -> Unit = {
-            Text(exitWay(way), textAlign = TextAlign.Center, fontWeight = if (exit != null) FontWeight.Bold else null)
-            if (exit == null) {
-                Icon(painterResource(R.drawable.ic_add), null, Modifier.size(EXIT_MARK))
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (exit.locked) Icon(painterResource(R.drawable.ic_lock), null, Modifier.size(EXIT_MARK))
-                    Text(destinationName(exit), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val chosenBorder = if (picked) BorderStroke(CHOSEN_BORDER, MaterialTheme.colorScheme.primary) else null
+        val content: @Composable RowScope.() -> Unit = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(exitWay(way), textAlign = TextAlign.Center, fontWeight = if (exit != null) FontWeight.Bold else null)
+                if (exit == null) {
+                    Icon(painterResource(R.drawable.ic_add), null, Modifier.size(EXIT_MARK))
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (exit.locked) Icon(painterResource(R.drawable.ic_lock), null, Modifier.size(EXIT_MARK))
+                        Text(destinationName(exit), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
         if (exit != null) {
-            val border = if (picked) BorderStroke(CHOSEN_BORDER, colors.primary) else null
-            FilledTonalButton({ onPick(way) }, cell, border = border, contentPadding = padding) { Column(horizontalAlignment = Alignment.CenterHorizontally, content = content) }
+            FilledTonalButton({ onPick(way) }, cell, border = chosenBorder, contentPadding = padding, content = content)
         } else {
-            val border = if (picked) BorderStroke(CHOSEN_BORDER, colors.primary) else BorderStroke(1.dp, colors.outline)
-            OutlinedButton({ onPick(way) }, cell, border = border, contentPadding = padding) { Column(horizontalAlignment = Alignment.CenterHorizontally, content = content) }
+            val border = chosenBorder ?: BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            OutlinedButton({ onPick(way) }, cell, border = border, contentPadding = padding, content = content)
         }
     }
 }

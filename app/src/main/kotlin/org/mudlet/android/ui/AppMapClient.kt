@@ -149,7 +149,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         rooms.onFrame(message.view)
     }
 
-    /** The engine's answer to [findRooms]; one to an earlier search is not shown. */
+    /** The engine's answer to [findRooms] or [findDestinations]; one to an earlier search is not shown. */
     internal fun onRooms(message: EngineMessage.Rooms) {
         val id = (message.replyTo as? Number)?.toLong() ?: return
         val found = RoomSearch(message.text, message.rooms, message.more)
@@ -166,7 +166,10 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         }
     }
 
-    /** The engine refused [request], whose id was [replyTo], for [reason]: true when it was this map's, which shows it. */
+    /**
+     * The engine refused [request], whose id was [replyTo], for [reason]: true when it was this map's, which shows it, or
+     * [findDestinations]'s, which the exits dialog shows.
+     */
     internal fun onRefused(request: String, reason: String, replyTo: Long? = null): Boolean {
         if (request == "findRooms" && replyTo != null && replyTo == pendingDestinations) {
             pendingDestinations = null
@@ -250,7 +253,11 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
     /** The rooms whose name holds [text], or whose number it is, into [destinations]. False as for [ProfileSession.send]. */
     fun findDestinations(text: String): Boolean {
         val id = session.newRequestId()
-        if (!session.send(Requests.findRooms(text, id))) return false
+        // Or the rooms found for what was typed before stay listed under what is typed now
+        if (!session.send(Requests.findRooms(text, id))) {
+            closeDestinations()
+            return false
+        }
         pendingDestinations = id
         destinations = RoomSearch(text, null)
         return true

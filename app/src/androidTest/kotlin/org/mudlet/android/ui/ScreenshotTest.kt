@@ -50,8 +50,8 @@ import java.util.concurrent.CompletableFuture
  * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
  * settings (the hub, a search and four pages, and in light mode the hub and a page side by side on a tablet), the
  * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
- * part of a name, and the game sheet with two games open, light and
- * dark, against a fake engine, for a pull request that changes how they look. Each is saved in the app's
+ * part of a name, and the game sheet with two games open, light and dark, against a fake engine, for a pull request
+ * that changes how they look. Each is saved in the app's
  * files as screenshots/<screen>-<light|dark>.png, which native/tests/android_instrumented.py copies into its output.
  * The app's own night mode needs API 31, so on older releases this takes none.
  */

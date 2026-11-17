@@ -31,9 +31,6 @@ object Settings {
     /** What becomes of the blank lines a game sends. */
     val blankLines = EnumSetting("blankLinesBehaviour", BlankLines.SHOW, BlankLines.entries, mudlet = true) { it.mudletValue }
 
-    /** Whether to join the lines some games (the IRE ones) split where their packets end; Mudlet turns it on for those. */
-    val joinSplitLines = BoolSetting("fixUnnecessaryLinebreaks", default = false, mudlet = true)
-
     /** Whether to join the lines a game wraps itself, at [undoWrapWidth], so triggers see them whole. */
     val undoWrap = BoolSetting("undoServerWrap", default = false, mudlet = true)
 
@@ -49,7 +46,7 @@ object Settings {
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
 
-    // The game protocols Mudlet speaks, each from the next connection, with Mudlet's defaults
+    // The game protocols Mudlet speaks, with Mudlet's defaults
     val gmcp = BoolSetting("enableGMCP", default = true, mudlet = true)
     val msdp = BoolSetting("enableMSDP", default = false, mudlet = true)
     val mssp = BoolSetting("enableMSSP", default = true, mudlet = true)
@@ -67,6 +64,12 @@ object Settings {
     // The workarounds desktop Mudlet has under "Special options", for games that need them
     val forceCompressionOff = BoolSetting("specialForceCompressionOff", default = false, mudlet = true)
     val forceGaOff = BoolSetting("specialForceGAOff", default = false, mudlet = true)
+
+    /**
+     * Desktop Mudlet's "Fix unnecessary linebreaks on GA servers": the line feed some games (the IRE ones) send ahead of
+     * the text after a prompt is taken out. Mudlet turns it on for those as it first loads their profile.
+     */
+    val fixLinebreaks = BoolSetting("fixUnnecessaryLinebreaks", default = false, mudlet = true)
     val versionInTerminalType = BoolSetting("versionInTTYPE", default = false, mudlet = true)
     val forceMxpOn = BoolSetting("specialForceMXPProcessorOn", default = false, mudlet = true)
     val lazyTriggerVariables = BoolSetting("lazyCaptureGlobals", default = true, mudlet = true)
@@ -97,7 +100,6 @@ object Settings {
         readNewText,
         advertiseScreenReader,
         blankLines,
-        joinSplitLines,
         undoWrap,
         undoWrapWidth,
         showSentText,
@@ -116,6 +118,7 @@ object Settings {
         closedCaptions,
         forceCompressionOff,
         forceGaOff,
+        fixLinebreaks,
         versionInTerminalType,
         forceMxpOn,
         lazyTriggerVariables,
@@ -132,6 +135,30 @@ object Settings {
 
     /** The settings Mudlet keeps with each profile, whose app values a game added in the app is given. */
     val mudletSettings = all.filter { it.mudlet }
+
+    /**
+     * Those of [mudletSettings] that Mudlet reads only as a game connects (as it negotiates telnet's options, or makes
+     * a secure connection), so that one changed while the game is connected waits for its next connection.
+     */
+    val readAsItConnects: Set<Setting<*>> = setOf(
+        offerSecureConnection,
+        gmcp,
+        msdp,
+        mssp,
+        msp,
+        mxp,
+        mtts,
+        mnes,
+        naws,
+        charset,
+        newEnviron,
+        forceCompressionOff,
+        forceGaOff,
+        versionInTerminalType,
+        acceptExpiredCertificate,
+        acceptSelfSignedCertificate,
+        acceptAnyCertificate,
+    )
 
     // The games added in the app that have not had the app's values of mudletSettings yet, by name. A game the app did
     // not add, such as one copied from desktop Mudlet, keeps its own from the start.

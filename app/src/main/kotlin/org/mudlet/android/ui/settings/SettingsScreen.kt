@@ -74,7 +74,7 @@ fun SettingsScreen(game: String?, onBack: () -> Unit, onOpen: (SettingsPage) -> 
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     val sections = hubSections(game)
     val resources = LocalResources.current
-    MudletScaffold(stringResource(R.string.settings_title), onBack = onBack) { padding ->
+    MudletScaffold(stringResource(R.string.settings_title), onBack = onBack, snackbarHost = { SettingsNotices(sections.mapNotNull { it.game }) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).testTag(SETTINGS_HUB_TAG),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),

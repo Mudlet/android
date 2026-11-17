@@ -166,7 +166,7 @@ object EngineNotifications {
     @SuppressLint("MissingPermission") // mayPost checks POST_NOTIFICATIONS: lint does not look into it
     fun postTell(context: Context, profile: String, title: String, text: String) {
         if (!mayPost(context)) {
-            Log.i(EngineService.TAG, "not posting a tell: the user has not allowed notifications")
+            Log.i(EngineService.TAG, "not posting the tell '$title': the user has not allowed notifications")
             return
         }
         val id = nextTellId.getAndIncrement()

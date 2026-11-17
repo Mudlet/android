@@ -397,6 +397,7 @@ void SocketBridge::sendState()
     sendFrame(hiddenInputMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
+        sendFrame(errorConsoleMessage(mEngine->errorConsole(), true));
     }
     if (std::exchange(mLinksMissed, false)) {
         sendFrame(linksChangedMessage({}));
@@ -616,6 +617,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, deleteScriptItem(message));
     } else if (type == QLatin1String("checkLua")) {
         checkLua(message);
+    } else if (type == QLatin1String("clearErrorConsole")) {
+        mEngine->clearErrorConsole();
     } else if (type == QLatin1String("getSettings")) {
         getSettings(message);
     } else if (type == QLatin1String("setSettings")) {
@@ -1367,6 +1370,24 @@ QJsonObject SocketBridge::historyMessage(const QStringList& lines)
     return {{QStringLiteral("t"), QStringLiteral("history")}, {QStringLiteral("lines"), QJsonArray::fromStringList(lines)}};
 }
 
+QJsonObject SocketBridge::errorConsoleMessage(const QList<ErrorConsoleEntry>& entries, const bool full)
+{
+    QJsonArray json;
+    for (const ErrorConsoleEntry& entry : entries) {
+        json.append(QJsonObject{{QStringLiteral("n"), entry.n},
+                                {QStringLiteral("at"), entry.at},
+                                {QStringLiteral("debug"), entry.debug},
+                                {QStringLiteral("object"), entry.object},
+                                {QStringLiteral("function"), entry.function},
+                                {QStringLiteral("event"), entry.event},
+                                {QStringLiteral("message"), entry.message},
+                                {QStringLiteral("kind"), entry.kind},
+                                {QStringLiteral("item"), entry.item},
+                                {QStringLiteral("line"), entry.line}});
+    }
+    return {{QStringLiteral("t"), QStringLiteral("errorConsole")}, {QStringLiteral("full"), full}, {QStringLiteral("entries"), json}};
+}
+
 QJsonObject SocketBridge::linksChangedMessage(const QList<int>& ids)
 {
     QJsonArray json;
@@ -1865,6 +1886,26 @@ void SocketBridge::commands(const QList<AddonCommandInfo>& commands)
         mMirror->commands(commands);
     }
     sendIfChanged(mCommands, commandsMessage(commands));
+}
+
+void SocketBridge::errorConsoleEntry(const ErrorConsoleEntry& entry)
+{
+    if (mMirror) {
+        mMirror->errorConsoleEntry(entry);
+    }
+    if (outputLive()) {
+        sendFrame(errorConsoleMessage({entry}, false));
+    }
+}
+
+void SocketBridge::errorConsoleCleared()
+{
+    if (mMirror) {
+        mMirror->errorConsoleCleared();
+    }
+    if (outputLive()) {
+        sendFrame(errorConsoleMessage({}, true));
+    }
 }
 
 void SocketBridge::map(const std::optional<MapFrame>& frame)

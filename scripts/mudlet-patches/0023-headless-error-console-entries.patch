@@ -1,0 +1,266 @@
+Let a frontend list the error console's entries with the item that raised each
+
+The editor's error console is text in pieces with colours (signal_errorConsolePrint). A frontend that shows the
+errors as a list, and takes the player to the trigger or script that raised one, needs each entry whole and which
+item it was; the text names an item only by its name, which need not be unique.
+
+- Host::signal_errorConsoleEntry carries each entry signal_errorConsolePrint prints, in its parts: a Lua error's
+  object, function and message (TLuaInterpreter::logError()), an event handler's event and message
+  (logEventError()), a printError()'s function info and message (errorc()), and a debugc()'s text (debug()).
+- THeadlessSession::errorConsoleEntry sends each, after its errorConsoleText pieces, as an ErrorConsoleEntry: its
+  parts, when, and the item that raised it as scriptItems() names it, where the function is one of the editor's
+  items (Trigger12, Alias3, Timer5, Key2, Action4) or the message's chunk ("[string \"Script: name\"]:3:") names
+  exactly one item of its kind by its name, with the line of that item's Lua the message names. A temporary item,
+  which the editor does not show, is none.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (error_console: a trigger's Lua error with the trigger
+and its line, an event handler's with its script, Lua run from the frontend and a temporary trigger's with none, a
+debugc()). The desktop is unchanged: nothing connects the new signal.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 385d9fe..5fd85ac 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -831,7 +831,7 @@ runs on one thread, and the session's signals are emitted on it. Which of three
+ decides what its handler may do.
+ 
+ **Sent mid-write.** `outputLine`, `lineShown`, `mainConsoleCleared`, `localText`, `localTextStyled`,
+-`errorConsoleText`, `debugText`, `hiddenInputWanted`, `typedLineMoveRequested`,
++`errorConsoleText`, `errorConsoleEntry`, `debugText`, `hiddenInputWanted`, `typedLineMoveRequested`,
+ `commandLineTextRequested`, `notificationRequested`, `attentionRequested`, `announcementRequested` and
+ the three `transport…Requested` are sent from inside whatever wrote the text or asked: the read of the
+ game's data, a script, or the session call that ran it. That is what keeps them in order with one
+@@ -916,6 +916,15 @@ them in: a Lua error comes as `[ERROR:]` in blue, where it was in green and the
+ black. It is sent as written, as `localText` is, so its handler must not call the session back. A
+ handler that takes only the profile and the text may still be connected.
+ 
++`errorConsoleEntry` follows each entry's pieces with the entry whole, for a frontend that lists the
++errors rather than prints them: a Lua error with the object and function the console names (an item's
++name and its Lua function), or the event whose handler raised it; a `printError()` with its function
++info; a `debugc()`, `debug` true, with its text. Where the function is one of the editor's items
++(`Trigger12`), or the message's chunk (`[string "Script: my script"]:3:`) names exactly one item of
++its kind by its name, `kind` and `id` say which, as `scriptItems()` gives them, and `line` the line of
++its Lua the message names; an error in Lua that no item of the editor holds, such as a temporary
++trigger's, has `id` 0. It is sent as written, as `errorConsoleText` is.
++
+ `latencyChanged` carries what the GUI's latency box shows: the network's lag, from a command sent to the
+ game's reply, while the game marks its prompts with GA or EOR, and none otherwise, where the box shows
+ `<no GA>`; and how long the game's last text took to process, its triggers included, in seconds. As the
+diff --git a/src/Host.h b/src/Host.h
+index 0e88822..0a50af0 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -1530,6 +1530,10 @@ signals:
+     void signal_emergencyStopChanged(bool stopped);
+     void signal_keyBoundByScript(int id);
+     void signal_errorConsolePrint(const QString& text, const QColor& fgColor, const QColor& bgColor);
++    // Each entry signal_errorConsolePrint prints, in its parts, for a frontend that lists them rather than prints them:
++    // a Lua error with the object and function that raised it, or the event whose handler did, a printError() with
++    // its function info as function, or a debugc() for debug true, with only message
++    void signal_errorConsoleEntry(const QString& object, const QString& function, const QString& event, const QString& message, bool debug);
+     // For the profile's module manager, if it has one: a script installed or
+     // uninstalled a module, or turned a module's sync on or off.
+     void signal_moduleListChangedByScript();
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index 6ca0743..f89bab9 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -2360,6 +2360,7 @@ int TLuaInterpreter::errorc(lua_State* L)
+     emit host.signal_errorConsolePrint(QLatin1String("[ERROR:] "), QColor(Qt::blue), QColor(Qt::black));
+     emit host.signal_errorConsolePrint(luaFunctionInfo, QColor(Qt::green), QColor(Qt::black));
+     emit host.signal_errorConsolePrint(qsl("         %1").arg(luaErrorText), QColor(Qt::red), QColor(Qt::black));
++    emit host.signal_errorConsoleEntry(QString(), n == 2 ? QString(lua_tostring(L, 2)) : QString(), QString(), QString(lua_tostring(L, 1)), false);
+ 
+     if (host.mEchoLuaErrors) {
+         const TBuffer& buffer = host.mainConsoleModel().buffer;
+@@ -2397,6 +2398,7 @@ int TLuaInterpreter::debug(lua_State* L)
+ 
+     emit host.signal_errorConsolePrint(QLatin1String("[DEBUG:]"), QColor(Qt::blue), QColor(Qt::black));
+     emit host.signal_errorConsolePrint(luaDebugText, QColor(Qt::green), QColor(Qt::black));
++    emit host.signal_errorConsoleEntry(QString(), QString(), QString(), luaDebugText.trimmed(), true);
+ 
+     return 0;
+ }
+@@ -6393,6 +6395,7 @@ void TLuaInterpreter::logError(std::string& e, const QString& name, const QStrin
+                                           QColor(Qt::green),
+                                           QColor(Qt::black));
+     emit mpHost->signal_errorConsolePrint(qsl("        <%1>\n").arg(e.c_str()), QColor(Qt::red), QColor(Qt::black));
++    emit mpHost->signal_errorConsoleEntry(name, function, QString(), QString::fromStdString(e), false);
+ 
+     // Log error to Profile's Main TConsole:
+     if (mpHost->mEchoLuaErrors) {
+@@ -6422,6 +6425,7 @@ void TLuaInterpreter::logEventError(const QString& event, const QString& error)
+     emit mpHost->signal_errorConsolePrint(qsl("[%1:]").arg(tr("ERROR")), QColor(Qt::blue), QColor(Qt::black));
+     emit mpHost->signal_errorConsolePrint(qsl(" event handler for %1:\n").arg(event), QColor(Qt::green), QColor(Qt::black));
+     emit mpHost->signal_errorConsolePrint(qsl("        <%1>\n").arg(error), QColor(Qt::red), QColor(Qt::black));
++    emit mpHost->signal_errorConsoleEntry(QString(), QString(), event, error, false);
+ 
+     // Log error to Profile's Main TConsole:
+     if (mpHost->mEchoLuaErrors) {
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 7bfbf5a..a6160dd 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -799,6 +799,13 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                     emit errorConsoleText(profile, text, foreground, background);
+                     --gSignalsBeingHandedOut;
+                 });
++                connect(pNewHost, &Host::signal_errorConsoleEntry, this, [this](const QString& object, const QString& function, const QString& event, const QString& message, const bool debug) {
++                    const ErrorConsoleEntry entry = errorConsoleEntryOf(object, function, event, message, debug);
++                    const QString profile = mProfileName;
++                    ++gSignalsBeingHandedOut;
++                    emit errorConsoleEntry(profile, entry);
++                    --gSignalsBeingHandedOut;
++                });
+                 // Held by the profile, which an exit handler may still be running once the session has gone
+                 pNewHost->setNotificationHandler([self = QPointer<THeadlessSession>(this)](const QString& title, const QString& text, std::optional<int> milliseconds) {
+                     if (!self || self->signalsBlocked() || !self->isSignalConnected(QMetaMethod::fromSignal(&THeadlessSession::notificationRequested))) {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index e612e82..11f22a7 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -950,6 +950,24 @@ public:
+     // is touched: nothing for code that compiles, as the editor's save would find it, else what Lua says is wrong.
+     // For an editor to check a script as it is typed.
+     static std::optional<LuaProblem> checkLua(const QString& code);
++    // An entry of the editor's error console, as errorConsoleEntry sends it: a Lua error, a printError() or, for
++    // debug, a debugc(). What the console prints in green is in object and function, as Mudlet named them (an item's
++    // name and its Lua function, or what else ran the Lua), or in event for an event handler's error; for a
++    // printError(), function is its function info. Where that names one of the editor's items, or the message's chunk
++    // ("[string \"Trigger: name\"]:3:") names exactly one by its name, id is that item and kind its kind, else id is 0;
++    // line is then the line of the item's Lua the message names, from 1, 0 for none. msecs is when, since the epoch.
++    struct ErrorConsoleEntry
++    {
++        bool debug = false;
++        QString object;
++        QString function;
++        QString event;
++        QString message;
++        ScriptItemKind kind = ScriptItemKind::trigger;
++        int id = 0;
++        int line = 0;
++        qint64 msecs = 0;
++    };
+     // A window the profile's scripts made, or the console of an MXP frame the game opened, as the GUI would show
+     // it, for the app to draw: Mudlet draws none of them. A Geyser gauge, button or container is the labels and
+     // windows it is made of. An MXP frame is a mini console in all but who made it: the same text, links, scroll
+@@ -1281,6 +1299,9 @@ signals:
+     // With the colours the editor's error console prints the piece in; a handler that takes only the first two
+     // arguments may be connected
+     void errorConsoleText(const QString& profile, const QString& text, const QColor& foreground, const QColor& background);
++    // Each entry the error console prints, whole, after its errorConsoleText pieces, for a frontend that lists them
++    // with the item that raised each. Sent as written, as errorConsoleText is.
++    void errorConsoleEntry(const QString& profile, const THeadlessSession::ErrorConsoleEntry& entry);
+     // A line of outputLine's as the main console shows it once its triggers have run: with what they replaced,
+     // recoloured or wrote into it, which may hold line feeds, and not at all if they deleted it. Lines a trigger
+     // feeds follow the line it ran on, as they are shown, and so does what it wrote anywhere else (an echo()
+@@ -1495,6 +1516,7 @@ signals:
+     void mainWindowResizeRequested(const QString& profile, const QSize& pixels);
+ 
+ private:
++    ErrorConsoleEntry errorConsoleEntryOf(const QString& object, const QString& function, const QString& event, const QString& message, bool debug) const;
+     void tellLater(std::function<void()> tell);
+     void noteConfigWritten();
+     void tellConfigSaved();
+diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
+index 0920fef..ec97746 100644
+--- a/src/headless/THeadlessSessionScripts.cpp
++++ b/src/headless/THeadlessSessionScripts.cpp
+@@ -34,6 +34,7 @@
+ #include "TimerUnit.h"
+ #include "TriggerUnit.h"
+ 
++#include <QDateTime>
+ #include <QRegularExpression>
+ 
+ #include <algorithm>
+@@ -1035,3 +1036,85 @@ bool THeadlessSession::deleteScriptItem(const ScriptItemKind kind, const int id)
+         return true;
+     });
+ }
++
++namespace {
++
++// Lua names a chunk by the first line of its name, cut to fit LUA_IDSIZE with "..." after it
++bool chunkNames(const QString& chunk, const QString& name)
++{
++    if (chunk.endsWith(QLatin1String("..."))) {
++        return name.startsWith(chunk.chopped(3));
++    }
++    return chunk == name.section(QLatin1Char('\n'), 0, 0);
++}
++
++template <class T>
++void findNamed(Host& host, T* pItem, const QString& chunk, QList<T*>& found)
++{
++    if (!shown(host, pItem)) {
++        return;
++    }
++    if (!pItem->isFolder() && chunkNames(chunk, pItem->getName())) {
++        found.append(pItem);
++    }
++    for (auto* pChild : *pItem->getChildrenList()) {
++        findNamed(host, static_cast<T*>(pChild), chunk, found);
++    }
++}
++
++} // namespace
++
++THeadlessSession::ErrorConsoleEntry THeadlessSession::errorConsoleEntryOf(const QString& object, const QString& function, const QString& event, const QString& message, const bool debug) const
++{
++    ErrorConsoleEntry entry{debug, object, function, event, message};
++    entry.msecs = QDateTime::currentMSecsSinceEpoch();
++    if (debug || !mpHost) {
++        return entry;
++    }
++    // A trigger's, alias's, timer's, key's or button's Lua function is named for its id, unlike its chunk, whose name
++    // two items may share
++    static const QRegularExpression functionOfItem(QStringLiteral(R"(^(Trigger|Alias|Timer|Key|Action)(\d+)$)"));
++    static const QRegularExpression chunkLine(QStringLiteral(R"re(\[string "(Trigger|Alias|Script|Timer|Key|Button): ([^"]*)"\]:(\d+):)re"));
++    static const QMap<QString, Kind> kindOfWord{{QStringLiteral("Trigger"), Kind::trigger},
++                                                {QStringLiteral("Alias"), Kind::alias},
++                                                {QStringLiteral("Script"), Kind::script},
++                                                {QStringLiteral("Timer"), Kind::timer},
++                                                {QStringLiteral("Key"), Kind::key},
++                                                {QStringLiteral("Action"), Kind::button},
++                                                {QStringLiteral("Button"), Kind::button}};
++    const QRegularExpressionMatch chunk = chunkLine.match(message);
++    const std::optional<Kind> chunkKind = chunk.hasMatch() ? std::optional(kindOfWord.value(chunk.captured(1))) : std::nullopt;
++    if (const QRegularExpressionMatch match = functionOfItem.match(function); match.hasMatch()) {
++        const Kind kind = kindOfWord.value(match.captured(1));
++        const int id = match.captured(2).toInt();
++        withItemClass(kind, [&](auto* pClass) {
++            using T = std::remove_pointer_t<decltype(pClass)>;
++            if (T* pItem = shownItem<T>(*mpHost, id)) {
++                entry.kind = kind;
++                entry.id = id;
++                if (chunkKind == kind && chunkNames(chunk.captured(2), pItem->getName())) {
++                    entry.line = chunk.captured(3).toInt();
++                }
++            }
++            return true;
++        });
++        return entry;
++    }
++    if (!chunkKind) {
++        return entry;
++    }
++    withItemClass(*chunkKind, [&](auto* pClass) {
++        using T = std::remove_pointer_t<decltype(pClass)>;
++        QList<T*> found;
++        for (T* pItem : rootItems<T>(*mpHost)) {
++            findNamed(*mpHost, pItem, chunk.captured(2), found);
++        }
++        if (found.size() == 1) {
++            entry.kind = *chunkKind;
++            entry.id = found.first()->getID();
++            entry.line = chunk.captured(3).toInt();
++        }
++        return true;
++    });
++    return entry;
++}

@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **27**.
+The current version is **29**.
 
 ## Transport
 
@@ -118,6 +118,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `moveScriptItem` | `kind`, `item`, `parent`, `position` | Moves the item into the folder whose id is `parent`, or to the top level for 0, at `position` among the items shown there, as a drag in the desktop editor does (`THeadlessSession::moveScriptItem()`). |
 | `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
 | `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, for a script editor to say what is wrong with it (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
+| `clearErrorConsole` | | Empties the open profile's error console, which an `errorConsole` with `full` true and no `entries` follows. |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
 
@@ -249,6 +250,7 @@ no refusal: `luaCheck` says what is wrong with it.
 | `scriptItems` | `kind`, `items`: `id`, `parent`, `name`, `folder`, `enabled`, `active`, `package`, `error`, `summary`; `re`? | The answer to `scriptItems`: the `kind` asked for, and its `items` depth first, each folder before what is in it, in the desktop editor's order; each with its `id`, the id of the folder it is in, `parent` (0 for the top level), its `name`, whether it is a `folder`, `enabled` (switched on, as the editor's checkbox shows it), `active` (switched on, compiled, and in folders that run), the `package` or module it came with (empty for the player's own), `error`, why it cannot run, as plain text, or empty, and `summary`, what a list shows under its name, as plain text: a trigger's patterns and a script's event handlers, one a line, an alias's pattern, a timer's time as `hh:mm:ss.zzz`, a key's name as the desktop writes it (`control + F1`) and the command a button sends, or empty. The temporary items scripts make are left out, as the editor leaves them. |
 | `scriptItem` | `kind`, `fields`, `re`? | The answer to `scriptItem` and the changes that give an item: its `kind` and its `fields`, an object of what `scriptItems` gives of it, `script`, its Lua, and those of its kind: a trigger's `patterns`, each with its `text` and its `type` (`substring`, `regex`, `startOfLine`, `exact`, `lua`, `spacer`, whose text is the number of lines, `color`, whose text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`, or `prompt`), `command`, `lineDelta` (the lines a trigger's patterns may be spread over, -1 for a trigger of one line), `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`, `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour; an alias's `pattern` and `command`; a script's `eventHandlers`, a list of event names; a timer's `command`, `time` and `offset`; a key's `command`, `key`, `modifiers` and `keyName`; a button's `commandDown`, `commandUp`, `pushDown`, `location`, `orientation`, `columns` and `css` ("Editing triggers, aliases and scripts" below). |
 | `luaCheck` | `ok`, `line`?, `message`?; `re`? | The answer to `checkLua`: `ok` when the code compiles; else `line`, the line Lua names, from 1, or 0 where it names none, and `message`, what Lua says is wrong, in English. |
+| `errorConsole` | `full`, `entries`: `n`, `at`, `debug`, `object`, `function`, `event`, `message`, `kind`, `item`, `line` | The profile's error console, as desktop Mudlet's editor shows it (`THeadlessSession::errorConsoleEntry`), oldest first: with `full` true all it holds, the last 1000 since the profile loaded or was cleared (fewer once their texts pass a million characters, so the message fits a frame), to each UI that attaches; otherwise each new entry as it comes. An entry is a Lua error, a `printError()` or, `debug` true, a `debugc()`. `object` and `function` are what the console names (an item's name and its Lua function, or what else ran the Lua), or `event` the event whose handler raised it, each empty where it names none; `message` is what Lua said, in English. A text over 10000 characters is cut there, with `…` after it. `kind` and `item` are the trigger, alias, script, timer, key or button that raised it, as `scriptItems` names it, empty and 0 where Mudlet names none the editor shows; `line` the line of its Lua the message names, from 1, 0 for none. `n` counts the profile's entries from 1; `at` is when, in ms since the epoch. The `luaError` status still carries each line of the console's text. |
 | `areas` | `areas`: `id`, `name`; `re`? | The answer to `mapAreas`: the areas that have rooms, by name ignoring case, then id. |
 | `envs` | `envs`: `env`, `color`; `re`? | The answer to `mapEnvs`: the environments the map gives a colour of its own, by number, as Mudlet's room colour dialog lists them (the profile's sixteen colours as 257 to 272, and those a script or the player added), each with the colour it draws rooms in as `#rrggbb`. |
 | `mapDownload` | `offered`, `host`, `state`, `label`, `value`, `maximum`, `cancelable`, `error` | The map the game offers and the download of it ("Downloading the map" below): `offered` is true while the game offers one, and `host` is its URL's host, nothing more of it. `state` is `none`, `downloading`, `loaded`, `failed` or `cancelled`; while `downloading`, `label` is what Mudlet's progress dialog says, `value` how far it has got of `maximum` (0 until Mudlet's progress starts, then its guess of the size until the server says it), and `cancelable` true until the map has arrived; `error` is why it `failed`, naming no more of a URL than its scheme and host, else empty. Sent on each change and to each UI that attaches, once the engine has sent one. |
@@ -698,10 +700,10 @@ The engine keeps the last 2000 lines in a ring buffer, its current tail, and the
 a UI says `hello`, the engine sends, in this order:
 
 1. its own `hello`;
-2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput` and `history`, and
-   `linksChanged` with empty `ids` if a change of a link went to no UI since the last attach, then `mainArea` if the
-   engine has sent one, `windows` with `full` true, a `label` for each label, a `textBox` for each text box, `map` while
-   the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, and a `windowText` of each
+2. every status, each as a `status` without `re`, in no particular order, then `hiddenInput`, `history` and
+   `errorConsole` with `full` true, and `linksChanged` with empty `ids` if a change of a link went to no UI since the
+   last attach, then `mainArea` if the engine has sent one, `windows` with `full` true, a `label` for each label, a
+   `textBox` for each text box, `map` while the mapper shows, `mapDownload` if the engine has sent one, `buttonBars`, `commands`, and a `windowText` of each
    console's last 300 rows;
 3. `clear`, if the console was emptied after the line the UI says it has, or ever, for a UI that has none;
 4. `gap`, if lines the UI does not have already fell out of the ring;
@@ -727,10 +729,10 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
 
 - When more than 4 MiB is queued unsent, the UI is lagging. The engine stops writing lines, tails, clears, notifies
   and statuses to it, but keeps them in the ring and its status table.
-- Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput` and `history` again (and
-  `linksChanged`, as on attach), and the script windows' state, the maps, the map download, the button bars and the
-  commands, as on attach, then the lines the UI has not had (with `clear` and `gap` as on attach, but without `replay`),
-  then the tail.
+- Once the queue drains below 256 KiB, the engine sends every status, `hiddenInput`, `history` and the whole
+  `errorConsole` again (and `linksChanged`, as on attach), and the script windows' state, the maps, the map download,
+  the button bars and the commands, as on attach, then the lines the UI has not had (with `clear` and `gap` as on
+  attach, but without `replay`), then the tail.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
   `getWindowText`, `image`, `rooms`, `room`, `areas`, `settings`, and a `status` that carries `re`.
 
@@ -741,7 +743,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 27, which added timers, keys and buttons to the script items (`timer`, `key` and `button`
+As implemented in version 29, which added the error console (`errorConsole`, `clearErrorConsole`); version 27 added
+timers, keys and buttons to the script items (`timer`, `key` and `button`
 for `kind`) and `summary` to `scriptItems`; version 26 added whether an open profile was given a password
 (`passwordGiven` in `openProfiles`); version 25 added checking that Lua compiles (`checkLua`, `luaCheck`);
 version 24 took the map info box out of the map's picture and sends it as text (`info` in

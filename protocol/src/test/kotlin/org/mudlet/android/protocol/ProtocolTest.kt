@@ -631,6 +631,34 @@ class ProtocolTest {
     }
 
     @Test
+    fun theErrorConsoleDecodes() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"errorConsole","full":true,"entries":[""" +
+                    """{"n":1,"at":1700000000000,"debug":false,"object":"Bad trigger","function":"Trigger3","event":"",""" +
+                    """"message":"[string \"Trigger: Bad trigger\"]:2: attempt to index local 'mob' (a nil value)","kind":"trigger","item":3,"line":2},""" +
+                    """{"n":2,"at":1700000000001,"debug":true,"object":"","function":"","event":"","message":"just saying","kind":"","item":0,"line":0},""" +
+                    """{"n":3,"at":1700000000002,"debug":false,"object":"x","function":"Gizmo4","event":"","message":"m","kind":"gizmo","item":4,"line":1},""" +
+                    """{"n":4,"at":1700000000003,"debug":false,"object":"","function":"","event":"","message":"m","kind":"trigger","item":0,"line":0}]}""",
+            ),
+        ) as EngineMessage.ErrorConsole
+        assertTrue(message.full)
+        assertEquals(
+            ErrorConsoleEntry(
+                1, 1700000000000, false, "Bad trigger", "Trigger3", "",
+                "[string \"Trigger: Bad trigger\"]:2: attempt to index local 'mob' (a nil value)", ScriptItemKind.TRIGGER, 3, 2,
+            ),
+            message.entries[0],
+        )
+        assertEquals(ErrorConsoleEntry(2, 1700000000001, true, "", "", "", "just saying", null, 0, 0), message.entries[1])
+        assertEquals("an item of a kind this client does not know is none", Pair(null, 0), message.entries[2].let { it.kind to it.item })
+        assertEquals("and so is item 0, whatever the kind", Pair(null, 0), message.entries[3].let { it.kind to it.item })
+        val added = FrameReader.parse(JSONObject("""{"t":"errorConsole","full":false,"entries":[]}""")) as EngineMessage.ErrorConsole
+        assertEquals(EngineMessage.ErrorConsole(emptyList(), false), added)
+        assertEquals("clearErrorConsole", Requests.clearErrorConsole().getString("t"))
+    }
+
+    @Test
     fun aLuaCheckCarriesTheCodeAsItIs() {
         val request = Requests.checkLua("if x then\n  send(\"hi\")\nend", 9)
         assertEquals("checkLua", request.getString("t"))

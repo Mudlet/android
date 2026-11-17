@@ -193,4 +193,12 @@ public:
     };
     // Nothing for code that compiles. The code is not run, and no profile need be open
     virtual std::optional<LuaProblem> checkLua(const QString& code) const = 0;
+    // The error console's entries since the profile loaded or the console was last cleared, oldest first: the last
+    // maxErrorConsoleEntries of them, fewer if their text passes maxErrorConsoleChars, as one message carries them all.
+    // A text longer than maxErrorConsoleText is cut, with an ellipsis after it
+    static constexpr qsizetype maxErrorConsoleEntries = 1000;
+    static constexpr qsizetype maxErrorConsoleChars = 1000000;
+    static constexpr qsizetype maxErrorConsoleText = 10000;
+    virtual QList<ErrorConsoleEntry> errorConsole() const = 0;
+    virtual void clearErrorConsole() = 0;
 };

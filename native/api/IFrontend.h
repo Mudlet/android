@@ -408,6 +408,24 @@ struct ScriptItemInfo
     QString summary;
 };
 
+// An entry of the editor's error console, as THeadlessSession::ErrorConsoleEntry gives it: a Lua error, a
+// printError() or, for debug, a debugc(). kind and item are the trigger, alias, script, timer, key or button that
+// raised it, as ScriptItemInfo names them, empty and 0 where Mudlet names none the editor shows; line is the line of its
+// Lua the message names, 0 for none. n counts the profile's entries from 1; at is when, in ms since the epoch
+struct ErrorConsoleEntry
+{
+    qint64 n = 0;
+    qint64 at = 0;
+    bool debug = false;
+    QString object;
+    QString function;
+    QString event;
+    QString message;
+    QString kind;
+    int item = 0;
+    int line = 0;
+};
+
 // Everything the engine tells its host. Every method must be implementable
 // over a byte stream, so arguments are plain values only.
 class IFrontend
@@ -457,4 +475,8 @@ public:
     virtual void appMap(const std::optional<MapFrame>& frame) = 0;
     // The map the game offers and the download of it, on each change; as none offered once a profile closes
     virtual void mapDownload(const MapDownload& download) = 0;
+    // A new entry of the error console; IEngine::errorConsole() is read at other times
+    virtual void errorConsoleEntry(const ErrorConsoleEntry& entry) = 0;
+    // IEngine::clearErrorConsole() emptied it
+    virtual void errorConsoleCleared() = 0;
 };

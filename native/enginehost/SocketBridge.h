@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 27;
+    static constexpr int protocolVersion = 29;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -82,6 +82,8 @@ public:
     void map(const std::optional<MapFrame>& frame) override;
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
+    void errorConsoleEntry(const ErrorConsoleEntry& entry) override;
+    void errorConsoleCleared() override;
 
 protected:
     struct StoredLine
@@ -170,6 +172,8 @@ protected:
     static QJsonArray buttonsJson(const QList<BarButton>& buttons);
     static QJsonObject buttonBarsMessage(const QList<ButtonBar>& bars);
     static QJsonObject commandsMessage(const QList<AddonCommandInfo>& commands);
+    // The error console's entries: all it holds for full, else ones to add to those
+    static QJsonObject errorConsoleMessage(const QList<ErrorConsoleEntry>& entries, bool full);
     // The fields of a map or appMap message, all but its type; empty for a frame too large to send
     static QJsonObject mapMessage(const MapFrame& frame);
     static QJsonObject mapViewMessage(const MapViewInfo& view);

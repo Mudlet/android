@@ -27,6 +27,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
@@ -382,7 +383,7 @@ class ScriptLibraryTest {
         compose.onNode(seconds).performTextClearance()
         compose.onNode(seconds).performTextInput("75")
         waitFor(hasText(string(R.string.scripts_number_range, 0, 59)))
-        compose.onNode(field(R.string.scripts_timer_command)).performTextInput("cast heal")
+        compose.onNode(field(R.string.scripts_timer_command)).performTextReplacement("cast heal")
         compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
         activate(apply)
         val edit = received("editScriptItem")
@@ -495,7 +496,7 @@ class ScriptLibraryTest {
         val columns = field(R.string.scripts_bar_columns)
         compose.onNode(columns).performTextClearance()
         compose.onNode(columns).performTextInput("2")
-        compose.onNode(field(R.string.scripts_button_css)).performTextInput("QToolBar { color: red; }")
+        compose.onNode(field(R.string.scripts_button_css)).performTextReplacement("QToolBar { color: red; }")
         compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
         activate(apply)
         val edit = received("editScriptItem")
@@ -510,7 +511,7 @@ class ScriptLibraryTest {
         activate(hasContentDescription(string(R.string.navigate_back)))
 
         activate(row("Sword"))
-        session.send(fields("button", button(2, 1, "Sword").put("commandDown", "wield sword"), received("scriptItem")))
+        session.send(fields("button", button(2, 1, "Sword").put("commandDown", "wield sword").put("commandUp", "sheathe sword"), received("scriptItem")))
         val down = field(R.string.scripts_button_command)
         waitFor(down and hasText("wield sword"))
         compose.onNode(hasText(string(R.string.scripts_bar_place))).assertDoesNotExist()
@@ -518,7 +519,7 @@ class ScriptLibraryTest {
         compose.onNode(up).assertDoesNotExist()
         activate(hasText(string(R.string.scripts_button_push_down)))
         waitFor(up)
-        compose.onNode(up).performTextInput("remove sword")
+        compose.onNode(up).performTextReplacement("remove sword")
         compose.onNode(page).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
         activate(apply)
         val sword = received("editScriptItem").getJSONObject("fields")
@@ -753,13 +754,15 @@ class ScriptLibraryTest {
         .put("id", id).put("parent", parent).put("name", name).put("folder", folder).put("enabled", enabled).put("active", enabled)
         .put("package", "").put("error", "").put("summary", summary)
 
-    private fun timer(id: Int, parent: Int, name: String, time: Int): JSONObject = node(id, parent, name).put("script", "").put("command", "").put("time", time).put("offset", false)
+    // The fields that take text have some: an empty one whose top alone shows at the page's foot has no name for the
+    // checks (docs/roadmap.md, "A known gap, the toolkit's")
+    private fun timer(id: Int, parent: Int, name: String, time: Int): JSONObject = node(id, parent, name).put("script", "").put("command", "look").put("time", time).put("offset", false)
 
-    private fun key(id: Int, name: String, key: Int, modifiers: Int, keyName: String): JSONObject = node(id, 0, name).put("script", "").put("command", "").put("key", key).put("modifiers", modifiers).put("keyName", keyName)
+    private fun key(id: Int, name: String, key: Int, modifiers: Int, keyName: String): JSONObject = node(id, 0, name).put("script", "").put("command", "north").put("key", key).put("modifiers", modifiers).put("keyName", keyName)
 
     private fun button(id: Int, parent: Int, name: String, folder: Boolean = false, enabled: Boolean = true): JSONObject = node(id, parent, name, folder, enabled)
         .put("script", "").put("commandDown", "").put("commandUp", "").put("pushDown", false).put("location", "top").put("orientation", "horizontal")
-        .put("columns", 1).put("css", "")
+        .put("columns", 1).put("css", "color: blue;")
 
     private fun trigger(id: Int, parent: Int, name: String, enabled: Boolean = true): JSONObject = node(id, parent, name, enabled = enabled)
         .put("script", "").put("patterns", JSONArray().put(JSONObject().put("text", "You wave").put("type", "substring")))

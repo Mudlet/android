@@ -153,6 +153,8 @@ class ListDetailTest {
         session.profiles(PROFILES, session.receive("openProfile"))
         activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
         val triggers = JSONArray().put(scriptNode(1, "Greet")).put(scriptNode(2, "Wave"))
+        // The library asks as it opens, and an item's page too, from their composition, which goes on while the test waits on it
+        compose.waitForIdle()
         for (kind in listOf("trigger", "alias", "script")) {
             val ask = session.receive("scriptItems")
             session.send(JSONObject().put("t", "scriptItems").put("kind", kind).put("items", if (kind == "trigger") triggers else JSONArray()).put("re", ask.get("id")))
@@ -161,6 +163,7 @@ class ListDetailTest {
         displayed(hasText(string(R.string.scripts_pick)))
 
         activate(hasText("Greet") and inLibrary)
+        compose.waitForIdle()
         val open = session.receive("scriptItem")
         assertEquals(1, open.getInt("item"))
         val fields = scriptNode(1, "Greet").put("script", "").put("patterns", JSONArray()).put("command", "").put("lineDelta", -1).put("matchAll", false)
@@ -175,6 +178,7 @@ class ListDetailTest {
         // Another item takes its place with no question asked: the change stays a draft, which the library marks
         compose.onNode(name).performTextInput("!")
         activate(hasText("Wave") and inLibrary)
+        compose.waitForIdle()
         assertEquals(2, session.receive("scriptItem").getInt("item"))
         displayed(hasText("Greet") and hasText(string(R.string.scripts_draft)) and inLibrary)
 

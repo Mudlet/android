@@ -97,7 +97,7 @@ class ScriptLibraryTest {
 
     private fun openTheLibraryFromTheGame() {
         activate(hasContentDescription(string(R.string.scripts_open, game.name)))
-        val asked = (1..3).map { session.receive("scriptItems") }
+        val asked = (1..3).map { received("scriptItems") }
         assertEquals(listOf("trigger", "alias", "script"), asked.map { it.getString("kind") })
         items("trigger", triggers, asked[0])
         items("alias", listOf(node(1, 0, "kick")), asked[1])
@@ -115,12 +115,12 @@ class ScriptLibraryTest {
         compose.onNode(hasText("Combat") and !hasClickAction()).assertIsDisplayed()
 
         activate(switch("You hit"))
-        val enable = session.receive("enableScriptItem")
+        val enable = received("enableScriptItem")
         assertEquals("trigger", enable.getString("kind"))
         assertEquals(2, enable.getInt("item"))
         assertFalse(enable.getBoolean("enabled"))
         session.send(fields("trigger", trigger(2, 1, "You hit", enabled = false), enable))
-        items("trigger", listOf(triggers[0], node(2, 1, "You hit", enabled = false), triggers[2]), session.receive("scriptItems"))
+        items("trigger", listOf(triggers[0], node(2, 1, "You hit", enabled = false), triggers[2]), received("scriptItems"))
         waitFor(switch("You hit") and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         waitFor(hasText(string(R.string.scripts_off)))
 
@@ -160,15 +160,15 @@ class ScriptLibraryTest {
         waitFor(hasText("Wave") and hasSetTextAction())
 
         activate(apply)
-        val edit = session.receive("editScriptItem")
+        val edit = received("editScriptItem")
         assertEquals(3, edit.getInt("item"))
         assertEquals("Wave", edit.getJSONObject("fields").getString("name"))
         assertEquals("You wave", edit.getJSONObject("fields").getJSONArray("patterns").getJSONObject(0).getString("text"))
         session.send(fields("trigger", trigger(3, 0, "Wave"), edit))
-        items("trigger", listOf(triggers[0], triggers[1], node(3, 0, "Wave")), session.receive("scriptItems"))
+        items("trigger", listOf(triggers[0], triggers[1], node(3, 0, "Wave")), received("scriptItems"))
 
         activate(hasText(string(R.string.scripts_undo)) and hasClickAction())
-        val undo = session.receive("editScriptItem")
+        val undo = received("editScriptItem")
         assertEquals("Greet", undo.getJSONObject("fields").getString("name"))
 
         // A change and then Back, discarded, leaves the page and sends nothing
@@ -207,7 +207,7 @@ class ScriptLibraryTest {
     @Test
     fun aNewItemOpensAndANewFolderIsGoneInto() {
         activate(hasText(string(R.string.scripts_new_trigger)) and hasClickAction())
-        val add = session.receive("addScriptItem")
+        val add = received("addScriptItem")
         assertEquals("trigger", add.getString("kind"))
         assertEquals(0, add.getInt("parent"))
         assertEquals("after the folder and the trigger at the top level", 2, add.getInt("position"))
@@ -215,26 +215,26 @@ class ScriptLibraryTest {
         assertEquals(string(R.string.scripts_new_trigger), add.getString("name"))
         val made = trigger(9, 0, string(R.string.scripts_new_trigger)).put("active", false)
         session.send(fields("trigger", made, add))
-        items("trigger", triggers + node(9, 0, string(R.string.scripts_new_trigger)).put("active", false), session.receive("scriptItems"))
-        assertEquals(9, session.receive("scriptItem").getInt("item"))
+        items("trigger", triggers + node(9, 0, string(R.string.scripts_new_trigger)).put("active", false), received("scriptItems"))
+        assertEquals(9, received("scriptItem").getInt("item"))
         waitFor(hasText(string(R.string.scripts_new_trigger)) and hasSetTextAction() and hasAnyAncestor(page))
         activate(hasContentDescription(string(R.string.navigate_back)))
         // Switched on, but it runs only once applied
         waitFor(row(string(R.string.scripts_new_trigger)) and hasText(string(R.string.scripts_idle)))
 
         activate(hasContentDescription(string(R.string.scripts_add_folder)))
-        val folder = session.receive("addScriptItem")
+        val folder = received("addScriptItem")
         assertTrue(folder.getBoolean("folder"))
         assertEquals(3, folder.getInt("position"))
         val folderName = string(R.string.scripts_new_folder)
         session.send(fields("trigger", trigger(10, 0, folderName).put("folder", true), folder))
-        items("trigger", triggers + node(9, 0, string(R.string.scripts_new_trigger)) + node(10, 0, folderName, folder = true), session.receive("scriptItems"))
+        items("trigger", triggers + node(9, 0, string(R.string.scripts_new_trigger)) + node(10, 0, folderName, folder = true), received("scriptItems"))
         waitFor(hasText(string(R.string.scripts_folder_empty)))
         compose.onNode(hasText(folderName) and !hasClickAction() and hasAnyAncestor(library)).assertIsDisplayed()
 
         // What is made in a folder goes into it
         activate(hasText(string(R.string.scripts_new_trigger)) and hasClickAction())
-        assertEquals(10, session.receive("addScriptItem").getInt("parent"))
+        assertEquals(10, received("addScriptItem").getInt("parent"))
     }
 
     @Test
@@ -258,7 +258,7 @@ class ScriptLibraryTest {
         compose.onNode(second).assertDoesNotExist()
 
         activate(apply)
-        val patterns = session.receive("editScriptItem").getJSONObject("fields").getJSONArray("patterns")
+        val patterns = received("editScriptItem").getJSONObject("fields").getJSONArray("patterns")
         assertEquals(1, patterns.length())
         assertEquals("^hi$", patterns.getJSONObject(0).getString("text"))
         assertEquals("regex", patterns.getJSONObject(0).getString("type"))
@@ -283,7 +283,7 @@ class ScriptLibraryTest {
         compose.onNode(colour).performTextInput("#00ff00")
 
         activate(apply)
-        val fields = session.receive("editScriptItem").getJSONObject("fields")
+        val fields = received("editScriptItem").getJSONObject("fields")
         assertEquals(3, fields.getInt("lineDelta"))
         assertTrue(fields.getBoolean("highlight"))
         assertEquals("#00ff00", fields.getString("highlightFg"))
@@ -295,14 +295,14 @@ class ScriptLibraryTest {
         activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_aliases), 1)) and hasClickAction())
         activate(row("kick"))
         val alias = node(1, 0, "kick").put("script", "").put("pattern", "^k$").put("command", "kick rat")
-        session.send(fields("alias", alias, session.receive("scriptItem")))
+        session.send(fields("alias", alias, received("scriptItem")))
         val command = hasSetTextAction() and hasText(string(R.string.scripts_alias_command))
         waitFor(command and hasText("kick rat"))
         compose.onNode(hasSetTextAction() and hasText("^k$")).assertIsDisplayed()
         compose.onNode(command).performTextClearance()
         compose.onNode(command).performTextInput("kick orc")
         activate(apply)
-        val edit = session.receive("editScriptItem")
+        val edit = received("editScriptItem")
         assertEquals("alias", edit.getString("kind"))
         assertEquals("kick orc", edit.getJSONObject("fields").getString("command"))
         assertEquals("^k$", edit.getJSONObject("fields").getString("pattern"))
@@ -313,13 +313,13 @@ class ScriptLibraryTest {
         activate(hasText(string(R.string.scripts_kind_count, string(R.string.scripts_scripts), 1)) and hasClickAction())
         activate(row("On connect"))
         val script = node(1, 0, "On connect").put("script", "").put("eventHandlers", JSONArray().put("sysConnectionEvent"))
-        session.send(fields("script", script, session.receive("scriptItem")))
+        session.send(fields("script", script, received("scriptItem")))
         waitFor(hasText("sysConnectionEvent"))
         compose.onNode(hasSetTextAction() and hasText(string(R.string.scripts_event_new))).performTextInput("sysDisconnectionEvent")
         activate(hasContentDescription(string(R.string.scripts_event_add)))
         activate(hasContentDescription(string(R.string.scripts_event_remove, "sysConnectionEvent")))
         activate(apply)
-        val events = session.receive("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")
+        val events = received("editScriptItem").getJSONObject("fields").getJSONArray("eventHandlers")
         assertEquals(listOf("sysDisconnectionEvent"), (0 until events.length()).map(events::getString))
     }
 
@@ -339,10 +339,10 @@ class ScriptLibraryTest {
         // Leaving the library while the Undo is offered lets it go
         back()
         waitFor(hasText(string(R.string.game_title)))
-        val delete = session.receive("deleteScriptItem")
+        val delete = received("deleteScriptItem")
         assertEquals("trigger", delete.getString("kind"))
         assertEquals(3, delete.getInt("item"))
-        items("trigger", triggers.take(2), session.receive("scriptItems"))
+        items("trigger", triggers.take(2), received("scriptItems"))
     }
 
     @Test
@@ -350,7 +350,7 @@ class ScriptLibraryTest {
         openGreet()
         compose.onNode(name).performTextInput("!")
         activate(apply)
-        session.refuse(session.receive("editScriptItem"), "no such item")
+        session.refuse(received("editScriptItem"), "no such item")
         waitFor(hasText(string(R.string.scripts_refused_apply, "no such item")))
         // The draft is kept, to try again
         compose.onNode(apply).assertIsEnabled()
@@ -359,9 +359,9 @@ class ScriptLibraryTest {
 
         // An item gone since it was listed says so on its page, and goes from the list
         activate(row("Greet"))
-        session.refuse(session.receive("scriptItem"), "no such item")
+        session.refuse(received("scriptItem"), "no such item")
         waitFor(hasText(string(R.string.scripts_refused_open, "no such item")))
-        items("trigger", triggers.take(2), session.receive("scriptItems"))
+        items("trigger", triggers.take(2), received("scriptItems"))
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(row("Combat"))
         compose.onNode(row("Greet")).assertDoesNotExist()
@@ -370,13 +370,22 @@ class ScriptLibraryTest {
     /** Opens Greet from the library; [shown] is the name its page shows, a draft's when it has one. */
     private fun openGreet(shown: String = "Greet") {
         activate(row("Greet"))
-        val open = session.receive("scriptItem")
+        val open = received("scriptItem")
         assertEquals(3, open.getInt("item"))
         session.send(fields("trigger", trigger(3, 0, "Greet"), open))
         waitFor(hasText(shown) and hasSetTextAction() and hasAnyAncestor(page))
     }
 
     private fun back() = compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+
+    /**
+     * The next request of [type] the app sends, once its screens have settled: what a screen asks for as it opens, or
+     * sends as it goes, comes from its composition, which a test must wait on for it to go on.
+     */
+    private fun received(type: String): JSONObject {
+        compose.waitForIdle()
+        return session.receive(type)
+    }
 
     private fun node(id: Int, parent: Int, name: String, folder: Boolean = false, enabled: Boolean = true): JSONObject = JSONObject()
         .put("id", id).put("parent", parent).put("name", name).put("folder", folder).put("enabled", enabled).put("active", enabled)

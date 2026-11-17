@@ -514,7 +514,7 @@ The game screen's title bar has a Scripts button, before the map's, that opens t
 (`ui/scripts/ScriptLibraryScreen.kt`), over the requests in `docs/protocol.md`, "Editing triggers, aliases and scripts",
 kept by `ScriptItemsClient`:
 - A chip for each kind (triggers, aliases, scripts) with how many items it has; the kind's items one folder at a time
-  under a breadcrumb, each row with its name, then why it does not run (Mudlet's error), how many items a folder has,
+  under a breadcrumb, where Back goes up a folder, each row with its name, then why it does not run (Mudlet's error), how many items a folder has,
   that it is off, that it is on but not running (in a folder that is off, or new and not applied yet) or the package it
   came with, and a switch that sends `enableScriptItem`. A search finds names of every kind, with the folders each is
   in. New items and folders go last in the folder shown; a new item opens, and a new folder is gone into. At the foot, the game's last two lines go back to the game.

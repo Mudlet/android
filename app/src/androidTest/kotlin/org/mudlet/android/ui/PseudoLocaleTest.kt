@@ -126,6 +126,8 @@ class PseudoLocaleTest(private val locale: String) {
         activate(hasContentDescription(string(R.string.scripts_open, GAME.name)))
         val node = JSONObject().put("id", 1).put("parent", 0).put("name", "Greet").put("folder", false).put("enabled", false)
             .put("active", false).put("package", "").put("error", "")
+        // The library asks as it opens, from its composition, which goes on while the test waits on it
+        compose.waitForIdle()
         for (kind in listOf("trigger", "alias", "script")) {
             val ask = session.receive("scriptItems")
             val items = if (ask.getString("kind") == "trigger") JSONArray().put(node) else JSONArray()
@@ -136,6 +138,7 @@ class PseudoLocaleTest(private val locale: String) {
         assertAtStart("a script item", hasText("Greet"))
 
         activate(hasText("Greet"))
+        compose.waitForIdle()
         val open = session.receive("scriptItem")
         val trigger = JSONObject(node.toString()).put("script", "").put("command", "").put("lineDelta", 2).put("matchAll", true)
             .put("filter", false).put("fireLength", 0).put("sound", true).put("soundFile", "").put("highlight", true).put("highlightFg", "#ff0000")

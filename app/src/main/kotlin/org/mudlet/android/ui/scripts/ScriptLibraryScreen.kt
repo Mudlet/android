@@ -123,10 +123,10 @@ internal fun ScriptLibraryScreen(
         if (query.isNotBlank()) query = "" else openFolder = items?.firstOrNull { it.id == folder }?.parent ?: 0
     }
 
-    fun enter(kind: ScriptItemKind, folder: Int) {
-        kindWire = kind.wire
+    fun enter(of: ScriptItemKind, id: Int) {
+        kindWire = of.wire
         query = ""
-        openFolder = folder
+        openFolder = id
     }
 
     MudletScaffold(

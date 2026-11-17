@@ -600,7 +600,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | IF8 Script editor design pick | - | waiting for the user | |
 | IF9 Upstream PRs to Mudlet/Mudlet | - | waiting for the user | Mudlet/Mudlet#12962, Mudlet/Mudlet#12963, Mudlet/Mudlet#12964, Mudlet/Mudlet#12965, Mudlet/Mudlet#12967 |
 | 1 Stable release on Play | release blocker | in flight | |
-| 2 Main console links | release blocker | in flight | |
+| 2 Main console links | release blocker | done | #149, #159 |
 | 3 Profiles: backup, move, copy | release blocker | in flight | |
 | 4 Real phones and background | release blocker | not started | |
 | 5 Report a problem | release blocker | in flight: About > Report a problem; the offer after a crash next | |

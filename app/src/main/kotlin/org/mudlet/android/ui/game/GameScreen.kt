@@ -342,7 +342,8 @@ private fun ProfileGameScreen(
     LaunchedEffect(c.secureOfferRefusal) {
         val reason = c.secureOfferRefusal ?: return@LaunchedEffect
         c.secureOfferRefusalShown()
-        snackbars.showSnackbar(resources.getString(R.string.secure_offer_refused, reason), withDismissAction = true)
+        // Launched apart, as secureOfferRefusalShown ends this effect
+        scope.launch { snackbars.showSnackbar(resources.getString(R.string.secure_offer_refused, reason), withDismissAction = true) }
     }
     if (c.secureOffer && !c.secureOfferPutOff) {
         fun answer(accept: Boolean) {

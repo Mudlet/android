@@ -117,7 +117,8 @@ def main():
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items):
             checks()
-        secure_offer(port)
+        checks = secure_offer
+        checks(port)
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
         check(False, f"stopped in {checks.__name__}: {e!r}")
@@ -425,7 +426,9 @@ def secure_offer(plain_port):
     c.wait_for(lambda m: m["t"] == "secureOffer" and not m["offered"], timeout=10, collect=msgs)
     m = c.ask({"t": "answerSecureOffer", "accept": True}, answers=("error",), collect=msgs)
     check("no secure port" in m["message"], f"the offer lapses with its connection: {m}")
-    wait_status(c, "connection", lambda v: v == "disconnected", msgs)
+    # The status can come before the lapsed offer or the refusal, already collected
+    seen_or_next(c, lambda m: m["t"] == "status" and m["key"] == "connection" and m["value"] == "disconnected", msgs, 0,
+                 timeout=30, what="disconnected")
 
     # No: connects again where it was, and asks no more
     msgs = []

@@ -25,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -52,15 +55,16 @@ fun ReportProblemScreen(onBack: () -> Unit) {
         value = withContext(Dispatchers.IO) { ReportCollector.collect(context.applicationContext, EngineClient.profiles) }
     }
     val ready = report
+    val enabled = ready != null
     MudletScaffold(stringResource(R.string.report_title), onBack = onBack) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
             item { Paragraph(stringResource(R.string.report_intro)) }
             item {
                 FlowRow(Modifier.padding(horizontal = 12.dp)) {
-                    Button({ ready?.let { share(context, it.text) } }, Modifier.padding(4.dp), enabled = ready != null) {
+                    Button({ ready?.let { share(context, it.text) } }, Modifier.padding(4.dp), enabled = enabled) {
                         Text(stringResource(R.string.report_share))
                     }
-                    OutlinedButton({ ready?.let { copy(context, it.text) } }, Modifier.padding(4.dp), enabled = ready != null) {
+                    OutlinedButton({ ready?.let { copy(context, it.text) } }, Modifier.padding(4.dp), enabled = enabled) {
                         Text(stringResource(R.string.report_copy))
                     }
                     OutlinedButton(
@@ -71,14 +75,20 @@ fun ReportProblemScreen(onBack: () -> Unit) {
                             }
                         },
                         Modifier.padding(4.dp),
-                        enabled = ready != null,
+                        enabled = enabled,
                     ) { Text(stringResource(R.string.report_github)) }
                 }
             }
             item { Heading(stringResource(R.string.report_contents_heading)) }
-            if (ready == null) {
-                item { Paragraph(stringResource(R.string.report_collecting)) }
-            } else {
+            item {
+                // TalkBack says once that the report is ready, as the buttons above it come on
+                Text(
+                    stringResource(if (ready == null) R.string.report_collecting else R.string.report_ready),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+            if (ready != null) {
                 items(ready.text.lines()) { line ->
                     Text(
                         line,

@@ -25,17 +25,28 @@ data class CollectedReport(val header: List<String>, val text: String)
  */
 object ReportCollector {
     fun collect(context: Context, knownProfiles: List<Profile>?): CollectedReport {
-        val redactor = Redactor(PasswordStore(context).all(), logins(context, knownProfiles))
+        val passwords = PasswordStore(context).all()
+        val logins = logins(context, knownProfiles)
+        val redactor = Redactor(passwords.orEmpty(), logins.orEmpty())
         val header = header(context)
-        return CollectedReport(header.map(redactor::redact), composeReport(header, readLog(), redactor))
+        val log = if (passwords != null && logins != null) readLog() else null
+        return CollectedReport(header.map(redactor::redact), composeReport(header, log, redactor))
     }
 
-    private fun logins(context: Context, knownProfiles: List<Profile>?): List<String> {
+    /** Every profile's login, from the engine's files and [knownProfiles]; null if a profile's login file is unreadable */
+    private fun logins(context: Context, knownProfiles: List<Profile>?): List<String>? {
         // The engine's list, when it has given one, holds a login changed since the files were read
-        val stored = File(context.filesDir, "mudlet/profiles").listFiles()?.mapNotNull { folder ->
-            runCatching { readQString(File(folder, "login").readBytes()) }.getOrNull()
-        }.orEmpty()
-        return (stored + knownProfiles.orEmpty().map { it.login }).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val stored = File(context.filesDir, "mudlet/profiles").listFiles().orEmpty().mapNotNull { folder ->
+            val file = File(folder, "login")
+            if (!file.exists()) return@mapNotNull null
+            val login = try {
+                readQString(file.readBytes())
+            } catch (_: IOException) {
+                null
+            }
+            login ?: return null
+        }
+        return (stored + knownProfiles.orEmpty().map { it.login }).mapNotNull { it.trim().ifEmpty { null } }.distinct()
     }
 
     private fun header(context: Context): List<String> {

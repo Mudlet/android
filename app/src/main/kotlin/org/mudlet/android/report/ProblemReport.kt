@@ -21,7 +21,8 @@ class Redactor(passwords: Collection<String>, logins: Collection<String>) {
     private fun forms(secret: String): Set<String> {
         if (secret.isEmpty()) return emptySet()
         val escaped = secret.replace("\\", "\\\\").replace("\"", "\\\"")
-        return setOf(secret, escaped, URLEncoder.encode(secret, "UTF-8"), URLEncoder.encode(secret, "UTF-8").replace("+", "%20"))
+        val encoded = URLEncoder.encode(secret, "UTF-8")
+        return setOf(secret, escaped, encoded, encoded.replace("+", "%20"))
     }
 
     companion object {
@@ -32,11 +33,13 @@ class Redactor(passwords: Collection<String>, logins: Collection<String>) {
 
 /**
  * The text of a report: [header] (the versions, the device, the recent exits) and then as many of [log]'s newest
- * lines as fit in [maxChars], every line through [redactor] first. A report is sent as an Intent's text and put on the
- * clipboard, both through Binder, whose transaction is at most 1 MB for the whole process.
+ * lines as fit in [maxChars], every line through [redactor] first. A null [log] is left out, as when a secret could
+ * not be read and so could not be taken out of it. A report is sent as an Intent's text and put on the clipboard, both
+ * through Binder, whose transaction is at most 1 MB for the whole process.
  */
-fun composeReport(header: List<String>, log: List<String>, redactor: Redactor, maxChars: Int = MAX_REPORT_CHARS): String {
+fun composeReport(header: List<String>, log: List<String>?, redactor: Redactor, maxChars: Int = MAX_REPORT_CHARS): String {
     val top = header.joinToString("\n", postfix = "\n\n") { redactor.redact(it) }
+    if (log == null) return top + LOG_WITHHELD + "\n"
     var room = maxChars - top.length - LOG_HEADING.length - 1 - leftOut(log.size).length
     val kept = ArrayDeque<String>()
     for (line in log.asReversed()) {
@@ -80,3 +83,4 @@ fun readQString(bytes: ByteArray): String? {
 const val ISSUES_URL = "https://github.com/Mudlet/android/issues/new"
 const val MAX_REPORT_CHARS = 80_000
 private const val LOG_HEADING = "Log (newest last):"
+const val LOG_WITHHELD = "Log: left out, as a saved password or login could not be read to take it out of the log."

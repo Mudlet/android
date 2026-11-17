@@ -123,6 +123,82 @@ class LabelStyleTest {
     }
 
     @Test
+    fun theShorthandsSetWhatTheyDoNotNameBackToNone() {
+        val background = LabelStyle.parse("background: #222 url(tile.png); background: red")
+        assertEquals(LabelFill.Solid(0xFFFF0000.toInt()), background.background)
+        assertNull(background.backgroundImage)
+        assertNull(LabelStyle.parse("background-color: red; background: url(tile.png)").background)
+        // `background-color` names only the colour
+        assertEquals("tile.png", LabelStyle.parse("background: url(tile.png); background-color: red").backgroundImage)
+        val border = LabelStyle.parse("border: 3px solid red; border: 2px")
+        assertEquals(2f, border.borderWidth)
+        assertFalse(border.borderStyled)
+        assertNull(border.borderColor)
+        assertEquals(0f, LabelStyle.parse("border-width: 3px; border-style: solid; border: blue").borderWidth)
+    }
+
+    @Test
+    fun whatQtDrawsAsNothingIsNotDrawn() {
+        // A negative radius is none, a size of 0 or less keeps the one before it, and one stop is one colour
+        assertEquals(0f, LabelStyle.parse("border-radius: 4px; border-radius: -3px").borderRadius)
+        assertEquals(10f, LabelStyle.parse("font-size: 10px; font-size: 0").fontSizePx)
+        assertEquals(10f, LabelStyle.parse("font-size: 10px; font-size: -2pt").fontSizePx)
+        assertEquals(
+            LabelFill.Solid(0xFF00FF00.toInt()),
+            LabelStyle.parse("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0.5 lime)").background,
+        )
+        // A size in px is a whole number to Qt, so one under half a pixel is 0 and keeps the one before it too
+        assertEquals(10f, LabelStyle.parse("font-size: 10px; font-size: 0.3px").fontSizePx)
+        assertEquals(10f, LabelStyle.parse("font-size: 10px; font-size: .0001").fontSizePx)
+        assertEquals(1f, LabelStyle.parse("font-size: 0.5px").fontSizePx)
+        assertEquals(13f, LabelStyle.parse("font-size: 12.5px").fontSizePx)
+        assertEquals(10f * LabelStyle.PX_PER_PT, LabelStyle.parse("font-size: 10PT").fontSizePx)
+    }
+
+    @Test
+    fun noLengthIsLongerThanAScreenCouldShow() {
+        // Thirty-nine digits are a float that is infinite once a screen's density multiplies it; forty are infinite
+        // as read
+        for (huge in listOf("90000", "2" + "0".repeat(38), "1" + "0".repeat(39))) {
+            assertEquals(huge, LabelStyle.MAX_LENGTH, LabelStyle.length(huge))
+            assertEquals(huge, LabelStyle.MAX_LENGTH, LabelStyle.length("${huge}px"))
+            assertEquals(huge, LabelStyle.MAX_LENGTH, LabelStyle.length("${huge}pt"))
+            assertEquals(huge, -LabelStyle.MAX_LENGTH, LabelStyle.length("-$huge"))
+            val style = LabelStyle.parse("border-radius: ${huge}px; border: ${huge}px solid red; padding: $huge; margin: -$huge 0; font-size: ${huge}pt")
+            assertEquals(huge, 4096f, style.borderRadius)
+            assertEquals(huge, 4096f, style.drawnBorderWidth)
+            assertEquals(huge, Edges(4096f, 4096f, 4096f, 4096f), style.padding)
+            assertEquals(huge, Edges(-4096f, 0f, -4096f, 0f), style.margin)
+            assertEquals(huge, 4096f, style.fontSizePx)
+        }
+        // A point is more than a pixel
+        assertEquals(4096f, LabelStyle.length("4000pt"))
+        assertEquals(4095.5f, LabelStyle.length("4095.5px"))
+    }
+
+    @Test
+    fun aGradientsNumbersAreOnesAScreenCanDraw() {
+        val red = 0xFFFF0000.toInt()
+        val blue = 0xFF0000FF.toInt()
+        // Android has no gradient between points that are not numbers or are infinitely far apart
+        val gradient = LabelStyle.parse("background: qlineargradient(x1:NaN, y1:-Infinity, x2:1e39, y2:0.5, stop:0 red, stop:NaN lime, stop:1 blue)").background
+        assertEquals(LabelFill.Gradient(0f, -4096f, 4096f, 0.5f, listOf(0f to red, 1f to blue)), gradient)
+        // The one stop left of two is one colour
+        assertEquals(LabelFill.Solid(red), LabelStyle.parse("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 red, stop:NaN blue)").background)
+    }
+
+    @Test
+    fun noneTakesAwayOnlyWhatQtTakesAwayWithIt() {
+        // `background-image` takes only a file, so `none` leaves the one before it; the shorthand takes it away
+        assertEquals("tile.png", LabelStyle.parse("background-image: url(tile.png); background-image: none").backgroundImage)
+        assertNull(LabelStyle.parse("background-image: url(tile.png); background: none").backgroundImage)
+        // In the shorthand `none` is the image's, not the colour's
+        assertEquals(LabelFill.Solid(0xFFFF0000.toInt()), LabelStyle.parse("background: red none").background)
+        assertNull(LabelStyle.parse("background-color: red; background-color: none").background)
+        assertNull(LabelStyle.parse("border-image: url(frame.png); border-image: none").borderImage)
+    }
+
+    @Test
     fun whatItCannotReadLeavesTheRestAlone() {
         val style = LabelStyle.parse("color: nonsense; font-size: large; padding: 1px 2px 3px 4px 5px; ; : ; background-color: #00ff00 !important")
         assertNull(style.color)

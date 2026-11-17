@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
-import org.mudlet.android.protocol.Edges
 import org.mudlet.android.protocol.LabelFill
 import org.mudlet.android.protocol.LabelStyle
 import org.mudlet.android.protocol.PlacedWindow
@@ -144,10 +143,7 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit:
     val frameStyle = if (styledBorder) style else style.copy(borderColor = (if (focused) colours.primary else colours.outline).toArgb())
     val frameWidth = if (styledBorder) style.drawnBorderWidth * scale else with(density) { (if (focused) 2.dp else 1.dp).toPx() }
     val frame = if (styledBorder) style.drawnBorderWidth else FRAME_PX
-    val inner = with(style.padding) {
-        val extra = frame + DOCUMENT_MARGIN_PX
-        Edges(top + extra, right + extra, bottom + extra, left + extra)
-    }
+    val inner = style.padding + (frame + DOCUMENT_MARGIN_PX)
 
     Box(
         modifier.placeAt(touch, density).semantics {

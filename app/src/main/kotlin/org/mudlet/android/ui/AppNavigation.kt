@@ -40,6 +40,7 @@ import org.mudlet.android.ui.about.LicenceScreen
 import org.mudlet.android.ui.game.AnnouncementRegion
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
+import org.mudlet.android.ui.game.GameTourShown
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
 import org.mudlet.android.ui.report.ReportProblemScreen
@@ -92,15 +93,16 @@ private object Routes {
 /**
  * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the front profile's script
  * library with a screen for each item, the settings with a screen for each of their pages, About with a licence screen
- * for each component it lists, and, in debug builds only, the self-test. On an expanded screen, a profile's editor, a
- * script item, a settings page and a component's licence open beside their list ([ListDetail]).
+ * for each component it lists and its "Take a UI tour" going to the game screen's tour (which waits while [tourHeld]), and, in debug builds only, the
+ * self-test. On an expanded screen, a profile's editor, a script item, a settings page and a component's licence open
+ * beside their list ([ListDetail]).
  * A release build has no route to the self-test, so R8 drops it.
  *
  * On every screen, TalkBack says what the Announcer has to say; the first time TalkBack is on, the app asks whether
  * to tell games a screen reader is in use.
  */
 @Composable
-fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
+fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0, tourHeld: Boolean = false) {
     val nav = rememberNavController()
     // Each time a notification's tap brings its game to the front; at 0, none has
     LaunchedEffect(gamesShown) {
@@ -153,6 +155,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
             }
             composable(Routes.ABOUT) {
                 var open by rememberSaveable { mutableStateOf<String?>(null) }
+                val context = LocalContext.current
                 ListDetail(
                     open,
                     onCloseDetail = { open = null },
@@ -166,6 +169,10 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                             onOpenComponent = { if (twoPane) open = it else nav.navigate(Routes.licence(it)) { launchSingleTop = true } },
                             selected = open,
                             onReportProblem = { nav.navigate(Routes.REPORT) { launchSingleTop = true } },
+                            onTakeTour = {
+                                GameTourShown.set(context, false)
+                                nav.navigate(Routes.GAME) { launchSingleTop = true }
+                            },
                         )
                     },
                     detailContent = { LicenceScreen(it, onBack = { open = null }) },
@@ -189,6 +196,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                     onOpenSettings = { nav.navigate(Routes.settings(EngineClient.front.name.ifEmpty { null })) { launchSingleTop = true } },
                     onOpenScripts = { nav.navigate(Routes.SCRIPTS) { launchSingleTop = true } },
                     onMakeTrigger = { nav.navigate(Routes.triggerFromLine(it)) { launchSingleTop = true } },
+                    tourHeld = tourHeld,
                 )
             }
             composable(Routes.SCRIPTS) { entry ->

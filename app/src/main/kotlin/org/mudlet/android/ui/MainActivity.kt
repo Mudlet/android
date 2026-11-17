@@ -57,7 +57,9 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) showProfileOf(intent)
         setContent {
             MudletTheme {
-                AppNavigation(onKillUi = { finish() }, gamesShown = gamesShown)
+                val explainEngineStopped = EngineClient.engineStoppedInBackground && !engineStoppedAnswered
+                // The game screen's tour waits for these: each asks something of the player that matters more
+                AppNavigation(onKillUi = { finish() }, gamesShown = gamesShown, tourHeld = explainNotifications || explainEngineStopped)
                 if (explainNotifications) {
                     NotificationsExplanation(
                         onContinue = {
@@ -68,7 +70,7 @@ class MainActivity : ComponentActivity() {
                         // Tapped outside or Back: asked again at the next start
                         onDismiss = { explainNotifications = false },
                     )
-                } else if (EngineClient.engineStoppedInBackground && !engineStoppedAnswered) {
+                } else if (explainEngineStopped) {
                     EngineStoppedExplanation(
                         onBatterySettings = {
                             answerEngineStopped()

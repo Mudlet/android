@@ -35,6 +35,7 @@ import org.mudlet.android.protocol.RUN_ITALIC
 import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_UNDERLINE
+import org.mudlet.android.ui.game.GameTourShown
 
 /**
  * The self-test screen (debug builds), opened from the start screen, against a fake engine's message stream: how it
@@ -190,6 +191,8 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         EngineClient.init(InstrumentationRegistry.getInstrumentation().targetContext)
         // So MainActivity does not start the real engine
         EngineClient.engineWanted = false
+        // A test of the game screen sees it as a returning player does; GameTourTest shows the tour itself
+        GameTourShown.set(InstrumentationRegistry.getInstrumentation().targetContext, true)
         engine = FakeEngine(open)
         previous = EngineClient.connector
         EngineClient.connector = engine::connect

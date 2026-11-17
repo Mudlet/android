@@ -177,6 +177,8 @@
     <string name="help_manual">Manual</string>
     <!-- A link that opens the manual's page of every Lua function Mudlet has, in the browser -->
     <string name="help_lua_functions">Lua functions</string>
+    <!-- About > Help: shows the game screen's short tour again; desktop Mudlet's Help menu says the same -->
+    <string name="help_tour">Take a UI tour</string>
     <!-- About > Help: a link to Mudlet's video tutorials on its website; desktop Mudlet's Help menu says the same -->
     <string name="help_videos">Video tutorials</string>
     <!-- About > Help: a link to Mudlet's Discord server; desktop Mudlet's Help menu says the same -->
@@ -199,6 +201,44 @@
     <string name="help_introduction_keys">Introduction to key bindings</string>
     <!-- Script library > Help: the manual's introduction to buttons, opened in the browser -->
     <string name="help_introduction_buttons">Introduction to buttons</string>
+    <!-- The game screen's tour, as TalkBack names it when it shows; desktop Mudlet's tour has the same name -->
+    <string name="tour_name">Mudlet interface tour</string>
+    <!-- A button on the tour that closes it for good; desktop Mudlet's tour says the same -->
+    <string name="tour_skip">Skip tour</string>
+    <!-- A button on the tour that goes back to the previous step -->
+    <string name="tour_back">Back</string>
+    <!-- A button on the tour that goes on to the next step. tour_welcome names it: keep the two the same -->
+    <string name="tour_next">Next</string>
+    <!-- The button on the tour's last step that closes it, in place of tour_next -->
+    <string name="tour_finish">Finish</string>
+    <!-- How far through the tour the player is: %1$d is the step shown, %2$d the number of steps -->
+    <string name="tour_progress">%1$d of %2$d</string>
+    <!-- What TalkBack says as a step of the tour shows: %1$s is its title (such as tour_welcome_title), %2$s its text -->
+    <string name="tour_announcement">%1$s. %2$s</string>
+    <!-- The title of the tour's first step -->
+    <string name="tour_welcome_title">Welcome to Mudlet!</string>
+    <!-- The text of the tour's first step. "Next" is tour_next: keep the two the same -->
+    <string name="tour_welcome">New here? This quick tour points out the most important parts of Mudlet - it takes less than a minute. Use Next to move through it.</string>
+    <!-- The title of the tour's step at the console, where the game's text shows -->
+    <string name="tour_console_title">The game window</string>
+    <!-- The text of the tour's step at the console -->
+    <string name="tour_console">Text from the game appears here. Scroll up to read earlier text.</string>
+    <!-- The title of the tour's step at the input line, where commands are typed -->
+    <string name="tour_input_title">The input line</string>
+    <!-- The text of the tour's step at the input line. "History" is history_open, the button below the line: keep the two the same -->
+    <string name="tour_input">Type game commands here and send them. History, below it, brings back commands you typed before.</string>
+    <!-- The title of the tour's step at the title bar's button that opens the scripts (triggers, aliases and the rest) -->
+    <string name="tour_scripts_title">Automate your game</string>
+    <!-- The text of the tour's step at the scripts button -->
+    <string name="tour_scripts">Triggers, aliases, timers and scripts let Mudlet react to the game for you and shorten what you type. You will find them here - start simple, no programming needed.</string>
+    <!-- The title of the tour's step at the title bar's settings button -->
+    <string name="tour_settings_title">Make Mudlet yours</string>
+    <!-- The text of the tour's step at the settings button -->
+    <string name="tour_settings">Text size, colours, the map, accessibility options and much more can be changed in the settings, right here.</string>
+    <!-- The title of the tour's last step -->
+    <string name="tour_done_title">That\'s it - have fun!</string>
+    <!-- The text of the tour's last step. "About and licences", "Help" and "Take a UI tour" are about_title, help_heading and help_tour: keep them the same -->
+    <string name="tour_done">If you ever want to see this tour again, it is in About and licences, under Help: Take a UI tour.</string>
     <!-- Title of the problem report screen -->
     <string name="report_title">Report a problem</string>
     <!-- Problem report screen: what it is, above the report itself -->

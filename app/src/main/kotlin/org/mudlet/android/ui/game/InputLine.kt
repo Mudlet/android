@@ -175,7 +175,7 @@ fun InputLine(
     // Whether the line is the one kept, still selected whole: what is typed next replaces it
     fun keptWhole(): Boolean {
         val typed = text.text
-        return kept != null && typed.toString() == kept && text.selection == TextRange(0, typed.length)
+        return typed.toString() == kept && text.selection == TextRange(0, typed.length)
     }
 
     fun move(moved: HistoryPosition) {

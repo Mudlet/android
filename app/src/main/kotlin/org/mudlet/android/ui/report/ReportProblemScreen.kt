@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -56,6 +57,7 @@ fun ReportProblemScreen(onBack: () -> Unit) {
     }
     val ready = report
     val enabled = ready != null
+    val lines = remember(ready) { ready?.text?.lines() }
     MudletScaffold(stringResource(R.string.report_title), onBack = onBack) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
             item { Paragraph(stringResource(R.string.report_intro)) }
@@ -88,8 +90,8 @@ fun ReportProblemScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
-            if (ready != null) {
-                items(ready.text.lines()) { line ->
+            if (lines != null) {
+                items(lines) { line ->
                     Text(
                         line,
                         style = MaterialTheme.typography.bodySmall,

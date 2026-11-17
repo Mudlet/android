@@ -934,6 +934,13 @@ class ProtocolTest {
     }
 
     @Test
+    fun soundsDecodeAndAMissingFieldIsFalse() {
+        val muted = FrameReader.parse(JSONObject("""{"t":"sounds","played":true,"scriptsMuted":false,"gameMuted":true}""")) as EngineMessage.Sounds
+        assertEquals(EngineMessage.Sounds(played = true, scriptsMuted = false, gameMuted = true), muted)
+        assertEquals(EngineMessage.Sounds(false, false, false), FrameReader.parse(JSONObject("""{"t":"sounds"}""")))
+    }
+
+    @Test
     fun theMapDownloadRequestsCarryNothingElse() {
         assertEquals(mapOf("t" to "downloadMap"), Requests.downloadMap().toMap())
         assertEquals(mapOf("t" to "cancelMapDownload"), Requests.cancelMapDownload().toMap())

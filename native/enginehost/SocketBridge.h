@@ -82,6 +82,7 @@ public:
     void map(const std::optional<MapFrame>& frame) override;
     void appMap(const std::optional<MapFrame>& frame) override;
     void mapDownload(const MapDownload& download) override;
+    void sounds(const Sounds& sounds) override;
 
 protected:
     struct StoredLine
@@ -219,6 +220,8 @@ protected:
     KeptMap mAppMap;
     // The mapDownload message last sent, empty until the engine has sent one
     QJsonObject mMapDownload;
+    // The sounds message last sent, empty until the engine has sent one
+    QJsonObject mSounds;
     std::deque<StoredLine> mScrollback;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;

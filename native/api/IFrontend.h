@@ -254,6 +254,17 @@ struct MapDownload
     bool operator==(const MapDownload&) const = default;
 };
 
+// Whether the profile has set a sound, music or video going since it loaded, and the main window's mutes, which are
+// every profile's: the sounds scripts play (Mudlet's muteMediaAPI) and those the game sends (muteMediaGame)
+struct Sounds
+{
+    bool played = false;
+    bool scriptsMuted = false;
+    bool gameMuted = false;
+
+    bool operator==(const Sounds&) const = default;
+};
+
 // A room a map frame drew, at its middle in the frame's pixels
 struct MapRoomPlace
 {
@@ -457,4 +468,6 @@ public:
     virtual void appMap(const std::optional<MapFrame>& frame) = 0;
     // The map the game offers and the download of it, on each change; as none offered once a profile closes
     virtual void mapDownload(const MapDownload& download) = 0;
+    // On each change; as none played and nothing muted once a profile closes
+    virtual void sounds(const Sounds& sounds) = 0;
 };

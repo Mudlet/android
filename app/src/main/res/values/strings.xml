@@ -108,6 +108,40 @@
     <string name="profile_exported">Exported.</string>
     <!-- Shown, and read by TalkBack, when the profile could not be written to the file; %1$s is why, in English -->
     <string name="profile_export_failed">Could not export the profile: %1$s</string>
+    <!-- The profile list's button that adds a profile from a .zip file (one exported here, or desktop Mudlet's profile folder zipped), picked in Android's file picker -->
+    <string name="profiles_import">Import a profile</string>
+    <!-- Shown while the picked .zip file is unpacked and checked, before the player names the profile -->
+    <string name="profile_import_unpacking">Reading the file…</string>
+    <!-- Shown while the unpacked profile is added -->
+    <string name="profile_importing">Importing…</string>
+    <!-- Shown once a profile has been imported; %1$s is the name it was added under -->
+    <string name="profile_imported">Imported %1$s.</string>
+    <!-- Shown when importing a profile failed for a reason the device gave; %1$s is that reason, in English -->
+    <string name="profile_import_failed">Could not import the profile: %1$s</string>
+    <!-- The title of the dialog that names an imported profile; %1$s is the profile's name in the file -->
+    <string name="profile_import_title">Import %1$s</string>
+    <!-- The text of the dialog that names an imported profile: what comes with it, and that passwords do not -->
+    <string name="profile_import_text">Adds this profile\'s settings, scripts, map and logs as a new profile. Passwords are not imported: type them in again in its editor.</string>
+    <!-- Under the name field of the import dialog when a profile of that name exists (ignoring case); %1$s is that profile's name -->
+    <string name="profile_import_taken">There is already a profile named %1$s. Pick another name: an import never replaces a profile.</string>
+    <!-- Under the name field of the import dialog when the name has characters Mudlet cannot use for a profile -->
+    <string name="profile_import_name_rules">Use only the letters A to Z, digits, spaces and . _ ( ) - # &amp;, with no space at either end and no two dots together.</string>
+    <!-- The import dialog's button that adds the profile under the name typed -->
+    <string name="profile_import">Import</string>
+    <!-- The import dialog's button that drops the unpacked profile without adding it -->
+    <string name="profile_import_cancel">Cancel</string>
+    <!-- Why a picked file was not imported: it cannot be read as a .zip -->
+    <string name="profile_import_not_a_zip">This is not a .zip file, or it is damaged or empty.</string>
+    <!-- Why a picked .zip was not imported: the tool that made it wrote a file name in an encoding it does not name (not UTF-8), as some do for names with accented letters -->
+    <string name="profile_import_unreadable_name">A file name in the .zip cannot be read. Zip the folder again with a tool that writes names as UTF-8.</string>
+    <!-- Why a picked .zip was not imported: it must hold one profile's folder and nothing beside it -->
+    <string name="profile_import_not_one_folder">The .zip must hold one profile\'s folder, as Export writes it, and nothing beside it.</string>
+    <!-- Why a picked .zip was not imported: a file in it has a path that would put it outside the profile's folder, as a harmful file can -->
+    <string name="profile_import_unsafe_path">The .zip has a file whose path leads out of its folder, so it was not opened.</string>
+    <!-- Why a picked .zip was not imported: its folder has no saved profile (Mudlet keeps them as .xml files in a folder named current) -->
+    <string name="profile_import_no_save">The .zip holds no saved profile: its folder has no current folder with an .xml file in it.</string>
+    <!-- Why a picked .zip was not imported: it unpacks to more than the app takes in one import -->
+    <string name="profile_import_too_large">The .zip is too large to import.</string>
 
     <!-- The game screen's title: the screen with the game's text, the command line and the game pill -->
     <string name="game_title">Game</string>

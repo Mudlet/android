@@ -313,7 +313,8 @@ notifications (`app/src/main/kotlin/org/mudlet/android/ui/MainActivity.kt:100-10
 domain from cloud backup and device-to-device transfer (`app/src/main/res/xml/data_extraction_rules.xml:4-19`).
 A player can export one profile to a `.zip` (`app/src/main/kotlin/org/mudlet/android/ui/profiles/ProfileExport.kt`),
 written only where they pick through Android's file picker, with no storage permission and the profile's password
-files left out (`ProfileArchive.SECRETS`); nothing is sent to the developer, so it is not data collected.
+files left out (`ProfileArchive.SECRETS`); nothing is sent to the developer, so it is not data collected. Import
+(`ProfileImport.kt`) reads only the file the player picks, through the same picker, and leaves those files out too.
 
 **Deleting data.** Uninstalling the app, or Settings, Apps, Mudlet, Storage, "Clear storage", deletes everything it
 kept. As no copy leaves the device and there is no account, there is nothing for the Mudlet team to delete.

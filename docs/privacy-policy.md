@@ -42,7 +42,8 @@ Mudlet does not back any of this up to the cloud, and does not let Android copy 
 system logs on your device may hold Mudlet's error messages; they never hold a password.
 
 You can export a profile to a file yourself, from the profile's editor: it goes only where you choose in Android's file
-picker, and Mudlet leaves your passwords out of it. Who can read it then depends on where you put it.
+picker, and Mudlet leaves your passwords out of it. Who can read it then depends on where you put it. Importing one
+reads only the file you pick, and leaves out any password in it.
 
 ## Reporting a problem
 

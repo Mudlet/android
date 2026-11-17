@@ -103,6 +103,10 @@ def texts_of(msgs):
     return texts
 
 
+def disconnected(m):
+    return m["t"] == "status" and m["key"] == "connection" and m["value"] == "disconnected"
+
+
 def wait_status(c, key, pred, msgs, timeout=30):
     return c.wait_for(lambda m: m["t"] == "status" and m["key"] == key and pred(m["value"]), timeout=timeout, collect=msgs)
 
@@ -376,7 +380,7 @@ def tls_checks(plain_port):
     check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
     check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed"],
           f"the server saw the handshake end unfinished: {fake_telnet.TLS_HANDSHAKES}")
-    m = c.wait_for(lambda m: m["t"] == "certificateRefused", timeout=10, collect=msgs)
+    m = seen_or_next(c, lambda m: m["t"] == "certificateRefused", msgs, 0, timeout=10, what="certificateRefused")
     check(m.get("refused") is True and m.get("selfSigned") is True and m.get("expired") is False and m.get("others") is False,
           f"the self-signed certificate is passed on as refused: {m}")
     check(m.get("issuedTo") == "localhost" and m.get("issuer") == "localhost" and m.get("serial", "") != ""
@@ -388,7 +392,7 @@ def tls_checks(plain_port):
     c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": True})
     c.wait_for(lambda m: m["t"] in ("line", "tail") and "Secure handshake failed" in m["text"], timeout=30, collect=msgs)
     check(not any("Red bold" in t for t in texts_of(msgs)), "TLS to a plain port: the handshake fails, no game text")
-    wait_status(c, "connection", lambda v: v == "disconnected", msgs, timeout=10)
+    seen_or_next(c, disconnected, msgs, 0, timeout=10, what="disconnected")
     told = [m["refused"] for m in msgs if m["t"] == "certificateRefused"]
     check(told == [False], f"the refused certificate is forgotten as the next connection is tried, which had none: {told}")
 
@@ -436,8 +440,7 @@ def tls_checks(plain_port):
     check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
 
     # A certificate for another server: an error only "Accept all certificate errors" lets past
-    if ("connection", "disconnected") not in [(m["key"], m["value"]) for m in msgs if m["t"] == "status"]:
-        wait_status(c, "connection", lambda v: v == "disconnected", msgs, timeout=10)
+    seen_or_next(c, disconnected, msgs, 0, timeout=10, what="disconnected")
     msgs = []
     c.send({"t": "connect", "host": "localhost", "port": elsewhere_port, "tls": True})
     m = c.wait_for(lambda m: m["t"] == "certificateRefused" and m["refused"], timeout=30, collect=msgs)

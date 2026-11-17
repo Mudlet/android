@@ -457,7 +457,8 @@ as text over the map.
   A contributor that gives no colour has the map's own: black or white, whichever shows on the map's background.
 - `bg` is the box's colour as `#rrggbb` and `bgAlpha` its alpha, 0 to 255: what `setConfig("mapInfoColor", ...)`
   set, grey at 120 until a script does.
-- No `info` means no box: no contributor is on, or the map shows no room they speak of.
+- No `info` means no box: no contributor is on, none of them gives any text, or the map shows no room they speak
+  of.
 - The contributors run in the engine each time it draws the map, a script's in Lua, as on the desktop, so `info`
   changes only with a frame: `enableMapInfo()`, `disableMapInfo()`, `registerMapInfo()`, `killMapInfo()` and
   `updateMap()` each have the map drawn again. A frame whose `png` is as before but whose `info` differs is sent.

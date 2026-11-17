@@ -22,14 +22,15 @@ import org.mudlet.android.protocol.MapInfo
  * A map's info box (docs/architecture.md, "The map info"): what the profile's map info contributors say of the room, the
  * built-in ones and a script's `registerMapInfo()`, each in the colour, bold and italic the engine gives it, over the
  * box's own colour, as the desktop paints them. The engine leaves the box out of the map's picture, so here it is text:
- * at the player's font size, still while a finger drags the map under it, and read by TalkBack as one. A part with
- * nothing but space is left out, and with it the line break the built-in ones end with.
+ * at the player's font size, still while a finger drags the map under it, and read by TalkBack as one. Each part is
+ * trimmed, as the desktop trims it, which drops the line break the built-in ones end with; one of nothing but space is
+ * left out.
  */
 @Composable
 internal fun MapInfoBox(info: MapInfo, modifier: Modifier = Modifier) {
-    val lines = info.lines.map { it to it.text.trim() }.filter { (_, text) -> text.isNotEmpty() }
+    val lines = info.lines.map { it.copy(text = it.text.trim()) }.filter { it.text.isNotEmpty() }
     if (lines.isEmpty()) return
-    val description = stringResource(R.string.map_info, lines.joinToString("\n") { (_, text) -> text })
+    val description = stringResource(R.string.map_info, lines.joinToString("\n") { it.text })
     Column(
         modifier
             .padding(INFO_MARGIN)
@@ -37,9 +38,9 @@ internal fun MapInfoBox(info: MapInfo, modifier: Modifier = Modifier) {
             .background(Color(info.background), MaterialTheme.shapes.small)
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
-        for ((line, text) in lines) {
+        for (line in lines) {
             Text(
-                text,
+                line.text,
                 color = line.color?.let(::Color) ?: LocalContentColor.current,
                 fontWeight = if (line.bold) FontWeight.Bold else null,
                 fontStyle = if (line.italic) FontStyle.Italic else null,

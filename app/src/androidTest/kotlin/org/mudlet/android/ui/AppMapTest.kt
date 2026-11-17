@@ -283,7 +283,7 @@ class AppMapTest {
     @Test
     fun theMapInfoIsReadAtTheTopOfTheMapInFrontAndNotShownBehindTheText() {
         val behind = lastRequest("setAppMapSize", readPast = true)
-        val info = JSONObject("""{"lines":[{"text":"Great Hall / 7 (Castle)\n","bold":false,"italic":false,"color":"#000080"}],"bg":"#969696","bgAlpha":120}""")
+        val info = JSONObject("""{"lines":[{"text":"Great Hall / 7 (Castle)\n","bold":false,"italic":false,"color":"#ff0000"}],"bg":"#204060","bgAlpha":255}""")
         val shown = hasContentDescription(string(R.string.map_info, "Great Hall / 7 (Castle)"))
         session.send(appMap(behind.getInt("w"), behind.getInt("h"), scale = behind.getDouble("scale")).put("info", info))
         compose.waitUntil(WAIT_MS) { abs(backgroundPixel().red - 0.3f) < 0.03f }
@@ -298,6 +298,12 @@ class AppMapTest {
         val map = bounds(drawnMap())
         val box = bounds(shown)
         assertTrue("the info $box is not in the top half of the map $map", box.top >= map.top && box.bottom <= map.center.y && box.right <= map.right)
+        // In the engine's colours: the box's above the text, and the part's somewhere in it
+        val pixels = compose.onNode(shown).captureToImage().toPixelMap()
+        val edge = pixels[pixels.width / 2, 2]
+        assertTrue("the box is $edge", abs(edge.red - 0x20 / 255f) < 0.03f && abs(edge.green - 0x40 / 255f) < 0.03f && abs(edge.blue - 0x60 / 255f) < 0.03f)
+        val inRed = (0 until pixels.width).any { x -> (0 until pixels.height).any { y -> pixels[x, y].run { red > 0.8f && green < 0.3f && blue < 0.3f } } }
+        assertTrue("none of the text is the part's red", inRed)
         checkAccessibility()
     }
 

@@ -4,8 +4,8 @@ An app that draws the map as a picture gets the map info box painted into it: te
 that a screen reader cannot read, that moves and scales with the picture while a finger drags it, and that the app
 cannot keep clear of its own controls. The box's content was reachable only as pixels.
 
-- TMapPainter::mapInfo() gives what the enabled contributors return for a room, in the box's order;
-  paintMapInfo() paints from it, so the GUI's box is unchanged.
+- TMapPainter::mapInfo() gives what the enabled contributors return for a room, in the box's order, those with
+  no text left out as the box leaves them out; paintMapInfo() paints from it, so the GUI's box is unchanged.
 - TMapPainter::View::mPaintMapInfo, set by default, leaves the box out of a frame when cleared; PaintResult::mapInfo
   then holds its lines.
 - THeadlessSession::setMapInfoPainted(false) has renderMap() and renderAppMap() leave the box out, and mapInfo()
@@ -14,8 +14,8 @@ cannot keep clear of its own controls. The box's content was reachable only as p
 - docs/headless.md describes them.
 
 Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_info: the lines of the built-in and a script's
-contributor, their order, style and colour, enabling and disabling one, the box's colour, and the frame's pixels
-without the box). The desktop is unchanged.
+contributor, their order, style and colour, enabling and disabling one, one that gives no text, the box's colour,
+and the frame's pixels without the box). The desktop is unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 Upstream: not opened yet
@@ -38,7 +38,7 @@ index 81e1a43..b3147f5 100644
  the area's that has rooms, shown about the same point; an area is shown following the player where they are in
  it, else about the room nearest the middle of the level shown, or of its level with the most rooms where it has
 diff --git a/src/TMapPainter.cpp b/src/TMapPainter.cpp
-index 10e6ed9..cba4a3b 100644
+index 10e6ed9..1adae28 100644
 --- a/src/TMapPainter.cpp
 +++ b/src/TMapPainter.cpp
 @@ -2949,7 +2949,11 @@ void TMapPainter::paintFrame(QPainter& painter, PaintResult& result, const std::
@@ -54,7 +54,7 @@ index 10e6ed9..cba4a3b 100644
  
      if (!mHelpMsg.isEmpty()) {
          painter.setPen(QColor(255, 155, 50));
-@@ -3027,6 +3031,34 @@ void TMapPainter::resolveAreaExitClick(QPainter& painter, const QMap<int, QPoint
+@@ -3027,6 +3031,38 @@ void TMapPainter::resolveAreaExitClick(QPainter& painter, const QMap<int, QPoint
      }
  }
  
@@ -80,6 +80,10 @@ index 10e6ed9..cba4a3b 100644
 +                continue;
 +            }
 +            const MapInfoProperties properties = contributor(roomID, selectionSize, areaId, displayAreaId, infoColor);
++            // Nothing is painted for a contributor with nothing to say, as one whose script failed
++            if (properties.text.isEmpty()) {
++                continue;
++            }
 +            lines.append(MapInfoLine{properties.text, properties.isBold, properties.isItalic, properties.color.isValid() ? properties.color : infoColor});
 +        }
 +    }
@@ -89,7 +93,7 @@ index 10e6ed9..cba4a3b 100644
  int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
                                QPainter& painter,
                                Host* pHost,
-@@ -3052,8 +3084,7 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+@@ -3052,8 +3088,7 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
          return yOffset;
      }
  
@@ -99,7 +103,7 @@ index 10e6ed9..cba4a3b 100644
          return yOffset;
      }
  
-@@ -3068,22 +3099,9 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
+@@ -3068,22 +3103,9 @@ int TMapPainter::paintMapInfo(const QElapsedTimer& renderTimer,
      }
      painter.setFont(font);
  
@@ -126,7 +130,7 @@ index 10e6ed9..cba4a3b 100644
  
  #ifdef QT_DEBUG
 diff --git a/src/TMapPainter.h b/src/TMapPainter.h
-index 11dc1d2..df4c1dd 100644
+index 11dc1d2..6c1a434 100644
 --- a/src/TMapPainter.h
 +++ b/src/TMapPainter.h
 @@ -121,6 +121,9 @@ struct TMapPainterView
@@ -164,8 +168,8 @@ index 11dc1d2..df4c1dd 100644
      // Paints the whole view, the map info box included, at view.mSize. viewSettled is handed the frame's view just
      // before the info box's contributors run, so the Lua they run can read this frame's area and zoom from its caller.
      void paintView(QPainter&, const View&, PaintResult&, const std::function<void(const View&)>& viewSettled = {});
-+    // What the profile's enabled map info contributors give for the room, in the order the box shows them; each
-+    // runs here, a script's in Lua. A contributor may change infoColor for those after it.
++    // What the profile's enabled map info contributors give for the room, in the order the box shows them, but for
++    // those that give no text; each runs here, a script's in Lua. infoColor is the colour of one that gives none.
 +    static QList<MapInfoLine> mapInfo(Host* pHost, TMap* pMap, int roomID, int displayAreaId, int selectionSize, QColor& infoColor);
      // Returns where the box ends, down from the top
      static int paintMapInfo(const QElapsedTimer& renderTimer,

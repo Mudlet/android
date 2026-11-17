@@ -2680,7 +2680,7 @@ def map_info():
     """The map info box as text, left out of the picture: the built-in Short contributor's part in the app's map, with the
     map's own text colour and the box's colour; a script's registerMapInfo() after it, bold, italic and in its colour,
     in a frame whose picture is as before; disableMapInfo() and setConfig("mapInfoColor"); no info with no contributor
-    on; and the same in a script's mapper."""
+    on but one that gives no text; and the same in a script's mapper."""
     profile = "Map Info Test"
     proc, c = start_engine(profile)
     seen = []
@@ -2698,15 +2698,16 @@ def map_info():
     blue = {"bg": "#0a141e", "bgAlpha": 200}
 
     def frame_after(code, info, what, t="appMap"):
-        """The first frame after the Lua whose info is that, None for a frame with none."""
+        """The first frame after the Lua whose info is that, None for a frame with none; failing that, the last frame
+        there was, if any, for what else is checked of it."""
         since = len(seen)
         c.send({"t": "runLua", "code": "\n".join(code)})
         try:
             m = seen_or_next(c, lambda m: m["t"] == t and m["w"] and m.get("info") == info, seen, since, timeout=15)
         except TimeoutError:
-            came = [m.get("info", "no info") for m in seen[since:] if m["t"] == t]
-            check(False, f"{what}: the frames since had {came}")
-            return None
+            frames = [m for m in seen[since:] if m["t"] == t and m["w"]]
+            check(False, f"{what}: the frames since had {[m.get('info', 'no info') for m in frames]}")
+            return frames[-1] if frames else None
         check(True, what)
         return m
 
@@ -2729,7 +2730,8 @@ def map_info():
     m = frame_after(['disableMapInfo("Short")'], {"lines": [script], **grey}, "disableMapInfo() takes a contributor's part out")
     check(None not in (both, m) and m["png"] == both["png"], "in a frame whose picture is as before")
     frame_after(['setConfig("mapInfoColor", {10, 20, 30, 200})'], {"lines": [script], **blue}, 'setConfig("mapInfoColor") sets the box\'s colour and alpha')
-    frame_after(['disableMapInfo("Test")'], None, "with no contributor on a frame has no info")
+    frame_after(['registerMapInfo("Silent", function() return "" end)', 'enableMapInfo("Silent")', 'disableMapInfo("Test")'], None,
+                "with no contributor on but one that says nothing a frame has no info")
     m = frame_after(['enableMapInfo("Short")', 'testMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})'],
                     {"lines": [short], **blue}, "a script's mapper has the map info too", t="map")
     check(m is not None and unpainted(m), "and no box painted into its picture")

@@ -436,7 +436,8 @@ data class MapInfoLine(val text: String, val bold: Boolean, val italic: Boolean,
 
 /**
  * The map info box of a map frame, which the engine leaves out of the picture for the UI to show as text: the [lines]
- * of the contributors the profile has on, in the box's order, never empty, over its [background], ARGB.
+ * of the contributors the profile has on, in the box's order, never empty, over its [background], ARGB, transparent
+ * where the engine gave no colour.
  */
 data class MapInfo(val lines: List<MapInfoLine>, val background: Int)
 

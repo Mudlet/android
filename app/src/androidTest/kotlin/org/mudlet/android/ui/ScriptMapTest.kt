@@ -304,6 +304,12 @@ class ScriptMapTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(info).fetchSemanticsNodes().isNotEmpty() }
         session.send(frame(null))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isEmpty() }
+
+        // A script's long one leaves most of the map in sight
+        session.send(frame("""[{"text":"${(1..60).joinToString("\\n")}",$colour}]"""))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isNotEmpty() }
+        val long = bounds(anyInfo)
+        assertTrue("the info $long takes more than two fifths of the map $drawn", long.height <= drawn.height * 0.4f && long.bottom <= drawn.bottom)
     }
 
     @Test

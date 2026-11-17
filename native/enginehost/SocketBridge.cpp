@@ -1902,7 +1902,7 @@ QJsonObject SocketBridge::mapMessage(const MapFrame& frame)
         return part.isEmpty() ? 0 : QJsonDocument(part).toJson(QJsonDocument::Compact).size();
     };
     if (base64.size() + bytes(view) + bytes(info) + 1024 > qsizetype(maxFrameBytes)) {
-        qWarning("SocketBridge: a map at %dx%d as a PNG, with its view, is too large for a frame", frame.size.width(), frame.size.height());
+        qWarning("SocketBridge: a map at %dx%d as a PNG, with its view and info, is too large for a frame", frame.size.width(), frame.size.height());
         return {};
     }
     QJsonObject message{

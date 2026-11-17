@@ -38,7 +38,8 @@ import org.mudlet.android.protocol.RUN_UNDERLINE
 
 /**
  * The game's links in the main console (docs/architecture.md, "The main console's links"), against a fake engine: asked
- * about with no window, followed by a tap, a menu item or TalkBack's action, and asked again after `linksChanged`.
+ * about with no window, followed by a tap, a menu item or TalkBack's action, and asked again after `linksChanged`. A
+ * long press on a link with a menu opens that menu; elsewhere on the line it offers to make a trigger from the line.
  */
 @RunWith(AndroidJUnit4::class)
 class ConsoleLinksTest {
@@ -81,7 +82,7 @@ class ConsoleLinksTest {
         session.send(linkMessage("walk north", asked.get("id")))
         val follow = string(R.string.console_link_follow, "walk north")
         val openMenu = string(R.string.console_link_menu, "walk north")
-        compose.waitUntil(WAIT_MS) { actions().map { it.label } == listOf(follow, openMenu) }
+        compose.waitUntil(WAIT_MS) { actions().map { it.label } == listOf(follow, openMenu, makeTrigger()) }
         compose.onRoot().tryPerformAccessibilityChecks()
         // Once asked, it is not asked again as the line is drawn again with the answer
         session.assertNoRequest("getLink", 1_000)
@@ -103,6 +104,7 @@ class ConsoleLinksTest {
         compose.onNode(row).performTouchInput { longClick(onLink) }
         compose.waitUntil(WAIT_MS) { displayed("Eat") }
         compose.onNodeWithText("Ways").assertIsDisplayed()
+        assertFalse("the link's menu, not the line's", displayed(makeTrigger()))
         compose.onNode(hasText("Drop") and hasClickAction()).assertIsNotEnabled()
         compose.onRoot().tryPerformAccessibilityChecks()
         compose.onNode(hasText("Eat") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
@@ -113,6 +115,13 @@ class ConsoleLinksTest {
         compose.waitUntil(WAIT_MS) { displayed("Look") }
         compose.onNode(hasText("Look") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         assertFollowed(item = 0)
+        compose.waitUntil(WAIT_MS) { !displayed("Look") }
+
+        // Beside the link, a long press offers a trigger from the line, and follows nothing
+        compose.onNode(row).performTouchInput { longClick(beside) }
+        compose.waitUntil(WAIT_MS) { displayed(makeTrigger()) }
+        assertFalse(displayed("Eat"))
+        session.assertNoRequest("followLink", 1_000)
     }
 
     @Test
@@ -126,13 +135,13 @@ class ConsoleLinksTest {
         session.assertNoRequest("getLink", 1_000)
         session.send(linksChanged(LINK))
         session.send(linkMessage("run north", askedAbout().get("id"), menu = false))
-        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "run north")) }
+        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "run north"), makeTrigger()) }
 
         // Any link may have changed: asked again. One the engine no longer holds is read by its own text, and not asked again
         session.send(linksChanged())
         val again = askedAbout()
         session.send(JSONObject().put("t", "error").put("message", "getLink: unknown").put("re", again.get("id")))
-        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "north")) }
+        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "north"), makeTrigger()) }
         session.assertNoRequest("getLink", 1_000)
         assertFalse("no menu without an answer", labels().contains(string(R.string.console_link_menu, "north")))
     }
@@ -147,7 +156,7 @@ class ConsoleLinksTest {
         compose.waitUntil(WAIT_MS) { displayed(string(R.string.marker_new_engine, "$INSTANCE-2")) }
         compose.waitForIdle()
         session.assertNoRequest("getLink", 1_000)
-        assertEquals(emptyList<String>(), labels())
+        assertEquals("only the line's own action", listOf(makeTrigger()), labels())
         compose.onNode(row).performTouchInput { click(onLink) }
         session.assertNoRequest("followLink", 1_000)
 
@@ -195,6 +204,8 @@ class ConsoleLinksTest {
     private fun actions() = compose.onNode(row).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty()
 
     private fun labels() = actions().map { it.label }
+
+    private fun makeTrigger() = string(R.string.console_make_trigger)
 
     // TalkBack's action [label]: found from the test thread, as a semantics lookup waits for idle, and run on the main one
     private fun runAction(label: String) {

@@ -677,6 +677,8 @@
     <string name="console_link_follow">Follow link: %1$s</string>
     <!-- TalkBack's action that opens the menu of a link in the game's text; %1$s is the link's tool tip or text -->
     <string name="console_link_menu">Menu of link: %1$s</string>
+    <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: opens a page that makes a trigger matching the line -->
+    <string name="console_make_trigger">Make a trigger from this line</string>
     <!-- What TalkBack reads for a blank line of a mini console or user window with "Blank lines from the game" on
          "Replace them with a space": the name of the space character -->
     <string name="console_blank_line_space">Space</string>
@@ -1461,6 +1463,43 @@
     <!-- The face of the key that indents, in the row over the keyboard while the Lua field of a script item's page
          is typed in: an arrow, not a word -->
     <string name="lua_indent_key">⇥</string>
+    <!-- The title of the page that makes a trigger from a line of the game's text -->
+    <string name="line_trigger_title">Make a trigger</string>
+    <!-- A heading on the page that makes a trigger from a line, over the line's words, each a button -->
+    <string name="line_trigger_words">Words of the line</string>
+    <!-- Under the words of the line a trigger is made from: what tapping a word does. To capture a word is to take whatever is in its place and hand it to the trigger's Lua code -->
+    <string name="line_trigger_words_hint">Tap a word to capture what is in its place. Tap it again to make it optional, and once more to keep it as it is.</string>
+    <!-- What a screen reader says of a word of the line that the trigger's pattern keeps as it is -->
+    <string name="line_trigger_fixed">Kept as it is</string>
+    <!-- What a screen reader says of a word of the line whose place the trigger's pattern captures: it takes whatever is there and hands it to the trigger's Lua code -->
+    <string name="line_trigger_capture">Captured</string>
+    <!-- What a screen reader says of a word of the line that the trigger's pattern matches with or without -->
+    <string name="line_trigger_optional">Optional</string>
+    <!-- What a screen reader says a tap on a word of the line does: it changes whether the word is kept, captured or optional -->
+    <string name="line_trigger_change">change it</string>
+    <!-- A switch on the page that makes a trigger from a line: the trigger matches only a line that is exactly this one -->
+    <string name="line_trigger_whole">Whole line only</string>
+    <!-- Under the "Whole line only" switch -->
+    <string name="line_trigger_whole_hint">Not a line that has this somewhere in it</string>
+    <!-- A switch on the page that makes a trigger from a line: where a word is captured, the pattern takes several words, not just one -->
+    <string name="line_trigger_wide">A capture can be several words</string>
+    <!-- Under the "A capture can be several words" switch -->
+    <string name="line_trigger_wide_hint">As a name of two words in the place of one</string>
+    <!-- A heading on the page that makes a trigger from a line, over the pattern made: its type, as "Perl regex", and its text -->
+    <string name="line_trigger_pattern">Pattern</string>
+    <!-- A heading on the page that makes a trigger from a line, over what the pattern does with the line and with the game's recent lines -->
+    <string name="line_trigger_test">Test</string>
+    <!-- On the page that makes a trigger from a line: one thing the pattern captures from the line. "matches" is the Lua table a trigger's code reads and is not translated; %1$d is the number in it, %2$s what was captured -->
+    <string name="line_trigger_match">matches[%1$d] is “%2$s”</string>
+    <!-- On the page that makes a trigger from a line: how many, %1$d, of the game's lines still kept, %2$d of them, the pattern matches -->
+    <plurals name="line_trigger_scrollback">
+        <item quantity="one">%1$d of the last %2$d lines matches</item>
+        <item quantity="other">%1$d of the last %2$d lines match</item>
+    </plurals>
+    <!-- On the page that makes a trigger from a line, in place of the pattern, when every word was made optional: such a pattern would match every line -->
+    <string name="line_trigger_unusable">Every word is optional. Keep or capture at least one.</string>
+    <!-- The button at the foot of the page that makes a trigger from a line: makes the trigger and opens its page -->
+    <string name="line_trigger_make">Make trigger</string>
     <!-- A snackbar when the engine refuses to delete a script item; %1$s is its reason, in English -->
     <string name="scripts_refused_delete">Not deleted: %1$s</string>
 

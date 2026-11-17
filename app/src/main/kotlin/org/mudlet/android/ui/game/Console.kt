@@ -74,6 +74,9 @@ private const val CELLS_MEASURED = 100
  * Each line is one node for TalkBack, whose text is the line's without its styles. Its [links] are followed as
  * [ConsoleLine] offers them, each asked about once its line is shown, and again after the engine says it changed.
  *
+ * A long press on a line, but on a link with a menu, which opens that, or TalkBack's action on it, hands the line's
+ * text to [onMakeTrigger], to make a trigger from.
+ *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
  */
@@ -88,6 +91,7 @@ fun Console(
     onScreenSize: (columns: Int, rows: Int) -> Unit,
     modifier: Modifier = Modifier,
     links: ConsoleLinksClient? = null,
+    onMakeTrigger: ((String) -> Unit)? = null,
     behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -164,7 +168,9 @@ fun Console(
                     LaunchedEffect(spans, changes) { for (span in spans) links.request(span.link) }
                     LineLinks(spans, links::info, links::follow)
                 }
-                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks)
+                // The app's own markers are not the game's text: no trigger sees them
+                val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
+                ConsoleLine(text, line.text, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger)
             }
         }
         if (!following) {

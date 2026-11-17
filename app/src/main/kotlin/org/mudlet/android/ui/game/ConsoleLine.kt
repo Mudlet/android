@@ -59,6 +59,9 @@ internal class LineLinks(val spans: List<LinkSpan>, val info: (Int) -> EngineMes
  * Of its [links], a tap follows one and a long press opens its menu where it has one; TalkBack offers each the engine
  * has not disabled as an action that follows it, and one with a menu as another that opens it. A link that could not
  * be sent says so.
+ *
+ * With [onMakeTrigger], which a line of the game's own text has, a long press on a line that is not blank, anywhere but
+ * on a link with a menu, opens a menu that offers to make a trigger from it, and TalkBack offers the same as an action.
  */
 @Composable
 internal fun ConsoleLine(
@@ -70,6 +73,7 @@ internal fun ConsoleLine(
     blankLines: Settings.BlankLines = Settings.BlankLines.SHOW,
     singleLine: Boolean = false,
     links: LineLinks? = null,
+    onMakeTrigger: (() -> Unit)? = null,
 ) {
     val space = stringResource(R.string.console_blank_line_space)
 
@@ -88,47 +92,72 @@ internal fun ConsoleLine(
         if (actions.isNotEmpty()) customActions = actions
     }
 
-    if (links == null || links.spans.isEmpty()) {
+    val spans = links?.spans.orEmpty()
+    // Nothing matches a blank line alone
+    val makeTrigger by rememberUpdatedState(onMakeTrigger?.takeIf { plain.isNotBlank() })
+    val offersTrigger = makeTrigger != null
+    if (spans.isEmpty() && !offersTrigger) {
         LineText(text, modifier.then(read(emptyList())), color, style, singleLine)
         return
     }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var menu by remember { mutableStateOf<LinkMenu?>(null) }
+    // Where along the line the menu that offers a trigger is open, in pixels
+    var triggerMenuAt by remember { mutableStateOf<Float?>(null) }
     // The gestures read what the engine now says of a link, without starting again each time it answers
     val current by rememberUpdatedState(links)
     val context = LocalContext.current
 
-    fun follow(link: Int, item: Int?): Boolean = current.follow(link, item).also { sent ->
+    fun follow(link: Int, item: Int?): Boolean = (current?.follow(link, item) == true).also { sent ->
         if (!sent) Toast.makeText(context, R.string.input_not_sent, Toast.LENGTH_SHORT).show()
     }
 
-    val actions = linkActions(links, plain, ::follow) { menu = LinkMenu(it, 0f) }
+    val linkActions = if (links != null) linkActions(links, plain, ::follow) { menu = LinkMenu(it, 0f) } else emptyList()
+    val triggerLabel = stringResource(R.string.console_make_trigger)
+    val triggerAction = CustomAccessibilityAction(triggerLabel) {
+        makeTrigger?.invoke()
+        true
+    }.takeIf { offersTrigger }
 
     fun spanAt(position: Offset): LinkSpan? {
         val character = layout?.characterAt(position, plain.length) ?: return null
-        return current.spans.firstOrNull { character >= it.start && character < it.end }
+        return current?.spans?.firstOrNull { character >= it.start && character < it.end }
     }
 
-    val touches = Modifier.pointerInput(links.spans) {
+    val touches = Modifier.pointerInput(spans, offersTrigger) {
         detectTapGestures(
             onTap = { position ->
-                spanAt(position)?.let { span -> if (current.info(span.link)?.disabled != true) follow(span.link, null) }
+                spanAt(position)?.let { span -> if (current?.info(span.link)?.disabled != true) follow(span.link, null) }
             },
             onLongPress = { position ->
                 val link = spanAt(position)?.link
-                if (link != null && current.info(link)?.menu == true) menu = LinkMenu(link, position.x)
+                when {
+                    link != null && current?.info(link)?.menu == true -> menu = LinkMenu(link, position.x)
+                    offersTrigger -> triggerMenuAt = position.x
+                }
             },
         )
     }
     // A menu shows what the engine now says of its link, and goes once the line no longer has the link or it no menu
     val open = menu
-    val openSpan = open?.let { m -> links.spans.firstOrNull { it.link == m.link } }
-    val openInfo = open?.let { links.info(it.link) }?.takeIf { it.menu }
+    val openSpan = open?.let { m -> spans.firstOrNull { it.link == m.link } }
+    val openInfo = open?.let { links?.info(it.link) }?.takeIf { it.menu }
     if (open != null && (openSpan == null || openInfo == null)) SideEffect { menu = null }
     Box(modifier) {
-        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(actions)), color, style, singleLine) { layout = it }
+        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction))), color, style, singleLine) { layout = it }
         if (open != null && openSpan != null && openInfo != null) {
             LinkMenuView(openInfo, open.x, linkLabel(openInfo, plain.substring(openSpan.start, openSpan.end)), ::follow) { menu = null }
+        }
+        triggerMenuAt?.let { x ->
+            DropdownMenu(expanded = true, onDismissRequest = { triggerMenuAt = null }, offset = DpOffset(with(LocalDensity.current) { x.toDp() }, 0.dp)) {
+                DropdownMenuItem(
+                    text = { Text(triggerLabel) },
+                    onClick = {
+                        triggerMenuAt = null
+                        makeTrigger?.invoke()
+                    },
+                )
+            }
         }
     }
 }

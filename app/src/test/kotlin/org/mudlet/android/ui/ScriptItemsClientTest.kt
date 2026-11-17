@@ -12,6 +12,8 @@ import org.mudlet.android.protocol.ScriptItem
 import org.mudlet.android.protocol.ScriptItemDetails
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.protocol.TriggerPattern
+import org.mudlet.android.protocol.TriggerPatternType
 import org.mudlet.android.ui.scripts.ScriptItemKey
 
 /** What the script library keeps of the engine's items, and what it sends, against requests caught here. */
@@ -167,6 +169,75 @@ class ScriptItemsClientTest {
         val added = ScriptItemKey(ScriptItemKind.ALIAS, 10)
         assertEquals(made, scripts.saved[added])
         assertEquals(listOf<ScriptNotice>(ScriptNotice.Added(added, folder = false)), scripts.notices.toList())
+    }
+
+    private fun trigger(name: String, patterns: List<TriggerPattern> = emptyList()) = ScriptItem(
+        ScriptItemNode(11, 0, name, false, true, patterns.isNotEmpty(), "", "", ""),
+        "",
+        ScriptItemDetails.Trigger(patterns, "", -1, false, false, 0, false, "", false, null, null),
+    )
+
+    @Test
+    fun aTriggerMadeWithAPatternIsSavedWithItBeforeItIsOpened() {
+        val pattern = TriggerPattern("""You hit the (\w+)""", TriggerPatternType.REGEX)
+        assertTrue(scripts.addTrigger("You hit the goblin", pattern))
+        val add = take("addScriptItem")
+        assertEquals("trigger", add.getString("kind"))
+        assertEquals(0, add.getInt("parent"))
+        assertEquals("past the end, which appends, as the triggers were never listed", Int.MAX_VALUE, add.getInt("position"))
+        assertEquals("You hit the goblin", add.getString("name"))
+        assertFalse(add.getBoolean("folder"))
+        assertTrue(sent.isEmpty())
+
+        answer(add, trigger("You hit the goblin"))
+        assertTrue("not opened before it has its pattern", scripts.notices.isEmpty())
+        val edit = take("editScriptItem")
+        assertEquals(11, edit.getInt("item"))
+        val patterns = edit.getJSONObject("fields").getJSONArray("patterns")
+        assertEquals(1, patterns.length())
+        assertEquals(pattern.text, patterns.getJSONObject(0).getString("text"))
+        assertEquals("regex", patterns.getJSONObject(0).getString("type"))
+
+        val made = trigger("You hit the goblin", listOf(pattern))
+        answer(edit, made)
+        val added = ScriptItemKey(ScriptItemKind.TRIGGER, 11)
+        assertEquals(made, scripts.saved[added])
+        assertNull(scripts.drafts[added])
+        assertEquals("opened, with no Undo of its first save offered", listOf<ScriptNotice>(ScriptNotice.Added(added, folder = false)), scripts.notices.toList())
+        take("scriptItems")
+    }
+
+    @Test
+    fun aTriggerMadeAmongThoseListedGoesAfterThem() {
+        scripts.ask(ScriptItemKind.TRIGGER)
+        scripts.onItems(EngineMessage.ScriptItems(listOf(trigger("a").node, trigger("in it").node.copy(id = 12, parent = 11)), take("scriptItems").getLong("id")))
+        scripts.addTrigger("b", TriggerPattern("b", TriggerPatternType.SUBSTRING))
+        assertEquals(1, take("addScriptItem").getInt("position"))
+    }
+
+    @Test
+    fun aTriggerMadeButNotSavedWithItsPatternIsOpenedAndWhyIsSaid() {
+        val pattern = TriggerPattern("b", TriggerPatternType.SUBSTRING)
+        val added = ScriptNotice.Added(ScriptItemKey(ScriptItemKind.TRIGGER, 11), folder = false)
+        scripts.addTrigger("b", pattern)
+        answer(take("addScriptItem"), trigger("b"))
+        scripts.onRefused("editScriptItem", "a trigger is running", take("editScriptItem").getLong("id"))
+        assertEquals(listOf(added, ScriptNotice.Refused("editScriptItem", "a trigger is running")), scripts.notices.toList())
+        scripts.notices.toList().forEach(scripts::shown)
+
+        // The engine gone between the two requests
+        scripts.addTrigger("b", pattern)
+        val add = take("addScriptItem")
+        attached = false
+        answer(add, trigger("b"))
+        assertEquals(listOf(added, ScriptNotice.NotSent), scripts.notices.toList())
+    }
+
+    @Test
+    fun aTriggerWhoseAddIsRefusedIsSaid() {
+        scripts.addTrigger("b", TriggerPattern("b", TriggerPatternType.SUBSTRING))
+        scripts.onRefused("addScriptItem", "no profile", take("addScriptItem").getLong("id"))
+        assertEquals(listOf<ScriptNotice>(ScriptNotice.Refused("addScriptItem", "no profile")), scripts.notices.toList())
     }
 
     @Test

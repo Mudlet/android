@@ -10,8 +10,10 @@ import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LuaProblem
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.ScriptItem
+import org.mudlet.android.protocol.ScriptItemDetails
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.protocol.TriggerPattern
 import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.changedFrom
 import org.mudlet.android.ui.scripts.key
@@ -65,10 +67,14 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
         data class Item(val key: ScriptItemKey) : Pending
 
-        /** An editScriptItem of [sent]; [previous] is what Undo puts back, null for an Undo itself. */
-        data class Apply(val key: ScriptItemKey, val sent: ScriptItem, val previous: ScriptItem?) : Pending
+        /**
+         * An editScriptItem of [sent]; [previous] is what Undo puts back, null for an Undo itself and for the first save
+         * of an item [added] with what it matches.
+         */
+        data class Apply(val key: ScriptItemKey, val sent: ScriptItem, val previous: ScriptItem?, val added: Boolean = false) : Pending
 
-        data class Add(val kind: ScriptItemKind) : Pending
+        /** An addScriptItem; with [pattern], of a trigger that is saved with it as soon as it is made. */
+        data class Add(val kind: ScriptItemKind, val pattern: TriggerPattern? = null) : Pending
 
         data class Enable(val kind: ScriptItemKind) : Pending
 
@@ -124,6 +130,17 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         val position = listed[kind].orEmpty().count { it.parent == parent }
         if (!request(Pending.Add(kind)) { Requests.addScriptItem(kind, parent, position, folder, name, it) }) return false
         return ask(kind)
+    }
+
+    /**
+     * Makes a trigger named [name] that matches [pattern], last at the top level, and saves it, so that it runs;
+     * [notices] then has [ScriptNotice.Added], once the engine has it with its pattern, or, where the engine made it
+     * but did not save the pattern, with why not after it. False as for [ProfileSession.send].
+     */
+    fun addTrigger(name: String, pattern: TriggerPattern): Boolean {
+        // Past the end appends, which is where it goes when the triggers were never listed
+        val position = listed[ScriptItemKind.TRIGGER]?.count { it.parent == 0 } ?: Int.MAX_VALUE
+        return request(Pending.Add(ScriptItemKind.TRIGGER, pattern)) { Requests.addScriptItem(ScriptItemKind.TRIGGER, 0, position, false, name, it) }
     }
 
     /** Switches [key] on or off, and asks for its kind's items again, as those in a folder follow it. False as for [ProfileSession.send]. */
@@ -208,12 +225,24 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
                 ask(key.kind)
                 // An Undo of an earlier apply of this item would lose this one
                 queued.removeAll { it is ScriptNotice.Applied && it.item.key == key }
-                if (asked.previous != null) tell(ScriptNotice.Applied(item, asked.previous))
+                when {
+                    asked.added -> tell(ScriptNotice.Added(key, item.node.folder))
+                    asked.previous != null -> tell(ScriptNotice.Applied(item, asked.previous))
+                }
             }
 
             is Pending.Add -> {
                 store(item)
-                tell(ScriptNotice.Added(key, item.node.folder))
+                val details = item.details
+                if (asked.pattern == null || details !is ScriptItemDetails.Trigger) {
+                    tell(ScriptNotice.Added(key, item.node.folder))
+                } else {
+                    // Told once it is saved: a page opened before then would show, and could save, the trigger without it
+                    val sent = item.copy(details = details.copy(patterns = listOf(asked.pattern)))
+                    if (!request(Pending.Apply(key, sent, previous = null, added = true), quiet = true) { Requests.editScriptItem(sent, it) }) {
+                        addedWithout(key, ScriptNotice.NotSent)
+                    }
+                }
             }
 
             is Pending.Enable, is Pending.List, is Pending.Check -> if (key in opened) store(item)
@@ -243,8 +272,15 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
             refused[asked.key] = reason
             ask(asked.key.kind)
         } else {
-            tell(ScriptNotice.Refused(request, reason))
+            val refusal = ScriptNotice.Refused(request, reason)
+            if (asked is Pending.Apply && asked.added) addedWithout(asked.key, refusal) else tell(refusal)
         }
+    }
+
+    // A trigger made but not saved with its pattern is there all the same: it opens, and its page says [why] it has none
+    private fun addedWithout(key: ScriptItemKey, why: ScriptNotice) {
+        tell(ScriptNotice.Added(key, folder = false))
+        tell(why)
     }
 
     /** What the last link did not answer is not answered; a new engine instance loaded the profile again, with new ids. */

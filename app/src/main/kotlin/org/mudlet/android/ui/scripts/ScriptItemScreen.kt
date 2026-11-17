@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,10 +50,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -84,13 +83,15 @@ private val fieldWidth = Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth()
 
 /**
  * The page of the item [key]: its name, what its kind has (a trigger's patterns and options, an alias's pattern and
- * command, a script's event handlers) and its Lua, which [onEditCode] opens in the Lua editor. What the player changes is a draft, kept by [scripts] until Apply
- * saves it as the desktop editor's save does: [onGame] goes to the game and keeps it, to come back to, and Back asks
- * whether to discard it. Why the item does not run shows at the top. Delete hides it with Undo offered by the library,
- * and goes [onBack].
+ * command, a script's event handlers) and its Lua, edited here as [LuaField] has it, with Mudlet's [functions] offered
+ * and [LuaKeys] over the keyboard while the code has it. What the player changes is a draft, kept by [scripts] until
+ * Apply saves it as the desktop editor's save does, Lua that does not compile too: what is wrong with it then shows
+ * over the buttons until the code is changed, with a button that goes to its line. [onGame] goes to the game and keeps
+ * the draft, to come back to, and Back asks whether to discard it. Why the item does not run shows at the top. Delete
+ * hides it with Undo offered by the library, and goes [onBack].
  */
 @Composable
-internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, onBack: () -> Unit, onGame: () -> Unit, onEditCode: () -> Unit) {
+internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, functions: List<LuaFunction>, onBack: () -> Unit, onGame: () -> Unit) {
     // Asked again each time, as a script may have changed it since, and once the engine is back; a draft stays over what comes
     LaunchedEffect(key, scripts.attaches) { scripts.open(key) }
     val saved = scripts.saved[key]
@@ -101,6 +102,9 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
     BackHandler(enabled = dirty) { leaving = true }
     val unnamed = stringResource(R.string.scripts_unnamed)
     val name = item?.node?.name?.ifEmpty { unnamed }
+    val lua = rememberLuaFieldState(scripts, key, functions)
+    val luaFocus = remember { FocusRequester() }
+    val scroll = rememberScrollState()
 
     MudletScaffold(
         name ?: stringResource(R.string.scripts_loading),
@@ -118,26 +122,40 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Column(
-                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).testTag(SCRIPT_ITEM_TAG),
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll).padding(horizontal = 16.dp).testTag(SCRIPT_ITEM_TAG),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 val refusal = scripts.unopened[key]
                 when {
-                    item != null -> Fields(item, saved?.node?.error.orEmpty(), scripts::edit, onEditCode)
+                    item != null -> {
+                        Fields(item, saved?.node?.error.orEmpty(), scripts::edit)
+                        LuaField(lua, scroll, luaFocus, fieldWidth.padding(vertical = 16.dp))
+                    }
+
                     refusal != null -> Text(stringResource(R.string.scripts_refused_open, refusal), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.error)
+
                     else -> Text(stringResource(R.string.scripts_loading), fieldWidth.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            scripts.luaProblem(key)?.let { found ->
+                LuaProblemLine(found) {
+                    lua.goTo(found.line)
+                    luaFocus.requestFocus()
+                }
+            }
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
-                    Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val toGame = stringResource(R.string.scripts_back_to_game)
-                        OutlinedButton(onGame, Modifier.semantics { contentDescription = toGame }) {
-                            Icon(painterResource(R.drawable.ic_videogame_asset), contentDescription = null)
-                            Text(stringResource(R.string.game_title), Modifier.padding(start = 8.dp))
+                Column {
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+                        Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val toGame = stringResource(R.string.scripts_back_to_game)
+                            OutlinedButton(onGame, Modifier.semantics { contentDescription = toGame }) {
+                                Icon(painterResource(R.drawable.ic_videogame_asset), contentDescription = null)
+                                Text(stringResource(R.string.game_title), Modifier.padding(start = 8.dp))
+                            }
+                            Button({ scripts.apply(key) }, Modifier.weight(1f), enabled = dirty) { Text(stringResource(R.string.scripts_apply)) }
                         }
-                        Button({ scripts.apply(key) }, Modifier.weight(1f), enabled = dirty) { Text(stringResource(R.string.scripts_apply)) }
                     }
+                    if (item != null && lua.focused) LuaKeys(lua)
                 }
             }
         }
@@ -161,7 +179,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, on
 }
 
 @Composable
-private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (ScriptItem) -> Unit, onEditCode: () -> Unit) {
+private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (ScriptItem) -> Unit) {
     if (error.isNotEmpty()) {
         Surface(fieldWidth.padding(top = 8.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.errorContainer) {
             Text(stringResource(R.string.scripts_not_running, error), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
@@ -178,25 +196,6 @@ private fun ColumnScope.Fields(item: ScriptItem, error: String, onChange: (Scrip
         is ScriptItemDetails.Trigger -> TriggerFields(details) { onChange(item.copy(details = it)) }
         is ScriptItemDetails.Alias -> AliasFields(details) { onChange(item.copy(details = it)) }
         is ScriptItemDetails.Script -> EventHandlers(details) { onChange(item.copy(details = it)) }
-    }
-    SectionHeader(stringResource(R.string.scripts_code), fieldWidth)
-    ListSegment(0, 1, fieldWidth.padding(bottom = 16.dp)) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClickLabel = stringResource(R.string.scripts_lua_edit), onClick = onEditCode)
-                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.scripts_lua), style = MaterialTheme.typography.bodyLarge)
-                val lines = if (item.script.isBlank()) 0 else lineCount(item.script)
-                Text(
-                    if (lines == 0) stringResource(R.string.scripts_lua_empty) else pluralStringResource(R.plurals.scripts_lua_lines, lines, lines),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
     }
 }
 

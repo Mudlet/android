@@ -566,7 +566,7 @@ kept by `ScriptItemsClient`:
   that it is off, that it is on but not running (in a folder that is off, or new and not applied yet) or the package it
   came with, and a switch that sends `enableScriptItem`. A search finds names of every kind, with the folders each is
   in. New items and folders go last in the folder shown; a new item opens, and a new folder is gone into. At the foot, the game's last two lines go back to the game.
-- An item's page (`ScriptItemScreen.kt`) edits its name and what its kind has, and opens its Lua in the Lua editor: a trigger's patterns, each
+- An item's page (`ScriptItemScreen.kt`) edits its name, what its kind has and its Lua: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
   an alias's pattern and what it sends; a script's event handlers. A colour pattern is shown, not edited. The edit is
@@ -574,18 +574,22 @@ kept by `ScriptItemsClient`:
   it, and so does the page's Game button, which goes to the game to come back from, the library marking the item
   "Draft" meanwhile; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
   `deleteScriptItem` once the snackbar goes or the library does.
-- The Lua editor (`LuaEditorScreen.kt`, its edits in `LuaEditing.kt`) is a screen of its own over the same draft: the
-  lines numbered and not wrapped, a new line indented as the one above it and a step deeper under a line that opens a
-  block, a row over the keyboard with what Lua types most, and Mudlet's functions offered as a name is typed, from
-  `assets/lua/functions.json` (Mudlet's `lua-function-list.json`, which `scripts/sync-mudlet-games.py` writes and
-  `scripts/lint.sh games` checks). Once the typing stops it sends `checkLua`, and what Lua finds wrong is pinned at
-  the top, read out by TalkBack, with a button that goes to its line. Nothing runs until Apply.
+- The Lua is a field of the page (`LuaField.kt`, its edits in `LuaEditing.kt`), last in it and part of the same draft:
+  the lines numbered and not wrapped, a new line indented as the one above it and a step deeper under a line that
+  opens a block. The field is as tall as its lines, so only the page scrolls up and down, and it keeps the cursor's
+  line in what shows over the keyboard; a long line scrolls sideways. While the field has the keyboard, a row over it
+  has what Lua types most, and Mudlet's functions are offered as a name is typed, from `assets/lua/functions.json`
+  (Mudlet's `lua-function-list.json`, which `scripts/sync-mudlet-games.py` writes and `scripts/lint.sh games` checks).
+  Nothing is checked as it is typed. Apply sends `checkLua` with the `editScriptItem`: the item is saved whether or
+  not its Lua compiles, as the desktop editor's save does, and then does not run, which the top of the page says;
+  what Lua finds wrong shows over the page's buttons, read out by TalkBack, with a button that goes to its line,
+  until the code is changed. Nothing runs until Apply.
 - On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
   snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
   reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.
 - Not yet: a search of patterns and Lua, and a row's pattern under its name (`scriptItems` lists no text of either), a
   colour pattern's picker, moving an item to another folder (`moveScriptItem` is there for it), timers, keys and
-  buttons, and in the Lua editor colours for Lua's words and what each function does (Mudlet's list has only how each
+  buttons, and in the Lua field colours for Lua's words and what each function does (Mudlet's list has only how each
   is called).
 
 ## libmudlet as the engine
@@ -621,7 +625,7 @@ a room added beside another or deleted, the player placed, an area renamed and t
 moved and deleted as the desktop's script editor does (`0015-headless-script-items.patch`; see "Editing triggers,
 aliases and scripts" in [`protocol.md`](protocol.md)), the map info box as its parts, left out of the map's
 picture (`0016-headless-map-info.patch`; see "The map info"), Lua compiled without being run, for an editor to
-check it as it is typed (`checkLua()`, `0017-headless-check-lua.patch`), a running profile's login and password
+say what is wrong with it (`checkLua()`, `0017-headless-check-lua.patch`), a running profile's login and password
 changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-login-change.patch`), and its server,
 TLS choice and automatic reconnect changed for the connections after the one that is open (`setAddress()`,
 `setAutoReconnect()`, `0019-headless-connection-change.patch`).
@@ -1715,11 +1719,13 @@ Item 13 of the on-device checklist covers this.
     - The triggers' chip shows how many there are; a folder opens with a breadcrumb back; a switch turns an item off
       and its row says "Off", and the trigger no longer fires. The game's last lines show at the foot, and a tap on
       them goes back to the game.
-    - Tap New trigger: its page opens. Add a pattern "You see", tap Lua, type `echo("seen\n")` and Apply: "seen" shows
-      after a line with "You see"; Undo puts back what it had. Type `if x then` and Enter: the next line is indented,
-      and "'end' expected" shows at the top, with Go to putting the cursor on its line. Type `sel`: functions are
-      offered, and a tap completes one. Apply the `if`: the page says why it is not running, and the library's row
-      does too.
+    - Tap New trigger: its page opens. Add a pattern "You see", tap in the Lua field at the page's end, type
+      `echo("seen\n")` and Apply: "seen" shows after a line with "You see"; Undo puts back what it had. Type
+      `if x then` and Enter: the next line is indented, the row of symbols shows over the keyboard, and nothing is
+      said of the code yet. Type `sel`: functions are offered, and a tap completes one. Apply: "'end' expected"
+      shows over the buttons, with Go to putting the cursor on its line, the page says why the trigger is not
+      running, and the library's row does too. Type a key: the line over the buttons goes. Fill the field with thirty
+      lines and type at its end: the page scrolls with the cursor, which stays over the keyboard.
     - Change the name and tap Game: the game shows; back in Scripts the item is marked "Draft" and its page has the
       change. Press Back there: a dialog asks to discard; Keep editing keeps the change. Delete: the item goes, with
       Undo bringing it back; let the snackbar go and reopen the library: it is gone.

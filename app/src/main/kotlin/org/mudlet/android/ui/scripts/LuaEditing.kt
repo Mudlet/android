@@ -2,7 +2,7 @@ package org.mudlet.android.ui.scripts
 
 import org.json.JSONObject
 
-/** The Lua editor's text with the cursor in it, as an edit leaves them. */
+/** The Lua field's text with the cursor in it, as an edit leaves them. */
 data class LuaEdit(val text: String, val cursor: Int)
 
 /** One of Mudlet's Lua functions, as its function list has it: its [signature] is how it is called, such as `send(command, [echo])`. */

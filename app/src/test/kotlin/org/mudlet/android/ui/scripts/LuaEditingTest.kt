@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** The Lua editor's edits, which need no screen: indenting, completing and finding a line */
+/** The Lua field's edits, which need no screen: indenting, completing and finding a line */
 class LuaEditingTest {
     // The text with | where the cursor is
     private fun edit(marked: String) = LuaEdit(marked.replace("|", ""), marked.indexOf('|'))

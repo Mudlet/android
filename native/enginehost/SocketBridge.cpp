@@ -375,6 +375,10 @@ void SocketBridge::onReadyRead()
 
 bool SocketBridge::mapFileCancelAsked()
 {
+    // Bite: the cancel is never read while the map file runs, so map_files' cancel checks must go red
+    if (true) {
+        return false;
+    }
     if (!mClient) {
         return false;
     }

@@ -67,7 +67,8 @@ import kotlin.reflect.KClass
  * not hide it. The title bar's map button swaps the map and the console ([FullScreenMap]), until Back or the button
  * again, and for the game switched to: with the setting, the map is faint behind the text ([BackgroundMap]) and the
  * text faint behind the map in front ([textBehindMap]); without it there is no map behind the text and the map in front
- * covers the console. The input line and the row stay below the map in front, to type and pick commands in.
+ * covers the console. The input line and the row stay below the map in front, to type and pick commands in. The title
+ * bar's scripts button opens the profile's script library ([onOpenScripts]).
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
@@ -77,7 +78,7 @@ import kotlin.reflect.KClass
  * first, so Mudlet's retries after a drop are not each read out.
  */
 @Composable
-fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
+fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: () -> Unit) {
     val front = EngineClient.front
     val kept = rememberSaveableStateHolder()
     val open = EngineClient.sessions.map { it.name }
@@ -100,7 +101,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
     // Not the profile's either: a slide carries on across the switch it makes
     val scope = rememberCoroutineScope()
     val swipe = remember { GameSwipe(scope) }
-    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings) }
+    kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts) }
 }
 
 // What a composition last saw, which changing does not compose again
@@ -117,6 +118,7 @@ private fun ProfileGameScreen(
     swipe: GameSwipe,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenScripts: () -> Unit,
 ) {
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
@@ -199,6 +201,7 @@ private fun ProfileGameScreen(
             MudletTopBar(stringResource(R.string.game_title), onBack) {
                 ScriptCommandsButton()
                 MapButton(mapOpen, onMapOpen)
+                IconButton(onOpenScripts) { Icon(painterResource(R.drawable.ic_code), stringResource(R.string.scripts_open)) }
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }

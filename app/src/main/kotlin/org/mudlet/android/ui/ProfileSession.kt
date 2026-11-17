@@ -140,6 +140,9 @@ class ProfileSession internal constructor(
     /** The app's own map of this profile. */
     internal val appMap = AppMapClient(this)
 
+    /** Its triggers, aliases and scripts, as the script library shows and edits them. */
+    internal val scripts = ScriptItemsClient(::newRequestId, ::send)
+
     /** The text sizes the player pinched this profile's script consoles to. */
     internal val consoleZoom = ConsoleZoomClient(name, ::prefs, ::runAppLua)
 
@@ -450,6 +453,7 @@ class ProfileSession internal constructor(
                 }
                 linkState = "attached (${if (sameInstance) "same engine, delta replay" else "new engine instance"})"
                 windows.onAttached(sameInstance, connection)
+                scripts.onAttached(sameInstance)
             }
         }
 
@@ -539,6 +543,10 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Envs -> post { appMap.rooms.onEnvs(message) || windows.mapRooms.onEnvs(message) }
 
+                is EngineMessage.ScriptItems -> post { scripts.onItems(message) }
+
+                is EngineMessage.ScriptItemFields -> post { scripts.onItem(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }
@@ -562,6 +570,8 @@ class ProfileSession internal constructor(
                         // The settings shown stay as they were; the next load, attach or page asks again
                         defaultsRequests.remove(id)
                         Log.w(TAG, "Mudlet's settings: ${message.message}")
+                    } else if (message.message.substringBefore(':') in ScriptItemsClient.REQUESTS) {
+                        scripts.onRefused(message.message.substringBefore(':'), message.message.substringAfter(':').trim(), message.replyTo)
                     } else {
                         windows.onError(message)
                     }

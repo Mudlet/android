@@ -1043,6 +1043,214 @@
         <item quantity="one">--- %1$d line skipped while the UI lagged ---</item>
         <item quantity="other">--- %1$d lines skipped while the UI lagged ---</item>
     </plurals>
+    <!-- The game screen's title bar button, read by a screen reader, that opens the profile's triggers, aliases and scripts -->
+    <string name="scripts_open">Scripts</string>
+    <!-- The script library's title; %1$s is the profile's name, such as "Achaea" -->
+    <string name="scripts_title">Scripts: %1$s</string>
+    <!-- The script library's chip for its triggers: what reacts to lines from the game, as Mudlet calls them -->
+    <string name="scripts_triggers">Triggers</string>
+    <!-- The script library's chip for its aliases: what reacts to commands the player types, as Mudlet calls them -->
+    <string name="scripts_aliases">Aliases</string>
+    <!-- The script library's chip for its scripts: Lua run at load and on events, as Mudlet calls them -->
+    <string name="scripts_scripts">Scripts</string>
+    <!-- A script library chip once the items are listed; %1$s is the kind ("Triggers"), %2$d how many items it has -->
+    <string name="scripts_kind_count">%1$s %2$d</string>
+    <!-- The script library's search field's placeholder; it searches the items' names -->
+    <string name="scripts_search">Search by name</string>
+    <!-- What the script library shows while the engine has not listed the items yet -->
+    <string name="scripts_loading">Loading…</string>
+    <!-- What the script library shows for a kind with no items at all -->
+    <string name="scripts_none">None yet. Add one with the button below.</string>
+    <!-- What the script library shows inside a folder with nothing in it -->
+    <string name="scripts_folder_empty">This folder is empty.</string>
+    <!-- What the script library's search shows when no name matches; %1$s is what was typed -->
+    <string name="scripts_search_none">No names with “%1$s”</string>
+    <!-- The script library's breadcrumb's first step, the top level of a kind; %1$s is the kind, such as "Triggers" -->
+    <string name="scripts_all">All %1$s</string>
+    <!-- Between the steps of where a search result lives, such as "Triggers › Combat" -->
+    <string name="scripts_path_separator">" › "</string>
+    <!-- The name shown for a trigger, alias or script whose name is empty -->
+    <string name="scripts_unnamed">(no name)</string>
+    <!-- What a screen reader says a tap on a folder of the script library does -->
+    <string name="scripts_open_folder">open the folder</string>
+    <!-- What a screen reader says a tap on an item of the script library does -->
+    <string name="scripts_open_item">edit</string>
+    <!-- Under a script item, in the error colour, or atop its page: why it does not run; %1$s is Mudlet's error, in
+         English, such as a Lua syntax error -->
+    <string name="scripts_not_running">Not running: %1$s</string>
+    <!-- Under a folder of the script library: how many items are directly in it -->
+    <plurals name="scripts_folder_items">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <!-- Under a script item that is switched off -->
+    <string name="scripts_off">Off</string>
+    <!-- Under a script item a package installed; %1$s is the package's name, such as "generic_mapper" -->
+    <string name="scripts_from_package">From %1$s</string>
+    <!-- The script library's title bar button, read by a screen reader, that opens the folder shown, to rename it or edit
+         its Lua -->
+    <string name="scripts_edit_folder">Edit this folder</string>
+    <!-- The script library's title bar button, read by a screen reader, that makes a folder in the folder shown -->
+    <string name="scripts_add_folder">Add a folder</string>
+    <!-- The name a new folder of the script library starts with -->
+    <string name="scripts_new_folder">New folder</string>
+    <!-- The script library's button that makes a trigger, and the name it starts with -->
+    <string name="scripts_new_trigger">New trigger</string>
+    <!-- The script library's button that makes an alias, and the name it starts with -->
+    <string name="scripts_new_alias">New alias</string>
+    <!-- The script library's button that makes a script, and the name it starts with -->
+    <string name="scripts_new_script">New script</string>
+    <!-- Beside the script library on a wide screen, until an item is picked -->
+    <string name="scripts_pick">Pick a trigger, alias or script to edit it.</string>
+    <!-- A script item page's title bar button, read by a screen reader, that goes straight back to the game -->
+    <string name="scripts_back_to_game">Back to the game</string>
+    <!-- A script item page's title bar button, read by a screen reader; %1$s is the item's name. Undo is offered after -->
+    <string name="scripts_delete">Delete %1$s</string>
+    <!-- The button at the foot of a script item's page that saves what was changed, as Mudlet's Save Item -->
+    <string name="scripts_apply">Save</string>
+    <!-- The title of what asks, on leaving a script item's page, whether to lose what was changed; %1$s is its name -->
+    <string name="scripts_discard_title">Discard changes to %1$s?</string>
+    <!-- The text of what asks, on leaving a script item's page, whether to lose what was changed -->
+    <string name="scripts_discard_text">What you changed has not been saved.</string>
+    <!-- The button that leaves a script item's page losing what was changed -->
+    <string name="scripts_discard">Discard</string>
+    <!-- The button that stays on a script item's page to go on editing -->
+    <string name="scripts_keep_editing">Keep editing</string>
+    <!-- A script item's name field -->
+    <string name="scripts_name">Name</string>
+    <!-- A heading on a script item's page, over its Lua -->
+    <string name="scripts_code">Code</string>
+    <!-- The field of a script item's Lua code -->
+    <string name="scripts_lua">Lua</string>
+    <!-- A heading on a trigger's or alias's page, over what it matches -->
+    <string name="scripts_patterns">Patterns</string>
+    <!-- A trigger pattern's field; %1$d is its number, from 1 -->
+    <string name="scripts_pattern">Pattern %1$d</string>
+    <!-- What a screen reader says of a trigger pattern's type button; %1$d is the pattern's number, %2$s its type, such
+         as "Substring" -->
+    <string name="scripts_pattern_type_of">Pattern %1$d type: %2$s</string>
+    <!-- A button read by a screen reader, that moves a trigger pattern up the list; %1$d is its number -->
+    <string name="scripts_pattern_up">Move pattern %1$d up</string>
+    <!-- A button read by a screen reader, that moves a trigger pattern down the list; %1$d is its number -->
+    <string name="scripts_pattern_down">Move pattern %1$d down</string>
+    <!-- A button read by a screen reader, that removes a trigger pattern; %1$d is its number -->
+    <string name="scripts_pattern_remove">Remove pattern %1$d</string>
+    <!-- The button that adds a pattern to a trigger -->
+    <string name="scripts_add_pattern">Add pattern</string>
+    <!-- The title of the sheet that picks a trigger pattern's type -->
+    <string name="scripts_pattern_type">Pattern type</string>
+    <!-- A colour trigger pattern, which the app shows but does not edit yet; %1$s is the text colour, %2$s the
+         background's, each an ANSI colour number or one of scripts_color_any and scripts_color_default -->
+    <string name="scripts_color_pattern">Text colour %1$s on %2$s</string>
+    <!-- A side of a colour trigger pattern that matches any colour -->
+    <string name="scripts_color_any">any</string>
+    <!-- A side of a colour trigger pattern that matches the game's default colour -->
+    <string name="scripts_color_default">default</string>
+    <!-- A trigger pattern type, as Mudlet's "substring" -->
+    <string name="pattern_substring">Substring</string>
+    <!-- In the pattern type sheet, under "Substring": what that type matches -->
+    <string name="pattern_substring_description">The text anywhere in the line</string>
+    <!-- A trigger pattern type, as Mudlet's "perl regex" -->
+    <string name="pattern_regex">Perl regex</string>
+    <!-- In the pattern type sheet, under "Perl regex": what that type matches. "matches" is the Lua table, not translated -->
+    <string name="pattern_regex_description">A regular expression; its groups go to matches</string>
+    <!-- A trigger pattern type, as Mudlet's "start of line" -->
+    <string name="pattern_start">Start of line</string>
+    <!-- In the pattern type sheet, under "Start of line": what that type matches -->
+    <string name="pattern_start_description">The text at the start of the line</string>
+    <!-- A trigger pattern type, as Mudlet's "exact match" -->
+    <string name="pattern_exact">Exact match</string>
+    <!-- In the pattern type sheet, under "Exact match": what that type matches -->
+    <string name="pattern_exact_description">The whole line, exactly</string>
+    <!-- A trigger pattern type, as Mudlet's "lua function" -->
+    <string name="pattern_lua">Lua function</string>
+    <!-- In the pattern type sheet, under "Lua function": what that type matches -->
+    <string name="pattern_lua_description">Lua code that returns true to match</string>
+    <!-- A trigger pattern type, as Mudlet's "line spacer" -->
+    <string name="pattern_spacer">Line spacer</string>
+    <!-- In the pattern type sheet, under "Line spacer": what that type matches -->
+    <string name="pattern_spacer_description">Any lines, as many as it says, between the patterns either side</string>
+    <!-- A trigger pattern type, as Mudlet's "color trigger" -->
+    <string name="pattern_color">Colour trigger</string>
+    <!-- In the pattern type sheet, under "Colour trigger": what that type matches -->
+    <string name="pattern_color_description">Text in the colours it names</string>
+    <!-- A trigger pattern type, as Mudlet's "prompt" -->
+    <string name="pattern_prompt">Prompt</string>
+    <!-- In the pattern type sheet, under "Prompt", and in place of a prompt pattern's text: what that type matches -->
+    <string name="pattern_prompt_description">Any prompt the game marks as one</string>
+    <!-- A heading on a trigger's page, over how it matches and what it does -->
+    <string name="scripts_options">Options</string>
+    <!-- A trigger's choice to fire when any of its patterns matches, as Mudlet's Match: Any -->
+    <string name="scripts_match_any">Fire when any pattern matches</string>
+    <!-- A trigger's choice to fire only when all of its patterns match, as Mudlet's Match: All -->
+    <string name="scripts_match_all">Fire when all patterns match</string>
+    <!-- The field of how many lines all a trigger's patterns must match within, as Mudlet's "within %1 lines" -->
+    <string name="scripts_match_within">Within this many lines</string>
+    <!-- A trigger's switch, as Mudlet's "Every occurrence" -->
+    <string name="scripts_every_occurrence">Every occurrence</string>
+    <!-- Under a trigger's "Every occurrence" switch: what it does -->
+    <string name="scripts_every_occurrence_hint">Fire for each match in a line, not just the first</string>
+    <!-- The field of how many more lines a trigger fires for after it matches, as Mudlet's "Keep firing %1 more lines" -->
+    <string name="scripts_keep_firing">Keep firing for this many more lines</string>
+    <!-- A trigger's switch, as Mudlet's "Only pass matches" -->
+    <string name="scripts_filter">Only pass matches</string>
+    <!-- Under a trigger's "Only pass matches" switch: what it does -->
+    <string name="scripts_filter_hint">Its folder's triggers see only what it matched</string>
+    <!-- A trigger's switch, as Mudlet's "Highlight" -->
+    <string name="scripts_highlight">Highlight</string>
+    <!-- Under a trigger's "Highlight" switch: what it does -->
+    <string name="scripts_highlight_hint">Colour what it matched</string>
+    <!-- The field of the text colour a trigger highlights what it matched with -->
+    <string name="scripts_highlight_fg">Text colour</string>
+    <!-- The field of the background colour a trigger highlights what it matched with -->
+    <string name="scripts_highlight_bg">Background colour</string>
+    <!-- Under a colour field: how to type a colour -->
+    <string name="scripts_color_hint">Such as #ff0000; empty to keep the game\'s</string>
+    <!-- A trigger's switch, as Mudlet's "Sound" -->
+    <string name="scripts_sound">Sound</string>
+    <!-- Under a trigger's "Sound" switch: what it does -->
+    <string name="scripts_sound_hint">Play a sound file when it fires</string>
+    <!-- The field of the sound file a trigger plays -->
+    <string name="scripts_sound_file">Sound file</string>
+    <!-- The field of what a trigger sends to the game when it fires, as Mudlet's "Send plain text instead of a script" -->
+    <string name="scripts_trigger_command">Send to the game</string>
+    <!-- Under a number field whose text is not a whole number in range; %1$d and %2$d are the least and the most -->
+    <string name="scripts_number_range">A whole number from %1$d to %2$d</string>
+    <!-- An alias's pattern field -->
+    <string name="scripts_alias_pattern">Pattern</string>
+    <!-- Under an alias's pattern field: how it matches -->
+    <string name="scripts_alias_pattern_hint">A Perl regex the whole command is matched against</string>
+    <!-- The field of what an alias sends to the game in place of the command typed -->
+    <string name="scripts_alias_command">Send to the game</string>
+    <!-- A heading on a script's page, over the events it handles, as Mudlet's "Registered event handlers" -->
+    <string name="scripts_event_handlers">Event handlers</string>
+    <!-- The field of an event a script is to handle, such as "sysConnectionEvent" -->
+    <string name="scripts_event_new">Add an event</string>
+    <!-- A button read by a screen reader, that adds the event typed to a script's handlers -->
+    <string name="scripts_event_add">Add this event</string>
+    <!-- A button read by a screen reader, that removes an event from a script's handlers; %1$s is the event's name -->
+    <string name="scripts_event_remove">Remove %1$s</string>
+    <!-- A snackbar once a script item is saved; %1$s is its name. Undo is offered -->
+    <string name="scripts_applied">%1$s saved</string>
+    <!-- A snackbar once a script item is deleted; %1$s is its name. Undo is offered -->
+    <string name="scripts_deleted">%1$s deleted</string>
+    <!-- The snackbar button that undoes a script item's save or delete -->
+    <string name="scripts_undo">Undo</string>
+    <!-- A snackbar when the engine refuses to list script items; %1$s is its reason, in English -->
+    <string name="scripts_refused_list">Could not list them: %1$s</string>
+    <!-- A snackbar when the engine refuses to open a script item; %1$s is its reason, in English -->
+    <string name="scripts_refused_open">Could not open it: %1$s</string>
+    <!-- A snackbar when the engine refuses to add a script item; %1$s is its reason, in English -->
+    <string name="scripts_refused_add">Not added: %1$s</string>
+    <!-- A snackbar when the engine refuses to save a script item; %1$s is its reason, in English -->
+    <string name="scripts_refused_apply">Not saved: %1$s</string>
+    <!-- A snackbar when the engine refuses to switch a script item on or off; %1$s is its reason, in English -->
+    <string name="scripts_refused_enable">Not switched: %1$s</string>
+    <!-- A snackbar when the engine refuses to move a script item; %1$s is its reason, in English -->
+    <string name="scripts_refused_move">Not moved: %1$s</string>
+    <!-- A snackbar when the engine refuses to delete a script item; %1$s is its reason, in English -->
+    <string name="scripts_refused_delete">Not deleted: %1$s</string>
+
 
     <!-- The self-test: debug builds only, for developers, so not translated -->
     <string name="selftest_title" translatable="false">Self-test</string>

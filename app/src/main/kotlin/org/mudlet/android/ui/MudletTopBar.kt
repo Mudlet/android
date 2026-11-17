@@ -64,12 +64,14 @@ fun MudletScaffold(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
         modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = { MudletTopBar(title, onBack, scroll, actions) },
+        snackbarHost = snackbarHost,
         floatingActionButton = floatingActionButton,
         content = content,
     )

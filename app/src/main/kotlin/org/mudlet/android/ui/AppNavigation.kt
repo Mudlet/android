@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.net.Uri
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -11,6 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,9 @@ import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
+import org.mudlet.android.ui.scripts.ScriptItemKey
+import org.mudlet.android.ui.scripts.ScriptItemScreen
+import org.mudlet.android.ui.scripts.ScriptLibraryScreen
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsPage
 import org.mudlet.android.ui.settings.SettingsPageScreen
@@ -59,6 +64,8 @@ private object Routes {
     const val PROFILE = "profile?name={name}"
     const val ABOUT = "about"
     const val LICENCE = "licence/{id}"
+    const val SCRIPTS = "scripts"
+    const val SCRIPT_ITEM = "scriptItem/{key}"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
 
@@ -67,13 +74,15 @@ private object Routes {
     fun settings(game: String?) = if (game == null) "settings" else "settings?game=${Uri.encode(game)}"
 
     fun settingsPage(page: SettingsPage) = "settingsPage/${Uri.encode(page.encode())}"
+
+    fun scriptItem(key: ScriptItemKey) = "scriptItem/${Uri.encode(key.encode())}"
 }
 
 /**
- * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the settings with a screen
- * for each of their pages, About with a licence screen for each component it lists, and, in debug builds only, the
- * self-test. On an expanded screen, a profile's editor, a settings page and a component's licence open beside their
- * list ([ListDetail]).
+ * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the front profile's script
+ * library with a screen for each item, the settings with a screen for each of their pages, About with a licence screen
+ * for each component it lists, and, in debug builds only, the self-test. On an expanded screen, a profile's editor, a
+ * script item, a settings page and a component's licence open beside their list ([ListDetail]).
  * A release build has no route to the self-test, so R8 drops it.
  *
  * On every screen, TalkBack says what the Announcer has to say; the first time TalkBack is on, the app asks whether
@@ -165,7 +174,47 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 GameScreen(
                     onBack = { nav.navigateUp() },
                     onOpenSettings = { nav.navigate(Routes.settings(EngineClient.front.name.ifEmpty { null })) { launchSingleTop = true } },
+                    onOpenScripts = { nav.navigate(Routes.SCRIPTS) { launchSingleTop = true } },
                 )
+            }
+            composable(Routes.SCRIPTS) { entry ->
+                val front = EngineClient.front
+                val activity = LocalActivity.current
+                // A delete whose Undo is still offered is done as the library goes, but not for a rotation, which brings it back
+                DisposableEffect(front) { onDispose { if (activity?.isChangingConfigurations != true) front.scripts.commitDeletes() } }
+                // The item open beside the library, encoded
+                var open by rememberSaveable { mutableStateOf<String?>(null) }
+                val toGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) }
+                ListDetail(
+                    open,
+                    onCloseDetail = { open = null },
+                    onNarrowed = {
+                        open = null
+                        ScriptItemKey.decode(it)?.let { key -> nav.navigate(Routes.scriptItem(key)) { launchSingleTop = true } }
+                    },
+                    list = { twoPane ->
+                        ScriptLibraryScreen(
+                            front.scripts,
+                            front.name,
+                            onBack = { nav.navigateUp() },
+                            onOpen = { if (twoPane) open = it.encode() else nav.navigate(Routes.scriptItem(it)) { launchSingleTop = true } },
+                            selected = open?.let(ScriptItemKey::decode),
+                        )
+                    },
+                    detailContent = { key ->
+                        ScriptItemKey.decode(key)?.let { ScriptItemScreen(front.scripts, it, onBack = { if (open == key) open = null }, onGame = toGame) }
+                    },
+                    empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
+                )
+            }
+            composable(Routes.SCRIPT_ITEM, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
+                val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)
+                val back = entry.whileShown { nav.navigateUp() }
+                if (key != null) {
+                    ScriptItemScreen(EngineClient.front.scripts, key, onBack = back, onGame = entry.whileShown { nav.popBackStack(Routes.GAME, inclusive = false) })
+                } else {
+                    LaunchedEffect(Unit) { back() }
+                }
             }
             val game = navArgument("game") {
                 type = NavType.StringType

@@ -68,6 +68,7 @@ import org.mudlet.android.ui.EngineMessages.appMap
 import org.mudlet.android.ui.EngineMessages.areas
 import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.EngineMessages.room
+import org.mudlet.android.ui.EngineMessages.rooms
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import java.io.EOFException
@@ -1005,11 +1006,6 @@ class AppMapTest {
         val h = size.getInt("h")
         session.send(appMap(w, h, scale = size.getDouble("scale"), view = if (withView) mapView(w, h) else null))
         return w.toDouble() to h.toDouble()
-    }
-
-    private fun rooms(request: JSONObject, text: String, found: List<Triple<Int, String, String>>, more: Boolean = false): JSONObject {
-        val list = JSONArray(found.map { (id, name, area) -> JSONObject().put("id", id).put("name", name).put("area", area) })
-        return JSONObject().put("t", "rooms").put("text", text).put("rooms", list).put("more", more).put("re", request.get("id"))
     }
 
     private class RankedRoom(val id: Int, val name: String, val area: String, val areaId: Int, val steps: Int)

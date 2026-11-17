@@ -350,11 +350,14 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   asked with, so the mapper window's and the app's map never show each other's room.
 - While the map is edited, the room shown also has chips (`RoomEditActions` in `MapEdit.kt`), each but one opening a
   dialog: its details (name, symbol, a colour from the map's environments, `mapEnvs`, weight and lock, saved as one
-  `editRoom` of what changed), its exits (one per direction on a compass, led to a room by number or by tapping it on
-  the map next, both ways or not, locked, unlocked or removed: `setRoomExit`, `lockRoomExit`, each closing the dialog so
-  a refusal shows on the map), a room beside it a way no exit goes (`addRoom`, which then shows), moving it a place at a
-  time (`editRoom`'s place), placing the player in it (`setPlayerRoom`), renaming its area (`renameArea`) and deleting
-  it after asking (`deleteRoom`). While an exit waits for its room a banner over the map says which way it goes, with
+  `editRoom` of what changed), its exits (one per direction on a compass, a way with an exit filled and naming the
+  room it leads to, with a lock where locked, and one with none outlined with a plus; led to a room by number, by
+  picking it from the first rooms `findRooms` finds for part of its name, typed into the same field, or by tapping it
+  on the map next, both ways or not, locked, unlocked or removed: `setRoomExit`, `lockRoomExit`, each closing the dialog
+  so a refusal shows on the map; that search is `AppMapClient.destinations`, apart from the room search's results, and
+  its refusal shows in the dialog), a room beside it a way no exit goes (`addRoom`, which then shows), moving it a place
+  at a time (`editRoom`'s place), placing the player in it (`setPlayerRoom`), renaming its area (`renameArea`) and
+  deleting it after asking (`deleteRoom`). While an exit waits for its room a banner over the map says which way it goes, with
   Cancel, and the next tap on a room leads it there; viewing the map cancels it. A drag that starts on the room shown
   moves it by whole places, outlined where it will go as the finger moves (`MapMoves.roomsMoved`), and sent as one
   `editRoom` as the finger lifts. Each edit answers with the room as it now is, which the card shows.

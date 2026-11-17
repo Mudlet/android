@@ -793,8 +793,22 @@
     <string name="room_edit_exits_title">Exits of %1$s</string>
     <!-- In the dialog of a room's exits, for a direction none leads: %1$s is the direction (north) -->
     <string name="room_edit_no_exit">%1$s: no exit</string>
-    <!-- The field of the number of the room an exit leads to -->
-    <string name="room_edit_exit_to">Room number it leads to</string>
+    <!-- A direction's button in the dialog of a room's exits, as a screen reader reads it, for a direction none leads:
+         %1$s is the direction (north). The button shows a plus, to add an exit that way -->
+    <string name="room_edit_no_exit_reading">%1$s, no exit</string>
+    <!-- The same for a direction an exit leads: %1$s is the direction, %2$s the name of the room it leads to, which the
+         button shows under the direction -->
+    <string name="room_edit_exit_reading">%1$s, leads to %2$s</string>
+    <!-- The same for an exit the map marks locked, which a walk does not take; the button shows a lock -->
+    <string name="room_edit_exit_reading_locked">%1$s, locked, leads to %2$s</string>
+    <!-- The field of the room an exit leads to, which takes the room's number, or part of its name to list the rooms
+         that have it -->
+    <string name="room_edit_exit_to">Room it leads to</string>
+    <!-- The hint inside that field while it is empty -->
+    <string name="room_edit_exit_to_hint">Number or name</string>
+    <!-- Under that field, once the player picked a room from the list of rooms found by name: %1$s is the room's name,
+         %2$s its area's -->
+    <string name="room_edit_exit_to_found">%1$s in %2$s</string>
     <!-- The check box that also makes, or removes, the exit back from the other room, the opposite way -->
     <string name="room_edit_both_ways">Both ways</string>
     <!-- The button that leads the exit to the room whose number was typed -->

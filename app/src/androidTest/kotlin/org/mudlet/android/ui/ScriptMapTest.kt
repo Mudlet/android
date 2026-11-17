@@ -60,6 +60,7 @@ import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.EngineMessages.room
 import java.io.ByteArrayOutputStream
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -597,6 +598,103 @@ class ScriptMapTest {
     }
 
     @Test
+    fun theExitsDialogTellsTheWaysWithAnExitFromThoseWithNoneBySightAndToTalkBack() {
+        pickEditedRoom(listOf(exit("n", 5, "Tower", locked = true), exit("w", 1, "Great Hall"), exit("e", 7, "")))
+        tapInCard(R.string.room_edit_exits)
+
+        // A way with an exit shows the room it leads to, which TalkBack reads with whether it is locked; one with none
+        // names no room, so the two differ by more than colour, and is read as having none
+        fun way(direction: Int, reading: String) = hasText(string(direction)) and hasContentDescription(reading) and hasClickAction() and hasAnyAncestor(isDialog())
+        val west = way(R.string.exit_west, string(R.string.room_edit_exit_reading, string(R.string.exit_west), "Great Hall"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(west).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(west).assert(hasText("Great Hall"))
+        compose.onNode(way(R.string.exit_north, string(R.string.room_edit_exit_reading_locked, string(R.string.exit_north), "Tower"))).assert(hasText("Tower"))
+        val unnamed = string(R.string.room_unnamed, 7)
+        compose.onNode(way(R.string.exit_east, string(R.string.room_edit_exit_reading, string(R.string.exit_east), unnamed))).assert(hasText(unnamed))
+        val none = listOf("nw" to R.string.exit_northwest, "ne" to R.string.exit_northeast, "sw" to R.string.exit_southwest, "s" to R.string.exit_south) +
+            listOf("se" to R.string.exit_southeast, "up" to R.string.exit_up, "down" to R.string.exit_down, "in" to R.string.exit_in, "out" to R.string.exit_out)
+        none.forEach { (direction, label) ->
+            val node = compose.onNode(way(label, string(R.string.room_edit_no_exit_reading, string(label)))).fetchSemanticsNode()
+            assertEquals("the $direction way names no room", listOf(string(label)), node.config[SemanticsProperties.Text].map { it.text })
+        }
+        // Each of the twelve a finger's 48 dp
+        val least = with(compose.density) { 48.dp.toPx() } - 0.5f
+        compose.onAllNodes(hasAnyAncestor(isDialog()) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).fetchSemanticsNodes().also { assertEquals(12, it.size) }.forEach {
+            assertTrue("${it.config} is ${it.touchBoundsInRoot}", it.touchBoundsInRoot.width >= least && it.touchBoundsInRoot.height >= least)
+        }
+
+        // The way picked is selected, and said with what it has
+        val south = way(R.string.exit_south, string(R.string.room_edit_no_exit_reading, string(R.string.exit_south)))
+        activateInDialog(south)
+        compose.onNode(south).assertIsSelected()
+        compose.onNode(hasText(string(R.string.room_edit_no_exit, string(R.string.exit_south)))).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+    }
+
+    @Test
+    fun anExitIsLedToARoomFoundByPartOfItsNameOrGivenByItsNumber() {
+        pickEditedRoom(listOf(exit("w", 1, "Great Hall")))
+        tapInCard(R.string.room_edit_exits)
+        activateInDialog(hasText(string(R.string.exit_south)))
+
+        // Part of a name looks for the rooms that have it once the typing pauses, listing the first five of those found
+        type(R.string.room_edit_exit_to, "ha")
+        type(R.string.room_edit_exit_to, "hall")
+        val find = receiveComposing("findRooms")
+        assertEquals("only what was typed when the typing paused is looked for", "hall", find.getString("text"))
+        session.send(EngineMessages.rooms(find, "hall", (1..6).map { Triple(10 + it, "Hall $it", "Keep") }))
+        val count = hasText(compose.activity.resources.getQuantityString(R.plurals.app_map_results_count, 6, 6)) and hasAnyAncestor(isDialog())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(count).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(count).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        assertTrue("the sixth room found is listed", compose.onAllNodes(hasText("Hall 6")).fetchSemanticsNodes().isEmpty())
+        compose.onNode(hasText(string(R.string.app_map_more_rooms)) and hasAnyAncestor(isDialog())).assertExists()
+        // Apart from the map's own room search, whose results it does not open
+        compose.runOnIdle { assertEquals(null, EngineClient.front.appMap.search) }
+
+        // A room picked puts its number in, its name under it, and the exit leads there
+        activateInDialog(hasText("Hall 3") and hasText(string(R.string.app_map_result_place, "Keep", 13)))
+        field(R.string.room_edit_exit_to).assert(hasText("13"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.room_edit_exit_to_found, "Hall 3", "Keep"))).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("the rooms found stay listed", compose.onAllNodes(hasText("Hall 1")).fetchSemanticsNodes().isEmpty())
+        activateInDialog(hasText(string(R.string.room_edit_exit_set)))
+        val led = session.receive("setRoomExit")
+        assertEquals(listOf(2, "s", 13, true), listOf(led.getInt("room"), led.getString("direction"), led.getInt("to"), led.getBoolean("bothWays")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        session.send(room(led, 2, "Kitchen", steps = 1, exits = listOf(exit("s", 13, "Hall 3"), exit("w", 1, "Great Hall"))))
+
+        // Nothing found is said; so is a refusal, in the dialog and not over the map
+        tapInCard(R.string.room_edit_exits)
+        activateInDialog(hasText(string(R.string.exit_southeast)))
+        type(R.string.room_edit_exit_to, "cellar")
+        session.send(EngineMessages.rooms(receiveComposing("findRooms"), "cellar", emptyList()))
+        val nothing = hasText(string(R.string.app_map_no_rooms, "cellar")) and hasAnyAncestor(isDialog())
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(nothing).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(nothing).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+        // An earlier search's refusal too, answered after the next was sent
+        type(R.string.room_edit_exit_to, "vau")
+        val earlier = receiveComposing("findRooms")
+        type(R.string.room_edit_exit_to, "vault")
+        val later = receiveComposing("findRooms")
+        session.refuse(earlier, "an earlier search")
+        session.refuse(later, "no profile running")
+        val refused = hasText(string(R.string.map_refused, "no profile running"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(refused and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals(null, EngineClient.front.windows.mapRefusal)
+            assertEquals(null, EngineClient.front.appMap.refusal)
+        }
+
+        // A number is the room's own: nothing is looked for, and the exit leads there
+        type(R.string.room_edit_exit_to, "42")
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(QUIET_MS.toLong())
+        compose.waitForIdle()
+        session.assertNoRequest("findRooms", QUIET_MS)
+        activateInDialog(hasText(string(R.string.room_edit_exit_set)))
+        val numbered = session.receive("setRoomExit")
+        assertEquals(listOf(2, "se", 42), listOf(numbered.getInt("room"), numbered.getString("direction"), numbered.getInt("to")))
+    }
+
+    @Test
     fun aRoomIsAddedMovedDraggedPlacedAndDeletedOnAnEditedMapAndItsAreaRenamed() {
         val rooms = mapOf(1 to (200.0 to 150.0), 3 to (120.0 to 45.0))
         session.windows(listOf(mapper()), full = true)
@@ -690,6 +788,25 @@ class ScriptMapTest {
     }
 
     private fun mapper() = FakeEngine.window("mapper", kind = "mapper", x = 400, y = 0, w = MAP_W, h = MAP_H)
+
+    // Kitchen, room 2 of an edited map, picked, with [exits]
+    private fun pickEditedRoom(exits: List<JSONObject>) {
+        session.windows(listOf(mapper()), full = true)
+        session.send(mapFrame(MAP_W, MAP_H, viewOnly = false, view = mapView(MAP_W, MAP_H, rooms = mapOf(1 to (200.0 to 150.0), 2 to (230.0 to 150.0)))))
+        val map = drawnMap()
+        val drawn = bounds(map)
+        compose.onNode(map).performTouchInput { click(at(drawn, 230.0, 150.0)) }
+        session.send(room(session.receive("roomInfo"), 2, "Kitchen", steps = 1, exits = exits))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Kitchen")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    // The UI's next [type], read on another thread while this one waits on Compose, whose clock runs only then: a request
+    // the UI makes once a delay has passed is made only while the test waits
+    private fun receiveComposing(type: String): JSONObject {
+        val read = CompletableFuture.supplyAsync { session.receive(type) }
+        compose.waitUntil(WAIT_MS + QUIET_MS) { read.isDone }
+        return read.get()
+    }
 
     // A button of the room picked, scrolled to in its card
     private fun tapInCard(@StringRes label: Int) {

@@ -40,12 +40,11 @@ object ProfileArchive {
                 zip.closeEntry()
                 val children = dir.listFiles() ?: throw IOException("could not list ${dir.path}")
                 for (child in children.sortedBy { it.name }) {
-                    if (Files.isSymbolicLink(child.toPath())) continue
                     val childPath = "$path/${child.name}"
                     when {
                         child.isDirectory -> add(child, childPath)
 
-                        !child.isFile || (dir == folder && child.name in SECRETS) -> continue
+                        !child.isFile -> continue
 
                         else -> {
                             zip.putNextEntry(ZipEntry(childPath).apply { time = child.lastModified() })

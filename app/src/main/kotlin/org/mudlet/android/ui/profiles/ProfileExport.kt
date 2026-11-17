@@ -60,12 +60,12 @@ fun ProfileExport(name: String, open: Boolean) {
         }
         OutlinedButton(
             { launcher.launch(ProfileArchive.fileName(name, LocalDate.now())) },
-            enabled = !open && state !is ExportState.Running,
+            enabled = state !is ExportState.Running,
         ) { Text(stringResource(R.string.profile_export)) }
         val status = when (state) {
             null -> null
             ExportState.Running -> stringResource(R.string.profile_exporting)
-            ExportState.Done -> stringResource(R.string.profile_exported)
+            ExportState.Done -> null
             is ExportState.Failed -> stringResource(R.string.profile_export_failed, state.why)
         }
         status?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium) }

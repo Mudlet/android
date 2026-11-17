@@ -5,6 +5,7 @@ import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.theme.wallpaperColoursAvailable
 
@@ -81,6 +82,20 @@ sealed class SettingEntry(
 
         fun choose(owner: SettingsOwner, index: Int) = owner.change(setting, setting.entries[index])
     }
+
+    /**
+     * One of many [choices], such as Mudlet's names for something: a row with the current one, which opens the list to
+     * pick from. [choiceLabel] is a choice's label, or null for one the app has none for, which shows as it is.
+     */
+    class Pick(
+        category: SettingsCategory,
+        override val setting: Settings.TextSetting,
+        label: Int,
+        hint: Int,
+        keywords: Int,
+        val choices: List<String>,
+        val choiceLabel: (String) -> Int?,
+    ) : SettingEntry(category, label, hint, keywords)
 
     /**
      * A whole number: a slider, with buttons a step [less] and [more], its value as [valueText] has it and, for the
@@ -167,6 +182,15 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_clear_input,
             R.string.settings_clear_input_hint,
             R.string.settings_clear_input_keywords,
+        ),
+        SettingEntry.Pick(
+            SettingsCategory.CONNECTION,
+            Settings.serverEncoding,
+            R.string.settings_server_encoding,
+            R.string.settings_server_encoding_hint,
+            R.string.settings_server_encoding_keywords,
+            choices = ServerEncodings.names,
+            choiceLabel = encodingLabels::get,
         ),
         SettingEntry.Switch(
             SettingsCategory.CONNECTION,

@@ -198,8 +198,9 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   before does from the start.
 - The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
   what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the commands
-  the console shows, Unix line endings), Connection (offering a secure connection, and the protocols Mudlet negotiates
-  with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors
+  the console shows, Unix line endings), Connection (the server data encoding, picked from a list of Mudlet's
+  names for its encodings, `ServerEncodings`, with desktop Mudlet's labels; offering a secure connection, and the
+  protocols Mudlet negotiates with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors
   a secure connection lets past, and whether the game may install its packages or play its media) and Advanced
   (desktop Mudlet's "Special options", and a script's errors shown in the game's text, as the app has no error
   console). A number's slider changes it as the finger lifts, so a game's is sent once a slide. Mudlet's settings for
@@ -1646,6 +1647,10 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - Connected, turn GMCP off on the game's Connection page: the switch turns and a message says it takes effect
       the next time you connect, once however many protocols are turned while it shows. TalkBack reads it.
       Disconnected, no message shows.
+    - On the game's Connection page, "Server data encoding" reads its choice (UTF-8 (Recommended) for a new game);
+      double tap opens the list at it, and picking "ISO 8859-1 (Western European)" closes it:
+      `lua echo(getServerEncoding())` says `ISO 8859-1`, a game in Latin-1 (accented letters) reads right at once,
+      and the choice stays after the game is closed and opened again.
     - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
       interrupts it. The same announcement twice is read twice.
     - Swiping through the console moves line by line, and each line is read as its text, without colour or style

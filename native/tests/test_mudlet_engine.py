@@ -3695,8 +3695,8 @@ def profile_settings():
     """A profile's settings by getConfig()'s keys: getSettings reading them as getConfig() gives them, an option by its
     name, whatever a script has put in getConfig's place; setSettings changing them as setConfig() does and answering
     with what the profile now holds and what it refused, with why; autoClearInputLine, which Mudlet starts off, deciding
-    whether a send empties the input line; the change in the profile's save; and both refused while no profile is
-    open."""
+    whether a send empties the input line; the game's text encoding, and a name Mudlet does not have refused; the
+    changes in the profile's save; and both refused while no profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -3749,6 +3749,14 @@ def profile_settings():
               "acceptServerMedia": False, "echoLuaErrors": True}
     m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == wanted and "refused" not in m, f"the security and script error settings change too: {m}")
+
+    m = c.ask({"t": "getSettings", "keys": ["serverEncoding"]}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"serverEncoding": "UTF-8"}, f"a new profile reads the game's text as UTF-8: {m}")
+    m = c.ask({"t": "setSettings", "values": {"serverEncoding": "ISO 8859-2"}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"serverEncoding": "ISO 8859-2"} and "refused" not in m, f"the encoding changes: {m}")
+    m = c.ask({"t": "setSettings", "values": {"serverEncoding": "No Such Encoding"}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"serverEncoding": "ISO 8859-2"} and "does not exist" in m.get("refused", {}).get("serverEncoding", ""),
+          f"an encoding Mudlet does not have is refused, with why, and changes nothing: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
@@ -3757,6 +3765,10 @@ def profile_settings():
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
           and 'autoClearCommandLineAfterSend="yes"' in saved,
           f"the changes are in the profile's save: {save}")
+    encoding_file = os.path.join(CONFIG, "profiles", profile, "encoding")
+    with open(encoding_file, errors="replace") if os.path.exists(encoding_file) else open(os.devnull) as f:
+        encoding = f.read()
+    check(encoding == "ISO 8859-2", f"the encoding is kept where desktop Mudlet keeps it, {encoding_file}: {encoding!r}")
 
 
 def script_items():

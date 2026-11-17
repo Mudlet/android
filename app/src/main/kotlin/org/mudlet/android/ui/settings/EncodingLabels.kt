@@ -1,0 +1,53 @@
+package org.mudlet.android.ui.settings
+
+import androidx.annotation.StringRes
+import org.mudlet.android.R
+import org.mudlet.android.protocol.ServerEncodings
+
+/** The name desktop Mudlet's preferences show for each of [ServerEncodings.names], by Mudlet's name for it. */
+internal val encodingLabels: Map<String, @StringRes Int> = mapOf(
+    "ASCII" to R.string.settings_encoding_ascii,
+    "UTF-8" to R.string.settings_encoding_utf_8,
+    "EUC-KR" to R.string.settings_encoding_euc_kr,
+    "SHIFT_JIS" to R.string.settings_encoding_shift_jis,
+    "EUC-JP" to R.string.settings_encoding_euc_jp,
+    "GBK" to R.string.settings_encoding_gbk,
+    "GB18030" to R.string.settings_encoding_gb18030,
+    "BIG5" to R.string.settings_encoding_big5,
+    "BIG5-HKSCS" to R.string.settings_encoding_big5_hkscs,
+    "ISO 8859-1" to R.string.settings_encoding_iso_8859_1,
+    "CP1162" to R.string.settings_encoding_cp1162,
+    "CP437" to R.string.settings_encoding_cp437,
+    "CP667" to R.string.settings_encoding_cp667,
+    "CP737" to R.string.settings_encoding_cp737,
+    "CP850" to R.string.settings_encoding_cp850,
+    "CP866" to R.string.settings_encoding_cp866,
+    "CP869" to R.string.settings_encoding_cp869,
+    "ISO 8859-10" to R.string.settings_encoding_iso_8859_10,
+    "ISO 8859-11" to R.string.settings_encoding_iso_8859_11,
+    "ISO 8859-13" to R.string.settings_encoding_iso_8859_13,
+    "ISO 8859-14" to R.string.settings_encoding_iso_8859_14,
+    "ISO 8859-15" to R.string.settings_encoding_iso_8859_15,
+    "ISO 8859-16" to R.string.settings_encoding_iso_8859_16,
+    "ISO 8859-2" to R.string.settings_encoding_iso_8859_2,
+    "ISO 8859-3" to R.string.settings_encoding_iso_8859_3,
+    "ISO 8859-4" to R.string.settings_encoding_iso_8859_4,
+    "ISO 8859-5" to R.string.settings_encoding_iso_8859_5,
+    "ISO 8859-6" to R.string.settings_encoding_iso_8859_6,
+    "ISO 8859-7" to R.string.settings_encoding_iso_8859_7,
+    "ISO 8859-8" to R.string.settings_encoding_iso_8859_8,
+    "ISO 8859-9" to R.string.settings_encoding_iso_8859_9,
+    "KOI8-R" to R.string.settings_encoding_koi8_r,
+    "KOI8-U" to R.string.settings_encoding_koi8_u,
+    "MACINTOSH" to R.string.settings_encoding_macintosh,
+    "MEDIEVIA" to R.string.settings_encoding_medievia,
+    "WINDOWS-1250" to R.string.settings_encoding_windows_1250,
+    "WINDOWS-1251" to R.string.settings_encoding_windows_1251,
+    "WINDOWS-1252" to R.string.settings_encoding_windows_1252,
+    "WINDOWS-1253" to R.string.settings_encoding_windows_1253,
+    "WINDOWS-1254" to R.string.settings_encoding_windows_1254,
+    "WINDOWS-1255" to R.string.settings_encoding_windows_1255,
+    "WINDOWS-1256" to R.string.settings_encoding_windows_1256,
+    "WINDOWS-1257" to R.string.settings_encoding_windows_1257,
+    "WINDOWS-1258" to R.string.settings_encoding_windows_1258,
+)

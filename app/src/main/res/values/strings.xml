@@ -364,6 +364,152 @@
     <!-- Words a player might search the settings for to find "Offer a secure connection", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_offer_secure_keywords">TLS, SSL, encryption, encrypted, privacy</string>
+    <!-- A choice on a game's Connection page, desktop Mudlet's "Server data encoding": the character encoding the
+         game sends its text in, which the app must read it in -->
+    <string name="settings_server_encoding">Server data encoding</string>
+    <!-- Under "Server data encoding", when to change it, as desktop Mudlet's tooltip says. The character after
+         "seeing" is the Unicode replacement character, which a wrongly read letter shows as: keep it. -->
+    <string name="settings_server_encoding_hint">If the game is not in English and you see � instead of text, or letters like ñ do not show right, try UTF-8 or the encoding your game suggests.</string>
+    <!-- Words a player might search the settings for to find "Server data encoding", besides the words of its name
+         and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_server_encoding_keywords">charset, character set, code page, codepage, accents, garbled, question marks, language</string>
+    <!-- Under "Server data encoding", what the player does by tapping it: opens the list of encodings to pick one.
+         Spoken by TalkBack as "double tap to choose" -->
+    <string name="settings_choose">choose</string>
+    <!-- Closes the list of the server data encodings without changing the game's -->
+    <string name="settings_choice_cancel">Cancel</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_ascii">ASCII (Basic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_utf_8">UTF-8 (Recommended)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_euc_kr">EUC-KR (Korean)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_shift_jis">Shift JIS (Japanese)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_euc_jp">EUC-JP (Japanese)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_gbk">GBK (Chinese)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_gb18030">GB18030 (Chinese)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_big5">Big5-ETen (Taiwan)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_big5_hkscs">Big5-HKSCS (Hong Kong)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_1" tools:ignore="TypographyDashes">ISO 8859-1 (Western European)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp1162">CP1162 (Latin/Thai)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp437">CP437 (OEM Font)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp667">CP667 (Mazovia)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp737">CP737 (DOS Greek)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp850">CP850 (Western Europe)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp866">CP866 (Cyrillic/Russian)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_cp869">CP869 (DOS Greek 2)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_10" tools:ignore="TypographyDashes">ISO 8859-10 (Nordic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_11" tools:ignore="TypographyDashes">ISO 8859-11 (Latin/Thai)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_13" tools:ignore="TypographyDashes">ISO 8859-13 (Baltic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_14" tools:ignore="TypographyDashes">ISO 8859-14 (Celtic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_15" tools:ignore="TypographyDashes">ISO 8859-15 (Western)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_16" tools:ignore="TypographyDashes">ISO 8859-16 (Romanian)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_2" tools:ignore="TypographyDashes">ISO 8859-2 (Central European)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_3" tools:ignore="TypographyDashes">ISO 8859-3 (South European)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_4" tools:ignore="TypographyDashes">ISO 8859-4 (Baltic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_5" tools:ignore="TypographyDashes">ISO 8859-5 (Cyrillic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_6" tools:ignore="TypographyDashes">ISO 8859-6 (Arabic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_7" tools:ignore="TypographyDashes">ISO 8859-7 (Greek)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_8" tools:ignore="TypographyDashes">ISO 8859-8 (Hebrew Visual)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_iso_8859_9" tools:ignore="TypographyDashes">ISO 8859-9 (Turkish)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_koi8_r">KOI8-R (Cyrillic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_koi8_u">KOI8-U (Cyrillic/Ukrainian)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_macintosh">MACINTOSH</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_medievia">Medievia {Custom codec for that MUD}</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1250">WINDOWS-1250 (Central European)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1251">WINDOWS-1251 (Cyrillic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1252">WINDOWS-1252 (Western)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1253">WINDOWS-1253 (Greek)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1254">WINDOWS-1254 (Turkish)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1255">WINDOWS-1255 (Hebrew)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1256">WINDOWS-1256 (Arabic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1257">WINDOWS-1257 (Baltic)</string>
+    <!-- One of the server data encodings, as desktop Mudlet names it. Keep the English intact, so a player who has picked
+         a language they cannot read can change back, e.g. ISO 8859-2 (Центральная Европа/Central European) -->
+    <string name="settings_encoding_windows_1258">WINDOWS-1258 (Vietnamese)</string>
     <!-- Words a player might search the settings for to find any of the game protocol switches on a game's
          Connection page (GMCP, MSDP and the like), besides the words of their names and descriptions, separated by
          commas. Use the words a player of your language would search for. -->

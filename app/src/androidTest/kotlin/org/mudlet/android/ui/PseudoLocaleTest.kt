@@ -11,10 +11,12 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -43,7 +45,7 @@ import kotlin.math.abs
 /**
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
- * editor, new and at a profile's Export, the settings, the game screen, with the connection chip's states and the password field, the script library,
+ * editor, new and at a profile's Export, the settings with the list of server data encodings, the game screen, with the connection chip's states and the password field, the script library,
  * and a trigger's page, with its Lua being typed, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
@@ -97,6 +99,17 @@ class PseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.settings_text_size)))
         assertTextFits("a settings page")
         assertAtStart("the page's first setting", hasText(string(R.string.settings_text_size)))
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_connection)))
+        activate(hasText(string(R.string.settings_connection)))
+        waitFor(hasText(string(R.string.settings_server_encoding)))
+        assertTextFits("the Connection page, with the server data encoding")
+        activate(hasText(string(R.string.settings_server_encoding)))
+        val choices = isRoot() and hasAnyDescendant(hasText(string(R.string.settings_choice_cancel)))
+        waitFor(choices)
+        assertTextFits("the list of server data encodings", choices)
+        compose.onNode(hasText(string(R.string.settings_choice_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(choices).fetchSemanticsNodes().isEmpty() }
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))
@@ -231,11 +244,11 @@ class PseudoLocaleTest(private val locale: String) {
      * Every text on the screen is laid out whole within its box (no ellipsis, no line left out, nothing clipped below
      * its last line) and within the screen's width, after the accessibility checks. Not hasVisualOverflow: the layout
      * the semantics hand over is laid out across the width the text was offered, so a single line narrower than that
-     * would count as overflowing its box.
+     * would count as overflowing its box. A dialog is a window of its own, with a root of its own: [window] picks it.
      */
-    private fun assertTextFits(where: String) {
-        compose.onRoot().tryPerformAccessibilityChecks()
-        val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
+    private fun assertTextFits(where: String, window: SemanticsMatcher = isRoot()) {
+        compose.onNode(window).tryPerformAccessibilityChecks()
+        val root = compose.onNode(window, useUnmergedTree = true).fetchSemanticsNode()
         val width = root.size.width
         val problems = ArrayList<String>()
         var checked = 0

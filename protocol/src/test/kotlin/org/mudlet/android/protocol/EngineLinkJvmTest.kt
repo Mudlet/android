@@ -170,6 +170,22 @@ class EngineLinkJvmTest {
     }
 
     @Test
+    fun theEncodingsTheAppOffersAreMudletsOwnInItsOrder() {
+        val link = newLink()
+        link.start()
+        next<Attached>(ENGINE_START_MS)
+        next<EngineMessage.Synced>()
+        link.send(Requests.connect("127.0.0.1", fakePort, false))
+        next<EngineMessage.Tail>(PROFILE_LOAD_MS) { it.prompt }
+        link.send(Requests.runLua("echo(\"encodings \" .. table.concat(getServerEncodingsList(), \"|\") .. \"\\n\")", 1))
+        val listed = text(shown { it.startsWith("encodings ") }).removePrefix("encodings ").split("|")
+        assertEquals("the encodings Mudlet lists, in its order", ServerEncodings.names, listed)
+        link.send(Requests.getSettings(listOf("serverEncoding"), 2))
+        assertEquals(mapOf("serverEncoding" to ServerEncodings.DEFAULT), next<EngineMessage.SettingValues>().values)
+        link.stop()
+    }
+
+    @Test
     fun severalProfilesEachOnTheirOwnSocket() {
         val control = newLink(profileSockets = true)
         control.start()

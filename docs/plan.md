@@ -601,7 +601,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 5 Report a problem | release blocker | not started | |
 | 6 Copy, search, timestamps, lag | expected | not started | |
 | 7 Hardware keyboards and keys | expected | not started | |
-| 8 Display and input settings 2 | expected | not started | |
+| 8 Display and input settings 2 | expected | in flight | |
 | 9 Sound, music, TTS | expected | not started | |
 | 10 Map files, settings, areas | expected | not started | |
 | 11 Editor beyond items | expected | not started | |

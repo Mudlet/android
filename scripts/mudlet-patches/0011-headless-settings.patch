@@ -16,19 +16,23 @@ its own getConfig in the globals would answer for Mudlet.
   sslIgnoreExpired, sslIgnoreSelfSigned and sslIgnoreAll (the certificate errors a secure connection lets past),
   acceptServerGUI and acceptServerMedia (whether the game may install its packages and play its media), and
   echoLuaErrors (a script's errors also shown in the main console). The getConfig() table lists them too.
+- They also gain serverEncoding, the game's text encoding as getServerEncoding() and setServerEncoding() read and
+  change it: by the names getServerEncodingsList() gives, ASCII for none, kept with the profile as the preferences'
+  encoding is, and refused with setServerEncoding()'s message for a name Mudlet does not have.
 
 Tested in HeadlessSessionTest (reading, a script's replacement getConfig, an unknown key, a change taken and three
-refused, and the refusals with no profile), and the new keys in Other_spec.lua. The desktop's preferences
+refused, the refusals with no profile, and the encoding refused, changed and read again by a new session), and the
+new keys in Other_spec.lua. The desktop's preferences
 are unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 2d3259e..fcfb217 100644
+index 07707a4..b994339 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
-@@ -1658,6 +1658,22 @@ and also a call that left it as it was, so an app's mute buttons can follow it a
+@@ -1673,6 +1673,23 @@ and also a call that left it as it was, so an app's mute buttons can follow it a
  once the session's own profile has closed, as the session's other signals do, even while profiles its
  scripts opened live on. They are refused where `submit()` is.
  
@@ -37,6 +41,7 @@ index 2d3259e..fcfb217 100644
 +An app with its own settings screen reads and changes a profile's settings with `settings()` and
 +`setSettings()`, by the keys Lua's `getConfig()` and `setConfig()` take, rather than building Lua for
 +`runLua()` that cannot answer with what it read.
++The game's text encoding is the key `serverEncoding`, by the names `getServerEncodingsList()` gives.
 +
 +`settings()` fills a `QVariantMap` with the value of each key it is given, as `getConfig()` gives it
 +with `true` for its second argument: a `bool`, a `double` or a `QString`, an option of several by its
@@ -52,10 +57,10 @@ index 2d3259e..fcfb217 100644
  
  `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index 61b99d0..6ca0743 100644
+index 61b99d0..cb6ace6 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
-@@ -10385,6 +10385,30 @@ int TLuaInterpreter::setConfig(lua_State* L)
+@@ -10385,6 +10385,37 @@ int TLuaInterpreter::setConfig(lua_State* L)
          host.mAskTlsAvailable = getVerifiedBool(L, __func__, 2, "value");
          return success();
      }
@@ -83,10 +88,17 @@ index 61b99d0..6ca0743 100644
 +        host.mEchoLuaErrors = getVerifiedBool(L, __func__, 2, "value");
 +        return success();
 +    }
++    if (key == qsl("serverEncoding")) {
++        const QPair<bool, QString> result = host.mTelnet.setEncoding(getVerifiedString(L, __func__, 2, "value").toUtf8());
++        if (!result.first) {
++            return warnArgumentValue(L, __func__, result.second);
++        }
++        return success();
++    }
      if (key == qsl("promptForMXPProcessorOn")) {
          host.mPromptedForMXPProcessorOn = getVerifiedBool(L, __func__, 2, "value");
          return success();
-@@ -10956,6 +10980,30 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -10956,6 +10987,41 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.mAskTlsAvailable);
               }},
@@ -114,6 +126,17 @@ index 61b99d0..6ca0743 100644
 +             [&]() {
 +                 lua_pushboolean(L, host.mEchoLuaErrors);
 +             }},
++            {qsl("serverEncoding"),
++             [&]() {
++                 // as getServerEncoding() gives it: never empty, and without the "M_" of Mudlet's own codecs
++                 QByteArray encoding = host.mTelnet.getEncoding();
++                 if (encoding.isEmpty()) {
++                     encoding = "ASCII";
++                 } else if (encoding.startsWith("M_")) {
++                     encoding.remove(0, 2);
++                 }
++                 lua_pushstring(L, encoding.constData());
++             }},
              {qsl("promptForMXPProcessorOn"),
               [&]() {
                   lua_pushboolean(L, host.mPromptedForMXPProcessorOn);
@@ -130,7 +153,7 @@ index 154ae13..14e0af6 100644
      THeadlessSessionWindowText.cpp
  )
 diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
-index 1d8e9d8..e6af769 100644
+index 68e29a0..28e7904 100644
 --- a/src/headless/THeadlessSession.h
 +++ b/src/headless/THeadlessSession.h
 @@ -28,6 +28,7 @@
@@ -287,7 +310,7 @@ index 0000000..94d5408
 +    return true;
 +}
 diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
-index a15c1c2..61bd052 100644
+index a15c1c2..d38f5ac 100644
 --- a/src/mudlet-lua/lua/Other.lua
 +++ b/src/mudlet-lua/lua/Other.lua
 @@ -1635,6 +1635,8 @@ local oldgetConfig = getConfig
@@ -307,7 +330,15 @@ index a15c1c2..61bd052 100644
    "editorAutoComplete",
    "editorFont",
    "editorFontFollowsDisplay",
-@@ -1700,6 +1703,9 @@ local configOptions = {
+@@ -1690,6 +1693,7 @@ local configOptions = {
+   "muteMediaGame",
+   "promptForMXPProcessorOn",
+   "promptForVersionInTTYPE",
++  "serverEncoding",
+   "show3dMapView",
+   "showRoomIdsOnMap", 
+   "showSentText",
+@@ -1700,6 +1704,9 @@ local configOptions = {
    "specialForceGAOff",
    "specialForceMxpNegotiationOff",
    "specialForceMXPProcessorOn",
@@ -318,10 +349,10 @@ index a15c1c2..61bd052 100644
    "undoServerWrapWidth",
    "versionInTTYPE",
 diff --git a/src/mudlet-lua/tests/Other_spec.lua b/src/mudlet-lua/tests/Other_spec.lua
-index e864915..9f6d299 100644
+index e864915..8bfb8b6 100644
 --- a/src/mudlet-lua/tests/Other_spec.lua
 +++ b/src/mudlet-lua/tests/Other_spec.lua
-@@ -2216,6 +2216,16 @@ describe("Tests Other.lua functions", function()
+@@ -2216,6 +2216,31 @@ describe("Tests Other.lua functions", function()
        restore("editorAutoComplete")
      end)
  
@@ -335,14 +366,29 @@ index e864915..9f6d299 100644
 +      end
 +    end)
 +
++    it("reads and changes the server encoding as getServerEncoding and setServerEncoding do", function()
++      snapshot("serverEncoding")
++      assert.equals(getServerEncoding(), getConfig("serverEncoding"))
++      assert.is_true(setConfig("serverEncoding", "ISO 8859-1"))
++      assert.equals("ISO 8859-1", getConfig("serverEncoding"))
++      assert.equals("ISO 8859-1", getServerEncoding())
++      assert.is_true(setConfig("serverEncoding", "ASCII"))
++      assert.equals("ASCII", getConfig("serverEncoding"))
++      local ok, message = setConfig("serverEncoding", "No Such Encoding")
++      assert.is_nil(ok)
++      assert.truthy(message:find("does not exist", 1, true))
++      assert.equals("ASCII", getConfig("serverEncoding"))
++      restore("serverEncoding")
++    end)
++
      it("getConfig returns a keyed table when given a list of keys", function()
        local result = getConfig({ "enableGMCP", "editorAutoComplete" })
        assert.is_table(result)
 diff --git a/test/functional_tests/HeadlessSessionTest.cpp b/test/functional_tests/HeadlessSessionTest.cpp
-index 16baa1d..6d6a66e 100644
+index 16baa1d..5df2d77 100644
 --- a/test/functional_tests/HeadlessSessionTest.cpp
 +++ b/test/functional_tests/HeadlessSessionTest.cpp
-@@ -2216,6 +2216,43 @@ end))lua");
+@@ -2216,6 +2216,86 @@ end))lua");
          QVERIFY(!outputTexts(output).contains(qsl("Replayed line 1999.")));
      }
  
@@ -381,6 +427,49 @@ index 16baa1d..6d6a66e 100644
 +
 +        QVERIFY(session.shutdown(false));
 +        QVERIFY(!session.settings({qsl("blankLinesBehaviour")}, values));
++    }
++
++    void test_theServerEncodingIsASettingKeptWithTheProfile()
++    {
++        const QString name = qsl("Headless Encoding");
++        QVERIFY(writeProfile(name, QString()));
++        QVariantMap values;
++        QMap<QString, QString> refused;
++        {
++            THeadlessSession session;
++            QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++            QVERIFY(session.settings({qsl("serverEncoding")}, values));
++            QCOMPARE(values, QVariantMap({{qsl("serverEncoding"), qsl("UTF-8")}}));
++
++            QVERIFY(session.setSettings({{qsl("serverEncoding"), qsl("No Such Encoding")}}, refused));
++            QVERIFY2(refused.value(qsl("serverEncoding")).contains(qsl("does not exist")), qPrintable(refused.value(qsl("serverEncoding"))));
++            QCOMPARE(session.host()->mTelnet.getEncoding(), QByteArray("UTF-8"));
++
++            refused.clear();
++            QVERIFY(session.setSettings({{qsl("serverEncoding"), qsl("ASCII")}}, refused));
++            QVERIFY(refused.isEmpty());
++            QVERIFY(session.host()->mTelnet.getEncoding().isEmpty());
++            QVERIFY(session.settings({qsl("serverEncoding")}, values));
++            QCOMPARE(values.value(qsl("serverEncoding")), QVariant(qsl("ASCII")));
++
++            // Mudlet's own codec when Qt has none, which getConfig() names without its "M_"
++            QVERIFY(session.setSettings({{qsl("serverEncoding"), qsl("CP437")}}, refused));
++            QVERIFY(refused.isEmpty());
++            QVERIFY(session.settings({qsl("serverEncoding")}, values));
++            QCOMPARE(values.value(qsl("serverEncoding")), QVariant(qsl("CP437")));
++
++            QVERIFY(session.setSettings({{qsl("serverEncoding"), qsl("ISO 8859-2")}}, refused));
++            QVERIFY(refused.isEmpty());
++            QCOMPARE(session.host()->mTelnet.getEncoding(), QByteArray("ISO 8859-2"));
++            QVERIFY(session.shutdown(false));
++        }
++
++        THeadlessSession reopened;
++        QCOMPARE(reopened.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
++        values.clear();
++        QVERIFY(reopened.settings({qsl("serverEncoding")}, values));
++        QCOMPARE(values, QVariantMap({{qsl("serverEncoding"), qsl("ISO 8859-2")}}));
++        QVERIFY(reopened.shutdown(false));
 +    }
 +
      // As the GUI's command line hands the profile's key bindings its key events

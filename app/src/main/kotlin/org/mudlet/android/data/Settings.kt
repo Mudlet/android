@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
 
 /**
@@ -55,6 +56,9 @@ object Settings {
 
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
+
+    /** "Server data encoding": the encoding Mudlet reads the game's text in and sends in, by Mudlet's name for it. */
+    val serverEncoding = TextSetting("serverEncoding", default = ServerEncodings.DEFAULT, mudlet = true)
 
     // The game protocols Mudlet speaks, with Mudlet's defaults
     val gmcp = BoolSetting("enableGMCP", default = true, mudlet = true)
@@ -116,6 +120,7 @@ object Settings {
         unixLineEndings,
         clearInputAfterSend,
         offerSecureConnection,
+        serverEncoding,
         gmcp,
         msdp,
         mssp,
@@ -293,6 +298,19 @@ object Settings {
 
         override fun write(editor: SharedPreferences.Editor, v: Boolean) {
             editor.putBoolean(key, v)
+        }
+    }
+
+    /** A name, such as one of Mudlet's for an option of many; a blank one is taken as [default]. */
+    class TextSetting(key: String, default: String, mudlet: Boolean = false) : Setting<String>(key, default, mudlet) {
+        override fun normalise(v: String) = v.ifBlank { default }
+
+        override fun fromMudlet(v: Any) = (v as? String)?.takeIf { it.isNotBlank() }
+
+        override fun read(prefs: SharedPreferences) = prefs.getString(key, null) ?: default
+
+        override fun write(editor: SharedPreferences.Editor, v: String) {
+            editor.putString(key, v)
         }
     }
 

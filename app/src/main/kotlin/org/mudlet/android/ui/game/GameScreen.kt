@@ -55,15 +55,12 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.RefusedCertificate
+import org.mudlet.android.ui.CertificateFacts
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.ScriptWindowsClient
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import kotlin.reflect.KClass
 
 /**
@@ -448,11 +445,7 @@ private fun RefusedCertificateDialog(certificate: RefusedCertificate, onAccept: 
             val gap = Modifier.padding(top = 8.dp)
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(stringResource(R.string.certificate_refused_text))
-                certificate.errors.forEach { Text(stringResource(R.string.certificate_error, it)) }
-                Text(stringResource(R.string.certificate_issued_to, certificate.issuedTo), gap)
-                Text(stringResource(R.string.certificate_issuer, certificate.issuer))
-                Text(stringResource(R.string.certificate_expires, expiryText(certificate.expires)))
-                Text(stringResource(R.string.certificate_serial, certificate.serial))
+                CertificateFacts(certificate)
                 if (certificate.others) {
                     Text(stringResource(R.string.certificate_only_ignore_all), gap)
                 } else {
@@ -463,14 +456,6 @@ private fun RefusedCertificateDialog(certificate: RefusedCertificate, onAccept: 
             }
         },
     )
-}
-
-@Composable
-private fun expiryText(expires: String): String {
-    if (expires.isEmpty()) return stringResource(R.string.certificate_expiry_unknown)
-    return runCatching {
-        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(Instant.parse(expires))
-    }.getOrDefault(expires)
 }
 
 /**

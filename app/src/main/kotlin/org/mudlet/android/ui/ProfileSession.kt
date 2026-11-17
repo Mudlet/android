@@ -348,8 +348,7 @@ class ProfileSession internal constructor(
     fun acceptRefusedCertificate(): Boolean {
         val certificate = refusedCertificate ?: return false
         if (certificate.others) return false
-        if (certificate.expired && !changeSetting(Settings.acceptExpiredCertificate, true)) return false
-        if (certificate.selfSigned && !changeSetting(Settings.acceptSelfSignedCertificate, true)) return false
+        if (!certificateSwitches(certificate).all { changeSetting(it, true) }) return false
         refusedCertificatePutOff = true
         return true
     }

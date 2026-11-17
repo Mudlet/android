@@ -254,6 +254,8 @@ private fun ProfileGameScreen(
                         onInputChanged = suggestions::inputChanged,
                         picked = picked,
                         onPickedShown = { picked = null },
+                        takeFocus = c.windows.focusInput,
+                        onFocusTaken = c.windows::inputFocusTaken,
                         covered = mapOpen,
                         focusOnStart = switched,
                     )

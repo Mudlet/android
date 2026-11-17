@@ -260,6 +260,10 @@ class ProtocolTest {
         assertEquals(mapOf("t" to "sendWindowCommandLine", "name" to "chat", "text" to "look"), Requests.sendWindowCommandLine("chat", "look").toMap())
         assertEquals(mapOf("t" to "setTextBoxText", "name" to "notes", "text" to "one\ntwo"), Requests.setTextBoxText("notes", "one\ntwo").toMap())
         assertEquals(mapOf("t" to "selectFrameTab", "name" to "chat"), Requests.selectFrameTab("chat").toMap())
+        assertEquals(
+            mapOf("t" to "followLabelLink", "label" to "nav", "href" to "send:north ", "id" to 7L),
+            Requests.followLabelLink("nav", "send:north ", 7).toMap(),
+        )
     }
 
     @Test

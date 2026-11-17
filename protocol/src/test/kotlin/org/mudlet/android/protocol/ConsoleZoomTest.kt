@@ -95,4 +95,9 @@ class ConsoleZoomTest {
         assertTrue(lua, lua.contains("pcall(w.resetAutoWrap, w)"))
         assertTrue(lua, !lua.contains(":setFontSize"))
     }
+
+    @Test
+    fun luaStrings() {
+        assertEquals("\"a \\\"b\\\" \\\\ c\\n\\r\\009é\"", ConsoleZoom.luaString("a \"b\" \\ c\n\r\té"))
+    }
 }

@@ -104,7 +104,8 @@ private class Placed {
  * The up and down buttons, and a hardware keyboard's arrow keys, step through [history] (newest first). The completion
  * button, or a hardware Tab, hands the line to [onComplete], whose answer replaces it. A [commandLine] from a script
  * replaces the line, which then calls [onCommandLineShown]; a [picked] command (from the command history) replaces it
- * too and takes the focus, and then calls [onPickedShown].
+ * too and takes the focus, and then calls [onPickedShown]. [takeFocus] gives the line the focus, as after a `prompt:`
+ * link in a label, and then calls [onFocusTaken].
  *
  * While [hiddenInput] holds, a masked password field takes the line's place and sends with [onSendHidden]; its close
  * button calls [onDismissHidden]. What is typed there is not saved across a rotation, to keep it out of saved state.
@@ -134,6 +135,8 @@ fun InputLine(
     onInputChanged: (text: String, cursor: Int) -> Unit = { _, _ -> },
     picked: String? = null,
     onPickedShown: () -> Unit = {},
+    takeFocus: Boolean = false,
+    onFocusTaken: () -> Unit = {},
     covered: Boolean = false,
     focusOnStart: Boolean = false,
 ) {
@@ -250,6 +253,11 @@ fun InputLine(
         // Only the command line has this requester: the masked field has a focus of its own
         if (!hiddenInput) focus.requestFocus()
         onPickedShown()
+    }
+    LaunchedEffect(takeFocus) {
+        if (!takeFocus) return@LaunchedEffect
+        if (!hiddenInput) focus.requestFocus()
+        onFocusTaken()
     }
 
     val supportingText: (@Composable () -> Unit)? = notice?.let {

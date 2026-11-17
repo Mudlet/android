@@ -49,7 +49,7 @@ data class ConsoleZoom(val chosen: Int, val scripts: Int, val inFlight: Set<Int>
          */
         fun setFontSizeLua(name: String, size: Int): String = """
             |do
-            |  local name, size = ${LabelLink.luaString(name)}, $size
+            |  local name, size = ${luaString(name)}, $size
             |  if setFontSize(name, size) and type(Geyser) == "table" then
             |    local seen = {}
             |    local function walk(container)
@@ -66,5 +66,21 @@ data class ConsoleZoom(val chosen: Int, val scripts: Int, val inFlight: Set<Int>
             |  end
             |end
         """.trimMargin()
+
+        /** [text] as a Lua string literal. */
+        fun luaString(text: String): String {
+            val out = StringBuilder("\"")
+            for (c in text) {
+                when {
+                    c == '\\' -> out.append("\\\\")
+                    c == '"' -> out.append("\\\"")
+                    c == '\n' -> out.append("\\n")
+                    c == '\r' -> out.append("\\r")
+                    c < ' ' || c == '\u007F' -> out.append('\\').append(c.code.toString().padStart(3, '0'))
+                    else -> out.append(c)
+                }
+            }
+            return out.append('"').toString()
+        }
     }
 }

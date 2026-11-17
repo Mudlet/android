@@ -122,6 +122,7 @@ image by path and size while the profile runs.
 | `sendWindowCommandLine` | `name`, `text` | `setWindowCommandLineText()`, then `submitWindowCommandLine()` |
 | `setTextBoxText` | `name`, `text` | `setTextBoxText()` (gap 4, carried): what the player typed; a refusal is `error`, then the box's `textBox` |
 | `selectFrameTab` | `name` | `selectFrameTab()` (gap 5, carried): the player's tap on an MXP frame's tab, by the page's frame name; a refusal is `error` |
+| `followLabelLink` | `label`, `href`, `id`? | `followLabelLink()` (gap 1, carried): the player's tap on a link in a label's text, followed as Mudlet's click does; a web link the app opens itself, and the engine refuses; a refusal is `error` |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | Reads the file, or `QIcon(path)` at that size, or that frame of a movie (`QMovie`), answered by `image` |
 | `pressButton` | `id` | `pressButton()`; a refusal is `error` |
 | `activateCommand` | `id` | `activateAddonCommand()`; a refusal is `error` |
@@ -207,7 +208,10 @@ A `label` is a `Box` at its geometry, drawn in this order:
 - **Text**: Qt's rich text converted to an `AnnotatedString` by the app's own parser for the tags Geyser and scripts
   write: `b`, `i`, `u`, `s`, `font` (`color`, `size`, `face`), `span` with `style` (`color`, `background-color`,
   `font-size`, `font-weight`), `br`, `p`/`div` with `align`, `center`, `a`. Anything else keeps its text without its
-  formatting.
+  formatting. A link's `href` is read as Qt's `QTextHtmlParser` reads it, as the engine follows only that: a quoted
+  value up to its own closing quote, `<`, `>` and the other quote included, and entities decoded as Qt decodes them
+  (numeric ones, and the named ones of Qt's table, `HtmlEntities.kt`: HTML 4's, with Qt's own `&and;` and `&or;`, and
+  `&AMP;`, `&GT;`, `&LT;`, `&QUOT;`, `&apos;` and `&percnt;`), but in a single-quoted value, which Qt keeps as written.
 
 Taps reach the label with `pointer`, in its own Mudlet pixels: a tap is `enter`, `press` and `release`, a double tap
 adds `doubleClick`, a long press is the right button's `press` and `release` (Geyser's right-click menus); `leave`
@@ -351,15 +355,15 @@ F4 and F5 are independent of each other and of F3.
     size; a `mapPointer` press selects the room (`getMapSelection()` through `runLua` and an `echo()`).
 - **U pull requests:** Compose UI tests against `FakeEngine` on the API 28 and 36 emulators, with the accessibility
   checks: a fake `windows` and `windowText` draw a mini console at its scaled place in both layouts; a label tap
-  sends the `pointer` sequence; a gauge exposes its range; a button bar's button sends `pressButton`; an MXP frame's
+  sends the `pointer` sequence; a link in a label sends `followLabelLink`; a gauge exposes its range; a button bar's button sends `pressButton`; an MXP frame's
   tab sends `selectFrameTab`, the page brought forward then drawn under its tabs; TalkBack's focus order. `android_smoke.py` with libmudlet runs one Geyser script on the emulator and checks a mini console's
   line reaches the UI. On-device checklist items for what only a person judges: a game's real GUI package (for
   example a Geyser layout from a game's own package) in both orientations, and TalkBack over it.
 
 ## Upstream gaps
 
-Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. Gaps 2, 3, 4
-and 5 are carried in `scripts/mudlet-patches/` until merged; the others' interims are the app's own. Besides those
+Until each is merged, the interim in its last line holds. These go to Mudlet/Mudlet as pull requests. All five are
+carried in `scripts/mudlet-patches/` until merged. Besides those
 patches, `scripts/build-libmudlet.sh` carries the Lua 5.1 FORTIFY fix (Mudlet/Mudlet#12914), not in
 `3rdparty/lua51/CMakeLists.txt` at `bfc932d9`.
 
@@ -380,8 +384,15 @@ Each prompt is ready to paste into a Claude Code session on a checkout of Mudlet
 > itself has no `QLabel` to emit `linkActivated`, so a label link (`send:`, `prompt:`, Lua) does nothing on the
 > Android client and any other headless frontend.
 
-Interim: the app handles a tapped label link as `TLabel` does: `send:` as `runLua` `send(...)`, `prompt:` into the
-input line, `http(s):` through an intent, anything else as `runLua` of the link; visited styling is lost.
+Interim: replaced. The app carries this as `scripts/mudlet-patches/0014-headless-label-links.patch` until Mudlet
+merges it, in `THeadlessSessionLinks.cpp`, where the other links are followed, and with the scheme handling moved to
+`TLabelModel::followLink()`. The engine takes the player's tap as `followLabelLink` (`protocol.md`, "Labels"),
+but for a web link: the app opens that itself, with an intent, as the engine, a service, has no activity to start a
+browser from. Nor does a web link take the visited style: the engine is not sent a link it does not open, and the
+patch marks a link visited only as it follows it, so marking one alone would take a call of its own there and a way
+to ask for it in the protocol. After a `prompt:` link the input line takes the focus, so the keyboard opens and
+TalkBack moves there, as Mudlet's label gives its command line the focus. The engine follows only an `href` its
+label's text has, as Qt reads it, so the app reads hrefs as Qt does (the "Text" bullet of "Labels").
 
 ### 2. A label's accessible value, for gauges
 

@@ -247,7 +247,14 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         fun receive(type: String, timeoutMs: Long = 10_000): JSONObject = connectionFor(type).receive(type, timeoutMs)
 
         /** Fails if the UI sends a request of type [type] within [ms]; the others it skips. */
-        fun assertNoRequest(type: String, ms: Int) = connectionFor(type).assertNoRequest(type, ms)
+        fun assertNoRequest(type: String, ms: Int) = assertNoRequest(setOf(type), ms)
+
+        /** Fails if the UI sends a request of any of [types], all on one socket, within [ms]; the others it skips. */
+        fun assertNoRequest(types: Set<String>, ms: Int) {
+            val connection = connectionFor(types.first())
+            require(types.all { connectionFor(it) == connection }) { "$types are not all on one socket" }
+            connection.assertNoRequest(types, ms)
+        }
 
         /** As [Connection.receiveLast], on the socket that carries [type]. */
         fun receiveLast(type: String, quietMs: Int = 1_000, readPast: Boolean = false): JSONObject = connectionFor(type).receiveLast(type, quietMs, readPast)
@@ -432,14 +439,14 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
             throw AssertionError("the UI sent no '$type' within $timeoutMs ms")
         }
 
-        /** Fails if the UI sends a request of type [type] within [ms]; the others it skips. */
-        fun assertNoRequest(type: String, ms: Int) {
+        /** Fails if the UI sends a request of any of [types] within [ms]; the others it skips. */
+        fun assertNoRequest(types: Set<String>, ms: Int) {
             val deadline = System.currentTimeMillis() + ms
             try {
                 while (true) {
                     socket.soTimeout = (deadline - System.currentTimeMillis()).toInt().coerceAtLeast(1)
                     val frame = readFrame(input)
-                    if (frame.optString("t") == type) throw AssertionError("the UI sent $frame")
+                    if (frame.optString("t") in types) throw AssertionError("the UI sent $frame")
                 }
             } catch (_: IOException) {
                 // A LocalSocket's read timeout is a plain IOException

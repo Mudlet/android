@@ -493,6 +493,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         setTextBoxText(message);
     } else if (type == QLatin1String("selectFrameTab")) {
         refuse(type, mEngine->selectFrameTab(message.value(QLatin1String("name")).toString()));
+    } else if (type == QLatin1String("followLabelLink")) {
+        refuse(type, mEngine->followLabelLink(message.value(QLatin1String("label")).toString(), message.value(QLatin1String("href")).toString()));
     } else if (type == QLatin1String("pointer")) {
         refuse(type, pointer(message));
     } else if (type == QLatin1String("getImage")) {

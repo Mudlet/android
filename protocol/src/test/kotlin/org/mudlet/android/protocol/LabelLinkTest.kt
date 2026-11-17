@@ -1,40 +1,34 @@
 package org.mudlet.android.protocol
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** What the app does with a tapped label link until upstream can follow one (docs/phase-f.md, "Upstream gaps", 1). */
+/** Who follows a tapped label link (docs/phase-f.md, "Upstream gaps", 1). */
 class LabelLinkTest {
     @Test
-    fun linksAreSortedAsTLabelSortsThem() {
-        assertEquals(LabelLink.Send("north "), LabelLink.of("send:north "))
-        assertEquals(LabelLink.Send("x"), LabelLink.of("  SEND:x"))
-        assertEquals(LabelLink.Prompt("say "), LabelLink.of("prompt:say "))
+    fun theEngineFollowsEachLinkButAWebOne() {
+        // As the label's text gives it, its whitespace kept: the engine follows only that exact href
+        for (href in listOf("send:north ", "prompt:say ", "echo('hi')", "mailto:a@b.c", " SEND:x", "tel:go()", "http", "HTTPS", ":http:x")) {
+            assertEquals(LabelLink.Engine(href), LabelLink.of(href))
+        }
         assertEquals(LabelLink.Web("https://mudlet.org"), LabelLink.of(" https://mudlet.org "))
-        assertEquals(LabelLink.Lua("echo('hi')"), LabelLink.of("echo('hi')"))
-        // A method call after a scheme-shaped prefix is Lua; a URL that is none is not run
-        assertEquals(LabelLink.Lua("tel:go()"), LabelLink.of("tel:go()"))
-        assertEquals(LabelLink.Lua("pkg.ui:show \"x\""), LabelLink.of("pkg.ui:show \"x\""))
-        assertEquals(LabelLink.NotRun("mailto"), LabelLink.of("mailto:a@b.c"))
-        assertEquals(LabelLink.NotRun("javascript"), LabelLink.of("javascript:go()"))
-        assertEquals(LabelLink.Lua("x = {a = 1}"), LabelLink.of("x = {a = 1}"))
+        assertEquals(LabelLink.Web("HTTP://mudlet.org"), LabelLink.of("HTTP://mudlet.org"))
+        assertEquals(LabelLink.Web("http:x"), LabelLink.of("http:x"))
+        // Trimmed as Qt trims, as the engine reads the scheme: U+0085 is whitespace to Qt, U+001C is not
+        assertEquals(LabelLink.Web("https://x"), LabelLink.of("\u0085https://x"))
+        assertEquals(LabelLink.Engine("\u001chttps://x"), LabelLink.of("\u001chttps://x"))
     }
 
     @Test
-    fun whatTheEngineIsAskedToDo() {
-        assertEquals("expandAlias(\"north \")", LabelLink.Send("north ").request(1)!!.getString("code"))
-        assertEquals("printCmdLine(\"say \")", LabelLink.Prompt("say ").request(2)!!.getString("code"))
-        val lua = LabelLink.Lua("echo('hi')").request(3)!!
-        assertEquals("runLua", lua.getString("t"))
-        assertEquals("echo('hi')", lua.getString("code"))
-        assertEquals(3L, lua.getLong("id"))
-        assertNull(LabelLink.Web("https://mudlet.org").request(4))
-        assertNull(LabelLink.NotRun("ftp").request(5))
-    }
-
-    @Test
-    fun luaStrings() {
-        assertEquals("\"a \\\"b\\\" \\\\ c\\n\\r\\009é\"", LabelLink.luaString("a \"b\" \\ c\n\r\té"))
+    fun aPromptLinkIsReadAsTheEngineReadsIt() {
+        // The scheme as TLabelModel::followLink() reads it: any case, after Qt's whitespace, with something before the colon
+        for (href in listOf("prompt:say ", " PROMPT:say", "\u0085Prompt:", "prompt:send:x")) {
+            assertTrue(href, (LabelLink.of(href) as LabelLink.Engine).prompts)
+        }
+        for (href in listOf("send:prompt:x", "prompt", ":prompt:x", "\u001cprompt:x", "prompts:x", "echo('prompt:')")) {
+            assertFalse(href, (LabelLink.of(href) as LabelLink.Engine).prompts)
+        }
     }
 }

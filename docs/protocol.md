@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **21**.
+The current version is **22**.
 
 ## Transport
 
@@ -78,6 +78,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `sendWindowCommandLine` | `name`, `text` | Enter on the command line `name`, a console's own from `enableCommandLine()` or one from `createCommandLine()`, holding `text` (`submitWindowCommandLine()`): the line's action, or else the aliases, take each line of it. |
 | `setTextBoxText` | `name`, `text` | What the player has typed in the text box `name` so far: the whole of its `text`, a string (`THeadlessSession::setTextBoxText()`, "Text boxes" below). Refused for a box that is read-only or not `shown`, with `error` and then the box's `textBox` as the engine holds it, so the UI puts back what it showed. Only libmudlet takes it. |
 | `selectFrameTab` | `name` | The player's tap on a tab of an MXP frame's tab header ("Script windows" below): brings the page `name`, an MXP frame, forward (`THeadlessSession::selectFrameTab()`, carried in `scripts/mudlet-patches/`), so the header's frame and the two pages come in the next `windows`. Nothing happens for the page already in front. Only libmudlet takes it. |
+| `followLabelLink` | `label`, `href`, `id`? | The player's tap on the link `href` in the text of the label `label` ("Labels" below): the engine follows it as Mudlet's click on it does (`THeadlessSession::followLabelLink()`, carried in `scripts/mudlet-patches/`): a `send:` link's command goes to the game through the aliases, a `prompt:` link's text comes back as `commandLine`, and anything else runs as Lua. The UI gives its input line the focus as it sends a `prompt:` link, as Mudlet's label gives its command line the focus. A `prompt:` link is refused while the game hides input (`hiddenInput`), and nothing runs: Mudlet's desktop puts its text in the hidden-input box then, which the engine does not pass on. `href` is the link's target as Qt reads it from the label's text: a quoted value whole, up to its own closing quote, its whitespace kept and its entities decoded as Qt decodes them (numeric ones, and the named ones of Qt's table: HTML 4's, with `&and;` and `&or;` as U+22A5 and U+22A6, not HTML's U+2227 and U+2228, and also `&AMP;`, `&GT;`, `&LT;`, `&QUOT;`, `&apos;` and `&percnt;`), but in a single-quoted value, which Qt keeps as written. A web link (`http:` or `https:`) is always refused, as the UI opens it. Only libmudlet takes it. |
 | `pointer` | `window`, `type`, `x`, `y`, `button`?, `buttons`?, `modifiers`?, `wheelY`? | What the UI's pointer did at `x`, `y` (numbers, which may have fractions) in the pixels of the window `window`, from its top left; `main` is the main console's area (`THeadlessSession::pointer()`). `type` is `press`, `release`, `doubleClick`, `move`, `enter`, `leave` or `wheel`. `button` is the one that changed, for a press, release or double-click, and `buttons` those held after it, as Qt's flags: 1 left, 2 right, 4 middle. `modifiers` are Qt's: 0x02000000 Shift, 0x04000000 Control, 0x08000000 Alt, 0x10000000 Meta. `wheelY` is the wheel's turn in eighths of a degree, 120 a notch, positive away from the player. Each of those four is 0 when absent. A label's callback runs as the GUI's would, with the event table it gives (`button` `LeftButton` and the rest, `x`, `y`); a press or release no label takes goes on to the console under it. |
 | `getImage` | `path`, `w`?, `h`?, `frame`?, `id`? | The image file at `path`, as a label's `image` or `movie` names it, as a PNG, answered by `image` or `error`. With `w` and `h`, which go together, from 1 to 4096, it is scaled to that size; a path that is no image file is then taken as an icon file, or the name of one in the icon theme, at that size. `frame`, from 0, is that frame of an animated image. Without `w` and `h`, an image larger than 4096 pixels a side is refused, as is a PNG too large for one frame. |
 | `pressButton` | `button` | A click on the button or menu entry of `buttonBars` whose `id` is `button`, a whole number (`THeadlessSession::pressButton()`): it sends the button's command through the aliases and runs its script, as the GUI's button does, and a push-down button goes down, or up if it was down. To pick an entry of a folder's menu, the UI presses the entry, then the folder, as the GUI does. |
@@ -132,8 +133,10 @@ colon and why; `getWindowText` and `getImage` are always answered. libmudlet ref
 shown, a point outside it, or another window than the one a held button went down on. It refuses `setTextBoxText` as
 `THeadlessSession::setTextBoxText()` does: for a box there is not, one not shown and one read-only, and
 `selectFrameTab` as `THeadlessSession::selectFrameTab()` does: for a name that is no page of a tab header, and for a
-header whose page in front is not shown, as inside a hidden external frame. The stand-in has no script windows and
-refuses all nine.
+header whose page in front is not shown, as inside a hidden external frame. It refuses `followLabelLink` as
+`THeadlessSession::followLabelLink()` does: for a label there is not, a link its text does not have now, Lua that
+fails, with its error, a scheme Mudlet does not handle (`mailto:`, say) on what is no Lua command, and a `prompt:`
+link while the game hides input; and for any web link. The stand-in has no script windows and refuses all ten.
 
 `pressButton` and `activateCommand` too are answered only when refused, with `error` as above: libmudlet refuses
 them while no profile is open, and for an id that is not one the last `buttonBars` or `commands` would list. The
@@ -212,7 +215,7 @@ stand-in keeps the values it is given, with no meaning, so it reads back what a 
 | `linksChanged` | `ids` | What `link` says of these links of the main console may have changed (libmudlet's `linksChanged`): one was followed, revealed, chosen or deselected in its group, concealed or revealed by the game, expired, or let go of with the lines holding it, after which `getLink` answers `unknown`. A script window's links are not in it: a change to one of them comes as that window's next `windowText`. Empty `ids` means any link may have changed: the engine sends that to a UI that attaches, or catches up after lagging, when it missed a change. Only libmudlet sends it. |
 | `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. Only libmudlet sends it. |
-| `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. Not kept for a UI that attaches later. Only libmudlet sends it. |
+| `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, a `prompt:` link that `followLabelLink` followed put its text there, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. None comes while the game hides input (`hiddenInput`): Mudlet's desktop then writes a script's text to its hidden-input box, which the engine does not pass on, and the engine refuses a `prompt:` link. Not kept for a UI that attaches later. Only libmudlet sends it. |
 | `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. Only libmudlet sends it. |
@@ -306,6 +309,15 @@ What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which
 The files are the engine's: the UI asks for one with `getImage`. A label's cursor is not sent. The engine keeps each
 label's content and sends a `label` only when it differs from what it last sent; a label that goes is in the
 `windows` message's `removed`, with no `label`.
+
+A link the engine takes with `followLabelLink` is marked visited before it runs, even one then refused for failing Lua
+or a scheme Mudlet does not handle, so where `setLinkStyle()` gave the label a visited colour, its `text` is sent
+again in that colour (once: a visited link followed again sends nothing). That is only for an anchor Mudlet's link
+styling restyles: `<a href="...">` or `<a href='...'>`, in lower case, with `href` first and quoted, and no entity in
+a double-quoted `href` (Mudlet compares the `href` as written with the one followed, which Qt decoded), in a label
+with a link Mudlet's own check finds (not one whose every link has a raw `<` in its `href` or a space after the tag's
+`<`). Any other link is followed and marked, but keeps its colour. A web link, a `prompt:` link while the game hides
+input, and a link or label there is not, are refused before that and not marked.
 
 ### Text boxes
 
@@ -647,15 +659,15 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 21, which added editing the map (`editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom`,
-`deleteRoom`, `setPlayerRoom`, `renameArea`, `mapEnvs`, `envs`, and `symbol`, `env`, `color`, `weight` and `locked`
-in `room`); version 20 added a room's details and the map's levels and areas (`roomInfo`, `room`,
-`walkToRoom`, `showMapLevel`, `showMapArea`, `mapAreas`, `areas`, `levels` in `view`, and `areaId`, `match` and
-`steps` in `rooms`, which come best first); version 19 added a profile's settings (`getSettings`, `setSettings`,
-`settings`); version 18 added moving a map by touch (`moveMap`, `followPlayer`, and `view` in `map` and `appMap`);
-version 16 added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and `tabCurrent` in `windows`);
-version 15 added several profiles at once: a socket each, `profileSockets` and `profile` in `hello`, `alongside` in
-`openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
+As implemented in version 22, which added following a label's link (`followLabelLink`); version 21 added editing
+the map (`editRoom`, `setRoomExit`, `lockRoomExit`, `addRoom`, `deleteRoom`, `setPlayerRoom`, `renameArea`, `mapEnvs`,
+`envs`, and `symbol`, `env`, `color`, `weight` and `locked` in `room`); version 20 added a room's details and the map's
+levels and areas (`roomInfo`, `room`, `walkToRoom`, `showMapLevel`, `showMapArea`, `mapAreas`, `areas`, `levels` in
+`view`, and `areaId`, `match` and `steps` in `rooms`, which come best first); version 19 added a profile's settings
+(`getSettings`, `setSettings`, `settings`); version 18 added moving a map by touch (`moveMap`, `followPlayer`, and
+`view` in `map` and `appMap`); version 16 added an MXP frame's tabs (`selectFrameTab`, and `tabs`, `tabTitles` and
+`tabCurrent` in `windows`); version 15 added several profiles at once: a socket each, `profileSockets` and `profile`
+in `hello`, `alongside` in `openProfile`, `closeProfile`, `setFront`, `markSeen` and `openProfiles`; version 14 added
 the text boxes (`setTextBoxText`, `textBox`), and later `setMapScale`, which needs no new version as a UI does without
 it: an engine without it refuses it as unknown, the UI ignores that, and the map stays at the window's pixels; version
 13 added the map

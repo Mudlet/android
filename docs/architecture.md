@@ -492,7 +492,7 @@ checkout, skips one already in it and stops the build at one that no longer appl
 first, as a later patch may change the lines an earlier one is checked against. The app's engine
 compiles against the checkout's headers too, so a checkout built elsewhere, as CI's libmudlet build from its cache,
 is patched before `build-apk.sh` all the same (`.github/actions/libmudlet`). Today there
-are twelve: the app's own map and the room search (see "The map behind the text"), downloading the map the game
+are thirteen: the app's own map and the room search (see "The map behind the text"), downloading the map the game
 offers (see "Downloading the map"), `setGameScreenSize()`, which tells the game the app console's columns and
 rows without resizing the main window that `setMainWindowSize` gave, a label's live region in its
 `labelContent()`, a text box's content (`textBoxContent()`) with the player's typing in it (`setTextBoxText()`),
@@ -503,9 +503,10 @@ headless sessions sharing one pool of profiles, each with one profile (`0007-hea
 laid out (`0010-headless-map-moves.patch`; see "Moving a map" in [`protocol.md`](protocol.md)), a profile's settings
 as `getConfig()` and `setConfig()` have them (`settings()`, `setSettings()`; see "Settings"), a map's rooms:
 a room's details, a walk to it, its area's levels, another area or level shown, and the room search ranked best first
-with each room's distance (`0012-headless-map-rooms.patch`), and editing the map: a room's details, exits and place,
+with each room's distance (`0012-headless-map-rooms.patch`), editing the map: a room's details, exits and place,
 a room added beside another or deleted, the player placed, an area renamed and the environments' colours listed
-(`0013-headless-map-edits.patch`).
+(`0013-headless-map-edits.patch`), and following a link in a label as the GUI's click does (`followLabelLink()`,
+`0014-headless-label-links.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -546,6 +547,7 @@ keeps the profiles' passwords in the KeyStore.
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
+| `followLabelLink()` (carried patch); a web link is the UI's | `followLabelLink`, answered only when refused, and always for a web link |
 | `textBoxContent()` of each text box, read with `scriptWindows()`; `setTextBoxText()` (carried patch) | `textBox` after the `windows`, for each text box whose content changed, and every text box to a UI that attaches; `setTextBoxText`, answered only when refused, by `error` and then the box's `textBox`, each counted in its `typed` |
 | `pointer()` | `pointer`, answered only when refused |
 | `frameTabs` of each MXP frame's script window, read with `scriptWindows()`; `selectFrameTab()` (carried patch) | `tabs`, `tabTitles` and `tabCurrent` in the header frame's `windows` entry; `selectFrameTab`, answered only when refused |
@@ -646,6 +648,12 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   region, from Geyser's `liveRegion` and each `setLiveRegion()` or `setLabelLiveRegion()` alone, as `label`; its
   accessible value, from each `setLabelAccessibleValue()` or `clearLabelAccessibleValue()` alone, as `label`, clamped
   to its range, and a refused one sending nothing; every label to a UI that attaches; `deleteLabel()` as `removed`;
+- label links: `followLabelLink` sending a `send:` link's command through the aliases, a `prompt:` link's text as
+  `commandLine`, its space kept, and running any other link as Lua, none of them answered; the hrefs the app reads
+  from quoted values and entities, and from links with a raw `<` (the same as `RichTextTest`'s), followed; refused
+  before a profile is open, for a web link, Lua that fails, a `mailto:` link, a `prompt:` link while the game hides
+  input, and a link, or a label, there is not, none of them running anything; a link followed sent again in the
+  visited colour of `setLinkStyle()`, and only that one, not a web link;
 - text boxes: `createTextEdit()` with `setTextEditText()`, `setTextEditPlaceholder()`, `setTextEditStyleSheet()` and
   `setTextEditTabMovesFocus()` as `textBox` after its `windows`, with its `typed`; `setTextBoxText` read back by
   `getTextEditText()` and not sent back, by a later `windows` either, and a script's text after it sent, the text from
@@ -770,7 +778,10 @@ device shows, below the UI's debug hook:
   progress, and of a label as a progress bar's with its text and percentage as its state, a button's not, a live
   label with a value not live, its new text said but not a new value, a live label as one live node from blank (no
   stop) to text, a named one with its text as its state,
-  a link's command, and a label's image asked of the engine; the button bars: a bar's buttons
+  a link sent for the engine to follow, by its action or a tap, with the name of the label tapped, of two with the same
+  link, and the link as Qt reads it from the text, a `prompt:` link giving the input line the focus and a `send:` one
+  not, and neither sent again nor run by the app on a refusal, a web link opened with an intent and not sent, and a
+  label's image asked of the engine; the button bars: a bar's buttons
   as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
   name and icon, and the Extensions menu of commands, whose tap sends `activateCommand`; the map: drawn in the mapper
@@ -1426,7 +1437,7 @@ Item 13 of the on-device checklist covers this.
       scaled with their windows. A gauge's front follows its value.
     - A tap on a clickable label does what a click does on the desktop, a double tap what a double click does, and a
       long press opens a Geyser right-click menu and shows the label's tool tip. A slider made of labels follows a
-      drag. A link in a label's text runs its command.
+      drag. A link in a label's text runs its command (item 30).
     - With TalkBack on: a clickable label reads as a button with its name, and its actions offer the right-click and
       its links; a label's text reads as text, an image alone not at all; a gauge reads its text, or its percentage.
       `lua news = Geyser.Label:new({name = "news", x = 0, y = 0, width = 200, height = 30, liveRegion = "polite"})`
@@ -1531,6 +1542,15 @@ Item 13 of the on-device checklist covers this.
       `lua win:setFontSize(12)` holds.
     - With TalkBack on: the window's actions offer "Larger text" and "Smaller text", which change it a size at a time,
       and once changed "Reset text size".
+30. Label links, with the libmudlet APK: `lua createLabel("nav", 0, 0, 400, 40, 1) setLinkStyle("nav", "#00ff00",
+    "#ff00ff") echo("nav", [[<a href="send:look">look</a> <a href="prompt:say ">say</a> <a
+    href="https://www.mudlet.org/">site</a> <a href="echo('ran\n')">run</a>]])`, on one line.
+    - A tap on "look" sends `look` to the game, through the aliases; on "say", the input line reads "say ", its space
+      kept, and has the focus, with the keyboard open, as Mudlet's command line does; on "run", "ran" shows in the
+      console. Each turns magenta once tapped, and green again after `lua clearVisitedLinks("nav")`.
+    - A tap on "site" opens the page in the browser, and the link stays green.
+    - With TalkBack on: the label's actions offer "Follow link: look" and the others, which do the same as the taps;
+      after "Follow link: say", TalkBack is on the input line.
 
 25. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

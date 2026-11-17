@@ -1,6 +1,8 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.SystemClock
@@ -15,12 +17,15 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
@@ -31,6 +36,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONObject
 import org.junit.After
@@ -57,7 +63,9 @@ import kotlin.math.abs
  * at its scaled place, a clickable label as a button whose tap reaches the engine as `pointer` events, its 48 dp touch
  * bounds, a long press as the right button with the tool tip, a drag, a gauge read as its progress and its live text
  * label's new text said, the accessible value of a gauge's back label or of a label as its progress, a live label with
- * one as its new text said, a live label as one live node, a link's command, and the images the engine is asked for.
+ * one as its new text said, a live label as one live node, a link followed by the engine, by its action or a tap, with
+ * its href as Qt reads it, a `prompt:` one giving the input line the focus, but a web link opened in the browser, and
+ * the images the engine is asked for.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -70,6 +78,9 @@ class ScriptLabelsTest {
         .around(compose)
 
     private lateinit var session: FakeEngine.Session
+
+    // The game screen's one text field
+    private val input = hasSetTextAction()
 
     @Before
     fun openTheGameScreen() {
@@ -377,9 +388,76 @@ class ScriptLabelsTest {
     }
 
     @Test
-    fun aLinkInALabelIsAnActionThatHasTheEngineRunItsCommand() {
+    fun aLinkInALabelIsAnActionThatHasTheEngineFollowIt() {
+        followNorth()
+        val request = session.receive("followLabelLink")
+        // The label's name, and the link as its text gives it, its space kept: the engine follows it as Mudlet's click does
+        assertEquals("nav", request.getString("label"))
+        assertEquals("send:north ", request.getString("href"))
+        // Nor run as Lua by the app, before or after
+        assertTrue(session.received.none { it.optString("t") == "runLua" })
+        session.assertNoRequest("runLua", 500)
+    }
+
+    @Test
+    fun aTapOnALinkInALabelHasTheEngineFollowItsHrefAsQtReadsIt() {
+        // Quoted, the href keeps its quote of the other kind and its ">", and its entity is read as Qt reads it
+        val text = """<a href="send:say 'caf&eacute; > tea'">order</a>"""
+        // Two labels show that same link: each tap names the label tapped, not the other one the link was read or drawn for
+        showLinks(label("menu", w = 300, h = 40) to text, label("menu2", y = 100, w = 300, h = 40) to text)
+        tapLinkIn("menu2")
+        val request = session.receive("followLabelLink")
+        assertEquals("menu2", request.getString("label"))
+        assertEquals("send:say 'caf\u00e9 > tea'", request.getString("href"))
+        // Only a prompt: link puts text on the input line for the player to finish
+        compose.onNode(input).assertIsNotFocused()
+        tapLinkIn("menu")
+        assertEquals("menu", session.receive("followLabelLink").getString("label"))
+    }
+
+    @Test
+    fun aPromptLinkInALabelGivesTheInputLineTheFocus() {
+        showLinks(label("say", w = 300, h = 40) to """<a href="prompt:say hello">say</a>""")
+        compose.onNode(input).assertIsNotFocused()
+        tapLinkIn("say")
+        assertEquals("prompt:say hello", session.receive("followLabelLink").getString("href"))
+        session.commandLine("say hello")
+        // As Mudlet's label gives its command line the focus: the keyboard opens, and TalkBack moves there
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and isFocused() and hasText("say hello")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aWebLinkInALabelOpensInTheBrowserAndIsNotSentToTheEngine() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // Blocking: the browser is not started, only the intent seen
+        val browser = instrumentation.addMonitor(IntentFilter(Intent.ACTION_VIEW).apply { addDataScheme("https") }, null, true)
+        try {
+            showLinks(label("site", w = 300, h = 40) to """<a href="https://mudlet.org/">Mudlet</a>""")
+            tapLinkIn("site")
+            compose.waitUntil(WAIT_MS) { browser.hits == 1 }
+            // Not followed by the engine, which neither opens it nor marks it visited
+            session.assertNoRequest("followLabelLink", 1_000)
+            assertEquals(1, browser.hits)
+        } finally {
+            instrumentation.removeMonitor(browser)
+        }
+    }
+
+    @Test
+    fun aLabelLinkTheEngineRefusesIsNotFollowedAgain() {
+        followNorth()
+        val request = session.receive("followLabelLink")
+        // The engine tried it: the label had lost the link, so the app must not run it either
+        session.refuse(request, "The label \"nav\" has no link to \"send:north \".")
+        // Neither sent to the engine again nor run some other way: one call, as a call for one type skips the other
+        session.assertNoRequest(setOf("followLabelLink", "runLua"), 1_000)
+    }
+
+    // The label "nav", with one link, followed by its accessibility action
+    private fun followNorth() {
         session.windows(listOf(label("nav", w = 300, h = 40)), full = true)
-        session.label("nav", text = """Go <a href="send:north">north</a>""", accessibleName = "Directions")
+        session.label("nav", text = """Go <a href="send:north ">north</a>""", accessibleName = "Directions")
         val follow = string(R.string.label_follow_link, "north")
         val nav = hasContentDescription("Directions")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(nav).fetchSemanticsNodes().isNotEmpty() }
@@ -387,9 +465,21 @@ class ScriptLabelsTest {
 
         val action = compose.onNode(nav).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == follow }
         compose.runOnIdle { action.action() }
-        // Mudlet's send: link expands aliases as typed input does
-        assertEquals("expandAlias(\"north\")", session.receive("runLua").getString("code"))
     }
+
+    // Each label with its text, one link, centred, and named by its name for TalkBack
+    private fun showLinks(vararg labels: Pair<JSONObject, String>) {
+        session.windows(labels.map { it.first }, full = true)
+        for ((window, text) in labels) {
+            val name = window.getString("name")
+            session.label(name, text = text, styleSheet = "qproperty-alignment: 'AlignCenter'", accessibleName = name)
+        }
+        compose.waitUntil(WAIT_MS) { labels.all { compose.onAllNodes(hasContentDescription(it.first.getString("name"))).fetchSemanticsNodes().isNotEmpty() } }
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    // A tap in the middle of the label [name], on its centred link
+    private fun tapLinkIn(name: String) = compose.onNode(hasContentDescription(name)).performTouchInput { click(center) }
 
     @Test
     fun anImageLabelAsksTheEngineForItsImageOnce() {

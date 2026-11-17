@@ -49,3 +49,14 @@ start without the player's choice.
 - A clickable label and a text box take touches 48 dp around, however small a script draws them, and are drawn at
   their own size (`docs/phase-f.md`, "Touch and TalkBack"). Script geometry is made for a mouse; a finger needs
   Android's minimum touch target.
+- A web link in a label's text is opened by the app, with an intent, and never takes the label's visited style
+  (`docs/protocol.md`, "Labels"). The engine, a service, has no activity to open a browser from, so it is not sent the
+  link: the carried patch marks a link visited only as it follows it, and marking a web link alone would take a call
+  of its own in the patch and a way to ask for it in the protocol, for a colour.
+- A `prompt:` link in a label is refused while the game hides input (`docs/protocol.md`, "Labels"); the desktop puts
+  its text in the password box. The app's input line takes no text from the engine in that mode, so following the link
+  would mark it visited and do nothing the player can see.
+- A link Qt draws in a label's text is followed when tapped, also in a label where Mudlet's own check
+  (`containsAnchorTag()`) finds no link, as when every link in it has a raw `<` in its quoted `href` or a space after
+  the tag's `<`: the desktop draws those as links but does not make them clickable (`docs/protocol.md`, "Labels"). A
+  link the player sees and cannot follow is a fault, not a choice a script makes.

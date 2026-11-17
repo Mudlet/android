@@ -44,6 +44,7 @@ public:
     QString sendWindowCommandLine(const QString&, const QString&) override { return noWindows(); }
     QString setTextBoxText(const QString&, QString&) override { return noWindows(); }
     QString selectFrameTab(const QString&) override { return noWindows(); }
+    QString followLabelLink(const QString&, const QString&) override { return noWindows(); }
     QString pointer(const QString&, const PointerEvent&) override { return noWindows(); }
     std::variant<PngImage, QString> image(const QString&, const QSize&, std::optional<int>) const override { return noWindows(); }
     // Nor buttons or commands

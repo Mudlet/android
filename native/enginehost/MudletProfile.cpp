@@ -1538,6 +1538,23 @@ QString MudletProfile::selectFrameTab(const QString& name)
     return mSession->selectFrameTab(name) ? QString() : mSession->errorString();
 }
 
+QString MudletProfile::followLabelLink(const QString& label, const QString& href)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    // Mudlet would open it with QDesktopServices, from this service, which has no activity to start a browser from;
+    // the UI opens it itself. The scheme is read as TLabelModel::followLink() reads it: before the first colon of the
+    // trimmed href, in any case, and only where something comes before that colon.
+    const QString trimmed = href.trimmed();
+    if (const int colon = trimmed.indexOf(QLatin1Char(':')); colon > 0) {
+        if (const QString scheme = trimmed.left(colon).toLower(); scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
+            return QStringLiteral("the UI opens web links");
+        }
+    }
+    return mSession->followLabelLink(label, href) == THeadlessSession::LinkResult::ran ? QString() : mSession->errorString();
+}
+
 QString MudletProfile::pointer(const QString& window, const PointerEvent& event)
 {
     if (!loaded()) {

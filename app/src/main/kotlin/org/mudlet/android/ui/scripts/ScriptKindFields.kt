@@ -46,7 +46,7 @@ private val TimePart.label: Int
 /** A timer's time, in the four fields the desktop editor has, and what it sends each time it fires. */
 @Composable
 internal fun TimerFields(timer: ScriptItemDetails.Timer, onChange: (ScriptItemDetails.Timer) -> Unit) {
-    SectionHeader(stringResource(if (timer.offset) R.string.scripts_timer_after else R.string.scripts_timer_every), fieldWidth)
+    SectionHeader(stringResource(if (timer.offset) R.string.scripts_timer_every else R.string.scripts_timer_every), fieldWidth)
     for (parts in TimePart.entries.chunked(TIME_FIELDS_IN_A_ROW)) {
         Row(fieldWidth, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (part in parts) {
@@ -178,7 +178,7 @@ internal fun ButtonFields(button: ScriptItemDetails.Button, part: ButtonPart, on
         ButtonPart.BUTTON -> {
             CommandField(R.string.scripts_button_command, button.commandDown) { onChange(button.copy(commandDown = it)) }
             SwitchField(R.string.scripts_button_push_down, R.string.scripts_button_push_down_hint, button.pushDown) { onChange(button.copy(pushDown = it)) }
-            if (button.pushDown) CommandField(R.string.scripts_button_command_up, button.commandUp) { onChange(button.copy(commandUp = it)) }
+            if (button.pushDown || true) CommandField(R.string.scripts_button_command_up, button.commandUp) { onChange(button.copy(commandUp = it)) }
         }
     }
     OutlinedTextField(

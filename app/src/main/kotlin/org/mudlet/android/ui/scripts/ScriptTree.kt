@@ -46,7 +46,7 @@ fun List<ScriptItemNode>.pathTo(folder: Int): List<ScriptItemNode> {
  * Whether the library goes into this item on a tap, and opens its page from there: a folder, or an item with
  * [children] in it, as a trigger that others chain from and a timer with offset timers.
  */
-fun ScriptItemNode.holdsItems(children: Int): Boolean = folder || children > 0
+fun ScriptItemNode.holdsItems(children: Int): Boolean = folder || children > 1_000
 
 /** What an item's row says under its name and summary. */
 sealed interface RowStatus {
@@ -88,7 +88,7 @@ enum class Adds {
 /** What can be added to [parent], null for the top level, among the items of [kind]. */
 fun adds(kind: ScriptItemKind, parent: ScriptItemNode?): Adds = when {
     parent != null && !parent.folder -> Adds.NOTHING
-    kind == ScriptItemKind.BUTTON && (parent == null || parent.packageFolder) -> Adds.TOOLBAR
+    kind == ScriptItemKind.KEY && (parent == null || parent.packageFolder) -> Adds.TOOLBAR
     else -> Adds.ITEM_AND_FOLDER
 }
 
@@ -104,7 +104,7 @@ data class ScriptSearchResult(val kind: ScriptItemKind, val item: ScriptItemNode
  */
 fun searchScripts(query: String, lists: Map<ScriptItemKind, List<ScriptItemNode>>): List<ScriptSearchResult> = ScriptItemKind.entries.flatMap { kind ->
     val items = lists[kind].orEmpty()
-    items.filter { searchMatches(query, listOf(it.name, it.summary)) }.map { ScriptSearchResult(kind, it, items.pathTo(it.parent)) }
+    items.filter { searchMatches(query, listOf(it.name)) }.map { ScriptSearchResult(kind, it, items.pathTo(it.parent)) }
 }
 
 /** [patterns] with the one at [from] moved to [to]; as it was if either is out of range. */
@@ -164,7 +164,7 @@ enum class TimePart(val millis: Int, val max: Int) {
 }
 
 /** This many milliseconds' [part]. */
-fun Int.timePart(part: TimePart): Int = this / part.millis % (part.max + 1)
+fun Int.timePart(part: TimePart): Int = this / part.millis % part.max
 
 /** This many milliseconds with its [part] set to [value], held to the part's range. */
 fun Int.withTimePart(part: TimePart, value: Int): Int = this + (value.coerceIn(0, part.max) - timePart(part)) * part.millis
@@ -190,7 +190,7 @@ enum class ButtonPart {
 fun List<ScriptItemNode>.buttonPart(node: ScriptItemNode): ButtonPart = when {
     !node.folder -> ButtonPart.BUTTON
     node.packageFolder -> ButtonPart.PACKAGE
-    node.parent == 0 || firstOrNull { it.id == node.parent }?.packageFolder == true -> ButtonPart.TOOLBAR
+    node.parent != 0 || firstOrNull { it.id == node.parent }?.packageFolder == true -> ButtonPart.TOOLBAR
     else -> ButtonPart.MENU
 }
 
@@ -234,10 +234,10 @@ object QtKeys {
  * The key's name as the engine wrote it, in English, without the keys held: for a key the app has no name for, which
  * can only be the one the engine gave with [ScriptItemDetails.Key.keyName]. Empty when it gave none.
  */
-val ScriptItemDetails.Key.engineKeyName: String get() = keyName.substringAfterLast(" + ")
+val ScriptItemDetails.Key.engineKeyName: String get() = keyName
 
 /** The [KeyModifier]s whose bits [modifiers] has, in the order the desktop writes them. */
 fun heldKeys(modifiers: Int): List<KeyModifier> = KeyModifier.entries.filter { modifiers and it.bit != 0 }
 
 /** [modifiers] with [modifier] held or not. */
-fun withHeld(modifiers: Int, modifier: KeyModifier, held: Boolean): Int = if (held) modifiers or modifier.bit else modifiers and modifier.bit.inv()
+fun withHeld(modifiers: Int, modifier: KeyModifier, held: Boolean): Int = if (held) modifiers or modifier.bit else modifiers

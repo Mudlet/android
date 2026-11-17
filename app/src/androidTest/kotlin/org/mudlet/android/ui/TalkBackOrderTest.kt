@@ -39,9 +39,9 @@ import org.mudlet.android.ui.game.GAME_PILL_TAG
  * The order TalkBack moves through the game screen in (docs/architecture.md, "On-device checklist"), against a fake
  * engine, over a screen with a mini console, a button bar and the map behind the text: the title bar, the console, the
  * input line and the screen's own buttons, the row with the game pill, then the script windows, then the button bars,
- * and last the last announcement; with the map in front, the title bar, the map and the row with the game pill, and
- * nothing the map covers nor the History button, whose command would go to the covered input line. The order is the
- * one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
+ * and last the last announcement; with the map in front, the title bar, the map, the input line and the row with the
+ * game pill, and nothing the map covers. The order is the one Compose hands TalkBack, each node's traversalBefore, not
+ * one worked out here.
  */
 @RunWith(AndroidJUnit4::class)
 class TalkBackOrderTest {
@@ -117,7 +117,7 @@ class TalkBackOrderTest {
     }
 
     @Test
-    fun withTheMapInFrontTheTitleBarThenTheMapThenTheGamePill() {
+    fun withTheMapInFrontTheTitleBarThenTheMapThenTheInputLineAndTheGamePill() {
         showWindowAndBar()
         waitFor(hasText(WINDOW_ROW))
         waitFor(hasText("North") and hasClickAction())
@@ -131,16 +131,17 @@ class TalkBackOrderTest {
             "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
             "the room search" to (hasSetTextAction() and hasText(string(R.string.app_map_search))),
             "the map" to map,
+            "the input line" to (hasSetTextAction() and hasText(string(R.string.input_label))),
+            "its Send button" to (hasContentDescription(string(R.string.input_send)) and hasClickAction()),
             "the game pill" to hasTestTag(GAME_PILL_TAG),
             "its connection chip" to (hasContentDescription(string(R.string.connection_connect_to, GAME.name)) and hasClickAction()),
+            "the quick bar" to (hasText(string(R.string.history_open)) and hasClickAction()),
         )
         reading.assertInOrder(expected)
 
-        // Nothing the map covers is read
+        // Nothing the map covers is read, though the console's text shows faintly behind it
         val covered = listOf(
             "the console" to hasText(CONSOLE_LINE),
-            "the input line" to (hasSetTextAction() and hasText(string(R.string.input_label))),
-            "the History button" to (hasText(string(R.string.history_open)) and hasClickAction()),
             "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
             "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
         )

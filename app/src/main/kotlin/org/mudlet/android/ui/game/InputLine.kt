@@ -40,7 +40,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -116,9 +115,10 @@ private class Placed {
  * the line puts it on the line, without sending it; TalkBack reads it after the typed text. While input is hidden
  * there is no ghost text.
  *
- * While [covered] (by the map in front), the line lets go of the focus, and so of the keyboard; uncovered, it takes the
- * focus back if it had it. With [focusOnStart] (as another game comes to the front), the line takes the focus when it
- * first shows, unless covered.
+ * As the map comes to the front, [mapInFront], the keyboard goes down so the map has the room, but the line keeps the
+ * focus: a hardware keyboard still types in it and a tap opens the keyboard again. As the map goes back, the line takes
+ * the keyboard back if it had it. With [focusOnStart] (as another game comes to the front), the line takes the focus when
+ * it first shows, unless the map is in front, which would open the keyboard over it.
  */
 @Composable
 fun InputLine(
@@ -137,7 +137,7 @@ fun InputLine(
     onPickedShown: () -> Unit = {},
     takeFocus: Boolean = false,
     onFocusTaken: () -> Unit = {},
-    covered: Boolean = false,
+    mapInFront: Boolean = false,
     focusOnStart: Boolean = false,
 ) {
     // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
@@ -221,24 +221,23 @@ fun InputLine(
         if (hadFocus) (if (hiddenInput) hiddenFocus else focus).requestFocus()
     }
     val keyboard = LocalSoftwareKeyboardController.current
-    val focusManager = LocalFocusManager.current
-    // Read as the line is covered, before the cover's focus properties take the focus away
-    val focusedAsCovered = remember(covered) { focused }
+    // Read as the map comes or goes, before its search can take the focus
+    val focusedAsSwapped = remember(mapInFront) { focused }
     // Saved, as the map stays in front across a rotation
     var refocus by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(covered) {
-        if (covered) {
-            if (!focusedAsCovered) return@LaunchedEffect
+    LaunchedEffect(mapInFront) {
+        if (mapInFront) {
+            if (!focusedAsSwapped) return@LaunchedEffect
             refocus = true
             keyboard?.hide()
-            focusManager.clearFocus()
         } else if (refocus) {
             refocus = false
             (if (hiddenInput) hiddenFocus else focus).requestFocus()
+            keyboard?.show()
         }
     }
     LaunchedEffect(Unit) {
-        if (focusOnStart && !covered) (if (hiddenInput) hiddenFocus else focus).requestFocus()
+        if (focusOnStart && !mapInFront) (if (hiddenInput) hiddenFocus else focus).requestFocus()
     }
     LaunchedEffect(commandLine) {
         if (commandLine == null) return@LaunchedEffect

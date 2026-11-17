@@ -20,6 +20,7 @@ import androidx.compose.ui.test.TouchInjectionScope
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
@@ -28,7 +29,6 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
@@ -64,13 +64,13 @@ import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.TextBehindMap
 import org.mudlet.android.ui.EngineMessages.appMap
 import org.mudlet.android.ui.EngineMessages.areas
 import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.EngineMessages.room
 import org.mudlet.android.ui.EngineMessages.rooms
 import org.mudlet.android.ui.game.Announcer
-import org.mudlet.android.ui.game.GAME_PILL_TAG
 import java.io.EOFException
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
@@ -326,35 +326,112 @@ class AppMapTest {
     }
 
     @Test
-    fun theMapInFrontCoversTheInputLineAndHidesHistoryAndTheInputLineHasItsFocusBackAfter() {
+    fun theMapInFrontLeavesTheInputLineToTypeInWithoutOpeningTheKeyboardAndItsFocusIsKept() {
         val input = hasSetTextAction() and hasText(string(R.string.input_label))
         val history = hasText(string(R.string.history_open)) and hasClickAction()
-        val pill = hasTestTag(GAME_PILL_TAG)
-        // Where it is with no keyboard up, as the map in front has none
-        val inputAt = bounds(input)
 
-        // Without the focus, the input line does not take it when the map goes
+        // Without the focus: the swap opens no keyboard, and the line and History stay, read and reached, under the map
         activate(button)
         waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
-        assertCovered(input, inputAt, history, pill)
+        assertUnderTheMap(input, history)
+        assertNoKeyboardFor(STEADY_MS)
         checkAccessibility()
-        activate(button)
-        waitFor("the input line is back") { compose.onAllNodes(input).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(input).assertIsDisplayed()
-        compose.onNode(history).assertIsDisplayed()
-        compose.waitForIdle()
-        assertTrue("the input line stays without the focus. ${screen()}", compose.onAllNodes(input and isFocused()).fetchSemanticsNodes().isEmpty())
+        // A tap on the line opens the keyboard, and what is typed is sent, with the map still in front
+        compose.onNode(input).performTouchInput { click(center) }
+        keyboardUp()
+        compose.onNode(input).performTextInput("look")
+        compose.onNode(input).performImeAction()
+        assertEquals("look", request("send", "the line sends under the map in front").getString("text"))
+        compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        assertUnderTheMap(input, history)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitFor("the map goes back") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isEmpty() }
 
-        // With it, the keyboard goes while the map is in front, and the focus is the input line's again after Back
+        // With the focus, the keyboard goes while the map is in front, and the line keeps the focus, so a hardware
+        // keyboard types in it; Back gives the keyboard back
         withScreen { compose.onNode(input).performSemanticsAction(SemanticsActions.RequestFocus) }
         keyboardUp()
         activate(button)
         waitFor("the map comes to the front") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isNotEmpty() }
         waitFor("the input line's keyboard goes") { !keyboardShown() }
-        assertCovered(input, inputAt, history, pill)
+        compose.onNode(input).assertIsFocused()
+        assertUnderTheMap(input, history)
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        waitFor("the input line is back, with the focus") { compose.onAllNodes(input and isFocused()).fetchSemanticsNodes().isNotEmpty() }
+        waitFor("the map goes back") { compose.onAllNodes(mapShown()).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(input).assertIsFocused()
+        keyboardUp()
+    }
+
+    @Test
+    fun theTextShowsFaintlyBehindTheMapInFrontWhichTakesTheTapsAndNotWithTheSettingOff() {
+        // Text all down the console, so some is behind the map below its search
+        for (seq in 2L..LINES) session.line(seq, "M".repeat(LINE_LENGTH))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("M".repeat(LINE_LENGTH))).fetchSemanticsNodes().isNotEmpty() }
+        val (w, h) = openMap(colour = android.graphics.Color.BLACK, rooms = DARK_GREEN)
+        val map = drawnMap()
+        // As faint as keeps the rooms at 3:1 against the default grey text: DarkGreen on black allows about a fifth
+        val alpha = TextBehindMap.alpha(TextBehindMap.Ground(0x000000, listOf(DARK_GREEN and 0xFFFFFF)), 0xC0C0C0, 0x000000)
+        assertTrue("some, and fainter than the map behind the text: $alpha", alpha > 0.1f && alpha < 0.3f)
+        val faintest = alpha * (0xC0 / 255f)
+        waitFor("the text shows behind the map, no stronger than $faintest") {
+            val greys = greys(map)
+            greys.isNotEmpty() && greys.max() <= faintest + GREY_TOLERANCE
+        }
+        // The rooms are drawn over it whole, and the console's text is not read
+        val room = min(w, h) * 0.15
+        assertEquals(Color(DARK_GREEN), pixelOf(map, at(bounds(map), w, h, room, room)))
+        assertTrue(compose.onAllNodes(hasText("M".repeat(LINE_LENGTH))).fetchSemanticsNodes().isEmpty())
+        checkAccessibility()
+        // A tap is the map's, not the text's
+        compose.onNode(map).performTouchInput { click(at(bounds(map), w, h, w * 0.5, h * 0.5)) }
+        assertEquals("press", request("appMapPointer", "a tap on the map in front over the text is its press").getString("type"))
+        // Swapped back, the text is in front again
+        activate(button)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(map).fetchSemanticsNodes().isEmpty() }
+        compose.onAllNodes(hasText("M".repeat(LINE_LENGTH)))[0].assertIsDisplayed()
+
+        // With the setting off, the map in front covers the text: the frame is drawn as it came
+        compose.runOnIdle { Settings.mapBehindText.set(false) }
+        activate(button)
+        drawnMap()
+        compose.waitForIdle()
+        assertTrue("no text behind the map", greys(map).isEmpty())
+    }
+
+    // The grey pixels of [map] as drawn on the screen, the text's, by their brightness: the frame is DarkGreen on black
+    private fun greys(map: SemanticsMatcher): List<Float> {
+        val image = compose.onNode(map).captureToImage().toPixelMap()
+        val greys = ArrayList<Float>()
+        for (y in 0 until image.height step 2) {
+            for (x in 0 until image.width step 2) {
+                val pixel = image[x, y]
+                if (pixel.red > GREY_TOLERANCE && abs(pixel.green - pixel.red) < GREY_TOLERANCE && abs(pixel.blue - pixel.red) < GREY_TOLERANCE) greys.add(pixel.red)
+            }
+        }
+        return greys
+    }
+
+    private fun pixelOf(map: SemanticsMatcher, at: Offset): Color {
+        val image = compose.onNode(map).captureToImage().toPixelMap()
+        return image[at.x.toInt(), at.y.toInt()]
+    }
+
+    // Under the map in front the [input] line and the [history] button are read and shown, and the map ends above the line
+    private fun assertUnderTheMap(input: SemanticsMatcher, history: SemanticsMatcher) {
         compose.onNode(input).assertIsDisplayed()
+        compose.onNode(history).assertIsDisplayed()
+        val map = bounds(mapShown())
+        val inputTop = bounds(input).top
+        assertTrue("the map, at $map, ends above the input line, at $inputTop. ${screen()}", map.bottom <= inputTop + EDGE_PX)
+    }
+
+    // No keyboard shows for [ms], as one asked for comes in its own time
+    private fun assertNoKeyboardFor(ms: Long) {
+        val until = System.currentTimeMillis() + ms
+        while (System.currentTimeMillis() < until) {
+            compose.waitForIdle()
+            assertFalse("no keyboard opens. ${screen()}", keyboardShown())
+        }
     }
 
     @Test
@@ -886,22 +963,6 @@ class AppMapTest {
             .none { it.id in reachable && !inCard(it) && it.boundsInRoot.overlaps(card.boundsInRoot) }
     }
 
-    /**
-     * The map in front covers the [input] line, which was at [inputAt], and the [history] button goes, as what it picks
-     * would go to the covered line: neither is read, and the map reaches from above the line down to the row with the
-     * game [pill], which it leaves shown.
-     */
-    private fun assertCovered(input: SemanticsMatcher, inputAt: Rect, history: SemanticsMatcher, pill: SemanticsMatcher) {
-        for ((name, matcher) in listOf("the input line" to input, "the History button" to history)) {
-            assertTrue("$name is not read. ${screen()}", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
-        }
-        compose.onNode(pill).assertIsDisplayed()
-        val map = bounds(mapShown())
-        val pillTop = bounds(pill).top
-        assertTrue("the map, at $map, reaches past the input line's foot, ${inputAt.bottom}. ${screen()}", map.bottom >= inputAt.bottom - EDGE_PX)
-        assertTrue("the map, at $map, ends above the game pill, at $pillTop. ${screen()}", map.bottom <= pillTop + EDGE_PX)
-    }
-
     private fun resultsClose() = hasContentDescription(string(R.string.app_map_results_close)) and hasClickAction()
 
     private fun mapShown() = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
@@ -997,14 +1058,14 @@ class AppMapTest {
         return compose.runOnUiThread { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
     }
 
-    // Opens the map in front, and returns the size it is asked at, once the engine has drawn it
-    private fun openMap(withView: Boolean = false): Pair<Double, Double> {
+    // Opens the map in front, and returns the size it is asked at, once the engine has drawn it, as [appMap] does
+    private fun openMap(withView: Boolean = false, colour: Int = android.graphics.Color.WHITE, rooms: Int? = null): Pair<Double, Double> {
         activate(button)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_not_drawn))).fetchSemanticsNodes().isNotEmpty() }
         val size = lastRequest("setAppMapSize")
         val w = size.getInt("w")
         val h = size.getInt("h")
-        session.send(appMap(w, h, scale = size.getDouble("scale"), view = if (withView) mapView(w, h) else null))
+        session.send(appMap(w, h, scale = size.getDouble("scale"), view = if (withView) mapView(w, h) else null, colour = colour, rooms = rooms))
         return w.toDouble() to h.toDouble()
     }
 
@@ -1128,6 +1189,13 @@ class AppMapTest {
 
         // How far apart two edges that meet may be found, in pixels
         const val EDGE_PX = 1f
+
+        // The console's lines under the map in front, and how long each is
+        const val LINES = 60L
+        const val LINE_LENGTH = 40
+
+        // How far from grey, and from black, the screen's pixels may round
+        const val GREY_TOLERANCE = 0.02f
 
         const val TIMEOUT_MS = 240_000L
     }

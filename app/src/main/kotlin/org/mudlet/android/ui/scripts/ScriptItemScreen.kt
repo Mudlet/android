@@ -356,12 +356,16 @@ private fun colorName(color: Int): String = when (color) {
 @Composable
 private fun PatternTypeSheet(current: TriggerPatternType, onDismiss: () -> Unit, onPick: (TriggerPatternType) -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Text(
-            stringResource(R.string.scripts_pattern_type),
-            Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
-            style = MaterialTheme.typography.titleMedium,
-        )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheet,
+        // No handle: its full-width target is shorter than 48 dp, and the close button and Back do what it offers
+        dragHandle = null,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 24.dp, top = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.scripts_pattern_type), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+            IconButton(onDismiss) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.scripts_pattern_type_close)) }
+        }
         Column(Modifier.selectableGroup().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             for (type in TriggerPatternType.entries) {
                 if (type == TriggerPatternType.COLOR && current != TriggerPatternType.COLOR) continue

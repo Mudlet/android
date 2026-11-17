@@ -152,7 +152,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (request == "moveMap" || request == "followPlayer") mapMover.clear()
         if (request in MapRooms.REQUESTS) mapRooms.onRefused(request)
         if (request in MAP_REQUESTS) mapRefusal = reason
-        if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
+        // Without the reason, which may quote the link or label, game text the log is not to carry
+        if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link was refused")
         // The box's own textBox follows, which puts back what it holds
         if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
         // The map stays at the scale the engine last took
@@ -161,7 +162,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (request == "selectFrameTab") Log.w(TAG, "an MXP frame's tab: ${message.message}")
         // The engine tried the link, the label no longer has it, or it is a prompt: link while the game hides input:
         // following it here would run it twice, or do what the engine refused
-        if (request == "followLabelLink") Log.w(TAG, "a label's link: ${message.message}")
+        if (request == "followLabelLink") Log.w(TAG, "a label's link was refused")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -397,7 +398,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
             is LabelLink.Web -> try {
                 context.startActivity(Intent(Intent.ACTION_VIEW, link.url.toUri()))
             } catch (e: ActivityNotFoundException) {
-                Log.w(TAG, "no app opens the label link ${link.url}", e)
+                Log.w(TAG, "no app opens a label's web link", e)
             }
 
             is LabelLink.Engine -> {

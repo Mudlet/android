@@ -366,9 +366,9 @@ private fun RoomResults(search: AppMapClient.RoomSearch, modifier: Modifier = Mo
                     }
                 }
             }
-            // Each area's list from its top: kept, the list would hold on to the row the last one had first, by its key,
-            // and leave the rows before it scrolled out of a short list
-            key(area) {
+            // Each search's and area's list from its top: kept, the list would hold on to the row the last one had first,
+            // by its key, and leave the rows before it scrolled out of a short list
+            key(search, area) {
                 LazyColumn(Modifier.weight(1f, fill = false)) {
                     items(shown, key = { it.id }) { room -> RoomResult(room, search.text) }
                 }

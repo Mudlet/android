@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,10 +52,15 @@ import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import kotlin.reflect.KClass
 
 /**
@@ -355,4 +362,66 @@ private fun ProfileGameScreen(
             text = { Text(stringResource(R.string.secure_offer_text)) },
         )
     }
+    val refused = c.refusedCertificate
+    if (refused != null && !c.refusedCertificatePutOff) {
+        RefusedCertificateDialog(
+            refused,
+            onAccept = {
+                if (c.acceptRefusedCertificate()) {
+                    reconnect()
+                } else {
+                    scope.launch { snackbars.showSnackbar(resources.getString(R.string.certificate_not_accepted, resources.getString(R.string.profiles_error_not_attached)), withDismissAction = true) }
+                }
+            },
+            onOpenSettings = {
+                c.putOffRefusedCertificate()
+                onOpenSettings()
+            },
+            onDismiss = c::putOffRefusedCertificate,
+        )
+    }
+}
+
+// Desktop shows these facts only in the profile's preferences; the app asks as the connection ends, and the choice is
+// still the game's settings, so it is remembered and can be undone where desktop keeps it
+@Composable
+private fun RefusedCertificateDialog(certificate: RefusedCertificate, onAccept: () -> Unit, onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            if (certificate.others) {
+                TextButton(onOpenSettings) { Text(stringResource(R.string.certificate_open_settings)) }
+            } else {
+                TextButton(onAccept) { Text(stringResource(R.string.certificate_accept)) }
+            }
+        },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.certificate_cancel)) } },
+        title = { Text(stringResource(R.string.certificate_refused_title)) },
+        text = {
+            val gap = Modifier.padding(top = 8.dp)
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(stringResource(R.string.certificate_refused_text))
+                certificate.errors.forEach { Text(stringResource(R.string.certificate_error, it)) }
+                Text(stringResource(R.string.certificate_issued_to, certificate.issuedTo), gap)
+                Text(stringResource(R.string.certificate_issuer, certificate.issuer))
+                Text(stringResource(R.string.certificate_expires, expiryText(certificate.expires)))
+                Text(stringResource(R.string.certificate_serial, certificate.serial))
+                if (certificate.others) {
+                    Text(stringResource(R.string.certificate_only_ignore_all), gap)
+                } else {
+                    if (certificate.expired) Text(stringResource(R.string.certificate_turns_on, stringResource(R.string.settings_accept_expired_certificate)), gap)
+                    if (certificate.selfSigned) Text(stringResource(R.string.certificate_turns_on, stringResource(R.string.settings_accept_self_signed_certificate)), gap)
+                    Text(stringResource(R.string.certificate_risk), gap)
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun expiryText(expires: String): String {
+    if (expires.isEmpty()) return stringResource(R.string.certificate_expiry_unknown)
+    return runCatching {
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(Instant.parse(expires))
+    }.getOrDefault(expires)
 }

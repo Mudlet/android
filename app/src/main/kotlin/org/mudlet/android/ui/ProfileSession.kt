@@ -21,6 +21,7 @@ import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.OpenProfile
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.ui.game.Announcer
 import java.io.IOException
@@ -128,6 +129,14 @@ class ProfileSession internal constructor(
 
     /** Why the engine did not take the last [answerSecureOffer], until [secureOfferRefusalShown]. */
     var secureOfferRefusal by mutableStateOf<String?>(null)
+        private set
+
+    /** The game's certificate the last secure connection was refused for, as the engine says, until the next is tried. */
+    var refusedCertificate by mutableStateOf<RefusedCertificate?>(null)
+        private set
+
+    /** The player answered or put off [refusedCertificate]: not asked again until another is refused. */
+    var refusedCertificatePutOff by mutableStateOf(false)
         private set
 
     /** The input line's history, newest first: the engine's, with the commands [sendCommand] sent since it last said. */
@@ -317,6 +326,24 @@ class ProfileSession internal constructor(
 
     fun secureOfferRefusalShown() {
         secureOfferRefusal = null
+    }
+
+    /**
+     * Lets past, for this game, what [refusedCertificate] was refused for, as desktop Mudlet's "Accept expired
+     * certificates" and "Accept self-signed certificates" do; they stay on in the game's settings until the player turns
+     * them off. False, changing nothing more, for a certificate with [RefusedCertificate.others] or as [changeSetting].
+     */
+    fun acceptRefusedCertificate(): Boolean {
+        val certificate = refusedCertificate ?: return false
+        if (certificate.others) return false
+        if (certificate.expired && !changeSetting(Settings.acceptExpiredCertificate, true)) return false
+        if (certificate.selfSigned && !changeSetting(Settings.acceptSelfSignedCertificate, true)) return false
+        refusedCertificatePutOff = true
+        return true
+    }
+
+    fun putOffRefusedCertificate() {
+        refusedCertificatePutOff = true
     }
 
     /** Connects the profile to a game and remembers the address for [reconnect]. False as for [send]. */
@@ -564,6 +591,11 @@ class ProfileSession internal constructor(
                 is EngineMessage.SecureOffer -> post {
                     if (message.offered && !secureOffer) secureOfferPutOff = false
                     secureOffer = message.offered
+                }
+
+                is EngineMessage.CertificateRefused -> post {
+                    if (message.certificate != refusedCertificate) refusedCertificatePutOff = false
+                    refusedCertificate = message.certificate
                 }
 
                 is EngineMessage.History -> post { history = message.lines }

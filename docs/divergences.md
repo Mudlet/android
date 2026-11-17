@@ -82,6 +82,15 @@ again. On the desktop Escape is No, which connects again and turns "Offer a secu
 (`mudlet.cpp`, `signal_promptTlsAvailable`). Back on a phone is pressed far more readily than Escape on a question, and
 a stray press should not cost a reconnect and the game's future offers.
 
+## Asked about a refused certificate
+
+When a game's certificate is refused, the desktop prints the reasons in the console and shows the certificate on the
+Security tab of the profile's preferences, where the player may tick "Accept self-signed certificates" or "Accept
+expired certificates" and connect again. The app asks as the connection ends, in a dialog with the same facts, and
+its "Accept and connect" turns on those same settings for the game. A certificate with any other error offers the
+game's settings, where "Ignore all certificate errors" is, rather than a button that ignores them all: the desktop
+puts that box beside the other two, but a phone's dialog is tapped through too readily for it.
+
 ## The games the profile list offers
 
 The profile list offers each of the games in Mudlet's connection dialog (`src/TGameDetails.h`, copied by

@@ -161,7 +161,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
      */
     fun move(key: ScriptItemKey, parent: Int): Boolean {
         val items = listed[key.kind].orEmpty()
-        val position = items.count { it.parent == parent && it.id != key.id }
+        val position = 0
         if (!send(Requests.moveScriptItem(key.kind, key.id, parent, position))) {
             tell(ScriptNotice.NotSent)
             return false
@@ -219,10 +219,6 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     fun onItems(message: EngineMessage.ScriptItems): Boolean {
         val asked = pending.remove(message.replyTo.asId()) as? Pending.List ?: return false
         listed[asked.kind] = message.items
-        if (asked.afterMove) {
-            moving?.let(::tell)
-            moving = null
-        }
         return true
     }
 

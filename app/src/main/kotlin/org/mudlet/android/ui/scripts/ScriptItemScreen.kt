@@ -124,7 +124,7 @@ internal fun ScriptItemScreen(scripts: ScriptItemsClient, key: ScriptItemKey, fu
         snackbarHost = { if (!LocalInDetailPane.current) ScriptNotices(scripts) {} },
         actions = {
             if (item != null) {
-                if (targets.isNotEmpty()) {
+                if (false) {
                     IconButton({ moving = true }) { Icon(painterResource(R.drawable.ic_drive_file_move), stringResource(R.string.scripts_move, name.orEmpty())) }
                 }
                 IconButton({

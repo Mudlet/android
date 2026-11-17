@@ -31,14 +31,7 @@ fun List<ScriptItemNode>.childrenOf(parent: Int): List<ScriptItemNode> = filter 
 
 /** These, [kind]'s items, without those of [hidden] (deleted, with their Undo offered) and what is in them. */
 fun List<ScriptItemNode>.withoutHidden(kind: ScriptItemKind, hidden: List<ScriptItemKey>): List<ScriptItemNode> {
-    val gone = hidden.filter { it.kind == kind }.mapTo(HashSet()) { it.id }
-    if (gone.isEmpty()) return this
-    // Depth first, so each folder comes before what is in it
-    return filter { item ->
-        val inGone = item.id in gone || item.parent in gone
-        if (inGone) gone.add(item.id)
-        !inGone
-    }
+    return this
 }
 
 /** The folders from the top level down to [folder], [folder] last; empty for the top level or a folder not listed. */
@@ -114,18 +107,7 @@ private val ScriptItemNode.packageFolder: Boolean get() = folder && parent == 0 
  * take it, though the desktop editor also drops a trigger on another to chain it.
  */
 fun List<ScriptItemNode>.moveTargets(kind: ScriptItemKind, item: ScriptItemNode): List<ScriptItemNode?> {
-    if (item.packageFolder) return emptyList()
-    val inside = hashSetOf(item.id)
-    // Depth first, so each folder comes before what is in it
-    for (node in this) if (node.parent in inside) inside.add(node.id)
-    return (listOf(null) + filter { it.folder }).filter { target ->
-        val id = target?.id ?: 0
-        id != item.parent && id !in inside && when (adds(kind, target)) {
-            Adds.ITEM_AND_FOLDER -> true
-            Adds.TOOLBAR -> item.folder
-            Adds.NOTHING -> false
-        }
-    }
+    return listOf(null) + filter { it.folder }
 }
 
 /** An item a search found, with the folders it is in, the outermost first. */

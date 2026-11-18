@@ -730,6 +730,30 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
 - Known limits: a `centerview()` on the room the player is already in is taken by whichever view draws first, so a
   view moved by `showRoom` (or a pan) that draws second keeps its place until the player moves to another room.
 
+### The map in the corner
+With "See-through map and text" off, the game screen shows the app's map small in a corner of the console, where a
+script's small mapper would be (`AppMapCorner` in `ui/game/AppMap.kt`):
+- Only while the setting "Map in the corner" (`Settings.mapInCorner`, on by default) has it there, a frame with rooms
+  has come (the empty one of a profile with no rooms shows none), no script's mapper is drawn
+  (`WindowLayout.mapperDrawn`) and the map is not in front: one map on the screen.
+- `MapCorner.ofAppMap` in `:protocol` places it: a square 120 dp a side at the console's top end, its right, or its
+  left in a right-to-left language as the windows are mirrored, grown by `MapCorner.of` as a script's small mapper is,
+  to two fifths of the console within 120 and 320 dp and short of any window or tab, with its panel under it. None
+  where a window or tab is in that square, which it would hide, or the console is too short for 120 dp and a row of
+  buttons, as on a phone held sideways.
+- Its picture is the frame drawn for the map behind the text, which the UI asks for at the console's size whether or
+  not that map is drawn (above): no other size is asked for, so the engine draws nothing more for it. `MapFit.centred`
+  shows it as large as the map over the whole console would be, rooms the size they are behind the text, with its
+  middle, the player it follows, in the corner's.
+- Its panel is `MapPanel`: the zoom buttons, the button that centres it on the player, the area and level bar, and a
+  button that hides it, which turns the setting off and says so with Undo; no edit switch and no map info, which the
+  map in front has. A tap on the map brings the map to the front; touches between the map and the panel reach the
+  console.
+- TalkBack reads the map as one button, "Small map of" its area and the player's room (the area alone, or "of the
+  game", where the frame says less), which brings the map to the front, then the panel's controls. The group is read
+  where the windows are, after the console, the input line and the quick bar, where a script's mapper it stands in for
+  is read, so the order is the same whichever map shows.
+
 ### Downloading the map
 A game can offer its map, as GMCP's `Client.Map` (docs/protocol.md, "Downloading the map"; a carried Mudlet patch),
 which the desktop's mapper turns into a "Download from game" button. The app's map has it (`AppMapClient.download`,
@@ -1309,6 +1333,13 @@ device shows, below the UI's debug hook:
   restarted engine's UI showing neither it nor the offer; the notification permission, explained and then asked on
   Android 13 and later, on a fresh install; and a PNG from the engine's own writer for maps read by Android's decoder,
   each pixel as the writer was given it (`MapPngTest`).
+  The app's map in the corner (`AppMapCornerTest`), on the five screens of `ScriptMapCornerTest`: there where the
+  console has room, grown and placed as a small mapper is, none of its panel over it, each button touched within 48 dp,
+  the newest line's text clear of it and its panel, and TalkBack reading it after the console, then its panel, with the
+  panel scrolled to its top and to its end; none while a script's mapper, the map in front or the map behind the text
+  shows, a script's label is where it would be, or with no rooms; hidden, undone and shown again from the settings,
+  which is kept; a tap on it, not on its buttons, bringing the map to the front; at the top end in en-XA and ar-XB with
+  its text whole (`AppMapCornerPseudoLocaleTest`).
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only. `ScriptLibraryTest` and `PseudoLocaleTest` turn them on through `AccessibilityChecks.kt`, which
@@ -2116,6 +2147,9 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - Turning "See-through map and text" off in the settings takes it away; on, it comes back. Opening a mapper
       (`lua myMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 400, height = 300})`) takes it away
       too, and closing it (`lua myMapper:hide()`) brings it back.
+    - With it off, the map shows small in the console's top right, following the player, with its zoom buttons and a
+      close button under it; the newest text stays in sight. A tap on it brings the map to the front. Its close button
+      hides it, Undo brings it back, and so does "Map in the corner" in the settings. A `Geyser.Mapper` takes it away.
     - The title bar's map button brings it to the front: a tap selects, a double tap walks there, a pinch and the zoom
       buttons zoom, and the edit switch edits it. A tap on a room shows its name, area, distance and exits at the
       bottom, with "Walk here"; the bar there lists the areas and moves between levels. "Find a room" with part of a

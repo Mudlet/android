@@ -166,15 +166,29 @@ private class ConsoleMetrics(val charWidth: Float, val glyphWidthPerSp: Float, v
  * as [WindowLayout] says; below it, while there are any, the window switcher's tabs, which open a window in a pane over
  * the console. It gives Mudlet's main window the size that makes Mudlet's grid the console's, at the console's
  * [textSizeSp], and tells the engine where it put the user windows. The profile's button bars go around all of it ([ScriptButtonBars]).
+ * Given [appMapCorner], while no script's mapper is drawn and the console has room for it clear of the windows
+ * ([MapCorner.ofAppMap]), it draws the app's map in the console's corner: at the [MapCorner] and in the console it is
+ * given, with the modifier it is given.
  */
 @Composable
-fun ScriptWindowsArea(textSizeSp: Int, modifier: Modifier = Modifier, content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit) {
-    ScriptButtonBars(modifier) { area, fitted -> WindowsArea(textSizeSp, area, fitted, content) }
+fun ScriptWindowsArea(
+    textSizeSp: Int,
+    modifier: Modifier = Modifier,
+    appMapCorner: (@Composable (corner: MapCorner, console: PxRect, modifier: Modifier) -> Unit)? = null,
+    content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit,
+) {
+    ScriptButtonBars(modifier) { area, fitted -> WindowsArea(textSizeSp, area, fitted, appMapCorner, content) }
 }
 
 // [fitted] is the whole game area's, bars and all, so the windows are fitted when the bars are
 @Composable
-private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit) {
+private fun WindowsArea(
+    textSizeSp: Int,
+    modifier: Modifier,
+    fitted: Boolean,
+    appMapCorner: (@Composable (corner: MapCorner, console: PxRect, modifier: Modifier) -> Unit)?,
+    content: @Composable (consoleModifier: Modifier, mapperDrawn: Boolean) -> Unit,
+) {
     val client = EngineClient.front.windows
     val windows = client.state
     val metrics = rememberConsoleMetrics(textSizeSp)
@@ -223,16 +237,23 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         // row, which is the app's own and stays black
         Box(Modifier.placeAt(layout.main, density).background(windowColour(windows.mainArea?.borderColor ?: -1, CONSOLE_BACKGROUND)))
         content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
+        // What else is drawn over the game area, which a map in its corner stops short of
+        fun drawnBesides(map: PlacedWindow?) = layout.windows.filter { it !== map && it.scrollBox == null }.map { it.rect } + layout.dockHeaders.map { it.rect } + layout.frameTabs.map { it.rect }
+
         // A mapper's panel goes beside it where there is room, and a small mapper is drawn larger, over what is under it
         // but never over another window it was clear of
         val mapper = layout.windows.firstOrNull { it.window.kind == WindowKind.MAPPER && it.scrollBox == null }
         val mapperKey = mapper?.window?.key
         val corner = remember(layout, w, h, switcherHeight, density.density) {
             mapper?.let { m ->
-                val others = layout.windows.filter { it !== m && it.scrollBox == null }.map { it.rect } + layout.dockHeaders.map { it.rect } + layout.frameTabs.map { it.rect }
                 val areaH = if (layout.pages.isEmpty()) h else (h - switcherHeight).coerceAtLeast(0f)
-                MapCorner.of(m.rect, PxRect(0f, 0f, w, areaH), others, density.density)
+                MapCorner.of(m.rect, PxRect(0f, 0f, w, areaH), drawnBesides(m), density.density)
             }
+        }
+        // The app's map goes in the console's corner as a script's small mapper would, never as well as one
+        val wantsAppCorner = appMapCorner != null && !layout.mapperDrawn
+        val appCorner = remember(layout, density.density, wantsAppCorner) {
+            if (wantsAppCorner) MapCorner.ofAppMap(layout.console, drawnBesides(null), density.density) else null
         }
         // The windows in a scroll box are drawn in it, to scroll with it; the map and its panel beside it go over the
         // windows it was drawn among
@@ -249,6 +270,7 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         for (strip in layout.frameTabs) {
             key(strip.frame.key) { ScriptFrameTabs(strip, Modifier.placeAt(strip.rect, density).coveredBy(strip.rect)) }
         }
+        if (appCorner != null && appMapCorner != null) appMapCorner(appCorner, layout.console, Modifier.coveredBy(appCorner.bounds))
         if (pane != null && page != null) {
             BackHandler { selected = null }
             // Touches on the pane stay off what it covers

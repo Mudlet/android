@@ -34,6 +34,7 @@ class SettingsTest {
     @After
     fun keepTheAppsOwnSettings() {
         Settings.mapBehindText.load(context.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE))
+        Settings.mapInCorner.load(context.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE))
     }
 
     @Test
@@ -48,6 +49,19 @@ class SettingsTest {
         prefs.edit(commit = true) { putBoolean(MAP_BEHIND_TEXT, false) }
         Settings.mapBehindText.load(prefs)
         assertFalse(Settings.mapBehindText.value)
+    }
+
+    @Test
+    fun theMapInTheCornerShowsUnlessThePlayerHidIt() {
+        Settings.mapInCorner.load(prefs)
+        assertTrue(Settings.mapInCorner.value)
+
+        prefs.edit(commit = true) { putBoolean(MAP_IN_CORNER, false) }
+        Settings.mapInCorner.load(prefs)
+        assertFalse(Settings.mapInCorner.value)
+        prefs.edit(commit = true) { putBoolean(MAP_IN_CORNER, true) }
+        Settings.mapInCorner.load(prefs)
+        assertTrue(Settings.mapInCorner.value)
     }
 
     @Test
@@ -80,5 +94,6 @@ class SettingsTest {
         // The stored names: players' apps have them
         const val KEY = "gamesAwaitingInputClear"
         const val MAP_BEHIND_TEXT = "mapBehindText"
+        const val MAP_IN_CORNER = "mapInCorner"
     }
 }

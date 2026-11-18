@@ -806,6 +806,17 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   Back or the button again sends it back, with the keyboard if it went with the swap; with a predictive back gesture the
   map shrinks as the gesture goes, over the game screen under it. A switch to another open game keeps the map in front,
   with that game's map.
+- Beside the text: on an expanded screen (840 dp wide and more, as `ListDetail`'s), with the setting "Map beside the
+  text" (`Settings.mapBesideText`, on by default), the map stands at the game screen's end side, as desktop Mudlet docks
+  its mapper on the main window's right, from the top of the screen to its foot: 40% of the width, but at least 360 dp,
+  leaving the console at least 480 dp (`MapPlacement` in `:protocol`). It is the map in front's search, buttons and map
+  (`MapBesideText`), asked for at its own size as the map in front is, and the console keeps its text, its script
+  windows and the map's room: none is drawn behind the text or in its corner then. The title bar's map button, a toggle
+  read as on, and Alt+M put it away and bring it back; Back is the game screen's. TalkBack reads it after the whole game
+  screen, button bars included, and before the last announcement. A map in front goes beside the text as the screen
+  widens (a foldable unfolding, a window resized), and one beside it goes, leaving the text, as the screen narrows; one
+  put away stays away either way, and which of these the player chose outlasts a rotation. A script's mapper on the
+  screen is the map then, as desktop's one mapper is, and the button brings the map to the front as on a phone.
 - The text behind the map, with the same setting; without it the map in front covers the console. The engine paints the
   frame's background opaque (TMapPainter fills it with the map's background colour), so text could never show through
   it: the console and its script windows are drawn over that colour instead, faintly, and the frame over them with each

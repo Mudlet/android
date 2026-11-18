@@ -234,6 +234,9 @@ object Settings {
     /** "Movement pad": the game screen's keys for walking with one thumb (docs/architecture.md, "The movement pad"). */
     val movementPad = BoolSetting("movementPad", default = true)
 
+    /** "Map beside the text": on an expanded screen, the profile's map beside the game's text, as desktop's docked mapper. */
+    val mapBesideText = BoolSetting("mapBesideText", default = true)
+
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)
 
@@ -305,6 +308,7 @@ object Settings {
         mapInCorner,
         checkTestBuilds,
         movementPad,
+        mapBesideText,
         wallpaperColours,
     )
 

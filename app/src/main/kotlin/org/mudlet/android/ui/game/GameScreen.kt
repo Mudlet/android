@@ -4,11 +4,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -22,6 +29,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +60,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -61,6 +71,8 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.MapCorner
+import org.mudlet.android.protocol.MapPlace
+import org.mudlet.android.protocol.MapPlacement
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.CertificateFacts
@@ -92,6 +104,8 @@ import kotlin.reflect.KClass
  * to: with the setting, the map is faint behind the text ([BackgroundMap]) and the text faint behind the map in front
  * ([textBehindMap]); without it there is no map behind the text and the map in front covers the console. The title bar
  * and the banner stay above the map in front, and the input line and the row below it, to type and pick commands in.
+ * On an expanded screen, with the setting, the map stands beside it all instead ([MapBesideText], [MapPlacement]),
+ * read by TalkBack after it, and the map button puts it away and brings it back.
  * The title bar's scripts button opens the profile's script library ([onOpenScripts]); a long press on a line of the
  * console offers to make a trigger from it ([onMakeTrigger], with the line's text). The first time it shows, and after
  * Help's "Take a UI tour", a short tour points out the console, the input line, the scripts and the menu with the
@@ -128,8 +142,10 @@ fun GameScreen(
         closed.forEach(kept::removeState)
         shown.removeAll(closed.toSet())
     }
-    // Not the profile's: a switch keeps the map in front (docs/multi-profile.md, "Interactions")
+    // Not the profile's: a switch keeps the map in front (docs/multi-profile.md, "Interactions"), and the map beside the
+    // text put away
     var mapOpen by rememberSaveable { mutableStateOf(false) }
+    var besideHidden by rememberSaveable { mutableStateOf(false) }
     val before = remember { Last<String>() }
     val switched = remember(front.name) {
         val was = before.value
@@ -141,8 +157,31 @@ fun GameScreen(
     val swipe = remember { GameSwipe(scope) }
     ScriptWebPageOpener()
     GameTourHost(tourHeld) {
-        kept.SaveableStateProvider(front.name) {
-            ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onOpenPackages, onMakeTrigger)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val widthDp = maxWidth.value
+            val placement = MapPlacement(mapOpen, besideHidden)
+            val fits = MapPlacement.fitsBeside(widthDp, Settings.mapBesideText.value, MapPlacement.scriptMapperShown(front.windows.state.windows))
+            val place = placement.place(fits)
+            val beside = place == MapPlace.BESIDE
+            val onMapButton = {
+                val toggled = placement.toggled(fits)
+                mapOpen = toggled.inFront
+                besideHidden = toggled.besideHidden
+            }
+            // The same tree with the map beside or not, so the game screen keeps its state as the screen folds or widens.
+            // Each keeps the system bars' insets of its own side only, as the list and detail panes do
+            Row(Modifier.fillMaxSize()) {
+                val gameScreen = if (beside) Modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.End)).semantics { isTraversalGroup = true } else Modifier
+                Box(Modifier.weight(1f).fillMaxHeight().then(gameScreen)) {
+                    kept.SaveableStateProvider(front.name) {
+                        ProfileGameScreen(front, switched, place == MapPlace.IN_FRONT, beside, onMapButton, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onOpenPackages, onMakeTrigger)
+                    }
+                }
+                if (beside) {
+                    VerticalDivider()
+                    MapBesideText(Modifier.width(MapPlacement.besideWidthDp(widthDp).dp).fillMaxHeight().consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)))
+                }
+            }
         }
     }
 }
@@ -157,6 +196,8 @@ private fun ProfileGameScreen(
     c: ProfileSession,
     switched: Boolean,
     mapOpen: Boolean,
+    mapBeside: Boolean,
+    onMapButton: () -> Unit,
     onMapOpen: (Boolean) -> Unit,
     swipe: GameSwipe,
     onBack: () -> Unit,
@@ -193,10 +234,10 @@ private fun ProfileGameScreen(
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
     // The map in front covers the text, which no keyboard focus then reaches
     LaunchedEffect(mapOpen) { if (mapOpen) caret = false }
-    // The map behind the text is not there to be moved or picked in: once the map in front closes, not as a rotation
-    // remakes it, it shows no room and follows the player again
-    LaunchedEffect(mapOpen) {
-        if (!mapOpen) {
+    // The map behind the text is not there to be moved or picked in: once the map in front or beside the text closes, not
+    // as a rotation remakes it, it shows no room and follows the player again
+    LaunchedEffect(mapOpen || mapBeside) {
+        if (!mapOpen && !mapBeside) {
             c.appMap.rooms.close()
             if (!c.appMap.mover.following) c.appMap.mover.followPlayer()
         }
@@ -328,7 +369,7 @@ private fun ProfileGameScreen(
                     IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
                         Icon(painterResource(R.drawable.ic_auto_fix_high), stringResource(R.string.scripts_open, c.name))
                     }
-                    MapButton(mapOpen, onMapOpen)
+                    MapButton(mapOpen || mapBeside) { onMapButton() }
                     GameMenuButton(
                         c.name,
                         name,
@@ -357,7 +398,7 @@ private fun ProfileGameScreen(
                         when (shortcut) {
                             DesktopShortcut.SCRIPTS -> onOpenScripts()
                             DesktopShortcut.SETTINGS -> onOpenSettings()
-                            DesktopShortcut.MAP -> onMapOpen(!mapOpen)
+                            DesktopShortcut.MAP -> onMapButton()
                             DesktopShortcut.CONNECT -> onBack()
                             DesktopShortcut.DISCONNECT -> if (canDisconnect) disconnect()
                             DesktopShortcut.RECONNECT -> if (canReconnect) reconnect()
@@ -398,7 +439,8 @@ private fun ProfileGameScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val textSizeSp = Settings.textSize.value
                     val colors = ConsoleColors.of(c.status["consoleColors"])
-                    val behind = Settings.mapBehindText.value
+                    // One map on the screen: none behind the text while it is beside it
+                    val behind = Settings.mapBehindText.value && !mapBeside
                     var backProgress by remember { mutableFloatStateOf(0f) }
                     val textBehind = if (mapOpen && behind) textBehindMap(c.appMap, colors) else null
                     // Under the map in front: faint with the setting, or drawn on for a predictive back gesture to show,
@@ -410,8 +452,8 @@ private fun ProfileGameScreen(
                         Modifier.background(textBehind.ground).graphicsLayer { alpha = textBehind.alpha().let { it + (1f - it) * backProgress } }
                     }
                     // One map on the screen: none behind the text or in its corner while a script's mapper window is
-                    // drawn, nor drawn there while the map is in front
-                    val inCorner = !behind && !mapOpen && Settings.mapInCorner.value && c.appMap.map?.bitmap != null
+                    // drawn, nor drawn there while the map is in front or beside the text
+                    val inCorner = !behind && !mapOpen && !mapBeside && Settings.mapInCorner.value && c.appMap.map?.bitmap != null
                     val mapCorner: (@Composable (MapCorner, PxRect, Modifier) -> Unit)? = if (inCorner) {
                         { place, console, modifier -> AppMapCorner(place, console, onOpen = { onMapOpen(true) }, onHide = ::hideMapInCorner, modifier) }
                     } else {

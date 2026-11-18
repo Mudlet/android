@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -36,13 +37,15 @@ import org.mudlet.android.ui.EngineMessages.button
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.HardwareKeyboard
 import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
+import java.io.FileInputStream
 
 /**
  * The order TalkBack moves through the game screen in (docs/architecture.md, "On-device checklist"), against a fake
  * engine, over a screen with a mini console, a button bar and the map behind the text: the game title, then the rest
  * of the title bar, the console, the input line and its buttons, then the script windows, then the button bars, and
  * last the last announcement; with the map in front, the title bar, the map and the input line, and nothing the map
- * covers. The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
+ * covers; with the map beside the text on a tablet, the whole game screen, then the map, then the last announcement.
+ * The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
  */
 @RunWith(AndroidJUnit4::class)
 class TalkBackOrderTest {
@@ -193,6 +196,53 @@ class TalkBackOrderTest {
             assertTrue("$name is not read: TalkBack reads ${reading.read}", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
         }
         reading.assertEveryControlRead()
+    }
+
+    @Test
+    fun withTheMapBesideTheTextTheGameScreenThenTheMapThenTheLastAnnouncement() = onATablet {
+        showWindowAndBar()
+        session.announce(ANNOUNCEMENT, assertive = false)
+        waitFor(hasText(WINDOW_ROW))
+        waitFor(hasText("North") and hasClickAction())
+        waitFor(hasContentDescription(ANNOUNCEMENT))
+        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
+        waitFor(map)
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        val reading = TalkBackReading(compose)
+        val expected = listOf(
+            "the game title" to hasTestTag(GAME_TITLE_TAG),
+            "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
+            "the console" to hasText(CONSOLE_LINE),
+            "the input line" to (hasSetTextAction() and hasText(string(R.string.input_label))),
+            "its Send button" to (hasContentDescription(string(R.string.input_send)) and hasClickAction()),
+            "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
+            "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
+            "the room search" to (hasSetTextAction() and hasText(string(R.string.app_map_search))),
+            "the map" to map,
+            "the last announcement" to hasContentDescription(ANNOUNCEMENT),
+        )
+        reading.assertInOrder(expected)
+        reading.assertEveryControlRead()
+    }
+
+    /** A 10-inch tablet on its side, 1280 dp wide, at its own density for the checks, as ScreenshotTest makes it. */
+    private fun onATablet(block: () -> Unit) {
+        // The shell's output must be read for the command to finish
+        fun shell(command: String) = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { pfd ->
+            FileInputStream(pfd.fileDescriptor).readBytes()
+        }
+        try {
+            shell("wm size 2560x1600")
+            shell("wm density 320")
+            compose.waitForIdle()
+            waitFor(hasText(CONSOLE_LINE))
+            block()
+        } finally {
+            shell("wm density reset")
+            shell("wm size reset")
+            compose.waitForIdle()
+        }
     }
 
     // The chat is the top right quarter of Mudlet's 800 by 600 main window; a bar above the console

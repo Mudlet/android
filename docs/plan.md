@@ -57,8 +57,8 @@ phones; translations live; help; changes to lines already shown.
 
 | Lane | What | Touches |
 |---|---|---|
-| IF1 Script editor slices 4 and 5 | Slice 4, timers, keys and buttons, merged (#142, protocol 27, patch 0020); slice 5 in flight: a trigger made from a console line | `ui/scripts/`, `ScriptItemsClient.kt`, patch 0020 |
-| IF2 Map frame cost, part 5 | The map frame's cost with the text behind it (#144) | `AppMapClient.kt`, `protocol/MapBehindText.kt`, `TextBehindMap.kt` |
+| IF1 Script editor slices 4 and 5 | Slice 4, timers, keys and buttons, merged (#142, protocol 27, patch 0020); slice 5, a trigger made from a console line, merged (#148) | `ui/scripts/`, `ScriptItemsClient.kt`, patch 0020 |
+| IF2 Map frame cost, part 5 | The map frame's cost with the text behind it, merged (#144) | `AppMapClient.kt`, `protocol/MapBehindText.kt`, `TextBehindMap.kt` |
 | IF3 Scripted UI | What remains of Phase F | `ui/game/Script*.kt`, `ScriptWindowsClient.kt` |
 | IF4 Package manager | Installed packages, install from file and URL, uninstall: the engine side is #145, the screen follows; then modules and the package repository browser as later PRs of the same lane | new `ui/packages/`, protocol, `MudletProfile.cpp` |
 | IF5 Connection security | The game's secure-port offer (`secureConnectionOffered`), a bad certificate's facts and the per-game choices; a proxy if small | `ui/game/`, settings Security page, protocol |
@@ -247,7 +247,8 @@ scrollback, as desktop players do.
 `setTimeStamps` request). Scrollback length is the app's own ring (2000 lines today).
 
 **Pull requests.**
-1. Select and copy: long press a line to select, handles to extend, Copy and Share; TalkBack's action "Copy line".
+1. Select and copy: a line's Copy and Share in its long press menu, and TalkBack's action (#171); then a selection
+   across lines, with handles to extend it.
 2. Search the scrollback: a search bar from the top bar or Ctrl+F (F3 with the setting), next and previous, matches
    highlighted, the count read once.
 3. Timestamps: protocol `time` on `line` and `setTimeStamps`; a switch on the Display page and in the top bar's menu.
@@ -590,32 +591,32 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 
 | Lane | Mark | Status | PRs |
 |---|---|---|---|
-| IF1 Script editor slices 4-5 | expected | in flight | #142 (slice 4, merged) |
-| IF2 Map frame cost part 5 | expected | in flight | #144 |
+| IF1 Script editor slices 4-5 | expected | done | #142, #148 |
+| IF2 Map frame cost part 5 | expected | done | #144 |
 | IF3 Scripted UI | expected | in flight | |
-| IF4 Package manager | release blocker | in flight | #145 |
-| IF5 Connection security (TLS, secure port, proxy) | release blocker | in flight | |
-| IF6 Error console and logging | release blocker | in flight | |
+| IF4 Package manager | release blocker | in flight: the engine side merged; the screen next | #145, #163 |
+| IF5 Connection security (TLS, secure port, proxy) | release blocker | in flight: the secure-port and refused-certificate questions merged (#147, carried by engine train 1); the Security page next | #157, #178 |
+| IF6 Error console and logging | release blocker | in flight: the engine lists Lua errors; the error console screen next, then logging to file (engine train 2) | #150, #170 |
 | IF7 Mute game sounds | expected | done | #143, #152 |
 | IF8 Script editor design pick | - | waiting for the user | |
 | IF9 Upstream PRs to Mudlet/Mudlet | - | waiting for the user | Mudlet/Mudlet#12962, Mudlet/Mudlet#12963, Mudlet/Mudlet#12964, Mudlet/Mudlet#12965, Mudlet/Mudlet#12967 |
-| 1 Stable release on Play | release blocker | in flight | |
+| 1 Stable release on Play | release blocker | waiting for the user: the release workflow and the store listing merged; the Play forms, signing secrets and the first tag are the user's | #153, #166, #167 |
 | 2 Main console links | release blocker | done | #149, #159 |
-| 3 Profiles: backup, move, copy | release blocker | in flight | |
-| 4 Real phones and background | release blocker | not started | |
-| 5 Report a problem | release blocker | in flight: About > Report a problem; the offer after a crash next | |
-| 6 Copy, search, timestamps, lag | expected | not started | |
-| 7 Hardware keyboards and keys | expected | not started | |
-| 8 Display and input settings 2 | expected | not started | |
+| 3 Profiles: backup, move, copy | release blocker | in flight: export to a .zip desktop opens merged; import next, then copy | #151, #158 |
+| 4 Real phones and background | release blocker | in flight: the device pass page and the explanation of a stop in the background merged; the pass itself is run on real phones | #155, #160 |
+| 5 Report a problem | release blocker | in flight: About > Report a problem, with game and script text kept out of logcat; the offer after a crash next | #156, #164 |
+| 6 Copy, search, timestamps, lag | expected | in flight: copy or share a line; search next | #171 |
+| 7 Hardware keyboards and keys | expected | in flight: key bindings in the engine merged (engine train 1); the app's keys next | #157 |
+| 8 Display and input settings 2 | expected | in flight: the server encoding and the input line's settings merged, with their Connection and Input pages (engine train 1); the colours and display slice next | #157 |
 | 9 Sound, music, TTS | expected | not started | |
-| 10 Map files, settings, areas | expected | not started | |
-| 11 Editor beyond items | expected | in flight: move to a folder; search next | |
+| 10 Map files, settings, areas | expected | in flight: the engine side merged (engine train 1); the screen next | #157 |
+| 11 Editor beyond items | expected | in flight: move to a folder merged; the colour pattern picker and search next | #165 |
 | 12 Lua functions needing the app | expected | not started | |
 | 13 Emergency stop and replays | expected / nice later | not started | |
 | 14 Telnet links, profile extras | expected | not started | |
 | 15 Tablets and Chromebooks | expected | not started | |
 | 16 Slow phones | expected | not started | |
 | 17 Translations live | expected | not started | |
-| 18 Help and first steps | nice later | not started | |
+| 18 Help and first steps | nice later | in flight: Help in About and the script library merged; the game screen's first-run tour next; function descriptions wait on a source for them | #168 |
 | 19 Lines changed after shown | expected | not started | |
 | 20 Movement pad | nice later | not started | |

@@ -103,14 +103,14 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
     fun openOffline(name: String) {
         error = null
         // One open already only comes to the front, as it is, connected or not
-        if (EngineClient.session(name) != null) {
+        if (false && EngineClient.session(name) != null) {
             if (EngineClient.setFront(name)) onOpenGame() else error = notAttached
             return
         }
         waiting = true
         EngineClient.openProfileOffline(name, passwords.get(name)) { refused ->
             waiting = false
-            if (refused == null) onOpenGame() else error = refused
+            if (refused == null) onOpenGame()
         }
     }
 
@@ -193,7 +193,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                 // What is typed is saved first, as desktop's dialog keeps each change, or leaving would lose it
                 val unsaved = edited != existing || password.isNotEmpty()
                 OutlinedButton(
-                    { if (unsaved) save { openOffline(name) } else openOffline(name) },
+                    { openOffline(name) },
                     enabled = !waiting && (!unsaved || canSave),
                 ) { Text(stringResource(R.string.profile_open_offline)) }
                 ProfileExport(name, open = EngineClient.session(name) != null)

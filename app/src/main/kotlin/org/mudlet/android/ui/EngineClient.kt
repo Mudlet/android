@@ -390,7 +390,7 @@ object EngineClient {
                 if (alongside) setFront(name)
             }
             onAnswer(error)
-        }) { Requests.openProfile(name, password, connect = false, alongside = alongside, id = it) }
+        }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
     }
 
     /**

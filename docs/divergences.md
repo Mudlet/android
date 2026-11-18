@@ -383,6 +383,13 @@ front, as the emergency stop is, for the same reason (`docs/architecture.md`, "R
 a recording in the profile's log folder for the player to find; the app, whose folders the player cannot browse, offers
 the last one to Android's share sheet. The file, its name and what it holds are the desktop's.
 
+## Playing a replay
+
+Desktop Mudlet's replay button is on the game sheet's card, and its replay toolbar a bar under the input line while a
+replay plays (`docs/architecture.md`, "Playing a replay"). The bar has no clock: libmudlet does not say when it moves,
+and asking every second would keep the engine awake through a whole replay for a number TalkBack would read over the
+game's text. Pause, speed and stop are the desktop's, from 1 to 1024 times.
+
 ## Timestamps and the lag
 
 Desktop Mudlet's timestamp button and latency box, under the main console, are a switch and a line on the game sheet's

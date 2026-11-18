@@ -101,6 +101,10 @@ public:
     QString setScriptsStopped(bool stopped) override;
     QString setTimeStamps(bool shown) override;
     QString setReplayRecording(bool record) override;
+    QString playReplay(const QString& path) override;
+    QString setReplayPaused(bool paused) override;
+    QString stopReplay() override;
+    QString changeReplaySpeed(bool faster) override;
     QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString deleteMap() override;
@@ -323,6 +327,7 @@ private:
     bool mRecording = false;
     QStringList mReplaysBefore;
     QString mRecordedFile;
+    Replay mReplay;
     // The download's own progress has started: Mudlet's progress before then is the end of a map import or export a
     // script began
     bool mMapDownloadProgressStarted = false;

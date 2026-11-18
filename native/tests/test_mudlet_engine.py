@@ -122,7 +122,7 @@ def main():
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
                        clipboard, file_dialog, web_pages, packages, error_console, key_bindings, scripts_stopped, replay_recording, time_stamps,
-                       line_updates):
+                       line_updates, replay_playback):
             checks()
         checks = secure_offer
         checks(port)
@@ -5566,6 +5566,121 @@ def replay_recording():
     c.wait_for(lambda m: m["t"] == "replayRecording", timeout=30, collect=seen)
     told = [m for m in seen[since:] if m["t"] == "replayRecording"]
     check(told == [{"t": "replayRecording", "recording": False, "file": ""}], f"a profile that closes names no file: {told}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+def replay_playback():
+    """playReplay, desktop's replay button, and the replay toolbar's setReplayPaused, stopReplay and changeReplaySpeed,
+    with replay following: refused with no profile, for bad arguments, a missing file, a file that is not a replay, and
+    while one plays; a recording played by its name in the log folder, its lines shown, held so the next waits, let go,
+    faster and slower, stopped, and played to its end; the state to a UI that attaches, and none once the profile
+    closes."""
+    game = fake_telnet.start_in_thread()
+    profile = "Replay Play Test"
+    folder = os.path.join(CONFIG, "profiles", profile, "log")
+    none = {"t": "replay", "playing": False, "paused": False, "speed": 0}
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(none in seen, "a UI that attaches with no profile open is told no replay plays")
+    for request in ({"t": "playReplay", "path": "x.dat"}, {"t": "setReplayPaused", "paused": True}, {"t": "stopReplay"},
+                    {"t": "changeReplaySpeed", "faster": True}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
+
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+    c.send({"t": "setReplayRecording", "record": True})
+    c.wait_for(lambda m: m["t"] == "replayRecording" and m["recording"], collect=seen)
+    for word in ("first", "second", "third"):
+        c.send({"t": "send", "text": f"echo replayed {word}"})
+        # The echo stays the open tail until the game sends more
+        c.wait_for(lambda m: m["t"] in ("line", "tail") and f"You said: replayed {word}" in m["text"], collect=seen)
+        time.sleep(3)
+    c.send({"t": "send", "text": "quit"})
+    saved = c.wait_for(lambda m: m["t"] == "replayRecording" and not m["recording"], timeout=30, collect=seen)["file"]
+    wait_status(c, "connection", lambda v: v == "disconnected", seen, timeout=30)
+    check(os.path.isfile(os.path.join(folder, saved)), f"a recording to play was saved: {saved}")
+
+    for request, reason in (({"t": "playReplay"}, "path must be a file's path"),
+                            ({"t": "setReplayPaused", "paused": "yes"}, "paused must be true or false"),
+                            ({"t": "changeReplaySpeed"}, "faster must be true or false")):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == f"{request['t']}: {reason}", f"{request} is refused: {m}")
+    for request in ({"t": "setReplayPaused", "paused": True}, {"t": "stopReplay"}, {"t": "changeReplaySpeed", "faster": True}):
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"].startswith(f"{request['t']}: ") and m["message"] != f"{request['t']}: ",
+              f"{request['t']} with no replay playing is refused with Mudlet's reason: {m}")
+    with open(os.path.join(folder, "not-a-replay.dat"), "wb") as f:
+        f.write(b"\xff" * 16)
+    for path in (os.path.join(folder, "missing.dat"), "not-a-replay.dat"):
+        m = c.ask({"t": "playReplay", "path": path}, answers=("error",), collect=seen)
+        check(m["message"].startswith("playReplay: ") and m["message"] != "playReplay: ", f"playing {path} is refused: {m}")
+    check(last_of(seen, "replay") == none, f"a refused play starts nothing: {last_of(seen, 'replay')}")
+
+    def replay(**state):
+        return c.wait_for(lambda m: m["t"] == "replay" and all(m[k] == v for k, v in state.items()), timeout=30, collect=seen)
+
+    # Not the ring's lines a UI that attaches is sent, which hold the lines recorded; the last word played stays the tail
+    def shown(word):
+        return c.wait_for(lambda m: m["t"] in ("line", "tail") and not m.get("replay") and f"You said: replayed {word}" in m["text"],
+                          timeout=30, collect=seen)
+
+    def quiet(pred, seconds=2):
+        try:
+            c.wait_for(pred, timeout=seconds, collect=seen)
+        except TimeoutError:
+            return True
+        return False
+
+    c.send({"t": "playReplay", "path": saved})
+    m = replay(playing=True)
+    check(m == {"t": "replay", "playing": True, "paused": False, "speed": 1}, f"a replay starts at its recorded pace: {m}")
+    m = c.ask({"t": "playReplay", "path": saved}, answers=("error",), collect=seen)
+    check(m["message"].startswith("playReplay: "), f"a second replay while one plays is refused: {m}")
+    shown("first")
+    c.send({"t": "setReplayPaused", "paused": True})
+    replay(playing=True, paused=True)
+    m = c.ask({"t": "setReplayPaused", "paused": True}, answers=("error",), collect=seen)
+    check(m["message"].startswith("setReplayPaused: "), f"holding a held replay is refused: {m}")
+    check(quiet(lambda m: m["t"] == "line" and "replayed second" in m.get("text", ""), 5), "a held replay shows nothing more")
+    c.send({"t": "changeReplaySpeed", "faster": True})
+    replay(paused=True, speed=2)
+    c.send({"t": "setReplayPaused", "paused": False})
+    replay(paused=False, speed=2)
+    shown("second")
+    c.send({"t": "changeReplaySpeed", "faster": False})
+    replay(speed=1)
+    c.send({"t": "changeReplaySpeed", "faster": False})
+    check(quiet(lambda m: m["t"] in ("replay", "error")), "slower at 1 times stays there, saying nothing")
+    c.send({"t": "stopReplay"})
+    m = replay(playing=False)
+    check(m == none, f"a stopped replay plays no more: {m}")
+
+    c.send({"t": "playReplay", "path": os.path.join(folder, saved)})
+    replay(playing=True)
+    c.send({"t": "changeReplaySpeed", "faster": True})
+    replay(speed=2)
+    # Held, so no line plays while no UI is attached
+    c.send({"t": "setReplayPaused", "paused": True})
+    replay(paused=True)
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(last_of(seen, "replay") == {"t": "replay", "playing": True, "paused": True, "speed": 2},
+          f"a UI that attaches is told the replay that plays: {last_of(seen, 'replay')}")
+    c.send({"t": "setReplayPaused", "paused": False})
+    shown("third")
+    m = replay(playing=False)
+    check(m == none, f"a replay played to its end is over: {m}")
+
+    c.send({"t": "playReplay", "path": saved})
+    replay(playing=True)
+    since = len(seen)
+    c.send({"t": "closeProfile", "name": profile})
+    c.wait_for(lambda m: m["t"] == "replay" and not m["playing"], timeout=30, collect=seen)
+    check(last_of(seen, "replay") == none, f"a profile that closes plays no replay: {seen[since:]}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

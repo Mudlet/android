@@ -398,6 +398,9 @@ private fun ProfileGameScreen(
                     onHistory = { historyOpen = true },
                 )
             }
+            if (c.replay.playing) {
+                ReplayBar(c.replay, onPaused = c::setReplayPaused, onFaster = c::changeReplaySpeed, onStop = c::stopReplay, Modifier.fillMaxWidth())
+            }
             QuickBar(if (hidden) emptyList() else suggestions.pinned, onSend = ::sendNow, Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 val sounds = c.sounds
                 if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {
@@ -426,6 +429,12 @@ private fun ProfileGameScreen(
             onOpenAnother = onBack,
             onDismiss = { gamesOpen = false },
         )
+    }
+    LaunchedEffect(c.replayRefusal) {
+        val reason = c.replayRefusal ?: return@LaunchedEffect
+        c.replayRefusalShown()
+        // Launched apart, as replayRefusalShown ends this effect
+        scope.launch { snackbars.showSnackbar(resources.getString(R.string.game_play_replay_refused, reason), withDismissAction = true) }
     }
     LaunchedEffect(c.secureOfferRefusal) {
         val reason = c.secureOfferRefusal ?: return@LaunchedEffect

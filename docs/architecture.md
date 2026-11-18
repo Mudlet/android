@@ -294,8 +294,21 @@ copies it into the cache (`ReplayShare`), the only folder the app's FileProvider
 and offers it to Android's share sheet, for desktop Mudlet's replay to play. `ReplayRecordingTest` tries the switch,
 the button and the copy against the fake engine, and `replay_recording` in the host test the engine against Mudlet.
 
+### Playing a replay
+Desktop Mudlet's replay button is "Play a replay" on the game sheet's card, under the recording switch, while no replay
+plays (`ReplayPlayback.kt`). It opens Android's file picker, which needs no storage permission, copies the document
+chosen into the cache (`ReplayFiles`), as the engine can read no `content:` URI, and sends `playReplay` with the copy's
+path; the engine plays it with `THeadlessSession::playReplay()` (`0037-headless-play-replay.patch`), as the desktop's
+button does, so the game's text says it is loading and when it is over. A refusal, as for a file that is not a replay,
+shows in a snackbar. Desktop's replay toolbar is a bar under the input line while the engine's `replay` says one plays,
+whether the player or a script began it: its speed, which TalkBack reads as it changes, and pause or resume, slower,
+faster and stop, each sending its request and showing only what the engine then says. The toolbar's clock is left out:
+libmudlet tells no change of it, and asking for it every second would wake the engine all through a replay.
+`ReplayPlaybackTest` tries the bar, the button and the copy against the fake engine, and `replay_playback` in the host
+test the engine against Mudlet.
+
 ### Timestamps and the lag
-Desktop Mudlet's timestamp button is a switch under the replay recording on the game sheet's card (`GameSheet.kt`). A
+Desktop Mudlet's timestamp button is a switch under "Play a replay" on the game sheet's card (`GameSheet.kt`). A
 tap sends `setTimeStamps`, which the engine does with libmudlet's `THeadlessSession::setTimeStampsShown()`, saved for
 the profile's next load as the button saves it; the switch follows status `timeStamps`, which a script's
 `enableTimeStamps()` and `disableTimeStamps()` change too. Each `line` and `tail` carries its `time`, when the game's
@@ -930,6 +943,7 @@ And the profile's console buffer size given to a main console with no window, an
 `setConfig()` (`consoleBufferSize`, `useMaxConsoleBufferSize`, `0033-headless-console-buffer-size.patch`).
 And the Lua variables, one table at a time, as the desktop editor's Variables view lists them (`variables()`,
 `0034-headless-variables.patch`; see "Reading the Lua variables" in [`protocol.md`](protocol.md)).
+And a replay file played as the GUI's replay button plays it (`playReplay()`, `0037-headless-play-replay.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

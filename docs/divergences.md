@@ -203,6 +203,11 @@ Remove button, and what a removal takes, the package's items and files, does not
   a text box or a bar, and leaves its content no room, as on the desktop; where the sheet also has a background, Qt
   draws the other edges, in their style (`docs/phase-f.md`, "Labels"). The app draws one border for all four edges,
   and a native top edge is what Qt draws no border of where the sheet draws nothing else.
+- A text box whose style sheet sets no colours has the theme's surface and text colours; the desktop's has the
+  profile's command-line colours, dark grey on black unless the player changed them (`docs/phase-f.md`, "Text
+  boxes"). They make it look like the desktop's command line, which has them too. The engine does not send them, and
+  the app's input line and a window's command line have the theme's colours, so in the theme's a text box looks like
+  the fields the player types in, as on the desktop.
 
 ## A see-through user window or switcher page
 

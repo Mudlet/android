@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
@@ -33,6 +34,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -43,6 +45,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -63,7 +66,9 @@ import kotlin.math.abs
  * a push-down button as a switch, a folder's menu, where bars go beside or above the console, an unnamed icon button,
  * the style sheets of a bar and its buttons drawn (docs/phase-f.md, "Button bars and commands") with a 48 dp button,
  * a switch's state and a down button's tick kept whatever they ask, a button no bigger than the game area whatever
- * its sheet's lengths or its name ask, and the Extensions menu of commands, whose tap sends `activateCommand`.
+ * its sheet's lengths or its name ask, a name too long for it giving way to its tick and arrow, a horizontal bar's
+ * columns each as wide as its widest button and a vertical bar's places all as wide as the bar's widest, and the
+ * Extensions menu of commands, whose tap sends `activateCommand`.
  *
  * A menu is a popup, a root of its own, so the checks on the whole screen run only while none is open.
  */
@@ -401,6 +406,81 @@ class ScriptButtonBarsTest {
     }
 
     @Test
+    fun aNameTooLongForItsButtonGivesWayToItsTickAndArrow() {
+        val sheet = "background-color: #000080; color: #ffffff"
+        val sneak = (1..60).joinToString(" ") { "Sneak" }
+        val cast = (1..60).joinToString(" ") { "Cast" }
+        // Each in a row of one line, above and below the console, which the row's quarter of the area does not cut
+        session.buttonBars(
+            bar(1, "Modes", "top", listOf(button(20, sneak, pushDown = true, checked = true, styleSheet = sheet))),
+            bar(2, "Spells", "floating", listOf(button(30, cast, styleSheet = sheet, children = listOf(button(31, "Fireball"))))),
+        )
+        // TalkBack has all of each name
+        val down = hasText(sneak) and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On)
+        val folder = hasText(cast) and hasClickAction()
+        waitFor(down)
+        waitFor(folder)
+        // An icon's 24 dp and the 8 dp between it and the name
+        val room = with(compose.density) { 32.dp.toPx() }
+
+        // The tick before the name, on the screen, and the name cut short with an ellipsis
+        assertOnScreen(down)
+        val tick = name(sneak).positionInRoot.x - left(down)
+        assertTrue("the name starts $tick px into its button, < $room", tick >= room - PIXELS)
+        assertDrawnIn(WHITE, down, EDGE_PX until tick.toInt())
+        assertTrue("'$sneak' is not cut short", nameLayout(sneak).isLineEllipsized(0))
+
+        // The arrow after it
+        assertOnScreen(folder)
+        val folderWidth = width(folder)
+        val arrow = left(folder) + folderWidth - name(cast).let { it.positionInRoot.x + it.size.width }
+        assertTrue("the name ends $arrow px before its button's end, < $room", arrow >= room - PIXELS)
+        assertDrawnIn(WHITE, folder, (folderWidth - arrow).toInt() until folderWidth.toInt() - EDGE_PX)
+        assertTrue("'$cast' is not cut short", nameLayout(cast).isLineEllipsized(0))
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aHorizontalBarsColumnIsAsWideAsItsWidestButton() {
+        // Two buttons to a column: N above Go north west, then Go south above S
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "N"), button(11, "Go north west"), button(12, "Go south"), button(13, "S")), columns = 2))
+        val n = hasText("N") and hasClickAction()
+        val northWest = hasText("Go north west") and hasClickAction()
+        val south = hasText("Go south") and hasClickAction()
+        val s = hasText("S") and hasClickAction()
+        waitFor(s)
+        assertEquals("N is not above Go north west", left(northWest), left(n), PIXELS)
+        assertEquals("S is not below Go south", left(south), left(s), PIXELS)
+        // A shorter button fills its column, which is as wide as the widest in it asks
+        assertSameWidth(northWest, n)
+        assertSameWidth(south, s)
+        assertNameWhole("Go north west")
+        assertNameWhole("Go south")
+        // Each column its own widest's: the second, to the right of the first, is narrower
+        assertTrue("Go south is not right of Go north west", left(south) >= left(northWest) + width(northWest) - PIXELS)
+        assertTrue("Go south's column ${width(south)} is not narrower than ${width(northWest)}", width(south) < width(northWest) - PIXELS)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aVerticalBarsPlacesAreAllAsWideAsItsWidestButton() {
+        // Two buttons to a row: N beside Go north west, then S beside E
+        session.buttonBars(bar(1, "Moves", "top", listOf(button(10, "N"), button(11, "Go north west"), button(12, "S"), button(13, "E")), vertical = true, columns = 2))
+        val n = hasText("N") and hasClickAction()
+        val northWest = hasText("Go north west") and hasClickAction()
+        val s = hasText("S") and hasClickAction()
+        val e = hasText("E") and hasClickAction()
+        waitFor(e)
+        // Each place of the grid, in any row or column, as wide as the widest button of the bar asks
+        for (other in listOf(n, s, e)) assertSameWidth(northWest, other)
+        assertNameWhole("Go north west")
+        assertEquals("S is not below N", left(n), left(s), PIXELS)
+        assertEquals("E is not below Go north west", left(northWest), left(e), PIXELS)
+        assertTrue("Go north west is not right of N", left(northWest) >= left(n) + width(n) - PIXELS)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
     fun aFolderIsPressedWhileItsMenuIsOpen() {
         val sheet = "QPushButton:pressed { background-color: #006400; } QPushButton { background-color: #000080; color: #ffffff; }"
         session.buttonBars(bar(1, "Spells", "top", listOf(button(30, "Cast", styleSheet = sheet, children = listOf(button(31, "Fireball"))))))
@@ -464,17 +544,47 @@ class ScriptButtonBarsTest {
     private fun assertColour(expected: Color, drawn: Color) = assertEquals("ARGB %08x, then %08x".format(expected.toArgb(), drawn.toArgb()), expected.toArgb(), drawn.toArgb())
 
     /** That some of [node] is drawn in [text]'s colour, as the middle of its letters' strokes are. */
-    private fun assertTextIn(text: Color, node: SemanticsMatcher) {
+    private fun assertTextIn(text: Color, node: SemanticsMatcher) = assertDrawnIn(text, node, 0 until Int.MAX_VALUE)
+
+    /** That some of [node] in its [columns] of pixels from its left is drawn in [colour], as the middle of a stroke is. */
+    private fun assertDrawnIn(colour: Color, node: SemanticsMatcher, columns: IntRange) {
         compose.waitForIdle()
         val image = compose.onNode(node).captureToImage().toPixelMap()
-        val drawn = (0 until image.width).any { x ->
+        val drawn = (columns.first.coerceAtLeast(0)..columns.last.coerceAtMost(image.width - 1)).any { x ->
             (0 until image.height).any { y ->
                 val c = image[x, y]
-                abs(c.red - text.red) < NEAR && abs(c.green - text.green) < NEAR && abs(c.blue - text.blue) < NEAR
+                abs(c.red - colour.red) < NEAR && abs(c.green - colour.green) < NEAR && abs(c.blue - colour.blue) < NEAR
             }
         }
-        assertTrue("no pixel of %08x".format(text.toArgb()), drawn)
+        assertTrue("no pixel of %08x in columns $columns".format(colour.toArgb()), drawn)
     }
+
+    // Where a button is and how wide, as laid out: a row of a bar that the area's quarter cuts short still has them
+    private fun left(matcher: SemanticsMatcher): Float = compose.onNode(matcher).fetchSemanticsNode().positionInRoot.x
+
+    private fun width(matcher: SemanticsMatcher): Float = compose.onNode(matcher).fetchSemanticsNode().size.width.toFloat()
+
+    private fun assertSameWidth(widest: SemanticsMatcher, other: SemanticsMatcher) = assertEquals("${other.description}'s width", width(widest), width(other), PIXELS)
+
+    /** That all of [matcher]'s node is within the screen's width. */
+    private fun assertOnScreen(matcher: SemanticsMatcher) {
+        val screen = compose.onRoot().fetchSemanticsNode().size.width
+        val left = left(matcher)
+        val right = left + width(matcher)
+        assertTrue("${matcher.description} from $left to $right is not within the screen's $screen", left >= -PIXELS && right <= screen + PIXELS)
+    }
+
+    /** The name [text] of a button, on its own: the button's node has it merged in. */
+    private fun name(text: String): SemanticsNode = compose.onNode(hasText(text), useUnmergedTree = true).fetchSemanticsNode()
+
+    /** The name [text]'s layout, laid out again in the width it was given, which is as cut short as the one drawn. */
+    private fun nameLayout(text: String): TextLayoutResult {
+        val layouts = ArrayList<TextLayoutResult>()
+        name(text).config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        return layouts.single()
+    }
+
+    private fun assertNameWhole(text: String) = assertFalse("'$text' is cut short", nameLayout(text).isLineEllipsized(0))
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 

@@ -1139,6 +1139,11 @@ CI runs both on API 28, the app's minSdk, and on API 36.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
 - No bundled fonts.
+- A label's movie does not play: while it plays the label shows its first frame, still, and once `pauseMovie()` paused
+  it or it played to its end, the frame it stopped at, so `setMovieSpeed()` changes only which frame a pause stops at
+  and how soon one that plays to its end shows its last frame (`docs/phase-f.md`, "Labels"). The desktop's `QMovie`
+  plays it from `setMovie()` on, at the speed `setMovieSpeed()` gives. The app draws a label's image as one PNG the
+  engine reads from the file (`getImage`), and nothing asks for the frames after the first while a movie plays.
 - TLS is chosen when the profile starts, and by a `saveProfile` of it after that (see "TLS" below).
 - Mudlet reads a profile's details as it loads, so libmudlet hands a running profile the ones `saveProfile` changes,
   and the password `openProfile` gives it (`THeadlessSession::setLogin()`, `setPassword()`, `setAddress()` and

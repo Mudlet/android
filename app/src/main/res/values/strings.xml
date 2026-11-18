@@ -162,6 +162,42 @@
     <string name="profile_exported">Exported.</string>
     <!-- Shown, and read by TalkBack, when the profile could not be written to the file; %1$s is why, in English -->
     <string name="profile_export_failed">Could not export the profile: %1$s</string>
+    <!-- The heading of the profile editor's part that makes a new profile from this one, as the Copy button of desktop Mudlet's connection dialog does -->
+    <string name="profile_copy_title">Copy</string>
+    <!-- Under the profile editor's Copy heading: what its two buttons do -->
+    <string name="profile_copy_text">Makes a new profile from this one, with all it holds or with its settings only.</string>
+    <!-- Under the profile editor's Copy heading, while the profile's game is open: why the two copy buttons are greyed out -->
+    <string name="profile_copy_close_first">Close this game to copy it: its scripts and map are saved as it closes.</string>
+    <!-- The profile editor's button that copies the whole profile, and the button of the dialog it opens that makes the copy; desktop Mudlet's "Copy" -->
+    <string name="profile_copy">Copy</string>
+    <!-- The profile editor's button that copies only the profile's settings; desktop Mudlet's "Copy settings only" -->
+    <string name="profile_copy_settings">Copy settings only</string>
+    <!-- The title of the dialog that names a copy of the whole profile; %1$s is the name of the profile copied -->
+    <string name="profile_copy_whole_title">Copy %1$s</string>
+    <!-- The title of the dialog that names a copy of the profile's settings; %1$s is the name of the profile copied -->
+    <string name="profile_copy_settings_title">Copy the settings of %1$s</string>
+    <!-- The text of the dialog that names a copy of the whole profile: what the copy gets -->
+    <string name="profile_copy_whole_text">The new profile gets all this one holds: its settings, triggers, aliases, scripts, packages, map and logs.</string>
+    <!-- The text of the dialog that names a copy of the profile's settings: what the copy gets and what it does not -->
+    <string name="profile_copy_settings_text">The new profile gets this one\'s connection details and settings. Its triggers, aliases, scripts, packages, map and logs are not copied.</string>
+    <!-- Under the name field of the copy dialog when a profile of that name exists (ignoring case); %1$s is that profile's name -->
+    <string name="profile_copy_taken">There is already a profile named %1$s. Pick another name: a copy never replaces a profile.</string>
+    <!-- The copy dialog's switch, shown when a password is stored for the profile copied: on, the copy logs in with the same password; off, the copy has none -->
+    <string name="profile_copy_password">Copy the stored password too</string>
+    <!-- The copy dialog's button that closes it without copying -->
+    <string name="profile_copy_cancel">Cancel</string>
+    <!-- Shown, and read by TalkBack, while the profile is being copied -->
+    <string name="profile_copying">Copying…</string>
+    <!-- Shown, and read by TalkBack, once the profile has been copied; %1$s is the name of the new profile -->
+    <string name="profile_copied">Copied as %1$s.</string>
+    <!-- Shown after "Copied as …" when "Copy settings only" could not read the profile's saved settings, so the new profile has only the game's address, port and login name -->
+    <string name="profile_copy_settings_unreadable">Only its connection details were copied: the profile\'s saved settings could not be read.</string>
+    <!-- Shown after "Copied as …" when the player asked for the stored password to be copied and it could not be -->
+    <string name="profile_copy_password_not_copied">Its password could not be copied: type it in again in the new profile\'s editor.</string>
+    <!-- Shown after "Copied as …" when the player left the stored password out of the copy, but a password stored earlier for another profile of the new profile's name could not be removed -->
+    <string name="profile_copy_password_not_cleared">A password stored earlier under this name could not be removed: forget it in the new profile\'s editor.</string>
+    <!-- Shown, and read by TalkBack, when the profile could not be copied; %1$s is why, in English -->
+    <string name="profile_copy_failed">Could not copy the profile: %1$s</string>
     <!-- The profile list's button that adds a profile from a .zip file (one exported here, or desktop Mudlet's profile folder zipped), picked in Android's file picker -->
     <string name="profiles_import">Import a profile</string>
     <!-- Shown while the picked .zip file is unpacked and checked, before the player names the profile -->

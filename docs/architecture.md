@@ -412,6 +412,13 @@ seconds into a connection, at its login step, so a restore the UI is attached fo
 UI attached, as when Android has stopped the app too, connects without logging in, and the password is for the
 connection after it. Keeping the password where the engine could read it alone would close that, and is not done.
 
+The editor's Copy (`ui/profiles/ProfileCopy.kt`) makes a new profile from one that is not open, as the two buttons of
+the desktop's connection dialog do (`data/ProfileFolderCopy.kt`): all its folder holds, or its connection details and
+the settings of its newest save. The copy is made in the cache and moved among the profiles whole
+(`ProfileArchive.install`), never over one that is there, and the engine is asked for its profiles again, as it lists
+a folder it did not make only then. A password goes to the copy only if the player turns that on in the dialog that
+names it, where it is stored again under the copy's name (`docs/divergences.md`, "A copy of a profile").
+
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
 `connect` stores a password and opens a profile as the profile list does.

@@ -212,6 +212,21 @@ its "Accept and connect" turns on those same settings for the game. A certificat
 game's settings, where "Ignore all certificate errors" is, rather than a button that ignores them all: the desktop
 puts that box beside the other two, but a phone's dialog is tapped through too readily for it.
 
+## A copy of a profile
+
+The editor's Copy and "Copy settings only" make what the two buttons of the desktop's connection dialog make
+(`dlgConnectionProfiles::slot_copyProfile()` and `slot_copyOnlySettingsOfProfile()`; `data/ProfileFolderCopy.kt`,
+`ui/profiles/ProfileCopy.kt`), with these differences. The desktop copies the profile's password with either button,
+and shows it, masked, in its password box. The app's editor never shows a stored password, so a copy would put one
+under a second name unseen: the app stores the password for the copy only when the player turns on "Copy the stored
+password too" in the dialog that names the copy, and leaves the password files a profile from the desktop may hold
+out of a copy, as out of an export. The desktop follows a link in the profile's folder and the app leaves it out, as
+a link can lead to files that are not the profile's. Where a file cannot be copied the desktop keeps the incomplete
+copy and warns; the app makes the copy beside the profiles and adds it whole or not at all, as a phone runs out of
+space sooner and a copy without its map looks like a profile that lost one. The desktop names the copy itself and
+lets the player rename it; a profile's name cannot change in the app, so its dialog offers the desktop's name and asks
+first. A game that is open is copied once it has closed and saved, as it is exported.
+
 ## The games the profile list offers
 
 The profile list offers each of the games in Mudlet's connection dialog (`src/TGameDetails.h`, copied by

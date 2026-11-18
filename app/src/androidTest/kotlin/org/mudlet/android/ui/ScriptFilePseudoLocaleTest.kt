@@ -10,7 +10,6 @@ import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
-import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Before
@@ -40,7 +39,7 @@ class ScriptFilePseudoLocaleTest(private val locale: String) {
         compose.enableAccessibilityChecksOfWhatShows()
         val session = fake.engine.nextSession()
         session.profiles(listOf(GAME), session.receive("listProfiles"))
-        session.send(JSONObject().put("t", "pickFile").put("id", 1).put("title", "").put("into", compose.activity.filesDir.path))
+        session.send(pickFile(nextPickId(), "", compose.activity.filesDir))
     }
 
     @After

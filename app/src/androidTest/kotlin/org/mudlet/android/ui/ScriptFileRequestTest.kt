@@ -31,6 +31,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.ScriptFilePicks
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * A game script's invokeFileDialog() against a fake engine: the engine's pickFile shows the app's dialog with the
@@ -72,23 +73,31 @@ class ScriptFileRequestTest {
 
     @Test
     fun cancelBackAndThePickersBackAnswerACancel() {
-        ask(1, SCRIPT_TITLE)
+        val cancelled = nextPickId()
+        ask(cancelled, SCRIPT_TITLE)
         compose.onNodeWithText(SCRIPT_TITLE, substring = true).assertExists()
         compose.onNode(isDialog()).assertExists()
         compose.onNodeWithText(compose.string(R.string.script_file_cancel)).performClick()
-        assertAnswer(1, "")
+        assertAnswer(cancelled, "")
         waitForDialog(false)
 
-        ask(2, "")
+        val backed = nextPickId()
+        ask(backed, "")
         device.pressBack()
-        assertAnswer(2, "")
+        assertAnswer(backed, "")
 
-        ask(3, SCRIPT_TITLE)
+        val pickerBacked = nextPickId()
+        ask(pickerBacked, SCRIPT_TITLE)
         compose.onNodeWithText(compose.string(R.string.script_file_choose)).performClick()
         assertTrue("the system's picker in front", device.wait(Until.gone(By.pkg(compose.activity.packageName)), WAIT_MS))
         device.pressBack()
         assertTrue("the app in front again", device.wait(Until.hasObject(By.pkg(compose.activity.packageName)), WAIT_MS))
-        assertAnswer(3, "")
+        // The app let go of the engine behind the picker, so its answer may have gone nowhere: as the engine does on a
+        // greeting, the new link is asked again, and the answer kept for that pick is what comes back
+        session = fake.engine.nextSession()
+        session.profiles(listOf(GAME), session.receive("listProfiles"))
+        session.send(pickFile(pickerBacked, SCRIPT_TITLE, into))
+        assertAnswer(pickerBacked, "")
         waitForDialog(false)
     }
 
@@ -96,11 +105,12 @@ class ScriptFileRequestTest {
     fun aChosenFileIsCopiedIntoTheFolderAndItsPathIsTheAnswer() {
         val there = File(into, "file").apply { writeText(OLD) }
         val chosen = File(compose.activity.cacheDir, FILE_NAME).apply { writeText(CONTENT) }
-        ask(4, SCRIPT_TITLE)
+        val id = nextPickId()
+        ask(id, SCRIPT_TITLE)
         // As the system picker's result would: Choose has been tapped, and the file comes back
-        choose(4, Uri.fromFile(chosen))
+        choose(id, Uri.fromFile(chosen))
         val answer = session.receive("answerPickFile")
-        assertEquals(4L, answer.getLong("id"))
+        assertEquals(id, answer.getLong("id"))
         val copy = File(answer.getString("path"))
         assertEquals(into.canonicalFile, copy.parentFile?.canonicalFile)
         assertEquals(CONTENT, copy.readText())
@@ -119,17 +129,18 @@ class ScriptFileRequestTest {
     fun aFolderOutsideTheAppsFilesTakesNoFile() {
         val outside = File(compose.activity.cacheDir, "outside").apply { mkdirs() }
         val chosen = File(compose.activity.cacheDir, FILE_NAME).apply { writeText(CONTENT) }
-        session.send(JSONObject().put("t", "pickFile").put("id", 5).put("title", "").put("into", outside.path))
+        val id = nextPickId()
+        session.send(pickFile(id, "", outside))
         waitForDialog(true)
-        choose(5, Uri.fromFile(chosen))
-        assertAnswer(5, "")
+        choose(id, Uri.fromFile(chosen))
+        assertAnswer(id, "")
         assertEquals(0, outside.list()?.size)
         outside.deleteRecursively()
         chosen.delete()
     }
 
     private fun ask(id: Long, title: String) {
-        session.send(JSONObject().put("t", "pickFile").put("id", id).put("title", title).put("into", into.path))
+        session.send(pickFile(id, title, into))
         waitForDialog(true)
     }
 
@@ -171,6 +182,14 @@ internal fun scriptFileRules(fake: FakeEngineRule, compose: TestRule, inner: Tes
     .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
     .around(inner)
     .around(compose)
+
+internal fun pickFile(id: Long, title: String, into: File): JSONObject = JSONObject().put("t", "pickFile").put("id", id).put("title", title).put("into", into.path)
+
+private val pickIds = AtomicLong()
+
+// EngineClient keeps the last answer for as long as the engine instance, the same fake one in every test of the
+// process, and replays it to a pick with the same id without asking: each test's pick needs an id of its own
+internal fun nextPickId(): Long = pickIds.incrementAndGet()
 
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForScriptFileDialog(shown: Boolean) = waitUntil(WAIT_MS) {
     onAllNodesWithText(string(R.string.script_file_title)).fetchSemanticsNodes().isNotEmpty() == shown

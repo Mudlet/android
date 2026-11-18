@@ -56,12 +56,12 @@ def check(cond, what):
         failures.append(what)
 
 
-def start_engine(profile="Engine Test"):
+def start_engine(profile="Engine Test", extra_env=None):
     # Mudlet's own files (its Lua, unpacked from the library, and Mudlet.ini outside the config dir) stay in TMP
     home = os.path.join(TMP, "home")
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=CONFIG, MUDLET_PROFILE=profile,
                HOME=home, XDG_CONFIG_HOME=os.path.join(home, ".config"), XDG_DATA_HOME=os.path.join(home, ".local/share"),
-               XDG_CACHE_HOME=os.path.join(home, ".cache"))
+               XDG_CACHE_HOME=os.path.join(home, ".cache"), **(extra_env or {}))
     proc = subprocess.Popen([ENGINE, "--socket", SOCK, "--heartbeat-ms", "1000"], env=env,
                             stdout=subprocess.DEVNULL, stderr=open(LOG, "ab"))
     engines.append(proc)
@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
-                       clipboard, packages, error_console, key_bindings):
+                       clipboard, file_dialog, packages, error_console, key_bindings):
             checks()
         checks = secure_offer
         checks(port)
@@ -4602,6 +4602,117 @@ def clipboard():
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     with open(LOG, errors="replace") as f:
         check(secret not in f.read(), "the clipboard's text is not in the engine's log")
+
+
+def file_dialog():
+    """A script's invokeFileDialog() for a file sends pickFile with its title and the profile's folder, and waits, while
+    the game and other scripts go on, for answerPickFile, whose path it returns; an empty answer is a cancel. A folder,
+    a second pick while one waits, and a pick with no UI attached answer an empty string at once. A UI that attaches
+    while a pick waits is asked again, with the same id. Requests are read while a pick waits, also on the socket whose
+    request ran the script, and a pick from an alias run by a command on a profile's socket is answered over the
+    control socket, also by a UI that attached again after both its sockets closed while the pick waited."""
+    profile = "File Dialog Test"
+    # glibc fills freed memory, but not the frees its tcache keeps, so tcache is off: a socket freed under the read
+    # that ran the script then more often crashes the engine than reads back intact
+    proc, c = start_engine(profile, {"GLIBC_TUNABLES": "glibc.malloc.perturb=165:glibc.malloc.tcache_count=0"})
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    c.send({"t": "runLua", "code": 'echo("picked:[" .. invokeFileDialog(true, "Choose a map") .. "]\\n")'})
+    pick = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    check(pick.get("title") == "Choose a map" and pick.get("into", "").endswith(f"/profiles/{profile}")
+          and isinstance(pick.get("id"), int), f"a pick asks the UI, for the profile's folder: {pick}")
+    c.send({"t": "ping", "id": 1})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    c.send({"t": "runLua", "code": 'echo("meanwhile\\n")'})
+    c.wait_for(shown("meanwhile"), collect=seen)
+    c.send({"t": "runLua", "code": 'echo("second:[" .. invokeFileDialog(true, "Another") .. "]\\n")'})
+    c.wait_for(shown("second:[]"), collect=seen)
+    path = os.path.join(pick["into"], "chosen.dat")
+    with open(path, "w") as f:
+        f.write("x")
+    c.send({"t": "answerPickFile", "id": pick["id"] + 100, "path": "/elsewhere"})
+    c.send({"t": "answerPickFile", "id": pick["id"], "path": path})
+    c.wait_for(shown(f"picked:[{path}]"), collect=seen)
+    check(len([m for m in seen if m["t"] == "pickFile"]) == 1, "a second pick while one waits asks nothing")
+
+    c.send({"t": "runLua", "code": 'echo("cancel:[" .. invokeFileDialog(true, "Cancel me") .. "]\\n")'})
+    cancel = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    check(cancel["id"] != pick["id"], f"each pick has its own id: {cancel}")
+    c.send({"t": "answerPickFile", "id": cancel["id"], "path": ""})
+    c.wait_for(shown("cancel:[]"), collect=seen)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'echo("folder:[" .. invokeFileDialog(false, "A folder") .. "]\\n")'})
+    c.wait_for(shown("folder:[]"), collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "pickFile"], "a folder is not asked for")
+
+    c.send({"t": "runLua", "code": 'echo("again:[" .. invokeFileDialog(true, "Come back") .. "]\\n")'})
+    first = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    asked = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    check(asked == first, f"a UI that attaches while a pick waits is asked again: {asked}")
+    c.send({"t": "answerPickFile", "id": asked["id"], "path": ""})
+    c.wait_for(shown("again:[]"), collect=seen)
+
+    c.send({"t": "runLua", "code": 'tempTimer(1, function() echo("alone:[" .. invokeFileDialog(true, "Nobody") .. "]\\n") end)'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    c.close()
+    time.sleep(2)
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(shown("alone:[]"), collect=seen)
+    c.send({"t": "ping", "id": 2})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    check(not [m for m in seen if m["t"] == "pickFile"], f"with no UI a pick is a cancel at once: {seen}")
+    c.close()
+
+    # As the app runs it: the player's command comes on the profile's socket, whose read is on the stack while the alias
+    # waits, and the pick and its answer go over the control socket
+    ctl = Client(SOCK, profile_sockets=True)
+    msgs = []
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    listed = [m for m in msgs if m["t"] == "openProfiles"]
+    game = Client(listed[-1]["profiles"][0]["socket"])
+    seen = []
+    game.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    game.send({"t": "runLua", "code": 'tempAlias("^pickit$", [[echo("aliased:[" .. invokeFileDialog(true, "From the input line") .. "]\\n")]])'})
+    wait_status(game, "luaResult", lambda v: True, seen)
+    game.send({"t": "send", "text": "pickit"})
+    aliased = ctl.wait_for(lambda m: m["t"] == "pickFile", collect=msgs)
+    check(aliased.get("title") == "From the input line", f"an alias run from the input line asks on the control socket: {aliased}")
+    ctl.send({"t": "ping", "id": 3})
+    ctl.wait_for(lambda m: m["t"] == "pong", collect=msgs)
+    ctl.send({"t": "answerPickFile", "id": aliased["id"], "path": path})
+    game.wait_for(shown(f"aliased:[{path}]"), collect=seen)
+
+    # As Android stops the app behind the system's picker: both sockets close while the pick waits, the profile's,
+    # whose read ran the alias, among them, and the UI that comes back answers
+    game.send({"t": "send", "text": "pickit"})
+    detached = ctl.wait_for(lambda m: m["t"] == "pickFile", collect=msgs)
+    game.close()
+    ctl.close()
+    ctl = Client(SOCK, profile_sockets=True)
+    msgs = []
+    asked = ctl.wait_for(lambda m: m["t"] == "pickFile", collect=msgs)
+    check(asked == detached, f"a UI that comes back while an alias's pick waits is asked again: {asked}")
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=msgs)
+    listed = [m for m in msgs if m["t"] == "openProfiles"]
+    game = Client(listed[-1]["profiles"][0]["socket"])
+    seen = []
+    game.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    ctl.send({"t": "answerPickFile", "id": asked["id"], "path": ""})
+    game.wait_for(shown("aliased:[]"), collect=seen)
+    ctl.close()
+    game.close()
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def package_file(name, folder, details, icon=None):

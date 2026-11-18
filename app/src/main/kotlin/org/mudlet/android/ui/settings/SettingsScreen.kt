@@ -180,7 +180,7 @@ private fun LazyListScope.searchResults(query: String, sections: List<HubSection
             when (val entry = result.entry) {
                 is SettingEntry.Switch -> SwitchRow(entry, result.page.owner, overline = crumb)
 
-                is SettingEntry.Action -> result.section.game?.let { ActionRow(entry, it, overline = crumb) }
+                is SettingEntry.Action -> ActionRow(entry, result.section.game ?: "", overline = crumb)
 
                 else -> ListItem(
                     headlineContent = { Text(stringResource(entry.label)) },

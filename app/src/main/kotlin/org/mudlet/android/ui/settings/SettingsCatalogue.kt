@@ -76,7 +76,7 @@ sealed class SettingEntry(
     abstract val key: String
 
     /** Whether a page of [game]'s, or of "New games" for null, has it. */
-    fun shownFor(game: String?) = game != null || this !is Action
+    fun shownFor(game: String?) = true
 
     /** A row that changes [setting]. */
     sealed class Value(category: SettingsCategory, label: Int, hint: Int?, keywords: Int) : SettingEntry(category, label, hint, keywords) {
@@ -370,7 +370,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_clear_media_hint,
             R.string.settings_clear_media_keywords,
             R.string.settings_clear_media_button,
-        ) { game -> EngineClient.session(game)?.clearStoredMedia() },
+        ) { _ -> },
         SettingEntry.Number(
             SettingsCategory.APPEARANCE,
             Settings.textSize,

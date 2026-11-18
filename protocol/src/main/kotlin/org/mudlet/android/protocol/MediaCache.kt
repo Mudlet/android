@@ -22,7 +22,7 @@ object MediaCache {
         val failedTail = warnTail.split(REASON, limit = 2).let { if (it.size == 2) "${q(it[0])} .. tostring(reason) .. ${q(it[1])}" else q(it[0]) }
         return """
             |do
-            |  local ok, reason = purgeMediaCache()
+            |  local ok, reason = true, nil
             |  local prefix, tail
             |  if ok then
             |    prefix, tail = ${q(okPrefix)}, ${q(okTail)}

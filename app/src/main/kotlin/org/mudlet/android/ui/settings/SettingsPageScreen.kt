@@ -150,7 +150,7 @@ internal fun SwitchRow(entry: SettingEntry.Switch, owner: SettingsOwner, overlin
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             if (overline != null) Overline(overline)
             Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
-            entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            entry.hint?.let { Text(stringResource(it), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         Switch(checked, onCheckedChange = null)
     }
@@ -171,7 +171,7 @@ internal fun ActionRow(entry: SettingEntry.Action, game: String, overline: Strin
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             if (overline != null) Overline(overline)
             Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
-            entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            entry.hint?.let { Text(stringResource(it), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         Text(stringResource(entry.button), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
     }
@@ -286,7 +286,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
     val value = pluralStringResource(entry.valueText, size, size)
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
-        entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        entry.hint?.let { Text(stringResource(it), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Clamped: a disabled button still has its click action, which a test or an accessibility service can call
             IconButton({ owner.change(setting, (size - 1).coerceIn(range)) }, enabled = size > range.first) {

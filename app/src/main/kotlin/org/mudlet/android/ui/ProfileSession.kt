@@ -667,7 +667,7 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Sounds -> post { onSounds(message) }
 
-                is EngineMessage.ScriptsStopped -> post { scriptsStopped = message.stopped }
+                is EngineMessage.ScriptsStopped -> {}
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 

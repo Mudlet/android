@@ -121,7 +121,8 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
-                       clipboard, file_dialog, web_pages, packages, error_console, key_bindings, scripts_stopped, replay_recording, time_stamps):
+                       clipboard, file_dialog, web_pages, packages, error_console, key_bindings, scripts_stopped, replay_recording, time_stamps,
+                       line_updates):
             checks()
         checks = secure_offer
         checks(port)
@@ -5420,6 +5421,86 @@ def time_stamps():
     wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen, timeout=30)
     wait_status(c, "timeStamps", lambda v: True, seen, timeout=10)
     check(told("timeStamps", since) == ["true"], f"the timestamps stay on for the profile's next load: {told('timeStamps', since)}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def line_updates():
+    """lineUpdated: a line a script changes where it stands after it was sent (replace(), setFgColor()) or deletes, from
+    runLua and from a trigger on a later line; the tail a timer deletes, sent as an empty tail; a UI that attaches with
+    the lines gets the changes it missed, and one with none gets the lines as they are, the deleted ones left out."""
+    game = fake_telnet.start_in_thread()
+    profile = "Line Update Test"
+    proc, c = start_engine(profile)
+    seen = []
+    hello = c.wait_for(lambda m: m["t"] == "hello", collect=seen)
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen)
+    c.wait_for(lambda m: m["t"] == "tail" and m["text"].startswith("HP:100"), timeout=10, collect=seen)
+    for word in ("alpha", "beta", "gamma", "delta"):
+        c.send({"t": "send", "text": f"echo {word}"})
+        c.wait_for(shown(f"You said: {word}"), collect=seen)
+    c.send({"t": "send", "text": "echo epsilon"})
+    c.wait_for(shown("You said: epsilon"), collect=seen)
+    sent = {m["text"]: m for m in lines_of(seen)}
+    seq = {word: sent[f"You said: {word}"]["seq"] for word in ("alpha", "beta", "gamma", "delta")}
+
+    find = ("function lineUpdateAt(text) for y = getLineCount() - 1, 0, -1 do moveCursor(0, y) "
+            "if getCurrentLine() == text then return y end end end ")
+    since = len(seen)
+    c.send({"t": "runLua", "code": find + 'lineUpdateAt("You said: alpha") selectCurrentLine() replace("You said: ALPHA") deselect() '
+            'lineUpdateAt("You said: beta") deleteLine() '
+            'lineUpdateAt("You said: gamma") selectCurrentLine() setFgColor(255, 0, 0) deselect() moveCursorEnd()'})
+    for _ in range(3):
+        c.wait_for(lambda m: m["t"] == "lineUpdated", collect=seen)
+    updated = {m["seq"]: m for m in seen[since:] if m["t"] == "lineUpdated"}
+    check(updated.get(seq["alpha"], {}).get("text") == "You said: ALPHA" and "deleted" not in updated.get(seq["alpha"], {}),
+          f"a line replace() changed is sent again as it now is: {updated.get(seq['alpha'])}")
+    check(updated.get(seq["beta"]) == {"t": "lineUpdated", "seq": seq["beta"], "deleted": True},
+          f"a line deleteLine() deleted is sent as deleted: {updated.get(seq['beta'])}")
+    gamma = updated.get(seq["gamma"], {})
+    check(gamma.get("text") == "You said: gamma" and gamma.get("runs") != sent["You said: gamma"]["runs"],
+          f"a line setFgColor() restyled is sent with its new runs: {gamma} after {sent['You said: gamma']}")
+    check(len(updated) == 3 and not any(m["t"] == "line" for m in seen[since:]), f"and nothing else: {seen[since:]}")
+
+    c.send({"t": "runLua", "code": 'tempTrigger("You said: retouch", function() lineUpdateAt("You said: ALPHA") selectCurrentLine() '
+            'replace("You said: alpha again") deselect() lineUpdateAt("You said: gamma") deleteLine() moveCursorEnd() end)'})
+    since = len(seen)
+    c.send({"t": "send", "text": "echo retouch"})
+    c.wait_for(shown("You said: retouch"), collect=seen)
+    for _ in range(2):
+        c.wait_for(lambda m: m["t"] == "lineUpdated", collect=seen)
+    updated = {m["seq"]: m for m in seen[since:] if m["t"] == "lineUpdated"}
+    check(updated.get(seq["alpha"], {}).get("text") == "You said: alpha again" and updated.get(seq["gamma"], {}).get("deleted") is True,
+          f"a trigger on a later line that changes one line and deletes another sends both: {updated}")
+
+    since = len(seen)
+    c.send({"t": "send", "text": "echo zeta"})
+    c.wait_for(lambda m: m["t"] == "tail" and m["text"] == "You said: zeta", collect=seen)
+    c.send({"t": "runLua", "code": 'tempTimer(0, function() lineUpdateAt("You said: zeta") deleteLine() moveCursorEnd() end)'})
+    c.wait_for(lambda m: m["t"] == "tail" and m["text"] == "", collect=seen)
+    check(not any(m["t"] == "lineUpdated" for m in seen[since:]), f"the tail a timer deletes goes as an empty tail: {seen[since:]}")
+    last_seq = max(m["seq"] for m in lines_of(seen))
+
+    c.close()
+    c = Client(SOCK, hello=False)
+    c.send({"t": "hello", "v": PROTOCOL_VERSION, "client": "python-test", "instance": hello["instance"], "lastSeq": last_seq})
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    missed = {m["seq"]: m for m in seen if m["t"] == "lineUpdated"}
+    check(missed.get(seq["alpha"], {}).get("text") == "You said: alpha again" and missed.get(seq["beta"], {}).get("deleted") is True
+          and missed.get(seq["gamma"], {}).get("deleted") is True and seq["delta"] not in missed,
+          f"a UI that attaches with the lines is sent each change: {missed}")
+
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    texts = texts_of(seen)
+    check("You said: alpha again" in texts and "You said: beta" not in texts and "You said: gamma" not in texts
+          and "You said: delta" in texts and not any(m["t"] == "lineUpdated" for m in seen),
+          f"a UI with no lines is sent them as they are, without the deleted ones: {texts}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

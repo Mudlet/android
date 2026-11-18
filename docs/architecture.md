@@ -950,6 +950,7 @@ keeps the profiles' passwords in the KeyStore.
 | THeadlessSession | Socket protocol |
 |---|---|
 | `lineShown`: each line once its triggers ran, gagged ones left out | `line`. The last one is held as the `tail` until the next line or text that does not continue it, so an `echo()` after `deleteLine()` or a command typed at a prompt (`continuesLine`) still lands on its end |
+| `linesUpdated` (carried, `0036-headless-line-updates.patch`): a line `lineShown` sent, named by its `lineIds` entry, that a script later changed where it stands or deleted | `lineUpdated` of the `line` the id went with, kept in the ring for a UI that attaches; the tail's own line is changed in the `tail` instead. |
 | `localTextStyled`: `echo()`, Mudlet's messages, the command echo | `line` for each piece a line feed ends, `tail` for the rest. The line feed it repeats after `lineShown` ended its line is dropped, as `docs/headless.md` says |
 | `mainConsoleCleared` | `clear`. The ring is emptied, and a UI that attaches later is sent `clear` too |
 | `notificationRequested` (`showNotification()`) | `notify`, posted by the engine process |

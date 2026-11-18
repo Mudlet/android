@@ -9,6 +9,7 @@
 #include <QMap>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QStringList>
 #include <deque>
 #include <optional>
@@ -32,7 +33,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 42;
+    static constexpr int protocolVersion = 43;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -61,7 +62,8 @@ public:
     // (tests/map_frames_test.cpp): a frame given again is to have none made of it
     static int mapMessagesMade() { return sMapMessagesMade; }
 
-    void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) override;
+    void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time, qint64 lineId) override;
+    void lineUpdated(qint64 lineId, const QString& text, const QList<ColorRun>& runs, bool isPrompt, bool deleted) override;
     void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) override;
     void cleared() override;
     void notify(const QString& title, const QString& text) override;
@@ -102,6 +104,11 @@ protected:
         QList<ColorRun> runs;
         bool prompt;
         qint64 time;
+        // Not sent: what lineUpdated() names it by
+        qint64 lineId = 0;
+        // Changed since it was first sent, so a UI that comes back with it is sent the change
+        bool edited = false;
+        bool deleted = false;
     };
 
     void onNewConnection();
@@ -119,6 +126,11 @@ protected:
     virtual bool handleControl(const QString& type, const QJsonObject& message);
     virtual void greet(const QJsonObject& hello);
     void sendLinesAfter(qint64 seq, bool replay);
+    // Each lineUpdated a UI that has the lines up to seq missed
+    void sendLineUpdatesUpTo(qint64 seq);
+    static QJsonObject lineUpdatedMessage(const StoredLine& stored);
+    // Lines a mirror kept from the profile in front before stay as they are
+    void forgetLineIds() { mSeqOfLineId.clear(); }
     // Every status, then the input line's state and the script windows', as a UI attaching or catching up needs them
     virtual void sendState();
     void sendNotify(const QString& title, const QString& text);
@@ -264,6 +276,10 @@ protected:
     // The sounds message last sent, empty until the engine has sent one
     QJsonObject mSounds;
     std::deque<StoredLine> mScrollback;
+    // The seq of each line in mScrollback that has a lineId
+    QHash<qint64, qint64> mSeqOfLineId;
+    // Lines the UI has that changed while it lagged
+    QSet<qint64> mUpdatesOwed;
     StoredLine mTail{0, {}, {}, false};
     qint64 mNextSeq = 1;
     // The last line sent before the console was last emptied, -1 for never: a UI with no line after it is told

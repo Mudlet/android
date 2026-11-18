@@ -507,8 +507,10 @@ class IFrontend
 public:
     virtual ~IFrontend() = default;
     // time: when the game's text arrived, or the profile wrote it, in milliseconds since the epoch, as the console's
-    // timestamps show it
-    virtual void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) = 0;
+    // timestamps show it. lineId: what lineUpdated names the line by, 0 for a line it never does.
+    virtual void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time, qint64 lineId) = 0;
+    // A script changed or deleted a line already sent by line(), named by its lineId
+    virtual void lineUpdated(qint64 lineId, const QString& text, const QList<ColorRun>& runs, bool isPrompt, bool deleted) = 0;
     // The line still being written below the last one, shown until it is replaced; empty for none
     virtual void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) = 0;
     // The console was emptied: every line sent before, and the tail, are gone

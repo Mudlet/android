@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **42**.
+The current version is **43**.
 
 ## Transport
 
@@ -257,7 +257,8 @@ names no table (`There is no such table.`), as one gone since it was listed, or 
 | Message | Fields | Meaning |
 |---|---|---|
 | `hello` | `v`, `pid`, `instance`, `profile`? | The answer to the UI's `hello`. `pid` is the engine process's id. `instance` is an opaque string that differs for each run of the engine and each profile socket (now `<pid>-<ms since the epoch>`, and `-<slot>` after it on a profile's socket); its sequence numbers start again at 1. `profile` names the profile on a profile's socket. |
-| `line` | `seq`, `text`, `runs`, `prompt`, `time`, `replay`? | A finished line, which never changes. `seq` counts lines from 1 for each instance, by one. `prompt` is true for a prompt (a line ended by a telnet go-ahead or end-of-record). `time` is when the game's text arrived, or when the profile wrote it for a line the game did not send, in milliseconds since the epoch: the time desktop Mudlet's timestamps show beside it. `replay` is true on lines sent from the ring buffer in answer to `hello`. |
+| `line` | `seq`, `text`, `runs`, `prompt`, `time`, `replay`? | A finished line, which changes only by `lineUpdated`. `seq` counts lines from 1 for each instance, by one. `prompt` is true for a prompt (a line ended by a telnet go-ahead or end-of-record). `time` is when the game's text arrived, or when the profile wrote it for a line the game did not send, in milliseconds since the epoch: the time desktop Mudlet's timestamps show beside it. `replay` is true on lines sent from the ring buffer in answer to `hello`. A line a script deleted before the UI had it is not sent, and its `seq` is skipped. |
+| `lineUpdated` | `seq`, `text`?, `runs`?, `prompt`?, `deleted`? | A script changed the `line` of that `seq` where it stands, as desktop Mudlet's `replace()`, `setFgColor()`, `setLink()` or `insertText()` do on a line the script moved the cursor up to, and the UI shows it as it now is: `text`, `runs` and `prompt` as a `line`'s, its `time` unchanged. With `deleted` true and no other field, the script deleted it (`deleteLine()`): the UI draws nothing for it from then on. Only for a line the UI has had; a line that has left the ring, or that a `clear` emptied, is not updated. A link's state changing is a `linksChanged`, not this. |
 | `tail` | `text`, `runs`, `prompt`, `time` | The console's bottom line, which may still change or be ended. It replaces the previous tail. Empty `text` means none, with `time` 0; otherwise `time` is as a `line`'s. |
 | `clear` | | The console was emptied: the UI drops its lines and the tail. |
 | `status` | `key`, `value`, `re`? | A named value of the engine's state. The engine keeps the last value of each key. `re` is the `id` of the request being handled. |
@@ -855,6 +856,8 @@ a UI says `hello`, the engine sends, in this order:
 5. the lines in the ring after the UI's, each with `replay` true. That is all of them unless the UI's `instance`
    matches the engine's, in which case it is those after `lastSeq`, clamped to the lines this instance sent. None
    from before a clear is sent;
+   then, for a UI whose `instance` matches, a `lineUpdated` for each line up to `lastSeq` that is still in the ring
+   and that a script changed or deleted after it was first sent;
 6. `tail`, possibly empty;
 7. `synced`.
 
@@ -878,6 +881,7 @@ The engine never waits for the UI, as Android can freeze a backgrounded UI proce
   `errorConsole` again (and `linksChanged`, as on attach), and the script windows' state, the maps, the map download,
   the button bars and the commands, as on attach, then the lines the UI has not had (with `clear` and `gap` as on
   attach, but without `replay`), then the tail.
+- Before those lines it sends a `lineUpdated` for each line the UI had whose change was not sent while it lagged.
 - Answers are always written, even to a lagging UI: `pong`, `profiles`, `link`, `error`, the `windowText` that answers
   `getWindowText`, `image`, `rooms`, `room`, `areas`, `settings`, and a `status` that carries `re`.
   So are `clipboardRead` and `clipboardWrite`, which a script waits on or loses otherwise.
@@ -890,7 +894,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 42, which added each line's time (`time` in `line` and `tail`) and desktop Mudlet's
+As implemented in version 43, which added a script's changes to lines already sent (`lineUpdated`);
+version 42 added each line's time (`time` in `line` and `tail`) and desktop Mudlet's
 timestamp button (`setTimeStamps`);
 version 41 added recording a replay (`setReplayRecording`, `replayRecording`);
 version 40 added the emergency stop (`setScriptsStopped`, `scriptsStopped`);

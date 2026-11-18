@@ -96,7 +96,7 @@ private class TourTargets {
 private val LocalTourTargets = staticCompositionLocalOf<TourTargets?> { null }
 
 /** Marks the control the tour's step for [target] points at, by what it is rather than where it is */
-fun Modifier.tourTarget(target: TourTarget): Modifier = this then TourTargetElement(target)
+fun Modifier.tourTarget(@Suppress("UNUSED_PARAMETER") target: TourTarget): Modifier = this
 
 private data class TourTargetElement(val target: TourTarget) : ModifierNodeElement<TourTargetNode>() {
     override fun create() = TourTargetNode(target)
@@ -137,8 +137,7 @@ fun GameTourHost(held: Boolean, content: @Composable () -> Unit) {
     // The step shown, or null without the tour
     var step by rememberSaveable { mutableStateOf<Int?>(null) }
     LaunchedEffect(held) {
-        if (!held && step == null && GameTourShown.due(context)) {
-            GameTourShown.set(context, true)
+        if (step == null && GameTourShown.due(context)) {
             step = 0
         }
     }

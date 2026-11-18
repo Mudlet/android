@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
+import java.util.Locale
 
 /**
  * The app's own settings, kept in SharedPreferences. Each one is Compose state, read and set on the main thread. A new
@@ -87,6 +88,12 @@ object Settings {
     val charset = BoolSetting("enableCHARSET", default = true, mudlet = true)
     val newEnviron = BoolSetting("enableNEWENVIRON", default = true, mudlet = true)
 
+    /** "Blinking text": text a game sends blinking pulses, as desktop Mudlet draws it; off, it is drawn steady in italics. */
+    val blinkText = BoolSetting("enableBlinkText", default = false, mudlet = true)
+
+    /** "Links from the game (OSC 8)": OSC 8 links are shown, and Mudlet tells the game it shows them. */
+    val gameLinks = BoolSetting("enableOSC8Hyperlinks", default = true, mudlet = true)
+
     /** Whether the sounds, music and videos a game plays are named in its text as they start and stop. */
     val closedCaptions = BoolSetting("enableClosedCaption", default = false, mudlet = true)
 
@@ -118,6 +125,37 @@ object Settings {
     // Desktop Mudlet's mutes, under its toolbar's Sound button: Mudlet's own, so every open game shares them
     val muteScripts = BoolSetting("muteMediaAPI", default = false, mudlet = true)
     val muteGame = BoolSetting("muteMediaGame", default = false, mudlet = true)
+
+    // The game's text colours, as 0xRRGGBB, with Mudlet's own: the colour of text a game gives none, the console's
+    // background, the colours the commands sent show in, then the sixteen ANSI ones by the names color_table has
+    val foregroundColour = ColourSetting("foregroundColor", 0xC0C0C0)
+    val backgroundColour = ColourSetting("backgroundColor", 0x000000)
+    val commandForegroundColour = ColourSetting("commandForegroundColor", 0x717100)
+    val commandBackgroundColour = ColourSetting("commandBackgroundColor", 0x000000)
+    val ansiColours = listOf(
+        ColourSetting("ansiBlack", 0x000000),
+        ColourSetting("ansiRed", 0x800000),
+        ColourSetting("ansiGreen", 0x008000),
+        ColourSetting("ansiYellow", 0x808000),
+        ColourSetting("ansiBlue", 0x000080),
+        ColourSetting("ansiMagenta", 0x800080),
+        ColourSetting("ansiCyan", 0x008080),
+        ColourSetting("ansiWhite", 0xC0C0C0),
+        ColourSetting("ansiLightBlack", 0x808080),
+        ColourSetting("ansiLightRed", 0xFF0000),
+        ColourSetting("ansiLightGreen", 0x00FF00),
+        ColourSetting("ansiLightYellow", 0xFFFF00),
+        ColourSetting("ansiLightBlue", 0x0000FF),
+        ColourSetting("ansiLightMagenta", 0xFF00FF),
+        ColourSetting("ansiLightCyan", 0x00FFFF),
+        ColourSetting("ansiLightWhite", 0xFFFFFF),
+    )
+
+    /** Every colour the colours page has, which its reset puts back to Mudlet's. */
+    val colours = listOf(foregroundColour, backgroundColour, commandForegroundColour, commandBackgroundColour) + ansiColours
+
+    /** "Let the game change colours": the game may redefine the sixteen ANSI colours, by OSC P, and reset them, by OSC R. */
+    val gameChangesColours = BoolSetting("serverMayRedefineColors", default = false, mudlet = true)
 
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
@@ -155,6 +193,8 @@ object Settings {
         charset,
         newEnviron,
         closedCaptions,
+        blinkText,
+        gameLinks,
         forceCompressionOff,
         forceGaOff,
         fixLinebreaks,
@@ -169,6 +209,8 @@ object Settings {
         gamePlaysMedia,
         muteScripts,
         muteGame,
+        gameChangesColours,
+    ) + colours + listOf(
         screenReaderOffered,
         mapBehindText,
         wallpaperColours,
@@ -280,11 +322,17 @@ object Settings {
         @VisibleForTesting
         fun reset() = set(default)
 
+        /** Back to what Mudlet starts a profile with. */
+        fun setMudletDefault() = set(mudletDefault)
+
         /** [v] as Mudlet's `setConfig()` takes it and `getConfig()` gives it. */
         open fun toMudlet(v: T): Any = v as Any
 
         /** [value] as Mudlet's `setConfig()` takes it. */
         fun valueToMudlet(): Any = toMudlet(value)
+
+        /** [mudletDefault] as Mudlet's `setConfig()` takes it. */
+        fun mudletDefaultToMudlet(): Any = toMudlet(mudletDefault)
 
         /** Whether [value] is other than what Mudlet starts a profile with. */
         val differsFromMudlets get() = value != mudletDefault
@@ -338,6 +386,29 @@ object Settings {
             editor.putString(key, v)
         }
     }
+
+    /** A colour as 0xRRGGBB, which Mudlet's `setConfig()` takes and `getConfig()` gives as "#rrggbb". */
+    class ColourSetting(key: String, default: Int) : Setting<Int>(key, default, mudlet = true) {
+        override fun normalise(v: Int) = v and 0xFFFFFF
+
+        override fun toMudlet(v: Int): Any = colourName(v)
+
+        override fun fromMudlet(v: Any) = (v as? String)?.let(::parseColourName)
+
+        override fun read(prefs: SharedPreferences) = prefs.getInt(key, default)
+
+        override fun write(editor: SharedPreferences.Editor, v: Int) {
+            editor.putInt(key, v)
+        }
+    }
+
+    /** [rgb] as "#rrggbb". */
+    fun colourName(rgb: Int): String = "#%06x".format(Locale.ROOT, rgb and 0xFFFFFF)
+
+    /** "#rrggbb" (either case) as 0xRRGGBB, or null for anything else. */
+    fun parseColourName(name: String): Int? = name.takeIf { COLOUR_NAME.matches(it) }?.substring(1)?.toInt(16)
+
+    private val COLOUR_NAME = Regex("#[0-9A-Fa-f]{6}")
 
     /** One of [entries], stored by name; [mudletValue] is the string Mudlet's `setConfig()` takes for each. */
     class EnumSetting<E : Enum<E>>(

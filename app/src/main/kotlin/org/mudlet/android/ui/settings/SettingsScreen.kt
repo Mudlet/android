@@ -4,6 +4,7 @@ import android.content.res.Resources
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilterChip
@@ -26,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +40,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
@@ -76,20 +82,45 @@ fun SettingsScreen(game: String?, onBack: () -> Unit, onOpen: (SettingsPage) -> 
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     val sections = hubSections(game)
     val resources = LocalResources.current
+    val list = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     MudletScaffold(stringResource(R.string.settings_title), onBack = onBack, snackbarHost = { SettingsNotices(sections.mapNotNull { it.game }) }) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding).testTag(SETTINGS_HUB_TAG),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            item(key = "search") { SearchField(query) { query = it } }
-            if (query.isBlank()) {
-                for (section in sections) hubSection(section, selected, onOpen)
-            } else {
-                val shown = sections.filter { filter == null || it.key == filter }
-                item(key = "filters") { Filters(sections, filter) { filter = it } }
-                searchResults(query, shown, resources, onOpen)
+        // The field stays above the list: as its first row, it is half hidden when the hub comes back scrolled to a
+        // category, and TalkBack finds no label on what shows of it
+        Column(Modifier.fillMaxSize().padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
+            SearchField(query) {
+                // Results replace the categories: shown from the first, not from where the categories were scrolled
+                if (it.isBlank() != query.isBlank()) scope.launch { list.scrollToItem(0) }
+                query = it
             }
+            SettingsList(query, filter, sections, selected, resources, list, onOpen) { filter = it }
+        }
+    }
+}
+
+@Composable
+private fun SettingsList(
+    query: String,
+    filter: String?,
+    sections: List<HubSection>,
+    selected: SettingsPage?,
+    resources: Resources,
+    list: LazyListState,
+    onOpen: (SettingsPage) -> Unit,
+    onFilter: (String?) -> Unit,
+) {
+    LazyColumn(
+        Modifier.fillMaxSize().testTag(SETTINGS_HUB_TAG),
+        state = list,
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (query.isBlank()) {
+            for (section in sections) hubSection(section, selected, onOpen)
+        } else {
+            val shown = sections.filter { filter == null || it.key == filter }
+            item(key = "filters") { Filters(sections, filter, onFilter) }
+            searchResults(query, shown, resources, onOpen)
         }
     }
 }
@@ -110,7 +141,9 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
     OutlinedTextField(
         query,
         onQuery,
-        itemWidth.padding(vertical = 8.dp),
+        // Over the list: Compose gives a row the list's top cuts a touch area 24 dp above the cut, and takes it out of
+        // whatever is drawn before the list, which left accessibility a field 40 dp high
+        Modifier.zIndex(1f).padding(horizontal = 16.dp).then(itemWidth).padding(vertical = 8.dp),
         placeholder = { Text(stringResource(R.string.settings_search)) },
         leadingIcon = { Icon(painterResource(R.drawable.ic_search), contentDescription = null) },
         trailingIcon = {

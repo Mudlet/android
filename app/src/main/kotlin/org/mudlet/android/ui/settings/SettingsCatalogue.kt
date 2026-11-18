@@ -17,6 +17,9 @@ sealed interface SettingsOwner {
     fun <T> value(setting: Settings.Setting<T>): T
 
     fun <T> change(setting: Settings.Setting<T>, value: T)
+
+    /** Puts [settings] back to what Mudlet starts a profile with, all at once. */
+    fun resetToMudlets(settings: List<Settings.Setting<*>>)
 }
 
 /** The game [name]'s own values, which Mudlet keeps with its profile. */
@@ -30,6 +33,10 @@ data class GameSettings(val name: String) : SettingsOwner {
     override fun <T> change(setting: Settings.Setting<T>, value: T) {
         session?.changeSetting(setting, value)
     }
+
+    override fun resetToMudlets(settings: List<Settings.Setting<*>>) {
+        session?.resetSettings(settings)
+    }
 }
 
 /** The app's values: its own settings, and the game settings that games added in the app start with. */
@@ -39,6 +46,8 @@ data object AppSettings : SettingsOwner {
     override fun <T> value(setting: Settings.Setting<T>): T = setting.value
 
     override fun <T> change(setting: Settings.Setting<T>, value: T) = setting.set(value)
+
+    override fun resetToMudlets(settings: List<Settings.Setting<*>>) = settings.forEach { it.setMudletDefault() }
 }
 
 /**
@@ -53,6 +62,7 @@ enum class SettingsCategory(
     val sharedByGames: Boolean = false,
 ) {
     DISPLAY(true, R.string.settings_display, R.string.settings_display_summary, R.drawable.ic_text_fields),
+    COLOURS(true, R.string.settings_colours, R.string.settings_colours_summary, R.drawable.ic_invert_colors),
     ACCESSIBILITY(true, R.string.settings_accessibility, R.string.settings_accessibility_summary, R.drawable.ic_accessibility),
     INPUT(true, R.string.settings_input, R.string.settings_input_summary, R.drawable.ic_keyboard),
     CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
@@ -121,6 +131,9 @@ sealed class SettingEntry(
     /** Some text typed in, such as the command separator, which changes as the field is left or its Done key pressed. */
     class Typed(category: SettingsCategory, override val setting: Settings.TextSetting, label: Int, hint: Int, keywords: Int) : Value(category, label, hint, keywords)
 
+    /** A colour: its swatch and "#rrggbb" in a row, which opens a dialog to change it. */
+    class Colour(category: SettingsCategory, override val setting: Settings.ColourSetting, label: Int) : Value(category, label, null, R.string.settings_colours_keywords)
+
     /**
      * One of many [choices], such as Mudlet's names for something: a row with the current one, which opens the list to
      * pick from. [choiceLabel] is a choice's label, or null for one the app has none for, which shows as it is.
@@ -157,6 +170,26 @@ sealed class SettingEntry(
 /** The key of desktop Mudlet's "Clear stored media", which is no setting's. */
 const val CLEAR_MEDIA_KEY = "clearStoredMedia"
 
+// The names of the sixteen ANSI colours, in the order of [Settings.ansiColours]
+private val ANSI_COLOUR_LABELS = listOf(
+    R.string.settings_colour_black,
+    R.string.settings_colour_red,
+    R.string.settings_colour_green,
+    R.string.settings_colour_yellow,
+    R.string.settings_colour_blue,
+    R.string.settings_colour_magenta,
+    R.string.settings_colour_cyan,
+    R.string.settings_colour_white,
+    R.string.settings_colour_light_black,
+    R.string.settings_colour_light_red,
+    R.string.settings_colour_light_green,
+    R.string.settings_colour_light_yellow,
+    R.string.settings_colour_light_blue,
+    R.string.settings_colour_light_magenta,
+    R.string.settings_colour_light_cyan,
+    R.string.settings_colour_light_white,
+)
+
 /** Every setting the settings screen has, in the order its pages show them. A game category's are each game's own. */
 val settingsCatalogue: List<SettingEntry> by lazy {
     listOfNotNull(
@@ -189,6 +222,25 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             step = 1000,
         ),
         SettingEntry.Switch(
+            SettingsCategory.DISPLAY,
+            Settings.gameLinks,
+            R.string.settings_game_links,
+            R.string.settings_game_links_hint,
+            R.string.settings_game_links_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.COLOURS,
+            Settings.gameChangesColours,
+            R.string.settings_game_changes_colours,
+            R.string.settings_game_changes_colours_hint,
+            R.string.settings_colours_keywords,
+        ),
+        SettingEntry.Colour(SettingsCategory.COLOURS, Settings.foregroundColour, R.string.settings_colour_foreground),
+        SettingEntry.Colour(SettingsCategory.COLOURS, Settings.backgroundColour, R.string.settings_colour_background),
+        SettingEntry.Colour(SettingsCategory.COLOURS, Settings.commandForegroundColour, R.string.settings_colour_command_foreground),
+        SettingEntry.Colour(SettingsCategory.COLOURS, Settings.commandBackgroundColour, R.string.settings_colour_command_background),
+        *Settings.ansiColours.zip(ANSI_COLOUR_LABELS) { setting, label -> SettingEntry.Colour(SettingsCategory.COLOURS, setting, label) }.toTypedArray(),
+        SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.readNewText,
             R.string.settings_read_new_text,
@@ -215,6 +267,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_closed_captions,
             R.string.settings_closed_captions_hint,
             R.string.settings_closed_captions_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.ACCESSIBILITY,
+            Settings.blinkText,
+            R.string.settings_blink_text,
+            R.string.settings_blink_text_hint,
+            R.string.settings_blink_text_keywords,
         ),
         SettingEntry.Choice(SettingsCategory.INPUT, Settings.showSentText, R.string.settings_sent_text, R.string.settings_sent_text_keywords) {
             when (it) {

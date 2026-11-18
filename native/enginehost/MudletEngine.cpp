@@ -56,13 +56,6 @@ MudletEngine::MudletEngine(IEngineHost* host, int heartbeatMs, QObject* parent)
     }
     mStore = std::make_unique<SessionStore>(statePath, stopMarkerPath);
 
-    THeadlessSession::setClipboard(
-            [host] {
-                return host->clipboardText();
-            },
-            [host](const QString& text) {
-                host->setClipboardText(text);
-            });
     reportFont();
     mHost->engineStatus(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
     mHost->engineStatus(QStringLiteral("configDir"), mConfigDir);

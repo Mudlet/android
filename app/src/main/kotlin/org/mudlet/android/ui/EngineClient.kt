@@ -2,7 +2,6 @@ package org.mudlet.android.ui
 
 import android.annotation.SuppressLint
 import android.app.ActivityManager
-import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -527,19 +526,6 @@ object EngineClient {
                 is EngineMessage.OpenProfiles -> main.post {
                     onOpenProfiles(message.profiles)
                     answerProfileRequest(message.replyTo, null)
-                }
-
-                // Read here, not on the main thread, as a script waits in its call; Android gives no clip to an app
-                // without focus. Only the first item's text: a URI's content is not read for a script
-                is EngineMessage.ClipboardRead -> {
-                    val clip = clipboard("read") { it.primaryClip }
-                    val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString().orEmpty()
-                    link.send(Requests.answerClipboardRead(message.id, text))
-                }
-
-                is EngineMessage.ClipboardWrite -> main.post {
-                    val clip = ClipData.newPlainText(app.getString(R.string.script_clipboard_label), message.text)
-                    clipboard("write") { it.setPrimaryClip(clip) }
                 }
 
                 else -> {}

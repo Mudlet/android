@@ -22,7 +22,12 @@ if(NOT ANDROID)
 
     # What the bridge makes of a map's frames, with no engine behind it and no UI attached
     qt_add_executable(map_frames_test tests/map_frames_test.cpp enginehost/SocketBridge.cpp enginehost/SocketBridge.h
-        enginehost/ControlBridge.cpp enginehost/ControlBridge.h)
+        enginehost/ControlBridge.cpp enginehost/ControlBridge.h enginehost/LineJson.cpp enginehost/LineJson.h)
     target_include_directories(map_frames_test PRIVATE enginehost)
     target_link_libraries(map_frames_test PRIVATE engine_api Qt6::Core Qt6::Gui Qt6::Network)
+
+    # The line frames' writer against QJsonDocument
+    qt_add_executable(line_json_test tests/line_json_test.cpp enginehost/LineJson.cpp enginehost/LineJson.h)
+    target_include_directories(line_json_test PRIVATE enginehost)
+    target_link_libraries(line_json_test PRIVATE engine_api Qt6::Core)
 endif()

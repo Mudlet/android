@@ -8,7 +8,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Keeps docs/protocol.md, the engine (native/enginehost/SocketBridge.* and ControlBridge.*), this client and the Python test client in
+ * Keeps docs/protocol.md, the engine (native/enginehost/SocketBridge.*, ControlBridge.* and LineJson.*), this client and the Python test client in
  * step: the same messages in each direction, the same fields, the same protocol version, and the same phases of
  * libmudlet's restore status (native/enginehost/MudletEngine.cpp and MudletProfile.cpp).
  */
@@ -18,6 +18,9 @@ class ProtocolSpecTest {
 
     private val spec = read("docs/protocol.md")
     private val bridge = read("native/enginehost/SocketBridge.cpp") + read("native/enginehost/ControlBridge.cpp")
+
+    // The line frames, which LineJson.cpp writes as text: "{\"prompt\":", ",\"t\":\"line\""
+    private val lineJson = read("native/enginehost/LineJson.cpp")
 
     private val backquoted = Regex("`(\\w+)`")
 
@@ -59,11 +62,13 @@ class ProtocolSpecTest {
 
     @Test
     fun theEngineSendsTheMessagesTheSpecLists() {
-        val sent = Regex("QStringLiteral\\(\"t\"\\), QStringLiteral\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals("messages SocketBridge.cpp and ControlBridge.cpp send", toUi.keys, sent)
+        val sent = Regex("QStringLiteral\\(\"t\"\\), QStringLiteral\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet() +
+            Regex("\\\\\"t\\\\\":\\\\\"(\\w+)\\\\\"").findAll(lineJson).map { it.groupValues[1] }
+        assertEquals("messages SocketBridge.cpp, ControlBridge.cpp and LineJson.cpp send", toUi.keys, sent)
         // Keys of the JSON objects the engine writes: {QStringLiteral("key"), value} and insert(QStringLiteral("key"), ...)
-        val keys = Regex("(?:\\{|insert\\()QStringLiteral\\(\"(\\w+)\"\\),").findAll(bridge).map { it.groupValues[1] }.toSet()
-        assertEquals("fields SocketBridge.cpp and ControlBridge.cpp write", toUi.values.flatten().toSet() + "t", keys)
+        val keys = Regex("(?:\\{|insert\\()QStringLiteral\\(\"(\\w+)\"\\),").findAll(bridge).map { it.groupValues[1] }.toSet() +
+            Regex("\\\\\"(\\w+)\\\\\":").findAll(lineJson).map { it.groupValues[1] }
+        assertEquals("fields SocketBridge.cpp, ControlBridge.cpp and LineJson.cpp write", toUi.values.flatten().toSet() + "t", keys)
     }
 
     @Test

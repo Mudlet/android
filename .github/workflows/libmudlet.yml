@@ -240,7 +240,7 @@ jobs:
         run: |
           cmake -S . -B build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT/gcc_64" \
             -DLIBMUDLET_BUILD_DIR="$GITHUB_WORKSPACE/build-desktop"
-          cmake --build build-desktop-mudlet --target engine map_png_test map_frames_test
+          cmake --build build-desktop-mudlet --target engine map_png_test map_frames_test line_json_test
 
       - name: Test the real engine
         working-directory: native
@@ -260,6 +260,10 @@ jobs:
       - name: Test the bridge's map frames
         if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
         run: native/build-desktop-mudlet/map_frames_test
+
+      - name: Test the line frames' writer
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
+        run: native/build-desktop-mudlet/line_json_test
 
       # Gradle itself is the wrapper's (gradle/wrapper); this caches it and the dependencies
       - uses: gradle/actions/setup-gradle@v6

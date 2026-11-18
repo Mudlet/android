@@ -2,6 +2,7 @@
 
 #include "ControlBridge.h"
 #include "IEngine.h"
+#include "LineJson.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -1802,30 +1803,14 @@ void SocketBridge::sendReply(QJsonObject message)
     sendFrame(message);
 }
 
-QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
+QByteArray SocketBridge::lineMessage(const StoredLine& stored, bool replay)
 {
-    QJsonObject message{{QStringLiteral("t"), QStringLiteral("line")},
-                        {QStringLiteral("seq"), stored.seq},
-                        {QStringLiteral("text"), stored.text},
-                        {QStringLiteral("runs"), runsJson(stored.runs)},
-                        {QStringLiteral("prompt"), stored.prompt},
-                        {QStringLiteral("time"), stored.time}};
-    if (replay) {
-        message.insert(QStringLiteral("replay"), true);
-    }
-    return message;
+    return lineJson(stored.seq, stored.text, stored.runs, stored.prompt, stored.time, replay);
 }
 
-QJsonObject SocketBridge::lineUpdatedMessage(const StoredLine& stored)
+QByteArray SocketBridge::lineUpdatedMessage(const StoredLine& stored)
 {
-    if (stored.deleted) {
-        return {{QStringLiteral("t"), QStringLiteral("lineUpdated")}, {QStringLiteral("seq"), stored.seq}, {QStringLiteral("deleted"), true}};
-    }
-    return {{QStringLiteral("t"), QStringLiteral("lineUpdated")},
-            {QStringLiteral("seq"), stored.seq},
-            {QStringLiteral("text"), stored.text},
-            {QStringLiteral("runs"), runsJson(stored.runs)},
-            {QStringLiteral("prompt"), stored.prompt}};
+    return stored.deleted ? lineDeletedJson(stored.seq) : lineUpdatedJson(stored.seq, stored.text, stored.runs, stored.prompt);
 }
 
 // [start, length, fg], with bg and attributes, then link, only when a run has them
@@ -1844,13 +1829,9 @@ QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
     return json;
 }
 
-QJsonObject SocketBridge::tailMessage() const
+QByteArray SocketBridge::tailMessage() const
 {
-    return {{QStringLiteral("t"), QStringLiteral("tail")},
-            {QStringLiteral("text"), mTail.text},
-            {QStringLiteral("runs"), runsJson(mTail.runs)},
-            {QStringLiteral("prompt"), mTail.prompt},
-            {QStringLiteral("time"), mTail.time}};
+    return tailJson(mTail.text, mTail.runs, mTail.prompt, mTail.time);
 }
 
 QJsonObject SocketBridge::hiddenInputMessage() const
@@ -2131,14 +2112,20 @@ QJsonObject SocketBridge::mainAreaMessage(const MainArea& area)
 
 void SocketBridge::sendFrame(const QJsonObject& message)
 {
+    if (mClient && mClient->state() == QLocalSocket::ConnectedState) {
+        sendFrame(QJsonDocument(message).toJson(QJsonDocument::Compact));
+    }
+}
+
+void SocketBridge::sendFrame(const QByteArray& json)
+{
     if (!mClient || mClient->state() != QLocalSocket::ConnectedState) {
         return;
     }
-    const QByteArray payload = QJsonDocument(message).toJson(QJsonDocument::Compact);
     char header[4];
-    qToBigEndian<quint32>(quint32(payload.size()), header);
+    qToBigEndian<quint32>(quint32(json.size()), header);
     mClient->write(header, 4);
-    mClient->write(payload);
+    mClient->write(json);
     if (mClient->bytesToWrite() > highWaterBytes) {
         mClientLagging = true;
     }

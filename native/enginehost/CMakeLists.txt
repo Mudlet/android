@@ -1,5 +1,5 @@
-set(HOST_SOURCES main.cpp ControlBridge.cpp ControlBridge.h SocketBridge.cpp SocketBridge.h MudletEngine.cpp MudletEngine.h
-    MapPng.cpp MapPng.h MudletProfile.cpp MudletProfile.h ProfileStore.cpp ProfileStore.h SessionStore.cpp SessionStore.h)
+set(HOST_SOURCES main.cpp ControlBridge.cpp ControlBridge.h SocketBridge.cpp SocketBridge.h LineJson.cpp LineJson.h MudletEngine.cpp
+    MudletEngine.h MapPng.cpp MapPng.h MudletProfile.cpp MudletProfile.h ProfileStore.cpp ProfileStore.h SessionStore.cpp SessionStore.h)
 if(ANDROID)
     list(APPEND HOST_SOURCES AndroidNotifier.cpp AndroidNotifier.h AndroidServiceSetup.cpp AndroidServiceSetup.h)
 endif()

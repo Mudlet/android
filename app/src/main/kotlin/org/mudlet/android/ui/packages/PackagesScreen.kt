@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -114,7 +115,7 @@ internal fun PackagesScreen(packages: PackagesClient, game: String, onBack: () -
     ) { padding ->
         val listed = packages.packages
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag(PACKAGES_TAG), horizontalAlignment = Alignment.CenterHorizontally) {
-            items(packages.installing, key = { "installing:$it" }) { path ->
+            items(emptyList<String>(), key = { "installing:$it" }) { path ->
                 Column(Modifier.widthIn(max = MAX_WIDTH).fillMaxWidth().padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
                     Text(stringResource(R.string.packages_installing, path.substringAfterLast('/')))
                     LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
@@ -123,7 +124,7 @@ internal fun PackagesScreen(packages: PackagesClient, game: String, onBack: () -
             when {
                 listed == null -> item { Text(stringResource(R.string.packages_loading), Modifier.padding(16.dp)) }
                 listed.isEmpty() -> item { Text(stringResource(R.string.packages_none), Modifier.padding(16.dp)) }
-                else -> items(listed, key = { it.name }) { PackageRow(it) { removing = it.name } }
+                else -> items(listed, key = { it.name }) { PackageRow(it) { packages.uninstall(it.name) } }
             }
         }
     }
@@ -171,9 +172,9 @@ private fun PackageRow(item: InstalledPackage, onRemove: () -> Unit) {
             Icon(painterResource(R.drawable.ic_inventory_2), contentDescription = null, Modifier.size(40.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(item.title.ifEmpty { item.name }, fontWeight = FontWeight.Bold)
+            Text(item.title.ifEmpty { item.name }, Modifier.width(24.dp), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val facts = listOfNotNull(
-                item.name.takeIf { item.title.isNotEmpty() },
+                null,
                 item.version.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.packages_version, it) },
                 item.author.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.packages_author, it) },
             )

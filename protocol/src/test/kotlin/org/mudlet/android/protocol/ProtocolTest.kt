@@ -81,10 +81,13 @@ class ProtocolTest {
         assertEquals(fields + mapOf("autoReconnect" to false, "id" to 1L), saved.toMap())
         assertEquals(
             mapOf("t" to "openProfile", "name" to "Alpha", "connect" to false, "id" to 2L),
-            Requests.openProfile("Alpha", null, connect = false, alongside = false, id = 2).toMap(),
+            Requests.openProfile("Alpha", null, proxyPassword = null, connect = false, alongside = false, id = 2).toMap(),
         )
-        assertEquals("pw", Requests.openProfile("Alpha", "pw", connect = true, alongside = false, id = 3).getString("password"))
-        assertEquals(true, Requests.openProfile("Alpha", null, connect = true, alongside = true, id = 3).getBoolean("alongside"))
+        assertEquals("pw", Requests.openProfile("Alpha", "pw", proxyPassword = null, connect = true, alongside = false, id = 3).getString("password"))
+        assertEquals(true, Requests.openProfile("Alpha", null, proxyPassword = null, connect = true, alongside = true, id = 3).getBoolean("alongside"))
+        val proxied = Requests.openProfile("Alpha", null, proxyPassword = "proxy-pw", connect = true, alongside = false, id = 3)
+        assertEquals("proxy-pw", proxied.getString("proxyPassword"))
+        assertEquals(false, proxied.has("password"))
         assertEquals(mapOf("t" to "deleteProfile", "name" to "Alpha", "id" to 4L), Requests.deleteProfile("Alpha", 4).toMap())
         assertEquals(mapOf("t" to "listProfiles", "id" to 5L), Requests.listProfiles(5).toMap())
     }
@@ -1070,6 +1073,34 @@ class ProtocolTest {
         assertEquals(4, answer.replyTo)
         val bare = FrameReader.parse(JSONObject("""{"t":"settings"}""")) as EngineMessage.SettingValues
         assertEquals(EngineMessage.SettingValues(emptyMap(), emptyMap(), null), bare)
+    }
+
+    @Test
+    fun aProfilesProxyIsRequestedAndReadAsTheEngineHasIt() {
+        assertEquals(mapOf("t" to "getProxy", "id" to 3L), Requests.getProxy(3).toMap())
+        assertEquals(
+            mapOf("t" to "setProxy", "use" to true, "host" to "proxy.example", "port" to 1080, "user" to "hero", "id" to 4L),
+            Requests.setProxy(ProxySettings(true, "proxy.example", 1080, "hero"), 4).toMap(),
+        )
+        val answer = FrameReader.parse(JSONObject("""{"t":"proxy","use":true,"host":"proxy.example","port":1080,"user":"hero","re":4}"""))
+        assertEquals(EngineMessage.Proxy(ProxySettings(true, "proxy.example", 1080, "hero"), 4), answer)
+        val bare = FrameReader.parse(JSONObject("""{"t":"proxy"}"""))
+        assertEquals(EngineMessage.Proxy(ProxySettings(false, "", 0, ""), null), bare)
+    }
+
+    @Test
+    fun aProxyTypedIntoAFormIsOneTheEngineTakes() {
+        assertEquals(ProxySettings(true, "proxy.example", 1080, "hero"), ProxySettings.of(true, " proxy.example ", " 1080 ", " hero "))
+        // Kept while not used, as desktop Mudlet's preferences keep it, and none of it needed then
+        assertEquals(ProxySettings(false, "proxy.example", 1080, ""), ProxySettings.of(false, "proxy.example", "1080", ""))
+        assertEquals(ProxySettings(false, "", 0, ""), ProxySettings.of(false, "", "", ""))
+        assertEquals(null, ProxySettings.of(true, "", "1080", ""))
+        assertEquals(null, ProxySettings.of(true, "proxy.example", "", ""))
+        for (port in listOf("0", "65536", "-1", "10 80", "1080x")) {
+            assertEquals("port $port", null, ProxySettings.of(false, "proxy.example", port, ""))
+        }
+        assertEquals(65535, ProxySettings.portOf("65535"))
+        assertEquals(0, ProxySettings.portOf(" "))
     }
 
     @Test

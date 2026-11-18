@@ -35,7 +35,7 @@ public:
     QList<Profile> profiles() const override { return mProfiles.profiles(); }
     QString saveProfile(const Profile& profile) override;
     QString deleteProfile(const QString& name) override;
-    QString openProfile(const QString& name, const QString& password, bool connect, bool alongside) override;
+    QString openProfile(const QString& name, const ProfilePasswords& passwords, bool connect, bool alongside) override;
     QString closeProfile(const QString& name) override;
     IEngine* defaultSession() override;
     bool restorePending() const override;

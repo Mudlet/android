@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -54,6 +55,7 @@ import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.concealLinks
 import org.mudlet.android.protocol.linkRuns
 import org.mudlet.android.protocol.linkSpans
+import org.mudlet.android.protocol.matchStarts
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.ConsoleLinksClient
 import org.mudlet.android.ui.UiLine
@@ -82,6 +84,9 @@ private const val CELLS_MEASURED = 100
  * A long press on a line, but on a link with a menu, which opens that, offers to copy or share the line as it reads,
  * and to hand its text to [onMakeTrigger], to make a trigger from; TalkBack has actions to copy it and make the trigger.
  *
+ * Each match of [searchQuery] is drawn as desktop's search draws it, and the list goes to [searchFound], the number of
+ * the line a search found, each time a search finds one.
+ *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
  */
@@ -97,6 +102,8 @@ fun Console(
     modifier: Modifier = Modifier,
     links: ConsoleLinksClient? = null,
     onMakeTrigger: ((String) -> Unit)? = null,
+    searchQuery: String = "",
+    searchFound: Long? = null,
     behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -153,6 +160,16 @@ fun Console(
         }
     }
 
+    val latestFirstLine by rememberUpdatedState(firstLine)
+    LaunchedEffect(searchFound) {
+        val index = (searchFound ?: return@LaunchedEffect) - latestFirstLine
+        if (index !in 0 until lines.size) return@LaunchedEffect
+        // Left first, or the next composition's follow would take the list back to the bottom
+        if (following) seenUpTo = latestLinesAdded
+        following = false
+        listState.scrollToItem(index.toInt())
+    }
+
     Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
         behindText()
         LazyColumn(
@@ -168,7 +185,9 @@ fun Console(
                 val held = links?.takeIf { spans.isNotEmpty() && (i >= lines.size || firstLine + i >= it.firstLine) }
                 // Read here, so a new answer draws the line again in the link's new look
                 val answers = held?.let { l -> spans.map { l.info(it.link) } }.orEmpty()
-                val text = remember(line, colors, answers) { ansiText(held?.let { line.paintedAs(it::info) } ?: line, colors) }
+                val text = remember(line, colors, answers, searchQuery) {
+                    ansiText(held?.let { line.paintedAs(it::info) } ?: line, colors).withMatches(line.text, searchQuery)
+                }
                 val plain = remember(line, answers) { held?.let { concealLinks(line.text, spans, it::info) } ?: line.text }
                 val lineLinks = held?.let { l ->
                     val changes = l.changes
@@ -196,6 +215,13 @@ fun Console(
             }
         }
     }
+}
+
+// The text drawn for [plain] with each match of [query] in it as desktop's search draws one
+private fun AnnotatedString.withMatches(plain: String, query: String): AnnotatedString {
+    val starts = matchStarts(plain, query)
+    if (starts.isEmpty()) return this
+    return AnnotatedString.Builder(this).apply { for (start in starts) addStyle(SEARCH_MATCH, start, start + query.length) }.toAnnotatedString()
 }
 
 // The line with its links painted as the engine last said they are

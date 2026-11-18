@@ -385,6 +385,18 @@ a script gave beyond them; a console whose font is sized in pixels, or that the 
   console the size its scripts last gave it. TalkBack's "Larger text" and "Smaller text" change it a size at a time.
 - One finger is left to the window's list, its sideways scroll and its links: the pinch takes only two.
 
+### Searching the game's text
+The top bar's search, or Ctrl+F on a keyboard, opens a bar over the main console that searches its scrollback (the
+lines the app keeps, `ProfileSession.MAX_LINES`) as desktop's search box does (`TConsole::slot_searchBufferUp`):
+- Case is ignored. The first search goes up from the bottom, and each next one up (older, also the keyboard's search
+  key, as desktop's Enter) or down (newer) from the line the last one found, which the console scrolls to. A found line
+  since dropped from the scrollback counts as above all of it. Matches, overlapping ones too, are drawn black on yellow
+  as desktop draws them, while the bar is open.
+- What the bar says is a polite live region, so TalkBack reads it: once typing pauses, how many lines match; after each
+  step, the line found, or that there is no more that way. `nextMatchingLine` and `matchStarts` (`ScrollbackSearch` in
+  `:protocol`) are the search, tested on the JVM; `ConsoleSearch` holds its state.
+- Script windows are not searched, as on desktop, where only the main console has the search box.
+
 ### Button bars and commands
 The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt` and `ScriptCommands.kt`, laid out by
 `ButtonBarLayout` and `CommandMenu` in `:protocol`):

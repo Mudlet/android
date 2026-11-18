@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -867,14 +868,14 @@ class ScriptLibraryTest {
 
     /**
      * What a double tap does under TalkBack: the node's accessibility click, after the checks on every window. What is
-     * in the library's list or an item's page is scrolled to first, as TalkBack does.
+     * in the library's list, an item's page or a sheet's list is scrolled to first, as TalkBack does.
      */
     private fun activate(label: SemanticsMatcher) {
         val node = label and hasClickAction()
         waitFor(node)
         if (compose.onAllNodes(node and hasAnyAncestor(library)).fetchSemanticsNodes().isNotEmpty()) {
             compose.onNode(library).performScrollToNode(node)
-        } else if (compose.onAllNodes(node and hasAnyAncestor(page)).fetchSemanticsNodes().isNotEmpty()) {
+        } else if (compose.onAllNodes(node and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) {
             compose.onNode(node).performScrollTo()
         }
         checkAccessibility()

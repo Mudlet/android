@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,9 +37,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -57,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -78,6 +82,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -87,6 +92,7 @@ import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.ConsoleZoom
+import org.mudlet.android.protocol.DrawnWindow
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
@@ -98,6 +104,7 @@ import org.mudlet.android.protocol.WindowKey
 import org.mudlet.android.protocol.WindowKind
 import org.mudlet.android.protocol.WindowLayout
 import org.mudlet.android.protocol.backgroundArgb
+import org.mudlet.android.protocol.layoutSize
 import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
@@ -105,6 +112,7 @@ import org.mudlet.android.ui.ConsoleZoomClient
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 private const val CHAR_SAMPLE = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
@@ -204,8 +212,10 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         fun Modifier.coveredBy(rect: PxRect): Modifier = if (pane != null && pane.contains(rect)) clearAndSetSemantics {} else this
 
         content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
-        for (placed in layout.windows) {
-            key(placed.window.key) { PlacedWindowView(placed, windows, metrics, density, Modifier.coveredBy(placed.rect)) }
+        // The windows in a scroll box are drawn in it, to scroll with it
+        val drawn = remember(layout.windows) { DrawnWindow.of(layout.windows) }
+        for (window in drawn) {
+            key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density, Modifier.coveredBy(window.placed.rect)) }
         }
         for (header in layout.dockHeaders) {
             key(header.window.key) { WindowHeader(header.window, onBack = null, Modifier.placeAt(header.rect, density)) }
@@ -218,8 +228,9 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
             // Touches on the pane stay off what it covers
             Box(Modifier.placeAt(pane, density).background(CONSOLE_BACKGROUND).pointerInput(Unit) { consumeAll() })
             WindowHeader(page, onBack = { selected = null }, Modifier.placeAt(pane.copy(h = headerHeight), density))
-            for (placed in layout.paneWindows) {
-                key(placed.window.key) { PlacedWindowView(placed, windows, metrics, density) }
+            val paneDrawn = remember(layout.paneWindows) { DrawnWindow.of(layout.paneWindows) }
+            for (window in paneDrawn) {
+                key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density) }
             }
             // After the windows, as the tabs of a frame opened in the page go over the page
             for (strip in layout.paneFrameTabs) {
@@ -257,9 +268,10 @@ private fun rememberConsoleMetrics(textSizeSp: Int): ConsoleMetrics {
 }
 
 internal fun Modifier.placeAt(rect: PxRect, density: Density): Modifier = with(density) {
-    // Never a negative size, which Compose refuses, should the area be squeezed below a header's height
-    this@placeAt.offset { IntOffset(rect.x.roundToInt(), rect.y.roundToInt()) }
-        .size(rect.w.coerceAtLeast(0f).toDp(), rect.h.coerceAtLeast(0f).toDp())
+    // Never a negative size, which Compose refuses, should the area be squeezed below a header's height, nor one past
+    // what it can measure, which a window in a scroll box may have
+    val (w, h) = layoutSize(rect.w, rect.h)
+    this@placeAt.offset { IntOffset(rect.x.roundToInt(), rect.y.roundToInt()) }.size(w.toDp(), h.toDp())
 }
 
 // The mapper's name is always "mapper", so it is called the map; an MXP frame's page is called what its tab shows
@@ -273,7 +285,8 @@ private fun title(window: ScriptWindow): String = if (window.kind == WindowKind.
 internal fun windowColour(code: Int, default: Color): Color = if (code >= RUN_RGB) Color(0xFF000000.toInt() or (code and 0xFFFFFF)) else default
 
 @Composable
-private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier) {
+private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier) {
+    val placed = drawn.placed
     val window = placed.window
     val placedModifier = Modifier.placeAt(placed.rect, density).then(modifier)
     when (window.kind) {
@@ -304,10 +317,66 @@ private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metri
         // A text box places itself too, as a small one's touch bounds are larger than it
         WindowKind.TEXT_BOX -> ScriptTextBox(placed, windows.textBoxes[window.name], windows.textBoxEdits[window.name], density, modifier)
 
-        // A scroll box only holds windows
+        WindowKind.SCROLL_BOX -> ScrollBox(drawn, windows, metrics, density, placedModifier)
+
+        // No kind is left, but Kotlin does not count those in CONSOLE_KINDS
         else -> {}
     }
 }
+
+/**
+ * A scroll box, a `QScrollArea` on the desktop: what of it shows, and the windows in it drawn in its content
+ * ([PlacedWindow.content]), which scrolls under the whole box, from its top left, by a drag or TalkBack's scroll
+ * actions, along each axis its content is larger than the box on. Each axis scrolls in a node of its own, with its own
+ * actions. A pointer event is in the pixels of the window touched, so a label in it takes taps as anywhere else, and a
+ * drag the box takes, along an axis it scrolls on, is not the label's ([LocalScrollingBox]). Its scroll is kept only
+ * while it is drawn: a box hidden and shown again starts at its top left (docs/divergences.md).
+ */
+@Composable
+private fun ScrollBox(drawn: DrawnWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier) {
+    val placed = drawn.placed
+    val full = placed.full
+    val content = placed.content ?: full
+    // As placeIn lays the box out below
+    val (boxW, boxH) = layoutSize(full.w, full.h)
+    val contentW = content.w.roundToInt()
+    val contentH = content.h.roundToInt()
+    // An axis it cannot scroll on takes no drag, so a label's drag along it stays the label's, and offers no action
+    val scrollsDown = contentH > boxH
+    val scrollsAcross = contentW > boxW
+    // Its windows are read together, in reading order, after the game screen's own controls
+    Box(
+        modifier.clipToBounds().semantics {
+            isTraversalGroup = true
+            traversalIndex = WINDOWS_TRAVERSAL_INDEX
+        },
+    ) {
+        // The whole box scrolls, though only part of it may show
+        Box(Modifier.placeIn(full.x - placed.rect.x, full.y - placed.rect.y, full.w, full.h).verticalScroll(rememberScrollState(), enabled = scrollsDown)) {
+            Box(Modifier.horizontalScroll(rememberScrollState(), enabled = scrollsAcross)) {
+                CompositionLocalProvider(LocalScrollingBox provides (LocalScrollingBox.current || scrollsDown || scrollsAcross)) {
+                    // Never smaller than the box, as each scroll clips what it holds to its size: a window's 48 dp touch
+                    // bounds are cut where the box cuts them, not where content smaller than the box ends. Each window
+                    // places itself, at a size of its own, as in the area.
+                    Layout(content = {
+                        for (window in drawn.scrolled) {
+                            key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density) }
+                        }
+                    }) { measurables, _ ->
+                        val placeables = measurables.map { it.measure(Constraints()) }
+                        layout(max(contentW, boxW), max(contentH, boxH)) { placeables.forEach { it.place(0, 0) } }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Whether what is drawn here is in a scroll box that scrolls, whose drags a label leaves to it (docs/phase-f.md,
+ * "Labels").
+ */
+internal val LocalScrollingBox = compositionLocalOf { false }
 
 /** A script window is read after the game screen's own controls, as one group, by its [description]. */
 private fun Modifier.windowSemantics(description: String): Modifier = semantics {

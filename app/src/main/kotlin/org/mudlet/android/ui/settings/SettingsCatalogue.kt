@@ -177,17 +177,6 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             less = R.string.settings_undo_wrap_width_less,
             more = R.string.settings_undo_wrap_width_more,
         ),
-        SettingEntry.Number(
-            SettingsCategory.DISPLAY,
-            Settings.consoleBufferSize,
-            R.string.settings_console_buffer,
-            R.string.settings_console_buffer_hint,
-            R.string.settings_console_buffer_keywords,
-            valueText = R.plurals.settings_console_buffer_value,
-            less = R.string.settings_console_buffer_less,
-            more = R.string.settings_console_buffer_more,
-            step = 1000,
-        ),
         SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.readNewText,

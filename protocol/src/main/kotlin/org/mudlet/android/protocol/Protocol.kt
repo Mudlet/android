@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 37
+const val PROTOCOL_VERSION = 38
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -857,8 +857,11 @@ sealed interface EngineMessage {
     /** Rows of a script window's console from row [first] of its [lineCount]; [replyTo] is the getWindowText id. */
     data class WindowText(val window: String, val lineCount: Int, val first: Int, val lines: List<WindowRow>, val replyTo: Any?) : EngineMessage
 
-    /** The main window's size the UI gave, the main console's grid, and where its text goes, in Mudlet's pixels. */
-    data class MainArea(val w: Int, val h: Int, val columns: Int, val rows: Int, val textX: Int, val textY: Int, val textW: Int, val textH: Int) : EngineMessage
+    /**
+     * The main window's size the UI gave, the main console's grid, and where its text goes, in Mudlet's pixels;
+     * [borderColor] is the colour of the borders around it, as a run's (-1 for none).
+     */
+    data class MainArea(val w: Int, val h: Int, val columns: Int, val rows: Int, val textX: Int, val textY: Int, val textW: Int, val textH: Int, val borderColor: Int = -1) : EngineMessage
 
     /** A script set the command line [name] of a script window to [text]. */
     data class WindowCommandLine(val name: String, val text: String) : EngineMessage
@@ -1542,6 +1545,7 @@ class FrameReader(input: InputStream) {
                 o.optInt("textY"),
                 o.optInt("textW"),
                 o.optInt("textH"),
+                o.optInt("borderColor", -1),
             )
 
             "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))

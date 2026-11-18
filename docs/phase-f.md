@@ -36,6 +36,7 @@ these calls' signals.
 | `struct WindowPointerEvent` | 772 | `type` (`press`, `release`, `doubleClick`, `move`, `enter`, `leave`, `wheel`), `position` (`QPointF`), `button`, `buttons`, `modifiers`, `angleDelta` |
 | `windowCommandLineText()`, `setWindowCommandLineText()`, `submitWindowCommandLine()`; signal `windowCommandLineTextChanged(profile, commandLines)` | 374-382, 1005 | Command lines from `createCommandLine()` and a console's `enableCommandLine()` |
 | `bool setMainWindowSize(const QSize& pixels)`, `QSize mainConsoleGrid() const`, `QRect mainConsoleTextRect() const`; signal `mainConsoleAreaChanged(profile, grid, textRect)` | 547-551, 1034 | The main window's area in pixels, which the borders (`setBorderTop()` and the rest) take from; the console's grid and where its text goes. `setScreenSize()` (columns, rows) is the other way to size it; the later of the two holds. Once the profile has the main window's size, the engine gives the console's columns and rows to the carried `setGameScreenSize()` instead, which tells the game them and resizes nothing |
+| `QColor mainBorderColor() const`; signal `mainBorderColorChanged(profile, color)` (carried) | - | The colour `setBorderColor()` gives the borders around the console, which the desktop paints its main frame in: black until a script sets one |
 
 A Geyser gauge, button or container is not a window: a gauge is its `<name>_back`, `<name>_front` and `<name>_text`
 labels (`GeyserGauge.lua`), a button its labels.
@@ -99,7 +100,7 @@ green.
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | `labelContent()` for each label in a `windows` message whose content differs from what was last sent. The cursor fields are left out: a touch screen has no pointer to shape |
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | `textBoxContent()` (gap 4, carried) for each text box in a `windows` message whose content differs from what was last sent; not the player's own typing, kept as Mudlet keeps it; `typed`, the `setTextBoxText` for it the bridge has had from this UI |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | `windowLines(window, -300, 300)` for each window `windowTextChanged` names, and for every console on attach; older rows answer `getWindowText` |
-| `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The size given, `mainConsoleGrid()` and `mainConsoleTextRect()`, at `profileLoaded` and `mainConsoleAreaChanged` |
+| `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH`, `borderColor` | The size given, `mainConsoleGrid()`, `mainConsoleTextRect()` and `mainBorderColor()`, at `profileLoaded`, `mainConsoleAreaChanged` and `mainBorderColorChanged` |
 | `windowCommandLine` | `name`, `text` | `windowCommandLineTextChanged`, each name with `windowCommandLineText()` |
 | `image` | `path`, `png`, `w`, `h`, `re`? | The answer to `getImage`: the file or icon as PNG, base64 |
 | `buttonBars` | `bars`: `id`, `name`, `styleSheet`, `place`, `vertical`, `columns`, `fillerOffset`, `buttons`; the buttons' `id`, `name`, `icon`, `styleSheet`, `pushDown`, `checked`, `menu`, `children` | `buttonBars()`, whole, at load, on attach and on `buttonsChanged` |
@@ -169,6 +170,10 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
   (`setScreenSize`), not the landscape grid, so it wraps its lines for the narrower console: a setting picks fitted or
   stacked for the player who prefers the true layout. (Mudlet never makes the grid narrower than 40 columns, so a
   fitted portrait phone with a wide border would have its console cut off.)
+- In either, the borders are drawn in the colour `setBorderColor()` gave them (`borderColor`) where no window covers
+  them, as the desktop paints its main frame; black, as there, until a script sets one. Only the main window's area,
+  the console and its borders, takes it: the docks and the switcher's row are on black, as the desktop's docks are
+  outside its main frame.
 - A floating user window is a page of the switcher on a phone; on a free-form window (Chromebook, desktop mode) it may
   float, later.
 - Script geometry is never trusted to fit: a window that falls outside the area is clipped to it, and a pane whose
@@ -450,7 +455,8 @@ F4 and F5 are independent of each other and of F3.
   - F1P: `Geyser.MiniConsole:new{name="chat", x=0, y=0, width="30%", height="40%"}` and `chat:echo()` give `windows`
     with its geometry and `windowText` with the coloured row; `Geyser.UserWindow:new{name="side"}` and
     `placeUserWindow` raise `sysUserWindowResizeEvent` (a handler `echo()`s into the main console); `setBorderLeft()`
-    changes `mainArea`; `hideWindow()` gives `shown` false; a `windows` `full` on reattach; `enableCommandLine()` and
+    changes `mainArea`, and `setBorderColor()` its `borderColor`; `hideWindow()` gives `shown` false; a `windows` `full`
+    on reattach; `enableCommandLine()` and
     `sendWindowCommandLine`.
   - F2P: `Geyser.Label` with `setClickCallback`, a `pointer` press and release run it (it `echo()`s); `echo()` on the
     label gives a `label` with that text; `setStyleSheet()` arrives verbatim; `setBackgroundImage()` and `getImage`

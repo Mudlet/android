@@ -1945,7 +1945,8 @@ QJsonObject SocketBridge::mainAreaMessage(const MainArea& area)
             {QStringLiteral("textX"), area.textRect.x()},
             {QStringLiteral("textY"), area.textRect.y()},
             {QStringLiteral("textW"), area.textRect.width()},
-            {QStringLiteral("textH"), area.textRect.height()}};
+            {QStringLiteral("textH"), area.textRect.height()},
+            {QStringLiteral("borderColor"), area.borderColor}};
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)

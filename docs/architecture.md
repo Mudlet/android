@@ -799,6 +799,8 @@ And a script's clipboard, read and written by the app rather than the engine's p
 And the file a script asks for, chosen in the app (`THeadlessSession::setFilePicker()`, `0030-headless-file-picker.patch`;
 see "A script asks for a file" in [`divergences.md`](divergences.md)).
 And the map emptied as the desktop's Map settings' "Delete map" does (`deleteMap()`, `0031-headless-delete-map.patch`).
+And the colour `setBorderColor()` gives the borders around the main console (`mainBorderColor()`,
+`0032-headless-border-color.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -834,7 +836,7 @@ keeps the profiles' passwords in the KeyStore.
 | `commandLineTextRequested` (`printCmdLine()` and the like) | `commandLine` |
 | `scriptWindows()`, read at `profileLoaded`, then at each `scriptWindowsChanged` | `windows`, only the windows that changed and those `removed`; all of them, with `full`, to a UI that attaches. A close sends an empty list |
 | `windowLines()`, the last 300 rows, at `profileLoaded` and at each `windowTextChanged` | `windowText`; any rows on request with `getWindowText` |
-| `setMainWindowSize()`, then `mainConsoleGrid()` and `mainConsoleTextRect()` at `profileLoaded` and at each `mainConsoleAreaChanged` | `setMainWindowSize`, kept and given again to each profile as it loads; `mainArea` |
+| `setMainWindowSize()`, then `mainConsoleGrid()`, `mainConsoleTextRect()` and `mainBorderColor()` at `profileLoaded` and at each `mainConsoleAreaChanged` and `mainBorderColorChanged` | `setMainWindowSize`, kept and given again to each profile as it loads; `mainArea` |
 | `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()` (carried), at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given again to each profile as it loads |
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
@@ -934,7 +936,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   a main window's size the loading profile refuses, `setScreenSize` sizing the main window and reaching the game;
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
   colours; a Geyser `UserWindow` placed by `placeUserWindow`, which raises `sysUserWindowResizeEvent`; the size from
-  `setMainWindowSize` before the profile loads, and `setBorderLeft()`, as `mainArea`; `enableCommandLine()` with
+  `setMainWindowSize` before the profile loads, `setBorderLeft()` and `setBorderColor()`, as `mainArea`;
+  `enableCommandLine()` with
   `printCmdLine()` as `windowCommandLine` and `sendWindowCommandLine` running `setCmdLineAction()`'s function;
   `getWindowText`; hiding, `closeUserWindow`, a `full` `windows` and each console's text to a UI that attaches, and
   `removed`;

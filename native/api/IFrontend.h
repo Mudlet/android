@@ -231,13 +231,15 @@ struct AddonCommandInfo
     bool pulse = false;
 };
 
-// The main window's area: the size the UI gave (empty for none), the main console's grid in characters, and where its
-// text goes in pixels, which is the area less the borders scripts set
+// The main window's area: the size the UI gave (empty for none), the main console's grid in characters, where its
+// text goes in pixels, which is the area less the borders scripts set, and the colour of those borders
+// (setBorderColor(), as ColorRun's: ColorRun::rgbFlag | 0xRRGGBB, -1 for none)
 struct MainArea
 {
     QSize size;
     QSize grid;
     QRect textRect;
+    int borderColor = -1;
     bool operator==(const MainArea&) const = default;
 };
 

@@ -59,6 +59,11 @@ data class WindowLayout(
     /** What to give Mudlet with `setMainWindowSize`; null while [scale] is. */
     val mainWindowSize: MudletSize?,
     val console: PxRect,
+    /**
+     * The main window's area: the console and the borders around it, which `setBorderColor()` colours. Fitted, what
+     * the docks leave; stacked, the whole area.
+     */
+    val main: PxRect,
     /** Every window to draw outside the pane, children after their parents, each parent's by `stack`. */
     val windows: List<PlacedWindow>,
     val dockHeaders: List<DockHeader>,
@@ -279,6 +284,7 @@ data class WindowLayout(
                 scale = scale,
                 mainWindowSize = mainWindowSize,
                 console = console,
+                main = if (area.fitted) pane else whole,
                 windows = placed,
                 dockHeaders = headers,
                 pages = pages,

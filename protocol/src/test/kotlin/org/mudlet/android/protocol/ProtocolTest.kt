@@ -246,9 +246,11 @@ class ProtocolTest {
         assertArrayEquals(intArrayOf(0, 5, RUN_RGB or 0xff0000, -1, 0, 0), text.lines[0].runs)
         assertTrue(text.lines[1].prompt && text.lines[1].wrapped)
         assertEquals(
-            EngineMessage.MainArea(800, 600, 90, 30, 10, 0, 780, 600),
-            FrameReader.parse(JSONObject("""{"t":"mainArea","w":800,"h":600,"columns":90,"rows":30,"textX":10,"textY":0,"textW":780,"textH":600}""")),
+            EngineMessage.MainArea(800, 600, 90, 30, 10, 0, 780, 600, RUN_RGB or 0x0a141e),
+            FrameReader.parse(JSONObject("""{"t":"mainArea","w":800,"h":600,"columns":90,"rows":30,"textX":10,"textY":0,"textW":780,"textH":600,"borderColor":${RUN_RGB or 0x0a141e}}""")),
         )
+        // From an engine before borderColor: none
+        assertEquals(-1, (FrameReader.parse(JSONObject("""{"t":"mainArea","w":800,"h":600}""")) as EngineMessage.MainArea).borderColor)
         assertEquals(EngineMessage.WindowCommandLine("chat", "say hi"), FrameReader.parse(JSONObject("""{"t":"windowCommandLine","name":"chat","text":"say hi"}""")))
     }
 

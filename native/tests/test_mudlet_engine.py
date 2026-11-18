@@ -1614,7 +1614,7 @@ def seen_or_next(c, pred, seen, since, timeout=5.0, what=None):
 
 def script_windows():
     """What scripts draw: a Geyser MiniConsole and UserWindow as windows, with the console's text as windowText; the
-    main window's size from setMainWindowSize, and the borders a script sets, as mainArea; placeUserWindow raising
+    main window's size from setMainWindowSize, and the borders a script sets and their colour, as mainArea; placeUserWindow raising
     the resize event a script handles; a console's own command line both ways; hiding, closing and deleting; and all
     of it again for a UI that attaches."""
     game = fake_telnet.start_in_thread()
@@ -1635,6 +1635,7 @@ def script_windows():
     m = c.wait_for(lambda m: m["t"] == "mainArea", timeout=30, collect=seen)
     check(m["w"] == 1000 and m["h"] == 800 and (m["textX"], m["textY"], m["textW"], m["textH"]) == (0, 0, 1000, 800)
           and m["columns"] > 0 and m["rows"] > 0, f"the profile takes the size the UI gave before it loaded: {m}")
+    check(m.get("borderColor") == 0x1000000, f"the borders are black until a script colours them: {m}")
     columns = m["columns"]
     wait_status(c, "connection", lambda v: v == "connected", seen)
 
@@ -1693,6 +1694,11 @@ def script_windows():
     m = seen_or_next(c, lambda m: m["t"] == "mainArea", seen, since)
     check((m["w"], m["h"], m["textX"], m["textW"]) == (1200, 800, 100, 1100 - right),
           f"a size given while the profile runs is taken at once: {m}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": "setBorderColor(10, 20, 30)"})
+    m = seen_or_none(c, lambda m: m["t"] == "mainArea", seen, since)
+    check(m is not None and m.get("borderColor") == 0x1000000 | 0x0A141E and (m["w"], m["textX"]) == (1200, 100),
+          f"setBorderColor() colours the borders: {m}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": "\n".join([
@@ -1742,7 +1748,8 @@ def script_windows():
     check("chat" in texts and "side" in texts and texts["chat"]["lines"][0]["text"] == "red plain",
           f"and each console's text: {list(texts)}")
     areas = [m for m in msgs if m["t"] == "mainArea"]
-    check(len(areas) == 1 and (areas[0]["w"], areas[0]["textX"]) == (1200, 100), f"and the main area: {areas}")
+    check(len(areas) == 1 and (areas[0]["w"], areas[0]["textX"], areas[0].get("borderColor")) == (1200, 100, 0x1000000 | 0x0A141E),
+          f"and the main area: {areas}")
 
     since = len(seen)
     c.send({"t": "runLua", "code": 'deleteMiniConsole("chat")'})

@@ -21,6 +21,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -260,7 +261,11 @@ class PseudoLocaleTest(private val locale: String) {
         activate(hasContentDescription(string(R.string.navigate_back)))
         // In en-XA the title bar's title takes more lines beside its buttons, which can leave the toolbar's button below
         // the fold; TalkBack scrolls to it as well
-        compose.onNode(hasText("Greet") and hasClickAction()).performScrollTo()
+        val before = compose.onRoot().printToString()
+        val found = runCatching { waitFor(hasText("Greet") and hasClickAction()) }.isSuccess
+        val after = compose.onRoot().printToString()
+        val shown = runCatching { compose.onNode(hasText("Greet") and hasClickAction()).assertIsDisplayed() }.isSuccess
+        if (!shown) throw AssertionError("DEBUG found=$found\nBEFORE\n$before\nAFTER\n$after")
         activate(hasText("Greet"))
         open("button", JSONObject(button.toString()).put("id", 2).put("parent", 1))
         waitFor(hasText(string(R.string.scripts_button_push_down_hint)))

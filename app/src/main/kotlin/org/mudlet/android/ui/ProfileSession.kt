@@ -167,6 +167,13 @@ class ProfileSession internal constructor(
     var scriptsStopped by mutableStateOf(false)
         private set
 
+    /**
+     * Whether the game records a replay ([setReplayRecording]), and the file in its profile's log folder of the last
+     * recording saved since it loaded, as the engine last said.
+     */
+    var replayRecording by mutableStateOf(EngineMessage.ReplayRecording(recording = false, file = ""))
+        private set
+
     /** The profile whose suggestions the input line shows: this one, unless the engine's status `profile` named another as loaded. */
     var suggestionsProfile by mutableStateOf(name.ifEmpty { NO_PROFILE_SUGGESTIONS })
         private set
@@ -518,6 +525,13 @@ class ProfileSession internal constructor(
      */
     fun setScriptsStopped(stopped: Boolean): Boolean = settingsAvailable && link?.send(Requests.setScriptsStopped(stopped)) == true
 
+    /**
+     * Desktop Mudlet's replay recording button: [record] starts recording what the game sends, false stops and saves
+     * it; [replayRecording] follows once the engine has done it. False, sending nothing, while its profile has not
+     * loaded or the link is down.
+     */
+    fun setReplayRecording(record: Boolean): Boolean = settingsAvailable && link?.send(Requests.setReplayRecording(record)) == true
+
     private fun onSounds(message: EngineMessage.Sounds) {
         sounds = message
         settings[Settings.muteScripts.key] = message.scriptsMuted
@@ -657,6 +671,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ScriptsStopped -> post { scriptsStopped = message.stopped }
 
+                is EngineMessage.ReplayRecording -> post { replayRecording = message }
+
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
                 // One in the background says whose it is, and does not interrupt what the front one is saying
@@ -742,9 +758,10 @@ class ProfileSession internal constructor(
                         // The connection stays as it was, so a drop after this is no answer's doing
                         disconnectAsked = false
                         secureOfferRefusal = reason
-                    } else if (request == "setScriptsStopped") {
-                        // The switch follows scriptsStopped alone, so it already shows the state the engine kept
-                        Log.w(TAG, "the emergency stop: ${message.message}")
+                    } else if (request == "setScriptsStopped" || request == "setReplayRecording") {
+                        // The switch follows the engine's state alone, so it already shows what the engine kept, and
+                        // Mudlet says why a recording failed in the game's text
+                        Log.w(TAG, message.message)
                     } else if (request in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(request, reason, message.replyTo)
                     } else if (!links.onError(message)) {

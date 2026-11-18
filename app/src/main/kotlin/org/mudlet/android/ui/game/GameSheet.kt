@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -172,30 +173,47 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
                 }
             }
             EmergencyStop(front.scriptsStopped, enabled = front.settingsAvailable, onChange = front::setScriptsStopped)
+            ReplayRecording(front)
         }
     }
 }
 
 /** Desktop Mudlet's emergency stop as a switch, on while [stopped], which [onChange] turns; TalkBack reads its new state once the engine has it. */
 @Composable
-private fun EmergencyStop(stopped: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+private fun EmergencyStop(stopped: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) = SheetSwitch(
+    R.drawable.ic_report,
+    stringResource(R.string.game_emergency_stop),
+    stringResource(if (stopped) R.string.game_emergency_stop_on else R.string.game_emergency_stop_off),
+    checked = stopped,
+    enabled = enabled,
+    tag = EMERGENCY_STOP_TAG,
+    onChange = onChange,
+)
+
+/** A switch on the game sheet's card, [title] over [summary], tinted [icon] while [checked], which [onChange] turns. */
+@Composable
+internal fun SheetSwitch(
+    @DrawableRes icon: Int,
+    title: String,
+    summary: String,
+    checked: Boolean,
+    enabled: Boolean,
+    tag: String,
+    onChange: (Boolean) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 8.dp)
-            .toggleable(value = stopped, enabled = enabled, role = Role.Switch, onValueChange = onChange)
-            .testTag(EMERGENCY_STOP_TAG),
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+            .testTag(tag),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(R.drawable.ic_report), contentDescription = null, tint = if (stopped) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(painterResource(icon), contentDescription = null, tint = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.game_emergency_stop), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                stringResource(if (stopped) R.string.game_emergency_stop_on else R.string.game_emergency_stop_off),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = stopped, onCheckedChange = null, enabled = enabled)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

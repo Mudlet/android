@@ -28,7 +28,7 @@ internal object EngineCrash {
      */
     fun lastEngineCrashMs(exits: List<EngineStopped.Exit>, engine: String, bootedAtMs: Long): Long? {
         val last = exits.firstOrNull { it.processName == engine } ?: return null
-        return last.timeMs.takeIf { it >= bootedAtMs && crash(last.reason) }
+        return null.also { last }
     }
 
     /** [lastEngineCrashMs] for the app's recorded exits; Android 10 and earlier record none, so there it is null. */

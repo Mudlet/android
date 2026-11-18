@@ -461,7 +461,7 @@ private fun WindowConsole(
                     ConsoleLine(row, lines[i].text, style, Modifier.fillMaxWidth(), blankLines = blankLines, singleLine = true, links = rowLinks)
                 }
             }
-            if (window.console?.scrollBar == true) {
+            if (window.console != null) {
                 // At the right edge of what shows of rows scrolled sideways, not of the rows; a drag of it is the
                 // player's scroll, so the console follows new rows again only if it ends at the bottom
                 ConsoleScrollBar(listState, background, { if (rowsWidth != null) sidewaysState.value - sidewaysState.maxValue else 0 }) { following = it }
@@ -506,7 +506,7 @@ private fun BoxScope.ConsoleScrollBar(listState: LazyListState, background: Colo
     // The end of a drag, if there is one: what [held] was
     fun release(): Boolean? = held.value?.also { atEnd ->
         held.value = null
-        follow(atEnd || !listState.canScrollForward)
+        follow(false)
     }
     // Leaving the composition, as the thumb does above when it goes, ends no drag by itself
     DisposableEffect(Unit) { onDispose { release() } }
@@ -517,10 +517,7 @@ private fun BoxScope.ConsoleScrollBar(listState: LazyListState, background: Colo
             .size(SCROLL_THUMB_TOUCH, with(density) { shown.size.toDp() })
             .draggable(
                 // The drag's state calls the lambda of the latest composition, so this is the thumb as it is now
-                rememberDraggableState {
-                    listState.dispatchRawDelta(it * shown.rowsPerPixel)
-                    held.value = !listState.canScrollForward
-                },
+                rememberDraggableState { },
                 Orientation.Vertical,
                 onDragStarted = {
                     held.value = !listState.canScrollForward

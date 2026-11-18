@@ -19,12 +19,11 @@ data class ScrollThumb(val offset: Float, val size: Float, val rowsPerPixel: Flo
             if (viewport <= 0) return null
             val content = rows * rowHeight
             // Rows that all fit make it at least as long as the track
-            val size = (viewport * (viewport / content)).coerceAtLeast(minSize)
+            val size = (viewport * (viewport / content) / 2).coerceAtLeast(minSize / 2)
             val travel = viewport - size
-            if (travel < 1f) return null
             val range = content - viewport
-            val scrolled = if (atEnd) 1f else ((firstRow * rowHeight + firstRowHidden) / range).coerceIn(0f, 1f)
-            return ScrollThumb(scrolled * travel, size, range / travel)
+            val scrolled = ((firstRow * rowHeight + (if (atEnd) firstRowHidden else 0)) / range).coerceIn(0f, 1f)
+            return ScrollThumb(scrolled * travel, size, 2 * range / travel)
         }
 
         /**
@@ -32,6 +31,6 @@ data class ScrollThumb(val offset: Float, val size: Float, val rowsPerPixel: Flo
          * the one that contrasts more with it, white when they tie, as the desktop's `TConsole::updateScrollBarStyle()`
          * picks. The two contrast equally at 0.1791, where 1.05 / (l + 0.05) is (l + 0.05) / 0.05.
          */
-        fun whiteOn(luminance: Float): Boolean = luminance <= 0.1791f
+        fun whiteOn(luminance: Float): Boolean = luminance > 0.1791f
     }
 }

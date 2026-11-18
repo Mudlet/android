@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -53,14 +55,18 @@ import org.mudlet.android.ui.ProfileSession
 /** The game sheet's test tag. */
 const val GAME_SHEET_TAG = "gameSheet"
 
+/** The emergency stop switch's test tag. */
+const val EMERGENCY_STOP_TAG = "emergencyStop"
+
 /**
  * The game sheet, which the game pill opens (docs/multi-profile.md, "The switcher"): first a card for the game in
- * front, [front] (named [name]), with its state, its address, Reconnect ([onReconnect], while [canReconnect]) and
- * Disconnect ([onDisconnect]); then a row for each of the open [games], in the order opened, the front one ticked, which
- * a tap brings to the front ([onSwitch]) and whose close button closes it ([onClose]) after asking first when it is
- * connected; last "Open another game" ([onOpenAnother]), which says why not once [EngineClient.MAX_OPEN_GAMES] are
- * open. Every button but a game's close button closes the sheet once it has acted, as do the sheet's own close
- * button, Back and a tap outside it; [onDismiss] is called once it has gone.
+ * front, [front] (named [name]), with its state, its address, Reconnect ([onReconnect], while [canReconnect]),
+ * Disconnect ([onDisconnect]) and desktop Mudlet's emergency stop as a switch, which leaves the sheet open; then a row
+ * for each of the open [games], in the order opened, the front one ticked, which a tap brings to the front ([onSwitch])
+ * and whose close button closes it ([onClose]) after asking first when it is connected; last "Open another game"
+ * ([onOpenAnother]), which says why not once [EngineClient.MAX_OPEN_GAMES] are open. Every button but a game's close
+ * button closes the sheet once it has acted, as do the sheet's own close button, Back and a tap outside it; [onDismiss]
+ * is called once it has gone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,7 +171,31 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
                     Text(stringResource(R.string.connection_disconnect))
                 }
             }
+            EmergencyStop(front.scriptsStopped, enabled = front.settingsAvailable, onChange = front::setScriptsStopped)
         }
+    }
+}
+
+/** Desktop Mudlet's emergency stop as a switch, on while [stopped], which [onChange] turns; TalkBack reads its new state once the engine has it. */
+@Composable
+private fun EmergencyStop(stopped: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(top = 8.dp)
+            .toggleable(value = stopped, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+            .testTag(EMERGENCY_STOP_TAG),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(R.drawable.ic_report), contentDescription = null, tint = if (stopped) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.game_emergency_stop), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(if (stopped) R.string.game_emergency_stop_on else R.string.game_emergency_stop_off),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = stopped, onCheckedChange = null, enabled = enabled)
     }
 }
 

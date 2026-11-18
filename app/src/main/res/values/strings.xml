@@ -1286,6 +1286,9 @@
     <string name="game_state">%1$s, %2$s</string>
     <!-- Joins what TalkBack reads for an open game, %1$s, and more about it, %2$s, such as "12 new lines" -->
     <string name="game_description_more">%1$s, %2$s</string>
+    <!-- Read by TalkBack after the game pill's description while the game's emergency stop holds its scripts (shown on
+         the pill as a red stop sign) -->
+    <string name="game_scripts_stopped">scripts stopped</string>
     <!-- Read by TalkBack after the game pill's description: how many lines the other open games have that the player has
          not seen; %1$d is that number -->
     <plurals name="game_others_unread">
@@ -1325,6 +1328,14 @@
     <string name="profiles_all">All profiles</string>
     <!-- The game sheet's close button, read by TalkBack -->
     <string name="games_close">Close the game sheet</string>
+    <!-- The switch on the game sheet's card for the game in front that stops all its scripts at once, as desktop Mudlet's
+         emergency stop button does. Use desktop Mudlet's translation of "Emergency stop" where your language has one. -->
+    <string name="game_emergency_stop">Emergency stop</string>
+    <!-- Under "Emergency stop" while it is off: what turning it on does -->
+    <string name="game_emergency_stop_off">Stop all triggers, aliases, timers, key bindings and script events of this game</string>
+    <!-- Under "Emergency stop" while it is on: the game's scripts do nothing, and commands go to the game as typed, with
+         no alias changing them -->
+    <string name="game_emergency_stop_on">Scripts are stopped. What you type goes to the game as it is.</string>
     <!-- What TalkBack says a tap on an open game does: brings it to the front -->
     <string name="game_show">Show this game</string>
     <!-- The close button of an open game in the game sheet, read by TalkBack; %1$s is the game's (profile's) name -->

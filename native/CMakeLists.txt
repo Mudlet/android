@@ -24,5 +24,5 @@ if(NOT ANDROID)
     qt_add_executable(map_frames_test tests/map_frames_test.cpp enginehost/SocketBridge.cpp enginehost/SocketBridge.h
         enginehost/ControlBridge.cpp enginehost/ControlBridge.h)
     target_include_directories(map_frames_test PRIVATE enginehost)
-    target_link_libraries(map_frames_test PRIVATE engine_api Qt6::Core Qt6::Network)
+    target_link_libraries(map_frames_test PRIVATE engine_api Qt6::Core Qt6::Gui Qt6::Network)
 endif()

@@ -76,8 +76,10 @@ class ProtocolTest {
 
     @Test
     fun theOpenProfilesRequestsAndMessages() {
-        assertEquals(false, Requests.hello(null, 0, profileSockets = false).has("profileSockets"))
-        assertEquals(true, Requests.hello(null, 0, profileSockets = true).getBoolean("profileSockets"))
+        assertEquals(false, Requests.hello(null, 0, profileSockets = false, opensUrls = false).has("profileSockets"))
+        assertEquals(true, Requests.hello(null, 0, profileSockets = true, opensUrls = false).getBoolean("profileSockets"))
+        assertEquals(false, Requests.hello(null, 0, profileSockets = true, opensUrls = false).has("opensUrls"))
+        assertEquals(true, Requests.hello(null, 0, profileSockets = true, opensUrls = true).getBoolean("opensUrls"))
         assertEquals(mapOf("t" to "closeProfile", "name" to "Beta", "id" to 6L), Requests.closeProfile("Beta", 6).toMap())
         assertEquals(mapOf("t" to "setFront", "name" to "Beta"), Requests.setFront("Beta").toMap())
         assertEquals(mapOf("t" to "markSeen", "name" to "Beta", "seq" to 12L), Requests.markSeen("Beta", 12).toMap())
@@ -1080,6 +1082,11 @@ class ProtocolTest {
         assertEquals(mapOf("t" to "answerClipboardRead", "id" to 7L, "text" to "copied"), Requests.answerClipboardRead(7, "copied").toMap())
         assertEquals(EngineMessage.ClipboardWrite("from a script"), FrameReader.parse(JSONObject("""{"t":"clipboardWrite","text":"from a script"}""")))
         assertEquals(EngineMessage.ClipboardWrite(""), FrameReader.parse(JSONObject("""{"t":"clipboardWrite"}""")))
+    }
+
+    @Test
+    fun aScriptsWebPage() {
+        assertEquals(EngineMessage.OpenUrl("https://example.org/a%20b"), FrameReader.parse(JSONObject("""{"t":"openUrl","url":"https://example.org/a%20b"}""")))
     }
 
     @Test

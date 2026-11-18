@@ -74,7 +74,7 @@ class PackagesTest {
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
         waitFor(hasText(string(R.string.game_title)))
-        activate(hasContentDescription(string(R.string.packages_open, game.name)))
+        compose.pickFromGameMenu(string(R.string.packages_open, game.name))
         waitFor(hasText(string(R.string.packages_loading)))
         packages(listOf(mapper, plain), received("packages"))
         waitFor(row("Generic Mapper"))

@@ -1014,7 +1014,7 @@
     <!-- What TalkBack reads for a blank line of a mini console or user window with "Blank lines from the game" on
          "Replace them with a space": the name of the space character -->
     <string name="console_blank_line_space">Space</string>
-    <!-- The game screen's top bar button that opens the bar that searches the game's text -->
+    <!-- The item of the game screen's title bar menu that opens the bar that searches the game's text -->
     <string name="console_search">Search the game\'s text</string>
     <!-- The field of the bar that searches the game's text, for the words to find -->
     <string name="console_search_field">Find</string>
@@ -1502,8 +1502,11 @@
     <!-- The game screen's title bar button, read by a screen reader, that opens a profile's triggers, aliases and
          scripts; %1$s is the profile's name, such as "Achaea" -->
     <string name="scripts_open">Scripts of %1$s</string>
-    <!-- The game screen's title bar button that opens the package manager, which lists, installs and removes the
-         profile's packages; %1$s is the profile's name, such as "Achaea" -->
+    <!-- The game screen's title bar button, read by a screen reader, that opens a menu of what fits nowhere else on the
+         bar: the search of the game's text and the profile's packages -->
+    <string name="game_menu">More options</string>
+    <!-- An item of the game screen's title bar menu that opens the package manager, which lists, installs and removes
+         the profile's packages; %1$s is the profile's name, such as "Achaea" -->
     <string name="packages_open">Packages of %1$s</string>
     <!-- The package manager's title; %1$s is the profile's name, such as "Achaea" -->
     <string name="packages_title">Packages of %1$s</string>

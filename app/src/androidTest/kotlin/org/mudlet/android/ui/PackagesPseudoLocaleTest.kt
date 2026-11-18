@@ -70,7 +70,7 @@ class PackagesPseudoLocaleTest(private val locale: String) {
         session.profiles(listOf(game), session.receive("openProfile"))
         waitFor(hasText(string(R.string.game_title)))
 
-        activate(hasContentDescription(string(R.string.packages_open, game.name)))
+        compose.pickFromGameMenu(string(R.string.packages_open, game.name))
         compose.waitForIdle()
         val listed = session.receive("packages")
         val pack = JSONObject().put("name", "generic_mapper").put("title", "Generic Mapper").put("author", "Mudlet").put("version", "1.2")

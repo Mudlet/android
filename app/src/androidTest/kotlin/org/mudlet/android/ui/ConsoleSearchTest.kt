@@ -77,7 +77,7 @@ class ConsoleSearchTest {
 
     @Test
     fun theBarCountsTheMatchesStepsUpAndDownAsDesktopsAndDrawsThemUntilClosed() {
-        activate(hasContentDescription(string(R.string.console_search)))
+        compose.pickFromGameMenu(string(R.string.console_search))
         val field = hasSetTextAction() and hasText(string(R.string.console_search_field))
         waitFor(field)
         compose.onNode(field).performTextInput("RAT")

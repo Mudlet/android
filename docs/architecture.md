@@ -386,7 +386,7 @@ a script gave beyond them; a console whose font is sized in pixels, or that the 
 - One finger is left to the window's list, its sideways scroll and its links: the pinch takes only two.
 
 ### Searching the game's text
-The top bar's search, or Ctrl+F on a keyboard, opens a bar over the main console that searches its scrollback (the
+The title bar menu's search, or Ctrl+F on a keyboard, opens a bar over the main console that searches its scrollback (the
 lines the app keeps, `ProfileSession.MAX_LINES`) as desktop's search box does (`TConsole::slot_searchBufferUp`):
 - Case is ignored. The first search goes up from the bottom, and each next one up (older, also the keyboard's search
   key, as desktop's Enter) or down (newer) from the line the last one found, which the console scrolls to. A found line
@@ -648,7 +648,7 @@ drawn by `ui/game/AppMap.kt`):
   time limit, so a stalled download runs until cancelled.
 
 ### The package manager
-The game screen's title bar has a Packages button, after the Scripts button, that opens the front profile's packages
+The game screen's title bar menu, More options, has a Packages item that opens the front profile's packages
 (`ui/packages/PackagesScreen.kt`) as the desktop's Package Manager shows them, over `packages`, `installPackage` and
 `uninstallPackage` in `docs/protocol.md`, kept by `PackagesClient`:
 - Each package in the order installed, with its icon (`getImage`), its title or else its name, its name, version and
@@ -1995,7 +1995,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - With TalkBack on: a line's actions offer "Make a trigger from this line"; on its page a word reads "Kept as it
       is", "Captured" or "Optional", and a double tap changes it.
 
-32. The package manager, with the libmudlet APK: on the game screen, tap Packages.
+32. The package manager, with the libmudlet APK: on the game screen, tap More options, then Packages.
     - The bundled packages are listed, each with its icon, title, version and author; a tap on one shows its whole
       description.
     - Tap "Install from a file" and pick a `.mpackage` from Downloads: "Installing" shows with a progress bar, then
@@ -2005,7 +2005,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       is listed. `lua uninstallPackage("<name>")` on the input line: it goes from the list.
     - Tap Remove on a package: a dialog asks; Cancel keeps it, Remove takes it out, and its triggers and aliases go
       from the script library.
-    - With TalkBack on: the title bar's button reads "Packages of" and the game's name; a row reads its title, details
+    - With TalkBack on: the title bar menu's item reads "Packages of" and the game's name; a row reads its title, details
       and description, and whether its description is cut short; Remove reads "Remove" and the package's name.
 
 33. How the app looks, on Android 12 or later, in light and in dark mode.

@@ -28,11 +28,17 @@ class MudletBackupAgent : BackupAgent() {
             return
         }
         val files = filesDir.canonicalFile
+        // Static rules cannot name "the newest file", so the agent picks each profile's latest saves as it backs up
+        val latest = HashMap<String, String?>()
+        val latestIn = { folder: String ->
+            if (folder !in latest) latest[folder] = BackupScope.latestSave(File(files, folder))
+            latest[folder]
+        }
         files.walkTopDown()
             .onEnter { !Files.isSymbolicLink(it.toPath()) }
             .onFail { _, e -> Log.w(TAG, "a folder of the app's files could not be read for the backup", e) }
             .filter { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
-            .filter { BackupScope.takes(it.relativeTo(files).invariantSeparatorsPath, to) }
+            .filter { BackupScope.takes(it.relativeTo(files).invariantSeparatorsPath, to, latestIn) }
             .forEach { fullBackupFile(it, data) }
         preferencesDir().listFiles().orEmpty()
             .filter { it.isFile && BackupScope.takesPreferences(it.name) }

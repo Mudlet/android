@@ -424,6 +424,7 @@ added later travels only once it is named there:
 | Data | Cloud backup | New phone | Why |
 |---|---|---|---|
 | `files/mudlet/`: profiles, scripts, packages, maps, media, `Mudlet.ini`, fonts, `profile-order.json` | yes | yes | the player's games |
+| `profiles/<name>/map/` and `current/`, but for the save Mudlet loads from each | no | yes | older dated saves, rollback copies that pass the cloud's 25 MB |
 | `files/mudlet/profiles/<name>/log/` (logs and replays) | no | yes | the game's text, and what the player sent |
 | `files/suggest/<name>.txt` (command suggestions) | no | yes | learned from what the player typed and the game's lines |
 | `files/suggest/<name>.pins` (pinned commands) | yes | yes | the player's own choice |
@@ -452,9 +453,14 @@ Connect opens the profile with none, so the game's own prompt asks and the playe
 Mudlet's sign-in tokens are gone the same way, and a game that used one asks for the login again.
 
 A cloud backup holds at most 25 MB (the transport's quota, `FullBackupDataOutput.getQuota()`); past it Android makes
-none at all and keeps the last one, and the agent logs `onQuotaExceeded`. What makes a profile big: the dated map
-saves Mudlet keeps in `map/` (one per save, never pruned unless a package does), the dated profile saves in
-`current/`, sounds and music in `media/` and in packages. A transfer to a new phone has no such limit.
+none at all and keeps the last one, and the agent logs `onQuotaExceeded`. What makes a profile big is the dated map
+saves Mudlet keeps in `map/` and the dated profile saves in `current/`, one per save and never pruned unless a package
+does, so a cloud backup takes of each only the save Mudlet loads (`BackupScope.latestSave`): the last modified file in
+`map/` (`TMap::restore`) and `*.xml` in `current/` (`Host::loadProfileSave`), a tie going to the first name, as
+`QDir::Time` sorts. A restore sets each file's time from the backup, so Mudlet loads the same one there. XML rules
+cannot name "the newest file", so the agent picks it as it backs up. Sounds and music in `media/` and in packages still
+go; a profile whose latest saves and media pass 25 MB on their own has no cloud backup. A transfer to a new phone
+takes every save and has no such limit.
 
 ### Script windows' text: links and the screen reader
 A mini console's or user window's rows are drawn by `ui/game/ConsoleLine.kt`, as the main console's lines are, so

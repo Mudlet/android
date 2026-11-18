@@ -46,7 +46,9 @@ backup. When you move to a new phone with Android's transfer, by cable or over W
 logs of your games and the command suggestions Mudlet learned from what you typed. Logs and suggestions never go to a
 cloud backup. Your passwords, the sign-in tokens Mudlet keeps for games, and the small reconnect file never leave your
 phone: on a new phone, or after a restore, Mudlet asks you for each game's password again. You can turn backups off in
-your phone's settings, under Google or System, Backup. A backup can hold up to 25 MB; a bigger one is not made at all.
+your phone's settings, under Google or System, Backup. To stay within the 25 MB a cloud backup can hold, it keeps only
+the latest save of each game's map and profile; older saves go only to a new phone. A backup bigger than 25 MB all the
+same is not made at all.
 
 Android's own system logs on your device may hold Mudlet's error messages; they never hold a password.
 

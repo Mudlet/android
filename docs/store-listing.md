@@ -314,7 +314,8 @@ notifications (`app/src/main/kotlin/org/mudlet/android/ui/MainActivity.kt:100-10
 `android:fullBackupOnly` in `app/src/main/AndroidManifest.xml`). What it takes is `BackupScope`
 (`app/src/main/kotlin/org/mudlet/android/data/BackupScope.kt`): the profiles, Mudlet's settings, pinned commands and the
 app's settings to both a cloud backup and a new phone; the logs and command suggestions, which hold the game's text and
-what the player typed, to a new phone only; the passwords (`files/passwords/`), the sign-in tokens QtKeychain keeps
+what the player typed, and each profile's older map and profile saves (all but the one Mudlet loads, to keep within
+the cloud's 25 MB), to a new phone only; the passwords (`files/passwords/`), the sign-in tokens QtKeychain keeps
 (`files/settings/`), the engine's restore file and stop marker, and the `engine` and `ui` preferences to neither. A
 cloud backup is made only when the transport encrypts it with the screen lock (`FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED`;
 `disableIfNoEncryptionCapabilities` in `app/src/main/res/xml/data_extraction_rules.xml`). The XML rules

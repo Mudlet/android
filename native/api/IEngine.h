@@ -185,6 +185,8 @@ public:
     // begin.
     virtual QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) = 0;
     virtual QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) = 0;
+    // Empties the profile's map as the Mapper tab's "Delete map" does, keeping the map files saved before; else why not
+    virtual QString deleteMap() = 0;
     // The profile's settings named in keys, by the keys Lua's getConfig() takes, each a bool, a double or a string; a
     // key the engine does not know is left out. Else why none were read.
     virtual std::variant<QVariantMap, QString> settings(const QStringList& keys) = 0;

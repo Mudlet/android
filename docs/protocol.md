@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **38**.
+The current version is **39**.
 
 ## Transport
 
@@ -117,6 +117,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `loadMapFile` | `path` | Loads the map file at `path`, the whole path of a file the engine can read, in place of the profile's map, as the desktop's Map settings' "Load another map file" does (`THeadlessSession::loadMapFile()`, "Map files" below): a `.xml` file as an XML map, a `.json` file as a JSON map, anything else as Mudlet's own map. `mapFile` follows how it goes. |
 | `saveMapFile` | `path` | Saves the profile's map to `path`, as the desktop's "Save map as" does (`THeadlessSession::saveMapFile()`): a `.json` file as a JSON map, anything else as Mudlet's own map at its current format. `mapFile` follows how it goes. |
 | `cancelMapFile` | | Stops the JSON load or save under way while `mapFile`'s `cancelable` holds, as the Abort of Mudlet's progress dialog does: `mapFile` with `state` `cancelled` follows. It is read while the load or save runs, from the socket that asked for it. |
+| `deleteMap` | | Empties the profile's map, as the desktop's Map settings' "Delete map" does (`THeadlessSession::deleteMap()`, "Map files" below): `appMap` and `map` then show the default area with no rooms. The map files saved before stay. |
 | `scriptItems` | `kind`, `id`? | Asks for the open profile's triggers, aliases, scripts, timers, keys or buttons, `kind` `trigger`, `alias`, `script`, `timer`, `key` or `button`, as the desktop's script editor lists them (`THeadlessSession::scriptItems()`), answered by `scriptItems`. |
 | `scriptItem` | `kind`, `item`, `id`? | Asks for all the fields of the item of that kind whose id is `item` (`THeadlessSession::scriptItem()`), answered by `scriptItem`. |
 | `addScriptItem` | `kind`, `parent`, `position`, `folder`, `name`, `id`? | Makes an item of that kind, or a folder for `folder` true, named `name`, as the desktop editor's add does (`THeadlessSession::addScriptItem()`): in the folder whose id is `parent`, or at the top level for 0, at `position` among the items shown there (0 first; past the end appends); switched on, but not running until its first `editScriptItem`, or switched off for a timer or a button. Answered by `scriptItem`, the new item. |
@@ -205,6 +206,7 @@ of it, which Mudlet relays after a `downloadMap` read in the same pass.
 `loadMapFile`, `saveMapFile` and `cancelMapFile` too are answered only when refused. libmudlet refuses the first two
 while no profile is open, while the map downloads, and for a `path` that is not a whole path; a load or save that runs and fails is told by `mapFile`, not by
 `error`. `cancelMapFile` is refused unless it comes while a JSON load or save runs.
+`deleteMap` too is answered only when refused: while no profile is open, and while a map downloads or a map import or export runs.
 
 `getSettings` and `setSettings` are answered by `settings`, or by `error` whose `message` is the request's name, a colon
 and why: a `keys` or `values` that is not as above, and in libmudlet no profile loaded (`no profile running`). A value in
@@ -688,6 +690,9 @@ player chose, so the engine reads and writes only the app's own directories.
   console says why. A JSON load that failed or was stopped leaves the profile's map as it was; any other leaves it as
   Mudlet's loader did, as on the desktop.
 - A save ends `done` once the file is written, or `failed` with "Could not save map to" the file's name.
+- `deleteMap` empties the map within the request, as the desktop's "Delete map" does (`TMap::mapClear()`): no rooms,
+  only the default area, the default colours and no map data, and the next autosave saves that. The dated saves and
+  the autosave already in the profile's `map/` folder stay, so one can be loaded back.
 - Both are refused while a script's map download or import runs.
 
 ### Status keys
@@ -847,7 +852,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 38, which added a script's web pages (`opensUrls` in `hello`, `openUrl`);
+As implemented in version 39, which added deleting the map (`deleteMap`);
+version 38 added a script's web pages (`opensUrls` in `hello`, `openUrl`);
 version 37 added a script's file picker (`pickFile`, `answerPickFile`);
 version 36 added recording a replay (`setReplayRecording`, `replayRecording`);
 version 35 added a script's use of the device's clipboard (`clipboardRead`, `answerClipboardRead`,

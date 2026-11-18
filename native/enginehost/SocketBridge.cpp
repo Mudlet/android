@@ -779,6 +779,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("setReplayRecording")) {
         const QJsonValue record = message.value(QLatin1String("record"));
         refuse(type, record.isBool() ? mEngine->setReplayRecording(record.toBool()) : QStringLiteral("record must be true or false"));
+    } else if (type == QLatin1String("deleteMap")) {
+        refuse(type, mEngine->deleteMap());
     } else if (type == QLatin1String("loadMapFile") || type == QLatin1String("saveMapFile")) {
         const QString path = message.value(QLatin1String("path")).toString();
         const auto cancelAsked = [this] {

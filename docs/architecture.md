@@ -815,6 +815,7 @@ And a script's clipboard, read and written by the app rather than the engine's p
 `0029-headless-clipboard.patch`; see "A script and the clipboard" in [`divergences.md`](divergences.md)).
 And the file a script asks for, chosen in the app (`THeadlessSession::setFilePicker()`, `0030-headless-file-picker.patch`;
 see "A script asks for a file" in [`divergences.md`](divergences.md)).
+And the map emptied as the desktop's Map settings' "Delete map" does (`deleteMap()`, `0031-headless-delete-map.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

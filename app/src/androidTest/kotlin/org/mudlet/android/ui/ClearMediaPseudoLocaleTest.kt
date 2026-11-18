@@ -61,7 +61,7 @@ class ClearMediaPseudoLocaleTest(private val locale: String) {
         session.settings(emptyMap(), session.receive("getSettings").getLong("id"))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.settingsAvailable } }
 
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         val page = hasText(string(R.string.settings_security)) and hasClickAction()
         compose.scrollSettingsHubTo(page)
         activate(page)

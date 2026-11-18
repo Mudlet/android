@@ -5,8 +5,8 @@ protocol 15, with the stand-in engine (since removed) running several profiles. 
 a `THeadlessSession` of its own sharing the pool (UP1, carried as `0007-headless-shared-pool.patch`), restored
 together. U1 has the app
 attach to the control socket and to each open profile's socket, with a `ProfileSession` for each. U2 has the game
-pill and its sheet: several games open, switching, closing, "Open another game", the TalkBack actions and
-announcements, and the profile list's "Open games". U3 has the swipe on the pill and Ctrl+Tab. U4 has the unread and
+switcher and its sheet: several games open, switching, closing, "Open another game", the TalkBack actions and
+announcements, and the profile list's "Open games". U3 has the swipe on the switcher and Ctrl+Tab. U4 has the unread and
 attention badges, `markSeen` for the game in front, and what TalkBack says for a game in the background. N1 has the
 engine notification list the open games, files each game's tells under it, opens the game a tell's tap is about, and
 leaves the foreground with no game open.
@@ -95,23 +95,30 @@ there gets `error`, as a control request sent on a profile socket does.
 
 ## The switcher
 
-- **The profile button**, the game pill, sits at the start of the quick bar's row, above the keyboard; the separate
-  connection bar is gone. It shows the front profile's name, its connection state as an icon whose shape differs per
-  state, and a chip with the number of open games, with a dot when another game has unread lines or wants attention.
-  Reconnect and Disconnect, which act on the front profile, are in its sheet; while the game is not connected, one
-  chip beside the pill offers what the state needs (Connect, Reconnect, Reconnect now, Try again, or Stop while it
-  connects).
+- **The profile button** is the game screen's title: the front profile's connection state as an icon whose shape
+  differs per state, its name with the state in a few words under it ("Reconnecting…", "Connection error"), and a chip
+  with the number of open games, with a dot when another game has unread lines or wants attention. It stays in the
+  title bar with the map in front. Reconnect and Disconnect, which act on the front profile, are in its sheet and in
+  the title bar's ⋮ menu (Stop connecting while it connects), with Settings; after the player's own Disconnect a tonal
+  Connect button sits in the title bar, and the title is then the name alone, as on a 320 dp wide screen it has room
+  for no more. Connect shows only while every button, Back and the title keep 48 dp, so not beside the Extensions
+  button on a 320 dp wide screen; the menu's Reconnect is there then. While a connection the player did not end is dealt with, a banner under the
+  title bar, a polite live region, says so and offers what it needs: Stop and Reconnect now while Mudlet dials again on
+  its own, Reconnect once it has stopped, Try again with the reason when a connect failed. It pushes the console, or
+  the map's room search, down, and does not show after the player's own Disconnect. The History button is on the input
+  line beside its arrows; the row below the input line shows only with pinned commands or the Sound button.
 - **Tap** opens a bottom sheet with a row per open profile: name, state, an unread badge ("99+" past 99), a bell for
   `attention` and a close button. "Open another game" at the foot goes to the profile list, where Connect sends
   `openProfile` with `alongside` while a game is open. At the cap it says "Close a game to open another (at most 4)". It is 4: the emulator
   measures about 10 MB per profile after the first ([`architecture.md`](architecture.md), "Memory per profile"); raise
   it once that is measured on a phone with real games.
-- **Swipe** on the button moves its label with the finger and cross-slides the console. Past 40% of the button's width,
+- **Swipe** on the title moves its label with the finger and cross-slides the console. Past 40% of the title's width,
   or on a fling, it commits with a haptic tick; at either end it rubber-bands, with no wrap-around. It mirrors in
   right-to-left layouts; a drag from the system's back-gesture inset belongs to the system. A hardware keyboard gets
   Ctrl+Tab and Ctrl+Shift+Tab.
-- **TalkBack.** The button reads "Aardwolf, connected, game 2 of 3, 5 new lines in other games", with the custom
-  actions "Next game: Achaea" and "Previous game: Aardwolf", so the swipe is never the only way. After a switch a
+- **TalkBack.** The title is read first on the screen: "Aardwolf, connected, game 2 of 3, 5 new lines in other games",
+  with the custom actions "Reconnect to Aardwolf", "Disconnect from Aardwolf", "Next game: Achaea" and "Previous game:
+  Aardwolf", so neither the sheet nor the swipe is ever the only way. After a switch a
   polite live region says "Achaea, connected" and focus goes to the input line. New lines are read only for the front
   profile; a background `announce()` is read politely with the profile's name first, and a background `attention`
   once as "New activity in Achaea".

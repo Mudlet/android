@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -37,6 +38,7 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.report.Redactor
 import org.mudlet.android.report.ReportCollector
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * About > Report a problem against a fake engine, with this device's real logcat. A profile has a saved password and
@@ -100,7 +102,7 @@ class ReportProblemTest {
     private fun typeWhileTheGameHidesInput() {
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
         session.hiddenInput(true)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(password).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(password and hasSetTextAction()).performTextInput(HIDDEN)

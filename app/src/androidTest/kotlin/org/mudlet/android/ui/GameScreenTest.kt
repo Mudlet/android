@@ -31,7 +31,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
@@ -67,15 +69,15 @@ import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.protocol.RefusedCertificate
-import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import kotlin.math.abs
 import androidx.compose.ui.R as ComposeUiR
 
 /**
- * The game screen against a fake engine: the console's lines and how it follows them, the input line, the game pill
- * and its connection chip, what a rotation keeps, and the order TalkBack meets them in. Controls are found by the labels TalkBack reads
- * and activated through their accessibility actions.
+ * The game screen against a fake engine: the console's lines and how it follows them, the input line, the game title
+ * and the title bar's Connect, what a rotation keeps, and the order TalkBack meets them in. Controls are found by the
+ * labels TalkBack reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class GameScreenTest {
@@ -105,8 +107,8 @@ class GameScreenTest {
         session.profiles(listOf(GAME), session.receive("listProfiles"))
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        waitUntilDisplayed(string(R.string.game_title))
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodesWithTag(GAME_TITLE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
     }
 
     @Test
@@ -227,17 +229,17 @@ class GameScreenTest {
     }
 
     @Test
-    fun theGamePillShowsTheStateAndItsSheetReconnectsAndDisconnects() {
+    fun theGameTitleShowsTheStateAndItsSheetReconnectsAndDisconnects() {
         session.status("connection", "disconnected")
-        waitForPill(R.string.connection_disconnected)
+        waitForTitle(R.string.connection_disconnected)
         compose.runOnIdle { EngineClient.front.connect("127.0.0.1", 4000, false) }
         session.receive("connect")
         session.status("connection", "connecting 127.0.0.1:4000")
-        waitForPill(compose.activity.getString(R.string.connection_connecting_to, "127.0.0.1:4000"))
+        waitForTitle(compose.activity.getString(R.string.connection_connecting_to, "127.0.0.1:4000"))
         session.status("connection", "connected")
-        waitForPill(string(R.string.connection_connected))
+        waitForTitle(string(R.string.connection_connected))
 
-        activate(hasTestTag(GAME_PILL_TAG))
+        activate(hasTestTag(GAME_TITLE_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_reconnect_to, GAME.name)))
         val connect = session.receive("connect")
         assertEquals("127.0.0.1", connect.getString("host"))
@@ -245,7 +247,7 @@ class GameScreenTest {
         assertEquals(false, connect.getBoolean("tls"))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isEmpty() }
 
-        activate(hasTestTag(GAME_PILL_TAG))
+        activate(hasTestTag(GAME_TITLE_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
     }
@@ -257,7 +259,7 @@ class GameScreenTest {
         session.send(JSONObject().put("t", "keyBindings").put("keys", JSONArray().put(JSONObject().put("key", altD.key).put("modifiers", altD.modifiers))))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.keyBindings } == setOf(altD) }
         session.status("connection", "connected")
-        waitForPill(string(R.string.connection_connected))
+        waitForTitle(string(R.string.connection_connected))
 
         compose.onNode(input).requestFocus().performKeyInput { withKeyDown(Key.AltLeft) { pressKey(Key.D) } }
         session.receive("disconnect")
@@ -274,7 +276,7 @@ class GameScreenTest {
         compose.runOnIdle { EngineClient.front.connect(GAME.host, GAME.port, false) }
         session.receive("connect")
         session.status("connection", "connected")
-        waitForPill(string(R.string.connection_connected))
+        waitForTitle(string(R.string.connection_connected))
         assertFalse("no question before the game offers", displayed(string(R.string.secure_offer_title)))
 
         session.secureOffer(true)
@@ -305,7 +307,7 @@ class GameScreenTest {
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
         compose.waitUntil(WAIT_MS) { !displayed(string(R.string.secure_offer_title)) }
         session.assertNoRequest("answerSecureOffer", 1_000)
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
 
         // Mudlet takes the offer back with its connection, and makes it again on the next
         session.secureOffer(false)
@@ -318,7 +320,7 @@ class GameScreenTest {
         compose.runOnIdle { EngineClient.front.connect(GAME.host, GAME.port, true) }
         session.receive("connect")
         session.status("connection", "disconnected")
-        waitForPill(R.string.connection_disconnected)
+        waitForTitle(R.string.connection_disconnected)
 
         // Before the profile has loaded its settings cannot change: said, and still asked
         session.certificateRefused(SELF_SIGNED)
@@ -384,7 +386,7 @@ class GameScreenTest {
             // The running profile gets a connect of its own, as an openProfile would leave it connected
             session.status("profile", "Game loaded")
             session.status("connection", "disconnected")
-            waitForPill(R.string.connection_disconnected)
+            waitForTitle(R.string.connection_disconnected)
             activate(hasContentDescription(compose.activity.getString(R.string.connection_connect_to, GAME.name)))
             val connect = session.receive("connect")
             assertEquals(GAME.host, connect.getString("host"))
@@ -398,9 +400,9 @@ class GameScreenTest {
             val next = fake.engine.nextSession()
             next.profiles(listOf(GAME), next.receive("listProfiles"))
             val none = compose.activity.getString(R.string.game_state, string(R.string.game_none), string(R.string.connection_disconnected))
-            compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_PILL_TAG) and hasContentDescription(none)).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG) and hasContentDescription(none)).fetchSemanticsNodes().isNotEmpty() }
 
-            // The chip names the profile it opens again
+            // The title bar's Connect names the profile it opens again
             activate(hasContentDescription(compose.activity.getString(R.string.connection_connect_to, GAME.name)))
             val open = next.receive("openProfile")
             assertEquals(GAME.name, open.getString("name"))
@@ -415,16 +417,17 @@ class GameScreenTest {
     }
 
     @Test
-    fun theConsoleThenTheInputLineThenTheButtonsTopToBottom() {
+    fun theGameTitleThenTheConsoleThenTheInputLineThenItsButtonsTopToBottom() {
         session.line(1, "a line")
         waitUntilDisplayed("a line")
         val consoleBounds = bounds(console)
         val inputBounds = bounds(input)
-        val buttons = listOf(R.string.input_history_previous, R.string.input_history_next, R.string.input_send)
+        val buttons = listOf(R.string.history_open, R.string.input_history_previous, R.string.input_history_next, R.string.input_send)
             .map { bounds(hasContentDescription(string(it))) }
-        val pill = bounds(hasTestTag(GAME_PILL_TAG))
+        val gameTitle = bounds(hasTestTag(GAME_TITLE_TAG))
 
         // TalkBack goes by position: top to bottom, then left to right within a row
+        assertTrue("game title $gameTitle above the console $consoleBounds", gameTitle.bottom <= consoleBounds.top)
         assertTrue("console $consoleBounds above the input line $inputBounds", consoleBounds.bottom <= inputBounds.top)
         var left = inputBounds.right
         for (button in buttons) {
@@ -434,7 +437,6 @@ class GameScreenTest {
             )
             left = button.right
         }
-        assertTrue("game pill $pill below the input line $inputBounds", pill.top >= inputBounds.bottom)
         compose.onRoot().tryPerformAccessibilityChecks()
     }
 
@@ -512,11 +514,11 @@ class GameScreenTest {
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
 
-    private fun waitForPill(@StringRes state: Int) = waitForPill(string(state))
+    private fun waitForTitle(@StringRes state: Int) = waitForTitle(string(state))
 
-    private fun waitForPill(state: String) {
-        val reading = compose.activity.getString(R.string.game_pill_description, GAME.name, state, 1, 1)
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_PILL_TAG) and hasContentDescription(reading)).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitForTitle(state: String) {
+        val reading = compose.activity.getString(R.string.game_title_description, GAME.name, state, 1, 1)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG) and hasContentDescription(reading)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     // As plain text: the field's EditableText can carry spans, so comparing AnnotatedStrings fails on equal text

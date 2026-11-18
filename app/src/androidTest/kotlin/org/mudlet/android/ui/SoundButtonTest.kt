@@ -37,6 +37,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
 
 /**
@@ -68,7 +69,7 @@ class SoundButtonTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
         // As the engine does as the profile loads: EngineClient outlives a test, so an earlier one's would be there
         session.status("profile", "${GAME.name} loaded")
         sounds(played = false)
@@ -136,7 +137,7 @@ class SoundButtonTest {
     @Test
     fun theGamesSoundPageHasDesktopsTwoMutes() {
         sounds(played = true, gameMuted = true)
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         val page = hasText(string(R.string.settings_sound)) and hasClickAction()
         compose.scrollSettingsHubTo(page)
         activate(page)

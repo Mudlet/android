@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -27,6 +28,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.GameTourShown
 import kotlin.math.abs
 
@@ -65,7 +67,7 @@ class GameTourPseudoLocaleTest(private val locale: String) {
             assertAtStart("step ${index + 1}'s title", hasText(string(title)))
             activate(hasText(string(if (index < TITLES.lastIndex) R.string.tour_next else R.string.tour_finish)))
         }
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
     }
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)

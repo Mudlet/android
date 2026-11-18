@@ -18,12 +18,14 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
@@ -55,6 +57,7 @@ import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.settings.encodingLabels
 
 /**
@@ -90,8 +93,8 @@ class ScreenReaderTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
     }
 
     // The settings are stored and the Announcer lives as long as the process, so both would outlast the test
@@ -207,7 +210,7 @@ class ScreenReaderTest {
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { !Settings.awaitsDefaults(GAME.name) } }
 
         // A page asks for the game's own values as it opens: a script, or desktop Mudlet, may have changed them
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_accessibility)))
         val asked = session.receive("getSettings")
         session.settings(mapOf("announceIncomingText" to false, "advertiseScreenReader" to true, "blankLinesBehaviour" to "hide"), asked.getLong("id"))
@@ -323,7 +326,7 @@ class ScreenReaderTest {
     @Test
     fun theInputAndConnectionPagesChangeTheGamesOwnSettings() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_connection)), scroll = true)
         session.receive("getSettings")
         // No hint says when its switch applies: a message does, when one is turned while the game is connected
@@ -350,7 +353,7 @@ class ScreenReaderTest {
         session.status("profile", "Test loaded")
         session.settings(APP_VALUES + ("serverEncoding" to "ISO 8859-1"), session.receive("getSettings").getLong("id"))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.setting(Settings.serverEncoding) == "ISO 8859-1" } }
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         // Found by the name of an encoding, which only its list has
         compose.onNode(hasSetTextAction()).performTextInput("cyrillic")
         activate(hasText(string(R.string.settings_server_encoding)), scroll = true)
@@ -384,7 +387,7 @@ class ScreenReaderTest {
     @Test
     fun theInputPageTakesTheCommandSeparatorAsTheFieldIsDoneWithAndTurnsItsSwitches() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_input)), scroll = true)
         val mudlets = mapOf("commandSeparator" to ";;", "highlightHistory" to true, "disablePasswordMasking" to false)
         session.settings(mudlets, session.receive("getSettings").getLong("id"))
@@ -416,7 +419,7 @@ class ScreenReaderTest {
     @Test
     fun aGamesNumberIsSentOnceASlideEndsAndAStepAtATime() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_display)))
         session.receive("getSettings")
         // As on desktop Mudlet, what becomes of blank lines is on the Accessibility page
@@ -436,7 +439,7 @@ class ScreenReaderTest {
     @Test
     fun theScrollbackLengthIsTheGamesBufferSizeAThousandLinesAStep() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_display)))
         session.receive("getSettings")
         val more = hasContentDescription(string(R.string.settings_console_buffer_more))
@@ -456,7 +459,7 @@ class ScreenReaderTest {
     @Test
     fun theAdvancedPageChangesTheGamesOwnSettings() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_advanced)), scroll = true)
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_lazy_trigger_variables)), scroll = true)
@@ -475,7 +478,7 @@ class ScreenReaderTest {
         session.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.status["connection"] == "connected" } }
         val notice = hasText(string(R.string.settings_next_connection))
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_connection)), scroll = true)
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_gmcp)), scroll = true)
@@ -519,7 +522,7 @@ class ScreenReaderTest {
     @Test
     fun aSettingReadAsTheGameConnectsSaysNothingWhileItIsNotConnected() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_connection)), scroll = true)
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_gmcp)), scroll = true)
@@ -530,7 +533,7 @@ class ScreenReaderTest {
     @Test
     fun theSecurityPageChangesTheGamesOwnSettings() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_security)), scroll = true)
         session.receive("getSettings")
         activate(hasText(string(R.string.settings_game_installs_packages)), scroll = true)
@@ -549,7 +552,7 @@ class ScreenReaderTest {
         // The dialog is a window of its own, which activate()'s single-root checks do not take
         compose.onNode(hasText(string(R.string.certificate_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isEmpty() }
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_security)), scroll = true)
         session.receive("getSettings")
 

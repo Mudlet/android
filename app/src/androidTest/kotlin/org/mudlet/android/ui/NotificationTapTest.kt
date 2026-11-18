@@ -5,7 +5,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -16,6 +17,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.engine.EngineNotifications
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * A tap on one of a game's notifications (EngineNotifications.EXTRA_PROFILE on the launcher intent) brings that game
@@ -44,9 +46,8 @@ class NotificationTapTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
         assertEquals(ALPHA, engine.receive("setFront").getString("name"))
-        val game = compose.activity.getString(R.string.game_title)
-        compose.waitUntil(10_000) { compose.onAllNodesWithText(game).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(game).assertIsDisplayed()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(GAME_TITLE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         compose.runOnIdle { assertEquals(ALPHA, EngineClient.front.name) }
     }
 

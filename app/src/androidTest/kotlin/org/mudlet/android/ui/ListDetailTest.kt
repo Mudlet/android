@@ -198,7 +198,7 @@ class ListDetailTest {
         session.settings(mapOf("enableGMCP" to true), session.receive("getSettings").getLong("id"))
         session.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.settingsAvailable && EngineClient.front.status["connection"] == "connected" } }
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         waitFor("the settings hub", hasTestTag(SETTINGS_HUB_TAG))
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_connection)))
         activate(hasText(string(R.string.settings_connection)))

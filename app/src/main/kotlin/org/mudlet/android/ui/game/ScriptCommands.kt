@@ -32,6 +32,13 @@ import org.mudlet.android.protocol.CommandEntry
 import org.mudlet.android.protocol.CommandMenu
 import org.mudlet.android.ui.EngineClient
 
+/** Whether [ScriptCommandsButton] shows: the profile's packages added commands the GUI shows. */
+@Composable
+internal fun scriptCommandsShown(): Boolean {
+    val commands = EngineClient.front.windows.commands
+    return remember(commands) { CommandMenu.of(commands).isNotEmpty() }
+}
+
 /**
  * The top bar's Extensions button, while the profile's packages added commands the GUI shows: a menu of them, nested by
  * their menu paths, as [CommandMenu] lists them. A tap sends `activateCommand`; a checkable command is ticked while

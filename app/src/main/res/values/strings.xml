@@ -183,7 +183,8 @@
     <!-- Why a picked .zip was not imported: it unpacks to more than the app takes in one import -->
     <string name="profile_import_too_large">The .zip is too large to import.</string>
 
-    <!-- The game screen's title: the screen with the game's text, the command line and the game pill -->
+    <!-- The game screen's name: the screen with the game's text and the command line, on the button that goes back to it
+         from a script's page -->
     <string name="game_title">Game</string>
 
     <!-- The About screen, opened from the profile list's top bar: the app's version, its engine, where their source
@@ -298,16 +299,17 @@
     <string name="tour_console">Text from the game appears here. Scroll up to read earlier text.</string>
     <!-- The title of the tour's step at the input line, where commands are typed -->
     <string name="tour_input_title">The input line</string>
-    <!-- The text of the tour's step at the input line. "History" is history_open, the button below the line: keep the two the same -->
-    <string name="tour_input">Type game commands here and send them. History, below it, brings back commands you typed before.</string>
+    <!-- The text of the tour's step at the input line. "History" is history_open, the button beside the input line's
+         arrows: keep the two the same -->
+    <string name="tour_input">Type game commands here and send them. History, beside it, brings back commands you typed before.</string>
     <!-- The title of the tour's step at the title bar's button that opens the scripts (triggers, aliases and the rest) -->
     <string name="tour_scripts_title">Automate your game</string>
     <!-- The text of the tour's step at the scripts button -->
     <string name="tour_scripts">Triggers, aliases, timers and scripts let Mudlet react to the game for you and shorten what you type. You will find them here - start simple, no programming needed.</string>
-    <!-- The title of the tour's step at the title bar's settings button -->
+    <!-- The title of the tour's step at the title bar's menu button, whose menu has Settings -->
     <string name="tour_settings_title">Make Mudlet yours</string>
-    <!-- The text of the tour's step at the settings button -->
-    <string name="tour_settings">Text size, colours, the map, accessibility options and much more can be changed in the settings, right here.</string>
+    <!-- The text of the tour's step at the title bar's menu button: Settings is an item of that menu -->
+    <string name="tour_settings">Text size, colours, the map, accessibility options and much more can be changed in Settings, in this menu.</string>
     <!-- The title of the tour's last step -->
     <string name="tour_done_title">That\'s it - have fun!</string>
     <!-- The text of the tour's last step. "About and licences", "Help" and "Take a UI tour" are about_title, help_heading and help_tour: keep them the same -->
@@ -999,13 +1001,13 @@
          sounds of the game and of its scripts, or unmutes both when both are muted. Use desktop Mudlet's translation
          where your language has one. -->
     <string name="sound_mute_all">Mute all media</string>
-    <!-- The row of buttons below the input line: the button that opens the command history, then a button for each
-         command the player pinned, which sends it; %1$s is the command -->
+    <!-- The button, read by a screen reader, beside the input line's up and down buttons that opens the command
+         history -->
     <string name="history_open">History</string>
     <!-- A button below the input line for a command the player pinned, read by a screen reader: it sends the command;
          %1$s is the command -->
     <string name="pinned_command">Pinned: %1$s</string>
-    <!-- The command history: a sheet over the game screen, opened by the History button or Ctrl+R, that searches
+    <!-- The command history: a sheet over the game screen, opened by the input line's History button or Ctrl+R, that searches
          the commands the player sent; each row puts its command on the input line, and has buttons that send, pin
          or unpin, and forget it; %1$s is the command -->
     <string name="history_title">Command history</string>
@@ -1459,8 +1461,8 @@
     <!-- The button that closes the message saying how loading or saving a map file ended, read by a screen reader -->
     <string name="map_file_dismiss">Dismiss the map file message</string>
 
-    <!-- The state of the connection to the game, on the game pill (read by TalkBack) and in the game sheet: while the app
-         is not attached to Mudlet's engine -->
+    <!-- The state of the connection to the game, under its name in the game screen's title and in the game sheet:
+         while the app is not attached to Mudlet's engine -->
     <string name="connection_no_engine">Waiting for the engine…</string>
     <!-- The connection's state while the app is not connected to the game, by the player's Disconnect or as it has not
          connected yet -->
@@ -1474,32 +1476,47 @@
     <!-- The connection's state after the connection dropped, while Mudlet dials the game again on its own (the
          profile's "Reconnect automatically") -->
     <string name="connection_reconnecting">Connection lost, reconnecting automatically</string>
+    <!-- connection_reconnecting in a few words, under the game's name in the game screen's title, which has little room.
+         Keep it short. -->
+    <string name="connection_reconnecting_short">Reconnecting…</string>
     <!-- The connection's state after the connection dropped without the player's Disconnect, and nothing dials again -->
     <string name="connection_lost">Connection lost</string>
     <!-- The connection's state when connecting failed; %1$s is the engine's reason, in English -->
     <string name="connection_error">Connection error: %1$s</string>
-    <!-- The chip beside the game pill while the game has not connected yet, or the player disconnected: connects to
-         it. Keep it short. -->
-    <string name="connection_connect">Connect</string>
-    <!-- What TalkBack reads for the Connect chip; %1$s is the game's (profile's) name -->
+    <!-- connection_error without the reason, under the game's name in the game screen's title, which has little room;
+         the banner under the title bar gives the reason. Keep it short. -->
+    <string name="connection_error_short">Connection error</string>
+    <!-- The banner under the game screen's title bar after the connection dropped, while Mudlet dials the game again on
+         its own (the profile's "Reconnect automatically"); %1$s is the game's (profile's) name -->
+    <string name="connection_banner_reconnecting">Connection to %1$s lost. Mudlet is reconnecting.</string>
+    <!-- The banner under the game screen's title bar after the connection dropped without the player's Disconnect, and
+         nothing dials again; %1$s is the game's (profile's) name -->
+    <string name="connection_banner_lost">Connection to %1$s lost.</string>
+    <!-- The banner under the game screen's title bar when connecting failed; %1$s is the game's (profile's) name, %2$s
+         the engine's reason, in English -->
+    <string name="connection_banner_failed">Could not connect to %1$s: %2$s</string>
+    <!-- What TalkBack reads for the game screen's title bar button that connects the game while it has not connected
+         yet, or the player disconnected; %1$s is the game's (profile's) name -->
     <string name="connection_connect_to">Connect to %1$s</string>
-    <!-- The chip beside the game pill after the connection dropped, and the game sheet's button: connects to the same
+    <!-- The connection banner's button after the connection dropped, and the game sheet's button: connects to the same
          game again. Keep it short. -->
     <string name="connection_reconnect">Reconnect</string>
-    <!-- What TalkBack reads for Reconnect, and the game pill's TalkBack action; %1$s is the game's (profile's) name -->
+    <!-- What TalkBack reads for Reconnect, the game title's TalkBack action, and the game screen's menu item; %1$s is the
+         game's (profile's) name -->
     <string name="connection_reconnect_to">Reconnect to %1$s</string>
-    <!-- The chip beside the game pill while Mudlet dials a dropped game again on its own: dials at once instead of
+    <!-- The connection banner's button while Mudlet dials a dropped game again on its own: dials at once instead of
          waiting. Keep it short. -->
     <string name="connection_reconnect_now">Reconnect now</string>
-    <!-- What TalkBack reads for the Reconnect now chip; %1$s is the game's (profile's) name -->
+    <!-- What TalkBack reads for the Reconnect now button; %1$s is the game's (profile's) name -->
     <string name="connection_reconnect_now_to">Reconnect to %1$s now</string>
-    <!-- The chip beside the game pill after connecting failed: tries to connect again. Keep it short. -->
+    <!-- The connection banner's button after connecting failed: tries to connect again. Keep it short. -->
     <string name="connection_try_again">Try again</string>
-    <!-- What TalkBack reads for the Try again chip; %1$s is the game's (profile's) name -->
+    <!-- What TalkBack reads for the Try again button; %1$s is the game's (profile's) name -->
     <string name="connection_try_again_to">Try connecting to %1$s again</string>
-    <!-- The chip beside the game pill while the app connects to the game: stops connecting. Keep it short. -->
+    <!-- The connection banner's button while Mudlet dials a dropped game again on its own: stops it. Keep it short. -->
     <string name="connection_stop">Stop</string>
-    <!-- What TalkBack reads for the Stop chip; %1$s is the game's (profile's) name -->
+    <!-- What TalkBack reads for the Stop button, and the game screen's menu item while the app connects to the game;
+         %1$s is the game's (profile's) name -->
     <string name="connection_stop_to">Stop connecting to %1$s</string>
     <!-- Shown when Reconnect could not open the profile last played again; %1$s is the reason, from the engine in English -->
     <string name="connection_reconnect_refused">Not reconnected: %1$s</string>
@@ -1507,29 +1524,30 @@
     <string name="connection_disconnect_refused">Not disconnected: %1$s</string>
     <!-- The game sheet's button that closes the connection to the game in front -->
     <string name="connection_disconnect">Disconnect</string>
-    <!-- What TalkBack reads for Disconnect, and the game pill's TalkBack action; %1$s is the game's (profile's) name -->
+    <!-- What TalkBack reads for Disconnect, the game title's TalkBack action, and the game screen's menu item; %1$s is
+         the game's (profile's) name -->
     <string name="connection_disconnect_from">Disconnect from %1$s</string>
     <!-- What TalkBack says when the front game's connection changes; %1$s is the game's (profile's) name, %2$s its new
          state, such as "Connection lost" -->
     <string name="connection_announce">%1$s: %2$s</string>
 
-    <!-- The game pill, at the left of the row below the input line, while no game is open -->
+    <!-- The game screen's title while no game is open -->
     <string name="game_none">No game open</string>
-    <!-- What TalkBack reads for the game pill; %1$s is the game's (profile's) name, %2$s its connection state, such as
-         "Connected", %3$d which of the open games it is, %4$d how many are open -->
-    <string name="game_pill_description">%1$s, %2$s, game %3$d of %4$d</string>
+    <!-- What TalkBack reads for the game screen's title; %1$s is the game's (profile's) name, %2$s its connection state,
+         such as "Connected", %3$d which of the open games it is, %4$d how many are open -->
+    <string name="game_title_description">%1$s, %2$s, game %3$d of %4$d</string>
     <!-- What TalkBack reads for an open game, and says when one comes to the front; %1$s is the game's (profile's) name,
          %2$s its connection state, such as "Connected" -->
     <string name="game_state">%1$s, %2$s</string>
     <!-- Joins what TalkBack reads for an open game, %1$s, and more about it, %2$s, such as "12 new lines" -->
     <string name="game_description_more">%1$s, %2$s</string>
-    <!-- Read by TalkBack after the game pill's description: how many lines the other open games have that the player has
+    <!-- Read by TalkBack after the game title's description: how many lines the other open games have that the player has
          not seen; %1$d is that number -->
     <plurals name="game_others_unread">
         <item quantity="one">%1$d new line in other games</item>
         <item quantity="other">%1$d new lines in other games</item>
     </plurals>
-    <!-- Read by TalkBack after the game pill's description: another open game asked for the player's attention, as a
+    <!-- Read by TalkBack after the game title's description: another open game asked for the player's attention, as a
          script's alert() or the game's bell does -->
     <string name="game_others_attention">another game wants attention</string>
     <!-- Read by TalkBack for an open game in the game sheet and the profile list: how many of its lines the player has
@@ -1549,11 +1567,11 @@
     <!-- What TalkBack says when a script of a game in the background asks it to say something; %1$s is the game's
          (profile's) name, %2$s what the script asked to be said -->
     <string name="game_announce">%1$s: %2$s</string>
-    <!-- What TalkBack says the game pill's tap does: it opens the game sheet -->
-    <string name="game_pill_show">Show open games</string>
-    <!-- The game pill's TalkBack action that brings the next open game to the front; %1$s is that game's (profile's) name -->
+    <!-- What TalkBack says the game title's tap does: it opens the game sheet -->
+    <string name="game_title_show">Show open games</string>
+    <!-- The game title's TalkBack action that brings the next open game to the front; %1$s is that game's (profile's) name -->
     <string name="game_next">Next game: %1$s</string>
-    <!-- The game pill's TalkBack action that brings the previous open game to the front; %1$s is that game's (profile's)
+    <!-- The game title's TalkBack action that brings the previous open game to the front; %1$s is that game's (profile's)
          name -->
     <string name="game_previous">Previous game: %1$s</string>
     <!-- The game sheet's title, and the heading above the open games in the profile list -->

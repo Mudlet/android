@@ -39,8 +39,8 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
-import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -112,7 +112,7 @@ class ScreenshotTest {
         session.status("profile", "${PROFILES[0].name} loaded")
         val asked = session.receive("getSettings")
         session.settings(mapOf("announceIncomingText" to true, "advertiseScreenReader" to false, "blankLinesBehaviour" to "show"), asked.getLong("id"))
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         waitFor(hasText(string(R.string.settings_accessibility)))
         save("settings-$mode")
         compose.onNode(hasSetTextAction()).performTextInput("screen")
@@ -228,7 +228,7 @@ class ScreenshotTest {
         second.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { EngineClient.sessions.size == 2 && EngineClient.sessions.all { it.status["connection"] == "connected" } }
         compose.runOnIdle { EngineClient.setFront(PROFILES[0].name) }
-        activate(hasTestTag(GAME_PILL_TAG))
+        activate(hasTestTag(GAME_TITLE_TAG))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_SHEET_TAG)).fetchSemanticsNodes().isNotEmpty() }
         save("games-$mode")
         activate(hasContentDescription(string(R.string.games_close)))
@@ -236,7 +236,7 @@ class ScreenshotTest {
 
         if (mode == "light") {
             onATablet {
-                activate(hasContentDescription(string(R.string.settings_title)))
+                compose.pickFromGameMenu(string(R.string.settings_title))
                 compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
                 activate(hasText(string(R.string.settings_appearance)))
                 waitFor(hasText(string(R.string.settings_text_size)))

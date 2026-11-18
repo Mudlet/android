@@ -33,6 +33,7 @@ import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.errors.ERROR_CONSOLE_TAG
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /** The engine's `errorConsole`, all it holds when [full], else what it added. */
 internal fun FakeEngine.Session.errorConsole(full: Boolean, vararg entries: JSONObject) = send(JSONObject().put("t", "errorConsole").put("full", full).put("entries", JSONArray(entries.toList())))
@@ -84,7 +85,7 @@ class ErrorConsoleTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         session.errorConsole(true, greet, debug, handler)
     }
 

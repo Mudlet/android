@@ -101,7 +101,8 @@ private class Placed {
 /**
  * The line the player types commands in. The keyboard's Send key or the Send button hands the line to [onSend] and
  * leaves the keyboard open; an `on...` that returns false could not send its request, and the line then stays.
- * The up and down buttons, and a hardware keyboard's arrow keys, step through [history] (newest first). The completion
+ * The up and down buttons, and a hardware keyboard's arrow keys, step through [history] (newest first); the History
+ * button beside them calls [onHistory], and is not there while it is null or while input is hidden. The completion
  * button, or a hardware Tab, hands the line to [onComplete], whose answer replaces it. A [commandLine] from a script
  * replaces the line, which then calls [onCommandLineShown]; a [picked] command (from the command history) replaces it
  * too and takes the focus, and then calls [onPickedShown]. [takeFocus] gives the line the focus, as after a `prompt:`
@@ -148,6 +149,7 @@ fun InputLine(
     focusOnStart: Boolean = false,
     clearAfterSend: Boolean = true,
     highlightHistory: Boolean = true,
+    onHistory: (() -> Unit)? = null,
 ) {
     // State-based fields: what the keyboard edits is this state itself, so a clear holds against an edit the
     // keyboard sends before the next frame, which a value and onValueChange field would apply to the old text
@@ -385,6 +387,9 @@ fun InputLine(
                 onKeyboardAction = { submit() },
                 lineLimits = TextFieldLineLimits.SingleLine,
             )
+            if (onHistory != null) {
+                IconButton(onHistory) { Icon(painterResource(R.drawable.ic_history), stringResource(R.string.history_open)) }
+            }
             IconButton(::back, enabled = at.canGoBack(history)) {
                 Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
             }

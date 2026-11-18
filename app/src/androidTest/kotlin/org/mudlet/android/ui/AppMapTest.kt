@@ -219,7 +219,7 @@ class AppMapTest {
     @Test
     fun theSettingsSwitchTurnsTheMapBehindTheTextOff() {
         assertTrue(lastRequest("setAppMapSize", readPast = true).getInt("w") > 0)
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_appearance)))
         val row = hasText(string(R.string.settings_map_behind_text)) and hasClickAction()
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
@@ -440,7 +440,7 @@ class AppMapTest {
     @Test
     fun theMapInFrontLeavesTheInputLineToTypeInWithoutOpeningTheKeyboardAndItsFocusIsKept() {
         val input = hasSetTextAction() and hasText(string(R.string.input_label))
-        val history = hasText(string(R.string.history_open)) and hasClickAction()
+        val history = hasContentDescription(string(R.string.history_open)) and hasClickAction()
 
         // Without the focus: the swap opens no keyboard, and the line and History stay, read and reached, under the map
         activate(button)

@@ -33,6 +33,7 @@ import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.errors.ERROR_CONSOLE_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -77,7 +78,7 @@ class ErrorConsolePseudoLocaleTest(private val locale: String) {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
 
         session.errorConsole(true, errorEntry(1, "attempt to index a nil value", "trigger", 1, "Greet", "Trigger1", line = 2))
         activate(hasContentDescription(plural(R.plurals.errors_unseen, 1, string(R.string.scripts_open, game.name), 1)))

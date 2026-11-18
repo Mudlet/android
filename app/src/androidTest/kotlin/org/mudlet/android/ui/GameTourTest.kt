@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -30,6 +31,7 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.GameTourShown
 
 /**
@@ -79,13 +81,13 @@ class GameTourTest {
         activate(hasText(string(R.string.tour_next)))
         atStep(1)
         activate(hasText(string(R.string.tour_skip)))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         assertTrue(none(hasText(string(R.string.tour_skip))))
 
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))
         showGame()
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         compose.waitForIdle()
         assertTrue("the tour shows a second time", none(hasText(string(R.string.tour_welcome_title))))
     }
@@ -114,7 +116,7 @@ class GameTourTest {
                 activate(hasText(string(R.string.tour_finish)))
             }
         }
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         assertTrue(none(hasText(string(R.string.tour_finish))))
         assertFalse(GameTourShown.due(compose.activity))
     }
@@ -130,7 +132,7 @@ class GameTourTest {
             // Under the explanation's dialog, so without the checks on one root, which the dialog makes two
             val show = SemanticsMatcher("shows a game") { it.config.getOrNull(SemanticsActions.OnClick)?.label == string(R.string.game_show) }
             compose.onNode(show).performSemanticsAction(SemanticsActions.OnClick)
-            waitFor(hasText(string(R.string.game_title)))
+            waitFor(hasTestTag(GAME_TITLE_TAG))
             Thread.sleep(QUIET_MS)
             compose.waitForIdle()
             assertTrue("the tour shows under the explanation", none(hasText(string(R.string.tour_welcome_title))))
@@ -156,7 +158,7 @@ class GameTourTest {
         compose.onNode(hasText(string(R.string.tour_progress, index + 1, steps.size))).assertIsDisplayed()
         val said = string(R.string.tour_announcement, string(title), string(body))
         compose.waitUntil(WAIT_MS) { Announcer.current?.text?.endsWith(said) == true }
-        assertTrue("TalkBack reaches the game screen under the tour", none(hasText(string(R.string.game_title))))
+        assertTrue("TalkBack reaches the game screen under the tour", none(hasTestTag(GAME_TITLE_TAG)))
         assertTrue(none(hasContentDescription(string(R.string.scripts_open, GAME.name))))
     }
 

@@ -59,7 +59,7 @@ const val SETTINGS_HUB_TAG = "settingsHub"
  * ([forGame], what games added in the app start with) or of the app's own.
  */
 private data class HubSection(val game: String?, val forGame: Boolean) {
-    val categories get() = SettingsCategory.entries.filter(::holds)
+    val categories get() = SettingsCategory.entries.filter { holds(it) && it != SettingsCategory.MAP }
 
     fun holds(category: SettingsCategory) = category.forGame == forGame && (game != null || !category.sharedByGames)
 

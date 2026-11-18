@@ -3993,8 +3993,9 @@ def profile_settings():
     name, whatever a script has put in getConfig's place; setSettings changing them as setConfig() does and answering
     with what the profile now holds and what it refused, with why; autoClearInputLine, which Mudlet starts off, deciding
     whether a send empties the input line; the game's text encoding, and a name Mudlet does not have refused; the
-    input line's command separator, history highlight and password masking; the changes in the profile's save; and
-    both refused while no profile is open."""
+    input line's command separator, history highlight and password masking; the console's colours, a colour not as
+    #rrggbb refused and a new background reaching consoleColors; the game's colour redefinition, OSC 8 links and the
+    new text alert; the changes in the profile's save; and both refused while no profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -4063,6 +4064,25 @@ def profile_settings():
     wanted = {"commandSeparator": "|", "highlightHistory": False, "disablePasswordMasking": True}
     m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
+
+    keys = ["ansiRed", "backgroundColor", "serverMayRedefineColors", "enableOSC8Hyperlinks", "alertOnNewData"]
+    m = c.ask({"t": "getSettings", "keys": keys}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"ansiRed": "#800000", "backgroundColor": "#000000", "serverMayRedefineColors": False,
+                              "enableOSC8Hyperlinks": True, "alertOnNewData": True},
+          f"the colours and display settings start as Mudlet starts them: {m}")
+    m = c.ask({"t": "setSettings", "values": {"ansiRed": "red"}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"ansiRed": "#800000"} and "#rrggbb" in m.get("refused", {}).get("ansiRed", ""),
+          f"a colour not as #rrggbb is refused, with why, and changes nothing: {m}")
+    wanted = {"ansiRed": "#123456", "backgroundColor": "#0a141e", "serverMayRedefineColors": True,
+              "enableOSC8Hyperlinks": False, "alertOnNewData": False}
+    since = len(seen)
+    m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
+    # Queued after the change, so it may come before the answer or after it
+    colors = [x["value"] for x in seen[since:] if x["t"] == "status" and x["key"] == "consoleColors"]
+    if not colors:
+        colors = [wait_status(c, "consoleColors", lambda v: True, seen, timeout=10)["value"]]
+    check(colors[-1].endswith(" #0a141e"), f"a new background reaches consoleColors: {colors}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
@@ -4070,7 +4090,9 @@ def profile_settings():
         saved = f.read()
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
           and 'autoClearCommandLineAfterSend="yes"' in saved and 'HighlightHistory="no"' in saved
-          and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved,
+          and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved
+          and "<mRed>#123456</mRed>" in saved and ">#0a141e</mBgColor>" in saved and 'mServerMayRedefineColors="yes"' in saved
+          and 'enableOSC8Hyperlinks="no"' in saved and 'mAlertOnNewData="no"' in saved,
           f"the changes are in the profile's save: {save}")
     encoding_file = os.path.join(CONFIG, "profiles", profile, "encoding")
     # Mudlet writes it with QDataStream: a QString is its length in bytes, then UTF-16BE

@@ -264,6 +264,7 @@ private fun ProfileGameScreen(
                             consoleModifier,
                             links = c.links,
                             onMakeTrigger = onMakeTrigger,
+                            blinkText = c.setting(Settings.blinkText),
                         ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {

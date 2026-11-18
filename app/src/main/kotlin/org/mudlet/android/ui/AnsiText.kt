@@ -7,14 +7,18 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import org.mudlet.android.protocol.RUN_BLINK
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_CONCEALED
+import org.mudlet.android.protocol.RUN_FAST_BLINK
 import org.mudlet.android.protocol.RUN_ITALIC
 import org.mudlet.android.protocol.RUN_REVERSE
 import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_STRIDE
 import org.mudlet.android.protocol.RUN_STRIKE
 import org.mudlet.android.protocol.RUN_UNDERLINE
+import kotlin.math.PI
+import kotlin.math.cos
 
 /** The colours game text is drawn in until the engine says otherwise: on [CONSOLE_BACKGROUND], in [CONSOLE_FOREGROUND]. */
 val CONSOLE_BACKGROUND = Color.Black
@@ -46,11 +50,32 @@ private fun runColour(code: Int): Color? = when {
     else -> null
 }
 
+/** Whether any of [line]'s runs blinks, slowly or fast. */
+fun blinks(line: UiLine): Boolean {
+    var i = 0
+    while (i + RUN_STRIDE - 1 < line.runs.size) {
+        if (line.runs[i + 4] and (RUN_BLINK or RUN_FAST_BLINK) != 0) return true
+        i += RUN_STRIDE
+    }
+    return false
+}
+
+/**
+ * How opaque blinking text is [ms] into its pulse, as desktop Mudlet's `computeBlinkPulseOpacity()`: from 1 down to
+ * 0.4 and back, over two seconds, or one for [fast].
+ */
+fun blinkOpacity(ms: Long, fast: Boolean): Float {
+    val period = if (fast) 1000L else 2000L
+    val phase = (ms % period).toFloat() / period
+    return 0.7f + 0.3f * cos(2f * PI.toFloat() * phase)
+}
+
 /**
  * A line with its runs' colours and styles (docs/protocol.md, "Runs"), on [colors] where they set none; the app's own
- * marker lines in amber.
+ * marker lines in amber. Blinking runs pulse, [blinkMs] into their pulse; with no [blinkMs] they are italic, as desktop
+ * Mudlet draws them with blinking text off.
  */
-fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors()): AnnotatedString = buildAnnotatedString {
+fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors(), blinkMs: Long? = null): AnnotatedString = buildAnnotatedString {
     if (line.marker) {
         pushStyle(SpanStyle(color = markerColour))
         append(line.text)
@@ -73,6 +98,10 @@ fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors()): AnnotatedSt
             fg = swapped
         }
         if (attributes and RUN_CONCEALED != 0) fg = bg ?: Color.Transparent
+        val blink = attributes and (RUN_BLINK or RUN_FAST_BLINK) != 0
+        if (blink && blinkMs != null) {
+            fg = fg.copy(alpha = fg.alpha * blinkOpacity(blinkMs, fast = attributes and RUN_FAST_BLINK != 0))
+        }
         val decorations = listOfNotNull(
             TextDecoration.Underline.takeIf { attributes and RUN_UNDERLINE != 0 },
             TextDecoration.LineThrough.takeIf { attributes and RUN_STRIKE != 0 },
@@ -82,7 +111,7 @@ fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors()): AnnotatedSt
                 color = fg,
                 background = bg ?: Color.Unspecified,
                 fontWeight = if (attributes and RUN_BOLD != 0) FontWeight.Bold else null,
-                fontStyle = if (attributes and RUN_ITALIC != 0) FontStyle.Italic else null,
+                fontStyle = if (attributes and RUN_ITALIC != 0 || (blink && blinkMs == null)) FontStyle.Italic else null,
                 textDecoration = if (decorations.isEmpty()) null else TextDecoration.combine(decorations),
             ),
             start,

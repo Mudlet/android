@@ -347,6 +347,23 @@ class ScreenReaderTest {
     }
 
     @Test
+    fun theDisplayAndAccessibilityPagesTurnTheGamesLinksAndBlinkingText() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_display)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_game_links)), scroll = true)
+        assertEquals(mapOf("enableOSC8Hyperlinks" to false), values(session.receive("setSettings")))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasText(string(R.string.settings_accessibility)), scroll = true)
+        session.receive("getSettings")
+        activate(hasText(string(R.string.settings_blink_text)), scroll = true)
+        assertEquals(mapOf("enableBlinkText" to true), values(session.receive("setSettings")))
+        compose.runOnIdle { assertEquals("new games keep Mudlet's", false, Settings.blinkText.value) }
+    }
+
+    @Test
     fun theInputPageTakesTheCommandSeparatorAsTheFieldIsDoneWithAndTurnsItsSwitches() {
         loaded()
         activate(hasContentDescription(string(R.string.settings_title)))
@@ -376,6 +393,47 @@ class ScreenReaderTest {
         assertEquals(mapOf("commandSeparator" to "&&"), values(session.receive("setSettings")))
 
         compose.runOnIdle { assertEquals("new games keep Mudlet's", ";;", Settings.commandSeparator.value) }
+    }
+
+    @Test
+    fun theColoursPageChangesAColourBySliderOrHexAndPutsThemAllBackToMudlets() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_colours)), scroll = true)
+        session.settings(mapOf("ansiRed" to "#aa0000", "serverMayRedefineColors" to false), session.receive("getSettings").getLong("id"))
+        activate(hasText(string(R.string.settings_game_changes_colours)), scroll = true)
+        assertEquals(mapOf("serverMayRedefineColors" to true), values(session.receive("setSettings")))
+        val red = hasText(string(R.string.settings_colour_red)) and hasClickAction()
+        compose.onNode(red).performScrollTo().assert(hasText("#aa0000"))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        activate(red)
+
+        compose.onNode(isRoot() and hasAnyDescendant(hasText(string(R.string.settings_colour_ok)))).tryPerformAccessibilityChecks()
+        val redAmount = hasContentDescription(string(R.string.settings_colour_red_amount)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        compose.onNode(redAmount).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "170"))
+        val hex = hasSetTextAction() and hasAnyAncestor(isDialog())
+        compose.onNode(hex).performTextClearance()
+        compose.onNode(hex).performTextInput("#12AB34")
+        compose.onNode(redAmount).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "18"))
+        session.assertNoRequest("setSettings", 500)
+        compose.onNode(hasText(string(R.string.settings_colour_ok)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(mapOf("ansiRed" to "#12ab34"), values(session.receive("setSettings")))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        compose.onNode(red).assert(hasText("#12ab34"))
+
+        // A slide changes the colour; Cancel leaves the game's as it was
+        activate(red)
+        compose.onNode(redAmount).performSemanticsAction(SemanticsActions.SetProgress) { it(255f) }
+        compose.onNode(hex).assert(hasText("#ffab34"))
+        compose.onNode(hasText(string(R.string.settings_choice_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+        session.assertNoRequest("setSettings", 500)
+
+        activate(hasText(string(R.string.settings_colours_reset)), scroll = true)
+        val mudlets = Settings.colours.associate { it.key to Settings.colourName(it.mudletDefault) }
+        assertEquals("all twenty in one request", mudlets, values(session.receive("setSettings")))
+        compose.onNode(red).assert(hasText("#800000"))
+        compose.runOnIdle { assertEquals("new games keep Mudlet's", 0x800000, Settings.ansiColours[1].value) }
     }
 
     @Test

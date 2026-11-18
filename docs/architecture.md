@@ -196,18 +196,19 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   app's values the player changed ("New games"): Mudlet picks some for the game it knows, such as fixing the line
   breaks of IRE's, which unchanged values would undo. After that it keeps its own, as a game copied in or there
   before does from the start.
-- The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
-  what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the
-  commands the console shows, Unix line endings, the command separator, highlighting a command brought back from the
-  history, and showing passwords as they are typed, each as on desktop Mudlet's Input line tab), Connection (the
-  server data encoding, picked from a list of Mudlet's names for its encodings, `ServerEncodings`, with desktop
-  Mudlet's labels; offering a secure connection, and the protocols Mudlet negotiates with the game: GMCP, MSDP, MSSP,
-  MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Sound (the mutes), Security (the certificate errors a secure
-  connection lets past, and whether the game may install its packages or play its media) and Advanced (desktop
-  Mudlet's "Special options", and a script's errors shown in the game's text, as the app has no error console). A
-  number's slider changes it as the finger lifts, so a game's is sent once a slide. Mudlet's settings for how its own
-  console draws text (control characters, East Asian characters of either width) are not among them, as the app draws
-  the text itself.
+- The game categories are Display (undoing the game's own wrapping and the width it wraps at, and the links a game sends
+  by OSC 8), Accessibility (with what becomes of blank lines, captions for sounds and blinking text, as on desktop
+  Mudlet's Accessibility page), Input (the commands the console shows, Unix line endings, the command separator,
+  highlighting a command brought back from the history, and showing passwords as they are typed, each as on desktop
+  Mudlet's Input line tab), Colours (desktop Mudlet's Color view: letting the game change the colours, the text and
+  command colours and the sixteen ANSI ones), Connection (the server data encoding, picked from a list of Mudlet's names
+  for its encodings, `ServerEncodings`, with desktop Mudlet's labels; offering a secure connection, and the protocols
+  Mudlet negotiates with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Sound (the
+  mutes), Security (the certificate errors a secure connection lets past, and whether the game may install its packages
+  or play its media) and Advanced (desktop Mudlet's "Special options", and a script's errors shown in the game's text,
+  as the app has no error console). A number's slider changes it as the finger lifts, so a game's is sent once a slide.
+  Mudlet's settings for how its own console draws text (control characters, East Asian characters of either width) are
+  not among them, as the app draws the text itself.
 - The Sound page holds desktop Mudlet's two mutes, "Mute sounds from Mudlet (triggers, scripts, etc.)" and "Mute
   sounds from the game (MCMP, MSP)" (`muteMediaAPI`, `muteMediaGame`). Unlike the others, Mudlet keeps them for every
   profile in `Mudlet.ini`, as the desktop does, so turning one on a game's page turns it for every game open, the
@@ -239,6 +240,18 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   field sent as it is left or its Done key pressed, not on each key, as the engine's answer to one change could land
   between two keys; Mudlet splits a sent line at it. "Show passwords as you type them" (`disablePasswordMasking`) is
   Mudlet's: with it on, the engine sends no `hiddenInput` for a game's WILL ECHO.
+- The Colours page holds the profile's palette, which is Mudlet's: the engine paints each run in the exact colour it
+  resolved as it decoded the text, so a colour changed (`ColourSetting`, sent as `#rrggbb` by the keys of Mudlet's
+  `color_table`, such as `ansiRed`) reaches text the game sends after it, and the background reaches the console
+  through `consoleColors`. A colour's dialog has a slider each for red, green and blue and the colour as hex to type,
+  and changes the game's as OK is pressed. "Reset to Mudlet's colours" sends all twenty of Mudlet's in one request
+  (`SettingsOwner.resetToMudlets`), as desktop Mudlet's reset button puts them back. Desktop Mudlet's input line
+  colours are not among them, as the app's input line follows the app's theme.
+- "Blinking text" (`enableBlinkText`, off as on desktop) pulses a blinking run's opacity from 1 to 0.4 and back over
+  two seconds, or one for a fast blink, by desktop Mudlet's `computeBlinkPulseOpacity()`; off, the run is steady and
+  italic, as desktop Mudlet draws it. Only a console line in view that blinks reads the frame clock (`blinkClock()`),
+  so a console with none redraws nothing. "Links from the game" (`enableOSC8Hyperlinks`) is Mudlet's own: off, the
+  engine leaves OSC 8 links as plain text and stops telling the game it shows them.
 
 ### The Sound button
 Desktop Mudlet's toolbar Sound button, "Mute all media", is on the game screen's bottom row, after the game pill and
@@ -1702,6 +1715,10 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       Empty it and the same line goes as one.
     - Turn "Show passwords as you type them" on, then log in to a game that asks for a password: there is no masked
       field, and the password shows on the input line as typed.
+    - On the game's Colours page change Red to `#ff8000` by its hex field and press OK, then send
+      `lua feedTriggers("\27[31morange\n")`: the new line is orange, and red lines from before keep their red.
+      Change Background: the console's background follows at once. With TalkBack on, each slider reads its colour's
+      name and amount. "Reset to Mudlet's colours" puts Red back to `#800000`.
     - Disconnect, then send a command: "Not sent: ..." shows over the foot of the console, above the keyboard, and
       TalkBack reads it without moving focus.
 17. About and licences, with TalkBack on.

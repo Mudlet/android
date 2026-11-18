@@ -490,6 +490,15 @@ opened in another app's task is passed on to the app's own with the grant to rea
 contents are logged: a refusal logs only its kind. `OpenZipTest` sends both as a file manager does and
 `OpenZipPseudoLocaleTest` checks the dialogs in en-XA and ar-XB.
 
+A profile's proxy (desktop Mudlet's "Connect to the game via proxy", a SOCKS5 proxy) is Mudlet's setting, kept in the
+profile's file, so the editor reads and changes it only while the game is open and loaded (`getProxy`, `setProxy`,
+`ProfileSession.requestProxy`), and says so while it is not. Its password is the player's like the game's: stored in
+`PasswordStore` beside it, under `proxy:` before the profile's name (no new name holds a colon), and given only in an
+`openProfile`, as `proxyPassword`. The engine takes a profile's two passwords together and withdraws one not sent, so
+every `openProfile` the UI sends carries both, and a game the engine restored without them is given either one stored.
+A copy of the profile (Copy above) gets its proxy but never the proxy's password, as on desktop; a proxy password
+that a profile of the copy's name left behind is forgotten.
+
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
 `connect` stores a password and opens a profile as the profile list does.
@@ -1429,7 +1438,12 @@ device shows, below the UI's debug hook:
   no game that is not open, and a game the engine says holds no password given its stored one, once; the password
   field, which TalkBack does not read aloud; `PasswordStore`
   (`PasswordStoreTest`), whose passwords outlast a new store, go with Forget, are never in the clear, and are excluded
-  from backups; the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
+  from backups;
+  a proxy's password kept apart from the game's; an open game's proxy read into the editor, changed only when the
+  player changed it, refused with Mudlet's reason, and said to be set while open for a closed game, and the proxy's
+  password stored, sent as `proxyPassword` with every `openProfile`, forgotten, and given alone to a game brought back
+  without it; the proxy section in en-XA and ar-XB (`ProxyPseudoLocaleTest`) and as TalkBack reads it, a heading over
+  a switch and labelled fields (`ScreenReaderTest`); the self-test's colours and styles of each run, in the semantics tree and in the pixels drawn; the
   reattach to a new engine after one is lost, and to the same one; what TalkBack is given (new lines read as one
   announcement, `announce`, each console line as its plain text) and the settings: a game added in the app given
   the app's values the player changed and the input line's clearing (`setSettings`), a game from before the app could keep a sent command told once to go on clearing its line, and any other keeping its own (`getSettings`), read again as a page opens and changed there

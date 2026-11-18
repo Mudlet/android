@@ -16,9 +16,11 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -31,6 +33,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
@@ -101,6 +104,7 @@ class ProfilesTest {
     fun forgetPasswords() {
         (listOf(ALPHA, BETA, GAMMA).map { it.name } + listOf(ACHAEA, STICKMUD)).forEach {
             passwords.forget(it)
+            passwords.forget(it, PasswordStore.Kind.PROXY)
             Settings.setAwaitsDefaults(it, false)
             Settings.setAwaitsInputClear(it, false)
         }
@@ -109,6 +113,9 @@ class ProfilesTest {
     @Test
     fun listsTheProfilesInTheEnginesOrderEachReadAsNameAndAddress() {
         listed(BETA, ALPHA)
+        // EngineClient keeps the profiles an earlier test listed, and the list keeps the first row it showed in place
+        // when one comes above it
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
         val beta = compose.onNodeWithContentDescription("Beta, b.example:4000").assertIsDisplayed().fetchSemanticsNode()
         val alpha = compose.onNodeWithContentDescription("Alpha, a.example:23").assertIsDisplayed().fetchSemanticsNode()
         assertTrue("the last used first", beta.boundsInRoot.top < alpha.boundsInRoot.top)
@@ -214,6 +221,142 @@ class ProfilesTest {
         assertFalse("the game is not left with a password the player had the app forget", withdrawn.has("password"))
         assertFalse(withdrawn.getBoolean("connect"))
         assertTrue(withdrawn.getBoolean("alongside"))
+    }
+
+    @Test
+    fun readsAndChangesAnOpenGamesProxyAndGivesItTheProxyPassword() {
+        assertTrue(passwords.set("Alpha", "alpha secret"))
+        val alpha = openLoaded(ALPHA)
+        editOpenGame("Alpha")
+        alpha.proxy(false, "", 0, "", alpha.receive("getProxy").get("id"))
+        waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
+        compose.onNodeWithText(string(R.string.profile_proxy_while_open)).assertDoesNotExist()
+
+        toPageEnd()
+        activate(hasText(string(R.string.profile_proxy_use)))
+        // As the engine refuses a proxy to use with no address or port
+        scrollIntoView(hasText(string(R.string.profile_proxy_host_needed)))
+        compose.onNodeWithText(string(R.string.profile_proxy_host_needed)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profile_save)) and hasClickAction()).assertIsNotEnabled()
+        type(R.string.profile_proxy_host, " socks.example ")
+        compose.onNodeWithText(string(R.string.profile_proxy_host_needed)).assertDoesNotExist()
+        compose.onNode(hasText(string(R.string.profile_save)) and hasClickAction()).assertIsNotEnabled()
+        type(R.string.profile_proxy_port, "70000")
+        compose.onNode(hasText(string(R.string.profile_save)) and hasClickAction()).assertIsNotEnabled()
+        type(R.string.profile_proxy_port, "1080")
+        type(R.string.profile_proxy_user, "proxy-user")
+        type(R.string.profile_proxy_password, "proxy secret")
+        field(R.string.profile_proxy_password).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
+        compose.onRoot().tryPerformAccessibilityChecks()
+        activate(hasText(string(R.string.profile_save)))
+
+        engine.profiles(listOf(ALPHA), engine.receive("saveProfile"))
+        val set = alpha.receive("setProxy")
+        assertTrue(set.getBoolean("use"))
+        assertEquals("socks.example", set.getString("host"))
+        assertEquals(1080, set.getInt("port"))
+        assertEquals("proxy-user", set.getString("user"))
+        assertFalse("the proxy's password goes to the engine only with openProfile", set.has("password") || set.has("proxyPassword"))
+        alpha.proxy(true, "socks.example", 1080, "proxy-user", set.get("id"))
+
+        val given = engine.receive("openProfile")
+        assertEquals("Alpha", given.getString("name"))
+        assertEquals("proxy secret", given.getString("proxyPassword"))
+        assertEquals("the game's stored password goes with it, as the engine takes the two together", "alpha secret", given.getString("password"))
+        assertFalse(given.getBoolean("connect"))
+        assertTrue(given.getBoolean("alongside"))
+        waitFor(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        compose.runOnIdle {
+            assertEquals("proxy secret", passwords.get("Alpha", PasswordStore.Kind.PROXY))
+            assertEquals("each kept apart", "alpha secret", passwords.get("Alpha"))
+        }
+    }
+
+    @Test
+    fun forgetsTheProxyPasswordAndLeavesAProxyThePlayerDidNotChange() {
+        assertTrue(passwords.set("Alpha", "alpha secret"))
+        assertTrue(passwords.set("Alpha", "proxy secret", PasswordStore.Kind.PROXY))
+        val alpha = openLoaded(ALPHA)
+        editOpenGame("Alpha")
+        alpha.proxy(true, "socks.example", 1080, "proxy-user", alpha.receive("getProxy").get("id"))
+        waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
+        field(R.string.profile_proxy_host).assert(hasText("socks.example"))
+        field(R.string.profile_proxy_port).assert(hasText("1080"))
+        field(R.string.profile_proxy_user).assert(hasText("proxy-user"))
+
+        activate(hasText(string(R.string.profile_proxy_password_forget)))
+        val withdrawn = engine.receive("openProfile")
+        assertFalse("the game is not left with a proxy password the player had the app forget", withdrawn.has("proxyPassword"))
+        assertEquals("alpha secret", withdrawn.getString("password"))
+        compose.runOnIdle {
+            assertFalse(passwords.has("Alpha", PasswordStore.Kind.PROXY))
+            assertTrue(passwords.has("Alpha"))
+        }
+
+        activate(hasText(string(R.string.profile_save)))
+        engine.profiles(listOf(ALPHA), engine.receive("saveProfile"))
+        waitFor(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        alpha.assertNoRequest("setProxy", 500)
+    }
+
+    @Test
+    fun showsWhyMudletRefusedAProxyAndStaysInTheEditor() {
+        val alpha = openLoaded(ALPHA)
+        editOpenGame("Alpha")
+        alpha.proxy(false, "", 0, "", alpha.receive("getProxy").get("id"))
+        waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
+        toPageEnd()
+        type(R.string.profile_proxy_host, "bad host")
+        type(R.string.profile_proxy_port, "1080")
+        type(R.string.profile_proxy_password, "proxy secret")
+        activate(hasText(string(R.string.profile_save)))
+        engine.profiles(listOf(ALPHA), engine.receive("saveProfile"))
+        alpha.refuse(alpha.receive("setProxy"), "\"bad host\" is not the address of a proxy")
+        waitFor(hasText("\"bad host\" is not the address of a proxy"))
+        scrollIntoView(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
+        field(R.string.profile_proxy_host).assertIsDisplayed()
+        compose.runOnIdle { assertFalse("nothing is stored for a proxy Mudlet did not take", passwords.has("Alpha", PasswordStore.Kind.PROXY)) }
+        engine.assertNoRequest("openProfile", 500)
+    }
+
+    @Test
+    fun readsTheProxyOfAGameTheEngineOpenedItself() {
+        val alpha = openedByTheEngine(ALPHA)
+        editOpenGame("Alpha")
+        alpha.proxy(true, "socks.example", 1080, "proxy-user", alpha.receive("getProxy").get("id"))
+        waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
+        field(R.string.profile_proxy_host).assert(hasText("socks.example"))
+        field(R.string.profile_proxy_port).assert(hasText("1080"))
+        field(R.string.profile_proxy_user).assert(hasText("proxy-user"))
+        compose.onNodeWithText(string(R.string.profile_proxy_while_open)).assertDoesNotExist()
+    }
+
+    @Test
+    fun saysAClosedGamesProxyIsSetWhileItIsOpen() {
+        assertTrue(passwords.set("Alpha", "proxy secret", PasswordStore.Kind.PROXY))
+        listed(ALPHA)
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        compose.onNodeWithText(string(R.string.profile_proxy_while_open)).assertIsDisplayed()
+        assertEquals("no proxy fields", 0, compose.onAllNodes(hasSetTextAction() and hasText(string(R.string.profile_proxy_host))).fetchSemanticsNodes().size)
+        compose.onRoot().tryPerformAccessibilityChecks()
+        // A stored one can still be forgotten; a game that is not open is given nothing
+        activate(hasText(string(R.string.profile_proxy_password_forget)))
+        compose.runOnIdle { assertFalse(passwords.has("Alpha", PasswordStore.Kind.PROXY)) }
+        engine.assertNoRequest("openProfile", 500)
+    }
+
+    @Test
+    fun givesAGameTheEngineBroughtBackItsStoredProxyPasswordAlone() {
+        assertTrue(passwords.set("Beta", "proxy secret", PasswordStore.Kind.PROXY))
+        listed(BETA)
+        fake.engine.openAlongside("Beta")
+        fake.engine.passwordGiven("Beta", false)
+        engine.openProfiles()
+        val given = engine.receive("openProfile")
+        assertEquals("Beta", given.getString("name"))
+        assertEquals("proxy secret", given.getString("proxyPassword"))
+        assertFalse("Beta has no game password stored", given.has("password"))
+        assertFalse(given.getBoolean("connect"))
     }
 
     @Test
@@ -488,8 +631,10 @@ class ProfilesTest {
         try {
             File(source, "current").mkdirs()
             assertTrue(passwords.set(COPIED, "copied secret"))
+            assertTrue(passwords.set(COPIED, "copied proxy secret", PasswordStore.Kind.PROXY))
             // One a profile of the copy's name left behind
             assertTrue(passwords.set(COPY, "stale secret"))
+            assertTrue(passwords.set(COPY, "stale proxy secret", PasswordStore.Kind.PROXY))
             listed(COPIED_PROFILE)
             activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
             val switch = hasText(string(R.string.profile_copy_password)) and hasAnyAncestor(isDialog())
@@ -502,7 +647,10 @@ class ProfilesTest {
             activate(confirm)
             engine.profiles(listOf(COPIED_PROFILE, COPIED_PROFILE.copy(name = COPY)), engine.receive("listProfiles"))
             waitFor(hasText(string(R.string.profile_copied, COPY)))
-            compose.runOnIdle { assertFalse("off, no password is stored for the copy", passwords.has(COPY)) }
+            compose.runOnIdle {
+                assertFalse("off, no password is stored for the copy", passwords.has(COPY))
+                assertFalse("nor a proxy's", passwords.has(COPY, PasswordStore.Kind.PROXY))
+            }
 
             activate(hasText(string(R.string.profile_copy_settings)))
             compose.onNode(switch).assertIsOff()
@@ -515,6 +663,7 @@ class ProfilesTest {
             compose.runOnIdle {
                 assertEquals("on, the copy logs in as the profile copied does", "copied secret", passwords.get(SECOND_COPY))
                 assertEquals("which keeps its own", "copied secret", passwords.get(COPIED))
+                assertFalse("the proxy's stays with the profile copied, as on desktop", passwords.has(SECOND_COPY, PasswordStore.Kind.PROXY))
             }
         } finally {
             forgetCopies()
@@ -646,6 +795,7 @@ class ProfilesTest {
     @Test
     fun deletesOnlyOnceConfirmed() {
         assertTrue(passwords.set("Alpha", "alpha secret"))
+        assertTrue(passwords.set("Alpha", "proxy secret", PasswordStore.Kind.PROXY))
         compose.runOnIdle {
             Settings.setAwaitsDefaults("Alpha", true)
             Settings.setAwaitsInputClear("Alpha", true)
@@ -669,6 +819,7 @@ class ProfilesTest {
         compose.onNodeWithContentDescription("Alpha, a.example:23").assertDoesNotExist()
         compose.runOnIdle {
             assertFalse("its password goes with it", passwords.has("Alpha"))
+            assertFalse("and its proxy's", passwords.has("Alpha", PasswordStore.Kind.PROXY))
             assertFalse("a new game of its name will be given the settings when added", Settings.awaitsDefaults("Alpha"))
             assertFalse("and is not one from before the input line could keep a command", Settings.awaitsInputClear("Alpha"))
         }
@@ -688,6 +839,7 @@ class ProfilesTest {
     @Test
     fun opensAProfileWithItsStoredPasswordAndGoesToTheGame() {
         assertTrue(passwords.set("Alpha", "alpha secret"))
+        assertTrue(passwords.set("Alpha", "proxy secret", PasswordStore.Kind.PROXY))
         listed(ALPHA, BETA)
 
         // Refused: the reason shows, and the list stays
@@ -695,6 +847,7 @@ class ProfilesTest {
         val beta = engine.receive("openProfile")
         assertEquals("Beta", beta.getString("name"))
         assertFalse("Beta has no stored password", beta.has("password"))
+        assertFalse("nor a proxy password", beta.has("proxyPassword"))
         engine.refuse(beta, "there is no profile named \"Beta\"")
         waitFor(hasText("openProfile: there is no profile named \"Beta\""))
         compose.onNodeWithText(string(R.string.profiles_title)).assertIsDisplayed()
@@ -703,6 +856,7 @@ class ProfilesTest {
         val alpha = engine.receive("openProfile")
         assertEquals("Alpha", alpha.getString("name"))
         assertEquals("alpha secret", alpha.getString("password"))
+        assertEquals("proxy secret", alpha.getString("proxyPassword"))
         assertTrue(alpha.getBoolean("connect"))
         engine.profiles(listOf(ALPHA, BETA), alpha)
         waitFor(hasTestTag(GAME_TITLE_TAG))
@@ -798,6 +952,7 @@ class ProfilesTest {
     private fun forgetCopies() = compose.runOnIdle {
         for (name in listOf(COPIED, COPY, SECOND_COPY)) {
             passwords.forget(name)
+            passwords.forget(name, PasswordStore.Kind.PROXY)
             Settings.setAwaitsDefaults(name, false)
             Settings.setAwaitsInputClear(name, false)
             Copies.forgetEnded(name)
@@ -835,6 +990,44 @@ class ProfilesTest {
     private fun scrollToGame(matcher: SemanticsMatcher) {
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(matcher)
         compose.onNode(matcher).assertIsDisplayed()
+    }
+
+    /**
+     * [profile], listed and opened from the list, and the list shown again once the game says it has loaded; the
+     * session, then about the game, is returned.
+     */
+    private fun openLoaded(profile: Profile): FakeEngine.Session {
+        listed(profile)
+        activate(hasContentDescription(string(R.string.profile_connect_to, profile.name)))
+        engine.profiles(listOf(profile), engine.receive("openProfile"))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
+        engine.status("profile", "${profile.name} loaded")
+        compose.waitUntil(10_000) { compose.runOnIdle { EngineClient.session(profile.name)?.settingsAvailable == true } }
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasContentDescription(string(R.string.profile_edit, profile.name)))
+        return engine
+    }
+
+    /**
+     * [profile], listed, and opened by the engine itself, as one it brought back after it was killed, which the app
+     * holds no password for; its session is returned once the game says it has loaded.
+     */
+    private fun openedByTheEngine(profile: Profile): FakeEngine.Session {
+        listed(profile)
+        fake.engine.openAlongside(profile.name)
+        fake.engine.passwordGiven(profile.name, false)
+        engine.openProfiles()
+        compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
+        val session = engine.forProfile(profile.name)
+        session.status("profile", "${profile.name} loaded")
+        compose.waitUntil(10_000) { compose.runOnIdle { EngineClient.session(profile.name)?.settingsAvailable == true } }
+        return session
+    }
+
+    // The test's clock drives the composition: until it runs, the editor has not asked the game for its proxy
+    private fun editOpenGame(name: String) {
+        activate(hasContentDescription(string(R.string.profile_edit, name)))
+        compose.waitForIdle()
     }
 
     /** The engine answers the UI's listProfiles, sent when it attached, with [profiles]. */
@@ -885,6 +1078,15 @@ class ProfilesTest {
         compose.onNode(control).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
     }
 
+    // To the editor's end, whose last sections are taller than the screen and have no field, so that the proxy's come
+    // into view from below, whole: an empty field whose top alone shows at the foot is an edit box with no name
+    // (docs/roadmap.md, "A known gap, the toolkit's"). By the scroll action itself, as performScrollTo() runs the
+    // checks first, on the page as it is
+    private fun toPageEnd() {
+        compose.onNode(hasScrollAction() and hasAnyDescendant(hasText(string(R.string.profile_proxy_title))))
+            .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
+    }
+
     // As TalkBack does when it moves to a control below the edge of a small screen
     private fun scrollIntoView(matcher: SemanticsMatcher) {
         if (compose.onAllNodes(matcher and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) {
@@ -915,5 +1117,8 @@ class ProfilesTest {
 
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L
+
+        // Further than any page is long
+        const val PAGE_END_PX = 100_000f
     }
 }

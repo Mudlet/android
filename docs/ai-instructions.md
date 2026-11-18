@@ -63,7 +63,8 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
   - the application id `org.mudlet.mudlet` (`.ptb` for the PTB);
   - the SharedPreferences `settings` (the keys in `data/Settings.kt`), `engine` (`qpaPlatform`, `lastProfile`, and
     `lastHost:`, `lastPort:` and `lastTls:` before a profile's name) and `ui`;
-  - `PasswordStore`'s file `passwords/profiles.json` and KeyStore alias `profile-passwords`;
+  - `PasswordStore`'s file `passwords/profiles.json`, its keys (the lowercased profile name, and `proxy:` before it
+    for the proxy's password) and KeyStore alias `profile-passwords`;
   - the engine's files: `files/mudlet/` (`profiles/<name>/`, `profile-order.json`, and what Mudlet keeps under the
     organisation and application name `Mudlet` that `MudletEngine.cpp` gives Qt), `engine-session.json` and
     `engine-stopped`;

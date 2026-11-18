@@ -210,6 +210,8 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   display size"), the lines its main console keeps for scripts to read; the screen keeps the newest 2,000 of them
   (`ProfileSession.MAX_LINES`). A new game starts with 10,000 ("A new game keeps 10,000 lines" in
   [`divergences.md`](divergences.md)), and its buttons step to the next thousand.
+  It goes up to the most lines the device keeps (`EngineScrollback`), where "Keep as many lines as this device can",
+  desktop Mudlet's "Use maximum lines possible" (`useMaxConsoleBufferSize`), holds it while on.
 - The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
   what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the
   commands the console shows, Unix line endings, the command separator, highlighting a command brought back from the

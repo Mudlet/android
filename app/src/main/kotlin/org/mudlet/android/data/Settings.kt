@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
+import org.mudlet.android.engine.EngineScrollback
 import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
 import java.util.Locale
@@ -46,9 +47,13 @@ object Settings {
 
     /**
      * The lines of the game's text the profile's main console keeps, which its scripts read, desktop Mudlet's "Main
-     * display size". The app gives a game it adds a tenth of Mudlet's (docs/divergences.md).
+     * display size". The app gives a game it adds a tenth of Mudlet's (docs/divergences.md). Its most is what this
+     * device keeps, which [init] learns.
      */
-    val consoleBufferSize = IntSetting("consoleBufferSize", default = 10_000, range = 100..1_000_000, mudlet = true, mudletDefault = 100_000)
+    val consoleBufferSize = BufferSizeSetting()
+
+    /** Desktop Mudlet's "Use maximum lines possible": the main console keeps the most this device keeps. */
+    val useMaxConsoleBufferSize = BoolSetting("useMaxConsoleBufferSize", default = false, mudlet = true)
 
     /** Which of the commands the player sends show in the game's text. */
     val showSentText = EnumSetting("showSentText", SentText.SCRIPT, SentText.entries, mudlet = true) { it.mudletValue }
@@ -237,6 +242,7 @@ object Settings {
         undoWrap,
         undoWrapWidth,
         consoleBufferSize,
+        useMaxConsoleBufferSize,
         showSentText,
         unixLineEndings,
         clearInputAfterSend,
@@ -358,6 +364,7 @@ object Settings {
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
+        consoleBufferSize.range = consoleBufferSize.range.first..EngineScrollback.maxLines(context)
         all.forEach { it.load(p) }
         noteGamesBeforeInputClear(p, File(context.filesDir, PROFILES_DIR))
     }
@@ -442,7 +449,7 @@ object Settings {
     }
 
     /** A whole number within [range]: a value outside it is taken as the nearest end. */
-    open class IntSetting(key: String, default: Int, val range: IntRange, mudlet: Boolean = false, mudletDefault: Int = default) : Setting<Int>(key, default, mudlet, mudletDefault) {
+    open class IntSetting(key: String, default: Int, open val range: IntRange, mudlet: Boolean = false, mudletDefault: Int = default) : Setting<Int>(key, default, mudlet, mudletDefault) {
         override fun normalise(v: Int) = v.coerceIn(range)
 
         override fun fromMudlet(v: Any) = (v as? Number)?.toInt()?.coerceIn(range)
@@ -452,6 +459,15 @@ object Settings {
         override fun write(editor: SharedPreferences.Editor, v: Int) {
             editor.putInt(key, v)
         }
+    }
+
+    /**
+     * [consoleBufferSize]: from Mudlet's least, 100, to the most lines this device keeps (EngineScrollback), as desktop
+     * Mudlet's preferences go up to what the computer's memory holds; up to a million until [init] learns it.
+     */
+    class BufferSizeSetting : IntSetting("consoleBufferSize", default = 10_000, range = 100..1_000_000, mudlet = true, mudletDefault = 100_000) {
+        override var range = super.range
+            internal set
     }
 
     /**

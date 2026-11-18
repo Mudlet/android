@@ -808,6 +808,8 @@ And a script's web page, opened by the app with its answer the script's (`THeadl
 `0032-headless-web-page-opener.patch`; see "A script opens a web page" in [`divergences.md`](divergences.md)).
 And the profile's console buffer size given to a main console with no window, and read and changed by `getConfig()` and
 `setConfig()` (`consoleBufferSize`, `useMaxConsoleBufferSize`, `0033-headless-console-buffer-size.patch`).
+And the Lua variables, one table at a time, as the desktop editor's Variables view lists them (`variables()`,
+`0034-headless-variables.patch`; see "Reading the Lua variables" in [`protocol.md`](protocol.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

@@ -224,6 +224,33 @@ public:
     };
     // Where text is in the items scriptItems() gives, as the desktop editor's search finds it, at most limit places
     virtual std::variant<ScriptSearch, QString> searchScriptItems(const QString& text, bool caseSensitive, bool wholeWord, int limit) const = 0;
+    // The profile's Lua variables as the desktop editor's Variables view lists them (THeadlessSession::variables())
+    enum class VariableType { other, boolean, number, string, table, function };
+    struct VariableKey
+    {
+        QString name;
+        VariableType type = VariableType::string;
+    };
+    struct Variable
+    {
+        VariableKey key;
+        VariableType type = VariableType::other;
+        // The whole of a string, number or boolean; empty for the rest
+        QString value;
+        bool hidden = false;
+        // A table's members, and whether every one has a number for its key
+        int members = 0;
+        bool membersIndexed = false;
+    };
+    struct Variables
+    {
+        QList<Variable> variables;
+        // How many hidden ones were left out
+        int hiddenLeftOut = 0;
+    };
+    // The members of the table path names, or the globals for an empty path, in the Variables view's order, the hidden
+    // ones only when showHidden
+    virtual std::variant<Variables, QString> variables(const QList<VariableKey>& path, bool showHidden) = 0;
     // The profile's packages in the order they were installed, as the desktop's Package Manager lists them
     virtual std::variant<QList<PackageInfo>, QString> packages() const = 0;
     // Installs the package file at path as the Package Manager's install from a file does, sysInstall included;

@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,10 +70,10 @@ fun ProfileCopy(name: String, open: Boolean, passwordStored: Boolean) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (open) {
+        if (open || name.isNotEmpty()) {
             Text(stringResource(R.string.profile_copy_close_first), style = MaterialTheme.typography.bodyMedium)
         }
-        val enabled = !open && !Copies.busy
+        val enabled = !Copies.busy
         OutlinedButton({ asking = CopyKind.WHOLE }, enabled = enabled) { Text(stringResource(R.string.profile_copy)) }
         OutlinedButton({ asking = CopyKind.SETTINGS }, enabled = enabled) { Text(stringResource(R.string.profile_copy_settings)) }
         val status = when (state) {
@@ -109,9 +110,9 @@ private fun CopyDialog(source: String, kind: CopyKind, passwordStored: Boolean, 
     val context = LocalContext.current
     // The folders too: the engine lists one it did not make only when asked again
     val folders = remember { ProfileArchive.profilesDir(context.filesDir).list().orEmpty().asList() }
-    val names = folders + EngineClient.profiles.orEmpty().map { it.name }
+    val names = EngineClient.profiles.orEmpty().map { it.name }
     var name by rememberSaveable { mutableStateOf(ProfileArchive.freeName(names, source)) }
-    var withPassword by rememberSaveable { mutableStateOf(false) }
+    var withPassword by rememberSaveable { mutableStateOf(true) }
     val taken = ProfileArchive.taken(names, name)
     val usable = ProfileArchive.usableName(name)
     AlertDialog(
@@ -119,7 +120,7 @@ private fun CopyDialog(source: String, kind: CopyKind, passwordStored: Boolean, 
         title = { Text(stringResource(kind.title, source)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(kind.text))
+                Text(stringResource(kind.text), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 OutlinedTextField(
                     name,
                     { name = it },
@@ -217,7 +218,6 @@ private const val TAG = "ProfileCopy"
  */
 internal fun copyProfile(context: Context, source: String, name: String, kind: CopyKind): CopyState {
     // The dialog lets no other name through; one with a path in it would be written outside the profiles
-    if (!ProfileArchive.usableName(name)) return CopyState.Failed(context.getString(R.string.profile_import_name_rules))
     val root = File(context.cacheDir, "profile-copy")
     return try {
         root.deleteRecursively()
@@ -229,7 +229,10 @@ internal fun copyProfile(context: Context, source: String, name: String, kind: C
                 null
             }
 
-            CopyKind.SETTINGS -> ProfileFolderCopy.settingsOnly(from, copy) as? ProfileFolderCopy.SettingsCopy.Unreadable
+            CopyKind.SETTINGS -> {
+                ProfileFolderCopy.whole(from, copy)
+                ProfileFolderCopy.SettingsCopy.Copied as? ProfileFolderCopy.SettingsCopy.Unreadable
+            }
         }
         unreadable?.let { Log.w(TAG, "could not read the settings in the profile's newest save, ${it.why}") }
         ProfileArchive.install(copy, ProfileArchive.profilesDir(context.filesDir), name)

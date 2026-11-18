@@ -69,6 +69,29 @@
     <string name="default_game_address_secure">%1$s:%2$d, secure connection</string>
     <!-- The button that closes a known game's details without connecting -->
     <string name="default_game_close">Close</string>
+    <!-- Title of the question asked when a telnet:// link from outside the app (a game's website, a message) asks to
+         connect to a game, as Mudlet desktop asks it -->
+    <string name="game_link_title">Connect to a game</string>
+    <!-- The question asked when a telnet:// link names the address of one of the player's profiles; %1$s is the host
+         and port, %2$s the profile's name. As Mudlet desktop asks it -->
+    <string name="game_link_question_profile">Connect to %1$s with your profile %2$s? It will log in with your saved details.</string>
+    <!-- The question asked when a telnet:// link names the address of one of the games Mudlet knows that the player
+         has not added yet; %1$s is the host and port, %2$s the game's name. Yes adds the game and connects -->
+    <string name="game_link_question_game">Connect to %2$s at %1$s?</string>
+    <!-- The button that answers yes to a telnet:// link's question and connects -->
+    <string name="game_link_connect">Connect</string>
+    <!-- The button that answers no to a telnet:// link's question: nothing connects -->
+    <string name="game_link_cancel">Cancel</string>
+    <!-- Title of the message shown when a telnet:// link from outside the app is not a game's address the app can use -->
+    <string name="game_link_refused_title">Not a game\'s address</string>
+    <!-- The message shown when a telnet:// link from outside the app is broken: no host, a port out of range, or a
+         secure (telnets://) link to a bare IP address, which a certificate cannot be checked against -->
+    <string name="game_link_refused_text">This link has no game\'s address Mudlet can connect to, so nothing was opened.</string>
+    <!-- The button that closes the message about a broken telnet:// link -->
+    <string name="game_link_refused_close">OK</string>
+    <!-- At the top of the new game's editor when a telnet:// link from outside the app filled it in: nothing is saved
+         or connected until the player saves it -->
+    <string name="game_link_check">A link filled this in. Check the address before you save it.</string>
     <!-- Why a profile request got no answer. The engine gives its own reasons, in English, for those it refuses -->
     <string name="profiles_error_not_attached">The engine is not running yet. Try again in a moment.</string>
     <!-- Why a profile request got no answer: the engine (the part of the app that runs the game's connection) stopped

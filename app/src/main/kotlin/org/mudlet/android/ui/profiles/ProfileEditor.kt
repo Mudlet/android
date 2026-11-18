@@ -48,18 +48,20 @@ import org.mudlet.android.ui.MudletScaffold
 /**
  * Adds a profile ([name] null) or edits the one named [name], whose name cannot change, as the engine keeps the name a
  * profile was created with. A stored password is never shown again: a new one replaces it, and "Forget password"
- * removes it. [onClose] leaves, as Back does, once the engine has saved or deleted the profile.
+ * removes it. [onClose] leaves, as Back does, once the engine has saved or deleted the profile. A new profile can start
+ * [fromLink], a telnet:// link's, which the editor says to check.
  */
 @Composable
-fun ProfileEditor(name: String?, onClose: () -> Unit) {
+fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null) {
     val context = LocalContext.current
     val passwords = remember { PasswordStore(context) }
     val existing = remember(name) { name?.let { n -> EngineClient.profiles?.firstOrNull { it.name.equals(n, ignoreCase = true) } } }
-    var newName by rememberSaveable { mutableStateOf("") }
-    var host by rememberSaveable { mutableStateOf(existing?.host ?: "") }
-    var port by rememberSaveable { mutableStateOf(existing?.port?.toString() ?: "23") }
-    var tls by rememberSaveable { mutableStateOf(existing?.tls ?: false) }
-    var login by rememberSaveable { mutableStateOf(existing?.login ?: "") }
+    val start = existing ?: fromLink
+    var newName by rememberSaveable { mutableStateOf(fromLink?.name.orEmpty()) }
+    var host by rememberSaveable { mutableStateOf(start?.host ?: "") }
+    var port by rememberSaveable { mutableStateOf(start?.port?.toString() ?: "23") }
+    var tls by rememberSaveable { mutableStateOf(start?.tls ?: false) }
+    var login by rememberSaveable { mutableStateOf(start?.login ?: "") }
     // Not saveable: the saved state is kept outside the app, and in the clear
     var password by remember { mutableStateOf("") }
     var autoReconnect by rememberSaveable { mutableStateOf(existing?.autoReconnect ?: false) }
@@ -100,6 +102,9 @@ fun ProfileEditor(name: String?, onClose: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (fromLink != null) {
+                Text(stringResource(R.string.game_link_check), style = MaterialTheme.typography.bodyMedium)
+            }
             if (name == null) {
                 OutlinedTextField(
                     newName,

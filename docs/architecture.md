@@ -308,6 +308,18 @@ profile as that game, as it does a profile made from its dialog, and picks setti
 split lines (`Host::setupIreDriverBugfix`), which the app's "New games" defaults leave alone unless the player changed
 them (`ProfileSession.giveDefaults`).
 
+A `telnet://` or `telnets://` link opened in another app comes to `MainActivity` through its intent filter (a link
+started in the other app's task is sent on to the app's own, so one Activity talks to the engine), which reads it as
+Mudlet's `parseTelnetUri` does (`ui/profiles/TelnetLink.kt`: port 23 by default, 992 and TLS for `telnets://`, which
+takes no IP address; the user name kept, a password dropped as it is read) and refuses anything else, saying so.
+`GameLinkPrompt.kt` then waits for the profiles and looks for the player's profile at the link's address, the last
+used first, else a game of "More games" there; a `telnets://` link takes only one that connects securely. Either is
+connected only once the player says yes to a question naming the address, as desktop's `connectFromGameLink` asks:
+an open game comes to the front and connects to its own address if it is not connected, any other opens as Connect
+opens it, with its stored password. Any other address opens the editor of a new game filled in from the link, named
+as desktop's `createProfileForUri` names one, and nothing is saved or connected until the player saves it. A link
+never changes a saved profile.
+
 The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
 never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's
 name as associated data, so one profile's cannot be moved to another's. The ciphertext is in
@@ -1772,6 +1784,10 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       the letters, and the field reads as a password field, without the text. The switches read their labels and
       their state, and a double tap anywhere on a switch's row toggles it.
     - "Delete" opens a dialog that TalkBack moves into and reads; Cancel returns to the editor with the game kept.
+    - Tap a `telnet://` link to one of your games' addresses in a browser or a message: the app asks "Connect to
+      host:port with your profile name?", TalkBack reads it, and Connect logs in as Connect on the list does; Cancel
+      connects nothing. A link to another address opens "New game" filled in from it, with the note to check the
+      address; nothing is saved until Save. `telnet://host:0` says it is not a game's address.
     - After a refused save (a name with a `/`, say), TalkBack reads the engine's reason without moving focus.
     - Add your own game with its character name and password, and Connect: Mudlet logs in. Force-stop the app in the
       system's settings, reopen it and Connect: it logs in again. Forget password, then Connect: the game asks for it.

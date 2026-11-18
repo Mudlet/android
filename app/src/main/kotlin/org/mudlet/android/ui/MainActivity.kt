@@ -28,6 +28,8 @@ import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.ScriptFileRequest
 import org.mudlet.android.ui.game.ScriptWebPages
+import org.mudlet.android.ui.profiles.GameLinkRefused
+import org.mudlet.android.ui.profiles.TelnetLink
 import org.mudlet.android.ui.theme.MudletTheme
 
 class MainActivity : ComponentActivity() {
@@ -52,9 +54,23 @@ class MainActivity : ComponentActivity() {
     // How many notification taps have brought their game to the front, each a request to show the game screen
     private var gamesShown by mutableIntStateOf(0)
 
+    // A telnet:// link from outside the app, until the player has answered it; or whether the last was no game's address
+    private var gameLink by mutableStateOf<TelnetLink?>(null)
+    private var gameLinkRefused by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // A link opened in another app starts the Activity in that app's task: it goes to the app's own, so that one
+        // Activity talks to the engine
+        if (savedInstanceState == null && !isTaskRoot && intent.action == Intent.ACTION_VIEW) {
+            startActivity(
+                Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(intent.data)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+            finish()
+            return
+        }
         EngineClient.init(this)
         Settings.init(this)
         Announcer.init(this)
@@ -64,7 +80,12 @@ class MainActivity : ComponentActivity() {
         EngineClient.refreshServiceState()
         if (EngineClient.engineWanted && EngineClient.fgsState == "not running") EngineClient.startEngine()
         // A recreated Activity has shown its intent's game already
-        if (savedInstanceState == null) showProfileOf(intent)
+        if (savedInstanceState == null) {
+            showProfileOf(intent)
+            takeGameLink(intent)
+        } else {
+            gameLink = savedInstanceState.getString(STATE_GAME_LINK)?.let(TelnetLink::parse)
+        }
         setContent {
             MudletTheme {
                 val explainEngineStopped = EngineClient.engineStoppedInBackground && !engineStoppedAnswered
@@ -74,9 +95,13 @@ class MainActivity : ComponentActivity() {
                     reportsAsked = reportsAsked,
                     // The game screen's tour waits for these: each asks something of the player that matters more
                     tourHeld = explainNotifications || explainEngineStopped,
+                    gameLink = gameLink,
+                    onGameLinkDone = { gameLink = null },
                 )
                 ScriptFileRequest()
-                if (explainNotifications) {
+                if (gameLinkRefused) {
+                    GameLinkRefused(onDismiss = { gameLinkRefused = false })
+                } else if (explainNotifications) {
                     NotificationsExplanation(
                         onContinue = {
                             notificationsAnswered(PREF_NOTIFICATIONS_ASKED)
@@ -123,6 +148,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         showProfileOf(intent)
+        takeGameLink(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        gameLink?.let { outState.putString(STATE_GAME_LINK, it.encode()) }
     }
 
     // A tap on a notification of the engine's names the profile it is about (EngineNotifications.EXTRA_PROFILE). Recents
@@ -131,6 +162,14 @@ class MainActivity : ComponentActivity() {
         if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
         val profile = intent.getStringExtra(EngineNotifications.EXTRA_PROFILE) ?: return
         EngineClient.showProfile(profile) { gamesShown++ }
+    }
+
+    // Recents starts the Activity again with the link it last had, which the player has already answered
+    private fun takeGameLink(intent: Intent) {
+        if (intent.action != Intent.ACTION_VIEW || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val link = intent.dataString?.let(TelnetLink::parse)
+        gameLink = link
+        gameLinkRefused = link == null
     }
 
     override fun onStop() {
@@ -174,6 +213,7 @@ class MainActivity : ComponentActivity() {
         const val PREF_NOTIFICATIONS_DECLINED = "notificationsDeclined"
         const val PREF_ENGINE_STOPPED_ANSWERED = "engineStoppedAnswered"
         const val PREF_CRASH_REPORT_OFFERED = "crashReportOffered"
+        private const val STATE_GAME_LINK = "gameLink"
     }
 }
 

@@ -35,6 +35,7 @@ import androidx.navigation.navArgument
 import org.mudlet.android.BuildConfig
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.about.AboutScreen
 import org.mudlet.android.ui.about.ChangelogScreen
 import org.mudlet.android.ui.about.LicenceScreen
@@ -45,8 +46,10 @@ import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GameScreen
 import org.mudlet.android.ui.game.GameTourShown
 import org.mudlet.android.ui.packages.PackagesScreen
+import org.mudlet.android.ui.profiles.GameLinkPrompt
 import org.mudlet.android.ui.profiles.ProfileEditor
 import org.mudlet.android.ui.profiles.ProfileListScreen
+import org.mudlet.android.ui.profiles.TelnetLink
 import org.mudlet.android.ui.report.ReportProblemScreen
 import org.mudlet.android.ui.scripts.LUA_FUNCTIONS_ASSET
 import org.mudlet.android.ui.scripts.LuaFunction
@@ -75,6 +78,7 @@ private object Routes {
     const val SETTINGS_PAGE = "settingsPage/{page}"
     const val SELF_TEST = "selfTest"
     const val PROFILE = "profile?name={name}"
+    const val PROFILE_FROM_LINK = "profileFromLink/{link}?name={name}"
     const val ABOUT = "about"
     const val LICENCE = "licence/{id}"
     const val REPORT = "report"
@@ -87,6 +91,8 @@ private object Routes {
     const val ERRORS = "errors"
 
     fun profile(name: String?) = if (name == null) "profile" else "profile?name=${Uri.encode(name)}"
+
+    fun profileFromLink(link: TelnetLink, name: String) = "profileFromLink/${Uri.encode(link.encode())}?name=${Uri.encode(name)}"
 
     fun licence(id: String) = "licence/${Uri.encode(id)}"
 
@@ -111,7 +117,14 @@ private object Routes {
  * to tell games a screen reader is in use.
  */
 @Composable
-fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0, reportsAsked: Int = 0, tourHeld: Boolean = false) {
+fun AppNavigation(
+    onKillUi: () -> Unit,
+    gamesShown: Int = 0,
+    reportsAsked: Int = 0,
+    tourHeld: Boolean = false,
+    gameLink: TelnetLink? = null,
+    onGameLinkDone: () -> Unit = {},
+) {
     val nav = rememberNavController()
     // Each time a notification's tap brings its game to the front; at 0, none has
     LaunchedEffect(gamesShown) {
@@ -204,6 +217,16 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0, reportsAsked: Int =
             }
             composable(Routes.PROFILE, listOf(name)) { entry ->
                 ProfileEditor(entry.arguments?.getString("name"), onClose = entry.whileShown { nav.navigateUp() })
+            }
+            composable(Routes.PROFILE_FROM_LINK, listOf(navArgument("link") { type = NavType.StringType }, name)) { entry ->
+                val link = entry.arguments?.getString("link")?.let(TelnetLink::parse)
+                val back = entry.whileShown { nav.navigateUp() }
+                if (link != null) {
+                    val suggested = entry.arguments?.getString("name").orEmpty()
+                    ProfileEditor(null, onClose = back, fromLink = Profile(suggested, link.host, link.port, link.tls, link.login, autoReconnect = false))
+                } else {
+                    LaunchedEffect(Unit) { back() }
+                }
             }
             composable(Routes.GAME) {
                 GameScreen(
@@ -330,6 +353,19 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0, reportsAsked: Int =
             if (BuildConfig.DEBUG) {
                 composable(Routes.SELF_TEST) { SelfTestScreen(onBack = { nav.navigateUp() }, onKillUi = onKillUi) }
             }
+        }
+        if (gameLink != null) {
+            GameLinkPrompt(
+                gameLink,
+                onDone = onGameLinkDone,
+                onOpenGame = {
+                    nav.navigate(Routes.GAME) {
+                        popUpTo(Routes.PROFILES)
+                        launchSingleTop = true
+                    }
+                },
+                onNewProfile = { link, suggested -> nav.navigate(Routes.profileFromLink(link, suggested)) { popUpTo(Routes.PROFILES) } },
+            )
         }
         // At the foot, so it comes last for TalkBack and is out of the way of a finger exploring the screen
         AnnouncementRegion(Modifier.align(Alignment.BottomStart))

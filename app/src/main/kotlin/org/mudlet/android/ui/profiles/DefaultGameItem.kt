@@ -57,9 +57,13 @@ private val LOGO_HEIGHT = 24.dp
 
 /** Mudlet's games from the APK's assets, sorted by name for the player's language; empty, and logged, if unreadable. */
 @Composable
-fun rememberDefaultGames(): List<DefaultGame> {
+fun rememberDefaultGames(): List<DefaultGame> = rememberDefaultGamesRead() ?: emptyList()
+
+/** As [rememberDefaultGames], but null until they have been read. */
+@Composable
+fun rememberDefaultGamesRead(): List<DefaultGame>? {
     val context = LocalContext.current
-    val games by produceState(GameAssets.games ?: emptyList()) {
+    val games by produceState(GameAssets.games) {
         if (GameAssets.games == null) value = withContext(Dispatchers.IO) { GameAssets.loadGames(context) }
     }
     return games

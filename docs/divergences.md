@@ -178,6 +178,16 @@ The package manager asks before it removes a package (`docs/architecture.md`, "T
 Remove removes the packages selected at once. On a phone a tap meant to expand a package's description lands near its
 Remove button, and what a removal takes, the package's items and files, does not come back.
 
+## A telnet:// link from another app
+
+A `telnet://` link opened outside Mudlet connects on the desktop at once (`mudlet::handleTelnetUri`): to the profile
+at its address, or to a new profile it makes, named after the host and saved; a `telnets://` link also turns on the
+saved profile's TLS. The app asks first, naming the address, as the desktop asks for a link inside a game
+(`connectFromGameLink`), opens an unknown address in a new game's editor for the player to check and save, and
+never changes a saved profile, so a `telnets://` link to a profile that does not connect securely opens a new game.
+A phone opens links from messages and web pages a tap away, often by mistake: a link that connected at once would
+reach whatever server it named, or log in to one of the player's games with its saved details, unasked.
+
 ## Labels and TalkBack
 
 - A label's cursor shape is not drawn: a touch screen has no pointer to shape (`docs/phase-f.md`, `label`).

@@ -866,8 +866,9 @@ void MudletProfile::connectSession()
         }
     });
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
-        mFrontend->mainArea({mMainWindowSize, grid, textRect});
+        mFrontend->mainArea({mMainWindowSize, grid, textRect, colourCode(mSession->mainBorderColor(), false)});
     });
+    connect(session, &THeadlessSession::mainBorderColorChanged, this, &MudletProfile::pushMainArea);
     connect(session, &THeadlessSession::connecting, this, [this] {
         // Mudlet forgets the refused certificate as it dials
         mFrontend->certificateRefused(std::nullopt);
@@ -1629,7 +1630,7 @@ void MudletProfile::pushWindowText(const QString& window)
 // Also when only the size the UI gave changed, which mainConsoleAreaChanged does not tell
 void MudletProfile::pushMainArea()
 {
-    mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect()});
+    mFrontend->mainArea({mMainWindowSize, mSession->mainConsoleGrid(), mSession->mainConsoleTextRect(), colourCode(mSession->mainBorderColor(), false)});
 }
 
 void MudletProfile::pushButtonBars()

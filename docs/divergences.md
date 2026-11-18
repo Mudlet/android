@@ -188,6 +188,25 @@ console's black. A mini console in the game area shows what is under it, as on t
 a page of the switcher, from a side border, shows black too, as that layout draws no label from those borders and the
 page's pane covers the console.
 
+## A scroll box
+
+A scroll box draws no frame and no scroll bars (`docs/phase-f.md`, "Scroll boxes"). On the desktop it is a `QScrollArea`
+with a one-pixel frame and, where its content is larger, the desktop style's scroll bars, which take their room from
+what shows. On a touch screen the box scrolls under a finger and with TalkBack's scroll actions, and bars of a few
+pixels would only take room the script gave its windows. A box with nothing in it to size its content, none of its
+windows both visible and of some size, does not scroll: on the desktop its content keeps the size it last had, or that
+of the window the box was made in, which is no part of what a script laid out. One whose windows lie so far above or
+left of its top left that Qt would give its content a negative size does not scroll either, where the desktop keeps the
+size it had.
+A box hidden and shown again, or moved to or from a page of the switcher, starts at its top left: its scroll is kept
+only while it is drawn, where a hidden `QScrollArea` keeps its scroll bars' values.
+
+A mouse does not drag a `QScrollArea`, so on the desktop a press on a label in one is always the label's. Here a drag
+that starts on a label in a box that scrolls is the box's once the box takes it, which it does along an axis it scrolls
+on even at the end of its range, and so is a tap that stops its fling:
+the label gets neither, not even `enter`, which comes once the touch is the label's rather than as the finger lands. A
+drag the box has not taken by twice the touch slop, as along an axis it does not scroll on, is the label's.
+
 ## Button bars
 
 A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f.md`, "Button bars and commands").

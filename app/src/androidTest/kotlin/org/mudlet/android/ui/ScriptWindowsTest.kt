@@ -16,10 +16,12 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -37,10 +39,13 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -376,6 +381,123 @@ class ScriptWindowsTest {
         session.windows(listOf(chat(null)))
         assertMiddleDrawnIn(GREEN, windowNamed("chat"))
         compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aScrollBoxScrollsALabelPastItsEdgeIntoViewWithTalkBacksActionAndATapOnItReachesIt() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        // A Geyser.ScrollBox with one label in it and one below its edge, each tall enough to need no larger touch
+        // bounds, whose middle would move as the scroll box cuts them
+        fun inBox(name: String, y: Int) = FakeEngine.window(name, kind = "label", x = 0, y = y, w = 400, h = 200, parent = "box", parentKind = "scrollBox")
+        val box = FakeEngine.window("box", kind = "scrollBox", x = 0, y = 0, w = 400, h = 200)
+        session.windows(listOf(box, inBox("near", 0), inBox("far", 400)), full = true)
+        session.label("near", accessibleName = "Near", accessibleButton = true, styleSheet = "background-color: navy")
+        session.label("far", accessibleName = "Far", accessibleButton = true, styleSheet = "background-color: teal")
+        val near = hasContentDescription("Near") and hasClickAction()
+        val far = hasContentDescription("Far") and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(far).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(near).assertIsDisplayed()
+        compose.onNode(far).assertIsNotDisplayed()
+
+        // TalkBack's scroll forward, which is the box's scroll by: down to the end, which brings the far label in
+        val scrollsDown = SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange) and hasAnyDescendant(far)
+        compose.onNode(scrollsDown).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        compose.waitUntil(WAIT_MS) { isShown(far) && !isShown(near) }
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        // A finger on it reaches it at its middle, in its own pixels, wherever the box has scrolled it to
+        compose.onNode(far).performTouchInput { click(center) }
+        val events = ArrayList<JSONObject>()
+        do {
+            events.add(session.receive("pointer"))
+        } while (events.last().getString("type") != "release")
+        assertEquals(listOf("far"), events.map { it.getString("window") }.distinct())
+        val press = events.single { it.getString("type") == "press" }
+        assertNear("x", 200f, press.getDouble("x").toFloat())
+        assertNear("y", 100f, press.getDouble("y").toFloat())
+    }
+
+    @Test
+    fun aDragOnAClickableLabelInAScrollBoxScrollsTheBoxAndSendsTheLabelNothing() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        // A clickable label filling a box, with another below its edge, so the box scrolls down
+        fun inBox(name: String, y: Int) = FakeEngine.window(name, kind = "label", x = 0, y = y, w = 400, h = 200, parent = "box", parentKind = "scrollBox")
+        val box = FakeEngine.window("box", kind = "scrollBox", x = 0, y = 0, w = 400, h = 200)
+        session.windows(listOf(box, inBox("near", 0), inBox("far", 400)), full = true)
+        session.label("near", accessibleName = "Near", accessibleButton = true, styleSheet = "background-color: navy")
+        session.label("far", accessibleName = "Far", accessibleButton = true, styleSheet = "background-color: teal")
+        val near = hasContentDescription("Near") and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(near).fetchSemanticsNodes().isNotEmpty() }
+        val scrollsDown = SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange) and hasAnyDescendant(near)
+        fun range() = compose.onNode(scrollsDown).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+        compose.waitUntil(WAIT_MS) { range().maxValue() > 0f }
+        assertEquals(0f, range().value(), 0f)
+
+        // A finger dragged up the label scrolls the box, and the label hears nothing of it: no click, not even enter
+        compose.onNode(near).performTouchInput { swipeUp() }
+        compose.waitUntil(WAIT_MS) { range().value() > 0f }
+        session.assertNoRequest("pointer", 1000)
+    }
+
+    @Test
+    fun aLabelTappedBeforeItsScrollBoxCameToScrollLeavesTheNextDragToTheBox() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        // A clickable label filling a box, alone in it: the box has nothing to scroll to yet
+        fun inBox(name: String, x: Int) = FakeEngine.window(name, kind = "label", x = x, y = 0, w = 400, h = 200, parent = "box", parentKind = "scrollBox")
+        val box = FakeEngine.window("box", kind = "scrollBox", x = 0, y = 0, w = 400, h = 200)
+        session.windows(listOf(box, inBox("near", 0)), full = true)
+        session.label("near", accessibleName = "Near", accessibleButton = true, styleSheet = "background-color: navy")
+        val near = hasContentDescription("Near") and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(near).fetchSemanticsNodes().isNotEmpty() }
+        // A tap is the label's, as out of a box; the label then waits for its next touch
+        compose.onNode(near).performTouchInput { click(center) }
+        val types = ArrayList<String>()
+        do {
+            types.add(session.receive("pointer").getString("type"))
+        } while (types.last() != "release")
+        assertEquals(listOf("enter", "press", "release"), types)
+
+        // The script puts a second label beside it, past the box's edge: the box scrolls across from now on
+        session.windows(listOf(box, inBox("near", 0), inBox("far", 400)), full = true)
+        session.label("far", accessibleName = "Far", accessibleButton = true, styleSheet = "background-color: teal")
+        val scrollsAcross = SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange) and hasAnyDescendant(near)
+        fun range() = compose.onNode(scrollsAcross).fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange]
+        compose.waitUntil(WAIT_MS) { range().maxValue() > 0f }
+
+        // The next drag on the label is the box's all the same, though the label began to wait for it before the box
+        // scrolled
+        compose.onNode(near).performTouchInput { swipeLeft() }
+        compose.waitUntil(WAIT_MS) { range().value() > 0f }
+        session.assertNoRequest("pointer", 1000)
+    }
+
+    @Test
+    fun aNarrowClickableLabelInAScrollBoxKeepsTheTouchBoundsTheBoxShows() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        // The box's content is as narrow as the one label in it, 10 of Mudlet's pixels: far less than 48 dp
+        val box = FakeEngine.window("box", kind = "scrollBox", x = 200, y = 0, w = 400, h = 200)
+        val thin = FakeEngine.window("thin", kind = "label", x = 0, y = 0, w = 10, h = 200, parent = "box", parentKind = "scrollBox")
+        session.windows(listOf(box, thin), full = true)
+        session.label("thin", accessibleName = "Thin", accessibleButton = true, styleSheet = "background-color: navy")
+        val button = hasContentDescription("Thin") and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+
+        // Its touch bounds reach 24 dp right of its middle, as anywhere: only the box's left edge cuts them, not the
+        // content's width
+        val touch = bounds(button)
+        val half = with(compose.density) { 24.dp.toPx() }
+        assertTrue("touch bounds ${touch.width} px wide, under 24 dp ($half px)", touch.width >= half)
+    }
+
+    private fun isShown(node: SemanticsMatcher) = try {
+        compose.onNode(node).assertIsDisplayed()
+        true
+    } catch (_: AssertionError) {
+        false
     }
 
     private fun showChat() {

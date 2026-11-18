@@ -16,6 +16,17 @@ class WindowLayoutTest {
 
     private fun WindowLayout.rectOf(name: String) = windows.single { it.window.name == name }.rect
 
+    private fun inBox(
+        name: String,
+        kind: WindowKind = WindowKind.MINI_CONSOLE,
+        x: Int = 0,
+        y: Int = 0,
+        w: Int = 100,
+        h: Int = 100,
+        shown: Boolean = true,
+        box: String = "box",
+    ) = window(name, kind, x = x, y = y, w = w, h = h, parent = box, parentKind = WindowKind.SCROLL_BOX, shown = shown)
+
     @Test
     fun autoIsFittedFrom600dp() {
         assertTrue(WindowLayout.fitted(LayoutMode.AUTO, 600f))
@@ -126,8 +137,8 @@ class WindowLayoutTest {
         val layout = WindowLayout.of(
             state(
                 mainArea(800, 500, 100, 25, 0, 0, 800, 500),
-                window("box", WindowKind.SCROLL_BOX, x = 700, y = 0, w = 200, h = 100),
-                window("inside", x = 0, y = 0, w = 200, h = 50, parent = "box", parentKind = WindowKind.SCROLL_BOX),
+                window("box", WindowKind.USER_WINDOW, x = 700, y = 0, w = 200, h = 100),
+                window("inside", x = 0, y = 0, w = 200, h = 50, parent = "box", parentKind = WindowKind.USER_WINDOW),
                 window("hidden", x = 0, y = 0, w = 10, h = 10, shown = false),
             ),
             area(1600f, 1000f, fitted = true),
@@ -138,6 +149,198 @@ class WindowLayoutTest {
         assertEquals(400f, inside.full.w)
         assertEquals(PxRect(1400f, 0f, 400f, 100f), inside.full)
         assertTrue(layout.windows.none { it.window.name == "hidden" })
+    }
+
+    @Test
+    fun aScrollBoxsWindowsPastItsEdgeArePlacedInItsContentToScrollTo() {
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 500, 100, 25, 0, 0, 800, 500),
+                window("box", WindowKind.SCROLL_BOX, x = 100, y = 50, w = 200, h = 100),
+                inBox("top", x = 0, y = 0, w = 200, h = 50),
+                inBox("below", x = 0, y = 150, w = 200, h = 50),
+                inBox("beside", WindowKind.LABEL, x = 250, y = 0, w = 50, h = 50),
+                window("over", x = 100, y = 50, w = 10, h = 10, stack = 1),
+            ),
+            area(1600f, 1000f, fitted = true),
+        )
+        // The box shows its own 200 by 100; its windows scroll in the 300 by 200 they take, from its top left
+        val box = layout.windows.single { it.window.name == "box" }
+        assertEquals(PxRect(200f, 100f, 400f, 200f), box.rect)
+        assertEquals(PxRect(200f, 100f, 600f, 400f), box.content)
+        assertNull(box.scrollBox)
+        // Placed as the box at its top left would show them, not cut to it, and marked as scrolling in it
+        val below = layout.windows.single { it.window.name == "below" }
+        assertEquals(PxRect(200f, 400f, 400f, 100f), below.rect)
+        assertEquals(below.full, below.rect)
+        assertEquals(PxRect(700f, 100f, 100f, 100f), layout.rectOf("beside"))
+        assertEquals(
+            listOf("box" to null, "top" to "box", "below" to "box", "beside" to "box", "over" to null),
+            layout.windows.map { it.window.name to it.scrollBox?.name },
+        )
+        assertTrue(layout.windows.none { it.window.kind != WindowKind.SCROLL_BOX && it.content != null })
+    }
+
+    @Test
+    fun aScrollBoxsContentIsSizedAsQtSizesItsWidget() {
+        fun content(vararg inside: ScriptWindow): PxRect? {
+            val box = window("box", WindowKind.SCROLL_BOX, x = 0, y = 0, w = 200, h = 100)
+            val layout = WindowLayout.of(state(mainArea(800, 500, 100, 25, 0, 0, 800, 500), box, *inside), area(1600f, 1000f, fitted = true))
+            return layout.windows.single { it.window.name == "box" }.content
+        }
+        // As far past the children as they are from its top left, at the scale of 2
+        assertEquals(PxRect(0f, 0f, 240f, 240f), content(inBox("a", x = 10, y = 10, w = 100, h = 100)))
+        // A hidden child, and one of no size, do not count
+        assertEquals(
+            PxRect(0f, 0f, 280f, 100f),
+            content(inBox("a", x = 20, y = 0, w = 100, h = 50), inBox("hidden", h = 400, shown = false), inBox("none", w = 0, h = 0)),
+        )
+        // One at a negative place counts, but takes from the far edge as much as it lies before the near one
+        assertEquals(PxRect(0f, 0f, 500f, 100f), content(inBox("left", x = -50, y = 0, w = 100, h = 50), inBox("wide", x = 0, y = 0, w = 300, h = 50)))
+        // A box with nothing shown in it does not scroll
+        assertEquals(PxRect(0f, 0f, 400f, 200f), content())
+        assertEquals(PxRect(0f, 0f, 400f, 200f), content(inBox("hidden", shown = false)))
+    }
+
+    @Test
+    fun aScrollBoxsWindowsAreCutToItsContent() {
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 500, 100, 25, 0, 0, 800, 500),
+                window("box", WindowKind.SCROLL_BOX, x = 0, y = 0, w = 200, h = 100),
+                inBox("left", x = -50, y = 0, w = 100, h = 50),
+                inBox("wide", x = 0, y = 0, w = 300, h = 50),
+                window("box2", WindowKind.SCROLL_BOX, x = 0, y = 200, w = 200, h = 100),
+                inBox("nowhere", x = -50, y = -20, w = 100, h = 50, box = "box2"),
+            ),
+            area(1600f, 1000f, fitted = true),
+        )
+        // Qt's widget is 250 wide, so what lies before it and past it never shows
+        assertEquals(PxRect(0f, 0f, 100f, 100f), layout.rectOf("left"))
+        assertEquals(PxRect(0f, 0f, 500f, 100f), layout.rectOf("wide"))
+        // One child before both edges leaves the widget no width, and nothing in it shows
+        assertTrue(layout.windows.none { it.window.name == "nowhere" })
+    }
+
+    @Test
+    fun aScrollBoxsContentEndsWhereComposesLayoutDoes() {
+        // Windows a script put far out: the content ends where Compose's layout does, and they are cut to it
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 500, 100, 25, 0, 0, 800, 500),
+                window("box", WindowKind.SCROLL_BOX, x = 0, y = 0, w = 200, h = 100),
+                inBox("tall", x = 0, y = 0, w = 100, h = 500_000_000),
+                inBox("away", x = 900_000_000, y = 0, w = 100, h = 100),
+            ),
+            area(1600f, 1000f, fitted = true),
+        )
+        assertEquals(PxRect(0f, 0f, MAX_CONTENT_PX, MAX_CONTENT_PX), layout.windows.single { it.window.name == "box" }.content)
+        assertEquals(PxRect(0f, 0f, 200f, MAX_CONTENT_PX), layout.rectOf("tall"))
+        assertTrue(layout.windows.none { it.window.name == "away" })
+    }
+
+    @Test
+    fun aScrollBoxWithNothingToSizeItsContentEndsWhereComposesLayoutDoesToo() {
+        // The content is then the box's own area, which a script sizes as well
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 500, 100, 25, 0, 0, 800, 500),
+                window("box", WindowKind.SCROLL_BOX, x = 0, y = 0, w = 20_000_000, h = 100),
+                window("box2", WindowKind.SCROLL_BOX, x = 0, y = 200, w = 100, h = 20_000_000),
+                inBox("nowhere", x = -50, y = 0, w = 20, h = 50, box = "box2"),
+            ),
+            area(1600f, 1000f, fitted = true),
+        )
+        assertEquals(PxRect(0f, 0f, MAX_CONTENT_PX, 200f), layout.windows.single { it.window.name == "box" }.content)
+        assertEquals(PxRect(0f, 400f, 200f, MAX_CONTENT_PX), layout.windows.single { it.window.name == "box2" }.content)
+    }
+
+    @Test
+    fun aScrollBoxsContentIsSizedByWindowsWhoseFarEdgeIsPastAnInt() {
+        // x + w is past an Int here, and y + h once the top is added: the content is large, not the box's own area
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 500, 100, 25, 0, 0, 800, 500),
+                window("box", WindowKind.SCROLL_BOX, x = 0, y = 0, w = 200, h = 100),
+                inBox("far", x = 1_000_000_000, y = 1_000_000_000, w = 2_000_000_000, h = 1_000_000_000),
+            ),
+            area(1600f, 1000f, fitted = true),
+        )
+        assertEquals(PxRect(0f, 0f, MAX_CONTENT_PX, MAX_CONTENT_PX), layout.windows.single { it.window.name == "box" }.content)
+    }
+
+    @Test
+    fun aSizeToLayOutIsCutToWhatComposesConstraintsHold() {
+        // A size they hold is kept, to the whole pixel and never negative
+        assertEquals(300 to 200, layoutSize(300.4f, 199.5f))
+        assertEquals(0 to 7, layoutSize(-5f, 7f))
+        assertEquals(32_766 to 65_534, layoutSize(32_766f, 65_534f))
+        assertEquals(262_142 to 8_190, layoutSize(262_142f, 8_190f))
+        // Of one they do not hold, the smaller side gives way, and no side is past their largest
+        assertEquals(40_000 to 32_766, layoutSize(40_000f, 40_000f))
+        assertEquals(8_190 to 100_000, layoutSize(9_000f, 100_000f))
+        assertEquals(262_142 to 8_190, layoutSize(MAX_CONTENT_PX, MAX_CONTENT_PX))
+        assertEquals(100 to 262_142, layoutSize(100f, 1e12f))
+        // Whatever is asked fits the 31 bits the sides share: 13 bits for one under 8 191, then 15, 16 and 18
+        fun bits(size: Int) = listOf(0x1FFF to 13, 0x7FFF to 15, 0xFFFF to 16, 0x3FFFF to 18).first { size < it.first }.second
+        val sides = listOf(0f, 8_190f, 8_191f, 32_766f, 32_767f, 65_534f, 65_535f, 262_142f, 262_143f, 3e9f)
+        for (w in sides) {
+            for (h in sides) {
+                val (width, height) = layoutSize(w, h)
+                assertTrue("$w by $h gives $width by $height", bits(width) + bits(height) <= 31)
+            }
+        }
+    }
+
+    @Test
+    fun windowsInAScrollBoxAreDrawnInItFromItsContentsTopLeftAndBoxesInBoxesToo() {
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 500, 100, 25, 0, 0, 800, 500),
+                window("outer", WindowKind.SCROLL_BOX, x = 100, y = 50, w = 200, h = 100),
+                inBox("inner", WindowKind.SCROLL_BOX, x = 0, y = 150, w = 100, h = 50, box = "outer"),
+                inBox("deep", WindowKind.LABEL, x = 0, y = 80, w = 100, h = 20, box = "inner"),
+                inBox("label", WindowKind.LABEL, x = 10, y = 10, w = 20, h = 20, box = "outer"),
+                window("after"),
+            ),
+            area(1600f, 1000f, fitted = true),
+        )
+        // The inner box is in the outer's content, below what it shows, and its label in the inner's, below what it shows
+        assertEquals(listOf(null, "outer", "inner", "outer", null), layout.windows.map { it.scrollBox?.name })
+        assertEquals(PxRect(200f, 400f, 200f, 100f), layout.rectOf("inner"))
+        assertEquals(PxRect(200f, 560f, 200f, 40f), layout.rectOf("deep"))
+
+        val drawn = DrawnWindow.of(layout.windows)
+        assertEquals(listOf("outer", "after"), drawn.map { it.placed.window.name })
+        val outer = drawn[0]
+        assertEquals(PxRect(200f, 100f, 400f, 200f), outer.placed.rect)
+        assertEquals(listOf("inner", "label"), outer.scrolled.map { it.placed.window.name })
+        val inner = outer.scrolled[0]
+        // From the top left of the outer box's content, then of the inner's
+        assertEquals(PxRect(0f, 300f, 200f, 100f), inner.placed.rect)
+        assertEquals(PxRect(0f, 300f, 200f, 360f), inner.placed.content)
+        assertEquals(PxRect(20f, 20f, 40f, 40f), outer.scrolled[1].placed.rect)
+        assertEquals(PxRect(0f, 160f, 200f, 40f), inner.scrolled.single().placed.rect)
+        assertTrue(drawn[1].scrolled.isEmpty())
+    }
+
+    @Test
+    fun aScrollBoxInAPageScrollsInThePane() {
+        val layout = WindowLayout.of(
+            state(
+                mainArea(800, 400, 100, 25, 0, 0, 800, 400),
+                window("side", WindowKind.USER_WINDOW, w = 200, h = 375, dock = ScriptWindow.Dock(true, "right", false, "Side")),
+                window("box", WindowKind.SCROLL_BOX, x = 0, y = 0, w = 200, h = 100, parent = "side", parentKind = WindowKind.USER_WINDOW),
+                inBox("far", WindowKind.LABEL, x = 0, y = 500, w = 200, h = 50),
+            ),
+            area(800f, 1600f, fitted = false, selectedPage = WindowKey("side", WindowKind.USER_WINDOW)),
+        )
+        // The page fills the pane below its header, 800 by 1500 for the window's 200 by 375, 4 to a pixel; the label is
+        // far below the pane
+        val far = layout.paneWindows.single { it.window.name == "far" }
+        assertEquals(WindowKey("box", WindowKind.SCROLL_BOX), far.scrollBox)
+        val box = DrawnWindow.of(layout.paneWindows).single { it.placed.window.name == "box" }
+        assertEquals(PxRect(0f, 2000f, 800f, 200f), box.scrolled.single().placed.rect)
     }
 
     @Test

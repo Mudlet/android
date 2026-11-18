@@ -48,8 +48,8 @@ defaults:
   run:
     shell: bash
 
-# One PTB at a time on a ref, and never cancelled but on a pull request: a cancelled publish could leave Play and the
-# pre-release apart
+# One PTB at a time on a ref, and never cancelled but on a pull request: a publish cancelled between deleting the
+# old pre-release and making the new one would leave none
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -108,6 +108,7 @@ jobs:
             last_mudlet=$(marker mudlet)
             last_android=$(marker android)
             last_code=$(marker versionCode)
+            last_play=$(sed -n 's/^<!-- play: \([a-z]*\) -->$/\1/p' <<< "$notes")
           elif grep -q 'release not found' "$RUNNER_TEMP/gh.err"; then
             echo "No ptb pre-release yet"
           else
@@ -118,6 +119,12 @@ jobs:
           if [ "$FORCE" != true ] && [ "$mudlet_sha" = "${last_mudlet:-}" ] && [ "$android_sha" = "${last_android:-}" ]; then
             build=false
             echo "::notice::Neither Mudlet ${mudlet_sha:0:7} nor this repository ${android_sha:0:7} changed since the last PTB: nothing to build"
+          fi
+          # The pre-release does not wait for Play, so a build Play refused would otherwise never reach Play: build it
+          # again, under a new versionCode, until Play takes one
+          if [ "$build" = false ] && [ "${last_play:-}" = failed ]; then
+            build=true
+            echo "::notice::Google Play did not take the last PTB: building it again for Play"
           fi
 
           # versionCode: the UTC time as yyDDDHHmm (year, day of the year, hour, minute), which only grows, is
@@ -244,6 +251,8 @@ jobs:
     timeout-minutes: 30
     environment: play
     permissions: {}
+    outputs:
+      upload: ${{ steps.creds.outputs.upload }}
     steps:
       - name: Play credentials
         id: creds
@@ -287,10 +296,13 @@ jobs:
 
   # The rolling `ptb` pre-release, replaced by each PTB: the APKs, the source bundle, their checksums and the notes,
   # whose markers the next run's plan reads. Only for an APK signed with the upload key: a throwaway key would change
-  # every night, and no installed PTB could take the next one
+  # every night, and no installed PTB could take the next one. It does not wait for Play to take the AAB: a refused
+  # upload fails the play job and the run, and the notes' play marker has the next night build again for Play
   github-release:
     needs: [plan, build, notes, play]
-    if: needs.plan.outputs.publish == 'true' && needs.build.outputs.signed-with-upload-key == 'true'
+    if: >-
+      always() && needs.plan.outputs.publish == 'true' && needs.build.result == 'success'
+      && needs.notes.result == 'success' && needs.build.outputs.signed-with-upload-key == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -315,8 +327,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION_NAME: ${{ needs.plan.outputs.version-name }}
+          PLAY: ${{ needs.play.result }}
+          PLAY_UPLOAD: ${{ needs.play.outputs.upload }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           (cd dist && sha256sum mudlet-ptb-source.tar >> SHA256SUMS.txt)
+          case "$PLAY:$PLAY_UPLOAD" in
+            success:true) play=uploaded ;;
+            success:*) play=skipped ;;
+            *)
+              play=failed
+              {
+                echo
+                echo "Google Play did not take this build ([the run]($RUN_URL)): its test track still has the last PTB it"
+                echo "took, and the next night builds again for it."
+              } >> dist/release-notes.md
+              ;;
+          esac
+          echo "<!-- play: $play -->" >> dist/release-notes.md
           if ! out=$(gh release delete ptb --cleanup-tag --yes 2>&1); then
             grep -q 'release not found' <<< "$out" || { echo "::error::could not delete the old ptb pre-release: $out"; exit 1; }
           fi

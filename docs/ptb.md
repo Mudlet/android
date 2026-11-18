@@ -18,8 +18,8 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
 
 1. **plan**: resolves Mudlet's `development` to a commit, and reads the last PTB's commits from the markers in the
    `ptb` pre-release's notes. If neither Mudlet's commit nor this repository's changed, it stops there (a manual run
-   with `force` builds anyway); while there is no pre-release, before the setup below, every run builds. It works
-   out the version (below).
+   with `force` builds anyway), unless Google Play did not take the last PTB (step 7); while there is no pre-release,
+   before the setup below, every run builds. It works out the version (below).
 2. **engine** (arm64-v8a and x86_64 at once): libmudlet and its dependencies, with libmudlet.yml's caches, and the
    engine staged by `STAGE_ONLY=1 scripts/build-apk.sh`. libmudlet is built with `MUDLET_VERSION_BUILD=-ptb-<date>`,
    as Mudlet's own PTBs are, so the engine calls itself `<version>-ptb-<date>-<commit>`.
@@ -41,14 +41,16 @@ Every night at 05:23 UTC (after the libmudlet nightly, whose ccache it takes up)
 6. **play**: uploads the AAB to the open testing track (`beta` in Play's API) with
    [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play), pinned to a commit.
 7. **github-release**: replaces the `ptb` pre-release, its tag on this repository's commit, with the APKs, the
-   source bundle, `SHA256SUMS.txt` and notes naming both commits.
+   source bundle, `SHA256SUMS.txt` and notes naming both commits. It does not wait for Play: when Play refuses the
+   AAB, the play job fails, and so does the run, which reports it below, but the pre-release is still replaced, its
+   notes say that Play did not take it, and their `<!-- play: failed -->` marker has the next night build again
+   (with a new versionCode) even if nothing changed, until Play takes one. Play never gets the same versionCode twice.
 
 Steps 6 and 7 run only on `main`, only after the smoke test passed and the source bundle was built, and only with
-the secrets below; the GitHub
-pre-release only after Play took the AAB, or when no Play credentials are set. On any other branch, and on a pull
-request that changes the app's code (`app/`, `engine-service/`, `protocol/`, `suggest/`, `native/`) or the release
-build (the workflow, the Gradle files, the size budgets or the scripts it runs), the run is a dry run: it builds, signs with a throwaway key, runs the smoke test and
-publishes nothing. A failed nightly opens or updates the issue "Nightly PTB fails".
+the secrets below. On any other branch, and on a pull request that changes the app's code (`app/`,
+`engine-service/`, `protocol/`, `suggest/`, `native/`) or the release build (the workflow, the Gradle files, the
+size budgets or the scripts it runs), the run is a dry run: it builds, signs with a throwaway key, runs the smoke
+test and publishes nothing. A failed nightly opens or updates the issue "Nightly PTB fails".
 
 ### The source bundle
 
@@ -210,9 +212,8 @@ advanced sideloading flow.
     pre-release's notes). Google is still extending this part of Play Console; until it is done, testers in the
     regions above install the APKs with Android's advanced flow.
 
-From then on each night that has something new uploads to Play, and once Play took it, replaces the GitHub
-pre-release. Uploads are sent for review automatically; with Publishing overview's "Managed publishing" on, they wait
-for you to publish them.
+From then on each night that has something new uploads to Play and replaces the GitHub pre-release. Uploads are
+sent for review automatically; with Publishing overview's "Managed publishing" on, they wait for you to publish them.
 
 ## Joining as a tester
 

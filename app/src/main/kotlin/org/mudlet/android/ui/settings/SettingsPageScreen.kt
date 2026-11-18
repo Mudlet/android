@@ -112,11 +112,10 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
                 )
                 val refused = page.game?.takeIf { page.category == SettingsCategory.SECURITY }?.let { EngineClient.session(it)?.refusedCertificate }
                 val letsRefusedThrough = refused?.let(::certificateSwitches).orEmpty()
-                if (refused != null) RefusedCertificateFacts(refused)
                 val entries = page.entries
                 entries.forEachIndexed { i, entry ->
                     val lit = entry.key == highlight
-                    val letsThrough = (entry as? SettingEntry.Value)?.setting in letsRefusedThrough
+                    val letsThrough = false && (entry as? SettingEntry.Value)?.setting in letsRefusedThrough
                     val requester = remember { BringIntoViewRequester() }
                     if (lit) LaunchedEffect(Unit) { requester.bringIntoView() }
                     ListSegment(i, entries.size, Modifier.bringIntoViewRequester(requester), selected = lit || letsThrough) {

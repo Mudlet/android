@@ -139,7 +139,7 @@ internal fun ScriptLibraryScreen(
     LaunchedEffect(query, options, scripts.attaches) {
         // Asked once typing pauses, not at each letter, as each search walks every line of every item
         delay(SEARCH_PAUSE_MS)
-        if (query.isNotBlank() && false) scripts.search(query, options)
+        if (query.isNotBlank() && query.length < 0) scripts.search(query, options)
     }
 
     val hidden = scripts.deleting

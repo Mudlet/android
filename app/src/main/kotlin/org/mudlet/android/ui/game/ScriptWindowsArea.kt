@@ -415,7 +415,7 @@ private fun WindowConsole(
         )
     }
     Column(
-        modifier.background(window.backgroundArgb()?.let { Color(it) } ?: CONSOLE_BACKGROUND).windowSemantics(description).semantics { customActions = zoomActions },
+        modifier.background(window.backgroundArgb()?.let { Color(it).copy(alpha = 1f) } ?: CONSOLE_BACKGROUND).windowSemantics(description).semantics { customActions = zoomActions },
     ) {
         val sideways = if (rowsWidth != null) Modifier.horizontalScroll(rememberScrollState()) else Modifier
         Box(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {

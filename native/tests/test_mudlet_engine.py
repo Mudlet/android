@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
-                       packages, error_console, key_bindings):
+                       packages, error_console, key_bindings, scripts_stopped):
             checks()
         checks = secure_offer
         checks(port)
@@ -4890,6 +4890,82 @@ def key_bindings():
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
+
+def scripts_stopped():
+    """setScriptsStopped, desktop's emergency stop, and scriptsStopped: refused with no profile and for a stopped that
+    is not a boolean; an alias and an event handler that run, then do not while stopped, the typed line going to the
+    game as it is, and do again once started; the state told once for each change, to a UI that attaches, across a
+    reconnect, and as not stopped once the profile closes."""
+    game = fake_telnet.start_in_thread()
+    profile = "Stop Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "scriptsStopped", "stopped": False} in seen, "with no profile open, a UI that attaches is told scripts are not stopped")
+    m = c.ask({"t": "setScriptsStopped", "stopped": True}, answers=("error",), collect=seen)
+    check(m["message"] == "setScriptsStopped: no profile running", f"setScriptsStopped with no profile open is refused: {m}")
+
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+    for stopped in ("yes", 1, None):
+        request = {"t": "setScriptsStopped"} if stopped is None else {"t": "setScriptsStopped", "stopped": stopped}
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == "setScriptsStopped: stopped must be true or false", f"setScriptsStopped {stopped!r} is refused: {m}")
+    c.ask({"t": "runLua", "code": 'tempAlias("^ping$", [[send("pong")]]) '
+                                  'registerAnonymousEventHandler("stopTest", function() send("event ran") end)'},
+          answers=("status", "error"), collect=seen)
+
+    def scripts_run(running, what):
+        sent = len(fake_telnet.RECEIVED)
+        c.send({"t": "send", "text": "ping"})
+        c.send({"t": "runLua", "code": 'raiseEvent("stopTest")'})
+        # Typed input that no alias takes, so whatever the two before sent has reached the game ahead of it
+        c.send({"t": "send", "text": "done"})
+        got = received_after(sent, "done")
+        if running:
+            check("pong" in got and "ping" not in got and "event ran" in got, f"{what}: the alias and the event handler run: {got}")
+        else:
+            check("ping" in got and "pong" not in got and "event ran" not in got, f"{what}: neither runs, and the line goes to the game as typed: {got}")
+
+    def stops_told(since):
+        return [m["stopped"] for m in seen[since:] if m["t"] == "scriptsStopped"]
+
+    scripts_run(True, "before the stop")
+    since = len(seen)
+    c.send({"t": "setScriptsStopped", "stopped": True})
+    c.wait_for(lambda m: m["t"] == "scriptsStopped" and m["stopped"], collect=seen)
+    scripts_run(False, "once stopped")
+    c.send({"t": "setScriptsStopped", "stopped": True})
+    c.ask({"t": "runLua", "code": "return 1"}, answers=("status", "error"), collect=seen)
+    check(stops_told(since) == [True], f"the stop is told once, and a second stop changes nothing: {stops_told(since)}")
+
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(last_of(seen, "scriptsStopped") == {"t": "scriptsStopped", "stopped": True}, "a UI that attaches is told scripts are stopped")
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", seen)
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+    scripts_run(False, "after a reconnect")
+
+    since = len(seen)
+    c.send({"t": "setScriptsStopped", "stopped": False})
+    c.wait_for(lambda m: m["t"] == "scriptsStopped" and not m["stopped"], collect=seen)
+    scripts_run(True, "started again")
+    c.send({"t": "setScriptsStopped", "stopped": False})
+    c.ask({"t": "runLua", "code": "return 1"}, answers=("status", "error"), collect=seen)
+    check(stops_told(since) == [False], f"the start is told once, and a second start changes nothing: {stops_told(since)}")
+
+    c.send({"t": "setScriptsStopped", "stopped": True})
+    c.wait_for(lambda m: m["t"] == "scriptsStopped" and m["stopped"], collect=seen)
+    since = len(seen)
+    c.send({"t": "closeProfile", "name": profile})
+    c.wait_for(lambda m: m["t"] == "scriptsStopped", timeout=30, collect=seen)
+    check(stops_told(since) == [False], f"a profile that closes is told as no longer stopped: {stops_told(since)}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 if __name__ == "__main__":
     main()

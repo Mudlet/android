@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,6 +25,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -52,7 +55,8 @@ const val GAME_PILL_TAG = "gamePill"
  * ([onSwitch]) as actions, so neither the sheet nor a gesture is ever needed; a null action is left out. A horizontal
  * drag on it is [swipe]'s: its label slides with the finger, the neighbour's name comes in from the side, and a release
  * far enough, or a fling, switches to that game with a tick; the next game is to the right, or to the left in
- * right-to-left layouts.
+ * right-to-left layouts. While desktop Mudlet's emergency stop holds the game's scripts ([scriptsStopped]) it shows a
+ * red stop sign, and TalkBack reads "scripts stopped" after the state.
  */
 @Composable
 fun GamePill(
@@ -69,6 +73,7 @@ fun GamePill(
     next: String?,
     onSwitch: (String) -> Boolean,
     swipe: GameSwipe,
+    scriptsStopped: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -83,6 +88,7 @@ fun GamePill(
     } else {
         stringResource(R.string.game_state, name, stateText)
     }
+    if (scriptsStopped) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_scripts_stopped))
     if (othersUnread > 0) {
         description = stringResource(R.string.game_description_more, description, pluralStringResource(R.plurals.game_others_unread, othersUnread.toPluralCount(), othersUnread))
     }
@@ -116,6 +122,7 @@ fun GamePill(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ConnectionIcon(state)
+            if (scriptsStopped) Icon(painterResource(R.drawable.ic_report), contentDescription = null, Modifier.size(20.dp), tint = colors.error)
             val slide = swipe.offset
             Box(Modifier.widthIn(max = 120.dp).clipToBounds()) {
                 PillLabel(name, slide)

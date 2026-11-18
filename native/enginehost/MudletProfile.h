@@ -99,6 +99,7 @@ public:
     QString cancelMapDownload() override;
     QString answerSecureOffer(bool accept) override;
     QString setScriptsStopped(bool stopped) override;
+    QString setReplayRecording(bool record) override;
     QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
@@ -190,6 +191,10 @@ private:
     void applySaved();
     void applyPassword();
     void setSecureOffer(bool offered);
+    QString replayFolder() const;
+    QStringList replays() const;
+    // Tells the UI a recording that has ended, by setReplayRecording() or with the connection, and the file it saved
+    void pushRecordingEnded();
     void pushRefusedCertificate();
     // Why the running profile cannot be connected, with this TLS choice if one is given; empty if it can
     QString connectProblem(std::optional<bool> tls) const;
@@ -303,6 +308,11 @@ private:
     bool mMapDownloadCancelled = false;
     // The game's offer of its secure port waits for the player's answer
     bool mSecureOffer = false;
+    // A replay is being recorded, with the replays in the log folder as it began, as libmudlet does not say which file
+    // a recording is saved to; and the file of the last one saved
+    bool mRecording = false;
+    QStringList mReplaysBefore;
+    QString mRecordedFile;
     // The download's own progress has started: Mudlet's progress before then is the end of a map import or export a
     // script began
     bool mMapDownloadProgressStarted = false;

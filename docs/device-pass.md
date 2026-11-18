@@ -68,14 +68,9 @@ Multi-Users in Middle-earth (MUME) in the list let you make a character in a few
    appears, in colour.
 2. **Write down** how many seconds it took from your tap to the first text.
 3. Log in with your character.
-4. Some steps below ask you to type a command that starts with `lua`. Desktop Mudlet understands these by itself; the
-   app needs a small helper first, made once per game:
-   1. Tap the wand button at the top (Scripts), then Aliases, then "New alias".
-   2. Name: `lua`. Pattern: `^lua (.*)$`
-   3. Tap in the Lua field at the bottom and paste (or type), on one line:
-      `local f, e = loadstring("return " .. matches[2]) if not f then f, e = loadstring(matches[2]) end if not f then echo(e .. "\n") return end local ok, r = pcall(f) if not ok then echo(tostring(r) .. "\n") elseif r ~= nil then display(r) end`
-   4. Tap Apply, then Game beside it: the game shows again.
-   5. Type `lua 1 + 1` and Send. The answer `2` shows in the game's text. If it does not, write down what showed.
+4. Some steps below ask you to type a command that starts with `lua`. As on desktop Mudlet, a game gets Mudlet's
+   default packages the first time it opens, and one of them, run-lua-code, understands these. Type `lua 1 + 1` and
+   Send. The answer `2` shows in the game's text. If it does not, write down what showed.
 
 ## Part 3. Play
 
@@ -221,8 +216,8 @@ Only with a Bluetooth or USB keyboard, or a Chromebook's own.
 
 ## Part 13. Scripts
 
-1. Tap the wand button (Scripts). Triggers, Aliases, Scripts, Timers, Keys and Buttons are listed, with your `lua`
-   alias among the aliases.
+1. Tap the wand button (Scripts). Triggers, Aliases, Scripts, Timers, Keys and Buttons are listed, with the `lua`
+   alias of the run-lua-code package among the aliases.
 2. Tap Triggers, "New trigger". Add a pattern `You see` (or a few words your game often sends), type `echo("seen\n")`
    in the Lua field, and Apply. Go back to the game: after a line with those words, "seen" shows.
 3. Tap Timers, "New timer". Set Seconds to 30 and "Send to the game" to `look`, Apply, go back and switch it on:

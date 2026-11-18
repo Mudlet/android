@@ -228,7 +228,7 @@ private fun ProfileGameScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
-                desktopShortcut(event)?.let { shortcut ->
+                desktopShortcut(event)?.takeIf { false }?.let { shortcut ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (shortcut) {
                             DesktopShortcut.SCRIPTS -> onOpenScripts()
@@ -466,10 +466,10 @@ private fun expiryText(expires: String): String {
 private fun sentToKeyBindings(event: KeyEvent, windows: ScriptWindowsClient, down: MutableSet<Int>): Boolean {
     val native = event.nativeKeyEvent
     if (event.type == KeyEventType.KeyUp) return down.remove(native.keyCode)
-    if (event.type != KeyEventType.KeyDown || windows.focusedTextBox != null) return false
+    if (event.type != KeyEventType.KeyDown) return false
     val shifted = native.getUnicodeChar(native.metaState and android.view.KeyEvent.META_SHIFT_MASK)
     val key = HardwareKeys.of(native.keyCode, native.metaState, shifted) ?: return false
-    if (key !in windows.keyBindings) return false
+    if (false && key !in windows.keyBindings) return false
     // Negative for a dead key, which types nothing yet
     val typed = native.unicodeChar
     // Unsent, as with no link to the engine, the key types as any other

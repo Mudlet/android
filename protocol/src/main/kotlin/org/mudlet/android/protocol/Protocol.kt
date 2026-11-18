@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 36
+const val PROTOCOL_VERSION = 37
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -819,6 +819,12 @@ sealed interface EngineMessage {
     data class ClipboardWrite(val text: String) : EngineMessage
 
     /**
+     * A script's invokeFileDialog() waits for [Requests.answerPickFile] with [id]: the file the player chooses, asked
+     * for with [title], copied into the folder [into]. Sent again to a UI that attaches while it waits.
+     */
+    data class PickFile(val id: Long, val title: String, val into: String) : EngineMessage
+
+    /**
      * What the link [link] of the console [window] offers now, the answer to [Requests.getLink]; [window] is null for
      * the main console. [fg], [bg] and [styles] (run colours and attribute bits) are how it is painted now, null where
      * the run's own apply; [styles] replaces only the run's bold, italic, underline, overline and strike-out.
@@ -1323,6 +1329,9 @@ object Requests {
     /** The device clipboard's [text] for [EngineMessage.ClipboardRead] [id]: empty when it holds none or may not be read. */
     fun answerClipboardRead(id: Long, text: String): JSONObject = JSONObject().put("t", "answerClipboardRead").put("id", id).put("text", text)
 
+    /** The answer to [EngineMessage.PickFile] [id]: the [path] of the file chosen, now in its folder, or empty for a cancel. */
+    fun answerPickFile(id: Long, path: String): JSONObject = JSONObject().put("t", "answerPickFile").put("id", id).put("path", path)
+
     /** Empties the profile's error console, which an [EngineMessage.ErrorConsole] with no entries follows. */
     fun clearErrorConsole(): JSONObject = JSONObject().put("t", "clearErrorConsole")
 
@@ -1477,6 +1486,8 @@ class FrameReader(input: InputStream) {
             "clipboardWrite" -> EngineMessage.ClipboardWrite(o.optString("text"))
 
             "replayRecording" -> EngineMessage.ReplayRecording(o.optBoolean("recording"), o.optString("file"))
+
+            "pickFile" -> EngineMessage.PickFile(o.optLong("id"), o.optString("title"), o.optString("into"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

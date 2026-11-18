@@ -1103,6 +1103,16 @@ class ProtocolTest {
     }
 
     @Test
+    fun aScriptsFilePickAndItsAnswer() {
+        assertEquals(
+            EngineMessage.PickFile(2, "Choose a map", "/data/profiles/Game"),
+            FrameReader.parse(JSONObject("""{"t":"pickFile","id":2,"title":"Choose a map","into":"/data/profiles/Game"}""")),
+        )
+        assertEquals(mapOf("t" to "answerPickFile", "id" to 2L, "path" to "/data/profiles/Game/a.dat"), Requests.answerPickFile(2, "/data/profiles/Game/a.dat").toMap())
+        assertEquals(mapOf("t" to "answerPickFile", "id" to 3L, "path" to ""), Requests.answerPickFile(3, "").toMap())
+    }
+
+    @Test
     fun aRefusedCertificate() {
         val refused = JSONObject(
             """{"t":"certificateRefused","refused":true,"issuedTo":"localhost","issuer":"Test CA","expires":"2020-01-02T00:00:00Z",

@@ -753,6 +753,7 @@ It carries too the items searched as the desktop editor's search box does (`sear
 `0027-headless-script-search.patch`).
 And the log options `getConfig()` and `setConfig()` lacked: timestamps, how a log is named and its name
 (`0028-headless-log-settings.patch`).
+And the map emptied as the desktop's Map settings' "Delete map" does (`deleteMap()`, `0029-headless-delete-map.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

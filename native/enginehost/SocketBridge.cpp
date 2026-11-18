@@ -745,6 +745,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("answerSecureOffer")) {
         const QJsonValue accept = message.value(QLatin1String("accept"));
         refuse(type, accept.isBool() ? mEngine->answerSecureOffer(accept.toBool()) : QStringLiteral("accept must be true or false"));
+    } else if (type == QLatin1String("deleteMap")) {
+        refuse(type, mEngine->deleteMap());
     } else if (type == QLatin1String("loadMapFile") || type == QLatin1String("saveMapFile")) {
         const QString path = message.value(QLatin1String("path")).toString();
         const auto cancelAsked = [this] {

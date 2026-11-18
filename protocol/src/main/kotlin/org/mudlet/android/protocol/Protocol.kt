@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 33
+const val PROTOCOL_VERSION = 34
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -1329,6 +1329,9 @@ object Requests {
 
     /** Stops a JSON load or save while it is cancelable. Answered only by an Error, when refused. */
     fun cancelMapFile(): JSONObject = JSONObject().put("t", "cancelMapFile")
+
+    /** Empties the profile's map, keeping the map files saved before; a new [EngineMessage.AppMap] follows. Answered only by an Error, when refused. */
+    fun deleteMap(): JSONObject = JSONObject().put("t", "deleteMap")
 
     /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
     fun getSettings(keys: List<String>, id: Long): JSONObject {

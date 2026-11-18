@@ -3872,7 +3872,7 @@ def map_files():
     """loadMapFile and saveMapFile: a map saved as Mudlet's own format and as JSON, and loaded back from each and from
     an XML map, mapFile running first and done last, with Mudlet's progress, cancelable only for JSON; a file that does
     not load failing with why, a JSON one leaving the map as it was; cancelMapFile read while a large JSON map loads,
-    stopping it and keeping the map; and the refusals."""
+    stopping it and keeping the map; deleteMap emptying the map and keeping the saved files; and the refusals."""
     profile = "Map Files Test"
     proc, c = start_engine(profile)
     seen = []
@@ -3880,7 +3880,7 @@ def map_files():
     folder = os.path.join(TMP, "map-files")
     os.makedirs(folder, exist_ok=True)
     dat, js, xml, bad = (os.path.join(folder, name) for name in ("map.dat", "map.json", "map.xml", "bad.json"))
-    for request in ({"t": "loadMapFile", "path": dat}, {"t": "saveMapFile", "path": dat}):
+    for request in ({"t": "loadMapFile", "path": dat}, {"t": "saveMapFile", "path": dat}, {"t": "deleteMap"}):
         m = c.ask(request, answers=("error",), collect=seen)
         check(m["message"] == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
     refused_cancel = "cancelMapFile: no map file is being loaded or saved that can be cancelled"
@@ -3984,6 +3984,18 @@ def map_files():
     check(not any(m["t"] == "error" for m in seen[since:]), f"and the cancel is taken, not refused: {seen[since:][-3:]}")
     m = c.ask({"t": "cancelMapFile"}, answers=("error",), collect=seen)
     check(m["message"] == refused_cancel, f"a cancelMapFile after it ended is refused: {m}")
+
+    check(int(lua("full", rooms + " result = n")) > 0, "the map has rooms before deleteMap")
+    since = len(seen)
+    c.send({"t": "deleteMap"})
+    check(lua("emptied", rooms + " result = n") == "0", "deleteMap leaves no room")
+    areas = lua("areas", 'local names = {} for name in pairs(getAreaTable()) do names[#names + 1] = name end result = table.concat(names, ",")')
+    check(areas in ("", "Default Area"), f"and no area but the default one: {areas}")
+    check(not any(m["t"] == "error" for m in seen[since:]), f"and is not refused: {seen[since:][-3:]}")
+    check(all(os.path.getsize(path) > 0 for path in (dat, js, big)), "and the map files saved before stay")
+    frames = run({"t": "loadMapFile", "path": dat})
+    check(frames[-1]["state"] == "done" and lua("restored", "result = getRoomName(1)") == "File room 1",
+          f"so one loads the map back: {frames[-1:]}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

@@ -2267,6 +2267,17 @@ QString MudletProfile::saveMapFile(const QString& path, const std::function<bool
     return runMapFile(MapFile::Operation::save, path, cancelAsked);
 }
 
+QString MudletProfile::deleteMap()
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (mMapDownload.state == MapDownload::State::downloading) {
+        return QStringLiteral("the map is downloading");
+    }
+    return mSession->deleteMap() ? QString() : mSession->errorString();
+}
+
 QString MudletProfile::runMapFile(MapFile::Operation operation, const QString& path, const std::function<bool()>& cancelAsked)
 {
     if (!loaded()) {

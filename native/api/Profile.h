@@ -2,6 +2,14 @@
 
 #include <QString>
 
+// What openProfile gives a profile for this run only, each empty for none: the game's password and its proxy's.
+// Neither is stored or logged.
+struct ProfilePasswords
+{
+    QString game;
+    QString proxy;
+};
+
 // A profile as the UI sees it: a name and the game it connects to. The password is never part of it.
 struct Profile
 {

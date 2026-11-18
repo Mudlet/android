@@ -279,10 +279,14 @@ QString ControlBridge::saveProfile(const QJsonObject& message)
 QString ControlBridge::openProfile(const QJsonObject& message)
 {
     const QJsonValue password = message.value(QLatin1String("password"));
+    const QJsonValue proxyPassword = message.value(QLatin1String("proxyPassword"));
     const QJsonValue connectNow = message.value(QLatin1String("connect"));
     const QJsonValue alongside = message.value(QLatin1String("alongside"));
     if (!password.isUndefined() && !password.isNull() && !password.isString()) {
         return QStringLiteral("password must be a string");
+    }
+    if (!proxyPassword.isUndefined() && !proxyPassword.isNull() && !proxyPassword.isString()) {
+        return QStringLiteral("proxyPassword must be a string");
     }
     if (!connectNow.isUndefined() && !connectNow.isBool()) {
         return QStringLiteral("connect must be true or false");
@@ -294,7 +298,7 @@ QString ControlBridge::openProfile(const QJsonObject& message)
     if (alongside.toBool() && mOpen.size() >= maxOpenProfiles && openIndex(name) < 0) {
         return QStringLiteral("at most %1 open").arg(maxOpenProfiles);
     }
-    return mEngineControl->openProfile(name, password.toString(), connectNow.toBool(true), alongside.toBool());
+    return mEngineControl->openProfile(name, {password.toString(), proxyPassword.toString()}, connectNow.toBool(true), alongside.toBool());
 }
 
 void ControlBridge::setAppState(const QJsonObject& message)

@@ -33,7 +33,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 46;
+    static constexpr int protocolVersion = 47;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -155,6 +155,9 @@ protected:
     QString setAppMapSize(const QJsonObject& message);
     QString moveMap(const QJsonObject& message);
     void findRooms(const QJsonObject& message);
+    void setProxy(const QJsonObject& message);
+    // The proxy message answering request: the profile's proxy as the engine now holds it, never its password
+    void sendProxy(const QString& request);
     void getSettings(const QJsonObject& message);
     void setSettings(const QJsonObject& message);
     // The settings message answering request: the values of keys as the engine now holds them, and those refused

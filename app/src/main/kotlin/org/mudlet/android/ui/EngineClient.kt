@@ -369,7 +369,7 @@ object EngineClient {
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) opened(name)
         onAnswer(error)
-    }) { Requests.openProfile(name, password, connect = true, alongside = false, id = it) }
+    }) { Requests.openProfile(name, password, proxyPassword = null, connect = true, alongside = false, id = it) }
 
     /**
      * Opens and connects the profile [name], with [password] for this run, beside those open, and makes it the front;
@@ -381,7 +381,7 @@ object EngineClient {
             setFront(name)
         }
         onAnswer(error)
-    }) { Requests.openProfile(name, password, connect = true, alongside = true, id = it) }
+    }) { Requests.openProfile(name, password, proxyPassword = null, connect = true, alongside = true, id = it) }
 
     /**
      * Opens the profile [name] without connecting it, as desktop's Offline, with [password] for a later connection; beside
@@ -395,7 +395,7 @@ object EngineClient {
                 if (alongside) setFront(name)
             }
             onAnswer(error)
-        }) { Requests.openProfile(name, password, connect = false, alongside = alongside, id = it) }
+        }) { Requests.openProfile(name, password, proxyPassword = null, connect = false, alongside = alongside, id = it) }
     }
 
     /**
@@ -405,7 +405,7 @@ object EngineClient {
     fun givePassword(name: String, password: String?) {
         if (session(name) == null) return
         // Not answered to the player: an engine that refuses is closing the profile, whose next start has it
-        profileRequest({}) { Requests.openProfile(name, password, connect = false, alongside = true, id = it) }
+        profileRequest({}) { Requests.openProfile(name, password, proxyPassword = null, connect = false, alongside = true, id = it) }
     }
 
     // A profile the engine brought back after it was killed has no password, as the engine keeps none: its stored one

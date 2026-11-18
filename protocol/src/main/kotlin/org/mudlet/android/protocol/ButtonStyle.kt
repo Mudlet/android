@@ -14,8 +14,8 @@ data class ButtonRoom(val margin: Edges, val border: Float, val padding: Edges)
 /**
  * What the app draws of a bar's button (docs/phase-f.md, "Button bars and commands"): [style], the label style sheet's
  * subset, from the button's own sheet over its bar's, and the [padding] and [margin] those set; null where they set
- * none, which keeps the app's own spacing. [nativeBorder] is whether the sheets leave the button its native frame,
- * setting no `border` property and leaving no `border-image`, as Qt's `hasNativeBorder()` has it.
+ * none, which keeps the app's own spacing. [nativeBorder] is whether the sheets leave the button its native frame, as
+ * [LabelStyle.nativeFrame] has it.
  */
 data class ButtonStyle(val style: LabelStyle, val padding: Edges?, val margin: Edges?, val nativeBorder: Boolean) {
     /**
@@ -81,10 +81,8 @@ data class ButtonStyle(val style: LabelStyle, val padding: Edges?, val margin: E
             // Told apart from a sheet that sets them to 0 by being the same object afterwards
             val unset = Edges(0f, 0f, 0f, 0f)
             val read = LabelStyle.of(declarations, LabelStyle(padding = unset, margin = unset))
-            // Qt keeps the native frame under a `border-image` that ends with no file, as after a later `none`
-            val native = read.borderImage == null && declarations.none { (property, _) -> property.startsWith("border") && property != "border-image" }
             // Left as `unset` where the sheets set none, which is Edges.ZERO's value
-            return ButtonStyle(read, read.padding.takeIf { it !== unset }, read.margin.takeIf { it !== unset }, native)
+            return ButtonStyle(read, read.padding.takeIf { it !== unset }, read.margin.takeIf { it !== unset }, read.nativeFrame)
         }
 
         /**

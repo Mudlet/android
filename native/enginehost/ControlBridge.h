@@ -14,6 +14,7 @@
 
 class IEngineControl;
 class QEventLoop;
+class QUrl;
 
 // The control socket, engine.sock: the profiles, the app's state and the engine's own statuses, and a socket beside it
 // for each open profile, which a SocketBridge serves. A UI that leaves profileSockets out of its hello is served as in
@@ -27,6 +28,7 @@ public:
     static constexpr int maxOpenProfiles = 4;
 
     explicit ControlBridge(QObject* parent = nullptr);
+    ~ControlBridge() override;
     void setEngineControl(IEngineControl* control);
     bool listen(const QString& path);
 
@@ -44,6 +46,10 @@ public:
     enum class Change { lines, connection, attention };
     // From a profile's bridge
     void profileChanged(SocketBridge* profile, Change change);
+
+private slots:
+    // QDesktopServices' handler for a script's openUrl() and openWebPage() while a UI opens them
+    void openUrl(const QUrl& url);
 
 private:
     struct OpenProfile
@@ -76,6 +82,7 @@ private:
     // The open profiles and their connections to the engine notification
     void showProfiles();
     QJsonObject pickFileMessage() const;
+    void handleUrls(bool handle);
 
     static constexpr int changeDelayMs = 500;
     // How long a script's getClipboardText() waits for the UI's answer: the game stalls while it waits
@@ -108,4 +115,5 @@ private:
     std::optional<FilePick> mPick;
     qint64 mPickIds = 0;
     QEventLoop* mPickLoop = nullptr;
+    bool mHandlingUrls = false;
 };

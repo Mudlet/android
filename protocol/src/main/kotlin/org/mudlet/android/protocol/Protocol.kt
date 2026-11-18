@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 35
+const val PROTOCOL_VERSION = 36
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -815,6 +815,9 @@ sealed interface EngineMessage {
      */
     data class PickFile(val id: Long, val title: String, val into: String) : EngineMessage
 
+    /** A script's openUrl() or openWebPage() for [url], sent only to a UI whose hello said opensUrls. */
+    data class OpenUrl(val url: String) : EngineMessage
+
     /**
      * What the link [link] of the console [window] offers now, the answer to [Requests.getLink]; [window] is null for
      * the main console. [fg], [bg] and [styles] (run colours and attribute bits) are how it is painted now, null where
@@ -1006,11 +1009,12 @@ sealed interface EngineMessage {
 
 object Requests {
     /** With [profileSockets], on the control socket, the UI attaches to each open profile's socket for its traffic. */
-    fun hello(instance: String?, lastSeq: Long, profileSockets: Boolean): JSONObject = JSONObject()
+    fun hello(instance: String?, lastSeq: Long, profileSockets: Boolean, opensUrls: Boolean): JSONObject = JSONObject()
         .put("t", "hello").put("v", PROTOCOL_VERSION).put("client", "android-compose")
         .apply {
             if (instance != null) put("instance", instance).put("lastSeq", lastSeq)
             if (profileSockets) put("profileSockets", true)
+            if (opensUrls) put("opensUrls", true)
         }
 
     fun connect(host: String, port: Int, tls: Boolean): JSONObject = JSONObject().put("t", "connect").put("host", host).put("port", port).put("tls", tls)
@@ -1461,6 +1465,8 @@ class FrameReader(input: InputStream) {
             "clipboardWrite" -> EngineMessage.ClipboardWrite(o.optString("text"))
 
             "pickFile" -> EngineMessage.PickFile(o.optLong("id"), o.optString("title"), o.optString("into"))
+
+            "openUrl" -> EngineMessage.OpenUrl(o.optString("url"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

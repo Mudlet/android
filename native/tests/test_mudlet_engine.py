@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
-                       packages, error_console, key_bindings):
+                       clipboard, packages, error_console, key_bindings):
             checks()
         checks = secure_offer
         checks(port)
@@ -4541,6 +4541,67 @@ def sounds():
     c.wait_for(lambda m: m["t"] == "sounds" and not m["gameMuted"], collect=seen)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def clipboard():
+    """A script's getClipboardText() asks the UI with clipboardRead and takes the text of the answer with its id; an
+    answer that does not come in time reads as empty, and one that comes later is ignored; setClipboardText() sends clipboardWrite; with no UI
+    attached a read is empty at once. The clipboard's text never reaches the engine's log."""
+    profile = "Clipboard Test"
+    secret = "clipboard-text-7f3e"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    # The secret in upper case in the scripts, so only the clipboard's own text can put it in the log
+    c.send({"t": "runLua", "code": f'echo(getClipboardText():upper() == "{secret.upper()}" and "read:same\\n" or "read:other\\n")'})
+    ask = c.wait_for(lambda m: m["t"] == "clipboardRead", collect=seen)
+    check(isinstance(ask.get("id"), int) and ask["id"] >= 1, f"a read asks the UI, with an id: {ask}")
+    c.send({"t": "answerClipboardRead", "id": ask["id"], "text": secret})
+    c.wait_for(shown("read:same"), collect=seen)
+
+    c.send({"t": "runLua", "code": 'echo(getClipboardText() == "right" and "ids:same\\n" or "ids:other\\n")'})
+    second = c.wait_for(lambda m: m["t"] == "clipboardRead", collect=seen)
+    c.send({"t": "answerClipboardRead", "id": ask["id"], "text": "wrong"})
+    c.send({"t": "answerClipboardRead", "id": second["id"], "text": "right"})
+    c.wait_for(shown("ids:same"), collect=seen)
+
+    c.send({"t": "runLua", "code": 'echo("slow:[" .. getClipboardText() .. "]\\n")'})
+    late = c.wait_for(lambda m: m["t"] == "clipboardRead", collect=seen)
+    check(len({ask["id"], second["id"], late["id"]}) == 3, f"each read has its own id: {late}")
+    c.wait_for(shown("slow:[]"), collect=seen)
+    since = len(seen)
+    c.send({"t": "answerClipboardRead", "id": late["id"], "text": "too late"})
+    c.send({"t": "answerClipboardRead", "id": ask["id"], "text": "again"})
+    c.send({"t": "ping", "id": 9})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "error" or "too late" in json.dumps(m)],
+          f"an answer after the script stopped waiting is ignored: {seen[since:]}")
+
+    c.send({"t": "runLua", "code": f'setClipboardText(("{secret.upper()}"):lower() .. "-written")'})
+    put = c.wait_for(lambda m: m["t"] == "clipboardWrite", collect=seen)
+    check(put == {"t": "clipboardWrite", "text": f"{secret}-written"}, f"a write puts the text on the UI's clipboard: {put}")
+
+    c.send({"t": "runLua", "code": 'tempTimer(1, function() echo("alone:[" .. getClipboardText() .. "]\\n") '
+                                   'setClipboardText("unseen") end)'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    c.close()
+    time.sleep(2)
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(shown("alone:[]"), collect=seen)
+    c.send({"t": "ping", "id": 10})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    check(not [m for m in seen if m["t"] in ("clipboardRead", "clipboardWrite")],
+          f"with no UI a read is empty and a write goes nowhere, and neither waits for the next UI: {seen}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    with open(LOG, errors="replace") as f:
+        check(secret not in f.read(), "the clipboard's text is not in the engine's log")
 
 
 def package_file(name, folder, details, icon=None):

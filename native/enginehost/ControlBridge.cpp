@@ -7,11 +7,13 @@
 #include "AndroidNotifier.h"
 #endif
 
+#include <QDesktopServices>
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QLocalSocket>
+#include <QUrl>
 
 #include <cmath>
 
@@ -47,6 +49,11 @@ ControlBridge::ControlBridge(QObject* parent)
     connect(&mNotificationTimer, &QTimer::timeout, this, &ControlBridge::showProfiles);
 }
 
+ControlBridge::~ControlBridge()
+{
+    handleUrls(false);
+}
+
 void ControlBridge::setEngineControl(IEngineControl* control)
 {
     mEngineControl = control;
@@ -79,6 +86,7 @@ void ControlBridge::listenFor(SocketBridge* bridge) const
 void ControlBridge::greet(const QJsonObject& hello)
 {
     mProfileOutput = !hello.value(QLatin1String("profileSockets")).toBool();
+    handleUrls(hello.value(QLatin1String("opensUrls")).toBool());
     SocketBridge::greet(hello);
 }
 
@@ -209,6 +217,30 @@ QString ControlBridge::pickFile(bool folder, const QString& title, const QString
     const QString path = mPick->path.value_or(QString());
     mPick.reset();
     return path;
+}
+
+// Only the schemes a browser or mail app takes: any other, such as file: or a game's own, is left to Qt, which cannot
+// start an app from the engine's service. Handled, openUrl() returns true whether or not the UI opens it.
+void ControlBridge::handleUrls(bool handle)
+{
+    if (handle == mHandlingUrls) {
+        return;
+    }
+    mHandlingUrls = handle;
+    for (const QLatin1String scheme : {QLatin1String("http"), QLatin1String("https"), QLatin1String("mailto")}) {
+        if (handle) {
+            QDesktopServices::setUrlHandler(scheme, this, "openUrl");
+        } else {
+            QDesktopServices::unsetUrlHandler(scheme);
+        }
+    }
+}
+
+void ControlBridge::openUrl(const QUrl& url)
+{
+    if (mClient && mClientGreeted) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("openUrl")}, {QStringLiteral("url"), url.toString(QUrl::FullyEncoded)}});
+    }
 }
 
 QJsonObject ControlBridge::pickFileMessage() const

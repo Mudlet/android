@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **37**.
+The current version is **38**.
 
 ## Transport
 
@@ -54,7 +54,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 
 | Message | Fields | Meaning |
 |---|---|---|
-| `hello` | `v`, `client`, `instance`?, `lastSeq`?, `profileSockets`? | Must be the first frame. `v` is the protocol version, `client` names the client (the app sends `android-compose`; the engine ignores it). `instance` and `lastSeq` are what the UI already has: the engine instance it last attached to and the last line `seq` it holds. The app sends both or neither. `profileSockets`, false if absent and read only on the control socket, says the UI attaches to each profile's socket, so the control socket carries only the control traffic ("Several profiles" below). |
+| `hello` | `v`, `client`, `instance`?, `lastSeq`?, `profileSockets`?, `opensUrls`? | Must be the first frame. `v` is the protocol version, `client` names the client (the app sends `android-compose`; the engine ignores it). `instance` and `lastSeq` are what the UI already has: the engine instance it last attached to and the last line `seq` it holds. The app sends both or neither. `profileSockets`, false if absent and read only on the control socket, says the UI attaches to each profile's socket, so the control socket carries only the control traffic ("Several profiles" below). `opensUrls`, false if absent and read only on the control socket, says the UI opens the web pages scripts ask for (`openUrl`). |
 | `ping` | `id` | Asks for a `pong` with the same `id`. |
 | `connect` | `host`, `port`, `tls`? | Connects the engine to a game server. `port` defaults to 23. `tls` true encrypts the connection, false does not; absent, the profile's own choice stands. libmudlet takes `tls` only when this `connect` starts the profile, and stores it with the profile, as Mudlet's connection dialog does: while the profile runs, a `tls` other than the one it connects with, which is the one it started with until `saveProfile` gives it another, gets status `connection` `error: ...`, and so does any `connect` while the running profile has yet to take, or Mudlet refused, the address saved for it. A `tls` that is not a boolean gets `error`. |
 | `send` | `text` | A command line. Taken as typed input (`THeadlessSession::submit()`). |
@@ -254,6 +254,7 @@ no refusal: `luaCheck` says what is wrong with it.
 | `clipboardRead` | `id` | A script calls `getClipboardText()`, which Mudlet answers in the call: the UI answers at once with `answerClipboardRead` and the same `id`. The script waits for it at most 500 ms, then reads an empty clipboard, as it does at once while no UI is attached. Only on the control socket, and sent even to a lagging UI. |
 | `clipboardWrite` | `text` | A script's `setClipboardText()`: the UI puts `text` on the device's clipboard. With no UI attached, nothing is sent and the text goes nowhere. Only on the control socket, and sent even to a lagging UI. |
 | `pickFile` | `id`, `title`, `into` | A script calls `invokeFileDialog()` for a file and waits in its call, as for the desktop's dialog, while the game, timers and other scripts go on: the UI asks the player for a file with `title`, copies it into the folder `into` and answers with `answerPickFile`. Sent again, with the same `id`, to each UI that attaches while it waits. For a folder, with no UI attached, or while another pick waits, nothing is sent and the script gets an empty string, as a cancel. Only on the control socket, and sent even to a lagging UI. |
+| `openUrl` | `url` | A script's `openUrl()` or `openWebPage()` for an `http`, `https` or `mailto` URL, while the UI that attached last said `opensUrls`: the UI may open `url`, encoded. The script gets true whether or not it does, and with no UI attached nothing is sent. Without `opensUrls`, or for another scheme, the engine leaves the URL to Qt, which cannot open it from a service. Only on the control socket. |
 | `pong` | `id` | The answer to `ping`. `id` is absent if the ping had none. |
 | `gap` | `skipped` | `skipped` lines fell out of the ring buffer before the UI could get them. They come just before the next line. |
 | `synced` | `seq` | Ends the answer to `hello`: the newest line's `seq` (0 for none) when the engine greeted the UI. |
@@ -846,7 +847,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 37, which added a script's file picker (`pickFile`, `answerPickFile`);
+As implemented in version 38, which added a script's web pages (`opensUrls` in `hello`, `openUrl`);
+version 37 added a script's file picker (`pickFile`, `answerPickFile`);
 version 36 added recording a replay (`setReplayRecording`, `replayRecording`);
 version 35 added a script's use of the device's clipboard (`clipboardRead`, `answerClipboardRead`,
 `clipboardWrite`);

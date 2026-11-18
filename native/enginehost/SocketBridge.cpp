@@ -1798,9 +1798,6 @@ QJsonObject SocketBridge::windowJson(const ScriptWindowInfo& window)
         json.insert(QStringLiteral("tabTitles"), QJsonArray::fromStringList(window.frameTabs->titles));
         json.insert(QStringLiteral("tabCurrent"), window.frameTabs->current);
     }
-    if (!window.styleSheet.isEmpty()) {
-        json.insert(QStringLiteral("styleSheet"), window.styleSheet);
-    }
     return json;
 }
 

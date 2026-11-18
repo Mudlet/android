@@ -1547,7 +1547,7 @@ class FrameReader(input: InputStream) {
                 o.optInt("textY"),
                 o.optInt("textW"),
                 o.optInt("textH"),
-                o.optInt("borderColor", -1),
+                -1,
             )
 
             "windowCommandLine" -> EngineMessage.WindowCommandLine(o.optString("name"), o.optString("text"))
@@ -1856,7 +1856,7 @@ class FrameReader(input: InputStream) {
                     null
                 },
                 frameTabs = parseFrameTabs(w),
-                styleSheet = w.optString("styleSheet"),
+                styleSheet = "",
             )
         }
 

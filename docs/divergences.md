@@ -34,6 +34,17 @@ desktop paints the box into the map in the profile's display font. Painted into 
 read by TalkBack, does not follow the player's font size, and moves and scales with the picture under a finger until
 the engine's next frame.
 
+## The Map settings page
+
+A game's Map page has the desktop's Mapper tab sizes, room borders, large area exit arrows and player room marker, and
+the Mapper colors tab's colours, through `getConfig()` keys (`0038-headless-map-settings.patch`). A colour is picked as
+`#rrggbb` and keeps the alpha the profile had for it, so the grid stays faint; the desktop can pick an alpha too. Left
+out: "Draw rooms on upper and lower levels", which Mudlet keeps for every profile in `Mudlet.ini`, not with the
+profile; "Show the default area", which Mudlet does not save and no area list in the app reads; the symbol font, which
+needs the engine's list of fonts; the 3D map style, as the engine has no 3D map; the map info background, which the
+app's own info box does not use (see "The map info box"); and the desktop's anti-aliasing, grid width and zoom
+direction, which are how its window draws and scrolls rather than what the map holds.
+
 ## Saving when the app leaves the front
 
 When the app goes to the background, the open profiles are saved as Mudlet saves them at a close, but with no

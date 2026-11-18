@@ -24,6 +24,7 @@ import org.mudlet.android.protocol.MediaCache
 import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
+import org.mudlet.android.protocol.applyLineUpdates
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.packages.pickedPackage
 import java.io.IOException
@@ -222,6 +223,9 @@ class ProfileSession internal constructor(
     private val completions = HashMap<Long, (String) -> Unit>()
     private val sendsAwaitingClear = ArrayDeque<Long>()
 
+    // The number of the first line the engine instance attached now sent, as a new instance counts its seqs from 1 again
+    private var updatableFrom = 0L
+
     // The number (linesAdded) after the last console line given to the suggestions, so none is given twice
     internal var linesSuggested = 0L
 
@@ -239,6 +243,11 @@ class ProfileSession internal constructor(
 
     // The text of the new lines, not those replayed, for the Announcer
     private var pendingNews = ArrayList<String>()
+    private var pendingUpdates = ArrayList<EngineMessage.LineUpdated>()
+
+    // Where in pendingLines a new engine instance's lines start, and the updates to lines before it; -1 for none
+    private var pendingInstanceAt = -1
+    private var pendingOldUpdates: List<EngineMessage.LineUpdated> = emptyList()
     private var pendingTail: UiLine? = null
     private var pendingTailSet = false
     private var pendingClear = false
@@ -609,7 +618,10 @@ class ProfileSession internal constructor(
             // The engine forgets nothing across a reattach, but a new engine instance needs the size again
             EngineClient.screenSize?.let(::sendScreenSize)
             // The engine resends its whole status after hello, so the old instance's values must go first
-            if (!sameInstance) resetStatus()
+            if (!sameInstance) {
+                resetStatus()
+                newInstanceLines()
+            }
             post {
                 attaches++
                 // The engine's answers to sends on the old connection went with it
@@ -637,14 +649,23 @@ class ProfileSession internal constructor(
             if (misdirected) return
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
-                    pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time))
+                    pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time, seq = message.seq))
                     if (!message.replay) pendingNews.add(message.text)
+                    scheduleFlush()
+                }
+
+                // Not news: the Announcer reads only lines that are new
+                is EngineMessage.LineUpdated -> synchronized(pendingLock) {
+                    pendingUpdates.add(message)
                     scheduleFlush()
                 }
 
                 is EngineMessage.Clear -> synchronized(pendingLock) {
                     pendingLines.clear()
                     pendingNews.clear()
+                    pendingUpdates.clear()
+                    pendingOldUpdates = emptyList()
+                    pendingInstanceAt = -1
                     pendingClear = true
                     pendingTail = null
                     pendingTailSet = true
@@ -841,6 +862,14 @@ class ProfileSession internal constructor(
         while (sendsAwaitingClear.isNotEmpty() && now - sendsAwaitingClear.first() > SEND_CLEAR_WINDOW_MS) sendsAwaitingClear.removeFirst()
     }
 
+    // Runs on the reader thread, ahead of the next engine's first line. Updates of an instance that came and went
+    // within one flush are dropped, as are its lines' places to apply them to
+    private fun newInstanceLines() = synchronized(pendingLock) {
+        if (pendingInstanceAt < 0) pendingOldUpdates = pendingUpdates
+        pendingUpdates = ArrayList()
+        pendingInstanceAt = pendingLines.size
+    }
+
     // Runs on the reader thread, ahead of any status the next engine sends
     private fun resetStatus() = synchronized(pendingLock) {
         pendingStatus.clear()
@@ -866,6 +895,9 @@ class ProfileSession internal constructor(
         val newTail: UiLine?
         val tailSet: Boolean
         val clear: Boolean
+        val updates: List<EngineMessage.LineUpdated>
+        val oldUpdates: List<EngineMessage.LineUpdated>
+        val instanceAt: Int
         synchronized(pendingLock) {
             clear = pendingClear
             pendingClear = false
@@ -879,6 +911,12 @@ class ProfileSession internal constructor(
             newStatus = pendingStatus
             statusReset = pendingStatusReset
             pendingLines = ArrayList()
+            updates = pendingUpdates
+            pendingUpdates = ArrayList()
+            oldUpdates = pendingOldUpdates
+            pendingOldUpdates = emptyList()
+            instanceAt = pendingInstanceAt
+            pendingInstanceAt = -1
             pendingStatus = HashMap()
             pendingStatusReset = false
             flushPosted = false
@@ -890,7 +928,11 @@ class ProfileSession internal constructor(
         newStatus["luaResult"]?.let { lastLuaResult = it }
         newStatus["profile"]?.let(::profileStatus)
         if (clear) lines.clear()
+        val firstNew = linesAdded
         addLines(newLines)
+        applyUpdates(oldUpdates)
+        if (instanceAt >= 0) updatableFrom = firstNew + instanceAt
+        applyUpdates(updates)
         if (tailSet) tail = newTail
         links.pruneTo(lines, tail)
         // Only the front profile's new lines are read out, as desktop Mudlet reads only the profile in front
@@ -902,6 +944,17 @@ class ProfileSession internal constructor(
     // Takes the profile from the engine's status `profile` ("<name> loaded"); its other values change nothing
     private fun profileStatus(value: String) {
         if (value.endsWith(LOADED) && value.length > LOADED.length) suggestionsProfile = value.removeSuffix(LOADED)
+    }
+
+    private fun applyUpdates(updates: List<EngineMessage.LineUpdated>) {
+        val from = (updatableFrom - (linesAdded - lines.size)).coerceIn(0L, lines.size.toLong()).toInt()
+        applyLineUpdates(lines, from, updates, UiLine::seq) { line, update ->
+            if (update.deleted) {
+                UiLine("", IntArray(0), false, time = line.time, seq = line.seq, deleted = true)
+            } else {
+                UiLine(update.text, update.runs, update.prompt, time = line.time, seq = line.seq)
+            }
+        }
     }
 
     private fun addLines(newLines: List<UiLine>) {

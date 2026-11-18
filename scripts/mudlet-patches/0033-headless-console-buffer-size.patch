@@ -1,0 +1,130 @@
+Give a frontend with no window the profile's console buffer size, and getConfig() and setConfig() keys for it
+
+The preferences' "Main display size" (the lines the main console keeps) and "Use maximum lines possible" are kept with
+the profile (consoleBufferSize, useMaxConsoleBufferSize) and given to the main console as the GUI makes it
+(mudlet::addConsoleForNewHost()). A profile opened with no window (HostManager::openProfile()) never had them given,
+so its main console kept TBuffer's own 10000 lines whatever the profile said, and getConsoleBufferSize() said so. Nor
+could such a frontend, which changes a profile's settings through getConfig() and setConfig(), offer them.
+
+- HostManager::openProfile() gives the main console the profile's limit once the profile's save is loaded, before its
+  scripts run, through Host::applyConsoleBufferSize(): the limit, or the maximum the machine can hold, with a batch of
+  a fifth of it (at least 100), as the preferences apply it.
+- consoleBufferSize: the lines the main console keeps, a whole number from 100, the preferences' least. Set, it is
+  kept with the profile and taken at once, unless useMaxConsoleBufferSize holds, as in the preferences, where the size
+  is kept to go back to.
+- useMaxConsoleBufferSize: true or false, "Use maximum lines possible".
+- The keys are in Other.lua's list of configOptions.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (settings: both keys read, changed and read back
+through getSettings/setSettings, getConsoleBufferSize() following them, a size below 100 refused, the profile's save
+holding them, and a profile opened again with its saved size). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/src/Host.cpp b/src/Host.cpp
+index 015e40d..de91605 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -3334,6 +3334,13 @@ void Host::setMainConsoleBufferSize(int linesLimit, int batchDeleteSize, bool us
+     mConsoleBufferSize = linesLimit;
+ }
+ 
++void Host::applyConsoleBufferSize()
++{
++    TBuffer& buffer = mpMainConsoleModel->buffer;
++    const int linesLimit = mUseMaxConsoleBufferSize ? buffer.getMaxBufferSize() : mConsoleBufferSize;
++    buffer.setBufferSize(linesLimit, std::max(100, linesLimit / 5));
++}
++
+ // Hot: the trigger engine reads the model for every character of a colour
+ // pattern, so this hands back a reference rather than a shared_ptr copy - the
+ // latter costs an atomic increment and decrement per call.
+diff --git a/src/Host.h b/src/Host.h
+index 0a50af0..00f6ff0 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -439,6 +439,9 @@ public:
+     // The main console's scrollback limit is also the profile's setting. With
+     // useMaximum the most this machine can hold stands in for the limit given.
+     void setMainConsoleBufferSize(int linesLimit, int batchDeleteSize, bool useMaximum);
++    // The main console's limit from the profile's buffer size and its use of the maximum, as the preferences apply
++    // them, with a batch of a fifth of it (at least 100)
++    void applyConsoleBufferSize();
+     // Paint the named console's selection, and write what follows in the same
+     // format. Each answers whether it found the console.
+     bool setWindowFgColor(const QString& name, const QColor& color);
+diff --git a/src/HostManager.cpp b/src/HostManager.cpp
+index 0ef634b..9f632c4 100644
+--- a/src/HostManager.cpp
++++ b/src/HostManager.cpp
+@@ -265,6 +265,8 @@ Host* HostManager::openProfile(const QString& name, const bool connect, const st
+         beforeLoad(pHost);
+     }
+     const bool firstLoad = pHost->loadProfileSave(QString());
++    // As the GUI's console takes it (mudlet::addConsoleForNewHost()), before any script reads it
++    pHost->applyConsoleBufferSize();
+     // Chosen as the GUI chooses them, from the address the load leaves, before a frontend's own goes over it
+     const QStringList packages = firstLoad ? defaultPackages(pHost->getUrl().toLower(), name, pHost->mAcceptServerGUI && pHost->mEnableGMCP) : QStringList();
+     if (afterLoad) {
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index bec4ca3..4731d2b 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -10741,6 +10741,21 @@ int TLuaInterpreter::setConfig(lua_State* L)
+         host.setCommandLineHistorySaveSize(value);
+         return success();
+     }
++    if (key == qsl("consoleBufferSize")) {
++        const auto value = getVerifiedInt(L, __func__, 2, "value");
++        // The preferences' least; the most is what the machine can hold, to which the buffer clips a bigger one
++        if (value < 100) {
++            return warnArgumentValue(L, __func__, qsl("consoleBufferSize %1 is below the least of 100 lines").arg(value));
++        }
++        host.setConsoleBufferSize(value);
++        host.applyConsoleBufferSize();
++        return success();
++    }
++    if (key == qsl("useMaxConsoleBufferSize")) {
++        host.setUseMaxConsoleBufferSize(getVerifiedBool(L, __func__, 2, "value"));
++        host.applyConsoleBufferSize();
++        return success();
++    }
+     if (key == qsl("controlCharacterHandling")) {
+         static const QStringList values{"asis", "oem", "picture"};
+         const auto value = getVerifiedString(L, __func__, 2, "value");
+@@ -11274,6 +11289,14 @@ int TLuaInterpreter::getConfig(lua_State* L)
+              [&]() {
+                  lua_pushnumber(L, host.getCommandLineHistorySaveSize());
+              }},
++            {qsl("consoleBufferSize"),
++             [&]() {
++                 lua_pushnumber(L, host.getConsoleBufferSize());
++             }},
++            {qsl("useMaxConsoleBufferSize"),
++             [&]() {
++                 lua_pushboolean(L, host.getUseMaxConsoleBufferSize());
++             }},
+             {qsl("controlCharacterHandling"),
+              [&]() {
+                  const auto controlCharacterMode = host.getControlCharacterMode();
+diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
+index 72ebc2e..bac3dc4 100644
+--- a/src/mudlet-lua/lua/Other.lua
++++ b/src/mudlet-lua/lua/Other.lua
+@@ -1668,6 +1668,7 @@ local configOptions = {
+   "commandLineHistorySaveSize",
+   "commandSeparator",
+   "compactInputLine",
++  "consoleBufferSize",
+   "controlCharacterHandling",
+   "disablePasswordMasking",
+   "echoLuaErrors",
+@@ -1739,6 +1740,7 @@ local configOptions = {
+   "sslIgnoreSelfSigned",
+   "undoServerWrap",
+   "undoServerWrapWidth",
++  "useMaxConsoleBufferSize",
+   "versionInTTYPE",
+ }
+ local isConfigOption = {}

@@ -4006,8 +4006,9 @@ def profile_settings():
     with what the profile now holds and what it refused, with why; autoClearInputLine, which Mudlet starts off, deciding
     whether a send empties the input line; the game's text encoding, and a name Mudlet does not have refused; the
     input line's command separator, history highlight and password masking; the log options, a log then written as
-    they say, and a bad name format or file name refused; the changes in the profile's save; and both refused while no
-    profile is open."""
+    they say, and a bad name format or file name refused; the console buffer size and its maximum, which the main
+    console takes at once, a size below 100 refused; the changes in the profile's save, the buffer size taken again as
+    the profile next opens; and both refused while no profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -4097,6 +4098,34 @@ def profile_settings():
         logged = f.read()
     check(re.search(r"^\d\d:\d\d:\d\d\.\d\d\d ?SettingsLogLine$", logged, re.M) is not None,
           f"a log is then named by logFileName and its lines start with a timestamp, {log}: {logged!r}")
+
+    def buffer_size():
+        since = len(seen)
+        c.send({"t": "runLua", "code": 'echo("BufferSize " .. table.concat({getConsoleBufferSize()}, " ") .. "\\n")'})
+        m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("BufferSize "), seen, since)
+        return m["text"][len("BufferSize "):].strip()
+
+    keys = ["consoleBufferSize", "useMaxConsoleBufferSize"]
+    m = c.ask({"t": "getSettings", "keys": keys}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"consoleBufferSize": 100000, "useMaxConsoleBufferSize": False},
+          f"the console buffer size starts as Mudlet starts a profile: {m}")
+    size = buffer_size()
+    check(size == "100000 20000", f"and the main console keeps that many lines, as the GUI's would: {size}")
+    m = c.ask({"t": "setSettings", "values": {"consoleBufferSize": 99}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"consoleBufferSize": 100000} and "100" in m.get("refused", {}).get("consoleBufferSize", ""),
+          f"fewer than 100 lines is refused, with why: {m}")
+    m = c.ask({"t": "setSettings", "values": {"consoleBufferSize": 5000}}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"consoleBufferSize": 5000} and "refused" not in m, f"and a change: {m}")
+    size = buffer_size()
+    check(size == "5000 1000", f"is taken by the main console at once: {size}")
+    m = c.ask({"t": "setSettings", "values": {"useMaxConsoleBufferSize": True}}, answers=("settings", "error"), collect=seen)
+    size = buffer_size().split(" ")
+    check(m.get("values") == {"useMaxConsoleBufferSize": True} and int(size[0]) > 5000,
+          f"the maximum is the most the machine can hold: {m}, {size}")
+    m = c.ask({"t": "setSettings", "values": {"useMaxConsoleBufferSize": False}}, answers=("settings", "error"), collect=seen)
+    size = buffer_size()
+    check(m.get("values") == {"useMaxConsoleBufferSize": False} and size == "5000 1000",
+          f"and without it the size chosen before: {m}, {size}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
@@ -4105,13 +4134,24 @@ def profile_settings():
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
           and 'autoClearCommandLineAfterSend="yes"' in saved and 'HighlightHistory="no"' in saved
           and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved
-          and 'mIsLoggingTimestamps="yes"' in saved and 'logFileName="Settings Log"' in saved and 'logFileNameFormat=""' in saved,
+          and 'mIsLoggingTimestamps="yes"' in saved and 'logFileName="Settings Log"' in saved and 'logFileNameFormat=""' in saved
+          and "<consoleBufferSize>5000</consoleBufferSize>" in saved and "<useMaxConsoleBufferSize>no</useMaxConsoleBufferSize>" in saved,
           f"the changes are in the profile's save: {save}")
     encoding_file = os.path.join(CONFIG, "profiles", profile, "encoding")
     # Mudlet writes it with QDataStream: a QString is its length in bytes, then UTF-16BE
     with open(encoding_file, "rb") if os.path.exists(encoding_file) else open(os.devnull, "rb") as f:
         encoding = f.read()[4:].decode("utf-16-be", "replace")
     check(encoding == "ISO 8859-2", f"the encoding is kept where desktop Mudlet keeps it, {encoding_file}: {encoding!r}")
+
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    size = buffer_size()
+    check(size == "5000 1000", f"a profile opened again keeps the console buffer size it saved: {size}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def script_items():

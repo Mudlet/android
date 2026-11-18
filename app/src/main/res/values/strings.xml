@@ -457,6 +457,24 @@
     <string name="settings_undo_wrap_width_less">Fewer characters</string>
     <!-- The button, read by a screen reader, that raises the column the game wraps at by one -->
     <string name="settings_undo_wrap_width_more">More characters</string>
+    <!-- A setting on a game's Display & text page, desktop Mudlet's "Main display size": how many lines of the game's
+         text the game keeps -->
+    <string name="settings_console_buffer">Scrollback length</string>
+    <!-- Under "Scrollback length", what the setting is for. 2,000 is the most lines the screen keeps (write it as
+         your language writes that number) -->
+    <string name="settings_console_buffer_hint">How many lines of the game\'s text the game keeps for its scripts to read back. The screen keeps the last 2,000 of them. More lines take more memory.</string>
+    <!-- Words a player might search the settings for to find "Scrollback length", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_console_buffer_keywords">scrollback, buffer, history, lines, memory</string>
+    <!-- %1$,d is how many lines of the game's text the game keeps, a whole number such as 10,000 -->
+    <plurals name="settings_console_buffer_value">
+        <item quantity="one">%1$,d line</item>
+        <item quantity="other">%1$,d lines</item>
+    </plurals>
+    <!-- The button, read by a screen reader, that lowers the scrollback length to the thousand lines below -->
+    <string name="settings_console_buffer_less">Fewer lines</string>
+    <!-- The button, read by a screen reader, that raises the scrollback length to the thousand lines above -->
+    <string name="settings_console_buffer_more">More lines</string>
     <!-- A setting on a game's Input page, the heading of three choices: which of the commands sent to the game also
          show in the game's text -->
     <string name="settings_sent_text">Show the commands sent</string>

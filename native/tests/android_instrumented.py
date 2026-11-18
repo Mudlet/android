@@ -11,7 +11,8 @@ A test fails the run if it fails or runs past TEST_TIMEOUT_MS, if the instrument
 STALL_S, or it runs past its overall limit) or reports fewer tests than it started, or if no test ran at all. A crash
 of one of the app's processes is given from logcat, symbolised as android_smoke.py does; for a hang, the stacks of the
 hung process's threads. The screenshots the app's ScreenshotTest takes (API 31 and later) are copied into
-<out>/screenshots.
+<out>/screenshots. From API 31 it then backs the app up through bmgr's local transport, once as a cloud backup and once
+as a transfer to a new phone, restores it, and has BackupRestoreTest check what came back.
 
 usage: android_instrumented.py --app <app-debug.apk> --app-tests <app-debug-androidTest.apk>
                                --engine-tests <engine-service-debug-androidTest.apk> --out <dir> [--symbols <dir>]
@@ -33,6 +34,10 @@ APP_TESTS = APP + ".test"
 ENGINE_TESTS = "org.mudlet.android.engine.test"
 RUNNER = "androidx.test.runner.AndroidJUnitRunner"
 PERMISSION_TEST = "org.mudlet.android.ui.NotificationPermissionTest"
+BACKUP_TEST = "org.mudlet.android.data.BackupRestoreTest"
+# The local transport's one restore set; its is_encrypted and is_device_transfer parameters are from Android 12 (API 31)
+LOCAL_TRANSPORT = "com.android.localtransport/.LocalTransport"
+LOCAL_RESTORE_SET = "1"
 # am instrument's status codes for one test
 CODES = {0: "PASS", -1: "ERROR", -2: "FAIL", -3: "IGNORED", -4: "ASSUMPTION FAILED"}
 # AndroidJUnitRunner fails a test that runs longer, with the stack it was stuck in; the longest, EngineServiceTest's
@@ -212,6 +217,43 @@ def pull_screenshots(dev):
     log(f"screenshots: {', '.join(sorted(copied))}")
 
 
+def backup_round(dev, to):
+    """A backup of the app through the local transport, as a cloud backup encrypted with the screen lock (to "cloud")
+    or a transfer to a new phone ("phone"), then the app cleared and restored: BackupRestoreTest writes the data before
+    and says what came back after. Returns the failures, as text."""
+    parameters = "is_encrypted=true" if to == "cloud" else "is_device_transfer=true"
+    failures = instrument(dev, f"backup-seed-{to}", APP_TESTS, APP, f"backup ({to}): the data to back up", 300,
+                          "-e", "class", BACKUP_TEST + "#seed")
+    shell(f"settings put secure backup_local_transport_parameters {parameters}")
+    # Android puts off the backup of an app that is running, and the engine's foreground service may still be
+    shell(f"am force-stop {APP}")
+    out = shell(f"bmgr backupnow {APP}")
+    log(f"bmgr backupnow: {' '.join(out.split())}")
+    if "Success" not in out:
+        return failures + [f"backup ({to}): bmgr backupnow did not succeed: {out.strip()}"]
+    shell(f"pm clear {APP}")
+    out = shell(f"bmgr restore {LOCAL_RESTORE_SET} {APP}")
+    log(f"bmgr restore: {' '.join(out.split())}")
+    return failures + instrument(dev, f"backup-check-{to}", APP_TESTS, APP, f"backup ({to}): what the restore brought",
+                                 300, "-e", "class", BACKUP_TEST + "#check", "-e", "backupTo", to)
+
+
+def backup_rounds(dev):
+    if int(shell("getprop ro.build.version.sdk").strip()) < 31:
+        log("--- backup: skipped, the local transport takes the flags it needs from API 31")
+        return []
+    transports = shell("bmgr list transports")
+    current = next((line.split()[-1] for line in transports.splitlines() if line.strip().startswith("*")), None)
+    shell("bmgr enable true")
+    shell(f"bmgr transport {LOCAL_TRANSPORT}")
+    try:
+        return backup_round(dev, "cloud") + backup_round(dev, "phone")
+    finally:
+        shell("settings delete secure backup_local_transport_parameters", check=False)
+        if current:
+            shell(f"bmgr transport {current}", check=False)
+
+
 def run(dev, args):
     for package in (APP_TESTS, APP, ENGINE_TESTS):
         adb("uninstall", package, check=False)
@@ -225,8 +267,10 @@ def run(dev, args):
     install(args.app_tests)
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
-    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400, "-e", "notClass", PERMISSION_TEST)
+    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400,
+                           "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
     pull_screenshots(dev)
+    failures += backup_rounds(dev)
     install(args.engine_tests, "-g")
     failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
                            1320)

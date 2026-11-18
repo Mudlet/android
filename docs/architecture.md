@@ -444,8 +444,8 @@ keeps each change. It opens beside the games open, in front, when any are; one o
 The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
 never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's
 name as associated data, so one profile's cannot be moved to another's. The ciphertext is in
-`files/passwords/profiles.json`, which `data_extraction_rules.xml` excludes from cloud backup and device transfer
-(`android:allowBackup="false"` covers older releases), and no other device has the key to decrypt it. The editor never
+`files/passwords/profiles.json`, which no backup or transfer takes and no restore keeps ("Backup and transfer to a new
+phone" below), and no other device has the key to decrypt it. The editor never
 shows a stored password: a new one replaces it, Forget password removes it, and so does deleting the profile. One that
 can no longer be decrypted is forgotten, and the player types it again. The engine is told a password only in an
 `openProfile`, and the game screen's Reconnect is a bare `connect`, so a password stored or forgotten for a game that
@@ -467,6 +467,46 @@ names it, where it is stored again under the copy's name (`docs/divergences.md`,
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
 `connect` stores a password and opens a profile as the profile list does.
+
+### Backup and transfer to a new phone
+Android's backup takes the app's data through `data/MudletBackupAgent.kt` (`android:fullBackupOnly`, so a full backup
+of files, as Auto Backup makes, never key-value). What goes where is `data/BackupScope.kt`, an allowlist, so a file
+added later travels only once it is named there:
+
+| Data | Cloud backup | New phone | Why |
+|---|---|---|---|
+| `files/mudlet/`: profiles, scripts, packages, maps, media, `Mudlet.ini`, fonts, `profile-order.json` | yes | yes | the player's games |
+| `files/mudlet/profiles/<name>/log/` (logs and replays) | no | yes | the game's text, and what the player sent |
+| `files/suggest/<name>.txt` (command suggestions) | no | yes | learned from what the player typed and the game's lines |
+| `files/suggest/<name>.pins` (pinned commands) | yes | yes | the player's own choice |
+| SharedPreferences `settings` | yes | yes | the player's settings |
+| `files/passwords/` (`PasswordStore`) | no | no | its key stays in this device's KeyStore |
+| `files/settings/` (QtKeychain: Mudlet's sign-in tokens, under a KeyStore key of their own) | no | no | as the passwords |
+| `profiles/<name>/password`, `irc_password` | no | no | desktop's plain secret files; the engine does not write them here, and import and export drop them |
+| `files/engine-session.json`, `files/engine-stopped` | no | no | this device's engine runs: restored, a new phone would reopen and reconnect games at its first start, or keep the engine stopped |
+| SharedPreferences `engine` | no | no | `qpaPlatform` is the self-test's choice of platform for this device; `lastProfile` and `lastHost:` and the rest are where this device last went, and the profile list's own address stands in for them |
+| SharedPreferences `ui` | no | no | whether this device asked for the notification permission: carried over, a new phone where it is not granted would never ask |
+| the `root`, `database` and `external` domains, and the rest of `files/` | no | no | nothing of the player's is there |
+
+A cloud backup is made only when the transport encrypts it with the screen lock (`FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED`);
+a transfer is one with `FLAG_DEVICE_TO_DEVICE_TRANSFER`. The agent needs to be there because the XML rules name
+literal paths, with no wildcard (`BackupUtils.isFileSpecifiedInPathList`), and every profile has its own `log` folder.
+`res/xml/data_extraction_rules.xml` (Android 12 and later, `disableIfNoEncryptionCapabilities` on its cloud section)
+and `res/xml/backup_rules.xml` (`android:fullBackupContent`, Android 9 to 11) exclude the secrets and the engine state
+all the same, and `onRestoreFile` keeps only what `BackupScope` takes for a new phone, so neither a backup made by
+another build nor the platform's own restore filter can bring a password back. The older format's `exclude` takes no
+`requireFlags` and has one list for both destinations, so on Android 9 to 11 only the agent tells a cloud backup from
+a transfer; both flags exist from Android 9, the minimum. `BackupRulesTest` checks `BackupScope`, both XML files and
+the manifest.
+
+After a restore no profile has a stored password: `PasswordStore.has()` is false, so the editor shows none saved, and
+Connect opens the profile with none, so the game's own prompt asks and the player types it in the password field.
+Mudlet's sign-in tokens are gone the same way, and a game that used one asks for the login again.
+
+A cloud backup holds at most 25 MB (the transport's quota, `FullBackupDataOutput.getQuota()`); past it Android makes
+none at all and keeps the last one, and the agent logs `onQuotaExceeded`. What makes a profile big: the dated map
+saves Mudlet keeps in `map/` (one per save, never pruned unless a package does), the dated profile saves in
+`current/`, sounds and music in `media/` and in packages. A transfer to a new phone has no such limit.
 
 ### Script windows' text: links and the screen reader
 A mini console's or user window's rows are drawn by `ui/game/ConsoleLine.kt`, as the main console's lines are, so

@@ -24,8 +24,9 @@ Your Android version is in the phone's Settings, under "About phone" (on some ph
 Please do not report these; they are known and being worked on:
 
 - Links in the game's main text (words the game underlines) cannot be tapped yet. Links in a script's own windows can.
-- There is no backup. **Uninstalling the app deletes your games, scripts and maps**, and so does "Clear storage" in
-  the phone's settings. The test app is a separate app from Mudlet, so it cannot touch the real Mudlet's games.
+- **Uninstalling the app deletes your games, scripts and maps**, and so does "Clear storage" in the phone's settings.
+  Android's backup brings them back only if it made one, which needs a screen lock, and without your passwords. The
+  test app is a separate app from Mudlet, so it cannot touch the real Mudlet's games.
 
 ## How to write things down
 

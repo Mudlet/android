@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 32
+const val PROTOCOL_VERSION = 33
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -370,6 +370,38 @@ enum class ScriptItemKind(val wire: String) {
         fun fromWire(wire: String) = entries.firstOrNull { it.wire == wire }
     }
 }
+
+/** Where in an item Requests.searchScriptItems found its text (docs/protocol.md, "Searching triggers, aliases and scripts"). */
+enum class ScriptSearchField(val wire: String) {
+    NAME("name"),
+    COMMAND("command"),
+    COMMAND_DOWN("commandDown"),
+    COMMAND_UP("commandUp"),
+    PATTERN("pattern"),
+    EVENT("event"),
+    CSS("css"),
+    LUA("lua"),
+    ;
+
+    companion object {
+        fun fromWire(wire: String) = entries.firstOrNull { it.wire == wire }
+    }
+}
+
+/**
+ * A place Requests.searchScriptItems found its text: in [field] of the item [item] of [kind], named [name]; [index] is
+ * which pattern, event handler or line of the field, from 0, [text] that field or line, cut around the match with an
+ * ellipsis where it is long, and [start] where the match starts in it.
+ */
+data class ScriptSearchMatch(
+    val kind: ScriptItemKind,
+    val item: Int,
+    val name: String,
+    val field: ScriptSearchField,
+    val index: Int,
+    val text: String,
+    val start: Int,
+)
 
 /**
  * A trigger, alias, script, timer, key or button as the desktop's script editor lists it (docs/protocol.md,
@@ -890,6 +922,19 @@ sealed interface EngineMessage {
     /** The error console's [entries], oldest first: all it holds when [full], else ones to add to those already had. */
     data class ErrorConsole(val entries: List<ErrorConsoleEntry>, val full: Boolean) : EngineMessage
 
+    /**
+     * The answer to Requests.searchScriptItems for [text], [caseSensitive] and [wholeWord]: its [matches] in the desktop
+     * editor's order, and [more] when the engine found more than it sent.
+     */
+    data class ScriptSearch(
+        val text: String,
+        val caseSensitive: Boolean,
+        val wholeWord: Boolean,
+        val matches: List<ScriptSearchMatch>,
+        val more: Boolean,
+        val replyTo: Any?,
+    ) : EngineMessage
+
     /** The answer to Requests.checkLua: [problem] is null for code that compiles. */
     data class LuaCheck(val problem: LuaProblem?, val replyTo: Any?) : EngineMessage
 
@@ -1250,6 +1295,13 @@ object Requests {
     /** Removes the package [name] as the Package Manager's Remove does. Answered by [EngineMessage.Packages] with [id] as its replyTo, or an Error. */
     fun uninstallPackage(name: String, id: Long): JSONObject = JSONObject().put("t", "uninstallPackage").put("name", name).put("id", id)
 
+    /**
+     * Answered by [EngineMessage.ScriptSearch] with [id] as its replyTo, or an Error: where [text] is in the profile's
+     * items, as the desktop editor's search finds it, whatever its case unless [caseSensitive], and with [wholeWord] only
+     * where it is a word of its own.
+     */
+    fun searchScriptItems(text: String, caseSensitive: Boolean, wholeWord: Boolean, id: Long): JSONObject = JSONObject().put("t", "searchScriptItems").put("text", text).put("caseSensitive", caseSensitive).put("wholeWord", wholeWord).put("id", id)
+
     /** Answered by [EngineMessage.LuaCheck] with [id] as its replyTo, or an Error: whether [code] compiles as Lua; it is not run. */
     fun checkLua(code: String, id: Long): JSONObject = JSONObject().put("t", "checkLua").put("code", code).put("id", id)
 
@@ -1578,6 +1630,15 @@ class FrameReader(input: InputStream) {
 
             "errorConsole" -> EngineMessage.ErrorConsole(objects(o.optJSONArray("entries")).map(::parseErrorConsoleEntry), o.optBoolean("full"))
 
+            "scriptSearch" -> EngineMessage.ScriptSearch(
+                o.optString("text"),
+                o.optBoolean("caseSensitive"),
+                o.optBoolean("wholeWord"),
+                objects(o.optJSONArray("matches")).mapNotNull(::parseScriptSearchMatch),
+                o.optBoolean("more"),
+                o.opt("re"),
+            )
+
             "luaCheck" -> EngineMessage.LuaCheck(if (o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))
 
             "mapDownload" -> EngineMessage.MapDownload(
@@ -1638,6 +1699,17 @@ class FrameReader(input: InputStream) {
         private fun optInt(o: JSONObject, key: String): Int? = if (o.has(key)) o.getInt(key) else null
 
         // A whole number as a Double too, so a setting reads the same however the engine wrote it
+        // Null for a kind or field this client does not know
+        private fun parseScriptSearchMatch(m: JSONObject): ScriptSearchMatch? = ScriptSearchMatch(
+            kind = ScriptItemKind.fromWire(m.optString("kind")) ?: return null,
+            item = m.optInt("item"),
+            name = m.optString("name"),
+            field = ScriptSearchField.fromWire(m.optString("field")) ?: return null,
+            index = m.optInt("index"),
+            text = m.optString("text"),
+            start = m.optInt("start"),
+        )
+
         private fun parseScriptItemNode(i: JSONObject) = ScriptItemNode(
             id = i.optInt("id"),
             parent = i.optInt("parent"),

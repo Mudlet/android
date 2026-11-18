@@ -609,7 +609,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 8 Display and input settings 2 | expected | in flight | |
 | 9 Sound, music, TTS | expected | not started | |
 | 10 Map files, settings, areas | expected | in flight | |
-| 11 Editor beyond items | expected | not started | |
+| 11 Editor beyond items | expected | in flight: search | |
 | 12 Lua functions needing the app | expected | not started | |
 | 13 Emergency stop and replays | expected / nice later | not started | |
 | 14 Telnet links, profile extras | expected | not started | |

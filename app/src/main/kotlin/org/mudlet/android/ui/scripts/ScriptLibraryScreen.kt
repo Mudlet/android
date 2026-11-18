@@ -48,12 +48,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.protocol.ScriptSearchField
+import org.mudlet.android.protocol.ScriptSearchMatch
 import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.MudletScaffold
@@ -72,6 +77,12 @@ private const val CONSOLE_STRIP_LINES = 2
 
 // A trigger's patterns are one a line: the first two show under its name
 private const val SUMMARY_LINES = 2
+
+/** How long typing pauses before the engine is asked to search. */
+private const val SEARCH_PAUSE_MS = 300L
+
+/** How many of the places the engine found in an item show under its row. */
+private const val PLACES_SHOWN = 3
 
 /** The plural name of each kind, as the library's chips show it. */
 @get:StringRes
@@ -103,8 +114,8 @@ internal val ScriptItemKind.newName: Int
  * opens through [onOpen]; [selected] is the item shown beside the library. An item with others in it (a trigger that
  * others chain from, a timer with offset timers) is gone into as a folder is. New items go last in the folder shown,
  * and open once made; among the buttons the top level, as a package's folder, takes toolbars, which the buttons go
- * in ([adds]). A search lists the items of every kind whose name or summary it finds, with where each lives. At the
- * foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does.
+ * in ([adds]). A search lists the items of every kind it finds the text in, with where each lives and, under it, the
+ * first places the engine found it, by the desktop editor's options, each a chip. At the foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does.
  */
 @Composable
 internal fun ScriptLibraryScreen(
@@ -120,8 +131,16 @@ internal fun ScriptLibraryScreen(
     val kind = ScriptItemKind.fromWire(kindWire) ?: ScriptItemKind.TRIGGER
     var openFolder by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
+    var caseSensitive by rememberSaveable { mutableStateOf(false) }
+    var wholeWord by rememberSaveable { mutableStateOf(false) }
+    val options = SearchOptions(caseSensitive, wholeWord)
     // Asked again once the engine is back, as what was asked of the last link is not answered
     LaunchedEffect(scripts.attaches) { ScriptItemKind.entries.forEach(scripts::ask) }
+    LaunchedEffect(query, options, scripts.attaches) {
+        // Asked once typing pauses, not at each letter, as each search walks every line of every item
+        delay(SEARCH_PAUSE_MS)
+        if (query.isNotBlank()) scripts.search(query, options)
+    }
 
     val hidden = scripts.deleting
     val lists = ScriptItemKind.entries.associateWith { k -> scripts.lists[k]?.withoutHidden(hidden.filter { it.kind == k }.map { it.id }.toSet()) }
@@ -184,7 +203,13 @@ internal fun ScriptLibraryScreen(
                 item(key = "kinds") { KindChips(kind, lists) { enter(it, 0) } }
                 folderRows(kind, folder, items, selected, scripts, onEnter = { openFolder = it }, onOpen = onOpen)
             } else {
-                searchResults(query, lists, selected, scripts, onEnter = ::enter, onOpen = onOpen)
+                item(key = "options") {
+                    SearchOptionChips(options) {
+                        caseSensitive = it.caseSensitive
+                        wholeWord = it.wholeWord
+                    }
+                }
+                searchResults(query, options, lists, selected, scripts, onEnter = ::enter, onOpen = onOpen)
             }
         }
     }
@@ -218,6 +243,15 @@ private fun SearchField(query: String, onQuery: (String) -> Unit) {
         singleLine = true,
         shape = CircleShape,
     )
+}
+
+/** The desktop editor's two search options, each a chip. */
+@Composable
+private fun SearchOptionChips(options: SearchOptions, onOptions: (SearchOptions) -> Unit) {
+    FlowRow(itemWidth.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(options.caseSensitive, { onOptions(options.copy(caseSensitive = !options.caseSensitive)) }, label = { Text(stringResource(R.string.scripts_search_case)) })
+        FilterChip(options.wholeWord, { onOptions(options.copy(wholeWord = !options.wholeWord)) }, label = { Text(stringResource(R.string.scripts_search_whole_word)) })
+    }
 }
 
 /** A chip for each kind, with how many items it has, folders aside, once listed; on as many lines as they need, so all show. */
@@ -361,25 +395,88 @@ private fun ItemRow(
 
 private fun LazyListScope.searchResults(
     query: String,
+    options: SearchOptions,
     lists: Map<ScriptItemKind, List<ScriptItemNode>?>,
     selected: ScriptItemKey?,
     scripts: ScriptItemsClient,
     onEnter: (ScriptItemKind, Int) -> Unit,
     onOpen: (ScriptItemKey) -> Unit,
 ) {
-    val results = searchScripts(query, lists.mapValues { it.value.orEmpty() })
+    val found = scripts.found
+    val results = searchScripts(query, lists.mapValues { it.value.orEmpty() }, options, found)
     if (results.isEmpty()) {
         item(key = "none") { Hint(stringResource(R.string.scripts_search_none, query.trim())) }
         return
+    }
+    if (found != null && found.more && results.any { it.places.isNotEmpty() }) {
+        item(key = "more") { Hint(pluralStringResource(R.plurals.scripts_search_more, found.matches.size, found.matches.size)) }
     }
     itemsIndexed(results, key = { _, result -> "${result.kind.wire}/${result.item.id}" }) { i, result ->
         val key = ScriptItemKey(result.kind, result.item.id)
         val where = (listOf(stringResource(result.kind.title)) + result.folders.map { it.name }).joinToString(stringResource(R.string.scripts_path_separator))
         val children = lists[result.kind].orEmpty().count { it.parent == result.item.id }
         ListSegment(i, results.size, itemWidth, selected = key == selected) {
-            ItemRow(result.item, children, overline = where, scripts, key, onEnter = { onEnter(result.kind, result.item.id) }, onOpen = { onOpen(key) })
+            Column {
+                ItemRow(result.item, children, overline = where, scripts, key, onEnter = { onEnter(result.kind, result.item.id) }, onOpen = { onOpen(key) })
+                Places(result.kind, result.places, query.length)
+            }
         }
     }
+}
+
+/**
+ * The first of the [places] the engine's search found in an item of [kind], each what it is in and its text with the
+ * [length] matched marked, then how many more there are.
+ */
+@Composable
+private fun Places(kind: ScriptItemKind, places: List<ScriptSearchMatch>, length: Int) {
+    if (places.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    val mark = SpanStyle(background = colors.tertiaryContainer, color = colors.onTertiaryContainer)
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp)) {
+        for (place in places.take(PLACES_SHOWN)) {
+            val start = place.start.coerceIn(0, place.text.length)
+            val end = (start + length).coerceAtMost(place.text.length)
+            // Read as one, so TalkBack says what each text is in with it
+            Column(Modifier.semantics(mergeDescendants = true) {}) {
+                Text(placeLabel(kind, place), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Text(
+                    buildAnnotatedString {
+                        append(place.text)
+                        addStyle(mark, start, end)
+                    },
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        val more = places.size - PLACES_SHOWN
+        if (more > 0) {
+            Text(pluralStringResource(R.plurals.scripts_search_more_places, more, more), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+/** What a [place] is in, as the desktop editor's search results name it, with lines and patterns counted from 1. */
+@Composable
+private fun placeLabel(kind: ScriptItemKind, place: ScriptSearchMatch): String = when (place.field) {
+    ScriptSearchField.NAME -> stringResource(R.string.scripts_place_name)
+
+    ScriptSearchField.COMMAND -> stringResource(R.string.scripts_place_command)
+
+    ScriptSearchField.COMMAND_DOWN -> stringResource(R.string.scripts_place_command_down)
+
+    ScriptSearchField.COMMAND_UP -> stringResource(R.string.scripts_place_command_up)
+
+    ScriptSearchField.PATTERN ->
+        if (kind == ScriptItemKind.TRIGGER) stringResource(R.string.scripts_place_pattern_number, place.index + 1) else stringResource(R.string.scripts_place_pattern)
+
+    ScriptSearchField.EVENT -> stringResource(R.string.scripts_place_event, place.index + 1)
+
+    ScriptSearchField.CSS -> stringResource(R.string.scripts_place_css, place.index + 1)
+
+    ScriptSearchField.LUA -> stringResource(R.string.scripts_place_lua, place.index + 1)
 }
 
 /** The last of the game's lines, as the console shows them: the way back to the game, kept in sight. */

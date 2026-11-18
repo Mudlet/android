@@ -658,6 +658,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.LuaCheck -> post { scripts.onLuaCheck(message) }
 
+                is EngineMessage.ScriptSearch -> post { scripts.onSearch(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }

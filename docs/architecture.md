@@ -622,11 +622,14 @@ kept by `ScriptItemsClient`:
   but not running (in a folder that is off, or new and not applied yet) or the package it came with, and a switch that
   sends `enableScriptItem`. An item with others in it (a trigger that others chain from, a timer with offset timers)
   is gone into as a folder is, with Edit in the title bar for its own page. A search finds names and summaries of
-  every kind, with the folders each is in. New items and folders go last in the folder shown; a new item opens, and a
-  new folder is gone into. Nothing is added inside an item that is not a folder, as Mudlet adds only to folders, and
-  the buttons' top level, as a package's folder of them, takes toolbars, since a button outside one is never drawn.
-  At the foot, the game's last two lines go back to the game. The rules are in `ScriptTree.kt` (`holdsItems`,
-  `rowStatus`, `adds`), apart from the screen.
+  every kind, with the folders each is in, and asks the engine where else the text is as the desktop editor's search
+  box finds it (`searchScriptItems`: commands, patterns, event handlers, a button's style sheet, Lua), under each item
+  the first three places, each with what it is in and the text marked. The desktop's two options, Match case and
+  Whole words, are chips; with either on, only the engine's answer counts. New items and folders go last in the
+  folder shown; a new item opens, and a new folder is gone into. Nothing is added inside an item that is not a folder,
+  as Mudlet adds only to folders, and the buttons' top level, as a package's folder of them, takes toolbars, since a
+  button outside one is never drawn. At the foot, the game's last two lines go back to the game. The rules are in
+  `ScriptTree.kt` (`holdsItems`, `rowStatus`, `adds`), apart from the screen.
 - An item's page (`ScriptItemScreen.kt`) edits its name, what its kind has and its Lua: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
@@ -666,7 +669,7 @@ kept by `ScriptItemsClient`:
 - On an expanded screen an item's page opens beside the library (`ListDetail`). What the engine refuses shows in a
   snackbar with its reason, in English as Mudlet gives it, and an item it will not open, on the item's page. After a
   reattach the lists and the item shown are asked for again; a new engine instance has new ids, so the drafts go.
-- Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item to another
+- Not yet: a colour pattern's picker, moving an item to another
   folder (`moveScriptItem` is there for it), which is also how an offset timer or a trigger's chain is made, a
   button's icon and rotation, a key picked by pressing it, and in the Lua field colours for Lua's words and what
   each function does (Mudlet's list has only how each is called). A key binding is edited but does not run here: the
@@ -715,8 +718,9 @@ keys and buttons edited as the triggers are, with what each item's row shows und
 (`refusedCertificate()`, `0024-headless-refused-certificate.patch`), the keys the profile's key bindings take, told
 again as they change, for a keyboard's key to go to the engine or to the input line (`keyBindings()`,
 `0025-headless-key-bindings.patch`; see "Key bindings" in [`protocol.md`](protocol.md)),
-and the map loaded from and saved to a file as the desktop's Map settings do (`loadMapFile()`, `saveMapFile()`,
-`0026-headless-map-files.patch`; see "Map files" in [`protocol.md`](protocol.md)).
+the map loaded from and saved to a file as the desktop's Map settings do (`loadMapFile()`, `saveMapFile()`,
+`0026-headless-map-files.patch`; see "Map files" in [`protocol.md`](protocol.md)), and the items searched as the
+desktop editor's search box does (`searchScriptItems()`, `0027-headless-script-search.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONObject
 import org.mudlet.android.protocol.EngineMessage
@@ -15,6 +16,7 @@ import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
 import org.mudlet.android.protocol.TriggerPattern
 import org.mudlet.android.ui.scripts.ScriptItemKey
+import org.mudlet.android.ui.scripts.SearchOptions
 import org.mudlet.android.ui.scripts.changedFrom
 import org.mudlet.android.ui.scripts.key
 
@@ -52,6 +54,10 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
     /** What the screens are to tell the player, the oldest first; each is taken off once [shown]. */
     val notices: List<ScriptNotice> get() = queued
 
+    /** The engine's answer to the last [search], once it has come. */
+    var found by mutableStateOf<EngineMessage.ScriptSearch?>(null)
+        private set
+
     /** How many times the engine has been attached to: what was asked before the last is asked again. */
     var attaches by mutableIntStateOf(0)
         private set
@@ -79,12 +85,30 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         data class Enable(val kind: ScriptItemKind) : Pending
 
         data class Check(val key: ScriptItemKey, val code: String) : Pending
+
+        data object Search : Pending
     }
 
     private val pending = HashMap<Long, Pending>()
 
+    // Only the last search's answer is kept: one typed after it is a new search
+    private var lastSearch = 0L
+
     /** Asks for [kind]'s items. False as for [ProfileSession.send]. */
     fun ask(kind: ScriptItemKind): Boolean = request(Pending.List(kind)) { Requests.scriptItems(kind, it) }
+
+    /**
+     * Asks the engine where [text] is in the profile's items, as the desktop editor's search finds it, which [found] then
+     * has. False as for [ProfileSession.send]; neither that nor a refusal is told the player, as the library still shows
+     * what it finds without the engine.
+     */
+    fun search(text: String, options: SearchOptions): Boolean {
+        val id = newId()
+        if (!send(Requests.searchScriptItems(text, options.caseSensitive, options.wholeWord, id))) return false
+        pending[id] = Pending.Search
+        lastSearch = id
+        return true
+    }
 
     /** Asks for the fields of [key], which [saved] then has, or [unopened] why not. False as for [ProfileSession.send]. */
     fun open(key: ScriptItemKey): Boolean {
@@ -200,6 +224,14 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         return true
     }
 
+    /** The engine's answer to [search]: false when this did not ask it. */
+    fun onSearch(message: EngineMessage.ScriptSearch): Boolean {
+        val id = message.replyTo.asId()
+        if (pending.remove(id) !is Pending.Search) return false
+        if (id == lastSearch) found = message
+        return true
+    }
+
     /** The engine's answer to the check an [apply] asked for: false when this did not ask it. */
     fun onLuaCheck(message: EngineMessage.LuaCheck): Boolean {
         val asked = pending.remove(message.replyTo.asId()) as? Pending.Check ?: return false
@@ -245,7 +277,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
                 }
             }
 
-            is Pending.Enable, is Pending.List, is Pending.Check -> if (key in opened) store(item)
+            is Pending.Enable, is Pending.List, is Pending.Check, Pending.Search -> if (key in opened) store(item)
         }
         return true
     }
@@ -267,6 +299,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
      */
     fun onRefused(request: String, reason: String, replyTo: Any?) {
         val asked = pending.remove(replyTo.asId())
+        if (asked is Pending.Search) return
         if (asked is Pending.Item) {
             opened.remove(asked.key)
             refused[asked.key] = reason
@@ -288,6 +321,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
         pending.clear()
         if (!sameInstance) {
             listed.clear()
+            found = null
             opened.clear()
             edited.clear()
             problems.clear()
@@ -301,7 +335,7 @@ internal class ScriptItemsClient(private val newId: () -> Long, private val send
 
     companion object {
         /** The requests sent from here, whose refusal goes to [onRefused]. */
-        val REQUESTS = setOf("scriptItems", "scriptItem", "addScriptItem", "editScriptItem", "enableScriptItem", "moveScriptItem", "deleteScriptItem")
+        val REQUESTS = setOf("scriptItems", "scriptItem", "addScriptItem", "editScriptItem", "enableScriptItem", "moveScriptItem", "deleteScriptItem", "searchScriptItems")
     }
 }
 

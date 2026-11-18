@@ -15,6 +15,7 @@ import org.mudlet.android.protocol.ScriptItemNode
 import org.mudlet.android.protocol.TriggerPattern
 import org.mudlet.android.protocol.TriggerPatternType
 import org.mudlet.android.ui.scripts.ScriptItemKey
+import org.mudlet.android.ui.scripts.SearchOptions
 
 /** What the script library keeps of the engine's items, and what it sends, against requests caught here. */
 class ScriptItemsClientTest {
@@ -419,5 +420,35 @@ class ScriptItemsClientTest {
         scripts.onAttached(sameInstance = false)
         assertEquals(2, scripts.attaches)
         assertTrue(scripts.lists.isEmpty() && scripts.saved.isEmpty() && scripts.drafts.isEmpty())
+    }
+
+    private fun answer(search: JSONObject) = scripts.onSearch(EngineMessage.ScriptSearch(search.getString("text"), search.getBoolean("caseSensitive"), search.getBoolean("wholeWord"), emptyList(), false, search.getLong("id")))
+
+    @Test
+    fun onlyTheLastSearchsAnswerIsKeptAndANewEngineInstanceForgetsIt() {
+        assertTrue(scripts.search("hp", SearchOptions()))
+        val first = take("searchScriptItems")
+        assertTrue(scripts.search("hp", SearchOptions(caseSensitive = true, wholeWord = true)))
+        val second = take("searchScriptItems")
+        assertEquals(listOf("hp", true, true), listOf(second.getString("text"), second.getBoolean("caseSensitive"), second.getBoolean("wholeWord")))
+
+        assertTrue(answer(second))
+        assertTrue("answered, but a search typed after it is wanted", answer(first))
+        assertEquals(true, scripts.found?.caseSensitive)
+        assertFalse("answered once", answer(second))
+
+        scripts.onAttached(sameInstance = true)
+        assertEquals(true, scripts.found?.caseSensitive)
+        scripts.onAttached(sameInstance = false)
+        assertNull("its ids are the last instance's", scripts.found)
+    }
+
+    @Test
+    fun aSearchNotSentOrRefusedIsNotSaid() {
+        scripts.search("hp", SearchOptions())
+        scripts.onRefused("searchScriptItems", "no profile running", take("searchScriptItems").getLong("id"))
+        attached = false
+        assertFalse(scripts.search("hp", SearchOptions()))
+        assertTrue(scripts.notices.isEmpty())
     }
 }

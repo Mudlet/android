@@ -73,7 +73,7 @@ fun GamePill(
     next: String?,
     onSwitch: (String) -> Boolean,
     swipe: GameSwipe,
-    scriptsStopped: Boolean = false,
+    scriptsStopped: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl

@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 40
+const val PROTOCOL_VERSION = 41
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -827,6 +827,12 @@ sealed interface EngineMessage {
     /** The profile's scripts are stopped by desktop Mudlet's emergency stop ([Requests.setScriptsStopped]), or are not. */
     data class ScriptsStopped(val stopped: Boolean) : EngineMessage
 
+    /**
+     * The profile records a replay ([Requests.setReplayRecording]), or does not; [file] is the name of the file in its
+     * log folder of the last recording saved since it loaded, or empty.
+     */
+    data class ReplayRecording(val recording: Boolean, val file: String) : EngineMessage
+
     /** Why the last secure connection ended, when it was the game's [certificate]; null once the next one is tried. */
     data class CertificateRefused(val certificate: RefusedCertificate?) : EngineMessage
 
@@ -1417,6 +1423,13 @@ object Requests {
      */
     fun setScriptsStopped(stopped: Boolean): JSONObject = JSONObject().put("t", "setScriptsStopped").put("stopped", stopped)
 
+    /**
+     * Desktop Mudlet's replay recording button: [record] starts recording what the game sends into a new file in the
+     * profile's log folder, false stops and saves it, as [EngineMessage.ReplayRecording] follows. Answered only by an
+     * Error, when refused.
+     */
+    fun setReplayRecording(record: Boolean): JSONObject = JSONObject().put("t", "setReplayRecording").put("record", record)
+
     /** Loads the map file at the whole [path] in place of the profile's map, as [EngineMessage.MapFile] follows. Answered only by an Error, when refused. */
     fun loadMapFile(path: String): JSONObject = JSONObject().put("t", "loadMapFile").put("path", path)
 
@@ -1546,6 +1559,8 @@ class FrameReader(input: InputStream) {
             "openUrl" -> EngineMessage.OpenUrl(o.optLong("id"), o.optString("url"))
 
             "scriptsStopped" -> EngineMessage.ScriptsStopped(o.optBoolean("stopped"))
+
+            "replayRecording" -> EngineMessage.ReplayRecording(o.optBoolean("recording"), o.optString("file"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

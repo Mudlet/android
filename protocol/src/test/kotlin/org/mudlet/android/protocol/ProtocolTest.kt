@@ -1153,6 +1153,18 @@ class ProtocolTest {
     }
 
     @Test
+    fun recordingAReplay() {
+        assertEquals(EngineMessage.ReplayRecording(true, ""), FrameReader.parse(JSONObject("""{"t":"replayRecording","recording":true,"file":""}""")))
+        assertEquals(
+            EngineMessage.ReplayRecording(false, "2026-11-18#04-05-06.dat"),
+            FrameReader.parse(JSONObject("""{"t":"replayRecording","recording":false,"file":"2026-11-18#04-05-06.dat"}""")),
+        )
+        assertEquals(EngineMessage.ReplayRecording(false, ""), FrameReader.parse(JSONObject("""{"t":"replayRecording"}""")))
+        assertEquals(mapOf("t" to "setReplayRecording", "record" to true), Requests.setReplayRecording(true).toMap())
+        assertEquals(mapOf("t" to "setReplayRecording", "record" to false), Requests.setReplayRecording(false).toMap())
+    }
+
+    @Test
     fun aRefusedCertificate() {
         val refused = JSONObject(
             """{"t":"certificateRefused","refused":true,"issuedTo":"localhost","issuer":"Test CA","expires":"2020-01-02T00:00:00Z",

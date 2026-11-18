@@ -555,6 +555,16 @@
     <!-- Words a player might search the settings for to find "Show passwords as you type them", besides the words of
          its name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_show_passwords_keywords">password, masking, hidden characters, echo</string>
+    <!-- A switch on a game's Input page, desktop Mudlet's preference of that name: a key on a hardware keyboard that
+         the game's scripts bind to more than one key binding runs every one of them, not only the first -->
+    <string name="settings_run_all_key_bindings">React to all keybindings on the same key</string>
+    <!-- Under "React to all keybindings on the same key". Off, as in desktop Mudlet, so older scripts behave as
+         they were written. -->
+    <string name="settings_run_all_key_bindings_hint">A key with more than one key binding runs them all, not only the first. Off unless a game\'s scripts need it.</string>
+    <!-- Words a player might search the settings for to find "React to all keybindings on the same key", besides the
+         words of its name and description, separated by commas. Use the words a player of your language would search
+         for. -->
+    <string name="settings_run_all_key_bindings_keywords">hardware keyboard, shortcut, hotkey, macro, duplicate</string>
     <!-- A switch on a game's Connection page: ask the player whether to switch to a secure (encrypted) connection
          when the game says it has one -->
     <string name="settings_offer_secure">Offer a secure connection</string>

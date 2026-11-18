@@ -81,12 +81,34 @@ data class LabelStyle(
      */
     val drawsBox: Boolean get() = background != null || backgroundImage != null || image || !nativeFrame
 
+    /**
+     * This sheet with its [background] and [color] as a pair, for a widget that draws them over the opaque [under]:
+     * where it sets only one, the other is white or black, whichever contrasts more with it ([ScrollThumb.whiteOn]),
+     * not the widget's own, which could be as dark or as light. A background is judged as drawn, at its alpha over
+     * [under]. A colour of alpha 0 (`transparent`), background or text, draws nothing, so it counts as not set, in
+     * every case: text over a transparent background gets the background its colour would get alone, as on the
+     * desktop what shows through is whatever is under the widget, for which [under] only stands in; a background with
+     * transparent text gets the text that contrasts with it; and transparent text with no background is left out, for
+     * the widget's own colour. The desktop draws such text as nothing; here it is not hidden, so that a line keeps what
+     * is typed in it seen.
+     */
+    fun paired(under: Int): LabelStyle {
+        fun contrasting(rgb: Int) = if (ScrollThumb.whiteOn(MapBehindText.luminance(rgb).toFloat())) -1 else 0xFF shl 24
+        val text = color?.takeIf { it ushr 24 != 0 }
+        val fill = background?.colour()?.takeIf { it ushr 24 != 0 }
+        return when {
+            text != null && fill == null -> copy(background = LabelFill.Solid(contrasting(text)))
+            text == null && fill != null -> copy(color = contrasting(MapBehindText.blend(under, fill, (fill ushr 24) / 255f)))
+            else -> copy(color = text)
+        }
+    }
+
     companion object {
         /**
          * The label's own [sheet]: its bare declarations and those of the rules that name a `TLabel` by one of its
          * classes or by `*`, each over those Qt ranks under it ([declarations]). A rule with any other selector, a
          * state or a sub-control is skipped, as is a declaration the app does not draw. With [selectors]
-         * [TEXT_BOX_SELECTORS], a text box's sheet, the same way.
+         * [TEXT_BOX_SELECTORS] or [COMMAND_LINE_SELECTORS], a text box's or a command line's sheet, the same way.
          */
         fun parse(sheet: String, selectors: Set<String> = LABEL_SELECTORS): LabelStyle = of(declarations(sheet, selectors))
 
@@ -772,10 +794,11 @@ data class LabelStyle(
 
         // A border's colour, a gradient too, which Qt fills each edge with across the edge's own box. The app draws one
         // colour, so a linear gradient is the one it has at the middle of its box, where every edge has the same
-        private fun borderColour(value: String): Int? = when (val fill = fill(value)) {
-            is LabelFill.Gradient -> fill.middle()
-            is LabelFill.Solid -> fill.argb
-            null -> null
+        private fun borderColour(value: String): Int? = fill(value)?.colour()
+
+        private fun LabelFill.colour(): Int = when (this) {
+            is LabelFill.Gradient -> middle()
+            is LabelFill.Solid -> argb
         }
 
         // As Qt's gradient spreads: past the line between its points it keeps their colours, and between two stops it
@@ -915,6 +938,9 @@ data class LabelStyle(
 
         /** The rules of a text box's sheet that apply to it: Mudlet's `TTextBox` is a `QPlainTextEdit` as its `TLabel` is a `QLabel`. */
         val TEXT_BOX_SELECTORS = setOf("TTextBox", ".TTextBox", "QPlainTextEdit", "QAbstractScrollArea", "QFrame", "QWidget", "QObject", "*")
+
+        /** The rules of a command line's sheet that apply to it: Mudlet's `TCommandLine` is a `QPlainTextEdit` too. */
+        val COMMAND_LINE_SELECTORS = setOf("TCommandLine", ".TCommandLine", "QPlainTextEdit", "QAbstractScrollArea", "QFrame", "QWidget", "QObject", "*")
 
         // Qt's repeats, which its `background` shorthand passes over
         private val REPEATS = setOf("no-repeat", "repeat-x", "repeat-xy", "repeat-y")

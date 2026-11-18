@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 45
+const val PROTOCOL_VERSION = 46
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -150,6 +150,8 @@ data class ScriptWindow(
     val console: Console?,
     /** An MXP frame's tab header; null for a frame without one, for a page of one and for the other kinds. */
     val frameTabs: FrameTabs? = null,
+    /** A command line's own Qt style sheet, as `setCmdLineStyleSheet` gave it; empty for none and the other kinds. */
+    val styleSheet: String = "",
 ) {
     val key get() = WindowKey(name, kind)
 
@@ -2009,6 +2011,7 @@ class FrameReader(input: InputStream) {
                     null
                 },
                 frameTabs = parseFrameTabs(w),
+                styleSheet = w.optString("styleSheet"),
             )
         }
 

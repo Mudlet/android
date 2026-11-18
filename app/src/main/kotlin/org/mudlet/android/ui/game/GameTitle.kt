@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -55,7 +58,9 @@ private const val TITLE_TRAVERSAL_INDEX = -1f
  * out. A horizontal drag on it is [swipe]'s: its name slides with the finger, the neighbour's comes in from the side,
  * and a release far enough, or a fling, switches to that game with a tick; the next game is to the right, or to the
  * left in right-to-left layouts. Without [stateShown] the name is alone: the title bar's Connect button then says the
- * state, and on a 320 dp wide screen leaves no room for more; TalkBack still reads the state.
+ * state, and on a 320 dp wide screen leaves no room for more; TalkBack still reads the state. While desktop Mudlet's
+ * emergency stop holds the game's scripts ([scriptsStopped]) it shows a red stop sign, with or without the state, and
+ * TalkBack reads "scripts stopped" after the state.
  */
 @Composable
 fun GameTitle(
@@ -72,6 +77,7 @@ fun GameTitle(
     next: String?,
     onSwitch: (String) -> Boolean,
     swipe: GameSwipe,
+    scriptsStopped: Boolean,
     modifier: Modifier = Modifier,
     stateShown: Boolean = true,
 ) {
@@ -87,6 +93,7 @@ fun GameTitle(
     } else {
         stringResource(R.string.game_state, name, stateText)
     }
+    if (scriptsStopped) description = stringResource(R.string.game_description_more, description, stringResource(R.string.game_scripts_stopped))
     if (othersUnread > 0) {
         description = stringResource(R.string.game_description_more, description, pluralStringResource(R.plurals.game_others_unread, othersUnread.toPluralCount(), othersUnread))
     }
@@ -120,6 +127,7 @@ fun GameTitle(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (stateShown) ConnectionIcon(state)
+            if (scriptsStopped) Icon(painterResource(R.drawable.ic_report), contentDescription = null, Modifier.size(20.dp), tint = colors.error)
             Column(Modifier.weight(1f, fill = false)) {
                 val slide = swipe.offset
                 Box(Modifier.clipToBounds()) {

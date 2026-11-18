@@ -1145,6 +1145,14 @@ class ProtocolTest {
     }
 
     @Test
+    fun theEmergencyStopAndItsState() {
+        assertEquals(EngineMessage.ScriptsStopped(true), FrameReader.parse(JSONObject("""{"t":"scriptsStopped","stopped":true}""")))
+        assertEquals(EngineMessage.ScriptsStopped(false), FrameReader.parse(JSONObject("""{"t":"scriptsStopped"}""")))
+        assertEquals(mapOf("t" to "setScriptsStopped", "stopped" to true), Requests.setScriptsStopped(true).toMap())
+        assertEquals(mapOf("t" to "setScriptsStopped", "stopped" to false), Requests.setScriptsStopped(false).toMap())
+    }
+
+    @Test
     fun aRefusedCertificate() {
         val refused = JSONObject(
             """{"t":"certificateRefused","refused":true,"issuedTo":"localhost","issuer":"Test CA","expires":"2020-01-02T00:00:00Z",

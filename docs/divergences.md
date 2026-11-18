@@ -367,6 +367,15 @@ A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f
   instead of a background a sheet sets without a border, as some desktop styles do, where the app draws the sheet's
   background. What the button looks like then depends on the desktop's style, and the sheet asked for the background.
 
+## The emergency stop
+
+Desktop Mudlet's emergency stop, a button under the main console that stops a profile's triggers, aliases, timers, key
+bindings and events in one click, is a switch on the game sheet's card for the game in front, two taps away, and the
+game title shows a stop sign while it holds (`docs/architecture.md`, "The emergency stop"). The row below a phone's
+input line has room for a few controls only, and a button there that one stray tap turns on would leave the game's
+scripts silently off; the stop sign keeps the state in sight, and TalkBack reads it with the title. What it stops, and
+that it holds across a reconnect but not once the profile closes, are the desktop's.
+
 ## The Sound button
 
 The game screen's Sound button, desktop Mudlet's toolbar "Mute all media", is there only once the game has played a

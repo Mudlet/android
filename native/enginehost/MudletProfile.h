@@ -98,6 +98,7 @@ public:
     QString downloadMap() override;
     QString cancelMapDownload() override;
     QString answerSecureOffer(bool accept) override;
+    QString setScriptsStopped(bool stopped) override;
     QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString deleteMap() override;

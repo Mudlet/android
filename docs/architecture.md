@@ -269,6 +269,18 @@ from where it has got to. TalkBack reads it as "Mute all media", a checkbox chec
 state once as it turns; its coming takes no focus and says nothing, so the game's text is read on undisturbed.
 `SoundButtonTest` tries each of these against the fake engine.
 
+### The emergency stop
+Desktop Mudlet's emergency stop (`Host::stopAllTriggers()`, the button under the main console) is a switch on the game
+sheet's card for the game in front (`GameSheet.kt`), which takes a tap once the profile has loaded. A tap sends
+`setScriptsStopped`, which the engine does with libmudlet's `THeadlessSession::setScriptsStopped()`: the profile's
+triggers, aliases, timers and key bindings stop and its scripts' events are not raised, and typed lines go to the game
+as they are. The switch follows the engine's `scriptsStopped`, not the tap, so a refused stop never shows as on; the
+engine tracks the state itself, as libmudlet has no signal for it, and sends false once the profile closes. While it
+holds, the game title shows a red stop sign before the game's name and TalkBack reads "scripts stopped" after the
+title's state, so the state stays in sight with the sheet closed. TalkBack reads the switch as "Emergency stop", a
+switch, with what it does. `EmergencyStopTest` tries the switch and the title against the fake engine, and
+`scripts_stopped` in the host test the engine against Mudlet.
+
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
 scales; text sizes are in sp, so the system font size scales them.

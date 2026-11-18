@@ -2433,7 +2433,7 @@ std::variant<IEngine::ScriptSearch, QString> MudletProfile::searchScriptItems(co
     }
     ScriptSearch search;
     for (const THeadlessSession::ScriptSearchMatch& match : mSession->searchScriptItems(text, caseSensitive, wholeWord, limit, search.more)) {
-        search.matches.append({engineKind(match.kind), match.id, match.name, engineField(match.field), match.index, match.text, match.start});
+        Q_UNUSED(match)
     }
     return search;
 }

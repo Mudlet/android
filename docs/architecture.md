@@ -809,9 +809,11 @@ The script library's title bar has an Errors button that opens the profile's err
   than the screen; scrolled up, it stays where the player is, as the game's console does.
 - Copy all puts the entries on the clipboard as the screen shows them, only the newest that fit in 100000 characters
   (a larger clip would pass Binder's limit) with a snackbar that says how many, and Clear sends `clearErrorConsole`.
-- The game's Scripts button and the library's Errors button carry a badge with how many errors, not debug lines, came
-  since the console last showed, which is also in what TalkBack reads for them. While the console shows, TalkBack
+- The library's Errors button carries a badge with how many errors, not debug lines, came
+  since the console last showed, which is also in what TalkBack reads for it. While the console shows, TalkBack
   says each new error once, through the Announcer, and not the entries already there.
+  The game's Scripts button shows no count: most profiles have errors, and a count on the game screen would only nag;
+  in the library, the count invites the player to look at the console.
 - A reattach to the same engine keeps what was seen; a new engine instance numbers its entries from 1 again, so all
   of them are new.
 

@@ -81,7 +81,7 @@ class ErrorConsolePseudoLocaleTest(private val locale: String) {
         waitFor(hasTestTag(GAME_TITLE_TAG))
 
         session.errorConsole(true, errorEntry(1, "attempt to index a nil value", "trigger", 1, "Greet", "Trigger1", line = 2))
-        activate(hasContentDescription(plural(R.plurals.errors_unseen, 1, string(R.string.scripts_open, game.name), 1)))
+        activate(hasContentDescription(string(R.string.scripts_open, game.name)))
         compose.waitForIdle()
         repeat(KINDS) {
             val ask = session.receive("scriptItems")

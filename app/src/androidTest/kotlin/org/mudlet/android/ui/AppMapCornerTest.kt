@@ -277,7 +277,7 @@ class AppMapCornerTest(private val screen: Screen) {
         // Hidden again, the settings' switch shows it
         activate(button(R.string.app_map_corner_hide))
         waitForNone(corner)
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
         activate(hasText(string(R.string.settings_appearance)))
         val row = hasText(string(R.string.settings_map_in_corner)) and hasClickAction()

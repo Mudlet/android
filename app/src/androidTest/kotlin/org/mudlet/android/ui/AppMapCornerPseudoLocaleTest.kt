@@ -102,13 +102,13 @@ class AppMapCornerPseudoLocaleTest(private val locale: String) {
         val hidden = compose.activity.getString(R.string.app_map_corner_hidden, compose.activity.getString(R.string.settings_map_in_corner))
         waitFor(hasText(hidden))
         compose.onRoot().tryPerformAccessibilityChecks()
-        assertFits(hidden)
-        assertFits(compose.activity.getString(R.string.app_map_corner_undo))
+        assertFits(hidden, scrolls = false)
+        assertFits(compose.activity.getString(R.string.app_map_corner_undo), scrolls = false)
     }
 
-    /** Every layout of the text is whole, once what holds it has scrolled to it. */
-    private fun assertFits(text: String) {
-        compose.onNode(hasText(text)).performScrollTo()
+    /** Every layout of the text is whole, once what holds it, if it [scrolls], has scrolled to it. */
+    private fun assertFits(text: String, scrolls: Boolean = true) {
+        if (scrolls) compose.onNode(hasText(text)).performScrollTo()
         val layouts = ArrayList<TextLayoutResult>()
         for (node in compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes()) {
             if (node.config.getOrNull(SemanticsProperties.Text).isNullOrEmpty()) continue

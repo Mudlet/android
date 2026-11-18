@@ -506,9 +506,11 @@ class IFrontend
 {
 public:
     virtual ~IFrontend() = default;
-    virtual void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) = 0;
+    // time: when the game's text arrived, or the profile wrote it, in milliseconds since the epoch, as the console's
+    // timestamps show it
+    virtual void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) = 0;
     // The line still being written below the last one, shown until it is replaced; empty for none
-    virtual void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) = 0;
+    virtual void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) = 0;
     // The console was emptied: every line sent before, and the tail, are gone
     virtual void cleared() = 0;
     virtual void notify(const QString& title, const QString& text) = 0;

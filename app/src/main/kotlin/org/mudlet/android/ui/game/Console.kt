@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,6 +44,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -67,6 +70,9 @@ import org.mudlet.android.ui.blinks
 import kotlin.math.roundToInt
 
 private const val TAIL_KEY = "tail"
+
+// Desktop Mudlet's timestamps' colour, QColor(200, 150, 0), on the console's background
+private val TIME_STAMP_COLOR = Color(0xFFC89600)
 private val CONSOLE_SIDE_PADDING = 4.dp
 
 // The keyboard and a pinch resize the console in many small steps: only where it comes to rest goes to the game
@@ -79,6 +85,9 @@ private const val CELLS_MEASURED = 100
  * The game's text: [lines], then [tail] (the prompt), in their colours and styles, at [textSizeSp] in [colors]. At the
  * bottom it follows new lines; scrolled up, it stays where it is and offers a button back to the bottom that counts the
  * lines that came meanwhile. [linesAdded] is the profile session's count, which numbers the lines.
+ *
+ * While [timeStamps], each line the engine gave a time has it before it, as desktop Mudlet draws it, and TalkBack reads
+ * it first.
  *
  * Each line is one node for TalkBack, whose text is the line's without its styles. Its [links] are followed as
  * [ConsoleLine] offers them, each asked about once its line is shown, and again after the engine says it changed, and
@@ -109,6 +118,7 @@ fun Console(
     searchQuery: String = "",
     searchFound: Long? = null,
     blinkText: Boolean = false,
+    timeStamps: Boolean = false,
     behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -211,7 +221,19 @@ fun Console(
                 }
                 // The app's own markers are not the game's text: no trigger sees them
                 val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
-                ConsoleLine(text, plain, style, Modifier.fillMaxWidth(), color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger, copyable = true)
+                val stamp = if (timeStamps && line.time > 0) remember(line.time) { timeStamp(line.time) } else null
+                val consoleLine = @Composable { m: Modifier ->
+                    ConsoleLine(text, plain, style, m, color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger, copyable = true, readingPrefix = stamp.orEmpty())
+                }
+                if (stamp == null) {
+                    consoleLine(Modifier.fillMaxWidth())
+                } else {
+                    Row(Modifier.fillMaxWidth()) {
+                        // Read as the start of the line's own node, so TalkBack does not stop on the time apart
+                        Text(stamp, Modifier.clearAndSetSemantics {}, color = TIME_STAMP_COLOR, style = style, softWrap = false)
+                        consoleLine(Modifier.weight(1f))
+                    }
+                }
             }
         }
         if (!following) {
@@ -241,7 +263,7 @@ private fun AnnotatedString.withMatches(plain: String, query: String): Annotated
 // The line with its links painted as the engine last said they are
 private fun UiLine.paintedAs(info: (Int) -> EngineMessage.Link?): UiLine {
     val painted = linkRuns(runs, info)
-    return if (painted === runs) this else UiLine(text, painted, prompt, marker)
+    return if (painted === runs) this else UiLine(text, painted, prompt, marker, time)
 }
 
 /** The frame time in milliseconds, each frame, for as long as it is in the composition. */

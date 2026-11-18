@@ -42,7 +42,8 @@ import java.io.InputStream
 import java.io.OutputStream
 import kotlin.concurrent.thread
 
-class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false)
+/** [time]: when the game's text came or the profile wrote it, in milliseconds since the epoch; 0 where none is known. */
+class UiLine(val text: String, val runs: IntArray, val prompt: Boolean, val marker: Boolean = false, val time: Long = 0)
 
 /** Where a `connect` request sent the engine. */
 data class GameAddress(val host: String, val port: Int, val tls: Boolean)

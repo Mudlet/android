@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **41**.
+The current version is **42**.
 
 ## Transport
 
@@ -127,6 +127,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `moveScriptItem` | `kind`, `item`, `parent`, `position` | Moves the item into the folder whose id is `parent`, or to the top level for 0, at `position` among the items shown there, as a drag in the desktop editor does (`THeadlessSession::moveScriptItem()`). |
 | `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
 | `setScriptsStopped` | `stopped` | Desktop Mudlet's emergency stop, the button with the bomb at the bottom of the main console (`THeadlessSession::setScriptsStopped()`): `stopped` true turns off the open profile's triggers, aliases, timers and key bindings and keeps events from its scripts, so what the player types goes to the game as it is; false turns on again what the stop turned off, leaving off what a script or the player had turned off, as the button does. `scriptsStopped` follows a change. Mudlet keeps it for as long as the profile is open, a reconnect included, not once it closes. `error` (`setScriptsStopped: ...`) with no profile running, while it loads, or for a `stopped` that is not a boolean. |
+| `setTimeStamps` | `shown` | Desktop Mudlet's timestamp button at the bottom of the main console (`THeadlessSession::setTimeStampsShown()`): `shown` true shows each line's time beside it, as `line.time` and `tail.time` give it, false hides it. Saved for the profile's next load as the button saves it; status `timeStamps` follows a change, as it follows a script's `enableTimeStamps()` and `disableTimeStamps()`. `error` (`setTimeStamps: ...`) with no profile running, while it loads, where the choice could not be saved (the change stands), or for a `shown` that is not a boolean. |
 | `setReplayRecording` | `record` | Desktop Mudlet's replay recording button at the bottom of the main console (`THeadlessSession::setReplayRecording()`): `record` true records what the game sends into a new file in the open profile's log folder (`profiles/<name>/log/`, named by the time it began, as `2026-11-18#04-05-06.dat`), false stops the recording and saves the file, which desktop Mudlet's replay plays. `replayRecording` follows. The connection ending saves it too. `error` (`setReplayRecording: ...`) with no profile running, while it loads, when it is recording already or not, when the file cannot be opened or saved (the recording is over then too), or for a `record` that is not a boolean. |
 | `searchScriptItems` | `text`, `caseSensitive`?, `wholeWord`?, `id`? | Finds `text` in the open profile's triggers, aliases, scripts, buttons, timers and keys, as the desktop script editor's search box does (`THeadlessSession::searchScriptItems()`; "Searching triggers, aliases and scripts" below): whatever its case unless `caseSensitive`, and with `wholeWord` only where it is a word of its own. Answered by `scriptSearch`. |
 | `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, for a script editor to say what is wrong with it (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
@@ -256,8 +257,8 @@ names no table (`There is no such table.`), as one gone since it was listed, or 
 | Message | Fields | Meaning |
 |---|---|---|
 | `hello` | `v`, `pid`, `instance`, `profile`? | The answer to the UI's `hello`. `pid` is the engine process's id. `instance` is an opaque string that differs for each run of the engine and each profile socket (now `<pid>-<ms since the epoch>`, and `-<slot>` after it on a profile's socket); its sequence numbers start again at 1. `profile` names the profile on a profile's socket. |
-| `line` | `seq`, `text`, `runs`, `prompt`, `replay`? | A finished line, which never changes. `seq` counts lines from 1 for each instance, by one. `prompt` is true for a prompt (a line ended by a telnet go-ahead or end-of-record). `replay` is true on lines sent from the ring buffer in answer to `hello`. |
-| `tail` | `text`, `runs`, `prompt` | The console's bottom line, which may still change or be ended. It replaces the previous tail. Empty `text` means none. |
+| `line` | `seq`, `text`, `runs`, `prompt`, `time`, `replay`? | A finished line, which never changes. `seq` counts lines from 1 for each instance, by one. `prompt` is true for a prompt (a line ended by a telnet go-ahead or end-of-record). `time` is when the game's text arrived, or when the profile wrote it for a line the game did not send, in milliseconds since the epoch: the time desktop Mudlet's timestamps show beside it. `replay` is true on lines sent from the ring buffer in answer to `hello`. |
+| `tail` | `text`, `runs`, `prompt`, `time` | The console's bottom line, which may still change or be ended. It replaces the previous tail. Empty `text` means none, with `time` 0; otherwise `time` is as a `line`'s. |
 | `clear` | | The console was emptied: the UI drops its lines and the tail. |
 | `status` | `key`, `value`, `re`? | A named value of the engine's state. The engine keeps the last value of each key. `re` is the `id` of the request being handled. |
 | `notify` | `title`, `text` | A notification the engine's Lua asked for (`showNotification()`). The engine process posts it to Android itself; the UI only learns of it. |
@@ -741,6 +742,12 @@ a UI shows what it knows and ignores the rest. Now in use:
   `<fg> <bg>`, each `#rrggbb`, the colours of the console where the game asks for none (the runs' -1), from `consoleForeground()` and `consoleBackground()` when a
   profile loads, and on each change (`consoleColorsChanged`: a script's `setBackgroundColor()` on the main console,
   or a package or save with colours of its own).
+- **Also the engine's:** `timeStamps` (`true` or `false`), whether the main console shows each line's time beside it, as
+  desktop Mudlet's timestamp button does, when a profile loads, on each change (`setTimeStamps`, or a script's
+  `enableTimeStamps()` or `disableTimeStamps()`), and `false` once it closes; and `lag`: `<network> <processing>`, in
+  seconds to the millisecond, what desktop Mudlet's latency box shows as `N:` and `S:` (`latencyChanged`), `-` for
+  the network's while the game marks no prompts with GA or EOR, where the box shows `<no GA>`, and empty once the
+  profile closes.
 - **The engine host (`main.cpp`):** `enginePid`, `socketPath`, `appState`, `qtStartMsAfterAppOnCreate`,
   `qtStartMsAfterServiceOnCreate`, and on Android `serviceReadyWait` (`ok` or `timeout`).
 
@@ -883,7 +890,9 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 41, which added recording a replay (`setReplayRecording`, `replayRecording`);
+As implemented in version 42, which added each line's time (`time` in `line` and `tail`) and desktop Mudlet's
+timestamp button (`setTimeStamps`);
+version 41 added recording a replay (`setReplayRecording`, `replayRecording`);
 version 40 added the emergency stop (`setScriptsStopped`, `scriptsStopped`);
 version 39 added reading the profile's Lua variables (`variables`);
 version 38 had a script's web page answered (`id` in `openUrl`, `answerOpenUrl`);

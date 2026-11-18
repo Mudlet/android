@@ -72,6 +72,8 @@ internal class LineLinks(
  * With [onMakeTrigger], which a line of the game's own text has, or [copyable], a long press on a line that is not
  * blank, anywhere but on a link with a menu, opens a menu that offers to make a trigger from it, or to copy or share it
  * as it reads, and TalkBack offers making the trigger and copying the line as actions.
+ *
+ * TalkBack reads [readingPrefix], drawn beside the line by its caller, before [plain]; a copy leaves it out.
  */
 @Composable
 internal fun ConsoleLine(
@@ -85,13 +87,14 @@ internal fun ConsoleLine(
     links: LineLinks? = null,
     onMakeTrigger: (() -> Unit)? = null,
     copyable: Boolean = false,
+    readingPrefix: String = "",
 ) {
     val space = stringResource(R.string.console_blank_line_space)
 
     // The same Text either way, so the line's look and reading do not depend on whether it has links
     fun read(actions: List<CustomAccessibilityAction>) = Modifier.semantics {
         when {
-            plain.isNotEmpty() || blankLines == Settings.BlankLines.SHOW -> this.text = AnnotatedString(plain)
+            plain.isNotEmpty() || blankLines == Settings.BlankLines.SHOW -> this.text = AnnotatedString(readingPrefix + plain)
 
             blankLines == Settings.BlankLines.SPACE -> {
                 this.text = AnnotatedString(" ")

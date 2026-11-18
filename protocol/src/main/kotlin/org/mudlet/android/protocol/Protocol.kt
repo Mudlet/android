@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 41
+const val PROTOCOL_VERSION = 42
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -800,8 +800,10 @@ data class WindowRow(val text: String, val runs: IntArray, val prompt: Boolean, 
 sealed interface EngineMessage {
     /** [profile] names the profile a profile's socket serves; null on the control socket. */
     data class Hello(val version: Int, val pid: Int, val instance: String, val profile: String? = null) : EngineMessage
-    data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val replay: Boolean) : EngineMessage
-    data class Tail(val text: String, val runs: IntArray, val prompt: Boolean) : EngineMessage
+
+    /** [time]: when the game's text arrived or the profile wrote it, in milliseconds since the epoch. */
+    data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val time: Long, val replay: Boolean) : EngineMessage
+    data class Tail(val text: String, val runs: IntArray, val prompt: Boolean, val time: Long) : EngineMessage
 
     /** The engine's console was emptied: drop every line and the tail. */
     data object Clear : EngineMessage
@@ -1424,6 +1426,12 @@ object Requests {
     fun setScriptsStopped(stopped: Boolean): JSONObject = JSONObject().put("t", "setScriptsStopped").put("stopped", stopped)
 
     /**
+     * Desktop Mudlet's timestamp button: [shown] shows each line's time beside it, false hides it, saved for the profile's
+     * next load, as status `timeStamps` follows. Answered only by an Error, when refused.
+     */
+    fun setTimeStamps(shown: Boolean): JSONObject = JSONObject().put("t", "setTimeStamps").put("shown", shown)
+
+    /**
      * Desktop Mudlet's replay recording button: [record] starts recording what the game sends into a new file in the
      * profile's log folder, false stops and saves it, as [EngineMessage.ReplayRecording] follows. Answered only by an
      * Error, when refused.
@@ -1523,10 +1531,11 @@ class FrameReader(input: InputStream) {
                 o.getString("text"),
                 flattenRuns(o.optJSONArray("runs")),
                 o.optBoolean("prompt"),
+                o.optLong("time"),
                 o.optBoolean("replay"),
             )
 
-            "tail" -> EngineMessage.Tail(o.optString("text"), flattenRuns(o.optJSONArray("runs")), o.optBoolean("prompt"))
+            "tail" -> EngineMessage.Tail(o.optString("text"), flattenRuns(o.optJSONArray("runs")), o.optBoolean("prompt"), o.optLong("time"))
 
             "clear" -> EngineMessage.Clear
 

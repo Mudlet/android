@@ -239,6 +239,7 @@ class GameSwitcherTest {
 
         openTheSheet()
         compose.onNode(gameRow(BETA.name)).assertIsSelected()
+        compose.onNode(gameRow(ALPHA.name)).performScrollTo()
         activate(gameRow(ALPHA.name))
         assertEquals(ALPHA.name, beta.receive("setFront").getString("name"))
         waitUntilGone(sheet)
@@ -251,6 +252,7 @@ class GameSwitcherTest {
         compose.onNode(sheet).assertDoesNotExist()
 
         openTheSheet()
+        compose.onNode(hasContentDescription(string(R.string.game_close, ALPHA.name)) and hasClickAction()).performScrollTo()
         activate(hasContentDescription(string(R.string.game_close, ALPHA.name)))
         // Connected, so it asks first; Cancel keeps it
         waitFor(hasText(string(R.string.game_close_title, ALPHA.name)))
@@ -266,6 +268,7 @@ class GameSwitcherTest {
         // A game not connected closes without asking
         beta.status("connection", "disconnected")
         waitFor(gameRow(BETA.name, R.string.connection_lost))
+        compose.onNode(hasContentDescription(string(R.string.game_close, BETA.name)) and hasClickAction()).performScrollTo()
         activate(hasContentDescription(string(R.string.game_close, BETA.name)))
         closeInTheEngine(BETA.name)
         waitFor(hasText(string(R.string.profiles_title)))

@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 41;
+    static constexpr int protocolVersion = 42;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -61,8 +61,8 @@ public:
     // (tests/map_frames_test.cpp): a frame given again is to have none made of it
     static int mapMessagesMade() { return sMapMessagesMade; }
 
-    void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
-    void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt) override;
+    void line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) override;
+    void tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time) override;
     void cleared() override;
     void notify(const QString& title, const QString& text) override;
     void status(const QString& key, const QString& value) override;
@@ -101,6 +101,7 @@ protected:
         QString text;
         QList<ColorRun> runs;
         bool prompt;
+        qint64 time;
     };
 
     void onNewConnection();

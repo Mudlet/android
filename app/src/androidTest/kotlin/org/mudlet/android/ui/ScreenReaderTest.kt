@@ -12,6 +12,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
@@ -53,6 +54,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.engine.EngineScrollback
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RefusedCertificate
@@ -523,6 +525,31 @@ class ScreenReaderTest {
         val shown = compose.activity.resources.getQuantityString(R.plurals.settings_console_buffer_value, 9_000, 9_000)
         compose.onNode(length).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
         compose.runOnIdle { assertEquals("new games keep the app's own", 10_000, Settings.consoleBufferSize.value) }
+    }
+
+    // As desktop Mudlet's "Use maximum lines possible", with the most this device keeps (docs/divergences.md)
+    @Test
+    fun keepingTheMostHoldsTheScrollbackLengthAtWhatTheDeviceKeeps() {
+        loaded()
+        compose.pickFromGameMenu(string(R.string.settings_title))
+        activate(hasText(string(R.string.settings_display)))
+        session.receive("getSettings")
+        val most = EngineScrollback.maxLines(compose.activity)
+        compose.runOnIdle { assertEquals("the scrollback length goes up to what the device keeps", most, Settings.consoleBufferSize.range.last) }
+        val switch = hasText(string(R.string.settings_console_buffer_max))
+        val length = hasContentDescription(string(R.string.settings_console_buffer)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        val more = hasContentDescription(string(R.string.settings_console_buffer_more))
+        activate(switch, scroll = true)
+        assertEquals(mapOf("useMaxConsoleBufferSize" to true), values(session.receive("setSettings")))
+        val shownMost = compose.activity.resources.getQuantityString(R.plurals.settings_console_buffer_value, most, most)
+        compose.onNode(length).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shownMost)).assertIsNotEnabled()
+        compose.onNode(more).assertIsNotEnabled()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        activate(switch, scroll = true)
+        assertEquals(mapOf("useMaxConsoleBufferSize" to false), values(session.receive("setSettings")))
+        val shownOwn = compose.activity.resources.getQuantityString(R.plurals.settings_console_buffer_value, 10_000, 10_000)
+        compose.onNode(length).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shownOwn)).assertIsEnabled()
+        compose.runOnIdle { assertEquals("new games keep the app's own", false, Settings.useMaxConsoleBufferSize.value) }
     }
 
     @Test

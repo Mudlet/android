@@ -205,9 +205,9 @@ A `label` is a `Box` at its geometry, drawn in this order:
   with any other selector, state or pseudo-element is skipped. A user window's or the profile's sheet does not reach the
   app: only the label's own sheet is in `LabelContent`.
 - **Image**: the raster image fills the label as `QLabel` scales it; an SVG one is drawn under the text with its tint,
-  rotation and shear; a playing movie is an `AnimatedImageDrawable` (API 28, the app's minSdk). That cannot seek or
-  change speed, so a paused movie shows `movieFrame` as a still the engine renders (`getImage` with `frame`), and a
-  `movieSpeed` other than 100 is not followed.
+  rotation and shear; a movie is a still the engine renders (`getImage`): its first frame while it plays, and
+  `movieFrame` (`getImage` with `frame`) once it is paused or has played to its end. The app does not animate it, so
+  `movieSpeed` changes nothing ([`divergences.md`](divergences.md), "Labels and TalkBack").
 - **Text**: Qt's rich text converted to an `AnnotatedString` by the app's own parser for the tags Geyser and scripts
   write: `b`, `i`, `u`, `s`, `font` (`color`, `size`, `face`), `span` with `style` (`color`, `background-color`,
   `font-size`, `font-weight`), `br`, `p`/`div` with `align`, `center`, `a`. Anything else keeps its text without its

@@ -5,6 +5,7 @@ Mudlet desktop is the reference for anything a script or a game can see. A gap i
 function or event. What is left here differs on purpose. Each entry says what differs, why matching the desktop would
 be worse, and where the behaviour is described. A pull request that adds a difference adds its entry; one that takes a
 difference away removes it.
+An entry that calls its difference a gap names one the app has yet to close instead, and says what leaves it open.
 
 ## The size the game is told
 
@@ -102,6 +103,11 @@ that points at the desktop's menus and windows, which the app does not have.
 ## Labels and TalkBack
 
 - A label's cursor shape is not drawn: a touch screen has no pointer to shape (`docs/phase-f.md`, `label`).
+- A label's movie does not play: while it plays the label shows its first frame, still, and once `pauseMovie()`
+  paused it or it played to its end, the frame it stopped at; `setMovieSpeed()` changes nothing (`docs/phase-f.md`,
+  "Labels"). The desktop's `QMovie` plays it from `setMovie()` on, at the speed `setMovieSpeed()` gives. This is a
+  gap: the app draws a label's image as one PNG the engine reads from the file (`getImage`), and nothing asks for the
+  frames after the first while a movie plays.
 - TalkBack also reads a live label when a script makes it live or changes its region, when its name changes, and (its
   name alone) when a named one's text goes blank, and the app does not wait for the profile's "Make script buttons
   reachable with the keyboard" setting (`accessibleLabels`), which the desktop waits for (`docs/phase-f.md`, "Touch
@@ -128,6 +134,11 @@ that points at the desktop's menus and windows, which the app does not have.
   on, while a length of dozens of digits is infinite once it is multiplied into a screen's pixels, and Compose and
   Android throw on a corner or a size that is infinite. A `qlineargradient`'s coordinates are bounded the same way, and
   one that is not a number is 0, as Android has no gradient between such points.
+- A text box whose style sheet sets no colours has the theme's surface and text colours; the desktop's has the
+  profile's command-line colours, dark grey on black unless the player changed them (`docs/phase-f.md`, "Text
+  boxes"). They make it look like the desktop's command line, which has them too. The engine does not send them, and
+  the app's input line and a window's command line have the theme's colours, so in the theme's a text box looks like
+  the fields the player types in, as on the desktop.
 
 ## Button bars
 

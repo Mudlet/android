@@ -13,6 +13,7 @@
 #include <utility>
 
 class IEngineControl;
+class QEventLoop;
 
 // The control socket, engine.sock: the profiles, the app's state and the engine's own statuses, and a socket beside it
 // for each open profile, which a SocketBridge serves. A UI that leaves profileSockets out of its hello is served as in
@@ -38,6 +39,7 @@ public:
     IFrontend* controlFrontend() override { return this; }
     QString clipboardText() override;
     void setClipboardText(const QString& text) override;
+    QString pickFile(bool folder, const QString& title, const QString& location) override;
 
     enum class Change { lines, connection, attention };
     // From a profile's bridge
@@ -73,10 +75,13 @@ private:
     void sendOpenProfiles(bool now);
     // The open profiles and their connections to the engine notification
     void showProfiles();
+    QJsonObject pickFileMessage() const;
 
     static constexpr int changeDelayMs = 500;
     // How long a script's getClipboardText() waits for the UI's answer: the game stalls while it waits
     static constexpr int clipboardWaitMs = 500;
+    // How often the socket is read while a pick waits: the game and other requests go on meanwhile
+    static constexpr int pickReadMs = 20;
 
     IEngineControl* mEngineControl = nullptr;
     QString mSocketDir;
@@ -92,4 +97,15 @@ private:
     // What the engine notification was last given, as names and their connections
     std::optional<std::pair<QStringList, QStringList>> mShown;
     qint64 mClipboardReads = 0;
+    // The file a script waits for, which the UI answers with path
+    struct FilePick
+    {
+        qint64 id = 0;
+        QString title;
+        QString into;
+        std::optional<QString> path;
+    };
+    std::optional<FilePick> mPick;
+    qint64 mPickIds = 0;
+    QEventLoop* mPickLoop = nullptr;
 };

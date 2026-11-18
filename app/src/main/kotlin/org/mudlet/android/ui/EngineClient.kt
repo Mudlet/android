@@ -100,6 +100,13 @@ object EngineClient {
     // statuses at every attach, but that is asked once
     private var restoreChecked = false
 
+    /** The file a script waits for (invokeFileDialog()), until [answerFilePick]; kept while the UI is detached. */
+    var filePick by mutableStateOf<EngineMessage.PickFile?>(null)
+        private set
+
+    // The last pick answered, with its path, sent again if the engine asks again, as when the answer went with the link
+    private var answeredPick: Pair<Long, String>? = null
+
     /** The engine's profiles, the last opened first; null until it has listed them. */
     var profiles by mutableStateOf<List<Profile>?>(null)
         private set
@@ -276,6 +283,23 @@ object EngineClient {
         val session = frontSession ?: return
         if (!attached || (session.unread == 0L && !session.attention)) return
         if (send(Requests.markSeen(session.name, session.engineLastSeq))) session.seen()
+    }
+
+    private fun onPickFile(pick: EngineMessage.PickFile) {
+        val answered = answeredPick
+        if (answered != null && answered.first == pick.id) {
+            send(Requests.answerPickFile(pick.id, answered.second))
+        } else {
+            filePick = pick
+        }
+    }
+
+    /** Answers [filePick] with the [path] of the file now in its folder, or empty for a cancel. */
+    fun answerFilePick(path: String) {
+        val pick = filePick ?: return
+        filePick = null
+        answeredPick = pick.id to path
+        send(Requests.answerPickFile(pick.id, path))
     }
 
     // False when the link is down and the request was dropped
@@ -484,6 +508,8 @@ object EngineClient {
                 if (!sameInstance) {
                     engineStatus.clear()
                     restoreChecked = false
+                    filePick = null
+                    answeredPick = null
                 }
                 // What it says is in front now stands: it had any setFront sent before
                 requestedFront = null
@@ -536,6 +562,8 @@ object EngineClient {
                     val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString().orEmpty()
                     link.send(Requests.answerClipboardRead(message.id, text))
                 }
+
+                is EngineMessage.PickFile -> main.post { onPickFile(message) }
 
                 is EngineMessage.ClipboardWrite -> main.post {
                     val clip = ClipData.newPlainText(app.getString(R.string.script_clipboard_label), message.text)

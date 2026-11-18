@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 34;
+    static constexpr int protocolVersion = 35;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -103,6 +103,7 @@ protected:
 
     void onNewConnection();
     void onReadyRead();
+    void readFrames();
     void onBytesWritten();
     // Whether a cancelMapFile has come on this socket, which it takes out of the frames still to be handled
     bool mapFileCancelAsked();
@@ -169,6 +170,7 @@ protected:
     // Sent whole, and only when it differs from what was kept, which a UI that attaches or drains gets again
     void sendIfChanged(QJsonObject& kept, QJsonObject message);
     void dropClient(const QString& reason);
+    void deleteSocket(QLocalSocket* socket);
     void forgetClient();
     bool clientLive() const { return mClient && mClientGreeted && !mClientLagging; }
     // A profile's output goes to this UI: a profile socket's, or the control socket's that left out profileSockets
@@ -213,6 +215,9 @@ protected:
     QByteArray mReadBuffer;
     bool mTakingFrame = false;
     bool mReadQueued = false;
+    // The reads on the stack, and the sockets let go of meanwhile, deleted once the last of those reads returns
+    int mReading = 0;
+    QList<QPointer<QLocalSocket>> mRetired;
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;

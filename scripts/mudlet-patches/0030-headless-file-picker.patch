@@ -1,0 +1,131 @@
+Let a frontend with no window give invokeFileDialog() the app's file picker
+
+invokeFileDialog() asks the frontend's getOpenFileName() or getExistingDirectory(), which with no window answer an
+empty string, as a cancel, so a script on an app that embeds the session could never get a file.
+
+- TNullAppFrontend::setFilePicker() takes a function that is told whether a folder is wanted, the script's title and
+  the folder the dialog would open at, and returns the chosen path, or an empty string for a cancel; with it,
+  getOpenFileName() and getExistingDirectory() answer what it returns. THeadlessSession::setFilePicker() sets it for
+  every session of the process.
+- The script waits in its call, as for the desktop's modal dialog, and the function may run the event loop while
+  the player chooses, as that dialog does.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (file_dialog: a script gets the path the app answers
+with, an empty string for a cancel, and the game goes on while it waits). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 656581e..e7e053e 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1570,6 +1570,13 @@ Android service, which only the app in front may read from, hands the session it
+ `THeadlessSession::setClipboard()`: a function that answers a read, during the script's call, and
+ one that takes a script's write, for every session of the process.
+ 
++`invokeFileDialog()` asks the frontend's `getOpenFileName()` or `getExistingDirectory()`, which with
++no window answer an empty string, as a cancel. An app that shows its own picker hands the sessions a
++function with `THeadlessSession::setFilePicker()`: it is told whether a folder is wanted, the
++script's title and the folder the dialog would open at, and returns the path chosen, or an empty
++string for a cancel. The script waits in its call, as for the desktop's modal dialog; the function
++may run the event loop meanwhile, as that dialog does, so game text, timers and other scripts go on.
++
+ ### Waits that remain
+ 
+ These still block the application's thread or run a nested event loop:
+diff --git a/src/TNullAppFrontend.cpp b/src/TNullAppFrontend.cpp
+index bb0ff27..14e46b1 100644
+--- a/src/TNullAppFrontend.cpp
++++ b/src/TNullAppFrontend.cpp
+@@ -179,6 +179,21 @@ QPointer<const QObject> windowIdentity(const Host* pHost, const QString& name)
+ }
+ } // namespace
+ 
++QString TNullAppFrontend::getOpenFileName(const QString& title, const QString& location)
++{
++    return mFilePicker ? mFilePicker(false, title, location) : QString();
++}
++
++QString TNullAppFrontend::getExistingDirectory(const QString& title, const QString& location)
++{
++    return mFilePicker ? mFilePicker(true, title, location) : QString();
++}
++
++void TNullAppFrontend::setFilePicker(std::function<QString(bool folder, const QString& title, const QString& location)> pick)
++{
++    mFilePicker = std::move(pick);
++}
++
+ void TNullAppFrontend::getOpenFileNameAsync(const QString&, const QString&, QObject* context, std::function<void(const std::optional<QString>&)> done)
+ {
+     QTimer::singleShot(0ms, context, [done = std::move(done)]() {
+diff --git a/src/TNullAppFrontend.h b/src/TNullAppFrontend.h
+index 11f55f1..80d6faa 100644
+--- a/src/TNullAppFrontend.h
++++ b/src/TNullAppFrontend.h
+@@ -86,8 +86,9 @@ public:
+     void processEventLoopHack() override {}
+     QObject* openComposer(Host*, const QString&, const QString&) override { return nullptr; }
+     void closeComposer(QObject*) override {}
+-    QString getOpenFileName(const QString&, const QString&) override { return QString(); }
+-    QString getExistingDirectory(const QString&, const QString&) override { return QString(); }
++    // What setFilePicker() gave answers, else nothing, as a cancel, there being nobody to choose
++    QString getOpenFileName(const QString& title, const QString& location) override;
++    QString getExistingDirectory(const QString& title, const QString& location) override;
+     // None, there being nobody to choose
+     void getOpenFileNameAsync(const QString&, const QString&, QObject* context, std::function<void(const std::optional<QString>&)> done) override;
+     void getExistingDirectoryAsync(const QString&, const QString&, QObject* context, std::function<void(const std::optional<QString>&)> done) override;
+@@ -98,6 +99,9 @@ public:
+     // The clipboard of an app that embeds the session, where this process may not use the system's: read answers
+     // clipboardText() and write takes setClipboardText()'s text from here on. Without both, back to the system's.
+     void setClipboard(std::function<QString()> read, std::function<void(const QString&)> write);
++    // The file picker of an app that embeds the session: getOpenFileName() (folder false) and getExistingDirectory()
++    // (folder true) answer what pick returns, an empty string for a cancel, from here on. Empty, back to nothing.
++    void setFilePicker(std::function<QString(bool folder, const QString& title, const QString& location)> pick);
+     // Refuses what the main window refuses whatever its bars show, bar clashes with the main window's own shortcuts, and
+     // keeps each command for a frontend to show and activate
+     int addAddonCommand(const CommandRequest& request, Host* pHost, const QString& package, QString& error) override;
+@@ -165,6 +169,7 @@ private:
+     QString mClipboardText;
+     std::function<QString()> mClipboardRead;
+     std::function<void(const QString&)> mClipboardWrite;
++    std::function<QString(bool, const QString&, const QString&)> mFilePicker;
+     bool mShowTabConnectionIndicators = false;
+     // A pointer, as the main window keeps it, so a profile opened again under the name is not in front
+     QPointer<Host> mpActiveHost;
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 950ecbb..0e59395 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -428,6 +428,13 @@ void THeadlessSession::setClipboard(std::function<QString()> read, std::function
+     }
+ }
+ 
++void THeadlessSession::setFilePicker(std::function<QString(bool folder, const QString& title, const QString& location)> pick)
++{
++    if (auto* pView = dynamic_cast<TNullAppFrontend*>(TAppFrontend::instance())) {
++        pView->setFilePicker(std::move(pick));
++    }
++}
++
+ THeadlessSession::THeadlessSession(QObject* parent)
+ : QObject(parent)
+ {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index cf8e90b..7b6b138 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -162,6 +162,12 @@ public:
+     // setClipboardText() hands its text to write, each called during the script's call, so neither may call a
+     // session or run the event loop. Without both, the clipboard is the system's again.
+     static void setClipboard(std::function<QString()> read, std::function<void(const QString&)> write);
++    // The app's own file picker, for invokeFileDialog() in every session: pick gets whether a folder is wanted, the
++    // script's title and the folder the picker would open at, and returns the chosen path, or an empty string for a
++    // cancel, as the desktop's dialog does. It is called during the script's call, which waits for it as for the
++    // desktop's modal dialog; it may run the event loop while the player chooses. Empty, invokeFileDialog() answers
++    // an empty string at once.
++    static void setFilePicker(std::function<QString(bool folder, const QString& title, const QString& location)> pick);
+ 
+     // Names mudlet_core's own Qt resources (":/" images, translations and fonts), so a program linking it statically
+     // keeps them; Qt registers them before main() runs

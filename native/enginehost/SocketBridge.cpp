@@ -392,8 +392,19 @@ void SocketBridge::onNewConnection()
                 mClientGreeted = false;
                 forgetClient();
             }
-            socket->deleteLater();
+            deleteSocket(socket);
         });
+    }
+}
+
+// A script's file pick runs an event loop inside a read, and Qt delivers a deferred delete posted in that loop before
+// the loop ends: the socket whose readyRead the read is in would be freed under Qt, which uses it once the read returns
+void SocketBridge::deleteSocket(QLocalSocket* socket)
+{
+    if (mReading > 0) {
+        mRetired.append(socket);
+    } else {
+        socket->deleteLater();
     }
 }
 
@@ -405,7 +416,7 @@ void SocketBridge::dropClient(const QString& reason)
     qInfo("SocketBridge: dropping client: %s", qPrintable(reason));
     mClient->disconnect(this);
     mClient->abort();
-    mClient->deleteLater();
+    deleteSocket(mClient);
     mClient = nullptr;
     mClientGreeted = false;
     forgetClient();
@@ -429,6 +440,19 @@ void SocketBridge::onReadyRead()
     if (!mClient || mTakingFrame) {
         return;
     }
+    ++mReading;
+    readFrames();
+    if (--mReading == 0) {
+        for (const QPointer<QLocalSocket>& socket : std::exchange(mRetired, {})) {
+            if (socket) {
+                socket->deleteLater();
+            }
+        }
+    }
+}
+
+void SocketBridge::readFrames()
+{
     mReadBuffer.append(mClient->readAll());
     while (mReadBuffer.size() >= 4) {
         const quint32 length = qFromBigEndian<quint32>(mReadBuffer.constData());
@@ -829,7 +853,8 @@ bool SocketBridge::handleControl(const QString& type, const QJsonObject&)
                                                             QLatin1StringView("setFront"),
                                                             QLatin1StringView("markSeen"),
                                                             QLatin1StringView("setAppState"),
-                                                            QLatin1StringView("answerClipboardRead")};
+                                                            QLatin1StringView("answerClipboardRead"),
+                                                            QLatin1StringView("answerPickFile")};
     if (std::find(std::begin(controlRequests), std::end(controlRequests), type) == std::end(controlRequests)) {
         return false;
     }

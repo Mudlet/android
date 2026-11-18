@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
@@ -41,6 +42,12 @@ class MainActivity : ComponentActivity() {
     // Battery settings or Not now: the explanation of a stop in the background is never shown again
     private var engineStoppedAnswered by mutableStateOf(false)
 
+    // The time of the last engine crash Report a problem was offered for: each crash is offered once
+    private var crashReportOfferedMs by mutableLongStateOf(0L)
+
+    // How many times the player chose to report a crash, each a request to show Report a problem
+    private var reportsAsked by mutableIntStateOf(0)
+
     // How many notification taps have brought their game to the front, each a request to show the game screen
     private var gamesShown by mutableIntStateOf(0)
 
@@ -52,13 +59,14 @@ class MainActivity : ComponentActivity() {
         Announcer.init(this)
         explainNotifications = shouldAskForNotifications()
         engineStoppedAnswered = uiPrefs().getBoolean(PREF_ENGINE_STOPPED_ANSWERED, false)
+        crashReportOfferedMs = uiPrefs().getLong(PREF_CRASH_REPORT_OFFERED, 0L)
         EngineClient.refreshServiceState()
         if (EngineClient.engineWanted && EngineClient.fgsState == "not running") EngineClient.startEngine()
         // A recreated Activity has shown its intent's game already
         if (savedInstanceState == null) showProfileOf(intent)
         setContent {
             MudletTheme {
-                AppNavigation(onKillUi = { finish() }, gamesShown = gamesShown)
+                AppNavigation(onKillUi = { finish() }, gamesShown = gamesShown, reportsAsked = reportsAsked)
                 ScriptFileRequest()
                 if (explainNotifications) {
                     NotificationsExplanation(
@@ -79,6 +87,15 @@ class MainActivity : ComponentActivity() {
                         onNotNow = ::answerEngineStopped,
                         // Tapped outside or Back: explained again after the next stop
                         onDismiss = { EngineClient.engineStoppedInBackground = false },
+                    )
+                } else if (EngineClient.engineCrashedAtMs.let { it != 0L && it != crashReportOfferedMs }) {
+                    // Not now, Back or a tap outside: that crash is not offered again
+                    CrashReportOffer(
+                        onReport = {
+                            crashReportOffered()
+                            reportsAsked++
+                        },
+                        onClose = ::crashReportOffered,
                     )
                 }
             }
@@ -131,6 +148,11 @@ class MainActivity : ComponentActivity() {
         uiPrefs().edit { putBoolean(PREF_ENGINE_STOPPED_ANSWERED, true) }
     }
 
+    private fun crashReportOffered() {
+        crashReportOfferedMs = EngineClient.engineCrashedAtMs
+        uiPrefs().edit { putLong(PREF_CRASH_REPORT_OFFERED, crashReportOfferedMs) }
+    }
+
     private fun uiPrefs() = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
 
     internal companion object {
@@ -138,6 +160,7 @@ class MainActivity : ComponentActivity() {
         const val PREF_NOTIFICATIONS_ASKED = "notificationsAsked"
         const val PREF_NOTIFICATIONS_DECLINED = "notificationsDeclined"
         const val PREF_ENGINE_STOPPED_ANSWERED = "engineStoppedAnswered"
+        const val PREF_CRASH_REPORT_OFFERED = "crashReportOffered"
     }
 }
 
@@ -160,5 +183,16 @@ private fun EngineStoppedExplanation(onBatterySettings: () -> Unit, onNotNow: ()
         text = { Text(stringResource(R.string.engine_stopped_text)) },
         confirmButton = { TextButton(onClick = onBatterySettings) { Text(stringResource(R.string.engine_stopped_battery_settings)) } },
         dismissButton = { TextButton(onClick = onNotNow) { Text(stringResource(R.string.engine_stopped_not_now)) } },
+    )
+}
+
+@Composable
+private fun CrashReportOffer(onReport: () -> Unit, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.crash_offer_title)) },
+        text = { Text(stringResource(R.string.crash_offer_text)) },
+        confirmButton = { TextButton(onClick = onReport) { Text(stringResource(R.string.crash_offer_report)) } },
+        dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.crash_offer_not_now)) } },
     )
 }

@@ -26,6 +26,14 @@
     <string name="engine_stopped_battery_settings">Battery settings</string>
     <!-- The dialog's button that closes it; it is not shown again -->
     <string name="engine_stopped_not_now">Not now</string>
+    <!-- Shown once after Mudlet's engine crashed (or stopped responding) and was started again -->
+    <string name="crash_offer_title">Mudlet crashed</string>
+    <!-- The text of that dialog. "Report a problem" is the name of the screen the Report button opens (report_title) -->
+    <string name="crash_offer_text">Mudlet stopped unexpectedly and was started again. You can tell the developers about it in Report a problem, where you see what a report holds before you send it. Nothing is sent unless you send it.</string>
+    <!-- The dialog's button that opens Report a problem -->
+    <string name="crash_offer_report">Report</string>
+    <!-- The dialog's button that closes it; it is not shown again for this crash -->
+    <string name="crash_offer_not_now">Not now</string>
 
     <!-- The start screen's title: the list of the player's games (in Mudlet, a profile is a game and its settings) -->
     <string name="profiles_title">Profiles</string>

@@ -185,6 +185,7 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
     lateinit var engine: FakeEngine
     private lateinit var previous: (String) -> org.mudlet.android.protocol.Transport
     private lateinit var previousStoppedByAndroid: () -> Boolean
+    private lateinit var previousLastEngineCrashMs: () -> Long?
 
     override fun before() {
         EngineClient.init(InstrumentationRegistry.getInstrumentation().targetContext)
@@ -193,14 +194,17 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         engine = FakeEngine(open)
         previous = EngineClient.connector
         EngineClient.connector = engine::connect
-        // A test's restore status is not Android stopping the engine, unless the test says so
+        // A test's restore status is not Android stopping the engine, nor a crash, unless the test says so
         previousStoppedByAndroid = EngineClient.stoppedByAndroid
         EngineClient.stoppedByAndroid = { false }
+        previousLastEngineCrashMs = EngineClient.lastEngineCrashMs
+        EngineClient.lastEngineCrashMs = { null }
     }
 
     override fun after() {
         EngineClient.connector = previous
         EngineClient.stoppedByAndroid = previousStoppedByAndroid
+        EngineClient.lastEngineCrashMs = previousLastEngineCrashMs
         engine.close()
     }
 }

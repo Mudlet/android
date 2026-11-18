@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import androidx.annotation.RequiresApi
 
 /**
  * Whether Android stopped the engine in the background, as a battery saver or the low-memory killer does, which the
@@ -57,12 +58,19 @@ internal object EngineStopped {
      */
     fun lastExitByAndroid(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true
-        val exits = context.getSystemService(ActivityManager::class.java)
-            .getHistoricalProcessExitReasons(context.packageName, 0, EXITS_READ)
-            .map { Exit(it.processName, it.reason, it.timestamp) }
-        val bootedAtMs = System.currentTimeMillis() - SystemClock.elapsedRealtime()
-        return lastEngineExitByAndroid(exits, "${context.packageName}:engine", bootedAtMs)
+        return lastEngineExitByAndroid(recordedExits(context), engineProcess(context), bootedAtMs())
     }
+
+    /** The app's last recorded process exits, newest first. */
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun recordedExits(context: Context): List<Exit> = context.getSystemService(ActivityManager::class.java)
+        .getHistoricalProcessExitReasons(context.packageName, 0, EXITS_READ)
+        .map { Exit(it.processName, it.reason, it.timestamp) }
+
+    fun engineProcess(context: Context) = "${context.packageName}:engine"
+
+    /** When the device last started, in wall-clock ms. */
+    fun bootedAtMs() = System.currentTimeMillis() - SystemClock.elapsedRealtime()
 
     /**
      * Opens the app's page in Android's settings, where Battery (App battery usage on some phones) lets Mudlet run

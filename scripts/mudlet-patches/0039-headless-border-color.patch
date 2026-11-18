@@ -1,0 +1,160 @@
+Tell a frontend with no window the colour of the border around the main console
+
+A script's setBorderColor() colours the room the borders (setBorderTop() and the like) leave around the main
+console; the GUI paints TConsole's main frame that colour (TConsole::updateMainFrameTransparency()). With no window,
+TNullConsoleFrontend::setBorderColor() kept it in the main console's model, where getBorderColor() reads it, and told
+no one, so an app that draws the borders could only paint them black.
+
+- TNullConsoleFrontend::setBorderColor() raises Host::signal_borderColorChanged when the colour changes.
+- THeadlessSession::mainBorderColor() reads it: black until a script sets one, as the GUI's, and invalid after a
+  setBorderColor() out of range, which Qt makes no colour of (Mudlet/android's engine sends that as -1).
+- THeadlessSession::mainBorderColorChanged relays a change for the session's own profile, from the event loop, and
+  only when it differs from what was last sent or read at profileLoaded, as mainConsoleAreaChanged does.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (script_windows: black at load, the colour a script's
+setBorderColor() gives, and it again for a UI that attaches). The desktop is unchanged: nothing listens there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index d84d214..e97546d 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -883,7 +883,7 @@ naming what changed, for the app to read again: `scriptWindowsChanged`, `windowT
+ `mapRepaintRequested`; and `keyBindingsChanged`, only when `keyBindings()` differs from what it gave
+ at `profileLoaded` or the last one sent. The others carry the value as it is when they are sent, and only when it differs
+ from the one last sent or the one read at `profileLoaded`: `consoleFontChanged`, `consoleWrapChanged`,
+-`consoleColorsChanged`, `timeStampsShownChanged` and `mainConsoleAreaChanged`. So a change made and
++`consoleColorsChanged`, `timeStampsShownChanged`, `mainConsoleAreaChanged` and `mainBorderColorChanged`. So a change made and
+ undone within a turn sends nothing, and nothing follows `profileLoaded` for what the load did. A map
+ export or import runs the event loop as it goes, so these can arrive while the script that began it
+ still runs.
+@@ -1009,6 +1009,12 @@ signal comes from the event loop, with both as they are then, and only when they
+ app last had, so a script that sets a border twice in one turn sends one, and one that sets it and takes
+ it back sends none.
+ 
++`mainBorderColor()` is the colour a script's `setBorderColor()` gives the room the borders leave around
++the main console, which the GUI paints there and `getBorderColor()` reads: black until a script sets one,
++and invalid after a `setBorderColor()` out of range, which Qt makes no colour of. Read it at
++`profileLoaded`; `mainBorderColorChanged` carries it when it changes, from the event loop and only when
++it differs from what the app last had, as `mainConsoleAreaChanged` does.
++
+ A script's `setMainWindowSize(width, height)` sets its own profile's area in pixels, as the app's call
+ would, and answers `true`, or `nil` and a message for a size the app's call refuses.
+ `mainWindowResizeRequested` tells the app the size it asked for, from the event loop: an app that can
+diff --git a/src/Host.h b/src/Host.h
+index 0a50af0..2c3d589 100644
+--- a/src/Host.h
++++ b/src/Host.h
+@@ -1496,6 +1496,8 @@ signals:
+     void signal_consoleFontChanged(const QFont& font);
+     // With no view: the main console's grid, or where its text goes, may have changed
+     void signal_mainAreaLaidOut();
++    // With no view: setBorderColor() gave the border around the main console another colour
++    void signal_borderColorChanged();
+     // request counts the requests made, so an answer to one a newer one has replaced is known
+     void signal_mainWindowResizeRequested(const QSize& pixels, quint64 request);
+     void signal_editorSearchOptionsChanged(const enums::EditorSearchOptions);
+diff --git a/src/TNullConsoleFrontend.cpp b/src/TNullConsoleFrontend.cpp
+index ebc797f..78a566c 100644
+--- a/src/TNullConsoleFrontend.cpp
++++ b/src/TNullConsoleFrontend.cpp
+@@ -4459,7 +4459,12 @@ std::pair<bool, QString> TNullConsoleFrontend::setUserWindowTitle(const QString&
+ 
+ void TNullConsoleFrontend::setBorderColor(const QColor& color)
+ {
+-    mpHost->mainConsoleModel().mBorderColor = color;
++    QColor& border = mpHost->mainConsoleModel().mBorderColor;
++    if (border == color) {
++        return;
++    }
++    border = color;
++    emit mpHost->signal_borderColorChanged();
+ }
+ 
+ void TNullConsoleFrontend::applyBorders()
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index be7ac8b..dd5817c 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -697,6 +697,10 @@ public:
+     // less the borders. Empty with no profile open: read them at profileLoaded, then follow mainConsoleAreaChanged.
+     QSize mainConsoleGrid() const;
+     QRect mainConsoleTextRect() const;
++    // The colour of the border around the main console, the room the borders leave, as setBorderColor() set it:
++    // black until a script sets one, as the GUI's, and invalid after a setBorderColor() out of range, which Qt makes
++    // no colour of. Invalid with no profile open: read it at profileLoaded, then follow mainBorderColorChanged.
++    QColor mainBorderColor() const;
+     // The words scripts gave the main command line for Tab to complete, with addCmdLineSuggestion(), and those
+     // it is never to complete, with addCmdLineBlacklist(), each once and sorted. Empty with no profile open.
+     // Read from anywhere.
+@@ -1604,6 +1608,9 @@ signals:
+     // differ from what was last sent or what they gave at profileLoaded, so a turn that changes them more than once
+     // sends them once.
+     void mainConsoleAreaChanged(const QString& profile, const QSize& grid, const QRect& textRect);
++    // mainBorderColor() changed, by setBorderColor(). From the event loop, with it as it is then, and only when it
++    // differs from what was last sent or what it gave at profileLoaded.
++    void mainBorderColorChanged(const QString& profile, const QColor& color);
+     // What scriptWindows() gives for these names differs from what it gave at profileLoaded or the last of these:
+     // a window made, deleted (and so gone from it), moved, resized, shown, hidden, put in another window, raised,
+     // lowered or given another background or font, a console scrolled, by a script, pointer()'s wheel, a clear or a
+@@ -1862,6 +1869,8 @@ private:
+     QString mDeliveredLatency;
+     // What mainConsoleGrid() and mainConsoleTextRect() gave at profileLoaded, then each mainConsoleAreaChanged
+     std::optional<std::pair<QSize, QRect>> mDeliveredMainConsoleArea;
++    // The same for mainBorderColor()
++    std::optional<QColor> mDeliveredMainBorderColor;
+     // What scriptWindows(), each label's labelContent() and each text box's textBoxContent() gave at profileLoaded,
+     // then as each scriptWindowsChanged was sent, and a text box's text as setTextBoxText() set it
+     struct WindowsTold
+diff --git a/src/headless/THeadlessSessionArea.cpp b/src/headless/THeadlessSessionArea.cpp
+index b74f2e1..7815e19 100644
+--- a/src/headless/THeadlessSessionArea.cpp
++++ b/src/headless/THeadlessSessionArea.cpp
+@@ -69,9 +69,15 @@ QRect THeadlessSession::mainConsoleTextRect() const
+     return mpHost ? mpHost->mainTextRectWithNoView() : QRect();
+ }
+ 
++QColor THeadlessSession::mainBorderColor() const
++{
++    return mpHost ? mpHost->borderColor().value_or(QColor()) : QColor();
++}
++
+ void THeadlessSession::connectAreaRelays(Host* pHost, const unsigned int run)
+ {
+     mDeliveredMainConsoleArea.reset();
++    mDeliveredMainBorderColor.reset();
+     // Read at delivery, not as sent, so what a turn changed more than once is sent once
+     connect(
+             pHost,
+@@ -90,6 +96,23 @@ void THeadlessSession::connectAreaRelays(Host* pHost, const unsigned int run)
+                 emit mainConsoleAreaChanged(profile, area.first, area.second);
+             },
+             Qt::QueuedConnection);
++    connect(
++            pHost,
++            &Host::signal_borderColorChanged,
++            this,
++            [this, run]() {
++                if (run != mRun || !mpHost || !mDeliveredMainBorderColor) {
++                    return;
++                }
++                const QColor color = mainBorderColor();
++                if (color == *mDeliveredMainBorderColor) {
++                    return;
++                }
++                mDeliveredMainBorderColor = color;
++                const QString profile = mProfileName;
++                emit mainBorderColorChanged(profile, color);
++            },
++            Qt::QueuedConnection);
+     connect(
+             pHost,
+             &Host::signal_mainWindowResizeRequested,
+@@ -118,4 +141,5 @@ void THeadlessSession::connectAreaRelays(Host* pHost, const unsigned int run)
+ void THeadlessSession::noteAreaAtLoad()
+ {
+     mDeliveredMainConsoleArea = {mainConsoleGrid(), mainConsoleTextRect()};
++    mDeliveredMainBorderColor = mainBorderColor();
+ }

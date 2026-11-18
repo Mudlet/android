@@ -158,6 +158,23 @@ class ScriptWindowsTest {
     }
 
     @Test
+    fun theBordersAreDrawnInTheColourAScriptGaveThem() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.STACKED }
+        // Borders of 50 above and below the text, which setBorderColor() coloured
+        session.send(
+            JSONObject().put("t", "mainArea").put("w", 800).put("h", 400).put("columns", MUDLET_COLUMNS).put("rows", 30)
+                .put("textX", 0).put("textY", 50).put("textW", MUDLET_TEXT_WIDTH).put("textH", 300).put("borderColor", RUN_RGB or MAROON),
+        )
+        // In the middle of the band above the text
+        assertDrawnIn(MAROON) {
+            val text = bounds(console)
+            compose.waitForIdle()
+            val image = compose.onRoot().captureToImage().toPixelMap()
+            image[text.center.x.toInt(), (text.top - 25 * text.width / 800).toInt().coerceIn(0, image.height - 1)]
+        }
+    }
+
+    @Test
     fun stackedGivesMudletTheLandscapeSizeWithTheBordersAsBandsAndWindowsOverTheText() {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.STACKED }
         // Borders of 50 above and below the text
@@ -784,14 +801,16 @@ class ScriptWindowsTest {
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     /** That the middle of [node] comes to be drawn in [rgb], near enough for mixed colours to round either way. */
-    private fun assertMiddleDrawnIn(rgb: Int, node: SemanticsMatcher) {
+    private fun assertMiddleDrawnIn(rgb: Int, node: SemanticsMatcher) = assertDrawnIn(rgb) { middleColour(node) }
+
+    private fun assertDrawnIn(rgb: Int, colour: () -> Color) {
         val expected = Color(0xFF000000.toInt() or rgb)
         fun near(c: Color) = abs(c.red - expected.red) < NEAR && abs(c.green - expected.green) < NEAR && abs(c.blue - expected.blue) < NEAR
         val deadline = SystemClock.uptimeMillis() + WAIT_MS
-        var drawn = middleColour(node)
+        var drawn = colour()
         while (!near(drawn) && SystemClock.uptimeMillis() < deadline) {
             SystemClock.sleep(POLL_MS)
-            drawn = middleColour(node)
+            drawn = colour()
         }
         assertTrue("drawn in %06x, not %06x".format(drawn.toArgb() and 0xFFFFFF, rgb), near(drawn))
     }

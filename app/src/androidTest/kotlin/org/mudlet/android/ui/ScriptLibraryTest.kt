@@ -293,8 +293,7 @@ class ScriptLibraryTest {
 
         activate(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_substring))))
         waitFor(hasText(string(R.string.pattern_regex_description)))
-        // A colour pattern is made on the desktop for now
-        compose.onNode(hasText(string(R.string.pattern_color))).assertDoesNotExist()
+        compose.onNode(hasText(string(R.string.pattern_color))).assertExists()
         activate(hasText(string(R.string.pattern_regex)) and hasClickAction())
         waitFor(hasContentDescription(string(R.string.scripts_pattern_type_of, 2, string(R.string.pattern_regex))))
         // The sheet's Close leaves the type as it was
@@ -313,6 +312,38 @@ class ScriptLibraryTest {
         assertEquals(1, patterns.length())
         assertEquals("^hi$", patterns.getJSONObject(0).getString("text"))
         assertEquals("regex", patterns.getJSONObject(0).getString("type"))
+    }
+
+    @Test
+    fun aColourPatternsColoursArePickedFromTheirSheets() {
+        openGreet()
+        activate(hasContentDescription(string(R.string.scripts_pattern_type_of, 1, string(R.string.pattern_substring))))
+        activate(hasText(string(R.string.pattern_color)) and hasClickAction())
+        // "You wave" names no colours, so none are kept, and the pattern says it does not run until one is picked
+        waitFor(hasText(string(R.string.scripts_color_none)))
+        val any = string(R.string.scripts_color_any)
+        activate(hasText(string(R.string.scripts_color_text, any)))
+        waitFor(hasText(string(R.string.scripts_color_text_title, 1)))
+        val red = string(R.string.scripts_color_named, string(R.string.ansi_red), 1)
+        activate(hasText(red))
+        waitFor(hasText(string(R.string.scripts_color_text, red)))
+        compose.onNode(hasText(string(R.string.scripts_color_none))).assertDoesNotExist()
+
+        activate(hasText(string(R.string.scripts_color_background, any)))
+        val other = field(R.string.scripts_color_other)
+        waitFor(other)
+        compose.onNode(other).performScrollTo().performTextReplacement("300")
+        waitFor(hasText(string(R.string.scripts_number_range, 16, 255)))
+        // Not the 16 held from before, while the field shows what is not a colour
+        compose.onNode(hasText(string(R.string.scripts_color_use)) and hasClickAction()).assertIsNotEnabled()
+        compose.onNode(other).performTextReplacement("208")
+        activate(hasText(string(R.string.scripts_color_use)))
+        waitFor(hasText(string(R.string.scripts_color_background, string(R.string.scripts_color_number, 208))))
+
+        activate(apply)
+        val pattern = received("editScriptItem").getJSONObject("fields").getJSONArray("patterns").getJSONObject(0)
+        assertEquals("color", pattern.getString("type"))
+        assertEquals("ANSI_COLORS_F{1}_B{208}", pattern.getString("text"))
     }
 
     @Test

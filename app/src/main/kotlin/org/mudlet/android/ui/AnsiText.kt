@@ -40,6 +40,22 @@ private val ansi = listOf(
 ).map { Color(it) }
 private val markerColour = Color(0xFFFFB000)
 
+/**
+ * ANSI colour [code], 0 to 255, as the console draws it: the first 16 as above, then xterm's 6x6x6 cube and its greys,
+ * as Mudlet's `Host::getAnsiColor()` makes them.
+ */
+fun ansiColor(code: Int): Color = when (code) {
+    in 0..15 -> ansi[code]
+
+    in 16..231 -> {
+        fun level(step: Int) = if (step == 0) 0 else (step - 1) * 40 + 95
+        val cube = code - 16
+        Color(level(cube / 36), level(cube / 6 % 6), level(cube % 6))
+    }
+
+    else -> (code.coerceIn(232, 255) - 232).let { Color(it * 10 + 8, it * 10 + 8, it * 10 + 8) }
+}
+
 private fun runColour(code: Int): Color? = when {
     code in 0..15 -> ansi[code]
     code >= RUN_RGB -> Color(0xFF000000.toInt() or (code and 0xFFFFFF))

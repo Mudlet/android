@@ -1,5 +1,6 @@
 package org.mudlet.android.ui
 
+import android.content.res.Resources
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -21,12 +22,14 @@ import kotlin.math.abs
 
 /**
  * Turns on the accessibility checks before every action of a test, where they can run: they need API 34, so the API 36
- * emulator runs them and API 28 does not. Of a page that scrolls, they check what shows: see [ScrolledOutOfSight] and
- * [UnderWhatFloats].
+ * emulator runs them and API 28 does not. Of a page that scrolls, they check what shows: see [ScrolledOutOfSight],
+ * [UnderWhatFloats] and [OverWhatScrolled].
  */
 internal fun <R : TestRule, A : ComponentActivity> AndroidComposeTestRule<R, A>.enableAccessibilityChecksOfWhatShows() {
     if (Build.VERSION.SDK_INT >= 34) {
-        enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, UnderWhatFloats)))
+        enableAccessibilityChecks(
+            AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, UnderWhatFloats, OverWhatScrolled)),
+        )
     }
 }
 
@@ -74,6 +77,31 @@ private object UnderWhatFloats : TypeSafeMatcher<AccessibilityViewCheckResult>()
         description.appendText("a missing label or a small touch target where a notice or a floating button covers part of it")
     }
 }
+
+/**
+ * A small touch target just above a scrolling area that has scrolled. Compose hands accessibility the scrolled content
+ * as reaching half a touch target above the area that clips it, and takes that strip off what lies there: a sheet's
+ * 48 dp close button over its scrolled list is then 24 dp tall, though all of it shows and takes a touch.
+ */
+private object OverWhatScrolled : TypeSafeMatcher<AccessibilityViewCheckResult>() {
+    override fun matchesSafely(result: AccessibilityViewCheckResult): Boolean {
+        if (result.sourceCheckClass != TouchTargetSizeCheck::class.java) return false
+        val element = result.accessibilityHierarchyCheckResult.element ?: return false
+        val rest = element.boundsInScreen
+        val half = Math.round(HALF_TOUCH_TARGET_DP * Resources.getSystem().displayMetrics.density)
+        val above = element.ancestors().toList()
+        return element.window.allViews.any { view ->
+            val area = view.boundsInScreen
+            view.isScrollable == true && view !in above && area.top - half == rest.bottom && area.left < rest.right && rest.left < area.right
+        }
+    }
+
+    override fun describeTo(description: Description) {
+        description.appendText("a small touch target where a scrolled area's content is taken to reach half a touch target above it")
+    }
+}
+
+private const val HALF_TOUCH_TARGET_DP = 24
 
 private fun ViewHierarchyElement.ancestors() = generateSequence(parentView) { it.parentView }
 

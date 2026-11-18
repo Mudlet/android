@@ -975,6 +975,10 @@ for a running profile is the one kept for its restore.
 - that a Lua trigger fires, `cecho()`s on its line and has the engine post its `showNotification()`;
 - that `am send-trim-memory` has the engine save the profile;
 - that a Geyser `MiniConsole` and the line a script `cecho()`s on it reach the UI;
+- that a sound a script plays (`playSoundFile()`, a tone its Lua writes) plays from `:engine` as Android's media
+  stream (`dumpsys audio` lists Mudlet's one output, `TAudioMixer`, with `USAGE_MEDIA` or `USAGE_GAME`, both on the
+  media volume), and plays on with the screen off; what `ttsSpeak()` raised, and the device's text to speech engines,
+  go to its log, not yet checked;
 - that two more profiles open beside the first, recording the engine's PSS (`dumpsys meminfo`) with one, two and
   three open in `memory.json` among its output, which "Memory per profile" below takes its figures from;
 - that after `:engine` is killed, the UI starts a new engine and attaches to it;

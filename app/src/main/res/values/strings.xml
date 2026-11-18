@@ -904,7 +904,7 @@
          "Replace them with a space": the name of the space character -->
     <string name="console_blank_line_space">Space</string>
     <!-- The game screen's top bar button that opens the bar that searches the game's text -->
-    <string name="console_search">Search the game's text</string>
+    <string name="console_search">Search the game\'s text</string>
     <!-- The field of the bar that searches the game's text, for the words to find -->
     <string name="console_search_field">Find</string>
     <!-- The search bar's button that goes to the next line up, older, that holds the words, as desktop Mudlet's up arrow -->

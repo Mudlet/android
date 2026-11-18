@@ -16,11 +16,13 @@ It installs and launches the app, then drives the UI through the debug build's S
      showNotification() reaches the UI and is posted as an Android notification;
   6. told that memory is short (am send-trim-memory), the engine saves the profile;
   7. a Geyser mini console a script makes reaches the UI, shown, with the line it cecho()s;
-  8. two more profiles open beside the first, on the same game, and the engine's PSS (dumpsys meminfo) with one, two
+  8. a sound a script plays (playSoundFile) plays from :engine through Android's media stream (dumpsys audio), and goes
+     on with the screen off; ttsSpeak()'s outcome is logged (not yet a check: no device has said yet what it does);
+  9. two more profiles open beside the first, on the same game, and the engine's PSS (dumpsys meminfo) with one, two
      and three open goes to <out>/memory.json, to size ControlBridge::maxOpenProfiles by;
-  9. after the :engine process is killed, the UI starts a new engine, attaches to it and takes the kill for Android
+  10. after the :engine process is killed, the UI starts a new engine, attaches to it and takes the kill for Android
      stopping the engine in the background (EngineStopped.kt), which it explains;
-  10. the profile's password is nowhere in logcat.
+  11. the profile's password is nowhere in logcat.
 If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
 
@@ -230,6 +232,42 @@ def engine_pss(pid):
     return int(m.group(1))
 
 
+# Mudlet's own output (TAudioMixer) is one AudioTrack or AAudio stream, which dumpsys audio lists with its process
+PLAYER = re.compile(r"u/pid:\s*(\d+)/(\d+).*?state:\s*(\w+).*?usage=(\w+)")
+
+# A two second 440 Hz tone as a 16-bit mono WAV, written by Lua 5.1, which has no string.pack
+TONE_LUA = (
+    'local function le(n, b) local s = "" for _ = 1, b do s = s .. string.char(n % 256) n = math.floor(n / 256) end '
+    'return s end '
+    'local rate, samples = 8000, {} '
+    'for i = 0, rate * 2 - 1 do local v = math.floor(math.sin(i * 2 * math.pi * 440 / rate) * 8000) '
+    'if v < 0 then v = v + 65536 end samples[#samples + 1] = le(v, 2) end '
+    'local data = table.concat(samples) '
+    'local f = assert(io.open(getMudletHomeDir() .. "/smoke-tone.wav", "wb")) '
+    'f:write("RIFF" .. le(36 + #data, 4) .. "WAVEfmt " .. le(16, 4) .. le(1, 2) .. le(1, 2) .. le(rate, 4) '
+    '.. le(rate * 2, 4) .. le(2, 2) .. le(16, 2) .. "data" .. le(#data, 4) .. data) f:close() '
+    'playSoundFile({name = getMudletHomeDir() .. "/smoke-tone.wav", loops = -1})'
+)
+
+
+def engine_players(pid):
+    """The (state, usage) of each audio player dumpsys audio lists for the process pid."""
+    return [(m.group(3), m.group(4)) for m in PLAYER.finditer(shell("dumpsys audio")) if m.group(2) == str(pid)]
+
+
+def wait_for_player(pid, what, timeout):
+    deadline = time.monotonic() + timeout
+    while True:
+        players = engine_players(pid)
+        playing = [usage for state, usage in players if state == "started"]
+        if playing:
+            return playing
+        if time.monotonic() > deadline:
+            raise SmokeFailure(f"timed out after {timeout} s waiting for {what}; dumpsys audio lists for pid {pid}: "
+                               f"{players}")
+        time.sleep(0.5)
+
+
 def check_engine_process(pid):
     """That the engine the UI is attached to is the one process named :engine."""
     pids = shell(f"pidof {ENGINE_PROCESS}", check=False).split()
@@ -369,6 +407,40 @@ def run(dev, apk):
     if not chat["shown"]:
         raise SmokeFailure(f"the mini console is hidden: {chat}")
     ok(f"the UI has the mini console and its line: {chat}")
+
+    step("a script's sound plays from :engine through Android's media stream, and on with the screen off")
+    if any(state == "started" for state, _ in engine_players(engine_pid)):
+        raise SmokeFailure(f"the engine plays audio before any sound was asked for: {engine_players(engine_pid)}")
+    dev.command("lua", code=TONE_LUA)
+    try:
+        playing = wait_for_player(engine_pid, "the engine to play the script's sound", 30)
+    except SmokeFailure as e:
+        raise SmokeFailure(f"{e}; the engine's last Lua answer: {dev.command('state')['status'].get('luaResult')}")
+    # USAGE_GAME plays on the media stream too, so the media volume buttons set both
+    if not set(playing) <= {"USAGE_MEDIA", "USAGE_GAME"}:
+        raise SmokeFailure(f"the engine's sound plays as {playing}, not on Android's media stream")
+    ok(f"the engine plays the script's sound as {playing}")
+    shell("input keyevent KEYCODE_SLEEP")
+    time.sleep(5)
+    asleep = engine_players(engine_pid)
+    shell("input keyevent KEYCODE_WAKEUP")
+    shell("wm dismiss-keyguard", check=False)
+    if not any(state == "started" for state, _ in asleep):
+        raise SmokeFailure(f"the sound stopped with the screen off: dumpsys audio lists {asleep}")
+    ok("the sound plays on with the screen off")
+    shell(f"am start -W -n {ACTIVITY}")
+    dev.wait("the UI to attach again after the screen came back on",
+             lambda s: s["link"].startswith("attached to pid") and s["enginePid"] == engine_pid, 60)
+    dev.command("lua", code="stopSounds()")
+
+    step("ttsSpeak(): what the engine's text to speech does, for the record")
+    dev.command("lua", code='smoketts = {} for _, e in ipairs({"ttsSpeechStarted", "ttsSpeechReady", "ttsSpeechError"}) '
+                            'do registerAnonymousEventHandler(e, function(name) smoketts[#smoketts + 1] = name '
+                            'echo("[smoke tts] " .. name .. "\\n") end) end ttsSpeak("Hello from Mudlet")')
+    time.sleep(8)
+    state = dev.command("state")
+    events = [line["text"] for line in state.get("lines", []) if "[smoke tts]" in line.get("text", "")]
+    log(f"  ttsSpeak(): luaResult {state['status'].get('luaResult')!r}, events {events or 'none'}")
 
     step("memory per profile: the engine's PSS with one, two and three profiles open")
     pss = {1: engine_pss(engine_pid)}

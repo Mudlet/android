@@ -12,12 +12,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.net.toUri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.mudlet.android.protocol.AddonCommand
 import org.mudlet.android.protocol.ButtonBar
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.KeyPressResult
 import org.mudlet.android.protocol.LabelLink
+import org.mudlet.android.protocol.LabelStyle
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapInfo
 import org.mudlet.android.protocol.MapPoint
@@ -28,6 +32,7 @@ import org.mudlet.android.protocol.POINTER_LEFT
 import org.mudlet.android.protocol.Placement
 import org.mudlet.android.protocol.PointerType
 import org.mudlet.android.protocol.Requests
+import org.mudlet.android.protocol.RichText
 import org.mudlet.android.protocol.ScriptWindows
 import org.mudlet.android.protocol.TextBoxContent
 
@@ -90,8 +95,12 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     // Where this engine instance was last told each user window is
     private val sentPlacements = HashMap<String, Placement>()
 
-    /** An image file of the engine's, as a label shows it: `getImage`'s fields. */
-    data class ImageRequest(val path: String, val w: Int? = null, val h: Int? = null, val frame: Int? = null) {
+    /**
+     * An image file of the engine's, as a label shows it: `getImage`'s fields; or, [decoded], the image of the `data:`
+     * URL [path] in a label's text, which the app decodes itself ([decodeImage]) and the engine is never asked for, so
+     * a style sheet's `url()` of the same text, which the engine refuses as Qt's style sheet draws none, is apart.
+     */
+    data class ImageRequest(val path: String, val w: Int? = null, val h: Int? = null, val frame: Int? = null, val decoded: Boolean = false) {
         init {
             require((w == null) == (h == null)) { "an image is asked for at a size with both w and h, or neither" }
         }
@@ -104,10 +113,14 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
      */
     class MapImage(val bitmap: ImageBitmap?, val w: Int, val h: Int, val viewOnly: Boolean, val info: MapInfo? = null)
 
-    /** The images the engine sent, by what was asked; one not there yet is asked for with [requestImage]. */
+    /**
+     * The images the engine sent, and those the app decoded of `data:` URLs ([decodeImage]), by what was asked; one not
+     * there yet is asked for with [requestImage].
+     */
     val images = mutableStateMapOf<ImageRequest, ImageBitmap>()
 
-    // What was asked and not yet answered, by request id, and what of this engine instance's is kept or awaited
+    // What was asked and not yet answered, by request id, and what of this engine instance's is kept or awaited, or
+    // being decoded
     private val pendingImages = HashMap<Long, ImageRequest>()
     private val askedImages = HashSet<ImageRequest>()
 
@@ -189,9 +202,27 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         val request = pendingImages.remove((message.replyTo as? Number)?.toLong()) ?: return
         if (bitmap == null) {
             // Not asked again: the same file would not decode better
-            Log.w(TAG, "the engine's image ${request.path} did not decode")
+            Log.w(TAG, "an image of the engine's did not decode")
             return
         }
+        keep(request, bitmap)
+    }
+
+    /**
+     * Decodes [request]'s `data:` URL, [ImageRequest.decoded], off the main thread into [images], where the engine's
+     * files are kept and let go: once, as [requestImage] asks once, and to its end, so each label that shows it gets it.
+     * One that does not decode is forgotten, so script-made URLs that fail do not pile up; it is decoded again only when
+     * a label shows it afresh.
+     */
+    suspend fun decodeImage(request: ImageRequest) {
+        if (request in images || !askedImages.add(request)) return
+        withContext(NonCancellable) {
+            val bitmap = withContext(Dispatchers.Default) { decodeData(request.path) }
+            if (bitmap != null) keep(request, bitmap) else askedImages.remove(request)
+        }
+    }
+
+    private fun keep(request: ImageRequest, bitmap: ImageBitmap) {
         images[request] = bitmap
         imageOrder.add(request)
         trimImages()
@@ -208,15 +239,16 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         trimImages()
     }
 
-    // Lets go of the oldest images no label shows while there are more than MAX_IMAGES; one let go is asked again
-    // when a label shows it
+    // Lets go of the oldest images no label shows while there are more than MAX_IMAGES, or those no label shows hold
+    // more than MAX_IMAGE_BYTES; one let go is asked again when a label shows it
     private fun trimImages() {
+        var bytes = images.entries.sumOf { (request, image) -> if (request in shownImages) 0L else image.width * image.height * 4L }
         val unshown = imageOrder.iterator()
-        while (images.size > MAX_IMAGES && unshown.hasNext()) {
+        while ((images.size > MAX_IMAGES || bytes > MAX_IMAGE_BYTES) && unshown.hasNext()) {
             val request = unshown.next()
             if (request in shownImages) continue
             unshown.remove()
-            images.remove(request)
+            images.remove(request)?.let { bytes -= it.width * it.height * 4L }
             askedImages.remove(request)
         }
     }
@@ -444,7 +476,24 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         /** [message]'s PNG, decoded off the main thread; null for one that does not decode. */
         internal fun decode(message: EngineMessage.Map): ImageBitmap? = decodePng(message.png)
 
-        private fun decodePng(png: ByteArray): ImageBitmap? = BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
+        // An image's bytes decoded, null for bytes that do not decode or an image too large for the memory left
+        private fun decodePng(png: ByteArray): ImageBitmap? = try {
+            BitmapFactory.decodeByteArray(png, 0, png.size)?.asImageBitmap()
+        } catch (_: OutOfMemoryError) {
+            null
+        }
+
+        // A `data:` URL's image, null as for the engine's, and for one wider or higher than the engine sends one
+        // (`PngImage::maxSide`), found from its size alone first; its base64 read too within the memory left
+        private fun decodeData(path: String): ImageBitmap? = try {
+            RichText.Image(path, null, null).data()?.let { bytes ->
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (maxOf(bounds.outWidth, bounds.outHeight) > LabelStyle.MAX_LENGTH) null else decodePng(bytes)
+            }
+        } catch (_: OutOfMemoryError) {
+            null
+        }
 
         private const val TAG = "ScriptWindows"
 
@@ -453,5 +502,9 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
 
         // The images kept beyond those shown: few enough that sized ones asked again as labels resize do not pile up
         private const val MAX_IMAGES = 64
+
+        // And the bytes those hold at most, as images in a label's text are kept at their own size: one of the
+        // largest the engine sends, 4096 pixels a side
+        private const val MAX_IMAGE_BYTES = 64L shl 20
     }
 }

@@ -297,8 +297,9 @@ A `label` is a `Box` at its geometry, drawn in this order:
   ([`architecture.md`](architecture.md), "Gaps").
 - **Text**: Qt's rich text converted to an `AnnotatedString` by the app's own parser for the tags Geyser and scripts
   write: `b`, `i`, `u`, `s`, `font` (`color`, `size`, `face`), `span` with `style` (`color`, `background-color`,
-  `font-size`, `font-weight`), `br`, `p`/`div` with `align`, `center`, `a`. Anything else keeps its text without its
-  formatting. A link's `href` is read as Qt's `QTextHtmlParser` reads it, as the engine follows only that: a quoted
+  `font-size`, `font-weight`), `br`, `p`/`div` with `align`, `center`, `a`, and the headings, `sub`, `sup`, `img`,
+  `pre` and tables below. Anything else keeps its text without its formatting. A link's `href` is read as Qt's
+  `QTextHtmlParser` reads it, as the engine follows only that: a quoted
   value up to its own closing quote, `<`, `>` and the other quote included, and entities decoded as Qt decodes them
   (numeric ones, and the named ones of Qt's table, `HtmlEntities.kt`: HTML 4's, with Qt's own `&and;` and `&or;`, and
   `&AMP;`, `&GT;`, `&LT;`, `&QUOT;`, `&apos;` and `&percnt;`), but in a single-quoted value, which Qt keeps as written.
@@ -306,6 +307,31 @@ A `label` is a `Box` at its geometry, drawn in this order:
   black and a background it reads none off stays as it was, as `QTextHtmlParser` draws them; `font`'s `color` takes only
   a name or `#` and hex digits, and anything else is black, but an empty value, which Qt passes over as it does any
   attribute's.
+- **Headings, scripts, images and tables**, as Qt 6's `QTextDocument` draws them: `h1` to `h5` are bold at 2, 1.5, 1.2,
+  1 and 0.8 times the label's own size (Qt's `FontSizeAdjustment` 3, 2, 1, 0 and -1, which
+  `QTextFormatPrivate::resolveFont()` takes of the document's font), whatever size is around them or set by a `style` on
+  or in them, but a `font size` in them, which is such an adjustment too and so also against the label's own size; `h6`
+  is plain text, as Qt leaves it. A `font size` is 0.7, 0.8, 1, 1.2, 1.5, 2 or 2.4 times the label's size for 1 to 7,
+  from 3 with a `+` or `-` first, and over any size set in it; one that is not a whole number Qt reads as 0, so
+  `size="12px"` is the smallest. `sub` and `sup` are drawn at 2/3 of their size, a sixth down or a half up (Qt's
+  `subScriptBaseline()` and `superScriptBaseline()`, of the font's height; Compose's `BaselineShift` takes them of its
+  ascent, a little less). An `img` is drawn in the line, its bottom on the baseline: the engine's file at its `src`
+  (`getImage`; `qrc:` read as `:`, and a `file:` URL as its path), or the image of a `data:` URL in base64, which the
+  app decodes itself as Qt's `QTextDocument` does, its percent-escapes first, once for all the labels that show it and
+  kept with the engine's images, but for an SVG, which Android's decoder does not read, or one over 4096 pixels a side;
+  at the `width` and `height` it gives, at one of them with its shape kept, or else at its own size, each side drawn
+  4096 pixels at most (`LabelStyle.MAX_LENGTH`). A size is a number alone, as Qt reads it, rounded to a whole pixel as
+  `QTextImageHandler` rounds it, and -1 is Qt's for none given: a 0 hides the image, as does a side worked out from the
+  other that rounds to 0, which keeps its room along the side given, as Qt's layout does, and along a side given as
+  anything else (`80px`, `50%`) or as another negative number Qt draws the file's own size, as `QPainter::drawPixmap()`
+  draws a negative width. One the engine cannot read or does not send (a file over 4096 pixels a side) is not drawn, and
+  takes room only where it gives both sides, neither negative; a `:/` resource is drawn only where the engine has it,
+  and a web URL, which `QTextDocument` does not fetch either, is not asked for. An image is read as nothing, as Mudlet's
+  `TLabelModel` reads it. A table's row is a line with its cells four spaces apart, a `th` bold, a paragraph in a cell a
+  space from the rest of it, as Qt's `toHtml()` writes a paragraph in every cell, and a cell or row left open ends at
+  the next, as Qt's `QTextHtmlParser` ends it; `pre` keeps its spaces, tabs and line breaks, but for a line break right
+  after its start or before its end, in a monospace font. A heading, paragraph or table has no room above or below it
+  ([`divergences.md`](divergences.md), "Labels and TalkBack").
 
 Taps reach the label with `pointer`, in its own Mudlet pixels: a tap is `enter`, `press` and `release`, a double tap
 adds `doubleClick`, a long press is the right button's `press` and `release` (Geyser's right-click menus); `leave`
@@ -399,21 +425,23 @@ as the screen.
 
 Phase E's requirements apply to every pull request here; in short, and what they mean for script windows:
 
-- **Labels.** A label with `accessibleButton` is a button (`Role.Button`) whose label is its `accessibleName`, else
-  its text without formatting, else its tool tip; its click is the tap's `pointer` sequence, and a right-click menu
-  is a custom accessibility action. A label with text and no callbacks is text. One with only an image and no
+- **Labels.** A label with `accessibleButton` is a button (`Role.Button`) whose label is its `accessibleName`, else its
+  text without formatting, else its tool tip; its click is the tap's `pointer` sequence, and a right-click menu is a
+  custom accessibility action. A label with text and no callbacks is text. One with only an image and no
   `accessibleName` is decorative and left out of the tree, unless it is a button, which then gets its name from its
-  window name, and a lint-style warning in the log. A label with a live region (gap 3) is one node with
-  `liveRegion`, blank or not, so TalkBack says its new text as the desktop does, its first text too. An unnamed one
-  reads its text, its links as actions as a named label's are; a named one, or a named button, has its text as its
-  `stateDescription` unless its name says the same, so its new text is said after its name. A click-through label's
-  links are not actions, as the desktop's screen readers cannot reach them ("Labels"). Unlike the desktop,
-  TalkBack also reads a live label when a script makes it live or changes its region, when its name changes, and
-  (its name alone) when a named one's text goes blank; and the app does not wait for the profile's "Make script
-  buttons reachable with the keyboard" setting (`accessibleLabels`), which the desktop needs too. A label that is not
-  a button and has an accessible value (`setLabelAccessibleValue()`, gap 2) is a progress bar, as on the desktop:
-  `progressBarRangeInfo` with its value and range, its name, else its text, as its content description, and its
-  percentage as its `stateDescription`, after its text where its name does not say it ("Level 3, 40%"), so the value
+  window name, and a lint-style warning in the log. An unnamed one whose text has images and words is one node, read by
+  its text without the images, its links as actions; one whose only text is images, by its tool tip, as Mudlet reads it,
+  else, where they are links, an image's `alt` or `title`, else its link's target, so its links stay within reach. A
+  label with a live region (gap 3) is one node with `liveRegion`, blank or not, so TalkBack says its new text as the
+  desktop does, its first text too. An unnamed one reads its text, its links as actions as a named label's are; a named
+  one, or a named button, has its text as its `stateDescription` unless its name says the same, so its new text is said
+  after its name. A click-through label's links are not actions, as the desktop's screen readers cannot reach them
+  ("Labels"). Unlike the desktop, TalkBack also reads a live label when a script makes it live or changes its region,
+  when its name changes, and (its name alone) when a named one's text goes blank; and the app does not wait for the
+  profile's "Make script buttons reachable with the keyboard" setting (`accessibleLabels`), which the desktop needs too.
+  A label that is not a button and has an accessible value (`setLabelAccessibleValue()`, gap 2) is a progress bar, as on
+  the desktop: `progressBarRangeInfo` with its value and range, its name, else its text, as its content description, and
+  its percentage as its `stateDescription`, after its text where its name does not say it ("Level 3, 40%"), so the value
   is always said; not live, for the reason a gauge is not, so the `Announcer` says a live one's new text.
 - **Gauges** are one node: `progressBarRangeInfo` with the value and range (the `_back` label's accessible value,
   else 0 to 100 from the front label's width), the `_text` label's text, else the percentage, as

@@ -1,5 +1,6 @@
 package org.mudlet.android.protocol
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -42,7 +43,7 @@ class RichTextTest {
                 RichText.Span("s", base.copy(strike = true)),
                 RichText.Span("big", base.copy(background = 0xFFFF0000.toInt(), bold = true, sizePx = 6f)),
                 RichText.Span("green", base.copy(color = 0xFF00FF00.toInt(), sizePx = 18f)),
-                RichText.Span("small", base.copy(sizePx = 12f * 0.6f)),
+                RichText.Span("small", base.copy(sizePx = 12f * 0.7f)),
                 RichText.Span("x", base.copy(strike = true, italic = true)),
             ),
             text.blocks.single().spans,
@@ -62,6 +63,10 @@ class RichTextTest {
             assertEquals(none, listOf(RichText.Span("a", base)), parse("<span style=\"font-size: $none\">a</span>").blocks.single().spans)
         }
         assertEquals(listOf(RichText.Span("a", base.copy(sizePx = 13f))), parse("<span style=\"font-size: 12.5px\">a</span>").blocks.single().spans)
+        // A `font`'s `size` Qt reads as a whole number, else 0, the smallest size, 0.7 of the label's, from 3 only with a
+        // + or - first, and over a size set in it: as Qt 6.4.2 sizes them in a label
+        fun font(size: String) = parse("<font size=\"$size\">a<span style=\"font-size: 30px\">b</span></font>").blocks.single().spans.single().style.sizePx
+        assertEquals(listOf(0.7f, 0.7f, 0.7f, 1.5f, 1f, 2.4f).map { 12f * it }, listOf("0px", "12px", " +1", " 5", "-0px", "7").map(::font))
     }
 
     @Test
@@ -167,8 +172,160 @@ class RichTextTest {
     @Test
     fun otherTagsKeepTheirTextAndUnclosedOnesEndWithTheText() {
         val text = parse("<table><tr><td>cell</td><td>two</td></tr></table><blink>on</blink><b>bold")
-        assertEquals("celltwo\nonbold", text.plain)
+        assertEquals("cell    two\nonbold", text.plain)
         assertTrue(text.blocks.last().spans.last().style.bold)
         assertEquals(RichText(emptyList()), parse("   <p> </p> "))
+    }
+
+    @Test
+    fun headingsAsQtSizesThem() {
+        // As Qt 6.4.2's QTextDocument sizes them against a 10 pt default font: 20, 15, 12, 10 and 8 pt, bold, and h6 as text
+        val text = parse("body<h1>a</h1><h2>b</h2><h3>c</h3><h4>d</h4><h5>e</h5><h6>f</h6>")
+        assertEquals(
+            listOf(base, base.copy(bold = true, sizePx = 24f), base.copy(bold = true, sizePx = 18f), base.copy(bold = true, sizePx = 12f * 1.2f), base.copy(bold = true), base.copy(bold = true, sizePx = 12f * 0.8f), base),
+            text.blocks.map { it.spans.single().style },
+        )
+        assertEquals("body\na\nb\nc\nd\ne\nf", text.plain)
+        // Against the label's own size, over a size around it or in the heading's style, h4 too (Qt 6.4.2, 12 px font)
+        val sized = parse("<div style=\"font-size: 20px\"><h1>x</h1><h4>y</h4></div><h2 style=\"font-size: 30px\">z</h2>")
+        assertEquals(listOf(24f, 12f, 18f), sized.blocks.map { it.spans.single().style.sizePx })
+        assertTrue(sized.blocks.all { it.spans.single().style.bold })
+        // And over a size a style sets in it, but a `font size`'s, which Qt also takes against the label's own size
+        val inside = parse(
+            "<h1>a<span style=\"font-size: 30px\">b</span><font size=+2>c<span style=\"font-size: 30px\">d</span></font></h1>" +
+                "<h1><b>g<span style=\"font-size: 30px\">h</span></b></h1>" +
+                "<p style=\"font-size: 20px\"><font size=+1>e<span style=\"font-size: 30px\">f</span></font></p>",
+        )
+        assertEquals(listOf("ab" to 24f, "cd" to 18f, "gh" to 24f, "ef" to 12f * 1.2f), inside.blocks.flatMap { b -> b.spans.map { it.text to it.style.sizePx } })
+    }
+
+    @Test
+    fun subscriptsAndSuperscriptsAreSmallerAndShifted() {
+        val spans = parse("E = mc<sup>2</sup> H<sub>2</sub>O <sup><sub>q</sub></sup>").blocks.single().spans
+        assertEquals(listOf("E = mc", "2", " H", "2", "O ", "q"), spans.map { it.text })
+        assertEquals(listOf(0f, 0.5f, 0f, -1f / 6, 0f, -1f / 6), spans.map { it.style.raise })
+        // At 2/3 of the size around them, once, as Qt draws them
+        assertEquals(listOf(12f, 8f, 12f, 8f, 12f, 8f), spans.map { it.style.drawnSizePx })
+        assertEquals(12f, spans[1].style.sizePx)
+    }
+
+    @Test
+    fun imagesAreSpansOfTheirOwn() {
+        val text = parse(
+            "a<img src=\"/data/key.png\" width=20 height=\"10\">b<img src='qrc:/icons/x.png'><img src='qrc:/icons/x.png'>" +
+                "<img src=\"file:///sdcard/i.png\" width=\" 30\"><img src=\"file:/sdcard/i.png\" width=-1><img alt=\"none\"><a href=\"send:look\"><img src=\"eye.png\" height=8></a>",
+        )
+        val images = text.images
+        assertEquals(
+            listOf(
+                RichText.Image("/data/key.png", 20f, 10f),
+                RichText.Image(":/icons/x.png", null, null),
+                RichText.Image(":/icons/x.png", null, null),
+                RichText.Image("/sdcard/i.png", 30f, null),
+                RichText.Image("/sdcard/i.png", null, null),
+                RichText.Image("eye.png", null, 8f),
+            ),
+            images,
+        )
+        assertEquals(listOf("\uFFFC"), text.blocks.single().spans.filter { it.style.image != null }.map { it.text }.distinct())
+        // Read as nothing, as Mudlet reads a label, but a link of one is still a link
+        assertEquals("ab", text.plain)
+        assertEquals("x\ny", parse("<p><img src=\"a.png\"></p>x<p><img src=\"b.png\"></p>y").plain)
+        assertEquals(emptyList<RichText.Image>(), parse("<img alt=\"no src\">x").images)
+        assertEquals(listOf("" to "send:look"), text.links)
+        assertEquals("send:look", text.blocks.single().spans.last().style.href)
+        // Sized as Qt sizes them, of an image 8 by 4 pixels
+        assertEquals(20f to 10f, images[0].size(8, 4))
+        assertEquals(20f to 10f, images[0].size(null, null))
+        assertEquals(8f to 4f, images[1].size(8, 4))
+        assertEquals(null, images[1].size(null, null))
+        assertEquals(30f to 15f, images[3].size(8, 4))
+        assertEquals(null, images[3].size(null, null))
+        assertEquals(16f to 8f, images[5].size(8, 4))
+        assertEquals(" b", parse("<img src=\"a.png\"> b").plain)
+        // Qt reads a number alone; along a side it reads none or a negative one off it draws the file's own size, as
+        // QPainter::drawPixmap() draws a negative width, and a 0 alone hides it: as a QLabel of Qt 6.4.2 draws a 40 by
+        // 20 file
+        val odd = parse(
+            "<img src=a.png width=\"8px\"><img src=a.png width=-5 height=10><img src=a.png width=10 height=\"50%\">" +
+                "<img src=a.png width=0><img src=a.png width=0 height=10><img src=a.png width=1e1 height=+2><img src=a.png width=80f>",
+        ).images
+        assertEquals(listOf(-2f, -5f, 10f, 0f, 0f, 10f, -2f), odd.map { it.widthPx })
+        assertEquals(listOf(null, 10f, -2f, null, 10f, 2f, null), odd.map { it.heightPx })
+        assertEquals(listOf(40f to 20f, 40f to 10f, 10f to 20f, 0f to 0f, 0f to 10f, 10f to 2f, 40f to 20f), odd.map { it.size(40, 20) })
+        // Before the file comes, room only for both sides given and drawn
+        assertEquals(listOf(null, null, null, null, 0f to 10f, 10f to 2f, null), odd.map { it.size(null, null) })
+        // Qt rounds a side, a side it works out from the other that rounds to 0 hides the image but keeps its room along
+        // the side given, and -1 is Qt's own for a side not given: as a QLabel of Qt 6.4.2 draws a 200 by 20 file
+        val wide = parse(
+            "<img src=a.png width=abc><img src=a.png width=4><img src=a.png width=5><img src=a.png width=-5><img src=a.png width=-4>" +
+                "<img src=a.png width=-1 height=10><img src=a.png width=-1.0><img src=a.png width=1 height=-1><img src=a.png width=10.6 height=5>" +
+                "<img src=a.png width=-0.4><img src=a.png width=25 height=abc>",
+        ).images
+        assertEquals(
+            listOf(0f to 0f, 4f to 0f, 5f to 1f, 200f to 20f, 0f to 0f, 100f to 10f, 200f to 20f, 1f to 0f, 11f to 5f, 0f to 0f, 25f to 20f),
+            wide.map { it.size(200, 20) },
+        )
+        assertEquals(1f to 1f, wide[7].size(40, 20))
+        assertEquals(50f to 0f, parse("<img src=a.png width=50>").images.single().size(200, 1))
+        assertEquals(11f to 6f, parse("<img src=a.png width=10.6>").images.single().size(40, 20))
+        // A side at most a sheet's longest length, whatever the script or the file gives, so the app can lay it out
+        assertEquals(4096f to 4096f, parse("<img src=a.png width=1e9 height=1e99>").images.single().size(null, null))
+        assertEquals(4000f to 4096f, parse("<img src=a.png width=4000>").images.single().size(1, 4096))
+        assertEquals(4096f to 4096f, parse("<img src=a.png>").images.single().size(100000, 5000))
+        // Its `alt`, else its `title`, for a screen reader
+        assertEquals(listOf("Look", "eye", ""), parse("<img src=a.png alt=Look title=x><img src=b.png title=eye><img src=c.png>").images.map { it.alt })
+    }
+
+    @Test
+    fun aDataUrlsImageIsReadFromItsBase64() {
+        // As Qt's qDecodeDataUrl() reads one: its percent-escapes first, its base64 past what is not base64, and `data:`
+        // and `;base64` in any case
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        val images = parse(
+            "<img src='data:image/png;base64,iVBORw0K\n Ggo='><img src=\"DATA:;BASE64 ,iVBORw0KGgo=\">" +
+                "<img src='data:image/png%3Bbase64,iVBORw0KGgo%3d'><img src='data:;base64,%2B%2F8%3D'>" +
+                "<img src='data:image/png,iVBORw0KGgo='><img src='data:image/png;base64'><img src=a.png><img src='data:;base64,a'>",
+        ).images
+        assertArrayEquals(png, images[0].data())
+        assertArrayEquals(png, images[1].data())
+        assertArrayEquals(png, images[2].data())
+        assertArrayEquals(byteArrayOf(0xFB.toByte(), 0xFF.toByte()), images[3].data())
+        // Nor bad base64, which does not throw
+        assertEquals(listOf(null, null, null, null), images.drop(4).map { it.data() })
+    }
+
+    @Test
+    fun aTablesRowsAreLinesWithTheirCellsApart() {
+        val text = parse("<table><tr><th>Name</th><td> HP </td></tr><tr><td></td><td>b<td>c</tr></table>after")
+        assertEquals("Name    HP\n    b    c\nafter", text.plain)
+        assertEquals(listOf(true, false), text.blocks.first().spans.map { it.style.bold })
+        // A cell or row left open ends at the next cell, row or the table's end, so a `th`'s bold goes no further, as
+        // in Qt
+        val unclosed = parse("<table><tr><th>a<td>b<tr><td><b>c<td>d</table>e")
+        assertEquals("a    b\nc    d\ne", unclosed.plain)
+        assertEquals(listOf("a" to true, "    b" to false, "c" to true, "    d" to false, "e" to false), unclosed.blocks.flatMap { b -> b.spans.map { it.text to it.style.bold } })
+        // A row ends a cell left open in the row before, so its formatting stays in that row
+        assertEquals(listOf("a" to true, "b" to false), parse("<table><tr><th>a<tr><td>b</table>").blocks.flatMap { b -> b.spans.map { it.text to it.style.bold } })
+        // A paragraph in a cell, as Qt's toHtml() writes every cell's, keeps its row a line, a space from its cell's text
+        val paragraphs = parse("<table><tr><td><p>a</p></td><td><p>b</p><div align=center> c</div></td></tr><tr><td>d</table>")
+        assertEquals("a    b c\nd", paragraphs.plain)
+        // A table in a cell keeps the cell's `th` bold in it and after it, as Qt's QTextHtmlParser
+        val nested = parse("<table><tr><th>a<table><tr><td>b</td></tr></table>c</th></tr></table>")
+        assertEquals(listOf("a" to true, "b" to true, "c" to true), nested.blocks.flatMap { b -> b.spans.map { it.text to it.style.bold } })
+        // The spaces between cells are dropped, and a table without rows starts its own
+        assertEquals("a    b\nc", parse("<table>\n <tr>\n  <td>a</td>\n  <td>b</td>\n </tr>\n</table><table><td>c</td></table>").plain)
+    }
+
+    @Test
+    fun preformattedTextKeepsItsSpacesInMonospace() {
+        val text = parse("<pre>\n  a   b\r\n\tc &amp; <b>d</b>  \n</pre>after  it")
+        assertEquals("  a   b\n\tc & d  \nafter it", text.plain)
+        val mono = base.copy(family = "monospace")
+        assertEquals(
+            listOf(RichText.Span("  a   b\n\tc & ", mono), RichText.Span("d", mono.copy(bold = true)), RichText.Span("  ", mono)),
+            text.blocks.first().spans,
+        )
+        assertEquals(listOf(RichText.Span("after it", base)), text.blocks.last().spans)
     }
 }

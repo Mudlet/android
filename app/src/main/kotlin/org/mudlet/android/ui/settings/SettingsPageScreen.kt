@@ -108,10 +108,10 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
                 )
                 val entries = page.entries
                 entries.forEachIndexed { i, entry ->
-                    val lit = entry.setting.key == highlight
+                    val lit = entry.key == highlight
                     val requester = remember { BringIntoViewRequester() }
                     if (lit) LaunchedEffect(Unit) { requester.bringIntoView() }
-                    ListSegment(i, entries.size, Modifier.bringIntoViewRequester(requester), selected = lit) { EntryRows(entry, owner) }
+                    ListSegment(i, entries.size, Modifier.bringIntoViewRequester(requester), selected = lit) { EntryRows(entry, owner, page.game) }
                 }
             }
         }
@@ -127,8 +127,9 @@ private fun scopeLine(page: SettingsPage): String = when {
 }
 
 @Composable
-private fun EntryRows(entry: SettingEntry, owner: SettingsOwner) {
+private fun EntryRows(entry: SettingEntry, owner: SettingsOwner, game: String?) {
     when (entry) {
+        is SettingEntry.Action -> game?.let { ActionRow(entry, it) }
         is SettingEntry.Switch -> SwitchRow(entry, owner)
         is SettingEntry.Choice<*> -> ChoiceRows(entry, owner)
         is SettingEntry.Number -> NumberRows(entry, owner)
@@ -152,6 +153,27 @@ internal fun SwitchRow(entry: SettingEntry.Switch, owner: SettingsOwner, overlin
             entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         Switch(checked, onCheckedChange = null)
+    }
+}
+
+/**
+ * An action on [game] the whole row does, with its [SettingEntry.Action.button] word at the end, as desktop Mudlet's
+ * label and button. TalkBack reads it as one button: its [overline], label, hint and word.
+ */
+@Composable
+internal fun ActionRow(entry: SettingEntry.Action, game: String, overline: String? = null) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .clickable(onClickLabel = stringResource(entry.button), role = Role.Button) { entry.run(game) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            if (overline != null) Overline(overline)
+            Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
+            entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        Text(stringResource(entry.button), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
     }
 }
 

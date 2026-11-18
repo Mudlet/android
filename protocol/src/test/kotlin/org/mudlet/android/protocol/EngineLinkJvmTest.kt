@@ -235,6 +235,34 @@ class EngineLinkJvmTest {
     }
 
     @Test
+    fun clearingStoredMediaEmptiesTheGamesMediaAndSaysSoAsDesktopsButtonDoes() {
+        val link = newLink()
+        link.start()
+        next<Attached>(ENGINE_START_MS)
+        next<EngineMessage.Synced>()
+        link.send(Requests.connect("127.0.0.1", fakePort, false))
+        next<EngineMessage.Tail>(PROFILE_LOAD_MS) { it.prompt }
+        link.send(Requests.runLua("echo(\"MEDIA=\" .. getMudletHomeDir() .. \"/media\\n\")", 1))
+        val media = File(text(shown { it.contains("MEDIA=") }).substringAfter("MEDIA="))
+        File(media, "sounds").mkdirs()
+        File(media, "sounds/bell.wav").writeText("RIFF")
+        val clear = MediaCache.clearLua("[  OK  ]  - Cleared.") { "[ WARN ]  - Not cleared: $it." }
+
+        link.send(Requests.runLua(clear, 2))
+        shown { it.endsWith("[  OK  ]  - Cleared.") }
+        assertEquals("Cleared.", next<EngineMessage.Announce>().text)
+        assertTrue("the media folder is gone", !media.exists())
+
+        // Mudlet cannot make the folder where a file has its name
+        media.writeText("not a folder")
+        link.send(Requests.runLua(clear, 3))
+        val failed = text(shown { "[ WARN ]  - Not cleared: " in it })
+        assertTrue(failed, failed.endsWith("could not access the media directory \"${media.path}\"."))
+        assertEquals(failed.substringAfter("]  - "), next<EngineMessage.Announce>().text)
+        link.stop()
+    }
+
+    @Test
     fun protocolLatencyThroughputAndEngineDeath() {
         val link = newLink()
         link.start()

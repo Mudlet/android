@@ -763,6 +763,29 @@
     <string name="settings_accept_any_certificate">Ignore all certificate errors</string>
     <!-- Under "Ignore all certificate errors", what the switch does and why it is a risk -->
     <string name="settings_accept_any_certificate_hint">The connection is still encrypted, but nothing checks that it goes to the game. Use only if you must.</string>
+    <!-- A row on a game's Security page, desktop Mudlet's "Clear stored media": deletes the sounds and music the game
+         and its scripts downloaded, which Mudlet keeps with the game -->
+    <string name="settings_clear_media">Clear stored media</string>
+    <!-- Under "Clear stored media", what it does (desktop Mudlet's description of the card) -->
+    <string name="settings_clear_media_hint">Sounds and music the game sends are kept on the phone so they only have to be downloaded once. Many games download them again when needed.</string>
+    <!-- Words a player might search the settings for to find "Clear stored media", besides the words of its name and
+         description, separated by commas (desktop Mudlet's own). Use the words a player of your language would
+         search for. -->
+    <string name="settings_clear_media_keywords">cache, sounds, music, downloaded media, purge, space</string>
+    <!-- At the end of the "Clear stored media" row: what tapping the row does, as desktop Mudlet's button says. TalkBack
+         reads it as what the row does, after "double tap to". -->
+    <string name="settings_clear_media_button">Clear</string>
+    <!-- Shown in the game's text, and said by TalkBack without the part in brackets, once "Clear stored media" has
+         emptied the game's media files.
+         As desktop Mudlet's message: keep "[  OK  ]  - " at the start as it is, with its spaces, as Mudlet colours a
+         line by it. The double quotes around it keep Android from joining the spaces. -->
+    <string name="settings_clear_media_done">"[  OK  ]  - The stored media files for this profile have been cleared."</string>
+    <!-- Shown in the game's text, and said by TalkBack without the part in brackets, when "Clear stored media" could
+         not empty the game's media files.
+         As desktop Mudlet's message: keep "[ WARN ]  - " at the start as it is, with its spaces, as Mudlet colours a
+         line by it. The double quotes around it keep Android from joining the spaces. %1$s is Mudlet's reason, in
+         English. -->
+    <string name="settings_clear_media_failed">"[ WARN ]  - Could not clear the stored media: %1$s."</string>
     <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
          game's text, the map behind the text). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>

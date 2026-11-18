@@ -20,6 +20,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineService
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.MediaCache
 import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
@@ -412,6 +413,11 @@ class ProfileSession internal constructor(
         appLuaRequests.remove(id)
         return false
     }
+
+    /** Desktop Mudlet's "Clear stored media": empties this game's media cache and says so in its main console. */
+    fun clearStoredMedia(): Boolean = runAppLua(
+        MediaCache.clearLua(app.getString(R.string.settings_clear_media_done)) { reason -> app.getString(R.string.settings_clear_media_failed, reason) },
+    )
 
     /** This game's value of [setting], one of [Settings.mudletSettings], as Mudlet last gave it; until then, the app's. */
     fun <T> setting(setting: Settings.Setting<T>): T = settings[setting.key]?.let(setting::fromMudlet) ?: setting.value

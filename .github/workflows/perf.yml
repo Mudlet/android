@@ -48,6 +48,7 @@ jobs:
           apt-packages: >-
             lua5.1 libboost-dev libhunspell-dev libpcre2-dev libpugixml-dev libsqlite3-dev libyajl-dev libzip-dev
             qtkeychain-qt6-dev zlib1g-dev libgl-dev libopengl-dev libegl1 libxkbcommon0 libfontconfig1 libpulse0
+            liblua5.1-0-dev luarocks unzip
 
       # As libmudlet.yml's desktop-engine, with the desktop GUI's WebSockets and HttpServer
       - name: Host Qt modules for Mudlet
@@ -76,19 +77,47 @@ jobs:
           if grep -E '^USE_SANITIZER:[A-Z]+=.+' build-bench/CMakeCache.txt; then exit 1; fi
           cmake --build build-bench --target PipelineBenchmark
 
+      # Desktop Mudlet requires its Lua modules from LuaRocks, as Mudlet's own CI installs them before its training run;
+      # libmudlet has them built in, so only PipelineBenchmark is given their paths
+      - name: Lua rocks for PipelineBenchmark
+        run: |
+          mudlet/CI/install-lua-rocks.sh lua-yajl
+          mudlet/CI/install-lua-rocks.sh
+          mudlet/CI/install-lua-rocks.sh --check
+          luarocks path --local --lua-version 5.1 > "$RUNNER_TEMP/rocks.sh"
+
+      # Each run's whole output is kept in results/, and a failure prints its tail and exit code and lets the other
+      # runs go on, so one failing run says what failed
       - name: Run them in turns
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           mkdir -p results
-          for run in 1 2 3; do
+          failed=0
+          bench() {
+            local out=$1
+            shift
+            echo "# run $run: $(nproc) cores, $(uptime)" > "results/$out.txt"
+            local code=0
+            "$@" > "results/$out.log" 2>&1 || code=$?
+            grep '^METRIC' "results/$out.log" >> "results/$out.txt" || true
+            if [ "$code" -ne 0 ]; then
+              echo "::error::$out exited with $code"
+              tail -n 60 "results/$out.log"
+              failed=1
+            fi
+          }
+          # shellcheck disable=SC2329 # bench runs it
+          desktop() {
+            local scratch
             scratch=$(mktemp -d)
-            { echo "# run $run: $(nproc) cores, $(uptime)"
-              HOME=$scratch XDG_CONFIG_HOME=$scratch/.config build-bench/test/functional_tests/PipelineBenchmark | grep '^METRIC'
-            } > "results/desktop-$run.txt"
-            { echo "# run $run: $(nproc) cores, $(uptime)"
-              python3 native/tests/spam_bench.py native/build-desktop-mudlet/enginehost/engine
-            } > "results/engine-$run.txt"
+            # shellcheck disable=SC1091
+            (. "$RUNNER_TEMP/rocks.sh" && cd build-bench && HOME=$scratch XDG_CONFIG_HOME=$scratch/.config MUDLET_TEST_MODE=1 \
+              test/functional_tests/PipelineBenchmark)
+          }
+          for run in 1 2 3; do
+            bench "desktop-$run" desktop
+            bench "engine-$run" python3 native/tests/spam_bench.py native/build-desktop-mudlet/enginehost/engine
           done
           {
             echo "### Mudlet/Mudlet \`$MUDLET_REF\` at $(git -C mudlet log -1 --format='%h')"
@@ -96,7 +125,7 @@ jobs:
             echo '| metric | run 1 | run 2 | run 3 |'
             echo '| --- | --- | --- | --- |'
             for side in desktop engine; do
-              grep -h '^METRIC' "results/$side-1.txt" | while read -r _ name _; do
+              { grep -h '^METRIC' "results/$side-1.txt" || true; } | while read -r _ name _; do
                 printf '| %s %s |' "$side" "$name"
                 for run in 1 2 3; do printf ' %s |' "$(awk -v n="$name" '$2 == n { print $3 }' "results/$side-$run.txt")"; done
                 echo
@@ -105,6 +134,7 @@ jobs:
             echo
             grep -h '^# run' results/*.txt | sort -u | sed 's/^# /- /'
           } >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"
 
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}

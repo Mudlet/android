@@ -36,6 +36,7 @@ import org.mudlet.android.BuildConfig
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.about.AboutScreen
+import org.mudlet.android.ui.about.ChangelogScreen
 import org.mudlet.android.ui.about.LicenceScreen
 import org.mudlet.android.ui.game.AnnouncementRegion
 import org.mudlet.android.ui.game.Announcer
@@ -72,6 +73,7 @@ private object Routes {
     const val ABOUT = "about"
     const val LICENCE = "licence/{id}"
     const val REPORT = "report"
+    const val CHANGELOG = "changelog"
     const val SCRIPTS = "scripts"
     const val SCRIPT_ITEM = "scriptItem/{key}"
     const val TRIGGER_FROM_LINE = "triggerFromLine/{line}"
@@ -92,7 +94,7 @@ private object Routes {
 /**
  * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the front profile's script
  * library with a screen for each item, the settings with a screen for each of their pages, About with a licence screen
- * for each component it lists, and, in debug builds only, the self-test. On an expanded screen, a profile's editor, a
+ * for each component it lists and its changelog, and, in debug builds only, the self-test. On an expanded screen, a profile's editor, a
  * script item, a settings page and a component's licence open beside their list ([ListDetail]).
  * A release build has no route to the self-test, so R8 drops it.
  *
@@ -166,6 +168,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                             onOpenComponent = { if (twoPane) open = it else nav.navigate(Routes.licence(it)) { launchSingleTop = true } },
                             selected = open,
                             onReportProblem = { nav.navigate(Routes.REPORT) { launchSingleTop = true } },
+                            onShowChangelog = { nav.navigate(Routes.CHANGELOG) { launchSingleTop = true } },
                         )
                     },
                     detailContent = { LicenceScreen(it, onBack = { open = null }) },
@@ -173,6 +176,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 )
             }
             composable(Routes.REPORT) { ReportProblemScreen(onBack = { nav.navigateUp() }) }
+            composable(Routes.CHANGELOG) { ChangelogScreen(onBack = { nav.navigateUp() }) }
             composable(Routes.LICENCE, listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 LicenceScreen(componentId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.navigateUp() })
             }

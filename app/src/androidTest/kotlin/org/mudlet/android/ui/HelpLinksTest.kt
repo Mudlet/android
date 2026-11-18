@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
@@ -23,19 +24,23 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.about.ReleaseNotes
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.about.readAsset
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Help as a TalkBack user reaches it against a fake engine: About's Help links and the script library's Help menu
  * each open in the browser the page desktop Mudlet's Help menu and script editor open, written out here so a changed
- * address fails. The browser is not started: the test sees the intent only.
+ * address fails, and "Show changelog" shows the app's release notes. The browser is not started: the test sees the
+ * intent only.
  */
 @RunWith(AndroidJUnit4::class)
 class HelpLinksTest {
@@ -95,6 +100,26 @@ class HelpLinksTest {
     }
 
     @Test
+    fun aboutsShowChangelogShowsWhatEachReleaseSaidIsNew() {
+        activate(hasContentDescription(string(R.string.about_title)))
+        val link = hasText(string(R.string.help_changelog)) and hasClickAction()
+        compose.onNode(hasScrollAction()).performScrollToNode(link)
+        activate(link)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.changelog_title))).fetchSemanticsNodes().isNotEmpty() }
+        // The notes the build copied from docs/release-notes.md: none before the first stable release
+        val newest = ReleaseNotes.parse(readAsset(compose.activity, ReleaseNotes.ASSET)).firstOrNull()
+        if (newest == null) {
+            waitFor(hasText(string(R.string.changelog_none)))
+        } else {
+            waitFor(hasText(string(R.string.changelog_version, newest.version)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
+            waitFor(hasText(newest.lines.first()))
+        }
+        assertTrue("a page opened in the browser", browser.opened.isEmpty())
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        waitFor(hasText(string(R.string.help_heading)))
+    }
+
+    @Test
     fun theScriptLibrarysHelpOpensTheIntroductionToTheKindShownTheLuaFunctionsAndTheManual() {
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
@@ -118,6 +143,10 @@ class HelpLinksTest {
         compose.waitUntil(WAIT_MS) { browser.opened.isNotEmpty() }
         assertEquals(listOf(url), browser.opened.toList())
         browser.opened.clear()
+    }
+
+    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) {
+        compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
     }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)

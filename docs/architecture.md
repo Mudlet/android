@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About with its Help links and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, and the script library and an item's page in `ui/scripts/` ("The script library" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About with its Help links and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, the script library and an item's page in `ui/scripts/` ("The script library" below) and the package manager in `ui/packages/` ("The package manager" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt`, the packages in `ui/PackagesClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with Mudlet's version and commit (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go, what their buttons draw of their style sheets and the commands' menu (`ButtonBarLayout`, `ButtonStyle`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -646,6 +646,24 @@ drawn by `ui/game/AppMap.kt`):
 - Known limits: the button is only in the map in front, not behind the text, which takes no touches, and only while
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled.
+
+### The package manager
+The game screen's title bar has a Packages button, after the Scripts button, that opens the front profile's packages
+(`ui/packages/PackagesScreen.kt`) as the desktop's Package Manager shows them, over `packages`, `installPackage` and
+`uninstallPackage` in `docs/protocol.md`, kept by `PackagesClient`:
+- Each package in the order installed, with its icon (`getImage`), its title or else its name, its name, version and
+  author, and the start of its description, which a tap shows whole. The description is shown as plain text; the
+  desktop renders its Markdown.
+- Install from a file picks one with the system's picker (`OpenDocument`, any type, as Android knows none for
+  `.mpackage`), copied under the name it was picked by into a folder of its own in the cache's `packages/`, since
+  Mudlet names an `.xml` package after its file and the engine cannot read a picker's `content://` URI; the copy goes
+  once the engine has answered. Each install shows with a progress bar until `packageInstalled`, and how it went shows in a snackbar.
+- Install from a URL runs Mudlet's own Lua `installPackage(url)`, as the desktop does for a URL dropped on it, which
+  downloads it and tells the console how it went; the list follows from `packagesChanged`.
+- Remove asks first, then sends `uninstallPackage`, whose answer is the list without it.
+- What the engine refuses shows in a snackbar with its reason, in English as Mudlet gives it. The list is asked for
+  again on `packagesChanged` and after a reattach.
+- Not yet: modules, and the package repository's browser.
 
 ### The script library
 The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
@@ -1970,7 +1988,20 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - With TalkBack on: a line's actions offer "Make a trigger from this line"; on its page a word reads "Kept as it
       is", "Captured" or "Optional", and a double tap changes it.
 
-32. How the app looks, on Android 12 or later, in light and in dark mode.
+32. The package manager, with the libmudlet APK: on the game screen, tap Packages.
+    - The bundled packages are listed, each with its icon, title, version and author; a tap on one shows its whole
+      description.
+    - Tap "Install from a file" and pick a `.mpackage` from Downloads: "Installing" shows with a progress bar, then
+      "Installed" in a snackbar, and the package is in the list; its scripts run. Pick it again: "already installed".
+      Pick a text file: "Could not install" with Mudlet's reason.
+    - Tap "Install from a URL" and give a package's `https://` address: the console says how it went, and the package
+      is listed. `lua uninstallPackage("<name>")` on the input line: it goes from the list.
+    - Tap Remove on a package: a dialog asks; Cancel keeps it, Remove takes it out, and its triggers and aliases go
+      from the script library.
+    - With TalkBack on: the title bar's button reads "Packages of" and the game's name; a row reads its title, details
+      and description, and whether its description is cut short; Remove reads "Remove" and the package's name.
+
+33. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives
       Mudlet's own (sandstone) at once, and on again the wallpaper's. The game's text keeps its colours either way.
     - Back from any screen, with the predictive gesture, shows the screen it goes back to as the finger moves; let go
@@ -1989,7 +2020,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - With TalkBack on: the settings' section titles read as headings, and the editor beside the list has
       "Close <name>" at its top.
 
-33. Several profiles, with the libmudlet debug APK: connect one game, then open two more beside it with the game sheet's
+34. Several profiles, with the libmudlet debug APK: connect one game, then open two more beside it with the game sheet's
     "Open another game" (or each with `adb shell am broadcast -n org.mudlet.mudlet/org.mudlet.android.debug.SmokeTestReceiver
     --es cmd openAlongside --es profile <name> --es host <host> --ei port <port>`).
     - After each loads, note `adb shell dumpsys meminfo org.mudlet.mudlet:engine`'s TOTAL PSS, against

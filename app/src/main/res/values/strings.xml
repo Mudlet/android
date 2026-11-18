@@ -1039,6 +1039,8 @@
     <string name="console_line_copied">Line copied</string>
     <!-- A message when no app on the device can take a shared line of the game's text -->
     <string name="console_line_no_share">No app here can take the line: copy it instead</string>
+    <!-- The name the clipboard gives text a game's script put on it (setClipboardText()), which some keyboards and clipboard managers show -->
+    <string name="script_clipboard_label">Text from a game script</string>
     <!-- How TalkBack's actions name a link of the main console that has been followed, as desktop Mudlet's screen
          reader announcement does: %1$s is the link's tool tip or text -->
     <string name="console_link_visited">%1$s, visited</string>

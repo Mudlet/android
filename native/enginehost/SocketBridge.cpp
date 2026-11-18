@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDeadlineTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalServer>
@@ -424,8 +425,8 @@ void SocketBridge::forgetClient()
 
 void SocketBridge::onReadyRead()
 {
-    // The frames read while a map file is loaded or saved wait for the request being handled to end
-    if (!mClient || mPeekingForCancel) {
+    // The frames read by takeFrame() wait for the request or script that took one to end
+    if (!mClient || mTakingFrame) {
         return;
     }
     mReadBuffer.append(mClient->readAll());
@@ -454,31 +455,56 @@ void SocketBridge::onReadyRead()
 
 bool SocketBridge::mapFileCancelAsked()
 {
-    if (!mClient) {
-        return false;
-    }
     // Mudlet holds the main thread for the whole load or save, so the socket is read here, at each step of its progress
-    mPeekingForCancel = true;
-    mClient->waitForReadyRead(0);
-    mPeekingForCancel = false;
-    if (!mClient) {
-        return false;
-    }
-    mReadBuffer.append(mClient->readAll());
+    return takeFrame(QLatin1StringView("cancelMapFile"), QJsonValue(QJsonValue::Undefined), 0).has_value();
+}
+
+std::optional<QJsonObject> SocketBridge::takeFrame(QLatin1StringView type, const QJsonValue& id, int waitMs)
+{
+    // The complete frames before at are not it
     qsizetype at = 0;
-    while (mReadBuffer.size() - at >= 4) {
-        const quint32 length = qFromBigEndian<quint32>(mReadBuffer.constData() + at);
-        if (length > maxFrameBytes || mReadBuffer.size() - at < qsizetype(4 + length)) {
-            return false;
+    const auto scan = [&]() -> std::optional<QJsonObject> {
+        while (mReadBuffer.size() - at >= 4) {
+            const quint32 length = qFromBigEndian<quint32>(mReadBuffer.constData() + at);
+            if (length > maxFrameBytes || mReadBuffer.size() - at < qsizetype(4 + length)) {
+                return std::nullopt;
+            }
+            const QJsonObject frame = QJsonDocument::fromJson(mReadBuffer.mid(at + 4, length)).object();
+            if (frame.value(QLatin1String("t")).toString() == type && (id.isUndefined() || frame.value(QLatin1String("id")) == id)) {
+                mReadBuffer.remove(at, 4 + length);
+                return frame;
+            }
+            at += 4 + length;
         }
-        const QJsonObject frame = QJsonDocument::fromJson(mReadBuffer.mid(at + 4, length)).object();
-        if (frame.value(QLatin1String("t")).toString() == QLatin1String("cancelMapFile")) {
-            mReadBuffer.remove(at, 4 + length);
-            return true;
+        return std::nullopt;
+    };
+    const QDeadlineTimer deadline(waitMs);
+    std::optional<QJsonObject> taken = scan();
+    while (mClient && !taken) {
+        mTakingFrame = true;
+        const bool read = mClient->waitForReadyRead(int(deadline.remainingTime()));
+        mTakingFrame = false;
+        if (!mClient) {
+            break;
         }
-        at += 4 + length;
+        mReadBuffer.append(mClient->readAll());
+        taken = scan();
+        if (!read || deadline.hasExpired()) {
+            break;
+        }
     }
-    return false;
+    // Outside a request's handling, as in a timer's script, no readyRead would come for frames already read
+    if (mClient && !mReadBuffer.isEmpty() && !mReadQueued) {
+        mReadQueued = true;
+        QMetaObject::invokeMethod(
+                this,
+                [this] {
+                    mReadQueued = false;
+                    onReadyRead();
+                },
+                Qt::QueuedConnection);
+    }
+    return taken;
 }
 
 void SocketBridge::onBytesWritten()
@@ -806,7 +832,8 @@ bool SocketBridge::handleControl(const QString& type, const QJsonObject&)
                                                             QLatin1StringView("closeProfile"),
                                                             QLatin1StringView("setFront"),
                                                             QLatin1StringView("markSeen"),
-                                                            QLatin1StringView("setAppState")};
+                                                            QLatin1StringView("setAppState"),
+                                                            QLatin1StringView("answerClipboardRead")};
     if (std::find(std::begin(controlRequests), std::end(controlRequests), type) == std::end(controlRequests)) {
         return false;
     }

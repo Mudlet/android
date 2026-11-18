@@ -129,13 +129,14 @@ protected:
     void sendLinesAfter(qint64 seq, bool replay);
     // Each lineUpdated a UI that has the lines up to seq missed
     void sendLineUpdatesUpTo(qint64 seq);
-    static QJsonObject lineUpdatedMessage(const StoredLine& stored);
+    static QByteArray lineUpdatedMessage(const StoredLine& stored);
     // Lines a mirror kept from the profile in front before stay as they are
     void forgetLineIds() { mSeqOfLineId.clear(); }
     // Every status, then the input line's state and the script windows', as a UI attaching or catching up needs them
     virtual void sendState();
     void sendNotify(const QString& title, const QString& text);
     void sendFrame(const QJsonObject& message);
+    void sendFrame(const QByteArray& json);
     // An answer to the request being handled: it carries that request's id as re, and is sent even to a lagging UI
     void sendReply(QJsonObject message);
     void sendError(const QString& message);
@@ -193,9 +194,9 @@ protected:
     // A profile's output goes to this UI: a profile socket's, or the control socket's that left out profileSockets
     bool outputLive() const { return clientLive() && mProfileOutput; }
     bool replying() const { return !mCurrentRequestId.isUndefined() && !mCurrentRequestId.isNull(); }
-    static QJsonObject lineMessage(const StoredLine& stored, bool replay);
+    static QByteArray lineMessage(const StoredLine& stored, bool replay);
     static QJsonArray runsJson(const QList<ColorRun>& runs);
-    QJsonObject tailMessage() const;
+    QByteArray tailMessage() const;
     QJsonObject hiddenInputMessage() const;
     QJsonObject secureOfferMessage() const;
     QJsonObject scriptsStoppedMessage() const;

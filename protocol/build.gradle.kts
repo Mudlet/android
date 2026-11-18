@@ -35,6 +35,7 @@ tasks.test {
         rootProject.file("native/enginehost/SocketBridge.h"),
         rootProject.file("native/enginehost/SocketBridge.cpp"),
         rootProject.file("native/enginehost/ControlBridge.cpp"),
+        rootProject.file("native/enginehost/LineJson.cpp"),
         rootProject.file("native/enginehost/MudletEngine.cpp"),
         rootProject.file("native/tests/protocol_client.py"),
     )

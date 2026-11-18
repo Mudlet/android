@@ -84,13 +84,15 @@ KOTLIN_HOME=path/to/kotlinc JUNIT_JARS=junit-4.13.2.jar:hamcrest-core-1.3.jar su
 scripts/build-libmudlet-desktop.sh ../mudlet build-desktop
 cmake -S native -B native/build-desktop-mudlet -G Ninja -DCMAKE_PREFIX_PATH=$QT_ROOT/gcc_64 \
     -DLIBMUDLET_BUILD_DIR=$PWD/build-desktop
-cmake --build native/build-desktop-mudlet --target engine map_png_test map_frames_test
+cmake --build native/build-desktop-mudlet --target engine map_png_test map_frames_test line_json_test
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_engine.py native/build-desktop-mudlet/enginehost/engine
 QT_QPA_PLATFORM=offscreen python3 native/tests/test_mudlet_restore.py native/build-desktop-mudlet/enginehost/engine
 # The map's PNG writer against Qt's, and the picture the instrumented tests read with Android's decoder
 QT_QPA_PLATFORM=offscreen native/build-desktop-mudlet/map_png_test app/src/androidTest/assets/map-picture.png
 # The messages the bridge makes of a map's frames, none of a frame over again
 native/build-desktop-mudlet/map_frames_test
+# The line frames' writer against QJsonDocument's bytes
+native/build-desktop-mudlet/line_json_test
 QT_QPA_PLATFORM=offscreen native/tests/run_jvm_client_test.sh -PqtRoot=$QT_ROOT
 
 # The app's JVM tests (the About screen's licence data), after scripts/build-apk.sh

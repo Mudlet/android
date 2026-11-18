@@ -120,6 +120,12 @@ backgrounded UI process mid-read. Verified on the host:
 - With a stalled reader, the engine kept running at 42-60 MB RSS. When the
   reader resumed it received 1999 lines and one `gap`.
 
+The frames of a console's lines (`line`, `lineUpdated`, `tail`), one for each line of a game's spam, are written by
+`native/enginehost/LineJson.cpp` straight to the bytes `QJsonDocument` would give them (`line_json_test` holds it to
+Qt's, and `ProtocolSpecTest` reads their fields there). Building a `QJsonObject` with a `QJsonArray` for each run
+cost `SocketBridge::line()` four times as much: on the host, with a UI attached at 10,000 lines a second, 12.8-14.5 µs
+a line against 3.1-3.4 µs.
+
 ### Command suggestions
 `:suggest` ranks what the input line offers as the player types. It runs in the UI process and only on the
 device: no network, no engine round trip, so it can answer every (debounced) keystroke. One `CommandSuggester`

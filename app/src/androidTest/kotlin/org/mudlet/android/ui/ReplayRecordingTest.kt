@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.core.content.FileProvider
@@ -83,7 +84,7 @@ class ReplayRecordingTest {
 
     @Test
     fun theSheetsSwitchAsksTheEngine_andShowsWhatTheEngineSays() {
-        compose.onNode(recordSwitch).assertIsDisplayed().assert(role(Role.Switch)).assert(toggled(ToggleableState.Off))
+        compose.onNode(recordSwitch).performScrollTo().assertIsDisplayed().assert(role(Role.Switch)).assert(toggled(ToggleableState.Off))
             .assert(hasText(string(R.string.game_record_replay)))
         compose.onRoot().tryPerformAccessibilityChecks()
         assertEquals(0, compose.onAllNodes(share).fetchSemanticsNodes().size)
@@ -103,7 +104,7 @@ class ReplayRecordingTest {
         recording(false, FILE)
         waitFor(recordSwitch and toggled(ToggleableState.Off))
         waitFor(share)
-        compose.onNode(share).assertIsDisplayed()
+        compose.onNode(share).performScrollTo().assertIsDisplayed()
         compose.onRoot().tryPerformAccessibilityChecks()
 
         // Recording again: nothing to share until it is saved

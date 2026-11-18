@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -69,16 +70,17 @@ class ReplayRecordingPseudoLocaleTest(private val locale: String) {
 
     @Test
     fun theTextFits() {
-        assertFits(R.string.game_record_replay, R.string.game_record_replay_off)
+        assertFits(RECORD_REPLAY_TAG, R.string.game_record_replay, R.string.game_record_replay_off)
         recording(true, "")
         waitFor(hasText(compose.string(R.string.game_record_replay_on), substring = true))
-        assertFits(R.string.game_record_replay, R.string.game_record_replay_on)
+        assertFits(RECORD_REPLAY_TAG, R.string.game_record_replay, R.string.game_record_replay_on)
         recording(false, "2026-11-18#04-05-06.dat")
         waitFor(hasTestTag(SHARE_REPLAY_TAG))
-        assertFits(R.string.game_record_replay_off, R.string.game_share_replay)
+        assertFits(SHARE_REPLAY_TAG, R.string.game_record_replay_off, R.string.game_share_replay)
     }
 
-    private fun assertFits(vararg ids: Int) {
+    private fun assertFits(lowest: String, vararg ids: Int) {
+        compose.onNode(hasTestTag(lowest)).performScrollTo()
         compose.onRoot().tryPerformAccessibilityChecks()
         for (id in ids) {
             val text = compose.string(id)

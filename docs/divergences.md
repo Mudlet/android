@@ -74,6 +74,23 @@ where it last connected, until it is closed and opened again (`dlgConnectionProf
 preferences change the TLS choice of a profile that runs. A phone's player reconnects far more often than a
 desktop's, and closing the game to make it read its own details loses what its scripts hold.
 
+## Back on the game's offer of a secure port
+
+The question asked when a game offers its secure port has the desktop's Yes and No ("Connect securely", "No, don't
+ask again"), but Back answers neither: the dialog goes, the connection stays as it is, and the game's next offer asks
+again. On the desktop Escape is No, which connects again and turns "Offer a secure connection" off for good
+(`mudlet.cpp`, `signal_promptTlsAvailable`). Back on a phone is pressed far more readily than Escape on a question, and
+a stray press should not cost a reconnect and the game's future offers.
+
+## Asked about a refused certificate
+
+When a game's certificate is refused, the desktop prints the reasons in the console and shows the certificate on the
+Security tab of the profile's preferences, where the player may tick "Accept self-signed certificates" or "Accept
+expired certificates" and connect again. The app asks as the connection ends, in a dialog with the same facts, and
+its "Accept and connect" turns on those same settings for the game. A certificate with any other error offers the
+game's settings, where "Ignore all certificate errors" is, rather than a button that ignores them all: the desktop
+puts that box beside the other two, but a phone's dialog is tapped through too readily for it.
+
 ## The games the profile list offers
 
 The profile list offers each of the games in Mudlet's connection dialog (`src/TGameDetails.h`, copied by

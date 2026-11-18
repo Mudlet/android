@@ -596,7 +596,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | IF3 Scripted UI | expected | in flight | |
 | IF4 Package manager | release blocker | in flight: the engine side merged; the screen next | #145, #163 |
 | IF5 Connection security (TLS, secure port, proxy) | release blocker | in flight: the secure-port and refused-certificate questions merged (#147, carried by engine train 1); the Security page next | #157, #178 |
-| IF6 Error console and logging | release blocker | in flight: the engine lists Lua errors; the error console screen next, then logging to file (engine train 2) | #150, #170 |
+| IF6 Error console and logging | release blocker | in flight: the engine lists Lua errors and takes desktop's log options (engine train 2); the error console screen next, then the Logging page | #150, #182, #170 |
 | IF7 Mute game sounds | expected | done | #143, #152 |
 | IF8 Script editor design pick | - | waiting for the user | |
 | IF9 Upstream PRs to Mudlet/Mudlet | - | waiting for the user | Mudlet/Mudlet#12962, Mudlet/Mudlet#12963, Mudlet/Mudlet#12964, Mudlet/Mudlet#12965, Mudlet/Mudlet#12967 |
@@ -606,17 +606,17 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 4 Real phones and background | release blocker | in flight: the device pass page and the explanation of a stop in the background merged; the pass itself is run on real phones | #155, #160 |
 | 5 Report a problem | release blocker | in flight: About > Report a problem, with game and script text kept out of logcat; the offer after a crash next | #156, #164 |
 | 6 Copy, search, timestamps, lag | expected | in flight: copy or share a line; search next | #171 |
-| 7 Hardware keyboards and keys | expected | in flight: key bindings in the engine merged (engine train 1); the app's keys next | #157 |
+| 7 Hardware keyboards and keys | expected | in flight: a hardware keyboard runs the profile's key bindings, in the engine (engine train 1) and the app; the caret key next | #157, #181 |
 | 8 Display and input settings 2 | expected | in flight: the server encoding and the input line's settings merged, with their Connection and Input pages (engine train 1); the colours and display slice next | #157 |
-| 9 Sound, music, TTS | expected | not started | |
+| 9 Sound, music, TTS | expected | in flight: desktop's "Clear stored media" merged; text to speech behind TalkBack and sound attributes next | #176 |
 | 10 Map files, settings, areas | expected | in flight: the engine side merged (engine train 1); the screen next | #157 |
-| 11 Editor beyond items | expected | in flight: move to a folder merged; the colour pattern picker and search next | #165 |
+| 11 Editor beyond items | expected | in flight: move to a folder and search (engine train 2) merged; the colour pattern picker next | #165, #182 |
 | 12 Lua functions needing the app | expected | not started | |
 | 13 Emergency stop and replays | expected / nice later | not started | |
 | 14 Telnet links, profile extras | expected | not started | |
 | 15 Tablets and Chromebooks | expected | not started | |
 | 16 Slow phones | expected | not started | |
 | 17 Translations live | expected | not started | |
-| 18 Help and first steps | nice later | in flight: Help in About and the script library merged; the game screen's first-run tour next; function descriptions wait on a source for them | #168 |
+| 18 Help and first steps | nice later | in flight: Help in About and the script library, and Show changelog, merged; the game screen's first-run tour next; function descriptions wait on a source for them | #168, #183 |
 | 19 Lines changed after shown | expected | not started | |
 | 20 Movement pad | nice later | not started | |

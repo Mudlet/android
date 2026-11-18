@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -43,6 +44,8 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
+import java.util.concurrent.FutureTask
+import kotlin.concurrent.thread
 
 /**
  * A telnet:// link from another app, sent as a browser sends one (an ACTION_VIEW Android resolves through the
@@ -112,6 +115,24 @@ class GameLinkTest {
         waitFor(hasText(question))
         engine.assertNoRequest(setOf("openProfile", "saveProfile"), QUIET_MS)
         activate(inDialog(text(R.string.game_link_cancel)))
+    }
+
+    @Test
+    fun waitingForWhatALinkShowsLastsThroughThePauseAndroid9PutsAroundIt() {
+        listed(ALPHA)
+        val title = hasText(text(R.string.profiles_title))
+        compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        assertTrue("the paused Activity still shows ui-test its hierarchy", compose.onAllNodes(title).fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty())
+        val resume = FutureTask {
+            Thread.sleep(PAUSE_MS)
+            compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        }
+        thread { resume.run() }
+        try {
+            waitFor(title)
+        } finally {
+            resume.get()
+        }
     }
 
     @Test
@@ -231,7 +252,7 @@ class GameLinkTest {
 
     private fun text(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
-    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitFor(matcher: SemanticsMatcher) = waitFor(compose, matcher)
 
     private fun field(@StringRes label: Int) = compose.onNode(hasSetTextAction() and hasText(text(label)))
 
@@ -243,6 +264,9 @@ class GameLinkTest {
         const val QUIET_MS = 1_000
         const val ACHAEA = "Achaea"
         val ALPHA = Profile("Alpha", "a.example", 23, false, "", false)
+
+        // Longer than the two seconds ui-test looks for a compose hierarchy before fetchSemanticsNodes() throws
+        private const val PAUSE_MS = 3_000L
 
         fun profileOf(request: JSONObject) = Profile(
             request.getString("name"),
@@ -256,10 +280,16 @@ class GameLinkTest {
         /** The dialog's button or text [text]: the profile list behind it has a Connect of its own. */
         fun inDialog(text: String) = hasText(text) and hasAnyAncestor(isDialog())
 
+        /**
+         * Waits for a node [matcher] finds. Android 9 pauses the running Activity while it hands it a link (onNewIntent),
+         * and ui-test sees no compose hierarchy in a paused Activity: fetchSemanticsNodes() would throw then, not wait.
+         */
+        fun waitFor(compose: ComposeTestRule, matcher: SemanticsMatcher) = compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+
         /** What a double tap does under TalkBack: the node's accessibility click, scrolled into view first. */
         fun activate(compose: ComposeTestRule, label: SemanticsMatcher) {
             val control = label and hasClickAction()
-            compose.waitUntil(10_000) { compose.onAllNodes(control).fetchSemanticsNodes().isNotEmpty() }
+            waitFor(compose, control)
             if (compose.onAllNodes(control and hasAnyAncestor(hasScrollAction())).fetchSemanticsNodes().isNotEmpty()) {
                 compose.onNode(control).performScrollTo()
             }

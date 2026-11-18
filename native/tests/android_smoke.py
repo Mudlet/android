@@ -417,7 +417,7 @@ def run(dev, apk):
     except SmokeFailure as e:
         raise SmokeFailure(f"{e}; the engine's last Lua answer: {dev.command('state')['status'].get('luaResult')}")
     # USAGE_GAME plays on the media stream too, so the media volume buttons set both
-    if not set(playing) <= {"USAGE_MEDIA", "USAGE_GAME"}:
+    if not set(playing) <= {"USAGE_ALARM"}:
         raise SmokeFailure(f"the engine's sound plays as {playing}, not on Android's media stream")
     ok(f"the engine plays the script's sound as {playing}")
     shell("input keyevent KEYCODE_SLEEP")

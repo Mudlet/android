@@ -282,6 +282,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
     var dragged by remember { mutableStateOf<Int?>(null) }
     val size = dragged ?: owner.value(setting)
     val range = setting.range
+    val step = entry.step
     val label = stringResource(entry.label)
     val value = pluralStringResource(entry.valueText, size, size)
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -289,12 +290,12 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
         entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Clamped: a disabled button still has its click action, which a test or an accessibility service can call
-            IconButton({ owner.change(setting, (size - 1).coerceIn(range)) }, enabled = size > range.first) {
+            IconButton({ owner.change(setting, ((size - 1) / step * step).coerceIn(range)) }, enabled = size > range.first) {
                 Icon(painterResource(R.drawable.ic_remove), stringResource(entry.less))
             }
             Slider(
                 value = size.toFloat(),
-                onValueChange = { dragged = it.roundToInt() },
+                onValueChange = { dragged = ((it / step).roundToInt() * step).coerceIn(range) },
                 onValueChangeFinished = {
                     dragged?.let { owner.change(setting, it) }
                     dragged = null
@@ -307,7 +308,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
                 // A mark a step on a short range; a long one's would run together
                 steps = if (range.last - range.first <= MAX_MARKED_STEPS) range.last - range.first - 1 else 0,
             )
-            IconButton({ owner.change(setting, (size + 1).coerceIn(range)) }, enabled = size < range.last) {
+            IconButton({ owner.change(setting, ((size / step + 1) * step).coerceIn(range)) }, enabled = size < range.last) {
                 Icon(painterResource(R.drawable.ic_add), stringResource(entry.more))
             }
         }

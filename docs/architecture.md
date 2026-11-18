@@ -196,6 +196,10 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   app's values the player changed ("New games"): Mudlet picks some for the game it knows, such as fixing the line
   breaks of IRE's, which unchanged values would undo. After that it keeps its own, as a game copied in or there
   before does from the start.
+- Display's "Scrollback length" is the profile's console buffer size (`consoleBufferSize`, desktop Mudlet's "Main
+  display size"), the lines its main console keeps for scripts to read; the screen keeps the newest 2,000 of them
+  (`ProfileSession.MAX_LINES`). A new game starts with 10,000 ("A new game keeps 10,000 lines" in
+  [`divergences.md`](divergences.md)), and its buttons step to the next thousand.
 - The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
   what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the
   commands the console shows, Unix line endings, the command separator, highlighting a command brought back from the
@@ -802,6 +806,8 @@ see "A script asks for a file" in [`divergences.md`](divergences.md)).
 And the map emptied as the desktop's Map settings' "Delete map" does (`deleteMap()`, `0031-headless-delete-map.patch`).
 And a script's web page, opened by the app with its answer the script's (`THeadlessSession::setWebPageOpener()`,
 `0032-headless-web-page-opener.patch`; see "A script opens a web page" in [`divergences.md`](divergences.md)).
+And the profile's console buffer size given to a main console with no window, and read and changed by `getConfig()` and
+`setConfig()` (`consoleBufferSize`, `useMaxConsoleBufferSize`, `0033-headless-console-buffer-size.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

@@ -166,7 +166,7 @@ class ScreenReaderTest {
         }
         session.status("profile", "Test loaded")
         val defaults = session.receive("setSettings")
-        val own = mapOf("blankLinesBehaviour" to "hide", "autoClearInputLine" to true)
+        val own = mapOf("blankLinesBehaviour" to "hide", "consoleBufferSize" to 10_000, "autoClearInputLine" to true)
         assertEquals("what the player changed for new games, and the app's value where Mudlet starts with another", own, values(defaults))
         session.settings(values(defaults), defaults.getLong("id"))
         val loaded = session.receive("getSettings")
@@ -193,13 +193,14 @@ class ScreenReaderTest {
     }
 
     // Mudlet picks some settings for the game it knows, which the app's unchanged values would undo. Mudlet starts a
-    // profile keeping the command sent on its input line, which the app does not
+    // profile keeping the command sent on its input line, which the app does not, and with 100,000 lines, where the app
+    // keeps 10,000 (docs/divergences.md)
     @Test
-    fun aGameAddedHereWithNothingChangedForNewGamesKeepsMudletsOwnButForTheInputLine() {
+    fun aGameAddedHereWithNothingChangedForNewGamesKeepsMudletsOwnButForTheInputLineAndScrollback() {
         compose.runOnIdle { Settings.setAwaitsDefaults(GAME.name, true) }
         session.status("profile", "Test loaded")
         val defaults = session.receive("setSettings")
-        assertEquals(mapOf("autoClearInputLine" to true), values(defaults))
+        assertEquals(mapOf("consoleBufferSize" to 10_000, "autoClearInputLine" to true), values(defaults))
         session.settings(values(defaults), defaults.getLong("id"))
         session.receive("getSettings")
         session.assertNoRequest("setSettings", 500)
@@ -213,10 +214,12 @@ class ScreenReaderTest {
             Settings.clearInputAfterSend.set(false)
         }
         session.status("profile", "Test loaded")
+        val defaults = session.receive("setSettings")
+        assertEquals("the input line's setting is Mudlet's own, so not given", mapOf("consoleBufferSize" to 10_000), values(defaults))
+        session.settings(values(defaults), defaults.getLong("id"))
         session.receive("getSettings")
         session.assertNoRequest("setSettings", 500)
-        assertFalse("nothing was given before its settings were asked for", session.received.any { it.optString("t") == "setSettings" })
-        compose.runOnIdle { assertFalse(Settings.awaitsDefaults(GAME.name)) }
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { !Settings.awaitsDefaults(GAME.name) } }
     }
 
     // The app emptied the input line of every game before it had the setting, whatever the game's profile said
@@ -396,6 +399,26 @@ class ScreenReaderTest {
         val shown = compose.activity.resources.getQuantityString(R.plurals.settings_undo_wrap_width_value, slid + 1, slid + 1)
         compose.onNode(width).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
         compose.runOnIdle { assertEquals("new games keep it", 80, Settings.undoWrapWidth.value) }
+    }
+
+    @Test
+    fun theScrollbackLengthIsTheGamesBufferSizeAThousandLinesAStep() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_display)))
+        session.receive("getSettings")
+        val more = hasContentDescription(string(R.string.settings_console_buffer_more))
+        val less = hasContentDescription(string(R.string.settings_console_buffer_less))
+        activate(more, scroll = true)
+        assertEquals(mapOf("consoleBufferSize" to 11_000), values(session.receive("setSettings")))
+        activate(less, scroll = true)
+        assertEquals(mapOf("consoleBufferSize" to 10_000), values(session.receive("setSettings")))
+        activate(less, scroll = true)
+        assertEquals(mapOf("consoleBufferSize" to 9_000), values(session.receive("setSettings")))
+        val length = hasContentDescription(string(R.string.settings_console_buffer)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        val shown = compose.activity.resources.getQuantityString(R.plurals.settings_console_buffer_value, 9_000, 9_000)
+        compose.onNode(length).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
+        compose.runOnIdle { assertEquals("new games keep the app's own", 10_000, Settings.consoleBufferSize.value) }
     }
 
     @Test

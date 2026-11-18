@@ -42,6 +42,12 @@ object Settings {
     /** The column a game wraps its lines at, for [undoWrap]. */
     val undoWrapWidth = IntSetting("undoServerWrapWidth", default = 80, range = 20..500, mudlet = true)
 
+    /**
+     * The lines of the game's text the profile's main console keeps, which its scripts read, desktop Mudlet's "Main
+     * display size". The app gives a game it adds a tenth of Mudlet's (docs/divergences.md).
+     */
+    val consoleBufferSize = IntSetting("consoleBufferSize", default = 10_000, range = 100..1_000_000, mudlet = true, mudletDefault = 100_000)
+
     /** Which of the commands the player sends show in the game's text. */
     val showSentText = EnumSetting("showSentText", SentText.SCRIPT, SentText.entries, mudlet = true) { it.mudletValue }
 
@@ -129,6 +135,7 @@ object Settings {
         blankLines,
         undoWrap,
         undoWrapWidth,
+        consoleBufferSize,
         showSentText,
         unixLineEndings,
         clearInputAfterSend,
@@ -297,7 +304,7 @@ object Settings {
     }
 
     /** A whole number within [range]: a value outside it is taken as the nearest end. */
-    class IntSetting(key: String, default: Int, val range: IntRange, mudlet: Boolean = false) : Setting<Int>(key, default, mudlet) {
+    class IntSetting(key: String, default: Int, val range: IntRange, mudlet: Boolean = false, mudletDefault: Int = default) : Setting<Int>(key, default, mudlet, mudletDefault) {
         override fun normalise(v: Int) = v.coerceIn(range)
 
         override fun fromMudlet(v: Any) = (v as? Number)?.toInt()?.coerceIn(range)

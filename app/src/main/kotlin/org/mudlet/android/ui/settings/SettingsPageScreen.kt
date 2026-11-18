@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -44,7 +47,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -55,10 +60,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
@@ -113,6 +120,11 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
                     if (lit) LaunchedEffect(Unit) { requester.bringIntoView() }
                     ListSegment(i, entries.size, Modifier.bringIntoViewRequester(requester), selected = lit) { EntryRows(entry, owner, page.game) }
                 }
+                if (page.category == SettingsCategory.COLOURS) {
+                    TextButton({ owner.resetToMudlets(Settings.colours) }, Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.settings_colours_reset))
+                    }
+                }
             }
         }
     }
@@ -135,6 +147,7 @@ private fun EntryRows(entry: SettingEntry, owner: SettingsOwner, game: String?) 
         is SettingEntry.Number -> NumberRows(entry, owner)
         is SettingEntry.Pick -> PickRow(entry, owner)
         is SettingEntry.Typed -> TypedRow(entry, owner)
+        is SettingEntry.Colour -> ColourRow(entry, owner)
     }
 }
 
@@ -223,6 +236,90 @@ private fun TypedRow(entry: SettingEntry.Typed, owner: SettingsOwner) {
         singleLine = true,
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+    )
+}
+
+/** The colour's swatch and "#rrggbb" beside its label; a tap opens [ColourDialog]. */
+@Composable
+private fun ColourRow(entry: SettingEntry.Colour, owner: SettingsOwner) {
+    val rgb = owner.value(entry.setting)
+    var changing by rememberSaveable { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .clickable(onClickLabel = stringResource(R.string.settings_colour_change), role = Role.Button) { changing = true }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(entry.label), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Text(Settings.colourName(rgb), Modifier.padding(end = 12.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
+        Swatch(rgb)
+    }
+    if (changing) {
+        ColourDialog(stringResource(entry.label), rgb, onDismiss = { changing = false }) {
+            changing = false
+            owner.change(entry.setting, it)
+        }
+    }
+}
+
+@Composable
+private fun Swatch(rgb: Int, size: Dp = 32.dp) {
+    Box(
+        Modifier.size(size).clip(MaterialTheme.shapes.small).background(Color(0xFF000000 or rgb.toLong()))
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small),
+    )
+}
+
+/** A slider for each of red, green and blue, and the colour as "#rrggbb" to type, which [onPick] takes as OK is pressed. */
+@Composable
+private fun ColourDialog(title: String, initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    var rgb by rememberSaveable { mutableIntStateOf(initial) }
+    // What is typed, kept apart from rgb while it is not yet a whole colour
+    var typed by rememberSaveable { mutableStateOf(Settings.colourName(initial)) }
+    val channels = listOf(R.string.settings_colour_red_amount to 16, R.string.settings_colour_green_amount to 8, R.string.settings_colour_blue_amount to 0)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        // OK takes only a whole colour, never the last one the sliders left while the typed name is not one
+        confirmButton = {
+            TextButton({ onPick(rgb) }, enabled = Settings.parseColourName(typed) != null) { Text(stringResource(R.string.settings_colour_ok)) }
+        },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.settings_choice_cancel)) } },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Swatch(rgb, 48.dp)
+                channels.forEach { (name, shift) ->
+                    val amount = (rgb shr shift) and 0xFF
+                    val label = stringResource(name)
+                    Text(stringResource(R.string.settings_colour_amount, label, amount), style = MaterialTheme.typography.bodyMedium)
+                    Slider(
+                        value = amount.toFloat(),
+                        onValueChange = {
+                            rgb = (rgb and (0xFF shl shift).inv()) or (it.roundToInt() shl shift)
+                            typed = Settings.colourName(rgb)
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = label
+                            stateDescription = amount.toString()
+                        },
+                        valueRange = 0f..255f,
+                    )
+                }
+                OutlinedTextField(
+                    typed,
+                    { text ->
+                        typed = text
+                        Settings.parseColourName(text)?.let { rgb = it }
+                    },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.settings_colour_name)) },
+                    isError = Settings.parseColourName(typed) == null,
+                    supportingText = { Text(stringResource(R.string.settings_colour_name_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
+                )
+            }
+        },
     )
 }
 

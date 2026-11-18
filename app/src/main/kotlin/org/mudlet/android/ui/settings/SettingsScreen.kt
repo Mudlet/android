@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilterChip
@@ -26,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
@@ -76,13 +79,22 @@ fun SettingsScreen(game: String?, onBack: () -> Unit, onOpen: (SettingsPage) -> 
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     val sections = hubSections(game)
     val resources = LocalResources.current
+    val list = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     MudletScaffold(stringResource(R.string.settings_title), onBack = onBack, snackbarHost = { SettingsNotices(sections.mapNotNull { it.game }) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).testTag(SETTINGS_HUB_TAG),
+            state = list,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            item(key = "search") { SearchField(query) { query = it } }
+            item(key = "search") {
+                SearchField(query) {
+                    // Results replace the categories under the field, which a scrolled hub would leave half hidden
+                    if (it.isBlank() != query.isBlank()) scope.launch { list.scrollToItem(0) }
+                    query = it
+                }
+            }
             if (query.isBlank()) {
                 for (section in sections) hubSection(section, selected, onOpen)
             } else {

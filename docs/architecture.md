@@ -361,7 +361,8 @@ window's are, through the same `ConsoleLine`: a tap, a long press for the menu, 
   the line's trigger, as anywhere else on the line.
 - What a link runs is the engine's: an OSC 8 `send:` link sends its command, and a `prompt:` link runs
   `sendCmdLine()`, whose `commandLine` puts the text in the input line (dropped while the game hides input, as for any
-  `commandLine`). An OSC 8 web link runs `openUrl()`, which the engine, a service, cannot open yet.
+  `commandLine`). An OSC 8 web link runs `openUrl()`, which the app opens, as any script's ("A script opens a web
+  page" in [`divergences.md`](divergences.md)).
 
 ### Copying the game's text
 A long press on a line of the main console, anywhere but on a link with a menu, opens a menu with "Copy line", "Share
@@ -799,6 +800,8 @@ And a script's clipboard, read and written by the app rather than the engine's p
 And the file a script asks for, chosen in the app (`THeadlessSession::setFilePicker()`, `0030-headless-file-picker.patch`;
 see "A script asks for a file" in [`divergences.md`](divergences.md)).
 And the map emptied as the desktop's Map settings' "Delete map" does (`deleteMap()`, `0031-headless-delete-map.patch`).
+And a script's web page, opened by the app with its answer the script's (`THeadlessSession::setWebPageOpener()`,
+`0032-headless-web-page-opener.patch`; see "A script opens a web page" in [`divergences.md`](divergences.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

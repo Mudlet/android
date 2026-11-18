@@ -36,6 +36,7 @@ import org.mudlet.android.protocol.OpenProfileState
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.Transport
+import org.mudlet.android.ui.game.ScriptWebPages
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -158,7 +159,7 @@ object EngineClient {
 
     // One link for the UI process's life: it remembers the engine instance, so a reattach after onStop/onStart (or
     // rotation) is to the same engine or to a new one
-    private val link: EngineLink by lazy { EngineLink({ connector(EngineSocket.path(app)) }, listener, profileSockets = true) }
+    private val link: EngineLink by lazy { EngineLink({ connector(EngineSocket.path(app)) }, listener, profileSockets = true, opensUrls = true) }
 
     @Volatile private var attached = false
 
@@ -567,6 +568,9 @@ object EngineClient {
                 }
 
                 is EngineMessage.PickFile -> main.post { onPickFile(message) }
+
+                // A script waits in its call for the answer, at most half a second
+                is EngineMessage.OpenUrl -> main.post { link.send(Requests.answerOpenUrl(message.id, ScriptWebPages.open(message.url))) }
 
                 is EngineMessage.ClipboardWrite -> main.post {
                     val clip = ClipData.newPlainText(app.getString(R.string.script_clipboard_label), message.text)

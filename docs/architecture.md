@@ -218,6 +218,12 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   profile in `Mudlet.ini`, as the desktop does, so turning one on a game's page turns it for every game open, the
   engine's `sounds` message keeps each open game's page in step ([`protocol.md`](protocol.md)), and "New games" has
   no Sound page (`SettingsCategory.sharedByGames`).
+- The Logging page holds desktop Mudlet's "Log options" (`logInHTML`, `logTimestamps`, `logFileNameFormat`,
+  `logFileName`, by `0028-headless-log-settings.patch`): HTML or plain text, timestamps, and how a new log is named,
+  by its date and time, its day or month, or a name the player gives, whose field shows only for a named file, as
+  on the desktop, with the extension HTML gives it after it. A name with a folder separator, which Mudlet refuses,
+  says so under the field and is not sent (`LogNaming.kt`). The folder logs go in is not among them
+  ([`divergences.md`](divergences.md), "Log options").
 - Mudlet reads some settings only as a game connects (`Settings.readAsItConnects`: the protocols, compression, the
   go-ahead signal, the version in the terminal type, the certificate errors let past and the offer of a secure
   connection), so one changed while the game is connected waits for its next connection. The switch turns all the

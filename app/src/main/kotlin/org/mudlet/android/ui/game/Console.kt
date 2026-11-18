@@ -20,14 +20,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -60,6 +63,7 @@ import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.ConsoleLinksClient
 import org.mudlet.android.ui.UiLine
 import org.mudlet.android.ui.ansiText
+import org.mudlet.android.ui.blinks
 import kotlin.math.roundToInt
 
 private const val TAIL_KEY = "tail"
@@ -104,6 +108,7 @@ fun Console(
     onMakeTrigger: ((String) -> Unit)? = null,
     searchQuery: String = "",
     searchFound: Long? = null,
+    blinkText: Boolean = false,
     behindText: @Composable BoxScope.() -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -188,8 +193,14 @@ fun Console(
                 val held = links?.takeIf { spans.isNotEmpty() && (i >= lineCount || firstLine + i >= it.firstLine) }
                 // Read here, so a new answer draws the line again in the link's new look
                 val answers = held?.let { l -> spans.map { l.info(it.link) } }.orEmpty()
-                val text = remember(line, colors, answers, searchQuery) {
-                    ansiText(held?.let { line.paintedAs(it::info) } ?: line, colors).withMatches(line.text, searchQuery)
+                val painted = remember(line, answers) { held?.let { line.paintedAs(it::info) } ?: line }
+                val blinking = remember(line) { blinks(line) }
+                // Only a blinking line in view runs a clock, so the rest are built once
+                val text = if (blinkText && blinking) {
+                    val ms by blinkClock()
+                    ansiText(painted, colors, ms).withMatches(line.text, searchQuery)
+                } else {
+                    remember(painted, colors, searchQuery) { ansiText(painted, colors).withMatches(line.text, searchQuery) }
                 }
                 val plain = remember(line, answers) { held?.let { concealLinks(line.text, spans, it::info) } ?: line.text }
                 val lineLinks = held?.let { l ->
@@ -232,6 +243,10 @@ private fun UiLine.paintedAs(info: (Int) -> EngineMessage.Link?): UiLine {
     val painted = linkRuns(runs, info)
     return if (painted === runs) this else UiLine(text, painted, prompt, marker)
 }
+
+/** The frame time in milliseconds, each frame, for as long as it is in the composition. */
+@Composable
+private fun blinkClock(): State<Long> = produceState(0L) { while (true) withFrameMillis { value = it } }
 
 /** One character of the console's monospaced font: its advance, which may be a fraction of a pixel, and line height. */
 private data class CellSize(val width: Float, val height: Int) {

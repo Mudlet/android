@@ -444,6 +444,16 @@ class ProfileSession internal constructor(
         return true
     }
 
+    /** Puts this game's [which] back to what Mudlet starts a profile with, in one request; false as [changeSetting] is. */
+    fun resetSettings(which: List<Settings.Setting<*>>): Boolean {
+        if (!settingsAvailable) return false
+        val values = which.associate { it.key to it.mudletDefaultToMudlet() }
+        if (!sendSettings(Requests.setSettings(values, newRequestId()))) return false
+        settings.putAll(values)
+        if (which.any { it in Settings.readAsItConnects } && status["connection"] == CONNECTED) settingAwaitsConnection = true
+        return true
+    }
+
     fun settingAwaitsConnectionShown() {
         settingAwaitsConnection = false
     }

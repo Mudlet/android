@@ -1,6 +1,8 @@
 package org.mudlet.android.ui.game
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
@@ -27,15 +29,26 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
@@ -45,6 +58,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -56,6 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.concealLinks
@@ -102,6 +117,11 @@ private const val CELLS_MEASURED = 100
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
+ *
+ * With [caret], desktop Mudlet's caret mode, a hardware keyboard's focus is on one line, the last at first, which TalkBack
+ * reads: Up and Down move it a line, Page Up and Page Down a screen, Ctrl+Home and Ctrl+End to the first and the last.
+ * [onCaretLeft] gets a key that types, which goes to the input line, or null when there is no line or the focus went
+ * elsewhere, where it stays.
  */
 @Composable
 fun Console(
@@ -120,6 +140,8 @@ fun Console(
     blinkText: Boolean = false,
     timeStamps: Boolean = false,
     behindText: @Composable BoxScope.() -> Unit = {},
+    caret: Boolean = false,
+    onCaretLeft: (typed: String?) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val measurer = rememberTextMeasurer()
@@ -188,10 +210,73 @@ fun Console(
         listState.scrollToItem(index.toInt())
     }
 
+    // The caret's line by its number, firstLine plus its index; -1 until it moves, for the last line as lines come
+    var caretAt by remember { mutableLongStateOf(-1L) }
+    val lastIndex = (itemCount - 1).coerceAtLeast(0)
+    // A line a script deleted is not drawn, so it has no node to take the focus
+    val notDrawn = { i: Int -> (if (i < lineCount) lines.getOrNull(i) else tail)?.deleted != false }
+    val caretFrom = if (caretAt < 0) lastIndex else (caretAt - firstLine).coerceIn(0L, lastIndex.toLong()).toInt()
+    val caretIndex = HardwareKeys.caretStop(caretFrom, caretFrom, lastIndex, notDrawn)
+    val caretFocus = remember { FocusRequester() }
+    // The line the caret leaves loses its focus node, or scrolls out, which drops the focus until the next line takes it
+    var caretMoving by remember { mutableStateOf(false) }
+    var linesFocused by remember { mutableStateOf(false) }
+    val caretScope = rememberCoroutineScope()
+    val latestOnCaretLeft by rememberUpdatedState(onCaretLeft)
+    val latestCaret by rememberUpdatedState(caret)
+    LaunchedEffect(caret) { if (!caret) caretAt = -1L }
+    LaunchedEffect(caret, caretIndex, itemCount > 0) {
+        if (!caret) return@LaunchedEffect
+        // No line to read: the input line keeps the keys, the bindings' among them
+        if (itemCount == 0 || notDrawn(caretIndex)) {
+            latestOnCaretLeft(null)
+            return@LaunchedEffect
+        }
+        caretMoving = true
+        try {
+            val shown = listState.layoutInfo.visibleItemsInfo.any { it.index == caretIndex && it.offset >= 0 && it.offset + it.size <= listState.layoutInfo.viewportEndOffset }
+            if (!shown) listState.scrollToItem(caretIndex)
+            withFrameNanos {}
+            caretFocus.requestFocus()
+        } finally {
+            caretMoving = false
+        }
+    }
+    val caretKeys = Modifier.onKeyEvent { event ->
+        if (!caret || event.type != KeyEventType.KeyDown) return@onKeyEvent false
+        val page = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
+        val to = when {
+            event.key == Key.DirectionUp -> caretIndex - 1
+            event.key == Key.DirectionDown -> caretIndex + 1
+            event.key == Key.PageUp -> caretIndex - page
+            event.key == Key.PageDown -> caretIndex + page
+            event.key == Key.MoveHome && event.isCtrlPressed -> 0
+            event.key == Key.MoveEnd && event.isCtrlPressed -> itemCount - 1
+            else -> null
+        }
+        if (to != null) {
+            caretAt = firstLine + HardwareKeys.caretStop(caretIndex, to, lastIndex, notDrawn)
+            return@onKeyEvent true
+        }
+        val typed = event.nativeKeyEvent.unicodeChar
+        if (!HardwareKeys.typesFromCaret(event.nativeKeyEvent.metaState, typed)) return@onKeyEvent false
+        latestOnCaretLeft(String(Character.toChars(typed)))
+        true
+    }
+
     Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
         behindText()
         LazyColumn(
-            Modifier.fillMaxSize().onSizeChanged { consoleSize = it },
+            Modifier.fillMaxSize().onSizeChanged { consoleSize = it }.then(caretKeys).onFocusChanged {
+                linesFocused = it.hasFocus
+                if (caret && !it.hasFocus) {
+                    caretScope.launch {
+                        withFrameNanos {}
+                        withFrameNanos {}
+                        if (latestCaret && !linesFocused && !caretMoving) latestOnCaretLeft(null)
+                    }
+                }
+            },
             state = listState,
             contentPadding = PaddingValues(horizontal = CONSOLE_SIDE_PADDING),
         ) {
@@ -223,13 +308,19 @@ fun Console(
                 // The app's own markers are not the game's text: no trigger sees them
                 val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
                 val stamp = if (timeStamps && line.time > 0) remember(line.time) { timeStamp(line.time) } else null
+                val caretHere = if (caret && i == caretIndex) {
+                    // One node for TalkBack with the line's text and actions, which sit on a child of a line with a menu
+                    Modifier.focusRequester(caretFocus).focusable().semantics(mergeDescendants = true) {}.border(1.dp, colors.foreground)
+                } else {
+                    Modifier
+                }
                 val consoleLine = @Composable { m: Modifier ->
                     ConsoleLine(text, plain, style, m, color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger, copyable = true, readingPrefix = stamp.orEmpty())
                 }
                 if (stamp == null) {
-                    consoleLine(Modifier.fillMaxWidth())
+                    consoleLine(Modifier.fillMaxWidth().then(caretHere))
                 } else {
-                    Row(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().then(caretHere)) {
                         // Read as the start of the line's own node, so TalkBack does not stop on the time apart
                         Text(stamp, Modifier.clearAndSetSemantics {}, color = TIME_STAMP_COLOR, style = style, softWrap = false)
                         consoleLine(Modifier.weight(1f))

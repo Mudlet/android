@@ -106,7 +106,8 @@ private class Placed {
  * button, or a hardware Tab, hands the line to [onComplete], whose answer replaces it. A [commandLine] from a script
  * replaces the line, which then calls [onCommandLineShown]; a [picked] command (from the command history) replaces it
  * too and takes the focus, and then calls [onPickedShown]. [takeFocus] gives the line the focus, as after a `prompt:`
- * link in a label, and then calls [onFocusTaken].
+ * link in a label, and then calls [onFocusTaken]. [typed], what a hardware key typed while the console's caret had the
+ * focus, goes in at the cursor as it would have there, the line taking the focus, and then calls [onTypedShown].
  *
  * While [hiddenInput] holds, a masked password field takes the line's place and sends with [onSendHidden]; its close
  * button calls [onDismissHidden]. What is typed there is not saved across a rotation, to keep it out of saved state.
@@ -145,6 +146,8 @@ fun InputLine(
     onPickedShown: () -> Unit = {},
     takeFocus: Boolean = false,
     onFocusTaken: () -> Unit = {},
+    typed: String? = null,
+    onTypedShown: () -> Unit = {},
     mapInFront: Boolean = false,
     focusOnStart: Boolean = false,
     clearAfterSend: Boolean = true,
@@ -291,6 +294,16 @@ fun InputLine(
         // Only the command line has this requester: the masked field has a focus of its own
         if (!hiddenInput) focus.requestFocus()
         onPickedShown()
+    }
+    LaunchedEffect(typed) {
+        if (typed == null) return@LaunchedEffect
+        (if (hiddenInput) secret else text).edit {
+            val at = selection.min
+            replace(at, selection.max, typed)
+            selection = TextRange(at + typed.length)
+        }
+        (if (hiddenInput) hiddenFocus else focus).requestFocus()
+        onTypedShown()
     }
     LaunchedEffect(takeFocus) {
         if (!takeFocus) return@LaunchedEffect

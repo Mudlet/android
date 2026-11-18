@@ -1,6 +1,7 @@
 package org.mudlet.android.ui.game
 
 import android.view.KeyEvent
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.ui.scripts.QtKeys.BACKSPACE
@@ -64,6 +65,47 @@ internal object HardwareKeys {
         KeyEvent.KEYCODE_NUMPAD_RIGHT_PAREN to ')'.code,
         KeyEvent.KEYCODE_NUMPAD_ENTER to ENTER,
     )
+
+    private const val F6 = F1 + 5
+    private val anyModifier = KeyModifier.entries.fold(0) { bits, modifier -> bits or modifier.bit }
+
+    /** Whether [key] is the one [caretKey] names, as desktop's `Host::caretShortcutMatches` has it. */
+    fun caretKeyMatches(caretKey: Settings.CaretKey, key: KeyBinding?): Boolean = key != null && when (caretKey) {
+        Settings.CaretKey.NONE -> false
+        Settings.CaretKey.TAB -> key.key == TAB && key.modifiers and KeyModifier.CONTROL.bit == 0
+        Settings.CaretKey.CTRL_TAB -> key.key == TAB && key.modifiers and KeyModifier.CONTROL.bit != 0
+        Settings.CaretKey.F6 -> key.key == F6 && key.modifiers and anyModifier == 0
+    }
+
+    /**
+     * The line the console's caret goes to from [from] towards [to], of the lines 0 to [last], passing over those [hidden]
+     * says are not drawn, which no focus reaches: the first drawn one at or past [to], else the nearest drawn one between,
+     * else [from].
+     */
+    fun caretStop(from: Int, to: Int, last: Int, hidden: (Int) -> Boolean): Int {
+        val target = to.coerceIn(0, last)
+        val step = if (target > from) 1 else -1
+        var i = target
+        while (i in 0..last) {
+            if (!hidden(i)) return i
+            i += step
+        }
+        i = target - step
+        while (i != from && i in 0..last) {
+            if (!hidden(i)) return i
+            i -= step
+        }
+        return from
+    }
+
+    /**
+     * Whether a key held with [metaState] that types [char] (KeyEvent.getUnicodeChar) goes from the console's caret to
+     * the input line, as desktop's `TTextEdit::keyPressEvent` sends it: a printable character, with no Ctrl, Alt or Meta.
+     */
+    fun typesFromCaret(metaState: Int, char: Int): Boolean {
+        val modifiers = KeyEvent.META_CTRL_ON or KeyEvent.META_ALT_LEFT_ON or KeyEvent.META_META_ON
+        return metaState and modifiers == 0 && char > 0 && !Character.isISOControl(char)
+    }
 
     /**
      * The key [keyCode] held with [metaState]; [shiftedChar] is what it types with Shift alone, if held, or 0, as

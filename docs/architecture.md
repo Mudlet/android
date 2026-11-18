@@ -125,6 +125,8 @@ The frames of a console's lines (`line`, `lineUpdated`, `tail`), one for each li
 Qt's, and `ProtocolSpecTest` reads their fields there). Building a `QJsonObject` with a `QJsonArray` for each run
 cost `SocketBridge::line()` four times as much: on the host, with a UI attached at 10,000 lines a second, 12.8-14.5 µs
 a line against 3.1-3.4 µs.
+The manual workflow "Engine benchmark" (`.github/workflows/perf.yml`) runs Mudlet's PipelineBenchmark and
+`native/tests/spam_bench.py`, a fake game's fight and floods through the engine, in turns on one runner.
 
 ### Command suggestions
 `:suggest` ranks what the input line offers as the player types. It runs in the UI process and only on the

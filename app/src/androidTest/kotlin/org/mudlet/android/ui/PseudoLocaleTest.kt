@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -36,6 +37,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.util.Locale
 import kotlin.math.abs
@@ -127,6 +129,10 @@ class PseudoLocaleTest(private val locale: String) {
         session.status("connection", "error: $REASON")
         waitFor(hasText(string(R.string.connection_try_again)))
         assertTextFits("the game pill's row, failed")
+        session.send(JSONObject().put("t", "sounds").put("played", true).put("scriptsMuted", false).put("gameMuted", false))
+        // This waitFor reads the unmerged tree, where the button's name is on its icon
+        waitFor(hasTestTag(SOUND_BUTTON_TAG) and hasAnyDescendant(hasContentDescription(string(R.string.sound_mute_all))))
+        assertTextFits("the game pill's row with the Sound button")
 
         session.hiddenInput(true)
         waitFor(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))

@@ -40,12 +40,22 @@ data object AppSettings : SettingsOwner {
     override fun <T> change(setting: Settings.Setting<T>, value: T) = setting.set(value)
 }
 
-/** A page of the settings: [forGame] ones hold each game's own settings, the others the app's. */
-enum class SettingsCategory(val forGame: Boolean, @StringRes val title: Int, @StringRes val summary: Int, @DrawableRes val icon: Int) {
+/**
+ * A page of the settings: [forGame] ones hold each game's own settings, the others the app's. Those [sharedByGames]
+ * Mudlet keeps for every profile at once, so a game added has none of its own to start with ("New games" lacks them).
+ */
+enum class SettingsCategory(
+    val forGame: Boolean,
+    @StringRes val title: Int,
+    @StringRes val summary: Int,
+    @DrawableRes val icon: Int,
+    val sharedByGames: Boolean = false,
+) {
     DISPLAY(true, R.string.settings_display, R.string.settings_display_summary, R.drawable.ic_text_fields),
     ACCESSIBILITY(true, R.string.settings_accessibility, R.string.settings_accessibility_summary, R.drawable.ic_accessibility),
     INPUT(true, R.string.settings_input, R.string.settings_input_summary, R.drawable.ic_keyboard),
     CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
+    SOUND(true, R.string.settings_sound, R.string.settings_sound_summary, R.drawable.ic_volume_up, sharedByGames = true),
     SECURITY(true, R.string.settings_security, R.string.settings_security_summary, R.drawable.ic_security),
     ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
@@ -191,6 +201,8 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_new_environ_hint,
             R.string.settings_protocol_keywords,
         ),
+        SettingEntry.Switch(SettingsCategory.SOUND, Settings.muteScripts, R.string.settings_mute_scripts, R.string.settings_mute_scripts_hint, R.string.settings_mute_keywords),
+        SettingEntry.Switch(SettingsCategory.SOUND, Settings.muteGame, R.string.settings_mute_game, R.string.settings_mute_game_hint, R.string.settings_mute_keywords),
         SettingEntry.Switch(
             SettingsCategory.ADVANCED,
             Settings.forceCompressionOff,

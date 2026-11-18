@@ -58,7 +58,8 @@ import kotlin.reflect.KClass
  * The row holds the game pill ([GamePill]), which shows the front game's connection and opens the game sheet
  * ([GameSheet]) with Reconnect, Disconnect, the open games and "Open another game", which goes back to the profile
  * list ([onBack]), where Connect opens one more beside those open; beside the pill, while the game is not connected,
- * one chip with what to do about it ([ConnectionChip]); then the quick bar's History and pinned commands. After the title bar, TalkBack reads the console, the input line and that row, then the script
+ * one chip with what to do about it ([ConnectionChip]); once the game has played a sound in this session, or while
+ * anything is muted, desktop Mudlet's Sound button ([SoundButton]); then the quick bar's History and pinned commands. After the title bar, TalkBack reads the console, the input line and that row, then the script
  * windows and their switcher, then the button bars. The keyboard pushes them up, so the console shrinks above it. The
  * input line's suggestions and the quick bar's pinned commands come from the profile the engine runs
  * ([rememberEngineSuggestions]), which learns from what is sent. The History button, or Ctrl+R on a hardware keyboard,
@@ -311,6 +312,10 @@ private fun ProfileGameScreen(
                     null -> {}
                     ConnectionAction.STOP -> if (c.name.isNotEmpty()) ConnectionChip(action, name, onClick = ::disconnect)
                     else -> if (canReconnect) ConnectionChip(action, reconnectName, onClick = ::reconnect)
+                }
+                val sounds = c.sounds
+                if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {
+                    SoundButton(sounds.scriptsMuted && sounds.gameMuted, onToggle = { c.toggleAllSoundsMuted() })
                 }
             }
         }

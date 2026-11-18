@@ -137,6 +137,10 @@ class ProfileSession internal constructor(
     var sendError by mutableStateOf<String?>(null)
         private set
 
+    /** Whether this game has played a sound since it loaded, and desktop Mudlet's mutes, which every game shares. */
+    var sounds by mutableStateOf(EngineMessage.Sounds(played = false, scriptsMuted = false, gameMuted = false))
+        private set
+
     /** The profile whose suggestions the input line shows: this one, unless the engine's status `profile` named another as loaded. */
     var suggestionsProfile by mutableStateOf(name.ifEmpty { NO_PROFILE_SUGGESTIONS })
         private set
@@ -418,6 +422,24 @@ class ProfileSession internal constructor(
         return sent
     }
 
+    /**
+     * Desktop Mudlet's "Mute all media": mutes the sounds from scripts and from the game, or unmutes both when both are
+     * muted; false, changing nothing, while its profile has not loaded or the link is down.
+     */
+    fun toggleAllSoundsMuted(): Boolean {
+        if (!settingsAvailable) return false
+        val mute = !(sounds.scriptsMuted && sounds.gameMuted)
+        if (!sendSettings(Requests.setSettings(mapOf(Settings.muteScripts.key to mute, Settings.muteGame.key to mute), newRequestId()))) return false
+        onSounds(sounds.copy(scriptsMuted = mute, gameMuted = mute))
+        return true
+    }
+
+    private fun onSounds(message: EngineMessage.Sounds) {
+        sounds = message
+        settings[Settings.muteScripts.key] = message.scriptsMuted
+        settings[Settings.muteGame.key] = message.gameMuted
+    }
+
     private fun onSettings(message: EngineMessage.SettingValues) {
         val id = (message.replyTo as? Number)?.toLong()
         if (id == null || !settingsRequests.remove(id)) return
@@ -536,6 +558,8 @@ class ProfileSession internal constructor(
                 is EngineMessage.HiddenInput -> post { hiddenInput = message.wanted }
 
                 is EngineMessage.History -> post { history = message.lines }
+
+                is EngineMessage.Sounds -> post { onSounds(message) }
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 

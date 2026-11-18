@@ -133,6 +133,7 @@ class ScreenshotTest {
         waitFor(hasText(string(R.string.settings_next_connection)))
         save("settings-connection-changed-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
+        compose.scrollSettingsHubTo(hasText(string(R.string.settings_accessibility)))
         activate(hasText(string(R.string.settings_accessibility)))
         waitFor(hasText(string(R.string.settings_blank_lines)))
         save("settings-accessibility-$mode")

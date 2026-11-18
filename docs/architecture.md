@@ -199,12 +199,17 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
 - The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
   what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the commands
   the console shows, Unix line endings), Connection (offering a secure connection, and the protocols Mudlet negotiates
-  with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Security (the certificate errors
+  with the game: GMCP, MSDP, MSSP, MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Sound (the mutes), Security (the certificate errors
   a secure connection lets past, and whether the game may install its packages or play its media) and Advanced
   (desktop Mudlet's "Special options", and a script's errors shown in the game's text, as the app has no error
   console). A number's slider changes it as the finger lifts, so a game's is sent once a slide. Mudlet's settings for
   how its own console draws text (control characters, East Asian characters of either width) are not among them, as
   the app draws the text itself.
+- The Sound page holds desktop Mudlet's two mutes, "Mute sounds from Mudlet (triggers, scripts, etc.)" and "Mute
+  sounds from the game (MCMP, MSP)" (`muteMediaAPI`, `muteMediaGame`). Unlike the others, Mudlet keeps them for every
+  profile in `Mudlet.ini`, as the desktop does, so turning one on a game's page turns it for every game open, the
+  engine's `sounds` message keeps each open game's page in step ([`protocol.md`](protocol.md)), and "New games" has
+  no Sound page (`SettingsCategory.sharedByGames`).
 - Mudlet reads some settings only as a game connects (`Settings.readAsItConnects`: the protocols, compression, the
   go-ahead signal, the version in the terminal type, the certificate errors let past and the offer of a secure
   connection), so one changed while the game is connected waits for its next connection. The switch turns all the
@@ -226,6 +231,17 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   so the games there the first time it runs with it (`Settings.noteGamesBeforeInputClear`, by their profiles'
   directories) are each told once, as they next load, to go on clearing theirs; a profile copied in later keeps its
   own.
+
+### The Sound button
+Desktop Mudlet's toolbar Sound button, "Mute all media", is on the game screen's bottom row, after the game pill and
+its chip (`ui/game/SoundButton.kt`), where a thumb reaches it and it covers no text. It is there once the engine's
+`sounds` message says the game has played a sound, music or video since it loaded (`played`), or while either mute is
+on, so a mute can always be undone; leaving the game and coming back keeps it, as `ProfileSession.sounds` lives as long
+as the game is open. A tap does what the desktop's does (`ProfileSession.toggleAllSoundsMuted()`): both mutes off when
+both are on, otherwise both on, in one `setSettings`. Muted, Mudlet goes on playing silently, so music is heard again
+from where it has got to. TalkBack reads it as "Mute all media", a checkbox checked while both are on, and says the new
+state once as it turns; its coming takes no focus and says nothing, so the game's text is read on undisturbed.
+`SoundButtonTest` tries each of these against the fake engine.
 
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape

@@ -154,3 +154,11 @@ A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f
   border property in the sheets, under their `background-image` where they set one. Qt may also draw that native frame
   instead of a background a sheet sets without a border, as some desktop styles do, where the app draws the sheet's
   background. What the button looks like then depends on the desktop's style, and the sheet asked for the background.
+
+## The Sound button
+
+The game screen's Sound button, desktop Mudlet's toolbar "Mute all media", is there only once the game has played a
+sound, music or video since it loaded, or while either mute is on (`docs/architecture.md`, "The Sound button"). The
+desktop's toolbar always has it. The row below a phone's input line has room for a few controls only, which a button
+for a game that never plays a sound would take from the pinned commands. The two mutes are on each game's Sound
+settings page at all times, and are Mudlet's own, shared by every game, as on the desktop.

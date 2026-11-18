@@ -596,7 +596,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | IF4 Package manager | release blocker | in flight | #145 |
 | IF5 Connection security (TLS, secure port, proxy) | release blocker | in flight | |
 | IF6 Error console and logging | release blocker | in flight | |
-| IF7 Mute game sounds | expected | in flight | #143 |
+| IF7 Mute game sounds | expected | done | #143, #152 |
 | IF8 Script editor design pick | - | waiting for the user | |
 | IF9 Upstream PRs to Mudlet/Mudlet | - | waiting for the user | Mudlet/Mudlet#12962, Mudlet/Mudlet#12963, Mudlet/Mudlet#12964, Mudlet/Mudlet#12965, Mudlet/Mudlet#12967 |
 | 1 Stable release on Play | release blocker | in flight | |

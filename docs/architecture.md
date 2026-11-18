@@ -1785,6 +1785,13 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - With the system's dark theme on and off, every screen follows it, the window behind the first frame included.
     - At the system's largest font size, the start and game screens' text grows and nothing is cut off.
 15. The game screen, connected to a game (Connect on one of the start screen's games).
+    - The tour (`ui/game/GameTour.kt`), on a fresh install (or after About's "Take a UI tour"): the first game screen
+      dims under a card, "Welcome to Mudlet!", "1 of 6", with Skip tour, Back and Next. Next goes to the console, the
+      input line, the scripts button and the settings button, each lit through the dimming with a ring around it, the
+      card at the other end of the screen; the last step has Finish and no Skip. Nothing under the card takes a tap, and
+      Back closes it. With TalkBack, each step is read once as it comes and swiping reaches the card alone. Close the
+      app partway through and reopen a game: the tour does not come back. While the explanation of the notification
+      permission or of an engine Android stopped is up, the tour waits until it is answered or hidden.
     - The keyboard: tapping the input line opens it, and the console shrinks above it with its newest line still in
       view. Send on the keyboard sends the line and leaves the keyboard open, ready for the next. Note the keyboard's
       action key: it should read Send, and suggestions, corrections or a capital first letter should not change what is
@@ -1856,6 +1863,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       between them.
     - Each Help link opens the browser at the page desktop Mudlet's Help menu opens: the manual, the Lua functions,
       the video tutorials, Discord, the live help chat and the forum.
+    - Help's "Take a UI tour" opens the game screen with its tour.
     - Each source code button opens the browser at that source: this app's and Mudlet's at the commit shown, Qt's
       download page, and docs/licences.md. A row of the list reads its name, version and licence, and "double tap to
       read its licence"; its screen reads the full licence texts paragraph by paragraph, and Back returns to the list

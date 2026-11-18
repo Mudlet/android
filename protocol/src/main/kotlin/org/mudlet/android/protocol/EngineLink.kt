@@ -76,6 +76,9 @@ class EngineLink(
     @Synchronized
     fun stop() {
         running = false
+        // Its thread need not clear it before a start() connects again, as closing an android.net.LocalSocket wakes no
+        // read: a send meanwhile would fail on the closed socket and close the next connection
+        writer = null
         transport?.close()
         thread?.interrupt()
         thread = null
@@ -90,7 +93,8 @@ class EngineLink(
             w.write(message)
             n
         } catch (e: IOException) {
-            transport?.close()
+            // Only its own: a start() since may have taken the next connection
+            synchronized(this) { if (writer === w) transport?.close() }
             0
         }
     }

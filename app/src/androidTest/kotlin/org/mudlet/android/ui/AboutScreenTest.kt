@@ -109,19 +109,20 @@ class AboutScreenTest {
     private fun isHeading() = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
 
     /**
-     * Scrolls the screen's list to [node], waiting while the list is still read from the assets. Only "not found"
-     * (an AssertionError) is retried: a failed accessibility check, which the scroll runs first, fails the test.
+     * Scrolls the screen's list to [node], waiting while the list is still read from the assets. Only "not found" or
+     * "not displayed" (an AssertionError) is retried: a failed accessibility check, which the scroll runs first, fails
+     * the test. The licence texts arrive after their headings show, and push a heading already scrolled to out of view.
      */
     private fun scrollTo(node: SemanticsMatcher) {
         compose.waitUntil(TIMEOUT_MS / 4) {
             try {
                 compose.onNode(hasScrollAction()).performScrollToNode(node)
+                compose.onNode(node).assertIsDisplayed()
                 true
             } catch (e: AssertionError) {
                 false
             }
         }
-        compose.onNode(node).assertIsDisplayed()
     }
 
     /**

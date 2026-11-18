@@ -1110,6 +1110,9 @@ And the colour `setBorderColor()` gives the borders around the main console (`ma
 `0039-headless-border-color.patch`).
 And the style sheet `setCmdLineStyleSheet()` gives a command line (`ScriptWindow::styleSheet`,
 `0040-headless-command-line-style-sheet.patch`).
+And a profile's SOCKS5 proxy as the desktop's Connection preferences hold it, with its password given for the run
+as the game's is (`proxy()`, `setProxy()`, `setProxyPassword()`, `0042-headless-proxy.patch`; see `getProxy` in
+[`protocol.md`](protocol.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

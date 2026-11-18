@@ -295,7 +295,7 @@ MudletProfile* MudletEngine::freeProfile(const QString& name)
     return new MudletProfile(*this, name);
 }
 
-QString MudletEngine::openProfile(const QString& name, const QString& password, bool connect, bool alongside)
+QString MudletEngine::openProfile(const QString& name, const ProfilePasswords& passwords, bool connect, bool alongside)
 {
     const QString folder = mProfiles.find(name);
     if (folder.isEmpty()) {
@@ -308,10 +308,10 @@ QString MudletEngine::openProfile(const QString& name, const QString& password, 
     if (alongside && open && open->stopping()) {
         return QStringLiteral("\"%1\" is closing: open it again once it has closed").arg(folder);
     }
-    // Only a password for a profile that runs, as the UI hands one over: the order of the list and a restore under
+    // Only passwords for a profile that runs, as the UI hands them over: the order of the list and a restore under
     // way are for the player's own opening of a profile to change
     if (alongside && !connect && open && open->running()) {
-        open->openAgain(password, false);
+        open->openAgain(passwords, false);
         return {};
     }
     mProfiles.markOpened(folder);
@@ -330,12 +330,12 @@ QString MudletEngine::openProfile(const QString& name, const QString& password, 
                 }
             }
         }
-        open->openAgain(password, connect);
+        open->openAgain(passwords, connect);
         return {};
     }
     MudletProfile::Open request;
     request.profile = folder;
-    request.password = password;
+    request.passwords = passwords;
     request.connect = connect;
     if (alongside) {
         MudletProfile* profile = freeProfile(folder);

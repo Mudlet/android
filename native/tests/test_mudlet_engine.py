@@ -26,6 +26,7 @@ import zipfile
 import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fake_socks5  # noqa: E402
 import fake_telnet  # noqa: E402
 import profile_checks  # noqa: E402
 from protocol_client import PROTOCOL_VERSION, Client, Closed  # noqa: E402
@@ -588,9 +589,11 @@ def profile_requests(port):
     several_profiles(c, port)
     running_profile_login(port)
     running_profile_details(port)
+    proxy_saved = running_profile_proxy(port)
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     check(password not in open(LOG, errors="replace").read(), "nor did it log the password on its way out")
+    proxy_saved()
 
 
 def several_profiles(c, port):
@@ -973,6 +976,148 @@ def running_profile_details(port):
     profile_checks.password_kept_out(check, password, seen + listed, LOG)
     beta.close()
     ctl.close()
+
+
+def running_profile_proxy(port):
+    """The open profile "Beta" reaches its game through a SOCKS5 proxy (fake_socks5.py, on this machine only), as the
+    player sets it in the editor: setProxy for the next connection, its password with openProfile for this run, also
+    while the profile starts. A proxy that turns the password or the game away fails the connection with Mudlet's
+    message, and what setProxy refuses changes nothing. Returns the check of the profile's file, for after its save."""
+    user, proxy_password = "proxy-user", "pw-proxy-Wb5-never-logged"
+    masked_secrets["the proxy password"] = proxy_password
+    ctl = Client(SOCK, profile_sockets=True)
+    seen = []
+    listed = []
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=listed)
+
+    def ask(msg):
+        return ctl.ask(msg, timeout=30, collect=listed, answers=("profiles", "openProfiles", "error"))
+
+    def beta_socket(since):
+        """Beta's socket once it has loaded, as the control socket said since listed[since]."""
+        def loaded(m):
+            return m["t"] == "openProfiles" and ("Beta", "loaded") in [(p["name"], p["state"]) for p in m["profiles"]]
+        told = [m for m in listed[since:] if loaded(m)]
+        m = told[-1] if told else ctl.wait_for(loaded, timeout=30, collect=listed)
+        return next(p["socket"] for p in m["profiles"] if p["name"] == "Beta")
+
+    def proxy_request(msg):
+        return beta.ask(msg, timeout=30, collect=seen, answers=("proxy", "error"))
+
+    def set_proxy(use, proxy_port, proxy_user=user, host="127.0.0.1"):
+        return proxy_request({"t": "setProxy", "use": use, "host": host, "port": proxy_port, "user": proxy_user})
+
+    def give_proxy_password(given):
+        """As the editor does for the open profile: the stored game password, none here, with the proxy's."""
+        return ask({"t": "openProfile", "name": "Beta", "connect": False, "alongside": True,
+                    **({} if given is None else {"proxyPassword": given})})
+
+    def ended(since):
+        """How the connection begun by seen[since] ended: "connected", or Mudlet's line about the proxy once it failed."""
+        def end(m):
+            return (m["t"] == "status" and m["key"] == "connection" and m["value"] == "connected") or \
+                (m["t"] in ("line", "tail") and "via proxy" in m["text"] and "Unable to connect" in m["text"])
+        m = next((m for m in seen[since:] if end(m)), None) or beta.wait_for(end, timeout=30, collect=seen)
+        return "connected" if m["t"] == "status" else m["text"]
+
+    def connect():
+        mark = len(seen)
+        beta.send({"t": "connect", "host": "127.0.0.1", "port": port})
+        return ended(mark)
+
+    def disconnect():
+        beta.send({"t": "disconnect"})
+        wait_status(beta, "connection", lambda v: v == "disconnected", seen)
+
+    beta = Client(beta_socket(0))
+    beta.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    disconnect()
+    m = proxy_request({"t": "getProxy"})
+    check(m["t"] == "proxy" and (m["use"], m["host"], m["port"], m["user"]) == (False, "", 0, ""),
+          f"getProxy answers with the profile's proxy, none at first: {m}")
+
+    proxy = fake_socks5.Proxy(user=user, password=proxy_password)
+    for bad, why in [({"use": "yes"}, "a use that is not a boolean"),
+                     ({"port": 70000}, "a port above 65535"),
+                     ({"port": -1}, "a negative port"),
+                     ({"port": 1.5}, "a port that is not whole"),
+                     ({"host": 5}, "a host that is not a string"),
+                     ({"host": "proxy host"}, "a host that is no host's name"),
+                     ({"host": " "}, "a proxy to use with no host"),
+                     ({"port": 0}, "a proxy to use with no port")]:
+        request = {"t": "setProxy", "use": True, "host": "127.0.0.1", "port": proxy.port, "user": user, **bad}
+        m = proxy_request(request)
+        check(m["t"] == "error" and m["message"].startswith("setProxy: "), f"setProxy refuses {why}: {m}")
+    m = proxy_request({"t": "getProxy"})
+    check((m["use"], m["host"], m["port"]) == (False, "", 0), f"and changes nothing for any of them: {m}")
+
+    m = set_proxy(True, proxy.port, host=" 127.0.0.1 ")
+    check(m["t"] == "proxy" and (m["use"], m["host"], m["port"], m["user"]) == (True, "127.0.0.1", proxy.port, user),
+          f"setProxy answers with the proxy it set, its address trimmed: {m}")
+    give_proxy_password(proxy_password)
+    result = connect()
+    asked = proxy.requests[-1] if proxy.requests else {}
+    check(result == "connected" and asked.get("auth") == "password" and asked.get("target") == ("127.0.0.1", port),
+          f"the next connect goes through the proxy, with its user name and the password given: {result}; {asked}")
+    disconnect()
+
+    give_proxy_password("pw-proxy-wrong")
+    result = connect()
+    check("via proxy" in result and proxy.requests[-1].get("auth") == "wrong password",
+          f"a wrong proxy password fails the connection with Mudlet's message: {result}; {proxy.requests[-1]}")
+
+    give_proxy_password(None)
+    result = connect()
+    check("via proxy" in result and proxy.requests[-1].get("auth") == "wrong password",
+          f"and so does a password withdrawn, with none stored: {result}; {proxy.requests[-1]}")
+
+    refusing = fake_socks5.Proxy(refuse_connect=True)
+    set_proxy(True, refusing.port, proxy_user="")
+    result = connect()
+    check("via proxy" in result and refusing.requests and refusing.requests[-1].get("reply") == 5,
+          f"a proxy that refuses the way to the game fails the connection with Mudlet's message: {result}; {refusing.requests}")
+
+    asked_before = len(refusing.requests)
+    m = set_proxy(False, refusing.port, proxy_user="")
+    result = connect()
+    check(m["t"] == "proxy" and m["use"] is False and result == "connected" and len(refusing.requests) == asked_before,
+          f"a proxy kept but not used is not asked: {result}; {len(refusing.requests) - asked_before} asked")
+    disconnect()
+
+    # The password given as the profile starts, before Mudlet reads the profile's file and its stored passwords
+    set_proxy(True, proxy.port)
+    beta.close()
+    ask({"t": "closeProfile", "name": "Beta"})
+    ctl.wait_for(lambda m: m["t"] == "openProfiles" and not m["profiles"], timeout=30, collect=listed)
+    since, mark, asked_before = len(listed), len(seen), len(proxy.requests)
+    ask({"t": "openProfile", "name": "Beta", "proxyPassword": proxy_password, "alongside": True})
+    beta = Client(beta_socket(since))
+    result = ended(mark)
+    asked = proxy.requests[asked_before:]
+    check(result == "connected" and asked and all(r.get("auth") == "password" for r in asked),
+          f"a proxy password given with the profile's start is the one its first connection uses: {result}; {asked}")
+    m = proxy_request({"t": "getProxy"})
+    check((m["use"], m["host"], m["port"], m["user"]) == (True, "127.0.0.1", proxy.port, user),
+          f"and the proxy was kept with the profile when it closed: {m}")
+    disconnect()
+    m = set_proxy(False, proxy.port)
+
+    profile_checks.password_kept_out(check, proxy_password, seen + listed, LOG)
+    beta.close()
+    ctl.close()
+    proxy.close()
+    refusing.close()
+
+    def saved():
+        path, _ = newest_save("Beta")
+        text = open(path, errors="replace").read() if path else ""
+        stored = {key: (re.search(f' {key}="([^"]*)"', text) or [None, None])[1]
+                  for key in ("mUseProxy", "mProxyAddress", "mProxyPort", "mProxyUsername", "mProxyPassword")}
+        expected = {"mUseProxy": "no", "mProxyAddress": "127.0.0.1", "mProxyPort": str(proxy.port), "mProxyUsername": user,
+                    "mProxyPassword": ""}
+        check(stored == expected, f"the profile's file keeps its proxy as desktop Mudlet does, without the password given: {stored}")
+        check(proxy_password not in text, "and the proxy password is nowhere in it")
+    return saved
 
 
 def bridge_refusals():

@@ -24,8 +24,8 @@ public:
     virtual QString saveProfile(const Profile& profile) = 0;
     virtual QString deleteProfile(const QString& name) = 0;
     // Starts that profile. With alongside, beside those open, leaving it as it is if already open; without, first
-    // closing and saving the others. The password is for this run only.
-    virtual QString openProfile(const QString& name, const QString& password, bool connect, bool alongside) = 0;
+    // closing and saving the others. The passwords are for this run only.
+    virtual QString openProfile(const QString& name, const ProfilePasswords& passwords, bool connect, bool alongside) = 0;
     // Saves and closes that open profile
     virtual QString closeProfile(const QString& name) = 0;
     // What takes a version 13 UI's profile requests while no profile is open: a connect or Lua there may open one

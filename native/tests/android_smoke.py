@@ -17,7 +17,7 @@ It installs and launches the app, then drives the UI through the debug build's S
   6. told that memory is short (am send-trim-memory), the engine saves the profile;
   7. a Geyser mini console a script makes reaches the UI, shown, with the line it cecho()s;
   8. a sound a script plays (playSoundFile) plays from :engine through Android's media stream (dumpsys audio), and goes
-     on with the screen off; ttsSpeak()'s outcome is logged (not yet a check: no device has said yet what it does);
+     on with the screen off; the first ttsSpeak() is spoken (ttsSpeechStarted), when the device has a TTS engine;
   9. two more profiles open beside the first, on the same game, and the engine's PSS (dumpsys meminfo) with one, two
      and three open goes to <out>/memory.json, to size ControlBridge::maxOpenProfiles by;
   10. after the :engine process is killed, the UI starts a new engine, attaches to it and takes the kill for Android
@@ -436,17 +436,24 @@ def run(dev, apk):
              lambda s: s["link"].startswith("attached to pid") and s["enginePid"] == engine_pid, 60)
     dev.command("lua", code="stopSounds()")
 
-    step("ttsSpeak(): what the engine's text to speech does, for the record")
-    dev.command("lua", code='for _, e in ipairs({"ttsSpeechStarted", "ttsSpeechReady", "ttsSpeechError"}) do '
-                            'registerAnonymousEventHandler(e, function(name) echo("[smoke tts] " .. name .. "\\n") end) '
-                            'end ttsSpeak("Hello from Mudlet")')
-    time.sleep(8)
-    state = dev.command("state")
-    events = [line["text"] for line in state.get("lines", []) if "[smoke tts]" in line.get("text", "")]
+    step("ttsSpeak(): the first thing a script says is spoken, while the engine is still starting")
     engines = [line.strip() for line in shell("cmd package query-services --brief -a android.intent.action.TTS_SERVICE",
                                               check=False).splitlines() if "/" in line]
-    log(f"  ttsSpeak(): luaResult {state['status'].get('luaResult')!r}, events {events or 'none'}, "
-        f"TTS engines {engines or 'none'}")
+    if not engines:
+        log("  no text to speech engine on this device: nothing to check")
+    else:
+        # The first ttsSpeak() builds the engine, which binds to Android's TTS service in the background
+        dev.command("lua", code='for _, e in ipairs({"ttsSpeechStarted", "ttsSpeechReady", "ttsSpeechError"}) do '
+                                'registerAnonymousEventHandler(e, function(name) echo("[smoke tts] " .. name .. "\\n") '
+                                'end) end ttsSpeak("Hello from Mudlet")')
+        try:
+            dev.wait("the first ttsSpeak() to raise ttsSpeechStarted",
+                     lambda s: any("[smoke tts] ttsSpeechStarted" in line.get("text", "") for line in s.get("lines", [])),
+                     30)
+        except SmokeFailure as e:
+            said = adb("logcat", "-d", "-s", "QtTextToSpeech:*", "TextToSpeech:*", check=False).splitlines()[-10:]
+            raise SmokeFailure(f"{e}; text to speech in logcat: {said}")
+        ok(f"the first ttsSpeak() is spoken, with ttsSpeechStarted, by {engines[0]}")
 
     step("memory per profile: the engine's PSS with one, two and three profiles open")
     pss = {1: engine_pss(engine_pid)}

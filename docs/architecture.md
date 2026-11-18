@@ -1801,6 +1801,8 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       grid). Narrower, the borders become bands above and below the console, and the side windows and docks become
       tabs below it; a tab opens its window over the console, its back button or the system's Back closes it.
     - A window's text is readable, its newest line in view; scrolled back, it stays put.
+    - A console a script gave a scroll bar (`lua enableScrollBar("<name>")`) with more rows than fit has a thumb at
+      its right edge, which moves as the rows scroll and scrolls them when dragged; `disableScrollBar` takes it away.
     - With TalkBack on: swiping goes from the console to the input line, then the game pill and the quick bar, then
       the windows, each read as "<name> window", then the tabs; a window's command line, its Send button and a user
       window's close button read their names.

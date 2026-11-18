@@ -177,8 +177,9 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
 ### Mini consoles and user windows
 
 They reuse the main console's renderer: the rows of `windowText` as `UiLine`s through `ansiText()`, in a `LazyColumn`
-the size of the window, with its `bg` and font scaled by `s`. Each window keeps the last 300 rows it was sent and asks
-`getWindowText` for older ones as the player scrolls back. The `bg` keeps its `bgAlpha`: Mudlet's
+the size of the window, with its `bg` and font scaled by `s`. Each window holds the rows of its last `windowText`, the
+console's newest 300, and scrolls back through those: the app does not ask `getWindowText` for older ones yet.
+The `bg` keeps its `bgAlpha`: Mudlet's
 `TConsole::changeColors()` styles a mini console's or user window's colour as `rgba()` over a transparent palette, so
 one a script gave an alpha below 255 (`setBackgroundColor(name, r, g, b, a)`, or a Geyser colour with one) shows what
 is under it. For a mini console in the game area that is the windows below it in its parent, by `stack`, and the main
@@ -195,6 +196,20 @@ pane, and the rows of the frames opened in it are above their pages in the pane.
 title, selected for the page in front; a tap on another sends `selectFrameTab`, and the page the engine then brings
 forward is drawn there, the pane staying open on it. The switcher and the pane's header call such a page by its tab's
 title.
+
+A console a script gave a scroll bar (`scrollBar`: `enableScrollBar()`, or a Geyser `scrollBar = true`; a mini console
+and a user window start without one, and Geyser's take it off unless asked) shows a thumb at its right edge, 4 dp wide
+and never shorter than 48 dp: as long as the share of the rows in view, and where they are among the rows the app
+holds (`ScrollThumb` in `:protocol`). It is white or black at the desktop's alpha of 200, whichever stands out more
+from the console's colour, as `TConsole::updateScrollBarStyle()` picks. A finger drags it, in a strip 24 dp wide, to
+scroll the rows, which stops a fling of them; let go with the rows at their end, the console follows new rows again,
+those that came while it was held there too. There is no thumb while every row is in view, nor in a console too short
+for a thumb of 48 dp to move in (one under about 48 dp tall, which a finger scrolls by its rows), and the bar has no
+track, arrows or page steps. It is drawn over the rows' last columns and takes no width from them
+(`docs/divergences.md`); its strip takes the touches there, so a link under it is tapped once the rows, or the thumb,
+have moved. A thumb that goes while it is dragged, as the script takes the bar away or the rows come to fit, ends the
+drag. TalkBack is told nothing of it: the list's own scroll actions and the rows read as without it, so the thumb is no
+stop of its own.
 
 ### Labels
 

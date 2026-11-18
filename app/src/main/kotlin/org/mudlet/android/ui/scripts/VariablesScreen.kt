@@ -88,7 +88,7 @@ internal fun VariablesScreen(variables: VariablesClient, game: String, onBack: (
     MudletScaffold(
         stringResource(R.string.variables_title, game),
         onBack = onBack,
-        actions = { TextButton(variables::refresh) { Text(stringResource(R.string.variables_refresh)) } },
+        actions = { TextButton(variables::refresh, Modifier.widthIn(max = 56.dp)) { Text(stringResource(R.string.variables_refresh), maxLines = 1, overflow = TextOverflow.Ellipsis) } },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).testTag(VARIABLES_TAG),
@@ -222,7 +222,7 @@ private fun EntryRow(row: VariableRow.Entry, shownWhole: Boolean, onToggle: () -
 
         else -> stringResource(R.string.variables_reading, named, type, preview)
     }
-    val state = stringResource(if (expanded) R.string.variables_expanded else R.string.variables_collapsed)
+    val state = stringResource(if (expanded) R.string.variables_collapsed else R.string.variables_expanded)
     val action = stringResource(
         when {
             variable.opens && expanded -> R.string.variables_close

@@ -69,11 +69,11 @@ internal class VariablesClient(private val newId: () -> Long, private val send: 
     }
 
     /** Asks for the members of [path] after the [from] already had. */
-    fun more(path: List<VariableKey>, from: Int) = ask(path, from)
+    fun more(path: List<VariableKey>, from: Int) = ask(path, from + 1)
 
     private fun ask(path: List<VariableKey>, from: Int = 0) {
         val id = newId()
-        if (send(Requests.variables(path, showHidden, from, id))) pending[id] = path
+        if (send(Requests.variables(path, false, from, id))) pending[id] = path
     }
 
     /** The engine's answer to a request from here; one to none of them is left alone. */

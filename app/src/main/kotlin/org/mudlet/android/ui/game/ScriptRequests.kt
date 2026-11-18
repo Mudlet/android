@@ -211,7 +211,7 @@ fun ScriptWebPageOpener() {
     val activity = LocalActivity.current ?: return
     DisposableEffect(activity) {
         val open: (Uri) -> Boolean = open@{ uri ->
-            if ((activity as? LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return@open false
+            if ((activity as? LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.CREATED) != true) return@open false
             // Not the exception, whose message names the link
             try {
                 activity.startActivity(ScriptWebPages.intent(uri))

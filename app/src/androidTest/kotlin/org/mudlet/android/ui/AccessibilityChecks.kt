@@ -21,12 +21,12 @@ import kotlin.math.abs
 
 /**
  * Turns on the accessibility checks before every action of a test, where they can run: they need API 34, so the API 36
- * emulator runs them and API 28 does not. Of a page that scrolls, they check what shows: see [ScrolledOutOfSight] and
- * [UnderWhatFloats].
+ * emulator runs them and API 28 does not. Of a page that scrolls, they check what shows: see [ScrolledOutOfSight],
+ * [CutByTheBottom] and [UnderWhatFloats].
  */
 internal fun <R : TestRule, A : ComponentActivity> AndroidComposeTestRule<R, A>.enableAccessibilityChecksOfWhatShows() {
     if (Build.VERSION.SDK_INT >= 34) {
-        enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, UnderWhatFloats)))
+        enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, CutByTheBottom, UnderWhatFloats)))
     }
 }
 
@@ -44,6 +44,25 @@ private object ScrolledOutOfSight : TypeSafeMatcher<AccessibilityViewCheckResult
 
     override fun describeTo(description: Description) {
         description.appendText("about what its scrolling area has scrolled out of sight")
+    }
+}
+
+/**
+ * A missing label or a small touch target on something the bottom of its scrolling area cuts. Compose hands
+ * accessibility only the strip of a node that shows, without the children that do not: the CI emulator's 640 px screen
+ * cuts a row of the game sheet so, under its card's switches, a button 24 dp high. TalkBack scrolls a node into view
+ * before it reads it.
+ */
+private object CutByTheBottom : TypeSafeMatcher<AccessibilityViewCheckResult>() {
+    override fun matchesSafely(result: AccessibilityViewCheckResult): Boolean {
+        if (result.sourceCheckClass != SpeakableTextPresentCheck::class.java && result.sourceCheckClass != TouchTargetSizeCheck::class.java) return false
+        val element = result.accessibilityHierarchyCheckResult.element ?: return false
+        val area = element.ancestors().firstOrNull { it.isScrollable == true }?.boundsInScreen ?: return false
+        return abs(element.boundsInScreen.bottom - area.bottom) <= 1
+    }
+
+    override fun describeTo(description: Description) {
+        description.appendText("a missing label or a small touch target on what the bottom of its scrolling area cuts")
     }
 }
 

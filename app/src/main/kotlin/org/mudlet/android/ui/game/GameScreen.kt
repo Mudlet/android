@@ -263,6 +263,7 @@ private fun ProfileGameScreen(
                         next = next,
                         onSwitch = EngineClient::setFront,
                         swipe = swipe,
+                        scriptsStopped = c.scriptsStopped,
                         stateShown = !connectShown,
                     )
                 }) {

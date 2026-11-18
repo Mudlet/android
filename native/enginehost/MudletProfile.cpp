@@ -1539,6 +1539,7 @@ void MudletProfile::onProfileClosed()
     mFrontend->sounds(mSounds);
     setSecureOffer(false);
     mFrontend->certificateRefused(std::nullopt);
+    mFrontend->scriptsStopped(false);
 }
 
 void MudletProfile::pushWindows(bool withText)
@@ -2242,6 +2243,18 @@ void MudletProfile::setSecureOffer(bool offered)
 {
     mSecureOffer = offered;
     mFrontend->secureOffer(offered);
+}
+
+QString MudletProfile::setScriptsStopped(bool stopped)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (!mSession->setScriptsStopped(stopped)) {
+        return mSession->errorString();
+    }
+    mFrontend->scriptsStopped(mSession->scriptsStopped());
+    return {};
 }
 
 QString MudletProfile::answerSecureOffer(bool accept)

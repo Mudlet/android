@@ -570,4 +570,6 @@ public:
     // Why the last secure connection ended, when it was the game's certificate; none once the next connection is tried
     // and with no profile open
     virtual void certificateRefused(const std::optional<RefusedCertificate>& certificate) = 0;
+    // Whether the profile's scripts are stopped, by IEngine::setScriptsStopped(), on each change, and false once it closes
+    virtual void scriptsStopped(bool stopped) = 0;
 };

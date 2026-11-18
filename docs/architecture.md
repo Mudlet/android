@@ -240,6 +240,8 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   field sent as it is left or its Done key pressed, not on each key, as the engine's answer to one change could land
   between two keys; Mudlet splits a sent line at it. "Show passwords as you type them" (`disablePasswordMasking`) is
   Mudlet's: with it on, the engine sends no `hiddenInput` for a game's WILL ECHO.
+  "React to all keybindings on the same key" (`runAllKeyMatches`, off as on the desktop) is Mudlet's too: with it on,
+  a hardware key the profile binds more than once runs every binding, not only the first.
 - A further game category, Colours (desktop Mudlet's Color view), holds the profile's palette, which is Mudlet's: the
   engine paints each run in the exact colour it resolved as it decoded the text, so a colour changed (`ColourSetting`,
   sent as `#rrggbb` by the keys of Mudlet's `color_table`, such as `ansiRed`) reaches text the game sends after it, and

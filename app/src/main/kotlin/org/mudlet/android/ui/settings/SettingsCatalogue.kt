@@ -63,6 +63,7 @@ enum class SettingsCategory(
 ) {
     DISPLAY(true, R.string.settings_display, R.string.settings_display_summary, R.drawable.ic_text_fields),
     COLOURS(true, R.string.settings_colours, R.string.settings_colours_summary, R.drawable.ic_invert_colors),
+    MAP(true, R.string.settings_map, R.string.settings_map_summary, R.drawable.ic_map),
     ACCESSIBILITY(true, R.string.settings_accessibility, R.string.settings_accessibility_summary, R.drawable.ic_accessibility),
     INPUT(true, R.string.settings_input, R.string.settings_input_summary, R.drawable.ic_keyboard),
     CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
@@ -132,7 +133,12 @@ sealed class SettingEntry(
     class Typed(category: SettingsCategory, override val setting: Settings.TextSetting, label: Int, hint: Int, keywords: Int) : Value(category, label, hint, keywords)
 
     /** A colour: its swatch and "#rrggbb" in a row, which opens a dialog to change it. */
-    class Colour(category: SettingsCategory, override val setting: Settings.ColourSetting, label: Int) : Value(category, label, null, R.string.settings_colours_keywords)
+    class Colour(
+        category: SettingsCategory,
+        override val setting: Settings.ColourSetting,
+        label: Int,
+        keywords: Int = R.string.settings_colours_keywords,
+    ) : Value(category, label, null, keywords)
 
     /**
      * One of many [choices], such as Mudlet's names for something: a row with the current one, which opens the list to
@@ -190,6 +196,17 @@ private val ANSI_COLOUR_LABELS = listOf(
     R.string.settings_colour_light_white,
 )
 
+// The names of the map's own colours, in the order of [Settings.mapColours]
+private val MAP_COLOUR_LABELS = listOf(
+    R.string.settings_map_colour_background,
+    R.string.settings_map_colour_link,
+    R.string.settings_map_colour_room_border,
+    R.string.settings_map_colour_collision_border,
+    R.string.settings_map_colour_lower_level,
+    R.string.settings_map_colour_upper_level,
+    R.string.settings_map_colour_grid,
+)
+
 /** Every setting the settings screen has, in the order its pages show them. A game category's are each game's own. */
 val settingsCatalogue: List<SettingEntry> by lazy {
     listOfNotNull(
@@ -240,6 +257,93 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         SettingEntry.Colour(SettingsCategory.COLOURS, Settings.commandForegroundColour, R.string.settings_colour_command_foreground),
         SettingEntry.Colour(SettingsCategory.COLOURS, Settings.commandBackgroundColour, R.string.settings_colour_command_background),
         *Settings.ansiColours.zip(ANSI_COLOUR_LABELS) { setting, label -> SettingEntry.Colour(SettingsCategory.COLOURS, setting, label) }.toTypedArray(),
+        SettingEntry.Number(
+            SettingsCategory.MAP,
+            Settings.mapRoomSize,
+            R.string.settings_map_room_size,
+            R.string.settings_map_room_size_hint,
+            R.string.settings_map_size_keywords,
+            valueText = R.plurals.settings_map_size_value,
+            less = R.string.settings_map_room_size_less,
+            more = R.string.settings_map_room_size_more,
+        ),
+        SettingEntry.Number(
+            SettingsCategory.MAP,
+            Settings.mapExitSize,
+            R.string.settings_map_exit_size,
+            R.string.settings_map_exit_size_hint,
+            R.string.settings_map_size_keywords,
+            valueText = R.plurals.settings_map_size_value,
+            less = R.string.settings_map_exit_size_less,
+            more = R.string.settings_map_exit_size_more,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.MAP,
+            Settings.mapRoomBorders,
+            R.string.settings_map_room_borders,
+            R.string.settings_map_room_borders_hint,
+            R.string.settings_map_size_keywords,
+        ),
+        SettingEntry.Number(
+            SettingsCategory.MAP,
+            Settings.mapRoomBorderSize,
+            R.string.settings_map_border_size,
+            R.string.settings_map_border_size_hint,
+            R.string.settings_map_size_keywords,
+            valueText = R.plurals.settings_map_size_value,
+            less = R.string.settings_map_border_size_less,
+            more = R.string.settings_map_border_size_more,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.MAP,
+            Settings.mapLargeAreaExitArrows,
+            R.string.settings_map_large_area_exit_arrows,
+            R.string.settings_map_large_area_exit_arrows_hint,
+            R.string.settings_map_large_area_exit_arrows_keywords,
+        ),
+        SettingEntry.Choice(SettingsCategory.MAP, Settings.playerRoomStyle, R.string.settings_map_player_room, R.string.settings_map_player_room_keywords) {
+            when (it) {
+                Settings.PlayerRoomStyle.ORIGINAL -> R.string.settings_map_player_room_original
+                Settings.PlayerRoomStyle.RED_RING -> R.string.settings_map_player_room_red_ring
+                Settings.PlayerRoomStyle.BLUE_YELLOW_RING -> R.string.settings_map_player_room_blue_yellow_ring
+                Settings.PlayerRoomStyle.CUSTOM_RING -> R.string.settings_map_player_room_custom_ring
+            }
+        },
+        SettingEntry.Number(
+            SettingsCategory.MAP,
+            Settings.playerRoomOuterDiameter,
+            R.string.settings_map_player_room_outer_diameter,
+            R.string.settings_map_player_room_outer_diameter_hint,
+            R.string.settings_map_player_room_keywords,
+            valueText = R.plurals.settings_map_percent_value,
+            less = R.string.settings_map_player_room_outer_diameter_less,
+            more = R.string.settings_map_player_room_outer_diameter_more,
+        ),
+        SettingEntry.Number(
+            SettingsCategory.MAP,
+            Settings.playerRoomInnerDiameter,
+            R.string.settings_map_player_room_inner_diameter,
+            R.string.settings_map_player_room_inner_diameter_hint,
+            R.string.settings_map_player_room_keywords,
+            valueText = R.plurals.settings_map_percent_value,
+            less = R.string.settings_map_player_room_inner_diameter_less,
+            more = R.string.settings_map_player_room_inner_diameter_more,
+        ),
+        SettingEntry.Colour(
+            SettingsCategory.MAP,
+            Settings.playerRoomOuterColour,
+            R.string.settings_map_player_room_outer_colour,
+            R.string.settings_map_player_room_keywords,
+        ),
+        SettingEntry.Colour(
+            SettingsCategory.MAP,
+            Settings.playerRoomInnerColour,
+            R.string.settings_map_player_room_inner_colour,
+            R.string.settings_map_player_room_keywords,
+        ),
+        *Settings.mapColours.zip(MAP_COLOUR_LABELS + ANSI_COLOUR_LABELS) { setting, label ->
+            SettingEntry.Colour(SettingsCategory.MAP, setting, label, R.string.settings_map_colours_keywords)
+        }.toTypedArray(),
         SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.readNewText,

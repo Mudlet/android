@@ -130,9 +130,14 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
                         EntryRows(entry, owner, page.game, if (letsThrough) stringResource(R.string.settings_certificate_lets_through) else null)
                     }
                 }
-                if (page.category == SettingsCategory.COLOURS) {
-                    TextButton({ owner.resetToMudlets(Settings.colours) }, Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) {
-                        Text(stringResource(R.string.settings_colours_reset))
+                val reset = when (page.category) {
+                    SettingsCategory.COLOURS -> Settings.colours to R.string.settings_colours_reset
+                    SettingsCategory.MAP -> Settings.mapColours to R.string.settings_map_colours_reset
+                    else -> null
+                }
+                reset?.let { (colours, label) ->
+                    TextButton({ owner.resetToMudlets(colours) }, Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) {
+                        Text(stringResource(label))
                     }
                 }
             }

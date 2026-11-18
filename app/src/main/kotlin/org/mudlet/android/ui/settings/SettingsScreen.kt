@@ -39,6 +39,9 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
@@ -162,12 +165,18 @@ private fun LazyListScope.hubSection(section: HubSection, selected: SettingsPage
     itemsIndexed(categories, key = { _, category -> "${section.key}/${category.name}" }) { i, category ->
         val page = SettingsPage(category, section.game)
         ListSegment(i, categories.size, itemWidth, selected = selected?.let { it.category == category && it.game == section.game } == true) {
+            val title = stringResource(category.title)
+            val summary = stringResource(category.summary)
+            val reading = stringResource(R.string.settings_category_reading, title, summary)
             ListItem(
-                headlineContent = { Text(stringResource(category.title)) },
-                supportingContent = { Text(stringResource(category.summary)) },
+                // Hidden rather than cleared, so the tests still find them
+                headlineContent = { Text(title, Modifier.semantics { hideFromAccessibility() }) },
+                supportingContent = { Text(summary, Modifier.semantics { hideFromAccessibility() }) },
                 leadingContent = { Icon(painterResource(category.icon), contentDescription = null) },
                 trailingContent = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
-                modifier = Modifier.clickable(onClickLabel = stringResource(R.string.settings_open)) { onOpen(page) },
+                // Read from the row itself: the list's bottom can cut a row above its texts, and Compose then hands
+                // accessibility the row without them, a sliver with no label
+                modifier = Modifier.clickable(onClickLabel = stringResource(R.string.settings_open)) { onOpen(page) }.semantics { contentDescription = reading },
                 // The segment under it is the container, tinted when selected
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             )

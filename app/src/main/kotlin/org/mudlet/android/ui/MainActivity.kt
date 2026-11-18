@@ -25,6 +25,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.engine.EngineNotifications
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.CommandSuggestions
+import org.mudlet.android.ui.game.ScriptFileRequest
 import org.mudlet.android.ui.theme.MudletTheme
 
 class MainActivity : ComponentActivity() {
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MudletTheme {
                 AppNavigation(onKillUi = { finish() }, gamesShown = gamesShown)
+                ScriptFileRequest()
                 if (explainNotifications) {
                     NotificationsExplanation(
                         onContinue = {

@@ -812,6 +812,8 @@ And the log options `getConfig()` and `setConfig()` lacked: timestamps, how a lo
 (`0028-headless-log-settings.patch`).
 And a script's clipboard, read and written by the app rather than the engine's process (`THeadlessSession::setClipboard()`,
 `0029-headless-clipboard.patch`; see "A script and the clipboard" in [`divergences.md`](divergences.md)).
+And the file a script asks for, chosen in the app (`THeadlessSession::setFilePicker()`, `0030-headless-file-picker.patch`;
+see "A script asks for a file" in [`divergences.md`](divergences.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

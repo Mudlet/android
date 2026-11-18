@@ -1041,6 +1041,22 @@
     <string name="console_line_no_share">No app here can take the line: copy it instead</string>
     <!-- The name the clipboard gives text a game's script put on it (setClipboardText()), which some keyboards and clipboard managers show -->
     <string name="script_clipboard_label">Text from a game script</string>
+    <!-- Title of the dialog shown when a game's script asks the player for a file (invokeFileDialog()); the script's own
+         title, if it gave one, is shown above script_file_text -->
+    <string name="script_file_title">The game asks for a file</string>
+    <!-- Text of the dialog a game's script asks for a file with: the file chosen is copied into the game's folder, where
+         the script reads it -->
+    <string name="script_file_text">Choose a file to give the game\'s script a copy of. Cancel gives it none.</string>
+    <!-- Button of the dialog a game's script asks for a file with, which opens the system's file picker -->
+    <string name="script_file_choose">Choose a file</string>
+    <!-- Button of the dialog a game's script asks for a file with, which gives the script no file -->
+    <string name="script_file_cancel">Cancel</string>
+    <!-- Shown briefly when the file chosen for a game's script could not be copied into the game's folder; the script is
+         told no file was chosen -->
+    <string name="script_file_not_copied">The file could not be copied for the game</string>
+    <!-- Shown briefly when a game's script asks for a file on a device that has no system file picker; the script is
+         told no file was chosen -->
+    <string name="script_file_no_picker">This device has no file picker to choose a file with</string>
     <!-- How TalkBack's actions name a link of the main console that has been followed, as desktop Mudlet's screen
          reader announcement does: %1$s is the link's tool tip or text -->
     <string name="console_link_visited">%1$s, visited</string>

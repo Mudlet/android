@@ -8,6 +8,8 @@ name: Engine benchmark
 # setting beside another run's on the same kind of runner, and best against each other: the ratio of the engine's
 # lines a second to desktop's is the figure to compare. Manual only: it builds Mudlet twice and gates nothing.
 on:
+  push:
+    branches: [ccr-14671218-tf96z6-scrollback-bench]
   workflow_dispatch:
     inputs:
       mudlet-ref:

@@ -81,6 +81,8 @@ struct ScriptWindowInfo
         bool operator==(const FrameTabs&) const = default;
     };
     std::optional<FrameTabs> frameTabs;
+    // A command line's own Qt style sheet, as setCmdLineStyleSheet() gave it; empty for none and the other kinds
+    QString styleSheet;
     bool operator==(const ScriptWindowInfo&) const = default;
 };
 

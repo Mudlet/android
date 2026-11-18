@@ -90,6 +90,16 @@ history sheet already repeat a command. The setting is the profile's own (`autoC
 wants the desktop's way turns it off for a game, or for new games, and a profile copied from the desktop keeps what
 it had.
 
+## A script's style sheet for the input line
+
+A script's `setCmdLineStyleSheet()` with no name, or with `"main"`, styles the desktop's main command line. The app
+draws a window's command line with its sheet's background and text colour (`docs/phase-f.md`, "Mini consoles and user
+windows"), but not its input line with the main one's: the input line is the app's own, laid out for a phone with its
+history, completion and send buttons, in the theme's colours the player's light or dark choice sets, and a sheet made
+for the desktop's line, a dark one for a dark profile, can leave its text unreadable there. The engine keeps the sheet,
+so `getCmdLineStyleSheet()` reads it back as on the desktop, and does not send it (`docs/protocol.md`, "Script
+windows").
+
 ## A game's details changed while it is open
 
 What the editor saves reaches a game that is open, and the game stays open. Its next connection logs in with the
@@ -206,7 +216,7 @@ Remove button, and what a removal takes, the package's items and files, does not
 - A text box whose style sheet sets no colours has the theme's surface and text colours; the desktop's has the
   profile's command-line colours, dark grey on black unless the player changed them (`docs/phase-f.md`, "Text
   boxes"). They make it look like the desktop's command line, which has them too. The engine does not send them, and
-  the app's input line and a window's command line have the theme's colours, so in the theme's a text box looks like
+  the app's input line and a command line whose sheet sets no colours have the theme's colours, so a text box looks like
   the fields the player types in, as on the desktop.
 
 ## A see-through user window or switcher page

@@ -23,7 +23,7 @@ these calls' signals.
 |---|---|---|
 | `QList<ScriptWindow> scriptWindows() const` | 687 | Every window the scripts made, parents before what they hold, each parent's from the lowest up, the main window's area's before the docks; no buffers. Empty with no profile open. A getter, callable from any handler |
 | `std::optional<ScriptWindow> scriptWindow(const QString& name, std::optional<ScriptWindow::Kind> kind)` | 689 | One of them; a console's own command line shares its console's name, so the kind tells them apart |
-| `struct ScriptWindow` | 625 | `name`; `kind` (`miniConsole`, `userWindow`, `label`, `commandLine`, `textBox`, `scrollBox`, `mapper`, `mxpFrame`); `parent` and `parentKind` (empty parent: the main window's area, a dock or an `EXTERNAL` MXP frame); `geometry` (`QRect` in the parent's pixels, a dock's in the main window's; none for a console's command line); `visible` (its own flag) and `shown` (it and every window it is in visible); `stackOrder` (from 0 among its parent's windows, docks among themselves); `background` (`QColor`, consoles and labels); `font` (`QFont`, consoles, labels, text boxes); `inDock`; `dock` (`autoDock`, `area` as `Qt::DockWidgetArea`, `floating`, `title`; user windows only); `scrolledBackTo` (`optional<int>`, none while following), `grid` (`QSize` columns by rows of the upper pane), `scrollBar`, `timeStamps` (consoles) |
+| `struct ScriptWindow` | 625 | `name`; `kind` (`miniConsole`, `userWindow`, `label`, `commandLine`, `textBox`, `scrollBox`, `mapper`, `mxpFrame`); `parent` and `parentKind` (empty parent: the main window's area, a dock or an `EXTERNAL` MXP frame); `geometry` (`QRect` in the parent's pixels, a dock's in the main window's; none for a console's command line); `visible` (its own flag) and `shown` (it and every window it is in visible); `stackOrder` (from 0 among its parent's windows, docks among themselves); `background` (`QColor`, consoles and labels); `font` (`QFont`, consoles, labels, text boxes); `inDock`; `dock` (`autoDock`, `area` as `Qt::DockWidgetArea`, `floating`, `title`; user windows only); `scrolledBackTo` (`optional<int>`, none while following), `grid` (`QSize` columns by rows of the upper pane), `scrollBar`, `timeStamps` (consoles); `styleSheet` (a command line's, as `setCmdLineStyleSheet()` gave it; carried) |
 | `signal scriptWindowsChanged(const QString& profile, const QStringList& names)` | 1042 | From the event loop, once a turn, sorted: windows made, deleted (gone from the list), moved, resized, shown, hidden, reparented, restacked, recoloured, refonted, scrolled, or a label whose content changed |
 | `std::optional<LabelContent> labelContent(const QString& name) const` | 734 | None for a name that is not a label's |
 | `struct LabelContent` | 692 | `text` (Qt rich text, links styled by `setLinkStyle()`; empty while an image or movie shows); `image` (file path), `svg`, `svgTint`, `svgRotation`, `svgShearX`, `svgShearY`; `movie` (path), `moviePaused`, `movieFrame` (-1 while playing), `movieSpeed` (percent), `movieSize`; `toolTip`, `toolTipDuration` (s); `cursor`, `customCursor`, `customCursorHotSpot`; `clickThrough`; `accessibleName`, `accessibleButton`; `styleSheet` (the label's own, which Mudlet does not interpret) |
@@ -96,7 +96,7 @@ green.
 
 | Message | Fields | From |
 |---|---|---|
-| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?; `removed`?: `name`, `kind` | `scriptWindows()` at `profileLoaded` and on attach (`full` true: replaces all), then the entries `scriptWindowsChanged` names. A window is keyed by name and kind. `kind` is upstream's enum name. `tabs`, `tabTitles` and `tabCurrent` are an MXP frame's tab header, its `frameTabs` (gap 5, carried) |
+| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?, `styleSheet`?; `removed`?: `name`, `kind` | `scriptWindows()` at `profileLoaded` and on attach (`full` true: replaces all), then the entries `scriptWindowsChanged` names. A window is keyed by name and kind. `kind` is upstream's enum name. `tabs`, `tabTitles` and `tabCurrent` are an MXP frame's tab header, its `frameTabs` (gap 5, carried) |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `styleSheet` | `labelContent()` for each label in a `windows` message whose content differs from what was last sent. The cursor fields are left out: a touch screen has no pointer to shape |
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | `textBoxContent()` (gap 4, carried) for each text box in a `windows` message whose content differs from what was last sent; not the player's own typing, kept as Mudlet keeps it; `typed`, the `setTextBoxText` for it the bridge has had from this UI |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | `windowLines(window, -300, 300)` for each window `windowTextChanged` names, and for every console on attach; older rows answer `getWindowText` |
@@ -194,7 +194,18 @@ console's colour unfilled and fills others with their own, but a run's colour ca
 by `setBgColor(name, r, g, b, a)` is drawn opaque. Scrolling stays local; a script's `scrollTo()` arrives as
 `scrolledBackTo` and moves the list there. Links in them are asked about and followed with the extended `getLink` and
 `followLink` (version 12). A console's own command line is an input line along its bottom, sending with
-`sendWindowCommandLine`. MXP frames draw as mini consoles. A frame's tab header (`tabs`, gap 5), where Mudlet gives
+`sendWindowCommandLine`; a command line takes the background and text colour of the sheet a script's
+`setCmdLineStyleSheet()` gave it (`styleSheet`, read as a text box's, by `TCommandLine` and `QPlainTextEdit`
+rules), and the theme's where it sets neither. The text colour is for what is typed, the line's name, the cursor,
+the outline while focused, the "not sent" text and the send button, after a refused send too, as the theme's error
+and focus colours could not be read over the sheet's fill: the words "not sent" still tell of it. Where the sheet
+sets only one colour, the other is white or black, whichever contrasts more with it as drawn, not the theme's,
+which could be as dark or as light (the desktop takes the profile's command-line colours, which the engine does not
+send). A colour of alpha 0 counts as not set, text too: the desktop draws transparent text as nothing, but the app
+keeps what is typed seen. A see-through sheet is drawn over the theme's surface, where the desktop shows what is
+under the console or window the line is in, as a console's background fills only its text area there. The
+main input line's sheet is not drawn: that line is the app's (`docs/divergences.md`, "A script's style sheet for
+the input line"). MXP frames draw as mini consoles. A frame's tab header (`tabs`, gap 5), where Mudlet gives
 it one, is a row of tabs above the page in front, at least 48 dp tall and as tall as Mudlet's 30 pixels scaled, kept
 inside what may show of the page; stacked, where that page is a page of the switcher, the row is at the top of the
 pane, and the rows of the frames opened in it are above their pages in the pane. Each tab is a `Role.Tab` with its
@@ -456,8 +467,8 @@ F4 and F5 are independent of each other and of F3.
     with its geometry and `windowText` with the coloured row; `Geyser.UserWindow:new{name="side"}` and
     `placeUserWindow` raise `sysUserWindowResizeEvent` (a handler `echo()`s into the main console); `setBorderLeft()`
     changes `mainArea`, and `setBorderColor()` its `borderColor`; `hideWindow()` gives `shown` false; a `windows` `full`
-    on reattach; `enableCommandLine()` and
-    `sendWindowCommandLine`.
+    on reattach; `enableCommandLine()`, `sendWindowCommandLine`, and `setCmdLineStyleSheet()` giving the line its
+    `styleSheet` and the main line's none.
   - F2P: `Geyser.Label` with `setClickCallback`, a `pointer` press and release run it (it `echo()`s); `echo()` on the
     label gives a `label` with that text; `setStyleSheet()` arrives verbatim; `setBackgroundImage()` and `getImage`
     give a PNG of the right size; `setLabelAccessibleName()` and `accessibleButton`.

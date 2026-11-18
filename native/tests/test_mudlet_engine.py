@@ -1615,7 +1615,7 @@ def seen_or_next(c, pred, seen, since, timeout=5.0, what=None):
 def script_windows():
     """What scripts draw: a Geyser MiniConsole and UserWindow as windows, with the console's text as windowText; the
     main window's size from setMainWindowSize, and the borders a script sets and their colour, as mainArea; placeUserWindow raising
-    the resize event a script handles; a console's own command line both ways; hiding, closing and deleting; and all
+    the resize event a script handles; a console's own command line both ways, and its style sheet; hiding, closing and deleting; and all
     of it again for a UI that attaches."""
     game = fake_telnet.start_in_thread()
     proc, c = start_engine("Window Test")
@@ -1711,6 +1711,13 @@ def script_windows():
     line = window_of(seen, "chat", "commandLine")
     check(line is not None and line["parent"] == "chat" and line.get("parentKind") == "miniConsole" and line["shown"],
           f"enableCommandLine() gives the console a commandLine: {line}")
+    check(line is not None and "styleSheet" not in line, f"with no style sheet until a script sets one: {line}")
+    since = len(seen)
+    sheet = "QPlainTextEdit { background-color: rgb(20, 0, 20); color: white; }"
+    c.send({"t": "runLua", "code": f'setCmdLineStyleSheet("chat", [[{sheet}]])\nsetCmdLineStyleSheet("main", [[QPlainTextEdit {{ color: red; }}]])'})
+    got = seen_or_none(c, windows_with("chat", "commandLine", lambda w: w.get("styleSheet") == sheet), seen, since)
+    check(got is not None and not any("red" in w.get("styleSheet", "") for m in seen[since:] if m["t"] == "windows" for w in m["windows"]),
+          "setCmdLineStyleSheet() gives a console's command line its sheet, and the main line's goes to no window")
     since = len(seen)
     c.send({"t": "sendWindowCommandLine", "name": "chat", "text": "look"})
     seen_or_next(c, shown("acted look"), seen, since)

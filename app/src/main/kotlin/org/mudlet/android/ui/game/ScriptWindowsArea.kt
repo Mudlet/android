@@ -31,9 +31,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -53,8 +55,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -88,6 +93,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.LabelStyle
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RUN_RGB
@@ -300,7 +306,7 @@ private fun PlacedWindowView(placed: PlacedWindow, windows: ScriptWindows, metri
         // One a script made with createCommandLine(), where it put it
         WindowKind.COMMAND_LINE -> {
             val description = stringResource(R.string.window_description, title(window))
-            WindowCommandLine(window.name, windows.commandLines[window.name], placedModifier.windowSemantics(description))
+            WindowCommandLine(window.name, windows.commandLines[window.name], window.styleSheet, placedModifier.windowSemantics(description))
         }
 
         WindowKind.MAPPER -> ScriptMap(placed, placedModifier)
@@ -471,7 +477,7 @@ private fun WindowConsole(
                 ConsoleScrollBar(listState, background, { if (rowsWidth != null) sidewaysState.value - sidewaysState.maxValue else 0 }) { following = it }
             }
         }
-        if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], Modifier.fillMaxWidth())
+        if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], commandLine.styleSheet, Modifier.fillMaxWidth())
     }
 }
 
@@ -546,9 +552,12 @@ private fun BoxScope.ConsoleScrollBar(listState: LazyListState, background: Colo
  * [scriptText] replaces it. The engine's emptying of the line after a send is not taken as a script's, as the player
  * may already be typing the next. In a game that keeps a sent command on its input line, this line keeps its own too,
  * selected whole, as desktop Mudlet's does.
+ *
+ * It is drawn in the colours of a script's [styleSheet], over the theme's surface: a see-through sheet shows that
+ * surface here, where on the desktop it shows what is under the console or window the line is in.
  */
 @Composable
-private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modifier = Modifier) {
+private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: String, modifier: Modifier = Modifier) {
     var text by rememberSaveable(name, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var notSent by remember { mutableStateOf(false) }
     var awaitingClear by remember { mutableStateOf(false) }
@@ -573,7 +582,17 @@ private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modif
         awaitingClear = clears
     }
 
-    Row(modifier.background(MaterialTheme.colorScheme.surface), verticalAlignment = Alignment.CenterVertically) {
+    // A script's sheet, read as a text box's: its background behind the line, its colour for the line's text, name,
+    // cursor, outline while focused, "not sent" and send button, in the error state too, as the theme's error and focus
+    // colours could not be read over the sheet's fill; where it gives only one of the two, the other by contrast with
+    // it as drawn, not the theme's. A sheet that gives neither leaves the line as with none, on the theme's surface
+    val surface = MaterialTheme.colorScheme.surface
+    val style = remember(styleSheet, surface) { LabelStyle.parse(styleSheet, LabelStyle.COMMAND_LINE_SELECTORS).paired(surface.toArgb()) }
+    val textColour = style.color?.let { Color(it) } ?: Color.Unspecified
+    Row(
+        modifier.background(surface).drawBehind { drawLabelFrame(style.background, style, 0f, 0f, 1f, null, null) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         OutlinedTextField(
             value = text,
             onValueChange = {
@@ -592,9 +611,22 @@ private fun WindowCommandLine(name: String, scriptText: String?, modifier: Modif
             singleLine = true,
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { submit() }),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = textColour,
+                unfocusedTextColor = textColour,
+                focusedLabelColor = textColour,
+                unfocusedLabelColor = textColour,
+                cursorColor = textColour,
+                errorTextColor = textColour,
+                errorLabelColor = textColour,
+                errorCursorColor = textColour,
+                errorSupportingTextColor = textColour,
+                focusedBorderColor = textColour,
+                errorBorderColor = textColour,
+            ),
         )
         IconButton(::submit) {
-            Icon(painterResource(R.drawable.ic_send), stringResource(R.string.window_command_send, name))
+            Icon(painterResource(R.drawable.ic_send), stringResource(R.string.window_command_send, name), tint = textColour.takeOrElse { LocalContentColor.current })
         }
     }
 }

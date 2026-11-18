@@ -243,6 +243,7 @@ ScriptWindowInfo windowInfo(const ScriptWindow& window)
         tabs.current = window.frameTabs->current;
         info.frameTabs = tabs;
     }
+    info.styleSheet = window.styleSheet;
     return info;
 }
 

@@ -206,7 +206,7 @@ class ProtocolTest {
                     """"bg":${RUN_RGB or 0x102030},"fontFamily":"Mono","fontSize":10.5,"inDock":true,"autoDock":false,"dockArea":"left",""" +
                     """"dockFloating":true,"dockTitle":"Side","scrolledBackTo":12,"columns":40,"rows":10,"scrollBar":true,"timeStamps":false},""" +
                     """{"name":"side","kind":"commandLine","parent":"side","parentKind":"userWindow","x":0,"y":0,"w":0,"h":0,""" +
-                    """"visible":true,"shown":false,"stack":1,"inDock":false},""" +
+                    """"visible":true,"shown":false,"stack":1,"inDock":false,"styleSheet":"QPlainTextEdit { color: red }"},""" +
                     """{"name":"hp_text","kind":"label","parent":"","x":10,"y":600,"w":200,"h":20,"visible":true,"shown":true,"stack":3,""" +
                     """"bg":$RUN_RGB,"bgAlpha":0,"inDock":false},""" +
                     """{"name":"later","kind":"hologram","parent":"","x":0,"y":0,"w":1,"h":1,"visible":true,"shown":true,"stack":2,"inDock":false}],""" +
@@ -218,7 +218,10 @@ class ProtocolTest {
             "side", WindowKind.USER_WINDOW, "", null, 0, 0, 300, 200, true, true, 0, RUN_RGB or 0x102030, 255, "Mono", 10.5, true,
             ScriptWindow.Dock(false, "left", true, "Side"), ScriptWindow.Console(12, 40, 10, true, false),
         )
-        val line = ScriptWindow("side", WindowKind.COMMAND_LINE, "side", WindowKind.USER_WINDOW, 0, 0, 0, 0, true, false, 1, -1, 255, null, 0.0, false, null, null)
+        val line = ScriptWindow(
+            "side", WindowKind.COMMAND_LINE, "side", WindowKind.USER_WINDOW, 0, 0, 0, 0, true, false, 1, -1, 255, null, 0.0, false, null, null,
+            styleSheet = "QPlainTextEdit { color: red }",
+        )
         // A transparent background, as a gauge's text label has
         val text = ScriptWindow("hp_text", WindowKind.LABEL, "", null, 10, 600, 200, 20, true, true, 3, RUN_RGB, 0, null, 0.0, false, null, null)
         // A kind the app does not know is left out

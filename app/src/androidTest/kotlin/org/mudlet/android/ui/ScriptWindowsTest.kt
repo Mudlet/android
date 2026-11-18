@@ -161,12 +161,7 @@ class ScriptWindowsTest {
                 .put("textX", 0).put("textY", 50).put("textW", MUDLET_TEXT_WIDTH).put("textH", 300).put("borderColor", RUN_RGB or MAROON),
         )
         // In the middle of the band above the text
-        assertDrawnIn(MAROON) {
-            val text = bounds(console)
-            compose.waitForIdle()
-            val image = compose.onRoot().captureToImage().toPixelMap()
-            image[text.center.x.toInt(), (text.top - 25 * text.width / 800).toInt().coerceIn(0, image.height - 1)]
-        }
+        assertDrawnIn(MAROON) { bounds(console).let { rootColour(it.center.x, it.top - 25 * it.width / 800) } }
     }
 
     @Test
@@ -233,18 +228,30 @@ class ScriptWindowsTest {
     }
 
     @Test
+    fun aWindowsCommandLineTakesTheBackgroundItsStyleSheetGivesIt() {
+        val field = chatCommandLine("QPlainTextEdit { background-color: maroon; color: white }")
+        // Beside the field, in the line's own room
+        assertDrawnIn(MAROON) { bounds(field).let { rootColour(it.left - 2, it.center.y) } }
+    }
+
+    @Test
+    fun aFocusedWindowsCommandLineIsOutlinedInItsStyleSheetsTextColour() {
+        val field = chatCommandLine("QPlainTextEdit { background-color: maroon; color: white }")
+        compose.onNode(field).performSemanticsAction(SemanticsActions.RequestFocus)
+        // On the outline's left edge: white over the sheet's fill, not the theme's focus colour
+        assertDrawnIn(0xFFFFFF) { bounds(field).let { rootColour(it.left + 1, it.center.y) } }
+    }
+
+    @Test
+    fun aWindowsCommandLineWhoseSheetGivesOnlyATextColourTakesABackgroundThatContrastsWithIt() {
+        val field = chatCommandLine("color: white")
+        // Black behind white text, in either theme, not the theme's surface
+        assertDrawnIn(0x000000) { bounds(field).let { rootColour(it.left - 2, it.center.y) } }
+    }
+
+    @Test
     fun aWindowsCommandLineSendsWhatIsTypedAndShowsWhatAScriptPutsThere() {
-        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
-        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
-        session.windows(
-            listOf(
-                FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300),
-                FakeEngine.window("chat", kind = "commandLine", w = 0, h = 0, parent = "chat", parentKind = "miniConsole"),
-            ),
-            full = true,
-        )
-        val field = hasSetTextAction() and hasText(string(R.string.window_command_line, "chat"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(field).fetchSemanticsNodes().isNotEmpty() }
+        val field = chatCommandLine()
 
         compose.onNode(field).performTextInput("say hello")
         compose.onNode(field).performImeAction()
@@ -678,6 +685,21 @@ class ScriptWindowsTest {
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
+    /**
+     * A mini console in the lower half with a command line of the style sheet [styleSheet] if any: the line's field.
+     */
+    private fun chatCommandLine(styleSheet: String? = null): SemanticsMatcher {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        val console = FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300)
+        val line = FakeEngine.window("chat", kind = "commandLine", w = 0, h = 0, parent = "chat", parentKind = "miniConsole")
+        if (styleSheet != null) line.put("styleSheet", styleSheet)
+        session.windows(listOf(console, line), full = true)
+        val field = hasSetTextAction() and hasText(string(R.string.window_command_line, "chat"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(field).fetchSemanticsNodes().isNotEmpty() }
+        return field
+    }
+
     /** That the middle of [node] comes to be drawn in [rgb], near enough for mixed colours to round either way. */
     private fun assertMiddleDrawnIn(rgb: Int, node: SemanticsMatcher) = assertDrawnIn(rgb) { middleColour(node) }
 
@@ -691,6 +713,13 @@ class ScriptWindowsTest {
             drawn = colour()
         }
         assertTrue("drawn in %06x, not %06x".format(drawn.toArgb() and 0xFFFFFF, rgb), near(drawn))
+    }
+
+    // The colour drawn at a point of the root, in its pixels
+    private fun rootColour(x: Float, y: Float): Color {
+        compose.waitForIdle()
+        val image = compose.onRoot().captureToImage().toPixelMap()
+        return image[x.toInt().coerceIn(0, image.width - 1), y.toInt().coerceIn(0, image.height - 1)]
     }
 
     private fun middleColour(node: SemanticsMatcher): Color {

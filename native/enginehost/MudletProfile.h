@@ -100,6 +100,7 @@ public:
     QString answerSecureOffer(bool accept) override;
     QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
+    QString deleteMap() override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
     QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) override;
     std::variant<QList<ScriptItemInfo>, QString> scriptItems(ScriptItemKind kind) const override;

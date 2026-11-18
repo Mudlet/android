@@ -314,16 +314,27 @@ the app's private files (`native/enginehost/MudletEngine.cpp:95-106`); the engin
 (`engine-service/src/main/kotlin/org/mudlet/android/engine/EngineSession.kt:15-17`); whether the app has asked for
 notifications (`app/src/main/kotlin/org/mudlet/android/ui/MainActivity.kt:100-105`). Other apps cannot read them.
 
-**Backups.** None: `android:allowBackup="false"` and `android:fullBackupContent="false"`
-(`app/src/main/AndroidManifest.xml:10-11`), and on Android 12 and later the data extraction rules exclude every
-domain from cloud backup and device-to-device transfer (`app/src/main/res/xml/data_extraction_rules.xml:4-19`).
+**Backups.** Android's own backup and device transfer, through `MudletBackupAgent`
+(`app/src/main/kotlin/org/mudlet/android/data/MudletBackupAgent.kt`; `android:allowBackup`, `android:backupAgent` and
+`android:fullBackupOnly` in `app/src/main/AndroidManifest.xml`). What it takes is `BackupScope`
+(`app/src/main/kotlin/org/mudlet/android/data/BackupScope.kt`): the profiles, Mudlet's settings, pinned commands and the
+app's settings to both a cloud backup and a new phone; the logs and command suggestions, which hold the game's text and
+what the player typed, to a new phone only; the passwords (`files/passwords/`), the sign-in tokens QtKeychain keeps
+(`files/settings/`), the engine's restore file and stop marker, and the `engine` and `ui` preferences to neither. A
+cloud backup is made only when the transport encrypts it with the screen lock (`FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED`;
+`disableIfNoEncryptionCapabilities` in `app/src/main/res/xml/data_extraction_rules.xml`). The XML rules
+(`data_extraction_rules.xml` from Android 12, `backup_rules.xml` before it) exclude the same secrets and engine state,
+and a restore keeps only what `BackupScope` takes, so a backup made elsewhere cannot bring a password back.
+The backup is Google's service, in the user's own Google account and encrypted with their screen lock; it never reaches
+the developer, so it is not data collected or shared. `BackupRulesTest` checks the rules.
 A player can export one profile to a `.zip` (`app/src/main/kotlin/org/mudlet/android/ui/profiles/ProfileExport.kt`),
 written only where they pick through Android's file picker, with no storage permission and the profile's password
 files left out (`ProfileArchive.SECRETS`); nothing is sent to the developer, so it is not data collected. Import
 (`ProfileImport.kt`) reads only the file the player picks, through the same picker, and leaves those files out too.
 
 **Deleting data.** Uninstalling the app, or Settings, Apps, Mudlet, Storage, "Clear storage", deletes everything it
-kept. As no copy leaves the device and there is no account, there is nothing for the Mudlet team to delete.
+kept on the device; a backup Android made is in the user's Google account, where they delete it. No copy reaches the
+Mudlet team and there is no account, so there is nothing for the Mudlet team to delete.
 
 **Permissions** (`engine-service/src/main/AndroidManifest.xml:4-8`; the app's own manifest declares none):
 

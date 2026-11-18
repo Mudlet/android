@@ -19,7 +19,6 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -58,7 +57,7 @@ class ThemeTest {
     @Before
     fun enableChecks() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.enableAccessibilityChecksWithDump()
         compose.runOnIdle { Settings.wallpaperColours.reset() }
     }
 

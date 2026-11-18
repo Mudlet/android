@@ -26,7 +26,33 @@ import kotlin.math.abs
  */
 internal fun <R : TestRule, A : ComponentActivity> AndroidComposeTestRule<R, A>.enableAccessibilityChecksOfWhatShows() {
     if (Build.VERSION.SDK_INT >= 34) {
-        enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, CutByTheBottom, UnderWhatFloats)))
+        enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, CutByTheBottom, UnderWhatFloats, DiagDump)))
+    }
+}
+
+// DIAG (not for merging): the plain checks, with the dump of a result they fail on
+internal fun <R : TestRule, A : ComponentActivity> AndroidComposeTestRule<R, A>.enableAccessibilityChecksWithDump() {
+    if (Build.VERSION.SDK_INT >= 34) {
+        enableAccessibilityChecks(AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(DiagDump))
+    }
+}
+
+// DIAG (not for merging): never suppresses; throws the failing node, its ancestors and the window's every view instead
+private object DiagDump : TypeSafeMatcher<AccessibilityViewCheckResult>() {
+    override fun matchesSafely(result: AccessibilityViewCheckResult): Boolean {
+        if (result.type != com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResult.AccessibilityCheckResultType.ERROR) return false
+        val element = result.accessibilityHierarchyCheckResult.element ?: return false
+        fun ViewHierarchyElement.line() = "$boundsInScreen cls=$className clickable=$isClickable scrollable=$isScrollable " +
+            "visible=$isVisibleToUser important=$isImportantForAccessibility text=${text?.toString()?.take(40)} desc=${contentDescription?.toString()?.take(40)}"
+        val dump = StringBuilder("DIAG ${result.sourceCheckClass.simpleName} on ${element.line()}\nANCESTORS\n")
+        for (a in element.ancestors()) dump.append("  ").append(a.line()).append('\n')
+        dump.append("WINDOW\n")
+        for (v in element.window.allViews) dump.append("  ").append(v.line()).append('\n')
+        throw AssertionError(dump.toString())
+    }
+
+    override fun describeTo(description: Description) {
+        description.appendText("DIAG dump")
     }
 }
 

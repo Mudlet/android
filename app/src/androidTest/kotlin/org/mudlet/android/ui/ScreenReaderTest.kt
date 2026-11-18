@@ -22,7 +22,6 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isSelected
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -77,7 +76,7 @@ class ScreenReaderTest {
     @Before
     fun openTheGameScreen() {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        compose.enableAccessibilityChecksWithDump()
         reset()
         compose.runOnIdle { Settings.screenReaderOffered.set(true) }
         session = fake.engine.nextSession()

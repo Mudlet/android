@@ -298,6 +298,7 @@ private fun ProfileGameScreen(
                             onMakeTrigger = onMakeTrigger,
                             searchQuery = if (searching) search.query else "",
                             searchFound = search.found.takeIf { searching },
+                            blinkText = c.setting(Settings.blinkText),
                         ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {

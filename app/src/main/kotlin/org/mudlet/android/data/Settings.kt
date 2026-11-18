@@ -38,6 +38,9 @@ object Settings {
     /** What becomes of the blank lines a game sends. */
     val blankLines = EnumSetting("blankLinesBehaviour", BlankLines.SHOW, BlankLines.entries, mudlet = true) { it.mudletValue }
 
+    /** "Switch between input line and main window using": the hardware key that moves between the line and the text. */
+    val caretKey = EnumSetting("caretShortcut", CaretKey.NONE, CaretKey.entries, mudlet = true) { it.mudletValue }
+
     /** Whether to join the lines a game wraps itself, at [undoWrapWidth], so triggers see them whole. */
     val undoWrap = BoolSetting("undoServerWrap", default = false, mudlet = true)
 
@@ -234,6 +237,7 @@ object Settings {
         readNewText,
         advertiseScreenReader,
         blankLines,
+        caretKey,
         undoWrap,
         undoWrapWidth,
         consoleBufferSize,
@@ -385,6 +389,14 @@ object Settings {
         RED_RING("redRing"),
         BLUE_YELLOW_RING("blueYellowRing"),
         CUSTOM_RING("customRing"),
+    }
+
+    /** The values `setConfig("caretShortcut", ...)` takes. */
+    enum class CaretKey(val mudletValue: String) {
+        NONE("none"),
+        TAB("tab"),
+        CTRL_TAB("ctrltab"),
+        F6("f6"),
     }
 
     /** The values `setConfig("showSentText", ...)` takes; SCRIPT shows them unless a script sends them hidden. */

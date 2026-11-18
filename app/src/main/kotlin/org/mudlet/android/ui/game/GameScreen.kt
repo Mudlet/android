@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.MapCorner
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RefusedCertificate
@@ -179,8 +180,19 @@ private fun ProfileGameScreen(
     val hidden = c.hiddenInput
     val boundKeysDown = remember { HashSet<Int>() }
     var screen by remember { mutableStateOf(IntSize.Zero) }
+    var caret by rememberSaveable { mutableStateOf(false) }
+    var typedInCaret by remember { mutableStateOf<String?>(null) }
+
+    // Null: the focus went elsewhere, a tapped text box say, which keeps it
+    fun leaveCaret(typed: String?) {
+        caret = false
+        if (typed == null) return
+        if (typed.isEmpty()) c.windows.focusInput = true else typedInCaret = typed
+    }
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
+    // The map in front covers the text, which no keyboard focus then reaches
+    LaunchedEffect(mapOpen) { if (mapOpen) caret = false }
     // The map behind the text is not there to be moved or picked in: once the map in front closes, not as a rotation
     // remakes it, it shows no room and follows the player again
     LaunchedEffect(mapOpen) {
@@ -335,6 +347,11 @@ private fun ProfileGameScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().onSizeChanged { screen = it }.padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
+                // First, as desktop's beats the profile-switching shortcuts and a key binding on the same key
+                if (!mapOpen && HardwareKeys.caretKeyMatches(c.setting(Settings.caretKey), qtKey(event.nativeKeyEvent))) {
+                    if (event.type == KeyEventType.KeyDown) if (caret) leaveCaret("") else caret = true
+                    return@onPreviewKeyEvent true
+                }
                 desktopShortcut(event)?.let { shortcut ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (shortcut) {
@@ -350,7 +367,12 @@ private fun ProfileGameScreen(
                     return@onPreviewKeyEvent true
                 }
                 // A binding comes next, as desktop's command line claims a bound profile-switching shortcut
-                if (sentToKeyBindings(event, c.windows, boundKeysDown)) return@onPreviewKeyEvent true
+                // The caret's keys are its own; one that types goes to the input line on the desktop, whose bindings run
+                val typesFromCaret = caret && HardwareKeys.typesFromCaret(event.nativeKeyEvent.metaState, event.nativeKeyEvent.unicodeChar)
+                if ((!caret || typesFromCaret || event.type == KeyEventType.KeyUp) && sentToKeyBindings(event, c.windows, boundKeysDown)) {
+                    if (typesFromCaret && event.type == KeyEventType.KeyDown) leaveCaret("")
+                    return@onPreviewKeyEvent true
+                }
                 val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
                 val ctrlF = event.key == Key.F && event.isCtrlPressed
@@ -411,7 +433,10 @@ private fun ProfileGameScreen(
                             searchFound = search.found.takeIf { searching },
                             blinkText = c.setting(Settings.blinkText),
                             timeStamps = c.timeStampsShown,
-                        ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
+                            behindText = { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) },
+                            caret = caret,
+                            onCaretLeft = ::leaveCaret,
+                        )
                     }
                     if (mapOpen) {
                         FullScreenMap(
@@ -444,6 +469,8 @@ private fun ProfileGameScreen(
                     clearAfterSend = c.setting(Settings.clearInputAfterSend),
                     highlightHistory = c.setting(Settings.highlightHistory),
                     onHistory = { historyOpen = true },
+                    typed = typedInCaret,
+                    onTypedShown = { typedInCaret = null },
                 )
             }
             if (c.replay.playing) {
@@ -569,8 +596,7 @@ private fun sentToKeyBindings(event: KeyEvent, windows: ScriptWindowsClient, dow
     val native = event.nativeKeyEvent
     if (event.type == KeyEventType.KeyUp) return down.remove(native.keyCode)
     if (event.type != KeyEventType.KeyDown || windows.focusedTextBox != null) return false
-    val shifted = native.getUnicodeChar(native.metaState and android.view.KeyEvent.META_SHIFT_MASK)
-    val key = HardwareKeys.of(native.keyCode, native.metaState, shifted) ?: return false
+    val key = qtKey(native) ?: return false
     if (key !in windows.keyBindings) return false
     // Negative for a dead key, which types nothing yet
     val typed = native.unicodeChar
@@ -579,6 +605,9 @@ private fun sentToKeyBindings(event: KeyEvent, windows: ScriptWindowsClient, dow
     down += native.keyCode
     return true
 }
+
+/** [native] as Qt names it, as the key bindings do. */
+private fun qtKey(native: android.view.KeyEvent): KeyBinding? = HardwareKeys.of(native.keyCode, native.metaState, native.getUnicodeChar(native.metaState and android.view.KeyEvent.META_SHIFT_MASK))
 
 private enum class DesktopShortcut { SCRIPTS, SETTINGS, MAP, CONNECT, DISCONNECT, RECONNECT, CLOSE }
 

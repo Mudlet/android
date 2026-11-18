@@ -32,6 +32,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.packages.PACKAGES_TAG
 
 /**
@@ -73,7 +74,7 @@ class PackagesTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         compose.pickFromGameMenu(string(R.string.packages_open, game.name))
         waitFor(hasText(string(R.string.packages_loading)))
         packages(listOf(mapper, plain), received("packages"))

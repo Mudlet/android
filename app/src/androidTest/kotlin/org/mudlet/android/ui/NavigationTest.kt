@@ -11,7 +11,8 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
@@ -25,6 +26,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * The app starts on the profile list and reaches a profile's editor, the game screen (by opening the profile) and the
@@ -62,8 +64,8 @@ class NavigationTest {
 
         activate(hasContentDescription(string(R.string.profile_connect_to, "Nav")))
         engine.profiles(profiles, engine.receive("openProfile"))
-        compose.waitUntil(10_000) { compose.onAllNodesWithText(string(R.string.game_title)).fetchSemanticsNodes().isNotEmpty() }
-        assertOnScreen(R.string.game_title)
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag(GAME_TITLE_TAG).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         activate(hasContentDescription(string(R.string.navigate_back)))
         assertOnScreen(R.string.profiles_title)
 

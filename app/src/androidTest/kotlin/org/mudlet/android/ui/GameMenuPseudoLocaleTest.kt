@@ -9,6 +9,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -28,6 +29,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * The game screen's title bar menu in the debug build's pseudo-locales, as PseudoLocaleTest checks the screens: each
@@ -63,7 +65,7 @@ class GameMenuPseudoLocaleTest(private val locale: String) {
         compose.onRoot().tryPerformAccessibilityChecks()
         compose.onNode(connect).performSemanticsAction(SemanticsActions.OnClick)
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
     }
 
     @Test

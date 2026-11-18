@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About with its Help links and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, the script library and an item's page in `ui/scripts/` ("The script library" below) and the package manager in `ui/packages/` ("The package manager" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt`, the packages in `ui/PackagesClient.kt`, the Lua variables the library lists in `ui/VariablesClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the title with the game's connection (`GameTitle.kt`), the connection banner (`ConnectionBanner.kt`) and the game sheet (`GameSheet.kt`), the history sheet and the quick bar of pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About with its Help links and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, the script library and an item's page in `ui/scripts/` ("The script library" below) and the package manager in `ui/packages/` ("The package manager" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt`, the packages in `ui/PackagesClient.kt`, the Lua variables the library lists in `ui/VariablesClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with Mudlet's version and commit (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go, what their buttons draw of their style sheets and the commands' menu (`ButtonBarLayout`, `ButtonStyle`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -171,17 +171,17 @@ order the UI asked for it:
 - While the game hides input there is no ghost: nothing typed reaches the session, and the masked
   send is recorded only as `recordSent("", hidden = true)`.
 
-The History button below the input line, or Ctrl+R on a hardware keyboard, opens `HistorySheet`, a
+The History button on the input line, beside its arrows, or Ctrl+R on a hardware keyboard, opens `HistorySheet`, a
 `ModalBottomSheet` whose search field takes the focus. The session answers each change of it at once with up to 100
 of `search`'s commands, under the pinned ones that match. A row's text puts its command on the input line without
 sending it; its buttons send it, pin or unpin it, and forget it (`forget`, saved as a send is). Picking, sending,
 Back and the close button close the sheet.
 
-Pinned commands (`PinnedCommands`, `:suggest`) are the buttons after History in `QuickBar`, which scrolls sideways;
+Pinned commands (`PinnedCommands`, `:suggest`) are the buttons of `QuickBar`, below the input line, which scrolls sideways;
 one sends its command. Up to 12 per profile, in the order pinned, saved whole on the session's thread as
 `files/suggest/<name>.pins` beside the suggestions, the same way and with the same handling of a damaged file or an
-I/O error. They are unpinned from the sheet's Pinned section. While the game hides input the quick bar's row has only
-the game pill and its chip,
+I/O error. They are unpinned from the sheet's Pinned section; with none and no Sound button the row takes no room. While
+the game hides input the row has no pinned commands and the input line no History button,
 the sheet closes and Ctrl+R does nothing; nothing reaches the search, and a pin can only come from the history,
 which a hidden send never enters.
 
@@ -246,8 +246,8 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   Mudlet's: with it on, the engine sends no `hiddenInput` for a game's WILL ECHO.
 
 ### The Sound button
-Desktop Mudlet's toolbar Sound button, "Mute all media", is on the game screen's bottom row, after the game pill and
-its chip (`ui/game/SoundButton.kt`), where a thumb reaches it and it covers no text. It is there once the engine's
+Desktop Mudlet's toolbar Sound button, "Mute all media", is on the game screen's bottom row, below the input line, at
+its start (`ui/game/SoundButton.kt`), where a thumb reaches it and it covers no text. It is there once the engine's
 `sounds` message says the game has played a sound, music or video since it loaded (`played`), or while either mute is
 on, so a mute can always be undone; leaving the game and coming back keeps it, as `ProfileSession.sounds` lives as long
 as the game is open. A tap does what the desktop's does (`ProfileSession.toggleAllSoundsMuted()`): both mutes off when
@@ -285,13 +285,14 @@ each time it attaches, and its editor (`ProfileEditor.kt`) sends `saveProfile` a
 answer, and a refusal shows the engine's reason, which is in English. Connect sends `openProfile` with the profile's
 stored password and goes to the game screen once it is answered with `openProfiles`; while games are open, it sends
 `openProfile` with `alongside`, so they stay open, and the list shows them first ("Open games"), each a tap from the
-front. On the game screen the game pill, at the start of the row below the input line, shows the front game's name,
-its connection as an icon whose shape says the state, and how many games are open; a tap opens the game sheet, with
+front. On the game screen the title (`GameTitle.kt`) shows the front game's name with its state in a few words under
+it, its connection as an icon whose shape says the state, and how many games are open; a tap opens the game sheet, with
 Reconnect and Disconnect, a row per open game (a tap brings it to the front, its close button sends `closeProfile`,
-asking first while it is connected) and "Open another game", which goes back to the list. Beside the pill, while the
-game is not connected, one chip does what the state needs: Connect, Reconnect after a drop, Reconnect now while
-Mudlet's own "Reconnect automatically" retries (which read as one state, not each attempt), Try again after an error,
-Stop while connecting. A drop is the connection ending without the player's Disconnect, which the UI tells from the
+asking first while it is connected) and "Open another game", which goes back to the list. The title bar's ⋮ menu has
+Reconnect, and Disconnect (Stop connecting while connecting), and after the player's own Disconnect a tonal Connect
+button is in the title bar. After a drop a banner under it (`ConnectionBanner.kt`) offers Reconnect, Stop and
+Reconnect now while Mudlet's own "Reconnect automatically" retries (which read as one state, not each attempt), and Try
+again after an error. A drop is the connection ending without the player's Disconnect, which the UI tells from the
 status as it changes. The game screen's Reconnect then
 sends `connect` with the front profile's address on its socket, and, while no profile is open, `openProfile` with the
 last one's stored password, as on an engine started again after the notification's Quit, where a bare `connect` would
@@ -534,7 +535,7 @@ The game screen also has a map of its own, which needs no script: `appMap`, the 
   actions), under a search field. The buttons are beside the field, not over the map, whose top line is Mudlet's name
   of the room, which they would hide. It takes every touch on the console's place; TalkBack does not read the console
   and the script windows under it, and a hardware keyboard's focus does not reach them, while new lines are still
-  announced (`Announcer`). The input line, the row with the game pill and History stay below it, to type and pick
+  announced (`Announcer`). The title bar and any connection banner stay above it, and the input line with History below it, to type and pick
   commands in, and Ctrl+R opens the history. The swap opens no keyboard: one that was up goes down, so the map has the
   room, but the input line keeps the focus, so a hardware keyboard still types in it and a tap brings the keyboard back.
   Back or the button again sends it back, with the keyboard if it went with the swap; with a predictive back gesture the
@@ -1110,17 +1111,21 @@ device shows, below the UI's debug hook:
 - `app/src/androidTest` runs the app against a fake engine in the test's process (`EngineClient`'s `connector`), which
   serves the control socket and a socket for each profile it has open: two profiles' state kept apart
   (`ProfileSessionsTest`); a tap on a game's notification showing that game (`NotificationTapTest`); the game
-  switcher (`GameSwitcherTest`): the profile list's open games, the game pill's reading and its next and previous
-  actions with the announcement and the focus after a switch, the chip for each state of the connection with a drop
+  switcher (`GameSwitcherTest`): the profile list's open games, the game title's reading and its next and previous
+  actions with the announcement and the focus after a switch, the banner and the title bar for each state of the connection with a drop
   told once and Mudlet's own retries read as one state, the game sheet's Reconnect, Disconnect, switch and close
   (asking first while connected, and back to the list after the last), and "Open another game" opening one beside
-  the others until four are open; the swipe on the pill (`GameSwipeTest`, mirrored in ar-XB): a drag far enough or a
+  the others until four are open; the swipe on the title (`GameSwipeTest`, mirrored in ar-XB): a drag far enough or a
   fling brings the game beside with a tick, a short slow one springs back, nothing goes past the first or the last
-  game, Ctrl+Tab and Ctrl+Shift+Tab switch too, and a sideways swipe on the console or the quick bar switches nothing;
+  game, Ctrl+Tab and Ctrl+Shift+Tab switch too, and a sideways swipe on the console or the input line switches nothing;
   the badges (`GameBadgesTest`): the engine's unread count ("99+" past 99) and attention bell on the open games, read
-  by TalkBack there and as "new lines in other games" on the pill, `markSeen` for the game in front as it comes to
+  by TalkBack there and as "new lines in other games" on the title, `markSeen` for the game in front as it comes to
   the front and as its lines come, "New activity in" said once for a game in the background, and its `announce()`
-  said politely after its name; the
+  said politely after its name; the connection controls (`ConnectionControlsTest`): the menu's Disconnect and
+  Reconnect, the title bar's Connect with no banner after the player's own Disconnect, a drop's banner read after the
+  title bar and before the console and above the map's room search, and the row below the input line taking no room
+  with nothing in it, and in en-XA and ar-XB (`ConnectionTitlePseudoLocaleTest`) the title, the banner and the menu
+  whole and on the screen; the
   way from the start screen to a profile's editor, the game screen and the self-test and back, through the labels
   and click actions TalkBack uses; the profiles (`ProfilesTest`): the list in the engine's order, each read as "name,
   host:port", adding, editing, deleting only once confirmed, the engine's refusals, Connect sending
@@ -1134,9 +1139,9 @@ device shows, below the UI's debug hook:
   the app's values the player changed and the input line's clearing (`setSettings`), a game from before the app could keep a sent command told once to go on clearing its line, and any other keeping its own (`getSettings`), read again as a page opens and changed there
   alone, a search's switches
   for the game and for new games, the Input, Connection, Security and Advanced pages' changes, a game's number sent once a slide, and a setting read as the game connects saying once, while it is connected, that it waits for the next connection; the order TalkBack moves in (`TalkBackOrderTest`), as Compose gives it to TalkBack, over a mini console, a
-  button bar and the map behind the text: the title bar, the console, the input line and the screen's buttons, then the
+  button bar and the map behind the text: the game title, the rest of the title bar, the console, the input line and its buttons, then the
   windows, then the bars, then the last announcement, with every control in it and nothing of the map, and with the
-  map in front the title bar, its search, the map, the input line and the row with the game pill, and nothing it
+  map in front the title bar, its search, the map and the input line, and nothing it
   covers; the script windows: a mini console at its scaled place in the fitted and the stacked layout, the size the
   game screen gives Mudlet's main window, the window switcher, a window's command line both ways, a user window's close
   button, a window's rows read as their plain text, a blank one as "Blank lines from the game" says and none read
@@ -1169,7 +1174,7 @@ device shows, below the UI's debug hook:
   and stacked, the page called by its tab's title, the tabs at the top of the pane, which stays open on that page,
   with its chip in the switcher selected; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
   faintly behind its text, which TalkBack and touches still reach, none with the setting off or a mapper window shown,
-  the title bar's toggle bringing it to the front, over the input line down to the row with the game pill, without History,
+  the title bar's toggle bringing it to the front, over the console down to the input line and its History button,
   with the input line's keyboard gone and its focus back after, where taps, the zoom buttons, the edit switch and
   TalkBack's actions reach it as `appMapPointer`, and Back sending it back, the bar showing another area or level,
   the room search with its results, no match, more matches and a refusal, its count read out, the match marked, the
@@ -1811,29 +1816,30 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
       and again with a half-typed line: both stay. The same in split screen.
     - With TalkBack on: the input line reads as "Command, edit box"; the up, down and Send buttons read their names;
-      the game pill reads "<profile>, <state>, game 1 of 1", and each change of the connection is read out once, with
+      the game title, read first on the screen, reads "<profile>, <state>, game 1 of 1", and each change of the connection is read out once, with
       the profile's name first ("Achaea: Connection lost"), without moving focus.
       The line reads what was typed, then "Suggestion: ..." for the greyed text, and its actions (three-finger tap, or
       the reading controls) include "Accept the suggestion: ...", which puts it on the line. Swiping goes from the
-      console's lines to the input line, then "Complete the word", the up, down and Send buttons, then
-      the game pill, its chip if any, "History" and each "Pinned: ...". History moves the focus into the sheet: its title,
+      console's lines to the input line, then "Complete the word", "History", the up, down and Send buttons, then
+      each "Pinned: ...". History moves the focus into the sheet: its title,
       "Close the history", "Search the history", then each row's command ("double tap to put it on the command line")
       and its "Send ...", "Pin ..." or "Unpin ..." and "Forget ..." buttons. Back closes it and the focus goes back.
-    - Two games open (the game sheet's "Open another game", then Connect on a second profile): the pill shows "2" and
+    - Two games open (the game sheet's "Open another game", then Connect on a second profile): the title shows "2" and
       reads "<profile>, <state>, game 2 of 2", with the actions "Reconnect to ...", "Disconnect from ..." and
       "Previous game: ..."; that action, or a row in the game sheet, brings the other game to the front, says its
       name and state, and puts the focus on its input line. Closing a connected game asks first; closing the last one
-      goes back to the profile list. Turn off the network for a moment: the pill turns red, reads "Connection lost"
-      and offers Reconnect, or "Reconnect now" when the profile reconnects by itself.
-    - Three games open, TalkBack off: drag the pill sideways. Its name and the console follow the finger, the next
-      game's name comes in from the right; let go past about 40% of the pill's width, or flick, and it switches with
+      goes back to the profile list. Turn off the network for a moment: the title's state turns red and reads "Connection lost",
+      and a banner under the title bar offers Reconnect, or Stop and "Reconnect now" when the profile reconnects by
+      itself. Disconnect from the ⋮ menu: no banner, and a Connect button in the title bar.
+    - Three games open, TalkBack off: drag the title sideways. Its name and the console follow the finger, the next
+      game's name comes in from the right; let go past about 40% of the title's width, or flick, and it switches with
       a tick; let go short and it springs back. At the first and the last game it only gives a little. The console
-      still scrolls up and down, the quick bar still scrolls sideways, and a swipe in from the screen's edge is the
+      still scrolls up and down, the pinned commands still scroll sideways, and a swipe in from the screen's edge is the
       system's Back. In Arabic (or ar-XB) it is mirrored. With a hardware keyboard, Ctrl+Tab and Ctrl+Shift+Tab switch.
 16. The input line's engine features, connected to a game with the libmudlet APK.
     - At a password prompt (any game's login), the input line becomes a "Password" field with the keyboard's password
       layout, still open. TalkBack reads it as a password field and says "dot" or nothing for what is typed, never the
-      letters. There is no greyed text and no quick bar while it shows, and Ctrl+R opens nothing.
+      letters. There is no greyed text, no History button and no pinned commands while it shows, and Ctrl+R opens nothing.
       Send logs in; the field goes back to the command line, with what was typed there before, and the password is
       not among the suggestions or in the history sheet afterwards. Its close button gives the command line back
       without sending.
@@ -1906,7 +1912,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - `lua announce("polite")` is read after what TalkBack is saying; `lua announce("now", "importantall")`
       interrupts it. The same announcement twice is read twice.
     - Swiping through the console moves line by line, and each line is read as its text, without colour or style
-      names. Swiping past the game pill's row, and past the script windows and button bars when there are any,
+      names. Swiping past the input line, and past the script windows and button bars when there are any,
       reaches the last announcement.
     - "Blank lines from the game": Hide them, then send a command whose answer has blank lines: they are gone from
       the console, and TalkBack does not stop on them.
@@ -1919,7 +1925,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - A window's text is readable, its newest line in view; scrolled back, it stays put.
     - A console a script gave a scroll bar (`lua enableScrollBar("<name>")`) with more rows than fit has a thumb at
       its right edge, which moves as the rows scroll and scrolls them when dragged; `disableScrollBar` takes it away.
-    - With TalkBack on: swiping goes from the console to the input line, then the game pill and the quick bar, then
+    - With TalkBack on: swiping goes from the console to the input line, then the pinned commands, then
       the windows, each read as "<name> window", then the tabs; a window's command line, its Send button and a user
       window's close button read their names.
     - A scroll box: `lua sb = Geyser.ScrollBox:new({name = "sb", x = 0, y = 0, width = 300, height = 150})

@@ -8,7 +8,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
@@ -28,8 +27,6 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.withKeyDown
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.rule.GrantPermissionRule
@@ -43,12 +40,11 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
-import org.mudlet.android.ui.game.GAME_PILL_TAG
-import org.mudlet.android.ui.game.QUICK_BAR_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.switchHaptics
 
 /**
- * Three games open against a fake engine, switched by a swipe on the game pill and by Ctrl+Tab (docs/multi-profile.md,
+ * Three games open against a fake engine, switched by a swipe on the game title and by Ctrl+Tab (docs/multi-profile.md,
  * "The switcher"), in [locale], or the device's language when null.
  */
 abstract class GameSwipeTestBase(locale: String?) {
@@ -67,7 +63,7 @@ abstract class GameSwipeTestBase(locale: String?) {
     // Main thread only
     private var tickCount = 0
 
-    protected val pill = hasTestTag(GAME_PILL_TAG)
+    protected val gameTitle = hasTestTag(GAME_TITLE_TAG)
     protected val input = hasSetTextAction()
 
     @Before
@@ -102,16 +98,16 @@ abstract class GameSwipeTestBase(locale: String?) {
         waitFor(row)
         compose.onNode(row).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(name, gamma.receive("setFront").getString("name"))
-        waitFor(pillReading(name))
+        waitFor(titleReading(name))
     }
 
     /**
-     * A drag along [share] of the pill's width, for [ms], toward the start of the line (left to right: the left) when
+     * A drag along [share] of the title's width, for [ms], toward the start of the line (left to right: the left) when
      * [towardStart], else toward its end; [rtl] says which side the start is.
      */
-    protected fun swipePill(towardStart: Boolean, rtl: Boolean, share: Float = 0.9f, ms: Long = 200) {
+    protected fun swipeTitle(towardStart: Boolean, rtl: Boolean, share: Float = 0.9f, ms: Long = 200) {
         val leftward = towardStart != rtl
-        compose.onNode(pill).performTouchInput {
+        compose.onNode(gameTitle).performTouchInput {
             val half = width * share / 2
             val from = Offset(centerX + if (leftward) half else -half, centerY)
             val to = Offset(centerX + if (leftward) -half else half, centerY)
@@ -121,50 +117,23 @@ abstract class GameSwipeTestBase(locale: String?) {
         compose.waitForIdle()
     }
 
-    /** The engine is asked to bring [name] to the front, the pill reads it, and it has settled where a touch finds it. */
+    /** The engine is asked to bring [name] to the front, and the title reads it. */
     protected fun switchedTo(name: String) {
         assertEquals(name, gamma.receive("setFront").getString("name"))
-        waitFor(pillReading(name))
-        pillAboveTheKeyboard()
+        waitFor(titleReading(name))
     }
 
-    /**
-     * Waits for the pill to be above the keyboard the switched-to game's input line opens as it takes the focus. The
-     * keyboard comes in its own time and pushes the quick bar up; a touch aimed at the pill before then lands where it
-     * was, as performTouchInput aims from the pill's bounds once, before its events reach the screen.
-     */
-    private fun pillAboveTheKeyboard() {
-        try {
-            compose.waitUntil(KEYBOARD_MS) { keyboardTop() != null }
-        } catch (_: ComposeTimeoutException) {
-            // A device with no keyboard on the screen moves nothing
-            return
-        }
-        compose.waitUntil(WAIT_MS) {
-            val top = keyboardTop()
-            top == null || compose.onNode(pill).fetchSemanticsNode().boundsInWindow.bottom <= top + 1
-        }
-    }
-
-    // In the window's pixels, or null with no keyboard on the screen
-    private fun keyboardTop(): Float? = compose.runOnUiThread {
-        val view = compose.activity.window.decorView
-        val insets = ViewCompat.getRootWindowInsets(view)
-        val ime = WindowInsetsCompat.Type.ime()
-        if (insets == null || !insets.isVisible(ime)) null else (view.height - insets.getInsets(ime).bottom).toFloat()
-    }
-
-    /** No game is brought to the front: the engine is not asked, and the pill still reads [name]. */
+    /** No game is brought to the front: the engine is not asked, and the title still reads [name]. */
     protected fun stillOn(name: String) {
         gamma.assertNoRequest("setFront", QUIET_MS)
-        compose.onNode(pillReading(name)).assertIsDisplayed()
+        compose.onNode(titleReading(name)).assertIsDisplayed()
     }
 
     protected fun ticks() = compose.runOnIdle { tickCount }
 
-    private fun pillReading(name: String): SemanticsMatcher {
+    private fun titleReading(name: String): SemanticsMatcher {
         val index = PROFILES.indexOfFirst { it.name == name } + 1
-        return pill and hasContentDescription(string(R.string.game_pill_description, name, string(R.string.connection_connected), index, 3))
+        return gameTitle and hasContentDescription(string(R.string.game_title_description, name, string(R.string.connection_connected), index, 3))
     }
 
     protected fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
@@ -180,7 +149,6 @@ abstract class GameSwipeTestBase(locale: String?) {
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L
         const val WAIT_MS = 10_000L
-        const val KEYBOARD_MS = 5_000L
 
         // Long enough for a request that went astray to have arrived
         const val QUIET_MS = 500
@@ -191,30 +159,30 @@ abstract class GameSwipeTestBase(locale: String?) {
 @RunWith(AndroidJUnit4::class)
 class GameSwipeTest : GameSwipeTestBase(locale = null) {
     @Test
-    fun aSwipeOnThePillBringsTheGameBeside_withATick_andGoesNoFurtherThanTheEnds() {
+    fun aSwipeOnTheTitleBringsTheGameBeside_withATick_andGoesNoFurtherThanTheEnds() {
         show(ALPHA.name)
         // No game before the first
-        swipePill(towardStart = false, rtl = false)
+        swipeTitle(towardStart = false, rtl = false)
         stillOn(ALPHA.name)
         assertEquals(0, ticks())
 
-        swipePill(towardStart = true, rtl = false)
+        swipeTitle(towardStart = true, rtl = false)
         switchedTo(BETA.name)
         assertEquals(1, ticks())
 
         // Short of the way and slow: it springs back
-        swipePill(towardStart = true, rtl = false, share = SHORT, ms = 1500)
+        swipeTitle(towardStart = true, rtl = false, share = SHORT, ms = 1500)
         stillOn(BETA.name)
         // As short, but flung
-        swipePill(towardStart = true, rtl = false, share = SHORT, ms = 40)
+        swipeTitle(towardStart = true, rtl = false, share = SHORT, ms = 40)
         switchedTo(GAMMA.name)
         assertEquals(2, ticks())
 
         // No game after the last
-        swipePill(towardStart = true, rtl = false)
+        swipeTitle(towardStart = true, rtl = false)
         stillOn(GAMMA.name)
 
-        swipePill(towardStart = false, rtl = false)
+        swipeTitle(towardStart = false, rtl = false)
         switchedTo(BETA.name)
         assertEquals(3, ticks())
         // The game swiped to has the console
@@ -226,22 +194,22 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
         show(BETA.name)
         val screen = compose.onRoot().fetchSemanticsNode().size.width
         val rest = left(BETA.name)
-        dragPill()
+        dragTitle()
         // Most of the way, less the touch slop
         assertTrue("the console at ${left(BETA.name)}, from $rest", left(BETA.name) < rest - screen * 0.5f)
         // As the system's back gesture takes it
-        compose.onNode(pill).performTouchInput { cancel() }
+        compose.onNode(gameTitle).performTouchInput { cancel() }
         compose.waitForIdle()
         stillOn(BETA.name)
         assertEquals(rest, left(BETA.name), 1f)
         assertEquals(0, ticks())
 
-        swipePill(towardStart = true, rtl = false)
+        swipeTitle(towardStart = true, rtl = false)
         switchedTo(GAMMA.name)
-        dragPill()
+        dragTitle()
         val shift = rest - left(GAMMA.name)
         assertTrue("the console moved $shift of $screen with no game beside", shift > 0 && shift < screen * 0.15f + 1)
-        compose.onNode(pill).performTouchInput { up() }
+        compose.onNode(gameTitle).performTouchInput { up() }
         compose.waitForIdle()
         stillOn(GAMMA.name)
         assertEquals(rest, left(GAMMA.name), 1f)
@@ -267,18 +235,18 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
     }
 
     @Test
-    fun aSidewaysSwipeOnTheConsoleOrTheQuickBarSwitchesNothing() {
+    fun aSidewaysSwipeOnTheConsoleOrTheInputLineSwitchesNothing() {
         show(BETA.name)
         compose.onNode(hasText("${BETA.name} says hello")).performTouchInput { swipeLeft() }
         compose.onNode(hasText("${BETA.name} says hello")).performTouchInput { swipeRight() }
         stillOn(BETA.name)
-        compose.onNode(hasTestTag(QUICK_BAR_TAG)).performTouchInput { swipeLeft() }
-        compose.onNode(hasTestTag(QUICK_BAR_TAG)).performTouchInput { swipeRight() }
+        compose.onNode(input).performTouchInput { swipeLeft() }
+        compose.onNode(input).performTouchInput { swipeRight() }
         stillOn(BETA.name)
     }
 
-    // Most of the pill's width toward the left, in steps, the finger still down
-    private fun dragPill() = compose.onNode(pill).performTouchInput {
+    // Most of the title's width toward the left, in steps, the finger still down
+    private fun dragTitle() = compose.onNode(gameTitle).performTouchInput {
         down(center)
         repeat(10) { moveBy(Offset(-width * 0.09f, 0f)) }
     }
@@ -310,11 +278,11 @@ class GameSwipeRightToLeftTest : GameSwipeTestBase(locale = "ar-XB") {
     @Test
     fun theSwipeIsMirrored() {
         show(ALPHA.name)
-        swipePill(towardStart = false, rtl = true)
+        swipeTitle(towardStart = false, rtl = true)
         stillOn(ALPHA.name)
-        swipePill(towardStart = true, rtl = true)
+        swipeTitle(towardStart = true, rtl = true)
         switchedTo(BETA.name)
-        swipePill(towardStart = false, rtl = true)
+        swipeTitle(towardStart = false, rtl = true)
         switchedTo(ALPHA.name)
         assertEquals(2, ticks())
     }

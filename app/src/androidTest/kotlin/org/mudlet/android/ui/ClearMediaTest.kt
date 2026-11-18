@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -31,6 +32,7 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * Desktop Mudlet's "Clear stored media" on a game's Security page against a fake engine: a button row that runs
@@ -61,7 +63,7 @@ class ClearMediaTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
         // As the engine does as the profile loads: EngineClient outlives a test, so an earlier one's would be there
         session.status("profile", "${GAME.name} loaded")
         session.settings(emptyMap(), session.receive("getSettings").getLong("id"))
@@ -70,7 +72,7 @@ class ClearMediaTest {
 
     @Test
     fun theGamesSecurityPageClearsItsStoredMedia_asDesktopsButtonDoes() {
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         val page = hasText(string(R.string.settings_security)) and hasClickAction()
         compose.scrollSettingsHubTo(page)
         activate(page)

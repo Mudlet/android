@@ -19,10 +19,11 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
@@ -50,6 +51,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.suggest.SuggestionSession
 import org.mudlet.android.ui.game.CommandSuggestions
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import java.io.File
 
 /**
@@ -88,8 +90,8 @@ class GhostTextTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         session.status("profile", "$profile loaded")
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { CommandSuggestions.profile } == profile }
         compose.waitForIdle()

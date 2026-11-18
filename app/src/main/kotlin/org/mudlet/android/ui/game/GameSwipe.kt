@@ -35,8 +35,8 @@ import kotlin.math.sign
 internal var switchHaptics: HapticFeedback? = null
 
 /**
- * The slide of a switch between games (docs/multi-profile.md, "The switcher"): a drag on the game pill moves the front
- * game sideways with the finger, and a release past [COMMIT] of the pill's width, or a fling, slides it out and the game
+ * The slide of a switch between games (docs/multi-profile.md, "The switcher"): a drag on the game title moves the front
+ * game sideways with the finger, and a release past [COMMIT] of the title's width, or a fling, slides it out and the game
  * beside it in; otherwise it springs back. Toward a side with no game it gives only a little, as a rubber band does.
  * [offset] is how far the game has slid, as a share of its width, negative to the left.
  */
@@ -45,7 +45,7 @@ class GameSwipe(private val scope: CoroutineScope) {
     var offset by mutableFloatStateOf(0f)
         private set
 
-    // The drag so far, as a share of the pill's width, before the rubber band
+    // The drag so far, as a share of the title's width, before the rubber band
     private var dragged = 0f
     private var sliding: Job? = null
 
@@ -55,7 +55,7 @@ class GameSwipe(private val scope: CoroutineScope) {
         dragged = offset
     }
 
-    /** The finger moved [share] of the pill's width; [canLeft] and [canRight] say whether a game is that way. */
+    /** The finger moved [share] of the title's width; [canLeft] and [canRight] say whether a game is that way. */
     fun drag(share: Float, canLeft: Boolean, canRight: Boolean) {
         dragged += share
         offset = if ((dragged < 0 && !canLeft) || (dragged > 0 && !canRight)) band(dragged) else dragged.coerceIn(-1f, 1f)
@@ -112,7 +112,7 @@ class GameSwipe(private val scope: CoroutineScope) {
     }
 
     companion object {
-        /** How far, as a share of the pill's width, a drag goes before its release switches games. */
+        /** How far, as a share of the title's width, a drag goes before its release switches games. */
         const val COMMIT = 0.4f
 
         // How far the rubber band gives at most, as a share of the width

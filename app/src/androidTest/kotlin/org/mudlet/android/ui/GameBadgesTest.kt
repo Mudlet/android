@@ -27,13 +27,13 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
-import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * Two games open against a fake engine, with the engine's counts of their lines (docs/multi-profile.md, "The
  * switcher"): the unread and attention badges and what TalkBack reads of them on the profile list, the game sheet and
- * the game pill; markSeen for the game in front; and what TalkBack says for a game in the background.
+ * the game title; markSeen for the game in front; and what TalkBack says for a game in the background.
  */
 @RunWith(AndroidJUnit4::class)
 class GameBadgesTest {
@@ -50,7 +50,7 @@ class GameBadgesTest {
     // The one opened last and in front at the start, whose session the control socket is answered on
     private lateinit var beta: FakeEngine.Session
 
-    private val pill = hasTestTag(GAME_PILL_TAG)
+    private val gameTitle = hasTestTag(GAME_TITLE_TAG)
 
     @Before
     fun attach() {
@@ -83,9 +83,9 @@ class GameBadgesTest {
         beta.assertNoRequest("markSeen", QUIET_MS)
 
         show(BETA.name)
-        waitFor(pillReading(BETA.name, index = 2, others = 151, attention = true))
+        waitFor(titleReading(BETA.name, index = 2, others = 151, attention = true))
 
-        activate(pill)
+        activate(gameTitle)
         waitFor(hasTestTag(GAME_SHEET_TAG))
         compose.onNode(openGame(ALPHA.name, unread = 151, attention = true)).assertIsDisplayed()
         compose.onNode(openGame(BETA.name)).assertIsDisplayed()
@@ -101,7 +101,7 @@ class GameBadgesTest {
 
         show(ALPHA.name, unread = 12, attention = true)
         assertSeen(ALPHA.name, 12)
-        waitFor(pillReading(ALPHA.name, index = 1))
+        waitFor(titleReading(ALPHA.name, index = 1))
         // Once seen, the engine's next count asks for nothing
         counts(ALPHA.name, lastSeq = 12, unread = 0, attention = false)
         beta.assertNoRequest("markSeen", QUIET_MS)
@@ -112,9 +112,9 @@ class GameBadgesTest {
         SystemClock.sleep(QUIET_MS.toLong())
         assertEquals(said, serial())
 
-        // The one now in the background has its lines read on the pill
+        // The one now in the background has its lines read on the title
         counts(BETA.name, lastSeq = 35, unread = 5, attention = false)
-        waitFor(pillReading(ALPHA.name, index = 1, others = 5))
+        waitFor(titleReading(ALPHA.name, index = 1, others = 5))
     }
 
     @Test
@@ -149,7 +149,7 @@ class GameBadgesTest {
         waitFor(hasText(string(R.string.games_title)))
         activate(openGame(name, unread, attention))
         assertEquals(name, beta.receive("setFront").getString("name"))
-        waitFor(pill)
+        waitFor(gameTitle)
     }
 
     private fun openGame(name: String, unread: Long = 0, attention: Boolean = false): SemanticsMatcher {
@@ -159,11 +159,11 @@ class GameBadgesTest {
         return hasContentDescription(description) and hasClickAction()
     }
 
-    private fun pillReading(name: String, index: Int, others: Long = 0, attention: Boolean = false): SemanticsMatcher {
-        var description = string(R.string.game_pill_description, name, string(R.string.connection_connected), index, 2)
+    private fun titleReading(name: String, index: Int, others: Long = 0, attention: Boolean = false): SemanticsMatcher {
+        var description = string(R.string.game_title_description, name, string(R.string.connection_connected), index, 2)
         if (others > 0) description = string(R.string.game_description_more, description, quantity(R.plurals.game_others_unread, others))
         if (attention) description = string(R.string.game_description_more, description, string(R.string.game_others_attention))
-        return pill and hasContentDescription(description)
+        return gameTitle and hasContentDescription(description)
     }
 
     private fun quantity(id: Int, count: Long) = compose.activity.resources.getQuantityString(id, count.toInt(), count)

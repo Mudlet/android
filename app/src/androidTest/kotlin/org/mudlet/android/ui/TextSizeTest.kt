@@ -17,9 +17,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
@@ -43,6 +45,7 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.theme.MudletTheme
 
 /**
@@ -86,7 +89,7 @@ class TextSizeTest {
         assertConsoleFits(before)
         assertEquals(DEFAULT_SIZE.sp, consoleFontSize())
 
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_appearance)))
         val slider = hasContentDescription(string(R.string.settings_text_size)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
         compose.onNode(slider).performSemanticsAction(SemanticsActions.SetProgress) { it(28f) }
@@ -97,7 +100,7 @@ class TextSizeTest {
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.navigate_back)))
 
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         assertEquals(27.sp, consoleFontSize())
         val after = settledScreenSize()
         assertTrue("larger text, fewer columns and rows: $before, then $after", after.first < before.first && after.second < before.second)
@@ -136,7 +139,7 @@ class TextSizeTest {
         assertConsoleFits(settledScreenSize())
         assertNothingCutOff()
 
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_appearance)))
         compose.onNodeWithText(string(R.string.settings_text_size_sample)).assertIsDisplayed()
         assertNothingCutOff()
@@ -147,8 +150,8 @@ class TextSizeTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         // A line to measure the console's text by
         line("size")
     }

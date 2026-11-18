@@ -46,6 +46,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import org.mudlet.android.ui.scripts.MAX_MATCH_LINES
 import org.mudlet.android.ui.scripts.SCRIPT_ITEM_TAG
@@ -112,7 +113,7 @@ class ScriptLibraryTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         openTheLibraryFromTheGame()
     }
 
@@ -235,7 +236,7 @@ class ScriptLibraryTest {
         compose.onNode(name).performTextClearance()
         compose.onNode(name).performTextInput("Wave")
         activate(hasContentDescription(string(R.string.scripts_back_to_game)))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
 
         // The library marks the item, under the name the engine has, and its page has the draft
         openTheLibraryFromTheGame()
@@ -248,7 +249,7 @@ class ScriptLibraryTest {
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasText(string(R.string.scripts_discard)) and hasClickAction())
         activate(hasText(CONSOLE_LINE))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
     }
 
     @Test
@@ -599,7 +600,7 @@ class ScriptLibraryTest {
         waitFor(hasText(string(R.string.scripts_deleted, "Greet")))
         // Leaving the library while the Undo is offered lets it go
         back()
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         val delete = received("deleteScriptItem")
         assertEquals("trigger", delete.getString("kind"))
         assertEquals(3, delete.getInt("item"))
@@ -757,7 +758,7 @@ class ScriptLibraryTest {
 
         // A trip to the game keeps it
         activate(hasContentDescription(string(R.string.scripts_back_to_game)))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         openTheLibraryFromTheGame()
         openGreet(script = "x = 1")
         waitFor(editor and hasText("x = 12") and hasAnyAncestor(page))

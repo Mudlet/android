@@ -19,12 +19,14 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
@@ -51,6 +53,7 @@ import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.ProfileArchive
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.profiles.DefaultGame
 import org.mudlet.android.ui.profiles.DefaultGames
 import org.mudlet.android.ui.profiles.Exports
@@ -460,7 +463,7 @@ class ProfilesTest {
         assertEquals("alpha secret", alpha.getString("password"))
         assertTrue(alpha.getBoolean("connect"))
         engine.profiles(listOf(ALPHA, BETA), alpha)
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
     }
 
     @Test
@@ -474,7 +477,7 @@ class ProfilesTest {
         // The same message that lists these answers the openProfile
         engine.profiles(listOf(BETA, ALPHA), open)
         compose.waitUntil(10_000) { EngineClient.profiles == listOf(BETA, ALPHA) }
-        compose.onNodeWithText(string(R.string.game_title)).assertDoesNotExist()
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertDoesNotExist()
         compose.onNodeWithText(string(R.string.profile_save)).assertIsDisplayed()
     }
 
@@ -513,7 +516,7 @@ class ProfilesTest {
         assertTrue(open.getBoolean("connect"))
         compose.runOnIdle { assertTrue("Mudlet's game is given the app's settings as it first loads", Settings.awaitsDefaults(ACHAEA)) }
         engine.profiles(listOf(achaea.newProfile(), ALPHA), open)
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
     }
 
     @Test

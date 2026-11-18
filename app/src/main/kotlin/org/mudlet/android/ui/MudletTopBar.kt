@@ -18,13 +18,18 @@ import androidx.compose.ui.res.stringResource
 import org.mudlet.android.R
 
 /**
- * Every screen's title bar, with a Back button when [onBack] is given (a Close button on a detail beside its list), and
- * the screen's own buttons in [actions].
+ * Every screen's title bar: [title], or [titleContent] in its place, with a Back button when [onBack] is given (a Close
+ * button on a detail beside its list, which [title] names), and the screen's own buttons in [actions].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MudletTopBar(title: String, onBack: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
-    MudletTopBar(title, onBack, null, actions)
+fun MudletTopBar(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    titleContent: @Composable () -> Unit = { Text(title) },
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    MudletTopBar(title, titleContent, onBack, null, actions)
 }
 
 // Private, as TopAppBarScrollBehavior is experimental and would make every caller opt in
@@ -32,12 +37,13 @@ fun MudletTopBar(title: String, onBack: (() -> Unit)? = null, actions: @Composab
 @Composable
 private fun MudletTopBar(
     title: String,
+    titleContent: @Composable () -> Unit,
     onBack: (() -> Unit)?,
     scrollBehavior: TopAppBarScrollBehavior?,
     actions: @Composable RowScope.() -> Unit,
 ) {
     TopAppBar(
-        title = { Text(title) },
+        title = titleContent,
         navigationIcon = {
             if (onBack != null) {
                 val inPane = LocalInDetailPane.current
@@ -71,7 +77,7 @@ fun MudletScaffold(
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     Scaffold(
         modifier.nestedScroll(scroll.nestedScrollConnection),
-        topBar = { MudletTopBar(title, onBack, scroll, actions) },
+        topBar = { MudletTopBar(title, { Text(title) }, onBack, scroll, actions) },
         bottomBar = bottomBar,
         snackbarHost = snackbarHost,
         floatingActionButton = floatingActionButton,

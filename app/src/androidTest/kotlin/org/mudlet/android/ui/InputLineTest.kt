@@ -22,7 +22,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
@@ -51,6 +51,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.HISTORY_SHEET_TAG
 
 /**
@@ -84,8 +85,8 @@ class InputLineTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
     }
 
     // EngineClient lives as long as the process, and with it a game's settings

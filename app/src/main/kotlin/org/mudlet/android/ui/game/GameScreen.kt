@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -65,30 +66,34 @@ import org.mudlet.android.ui.errors.ErrorCountBadge
 import kotlin.reflect.KClass
 
 /**
- * The console with the windows the game's scripts draw around it, the input line, and the row below it, top to bottom.
- * The row holds the game pill ([GamePill]), which shows the front game's connection and opens the game sheet
- * ([GameSheet]) with Reconnect, Disconnect, the open games and "Open another game", which goes back to the profile
- * list ([onBack]), where Connect opens one more beside those open; beside the pill, while the game is not connected,
- * one chip with what to do about it ([ConnectionChip]); once the game has played a sound in this session, or while
- * anything is muted, desktop Mudlet's Sound button ([SoundButton]); then the quick bar's History and pinned commands. After the title bar, TalkBack reads the console, the input line and that row, then the script
- * windows and their switcher, then the button bars. The keyboard pushes them up, so the console shrinks above it. The
- * input line's suggestions and the quick bar's pinned commands come from the profile the engine runs
- * ([rememberEngineSuggestions]), which learns from what is sent. The History button, or Ctrl+R on a hardware keyboard,
- * opens the command history ([HistorySheet]). While the game hides input the row has only the pill and its chip, and
- * there is no history. Why the engine could not send something shows over the console's foot, where the keyboard does
- * not hide it. The title bar's map button swaps the map and the console ([FullScreenMap]), until Back or the button
- * again, and for the game switched to: with the setting, the map is faint behind the text ([BackgroundMap]) and the
- * text faint behind the map in front ([textBehindMap]); without it there is no map behind the text and the map in front
- * covers the console. The input line and the row stay below the map in front, to type and pick commands in. The title
- * bar's scripts button opens the profile's script library ([onOpenScripts]), and its menu the search of the text and
- * the profile's packages ([onOpenPackages]); a long press on a line of the console offers to make a trigger from it
- * ([onMakeTrigger], with the line's text). The first time it shows, and after Help's "Take a UI tour", a short tour
- * points out the console, the input line, the scripts and the settings ([GameTourHost]), once no dialog over the
- * screen asks something more urgent ([tourHeld]).
+ * The console with the windows the game's scripts draw around it, the input line, and the row below it, top to bottom,
+ * under a title bar whose title is the game ([GameTitle]): the front game's name and connection, which opens the game
+ * sheet ([GameSheet]) with Reconnect, Disconnect, the open games and "Open another game", which goes back to the profile
+ * list ([onBack]), where Connect opens one more beside those open. While the player's own Disconnect, or no connection
+ * yet, leaves the game disconnected, the bar's first button connects it again; its menu ([GameMenuButton]) has
+ * Reconnect, Disconnect (Stop while connecting), the search of the text, the profile's packages ([onOpenPackages]) and
+ * the settings. While a connection the player did not end is being dealt with, a banner under the title bar says so,
+ * with what to do about it ([ConnectionBanner]). The row below the input line holds, once the game has played a sound
+ * in this session or while anything is muted, desktop Mudlet's Sound button ([SoundButton]), then the quick bar's
+ * pinned commands, and takes no room with neither. TalkBack reads the game's title first, then the title bar's
+ * buttons, the banner, the console, the input line and that row, then the script windows and their switcher, then the
+ * button bars. The keyboard pushes them up, so the console shrinks above it. The input line's suggestions and the
+ * quick bar's pinned commands come from the profile the engine runs ([rememberEngineSuggestions]), which learns from
+ * what is sent. The input line's History button, or Ctrl+R on a hardware keyboard, opens the command history
+ * ([HistorySheet]); while the game hides input there is no history and the row has no pinned commands. Why the engine
+ * could not send something shows over the console's foot, where the keyboard does not hide it. The title bar's map
+ * button swaps the map and the console ([FullScreenMap]), until Back or the button again, and for the game switched
+ * to: with the setting, the map is faint behind the text ([BackgroundMap]) and the text faint behind the map in front
+ * ([textBehindMap]); without it there is no map behind the text and the map in front covers the console. The title bar
+ * and the banner stay above the map in front, and the input line and the row below it, to type and pick commands in.
+ * The title bar's scripts button opens the profile's script library ([onOpenScripts]); a long press on a line of the
+ * console offers to make a trigger from it ([onMakeTrigger], with the line's text). The first time it shows, and after
+ * Help's "Take a UI tour", a short tour points out the console, the input line, the scripts and the menu with the
+ * settings ([GameTourHost]), once no dialog over the screen asks something more urgent ([tourHeld]).
  *
  * All of it is the front profile's ([EngineClient.front]), and what the screen keeps of a profile, such as the typed
  * line and where the console is scrolled to, waits for it while another is in front. When another game comes to the
- * front, TalkBack says its name and state and the focus goes to its input line. A swipe on the pill, or Ctrl+Tab and
+ * front, TalkBack says its name and state and the focus goes to its input line. A swipe on the title, or Ctrl+Tab and
  * Ctrl+Shift+Tab on a hardware keyboard, brings the next or the previous game, and the console, or the map in front,
  * slides across with it ([GameSwipe]). Each change of the front game's connection is said once, with the game's name
  * first, so Mudlet's retries after a drop are not each read out. Desktop's Alt shortcuts open the screens they open
@@ -193,6 +198,7 @@ private fun ProfileGameScreen(
     // What Reconnect opens again while no game is open
     val reconnectName = c.name.ifEmpty { EngineClient.lastProfile.orEmpty() }
     val canReconnect = EngineClient.enginePid > 0 && EngineClient.canReconnect
+    val canDisconnect = c.name.isNotEmpty() && state.canDisconnect
     val index = games.indexOf(c)
     val previous = games.getOrNull(index - 1)?.name
     val next = if (index >= 0) games.getOrNull(index + 1)?.name else null
@@ -232,16 +238,43 @@ private fun ProfileGameScreen(
 
     Scaffold(
         topBar = {
-            MudletTopBar(stringResource(R.string.game_title), onBack) {
+            MudletTopBar(name, onBack, titleContent = {
+                GameTitle(
+                    name,
+                    state,
+                    index,
+                    games.size,
+                    othersUnread = games.sumOf { if (it === c) 0L else it.unread },
+                    othersAttention = games.any { it !== c && it.attention },
+                    onShowGames = { gamesOpen = true },
+                    onReconnect = if (canReconnect) ::reconnect else null,
+                    onDisconnect = if (canDisconnect) ::disconnect else null,
+                    previous = previous,
+                    next = next,
+                    onSwitch = EngineClient::setFront,
+                    swipe = swipe,
+                )
+            }) {
+                if (state == ConnectionState.Disconnected && canReconnect) {
+                    FilledTonalIconButton(::reconnect) { Icon(painterResource(R.drawable.ic_link), stringResource(R.string.connection_connect_to, reconnectName)) }
+                }
                 ScriptCommandsButton()
                 IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
                     ErrorCountBadge(c.errors.unseen, stringResource(R.string.scripts_open, c.name)) { Icon(painterResource(R.drawable.ic_auto_fix_high), it) }
                 }
                 MapButton(mapOpen, onMapOpen)
-                IconButton(onOpenSettings, Modifier.tourTarget(TourTarget.SETTINGS)) {
-                    Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
-                }
-                GameMenuButton(c.name, onSearch = { searching = true }, onOpenPackages = onOpenPackages)
+                GameMenuButton(
+                    c.name,
+                    name,
+                    reconnectName,
+                    connecting = state is ConnectionState.Connecting,
+                    onReconnect = if (canReconnect) ::reconnect else null,
+                    onDisconnect = if (canDisconnect) ::disconnect else null,
+                    onSearch = { searching = true },
+                    onOpenPackages = onOpenPackages,
+                    onOpenSettings = onOpenSettings,
+                    modifier = Modifier.tourTarget(TourTarget.SETTINGS),
+                )
             }
         },
     ) { padding ->
@@ -254,7 +287,7 @@ private fun ProfileGameScreen(
                             DesktopShortcut.SETTINGS -> onOpenSettings()
                             DesktopShortcut.MAP -> onMapOpen(!mapOpen)
                             DesktopShortcut.CONNECT -> onBack()
-                            DesktopShortcut.DISCONNECT -> if (c.name.isNotEmpty() && state.canDisconnect) disconnect()
+                            DesktopShortcut.DISCONNECT -> if (canDisconnect) disconnect()
                             DesktopShortcut.RECONNECT -> if (canReconnect) reconnect()
                             DesktopShortcut.CLOSE -> if (c.name.isNotEmpty()) close(c.name)
                         }
@@ -278,6 +311,7 @@ private fun ProfileGameScreen(
             },
         ) {
             Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
+                ConnectionBanner(state, name, onReconnect = if (canReconnect) ::reconnect else null, onStop = if (c.name.isNotEmpty()) ::disconnect else null, Modifier.fillMaxWidth())
                 if (searching) {
                     ConsoleSearchBar(search, c.lines, c.linesAdded, onClose = {
                         searching = false
@@ -346,34 +380,10 @@ private fun ProfileGameScreen(
                     focusOnStart = switched,
                     clearAfterSend = c.setting(Settings.clearInputAfterSend),
                     highlightHistory = c.setting(Settings.highlightHistory),
+                    onHistory = { historyOpen = true },
                 )
             }
-            QuickBar(
-                if (hidden) emptyList() else suggestions.pinned,
-                onHistory = if (hidden) null else ({ historyOpen = true }),
-                onSend = ::sendNow,
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            ) {
-                GamePill(
-                    name,
-                    state,
-                    index,
-                    games.size,
-                    othersUnread = games.sumOf { if (it === c) 0L else it.unread },
-                    othersAttention = games.any { it !== c && it.attention },
-                    onShowGames = { gamesOpen = true },
-                    onReconnect = if (canReconnect) ::reconnect else null,
-                    onDisconnect = if (c.name.isNotEmpty() && state.canDisconnect) ::disconnect else null,
-                    previous = previous,
-                    next = next,
-                    onSwitch = EngineClient::setFront,
-                    swipe = swipe,
-                )
-                when (val action = state.action) {
-                    null -> {}
-                    ConnectionAction.STOP -> if (c.name.isNotEmpty()) ConnectionChip(action, name, onClick = ::disconnect)
-                    else -> if (canReconnect) ConnectionChip(action, reconnectName, onClick = ::reconnect)
-                }
+            QuickBar(if (hidden) emptyList() else suggestions.pinned, onSend = ::sendNow, Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 val sounds = c.sounds
                 if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {
                     SoundButton(sounds.scriptsMuted && sounds.gameMuted, onToggle = { c.toggleAllSoundsMuted() })

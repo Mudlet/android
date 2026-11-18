@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -30,6 +31,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import kotlin.math.abs
 
 /**
@@ -68,7 +70,7 @@ class PackagesPseudoLocaleTest(private val locale: String) {
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         compose.waitForIdle()
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
 
         compose.pickFromGameMenu(string(R.string.packages_open, game.name))
         compose.waitForIdle()

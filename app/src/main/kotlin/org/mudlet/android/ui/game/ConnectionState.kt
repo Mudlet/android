@@ -64,20 +64,7 @@ sealed interface ConnectionState {
     }
 }
 
-/** What the chip beside the game pill does in a state; none while connected or without the engine. */
-enum class ConnectionAction { CONNECT, RECONNECT, RECONNECT_NOW, TRY_AGAIN, STOP }
-
-val ConnectionState.action: ConnectionAction?
-    get() = when (this) {
-        ConnectionState.Disconnected -> ConnectionAction.CONNECT
-        ConnectionState.Lost -> ConnectionAction.RECONNECT
-        ConnectionState.Reconnecting -> ConnectionAction.RECONNECT_NOW
-        is ConnectionState.Failed -> ConnectionAction.TRY_AGAIN
-        is ConnectionState.Connecting -> ConnectionAction.STOP
-        ConnectionState.NoEngine, ConnectionState.Connected, is ConnectionState.Other -> null
-    }
-
-/** The connection ended without the player asking: the pill takes the error colours. */
+/** The connection ended without the player asking: the game title says so in the error colour, and a banner shows. */
 val ConnectionState.trouble: Boolean
     get() = this == ConnectionState.Lost || this == ConnectionState.Reconnecting || this is ConnectionState.Failed
 

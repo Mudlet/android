@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -34,6 +35,7 @@ import org.mudlet.android.R
 import org.mudlet.android.about.ReleaseNotes
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.about.readAsset
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -123,7 +125,7 @@ class HelpLinksTest {
     fun theScriptLibrarysHelpOpensTheIntroductionToTheKindShownTheLuaFunctionsAndTheManual() {
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
         activate(hasContentDescription(string(R.string.scripts_open, game.name)))
 
         fromHelp(R.string.help_introduction_triggers, "https://wiki.mudlet.org/w/Manual:Introduction#Triggers")

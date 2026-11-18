@@ -54,7 +54,7 @@ import org.mudlet.android.ui.ProfileSession
 const val GAME_SHEET_TAG = "gameSheet"
 
 /**
- * The game sheet, which the game pill opens (docs/multi-profile.md, "The switcher"): first a card for the game in
+ * The game sheet, which the game title opens (docs/multi-profile.md, "The switcher"): first a card for the game in
  * front, [front] (named [name]), with its state, its address, Reconnect ([onReconnect], while [canReconnect]) and
  * Disconnect ([onDisconnect]); then a row for each of the open [games], in the order opened, the front one ticked, which
  * a tap brings to the front ([onSwitch]) and whose close button closes it ([onClose]) after asking first when it is

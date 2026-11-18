@@ -40,6 +40,7 @@ import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RefusedCertificate
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
@@ -50,7 +51,7 @@ import kotlin.math.abs
  * The app in the debug build's pseudo-locales (docs/translations.md, "Pseudo-locales"): en-XA, whose accented text
  * runs longer than the English, and ar-XB, right to left. On the profile list, empty and with a game, the profile
  * editor, new and at a profile's Export, the settings with the list of server data encodings and the Input page, the
- * game screen, with the connection chip's states and the password field, the page that makes a trigger from a line,
+ * game screen, connecting, with the connection banner and the password field, the page that makes a trigger from a line,
  * the script library, and a trigger's page, with its Lua being typed, no text is
  * cut off, overflows its box or leaves the screen, and in ar-XB the screens are mirrored. The app's language is set as the system's per-app language setting sets it,
  * which Android 13 brought.
@@ -139,20 +140,20 @@ class PseudoLocaleTest(private val locale: String) {
 
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         assertTextFits("the game screen")
         assertAtStart("the Back button", hasContentDescription(string(R.string.navigate_back)))
 
         session.status("connection", "connecting $ADDRESS")
-        waitFor(hasText(string(R.string.connection_stop)))
-        assertTextFits("the game pill's row, connecting")
+        waitFor(hasTestTag(GAME_TITLE_TAG) and hasContentDescription(string(R.string.connection_connecting_to, ADDRESS), substring = true))
+        assertTextFits("the game screen, connecting")
         session.status("connection", "error: $REASON")
         waitFor(hasText(string(R.string.connection_try_again)))
-        assertTextFits("the game pill's row, failed")
+        assertTextFits("the connection banner, failed")
         session.send(JSONObject().put("t", "sounds").put("played", true).put("scriptsMuted", false).put("gameMuted", false))
         // This waitFor reads the unmerged tree, where the button's name is on its icon
         waitFor(hasTestTag(SOUND_BUTTON_TAG) and hasAnyDescendant(hasContentDescription(string(R.string.sound_mute_all))))
-        assertTextFits("the game pill's row with the Sound button")
+        assertTextFits("the row below the input line, with the Sound button")
 
         session.hiddenInput(true)
         waitFor(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
@@ -170,7 +171,7 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("the page that makes a trigger from a line")
         assertAtStart("the words' heading", hasText(string(R.string.line_trigger_words)))
         activate(hasContentDescription(string(R.string.navigate_back)))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         session.clear()
 
         val question = hasText(string(R.string.secure_offer_title))
@@ -270,7 +271,7 @@ class PseudoLocaleTest(private val locale: String) {
         activate(hasContentDescription(string(R.string.navigate_back)))
 
         activate(hasContentDescription(string(R.string.navigate_back)))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
 
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasText(string(R.string.profiles_title)))

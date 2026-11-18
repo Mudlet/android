@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -42,14 +44,16 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.Announcer
-import org.mudlet.android.ui.game.GAME_PILL_TAG
+import org.mudlet.android.ui.game.CONNECTION_BANNER_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import androidx.compose.ui.R as ComposeUiR
 
 /**
  * Two games open against a fake engine (docs/multi-profile.md, "The switcher"): the profile list's open games, the game
- * pill with what TalkBack reads and its actions, the chip beside it for each state of the connection, and the game
- * sheet's Reconnect, Disconnect, switch, close and "Open another game". Controls are found by the labels TalkBack reads
+ * title with what TalkBack reads and its actions, the title bar's Connect, the menu's Stop and the banner under the
+ * title bar for each state of the connection, and the game sheet's Reconnect, Disconnect, switch, close and "Open
+ * another game". Controls are found by the labels TalkBack reads
  * and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
@@ -65,7 +69,8 @@ class GameSwitcherTest {
     private lateinit var alpha: FakeEngine.Session
     private lateinit var beta: FakeEngine.Session
 
-    private val pill = hasTestTag(GAME_PILL_TAG)
+    private val gameTitle = hasTestTag(GAME_TITLE_TAG)
+    private val banner = hasTestTag(CONNECTION_BANNER_TAG)
     private val sheet = hasTestTag(GAME_SHEET_TAG)
     private val input = hasSetTextAction()
 
@@ -114,67 +119,70 @@ class GameSwitcherTest {
     }
 
     @Test
-    fun theProfileListsOpenGamesBringOneToTheFront_andThePillReadsItAndSwitchesWithItsActions() {
+    fun theProfileListsOpenGamesBringOneToTheFront_andTheTitleReadsItAndSwitchesWithItsActions() {
         showFromTheList(ALPHA.name)
         assertEquals(ALPHA.name, beta.receive("setFront").getString("name"))
-        waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
-        assertEquals(listOf(reconnect(ALPHA.name), disconnect(ALPHA.name), next(BETA.name)), actionsOf(pill))
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        assertEquals(listOf(reconnect(ALPHA.name), disconnect(ALPHA.name), next(BETA.name)), actionsOf(gameTitle))
 
-        runAction(pill, next(BETA.name))
+        runAction(gameTitle, next(BETA.name))
         assertEquals(BETA.name, beta.receive("setFront").getString("name"))
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
-        assertEquals(listOf(reconnect(BETA.name), disconnect(BETA.name), previous(ALPHA.name)), actionsOf(pill))
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 2, 2))
+        assertEquals(listOf(reconnect(BETA.name), disconnect(BETA.name), previous(ALPHA.name)), actionsOf(gameTitle))
         // As a switch says, and then the focus is on the new game's line
         compose.runOnIdle { assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(gameState(BETA.name, R.string.connection_connected))) }
         compose.waitUntil(WAIT_MS) { focused(input) }
         compose.onNode(input).assertIsFocused()
 
-        runAction(pill, previous(ALPHA.name))
+        runAction(gameTitle, previous(ALPHA.name))
         assertEquals(ALPHA.name, beta.receive("setFront").getString("name"))
-        waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
         checkAccessibility()
 
         // The map in front stays there for the game switched to
         val mapButton = hasContentDescription(string(R.string.app_map_show)) and isToggleable()
         activate(mapButton)
-        runAction(pill, next(BETA.name))
+        runAction(gameTitle, next(BETA.name))
         assertEquals(BETA.name, beta.receive("setFront").getString("name"))
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 2, 2))
         compose.onNode(mapButton).assertIsOn()
     }
 
     @Test
-    fun theChipOffersWhatTheConnectionNeeds_andADropIsToldOnce() {
+    fun theBarAndTheBannerOfferWhatTheConnectionNeeds_andADropIsToldOnce() {
         showFromTheList(BETA.name)
         beta.receive("setFront")
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
-        assertNoChip()
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 2, 2))
+        assertNothingToDo()
 
         // Dropped without the player's Disconnect, and the profile does not dial again by itself
         beta.status("connection", "disconnected")
-        waitFor(pillReading(BETA.name, R.string.connection_lost, 2, 2))
+        waitFor(titleReading(BETA.name, R.string.connection_lost, 2, 2))
         compose.runOnIdle { assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(announced(BETA.name, R.string.connection_lost))) }
-        activate(hasContentDescription(string(R.string.connection_reconnect_to, BETA.name)))
+        compose.onNode(banner and hasAnyDescendant(hasText(compose.activity.getString(R.string.connection_banner_lost, BETA.name)))).assertIsDisplayed()
+        activate(hasContentDescription(string(R.string.connection_reconnect_to, BETA.name)) and hasAnyAncestor(banner))
         val connect = beta.receive("connect")
         assertEquals(BETA.host, connect.getString("host"))
         assertEquals(BETA.port, connect.getInt("port"))
 
         beta.status("connection", "connecting ${BETA.host}:${BETA.port}")
-        waitFor(pillReading(BETA.name, compose.activity.getString(R.string.connection_connecting_to, "${BETA.host}:${BETA.port}"), 2, 2))
-        activate(hasContentDescription(string(R.string.connection_stop_to, BETA.name)))
+        waitFor(titleReading(BETA.name, compose.activity.getString(R.string.connection_connecting_to, "${BETA.host}:${BETA.port}"), 2, 2))
+        compose.pickFromGameMenu(compose.activity.getString(R.string.connection_stop_to, BETA.name))
         beta.receive("disconnect")
         beta.status("connection", "disconnected")
-        waitFor(pillReading(BETA.name, R.string.connection_disconnected, 2, 2))
+        waitFor(titleReading(BETA.name, R.string.connection_disconnected, 2, 2))
+        compose.onNode(banner).assertDoesNotExist()
         activate(hasContentDescription(string(R.string.connection_connect_to, BETA.name)))
         beta.receive("connect")
 
         beta.status("connection", "error: host not found")
-        waitFor(pillReading(BETA.name, compose.activity.getString(R.string.connection_error, "host not found"), 2, 2))
+        waitFor(titleReading(BETA.name, compose.activity.getString(R.string.connection_error, "host not found"), 2, 2))
+        compose.onNode(banner and hasAnyDescendant(hasText(compose.activity.getString(R.string.connection_banner_failed, BETA.name, "host not found")))).assertIsDisplayed()
         activate(hasContentDescription(string(R.string.connection_try_again_to, BETA.name)))
         beta.receive("connect")
         beta.status("connection", "connected")
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
-        assertNoChip()
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 2, 2))
+        assertNothingToDo()
 
         // The sheet's Disconnect is the player's, so what follows is no drop
         openTheSheet()
@@ -182,7 +190,8 @@ class GameSwitcherTest {
         beta.receive("disconnect")
         waitUntilGone(sheet)
         beta.status("connection", "disconnected")
-        waitFor(pillReading(BETA.name, R.string.connection_disconnected, 2, 2))
+        waitFor(titleReading(BETA.name, R.string.connection_disconnected, 2, 2))
+        compose.onNode(banner).assertDoesNotExist()
         compose.onNode(hasContentDescription(string(R.string.connection_connect_to, BETA.name))).assertIsDisplayed()
 
         openTheSheet()
@@ -195,10 +204,10 @@ class GameSwitcherTest {
     fun aProfileThatReconnectsByItselfIsReconnectingThroughItsRetriesUntilConnected() {
         showFromTheList(ALPHA.name)
         beta.receive("setFront")
-        waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
 
         alpha.status("connection", "disconnected")
-        val reconnecting = pillReading(ALPHA.name, R.string.connection_reconnecting, 1, 2)
+        val reconnecting = titleReading(ALPHA.name, R.string.connection_reconnecting, 1, 2)
         waitFor(reconnecting)
         val told = compose.runOnIdle {
             assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(announced(ALPHA.name, R.string.connection_reconnecting)))
@@ -212,30 +221,32 @@ class GameSwitcherTest {
         compose.waitUntil(WAIT_MS) { EngineClient.session(ALPHA.name)?.status?.get("connection")?.startsWith("connecting") == true }
         compose.onNode(reconnecting).assertIsDisplayed()
         compose.runOnIdle { assertEquals("the retries are not each told", told, Announcer.current!!.serial) }
+        compose.onNode(banner and hasAnyDescendant(hasText(compose.activity.getString(R.string.connection_banner_reconnecting, ALPHA.name)))).assertIsDisplayed()
+        compose.onNode(hasContentDescription(string(R.string.connection_stop_to, ALPHA.name)) and hasAnyAncestor(banner)).assertIsDisplayed()
 
         activate(hasContentDescription(string(R.string.connection_reconnect_now_to, ALPHA.name)))
         alpha.receive("connect")
         alpha.status("connection", "connected")
-        waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
-        assertNoChip()
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        assertNothingToDo()
     }
 
     @Test
     fun theSheetSwitchesAndClosesAfterAsking_andTheLastGameClosedShowsTheProfileList() {
         showFromTheList(BETA.name)
         beta.receive("setFront")
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 2, 2))
 
         openTheSheet()
         compose.onNode(gameRow(BETA.name)).assertIsSelected()
         activate(gameRow(ALPHA.name))
         assertEquals(ALPHA.name, beta.receive("setFront").getString("name"))
         waitUntilGone(sheet)
-        waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
 
-        runAction(pill, next(BETA.name))
+        runAction(gameTitle, next(BETA.name))
         assertEquals(BETA.name, beta.receive("setFront").getString("name"))
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 2, 2))
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 2, 2))
         // The game the sheet switched away from comes back without it
         compose.onNode(sheet).assertDoesNotExist()
 
@@ -248,7 +259,7 @@ class GameSwitcherTest {
         activate(hasContentDescription(string(R.string.game_close, ALPHA.name)))
         activate(hasText(string(R.string.game_close_confirm)))
         closeInTheEngine(ALPHA.name)
-        waitFor(pillReading(BETA.name, R.string.connection_connected, 1, 1))
+        waitFor(titleReading(BETA.name, R.string.connection_connected, 1, 1))
         compose.onNode(sheet).assertIsDisplayed()
         compose.onNode(gameRow(ALPHA.name)).assertDoesNotExist()
 
@@ -265,7 +276,7 @@ class GameSwitcherTest {
     fun openAnotherGameOpensOneBesideThoseOpen_untilAsManyAsCanBeAre() {
         showFromTheList(ALPHA.name)
         beta.receive("setFront")
-        waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
 
         openTheSheet()
         activate(hasText(string(R.string.game_open_another)))
@@ -275,7 +286,7 @@ class GameSwitcherTest {
         assertTrue("beside those open", open.getBoolean("alongside"))
         beta.profiles(PROFILES, open)
         assertEquals(GAMMA.name, beta.receive("setFront").getString("name"))
-        waitFor(pillReading(GAMMA.name, R.string.connection_disconnected, 3, 3))
+        waitFor(titleReading(GAMMA.name, R.string.connection_disconnected, 3, 3))
         compose.runOnIdle { assertEquals(listOf(ALPHA.name, BETA.name, GAMMA.name), EngineClient.sessions.map { it.name }) }
 
         fake.engine.openAlongside(DELTA.name)
@@ -291,7 +302,7 @@ class GameSwitcherTest {
     private fun showFromTheList(name: String) {
         waitFor(hasText(string(R.string.games_title)))
         activate(hasContentDescription(gameState(name, R.string.connection_connected)))
-        waitFor(pill)
+        waitFor(gameTitle)
     }
 
     // The engine closes the profile [name] the UI asked it to, and answers
@@ -303,22 +314,24 @@ class GameSwitcherTest {
     }
 
     private fun openTheSheet() {
-        activate(pill)
+        activate(gameTitle)
         waitFor(sheet)
     }
 
-    private fun assertNoChip() {
-        val chips = listOf(R.string.connection_connect_to, R.string.connection_reconnect_now_to, R.string.connection_try_again_to, R.string.connection_stop_to)
-        for (chip in chips) compose.onNode(hasContentDescription(compose.activity.getString(chip, EngineClient.front.name))).assertDoesNotExist()
-        // Reconnect is also the pill's action, which is no node of its own
+    // Neither the title bar's Connect nor the banner and its buttons
+    private fun assertNothingToDo() {
+        compose.onNode(banner).assertDoesNotExist()
+        val buttons = listOf(R.string.connection_connect_to, R.string.connection_reconnect_now_to, R.string.connection_try_again_to, R.string.connection_stop_to)
+        for (button in buttons) compose.onNode(hasContentDescription(compose.activity.getString(button, EngineClient.front.name))).assertDoesNotExist()
+        // Reconnect is also the title's action, which is no node of its own
         compose.onNode(hasContentDescription(reconnect(EngineClient.front.name)) and hasClickAction()).assertDoesNotExist()
     }
 
     private fun gameRow(name: String, @StringRes state: Int = R.string.connection_connected) = hasContentDescription(gameState(name, state)) and hasClickAction()
 
-    private fun pillReading(name: String, @StringRes state: Int, index: Int, count: Int) = pillReading(name, string(state), index, count)
+    private fun titleReading(name: String, @StringRes state: Int, index: Int, count: Int) = titleReading(name, string(state), index, count)
 
-    private fun pillReading(name: String, state: String, index: Int, count: Int) = pill and hasContentDescription(compose.activity.getString(R.string.game_pill_description, name, state, index, count))
+    private fun titleReading(name: String, state: String, index: Int, count: Int) = gameTitle and hasContentDescription(compose.activity.getString(R.string.game_title_description, name, state, index, count))
 
     private fun gameState(name: String, @StringRes state: Int) = compose.activity.getString(R.string.game_state, name, string(state))
 

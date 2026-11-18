@@ -23,7 +23,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
@@ -52,16 +52,16 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.suggest.PinnedCommands
 import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.ui.game.CommandSuggestions
-import org.mudlet.android.ui.game.GAME_PILL_TAG
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.HISTORY_SHEET_TAG
 import org.mudlet.android.ui.game.QUICK_BAR_TAG
 import java.io.File
 
 /**
- * The command history and the pinned commands against a fake engine: the sheet the History button and Ctrl+R open,
- * its search, its rows' actions, the quick bar's pinned buttons, and none of them while the game hides input. Each
- * test has a profile of its own, so it starts with nothing sent or pinned. Controls are found by the labels TalkBack
- * reads and activated through their accessibility actions.
+ * The command history and the pinned commands against a fake engine: the sheet the input line's History button and
+ * Ctrl+R open, its search, its rows' actions, the quick bar's pinned buttons, and none of them while the game hides
+ * input. Each test has a profile of its own, so it starts with nothing sent or pinned. Controls are found by the labels
+ * TalkBack reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class HistorySheetTest {
@@ -101,10 +101,9 @@ class HistorySheetTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         session.status("profile", "$profile loaded")
-        // Connected, so no chip beside the game pill: on the CI emulator's 320 px wide screen, the chip leaves the quick bar no room for a pinned command
         session.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { CommandSuggestions.profile } == profile }
@@ -205,7 +204,7 @@ class HistorySheetTest {
             device.pressBack()
             waitUntilGone(sheet)
         }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
         // The R went to neither field
         compose.onNode(input).assert(editableText(""))
     }
@@ -257,7 +256,6 @@ class HistorySheetTest {
             compose.onNode(labelled(R.string.pinned_command, commands.last())).performScrollTo().assertIsDisplayed()
 
             send("north")
-            compose.onNode(historyButton).performScrollTo()
             activate(historyButton)
             // Below the twelve pins, the history's rows are off the sheet until the search leaves them out
             compose.onNode(search).performTextInput("north")
@@ -273,7 +271,7 @@ class HistorySheetTest {
     }
 
     @Test
-    fun theQuickBarIsBelowTheInputLineAfterTheGamePill() {
+    fun theHistoryButtonIsOnTheInputLineBeforeItsArrows_andTheQuickBarBelowIt() {
         send("open door")
         activate(historyButton)
         activate(labelled(R.string.history_pin, "open door"))
@@ -282,21 +280,19 @@ class HistorySheetTest {
         waitFor(labelled(R.string.pinned_command, "open door"))
         checkAccessibility()
 
-        // TalkBack goes by position, so the quick bar is read after the input line's buttons and the game pill
+        // TalkBack goes by position, so History is read after the line and before its arrows, and the quick bar after them
         val line = bounds(input)
-        val send = bounds(hasContentDescription(string(R.string.input_send)) and hasClickAction())
         val history = bounds(historyButton)
+        val previous = bounds(hasContentDescription(string(R.string.input_history_previous)) and hasClickAction())
         val pinned = bounds(labelled(R.string.pinned_command, "open door"))
-        val pill = bounds(hasTestTag(GAME_PILL_TAG))
-        assertTrue("history $history below the input line $line and its Send $send", history.top >= line.bottom && history.top >= send.bottom)
-        assertTrue("pinned $pinned beside history $history", pinned.left >= history.right && pinned.top < history.bottom)
-        assertTrue("game pill $pill below the input line $line", pill.top >= line.bottom)
-        assertTrue("history $history after the game pill $pill in its row", history.left >= pill.right && history.top < pill.bottom && history.bottom > pill.top)
+        assertTrue("history $history after the input line $line in its row", history.left >= line.right && history.top < line.bottom && history.bottom > line.top)
+        assertTrue("history $history before the up button $previous", history.right <= previous.left)
+        assertTrue("pinned $pinned below the input line $line", pinned.top >= line.bottom)
         val minimum = with(compose.density) { 48.dp.toPx() }
-        assertTrue("a ${history.height} px tall History button, at least 48 dp ($minimum px)", history.height >= minimum)
+        assertTrue("a ${history.width} by ${history.height} px History button, at least 48 dp ($minimum px)", history.width >= minimum && history.height >= minimum)
     }
 
-    private val historyButton get() = hasText(string(R.string.history_open)) and hasClickAction()
+    private val historyButton get() = hasContentDescription(string(R.string.history_open)) and hasClickAction()
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
 

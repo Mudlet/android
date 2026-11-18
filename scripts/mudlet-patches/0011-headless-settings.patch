@@ -22,27 +22,19 @@ its own getConfig in the globals would answer for Mudlet.
 - And the input line's three, kept with the profile as the preferences' Input line tab keeps them: commandSeparator
   (the text a sent line is split at, none when empty), highlightHistory (a command brought back from the history is
   selected whole) and disablePasswordMasking (no hidden-input box when the game hides what is typed).
-- And the console's colours, as #rrggbb text kept with the profile as the preferences' Color view tab keeps them: the
-  sixteen ANSI ones by the names color_table gives them (ansiBlack to ansiLightWhite), foregroundColor,
-  backgroundColor, commandForegroundColor and commandBackgroundColor. A change refreshes the console's colours and
-  color_table as the preferences' does, so text decoded after it takes it; anything not #rrggbb is refused. Beside
-  them serverMayRedefineColors (the game may redefine the sixteen), enableOSC8Hyperlinks (OSC 8 links are shown and
-  advertised) and alertOnNewData (the new text alert), each a bool.
 
 Tested in HeadlessSessionTest (reading, a script's replacement getConfig, an unknown key, a change taken and three
-refused, the refusals with no profile, the encoding refused, changed and read again by a new session, the input line's
-three changed and read again by a new session, and a colour refused, then colours and the display's three changed,
-the background reaching consoleColorsChanged, and read again by a new session), and the new keys in Other_spec.lua.
-The desktop's preferences are unchanged.
+refused, the refusals with no profile, and the encoding refused, changed and read again by a new session, and the input line's three changed and read again by a new session), and
+the new keys in Other_spec.lua. The desktop's preferences are unchanged.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 07707a4..5abe254 100644
+index 07707a4..432e622 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
-@@ -1673,6 +1673,29 @@ and also a call that left it as it was, so an app's mute buttons can follow it a
+@@ -1673,6 +1673,25 @@ and also a call that left it as it was, so an app's mute buttons can follow it a
  once the session's own profile has closed, as the session's other signals do, even while profiles its
  scripts opened live on. They are refused where `submit()` is.
  
@@ -54,10 +46,6 @@ index 07707a4..5abe254 100644
 +The game's text encoding is the key `serverEncoding`, by the names `getServerEncodingsList()` gives.
 +The input line's are `commandSeparator`, `highlightHistory` and `disablePasswordMasking`, as the preferences' Input line
 +tab has them.
-+The console's colours are text in `#rrggbb` form: the sixteen ANSI ones by the names `color_table` gives them
-+(`ansiBlack` to `ansiLightWhite`), then `foregroundColor`, `backgroundColor`, `commandForegroundColor` and
-+`commandBackgroundColor`, with `serverMayRedefineColors` beside them; a change reaches text decoded after it.
-+`enableOSC8Hyperlinks` and `alertOnNewData` turn OSC 8 links and the new text alert on and off.
 +
 +`settings()` fills a `QVariantMap` with the value of each key it is given, as `getConfig()` gives it
 +with `true` for its second argument: a `bool`, a `double` or a `QString`, an option of several by its
@@ -73,58 +61,10 @@ index 07707a4..5abe254 100644
  
  `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index 61b99d0..d4a013a 100644
+index 61b99d0..3372797 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
-@@ -85,6 +85,7 @@
- #include <QTextStream>
- #include <QFileInfo>
- #include <QVector>
-+#include <array>
- #include <cmath>
- #include <cstdlib>
- #include <cstring>
-@@ -10128,6 +10129,39 @@ int TLuaInterpreter::removeFileWatch(lua_State* L)
-     return 1;
- }
- 
-+// The profile's console colours, the sixteen by the names color_table gives them
-+static QColor Host::*consoleColorMember(QStringView key)
-+{
-+    static const std::array<std::pair<QStringView, QColor Host::*>, 20> members{{
-+            {u"ansiBlack", &Host::mBlack},
-+            {u"ansiRed", &Host::mRed},
-+            {u"ansiGreen", &Host::mGreen},
-+            {u"ansiYellow", &Host::mYellow},
-+            {u"ansiBlue", &Host::mBlue},
-+            {u"ansiMagenta", &Host::mMagenta},
-+            {u"ansiCyan", &Host::mCyan},
-+            {u"ansiWhite", &Host::mWhite},
-+            {u"ansiLightBlack", &Host::mLightBlack},
-+            {u"ansiLightRed", &Host::mLightRed},
-+            {u"ansiLightGreen", &Host::mLightGreen},
-+            {u"ansiLightYellow", &Host::mLightYellow},
-+            {u"ansiLightBlue", &Host::mLightBlue},
-+            {u"ansiLightMagenta", &Host::mLightMagenta},
-+            {u"ansiLightCyan", &Host::mLightCyan},
-+            {u"ansiLightWhite", &Host::mLightWhite},
-+            {u"foregroundColor", &Host::mFgColor},
-+            {u"backgroundColor", &Host::mBgColor},
-+            {u"commandForegroundColor", &Host::mCommandFgColor},
-+            {u"commandBackgroundColor", &Host::mCommandBgColor},
-+    }};
-+    for (const auto& [name, member] : members) {
-+        if (name == key) {
-+            return member;
-+        }
-+    }
-+    return nullptr;
-+}
-+
- // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setConfig
- // Please use same options with same names in setConfig and getConfig and keep them in sync
- // The table argument case for setting multiple properties at once is handled
-@@ -10385,6 +10419,37 @@ int TLuaInterpreter::setConfig(lua_State* L)
+@@ -10385,6 +10385,37 @@ int TLuaInterpreter::setConfig(lua_State* L)
          host.mAskTlsAvailable = getVerifiedBool(L, __func__, 2, "value");
          return success();
      }
@@ -162,7 +102,7 @@ index 61b99d0..d4a013a 100644
      if (key == qsl("promptForMXPProcessorOn")) {
          host.mPromptedForMXPProcessorOn = getVerifiedBool(L, __func__, 2, "value");
          return success();
-@@ -10409,6 +10474,33 @@ int TLuaInterpreter::setConfig(lua_State* L)
+@@ -10409,6 +10440,18 @@ int TLuaInterpreter::setConfig(lua_State* L)
          host.mAutoClearCommandLineAfterSend = getVerifiedBool(L, __func__, 2, "value");
          return success();
      }
@@ -178,40 +118,10 @@ index 61b99d0..d4a013a 100644
 +        host.setDisablePasswordMasking(getVerifiedBool(L, __func__, 2, "value"));
 +        return success();
 +    }
-+    if (QColor Host::*member = consoleColorMember(QString::fromUtf8(lua_tostring(L, 1)))) {
-+        const QString name = getVerifiedString(L, __func__, 2, "value");
-+        static const QRegularExpression hexColor(qsl("^#[0-9A-Fa-f]{6}$"));
-+        if (!hexColor.match(name).hasMatch()) {
-+            return warnArgumentValue(L, __func__, qsl("%1 takes a colour as #rrggbb, got '%2'").arg(QString::fromUtf8(lua_tostring(L, 1)), name));
-+        }
-+        host.*member = QColor::fromString(name);
-+        host.applyMainConsoleColors();
-+        host.updateAnsi16ColorsInTable();
-+        return success();
-+    }
-+    if (key == qsl("serverMayRedefineColors")) {
-+        host.setMayRedefineColors(getVerifiedBool(L, __func__, 2, "value"));
-+        return success();
-+    }
      if (key == qsl("showSentText")) {
          // Handle both legacy boolean and new string values
          if (lua_isboolean(L, 2)) {
-@@ -10700,6 +10792,14 @@ int TLuaInterpreter::setConfig(lua_State* L)
-         host.setEnableBlinkText(getVerifiedBool(L, __func__, 2, "value"));
-         return success();
-     }
-+    if (key == qsl("enableOSC8Hyperlinks")) {
-+        host.mEnableOSC8Hyperlinks = getVerifiedBool(L, __func__, 2, "value");
-+        return success();
-+    }
-+    if (key == qsl("alertOnNewData")) {
-+        host.mAlertOnNewData = getVerifiedBool(L, __func__, 2, "value");
-+        return success();
-+    }
- 
-     // Handle experiment keys
-     if (key.startsWith(qsl("experiment."))) {
-@@ -10956,6 +11056,41 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -10956,6 +10999,41 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.mAskTlsAvailable);
               }},
@@ -253,7 +163,7 @@ index 61b99d0..d4a013a 100644
              {qsl("promptForMXPProcessorOn"),
               [&]() {
                   lua_pushboolean(L, host.mPromptedForMXPProcessorOn);
-@@ -10980,6 +11115,23 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -10980,6 +11058,19 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.mAutoClearCommandLineAfterSend);
               }},
@@ -270,39 +180,9 @@ index 61b99d0..d4a013a 100644
 +             [&]() {
 +                 lua_pushboolean(L, host.disablePasswordMasking());
 +             }},
-+            {qsl("serverMayRedefineColors"),
-+             [&]() {
-+                 lua_pushboolean(L, host.getMayRedefineColors());
-+             }},
              {qsl("showSentText"),
               [&]() {
                   if (useStringFormat) {
-@@ -11143,6 +11295,14 @@ int TLuaInterpreter::getConfig(lua_State* L)
-              [&]() {
-                  lua_pushboolean(L, host.getEnableBlinkText());
-              }},
-+            {qsl("enableOSC8Hyperlinks"),
-+             [&]() {
-+                 lua_pushboolean(L, host.mEnableOSC8Hyperlinks);
-+             }},
-+            {qsl("alertOnNewData"),
-+             [&]() {
-+                 lua_pushboolean(L, host.mAlertOnNewData);
-+             }},
-             {qsl("showUpperLowerLevels"),
-              [&]() {
-                  lua_pushboolean(L, TAppFrontend::instance()->drawUpperLowerLevels());
-@@ -11184,6 +11344,10 @@ int TLuaInterpreter::getConfig(lua_State* L)
-         it->second();
-         return 1;
-     }
-+    if (QColor Host::*member = consoleColorMember(key)) {
-+        lua_pushstring(L, (host.*member).name().toUtf8().constData());
-+        return 1;
-+    }
- 
-     // Handle experiment keys
-     if (key.startsWith(qsl("experiment."))) {
 diff --git a/src/headless/CMakeLists.txt b/src/headless/CMakeLists.txt
 index 154ae13..14e0af6 100644
 --- a/src/headless/CMakeLists.txt
@@ -473,10 +353,10 @@ index 0000000..94d5408
 +    return true;
 +}
 diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
-index a15c1c2..1bd6d18 100644
+index a15c1c2..0746a0c 100644
 --- a/src/mudlet-lua/lua/Other.lua
 +++ b/src/mudlet-lua/lua/Other.lua
-@@ -1635,17 +1635,42 @@ local oldgetConfig = getConfig
+@@ -1635,6 +1635,8 @@ local oldgetConfig = getConfig
  -- Left out on purpose: "ircNickName" (with no nick stored it reads as a new random one, and writing it
  -- back also replaces the app-wide nick) and "ircPassword" (it would show up in every dump of the table)
  local configOptions = {
@@ -484,32 +364,10 @@ index a15c1c2..1bd6d18 100644
 +  "acceptServerMedia",
    "accessibleLabels",
    "advertiseScreenReader",
-+  "alertOnNewData",
    "ambiguousEAsianWidthCharacters",
-   "announceIncomingText",
-+  "ansiBlack",
-+  "ansiBlue",
-+  "ansiCyan",
-+  "ansiGreen",
-+  "ansiLightBlack",
-+  "ansiLightBlue",
-+  "ansiLightCyan",
-+  "ansiLightGreen",
-+  "ansiLightMagenta",
-+  "ansiLightRed",
-+  "ansiLightWhite",
-+  "ansiLightYellow",
-+  "ansiMagenta",
-+  "ansiRed",
-+  "ansiWhite",
-+  "ansiYellow",
-   "askTlsAvailable", 
-   "autoClearInputLine",
-+  "backgroundColor",
+@@ -1644,8 +1646,11 @@ local configOptions = {
    "blankLinesBehaviour",
    "caretShortcut",
-+  "commandBackgroundColor",
-+  "commandForegroundColor",
    "commandLineHistorySaveSize",
 +  "commandSeparator",
    "compactInputLine",
@@ -519,29 +377,23 @@ index a15c1c2..1bd6d18 100644
    "editorAutoComplete",
    "editorFont",
    "editorFontFollowsDisplay",
-@@ -1662,9 +1687,12 @@ local configOptions = {
-   "enableMXP",
-   "enableNAWS",
-   "enableNEWENVIRON",
-+  "enableOSC8Hyperlinks",
+@@ -1665,6 +1670,7 @@ local configOptions = {
    "f3SearchEnabled",
    "fixUnnecessaryLinebreaks",
    "forceNewEnvironNegotiationOff",
-+  "foregroundColor",
 +  "highlightHistory",
    "inputLineStrictUnixEndings",
    "ircChannels",
    "ircHostName",
-@@ -1690,6 +1718,8 @@ local configOptions = {
+@@ -1690,6 +1696,7 @@ local configOptions = {
    "muteMediaGame",
    "promptForMXPProcessorOn",
    "promptForVersionInTTYPE",
 +  "serverEncoding",
-+  "serverMayRedefineColors",
    "show3dMapView",
    "showRoomIdsOnMap", 
    "showSentText",
-@@ -1700,6 +1730,9 @@ local configOptions = {
+@@ -1700,6 +1707,9 @@ local configOptions = {
    "specialForceGAOff",
    "specialForceMxpNegotiationOff",
    "specialForceMXPProcessorOn",
@@ -552,10 +404,10 @@ index a15c1c2..1bd6d18 100644
    "undoServerWrapWidth",
    "versionInTTYPE",
 diff --git a/src/mudlet-lua/tests/Other_spec.lua b/src/mudlet-lua/tests/Other_spec.lua
-index e864915..3f0c65a 100644
+index e864915..a8ddd8a 100644
 --- a/src/mudlet-lua/tests/Other_spec.lua
 +++ b/src/mudlet-lua/tests/Other_spec.lua
-@@ -2216,6 +2216,87 @@ describe("Tests Other.lua functions", function()
+@@ -2216,6 +2216,52 @@ describe("Tests Other.lua functions", function()
        restore("editorAutoComplete")
      end)
  
@@ -605,49 +457,14 @@ index e864915..3f0c65a 100644
 +      end
 +    end)
 +
-+    it("reads and changes the console colours as #rrggbb, and color_table follows", function()
-+      local keys = { "ansiRed", "ansiLightCyan", "foregroundColor", "backgroundColor", "commandForegroundColor", "commandBackgroundColor" }
-+      for _, key in ipairs(keys) do
-+        snapshot(key)
-+        assert.truthy(getConfig(key):match("^#%x%x%x%x%x%x$"))
-+      end
-+      assert.is_true(setConfig("ansiRed", "#12AB34"))
-+      assert.equals("#12ab34", getConfig("ansiRed"))
-+      assert.same({ 0x12, 0xab, 0x34 }, color_table.ansiRed)
-+      for _, key in ipairs(keys) do
-+        assert.is_true(setConfig(key, "#010203"))
-+        assert.equals("#010203", getConfig(key))
-+      end
-+      for _, bad in ipairs({ "red", "#12ab3", "#12ab345", "12ab34" }) do
-+        local ok, message = setConfig("ansiRed", bad)
-+        assert.is_nil(ok)
-+        assert.truthy(message:find("#rrggbb", 1, true))
-+      end
-+      assert.equals("#010203", getConfig("ansiRed"))
-+      for _, key in ipairs(keys) do
-+        restore(key)
-+      end
-+    end)
-+
-+    it("reads and changes the game's colour redefinition, OSC 8 links and the new text alert", function()
-+      for _, key in ipairs({ "serverMayRedefineColors", "enableOSC8Hyperlinks", "alertOnNewData" }) do
-+        snapshot(key)
-+        local was = getConfig(key)
-+        assert.equals("boolean", type(was))
-+        assert.is_true(setConfig(key, not was))
-+        assert.equals(not was, getConfig(key))
-+        restore(key)
-+      end
-+    end)
-+
      it("getConfig returns a keyed table when given a list of keys", function()
        local result = getConfig({ "enableGMCP", "editorAutoComplete" })
        assert.is_table(result)
 diff --git a/test/functional_tests/HeadlessSessionTest.cpp b/test/functional_tests/HeadlessSessionTest.cpp
-index 16baa1d..488d457 100644
+index 16baa1d..b02e24f 100644
 --- a/test/functional_tests/HeadlessSessionTest.cpp
 +++ b/test/functional_tests/HeadlessSessionTest.cpp
-@@ -2216,6 +2216,162 @@ end))lua");
+@@ -2216,6 +2216,116 @@ end))lua");
          QVERIFY(!outputTexts(output).contains(qsl("Replayed line 1999.")));
      }
  
@@ -758,52 +575,6 @@ index 16baa1d..488d457 100644
 +        values.clear();
 +        QVERIFY(reopened.settings(keys, values));
 +        QCOMPARE(values, changed);
-+        QVERIFY(reopened.shutdown(false));
-+    }
-+
-+    void test_theColourAndDisplaySettingsAreKeptWithTheProfile()
-+    {
-+        const QString name = qsl("Headless Colours And Display");
-+        QVERIFY(writeProfile(name, QString()));
-+        const QStringList keys{qsl("ansiRed"), qsl("backgroundColor"), qsl("serverMayRedefineColors"), qsl("enableOSC8Hyperlinks"), qsl("alertOnNewData")};
-+        const QVariantMap changed{{qsl("ansiRed"), qsl("#123456")},
-+                                  {qsl("backgroundColor"), qsl("#0a141e")},
-+                                  {qsl("serverMayRedefineColors"), true},
-+                                  {qsl("enableOSC8Hyperlinks"), false},
-+                                  {qsl("alertOnNewData"), false}};
-+        QVariantMap values;
-+        QMap<QString, QString> refused;
-+        {
-+            THeadlessSession session;
-+            QSignalSpy colors(&session, &THeadlessSession::consoleColorsChanged);
-+            QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
-+            QVERIFY(session.settings(keys, values));
-+            QCOMPARE(values,
-+                     QVariantMap({{qsl("ansiRed"), qsl("#800000")},
-+                                  {qsl("backgroundColor"), qsl("#000000")},
-+                                  {qsl("serverMayRedefineColors"), false},
-+                                  {qsl("enableOSC8Hyperlinks"), true},
-+                                  {qsl("alertOnNewData"), true}}));
-+
-+            QVERIFY(session.setSettings({{qsl("ansiRed"), qsl("crimson")}}, refused));
-+            QVERIFY(refused.value(qsl("ansiRed")).contains(qsl("#rrggbb")));
-+            refused.clear();
-+
-+            QVERIFY(session.setSettings(changed, refused));
-+            QVERIFY2(refused.isEmpty(), qPrintable(refused.keys().join(qsl(", "))));
-+            QCOMPARE(session.host()->mRed, QColor(0x12, 0x34, 0x56));
-+            QTRY_COMPARE_WITH_TIMEOUT(colors.count(), 1, 10000);
-+            QCOMPARE(colors.constFirst().at(2).value<QColor>(), QColor(10, 20, 30));
-+            QCOMPARE(session.consoleBackground(), QColor(10, 20, 30));
-+            QVERIFY(session.shutdown(true));
-+        }
-+
-+        THeadlessSession reopened;
-+        QCOMPARE(reopened.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
-+        values.clear();
-+        QVERIFY(reopened.settings(keys, values));
-+        QCOMPARE(values, changed);
-+        QCOMPARE(reopened.consoleBackground(), QColor(10, 20, 30));
 +        QVERIFY(reopened.shutdown(false));
 +    }
 +

@@ -341,6 +341,9 @@ object EngineClient {
         onAnswer(error)
     }) { Requests.deleteProfile(name, it) }
 
+    /** Asks the engine to list its profiles again, as it does not see one added beside it, as an import adds one. */
+    fun refreshProfiles(onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.listProfiles(it) }
+
     /** Opens and connects the profile [name], closing those open; Reconnect then goes to its address, or opens it again once none is. */
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) opened(name)

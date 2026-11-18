@@ -171,6 +171,7 @@ fun ProfileListScreen(
                     )
                 }
             }
+            item(key = "import") { ProfileImport(Modifier.padding(top = 12.dp)) }
             if (onOpenSelfTest != null) {
                 item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
             }
@@ -184,6 +185,7 @@ fun ProfileListScreen(
             }
         }
     }
+    ProfileImportDialog()
     defaultGames.firstOrNull { it.name == info }?.let { game ->
         DefaultGameInfo(game, onConnect = { connectGame(game) }, onDismiss = { info = null })
     }

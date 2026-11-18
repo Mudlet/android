@@ -3,15 +3,22 @@ package org.mudlet.android.data
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.InputStream
+import java.io.SequenceInputStream
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.time.LocalDate
+import java.util.zip.ZipEntry
+import java.util.zip.ZipException
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 class ProfileArchiveTest {
     private val root = Files.createTempDirectory("profile-archive").toFile()
@@ -84,6 +91,198 @@ class ProfileArchiveTest {
     fun findsTheProfileWhereTheEngineKeepsIt() {
         assertEquals(File(root, "mudlet/profiles/Achaea"), ProfileArchive.folder(root, "Achaea"))
         assertEquals("Achaea-2026-11-17.zip", ProfileArchive.fileName("Achaea", LocalDate.of(2026, 11, 17)))
+    }
+
+    @Test
+    fun unpacksWhatItExportsLessTheSecrets() {
+        val folder = profile("Round Trip")
+        write(folder, "current/a.xml", "<MudletPackage/>".toByteArray())
+        write(folder, "map/m.dat", ByteArray(70_000) { it.toByte() })
+        write(folder, "password", "hunter2".toByteArray())
+        val out = ByteArrayOutputStream()
+        ProfileArchive.export(folder, out)
+
+        val unpacked = unpack(out.toByteArray()) as ProfileArchive.Unpacked.Folder
+
+        assertEquals("Round Trip", unpacked.folder.name)
+        assertArrayEquals(File(folder, "map/m.dat").readBytes(), File(unpacked.folder, "map/m.dat").readBytes())
+        assertEquals(listOf("current", "map"), unpacked.folder.list()!!.sorted())
+    }
+
+    @Test
+    fun leavesOutADesktopProfilesPasswordFilesAndMacOsForks() {
+        val unpacked = unpack(
+            zip(
+                "Desk/current/a.xml" to "x",
+                "Desk/password" to "hunter2",
+                "Desk/irc_password" to "irc",
+                "Desk/pkg/password" to "a package's",
+                "__MACOSX/Desk/._a.xml" to "fork",
+            ),
+        ) as ProfileArchive.Unpacked.Folder
+        assertEquals(listOf("current", "pkg"), unpacked.folder.list()!!.sorted())
+        assertEquals(listOf("Desk"), staging.list()!!.toList())
+    }
+
+    @Test
+    fun refusesAPathThatLeavesTheFolder() {
+        for (name in listOf("Evil/../../outside.txt", "/etc/evil", "Evil/./a", "Evil//a", "Evil\\..\\a", "Evil/a\u0000b")) {
+            assertRefused(ProfileArchive.Refusal.UNSAFE_PATH, zip("Evil/current/a.xml" to "x", name to "bad"), name)
+        }
+        assertFalse(File(root, "outside.txt").exists())
+    }
+
+    @Test
+    fun saysAPathAndroidRefusesLeavesTheFolderRatherThanThatItIsNotAZip() {
+        // What ZipInputStream throws from API 34 at a name with a `..` segment
+        assertRefused(ProfileArchive.Refusal.UNSAFE_PATH, failingAfterAnEntry("Invalid zip entry path: Evil/../../a"))
+        assertRefused(ProfileArchive.Refusal.NOT_A_ZIP, failingAfterAnEntry("invalid entry compressed size"))
+    }
+
+    @Test
+    fun refusesADuplicateEntry() {
+        assertRefused(ProfileArchive.Refusal.UNSAFE_PATH, zipAllowingDuplicates("D/current/a.xml", "D/current/a.xml"))
+    }
+
+    @Test
+    fun refusesMoreThanOneFolderOrAFileAtTheTop() {
+        assertRefused(ProfileArchive.Refusal.NOT_ONE_FOLDER, zip("A/current/a.xml" to "x", "B/current/b.xml" to "y"))
+        assertRefused(ProfileArchive.Refusal.NOT_ONE_FOLDER, zip("A/current/a.xml" to "x", "loose.txt" to "y"))
+    }
+
+    @Test
+    fun refusesAFolderWithNoSave() {
+        assertRefused(ProfileArchive.Refusal.NO_SAVE, zip("NoSave/map/m.dat" to "x", "NoSave/current/notes.txt" to "y"))
+    }
+
+    @Test
+    fun refusesWhatIsNotAZip() {
+        assertRefused(ProfileArchive.Refusal.NOT_A_ZIP, "just some text, not a zip".toByteArray())
+        assertRefused(ProfileArchive.Refusal.NOT_A_ZIP, zip())
+    }
+
+    @Test
+    fun refusesAnEntryNameThatIsNotUtf8RatherThanFailingOnIt() {
+        val bytes = zip("A/current/\u00e9.xml" to "x")
+        // \u00e9 in UTF-8, made Latin-1's, as an archiver that writes the local code page does
+        for (i in 0 until bytes.size - 1) {
+            if (bytes[i] == 0xC3.toByte() && bytes[i + 1] == 0xA9.toByte()) {
+                bytes[i] = 0xE9.toByte()
+                bytes[i + 1] = 'x'.code.toByte()
+            }
+        }
+        assertRefused(ProfileArchive.Refusal.UNREADABLE_NAME, bytes)
+    }
+
+    @Test
+    fun refusesAZipBombByTheBytesItUnpacksNotTheSizeItClaims() {
+        // Deflated zeros: 64 KiB in the archive unpacks to many megabytes
+        val bomb = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip ->
+                zip.putNextEntry(ZipEntry("Bomb/current/a.xml"))
+                zip.write(ByteArray(8 * 1024 * 1024))
+                zip.closeEntry()
+            }
+        }.toByteArray()
+        assertTrue(bomb.size < 100_000)
+        assertRefused(ProfileArchive.Refusal.TOO_LARGE, bomb, maxBytes = 1024 * 1024)
+        assertRefused(ProfileArchive.Refusal.TOO_LARGE, zip("M/current/a.xml" to "x", "M/b" to "y", "M/c" to "z"), maxEntries = 2)
+    }
+
+    @Test
+    fun namesAsMudletDoes() {
+        assertTrue(ProfileArchive.usableName("Achaea (main) #2 & co._-"))
+        for (bad in listOf("", " lead", "trail ", ".", "a..b", "slash/name", "dé", "back\\slash")) {
+            assertFalse(bad, ProfileArchive.usableName(bad))
+        }
+    }
+
+    @Test
+    fun findsATakenNameIgnoringCaseAndSuggestsAFreeOneAsDesktopsCopyDoes() {
+        val profiles = listOf("Achaea", "Achaea1", "Game7", "Game8")
+        assertEquals("Achaea", ProfileArchive.taken(profiles, "ACHAEA"))
+        assertEquals(null, ProfileArchive.taken(profiles, "Other"))
+        assertEquals("Achaea2", ProfileArchive.freeName(profiles, "Achaea"))
+        assertEquals("Game9", ProfileArchive.freeName(profiles, "Game7"))
+        assertEquals("Fresh1", ProfileArchive.freeName(profiles, "Fresh"))
+    }
+
+    @Test
+    fun installsUnderTheChosenNameAndNeverOverAnotherProfile() {
+        val profiles = File(root, "profiles").apply { mkdirs() }
+        File(profiles, "Kept").mkdirs()
+        write(File(profiles, "Kept"), "current/old.xml", "old".toByteArray())
+        val first = unpack(zip("Kept/current/new.xml" to "new")) as ProfileArchive.Unpacked.Folder
+        try {
+            ProfileArchive.install(first.folder, profiles, "kept")
+            throw AssertionError("installed over Kept")
+        } catch (_: FileAlreadyExistsException) {
+        }
+        assertEquals(listOf("old.xml"), File(profiles, "Kept/current").list()!!.toList())
+
+        ProfileArchive.install(first.folder, profiles, "Kept Too")
+        assertEquals("new", File(profiles, "Kept Too/current/new.xml").readText())
+    }
+
+    private val staging get() = File(root, "staging")
+
+    private fun unpack(bytes: ByteArray, maxBytes: Long = ProfileArchive.MAX_BYTES, maxEntries: Int = ProfileArchive.MAX_ENTRIES) = ProfileArchive.unpack(ByteArrayInputStream(bytes), staging, maxBytes, maxEntries)
+
+    private fun assertRefused(
+        refusal: ProfileArchive.Refusal,
+        bytes: ByteArray,
+        message: String = refusal.name,
+        maxBytes: Long = ProfileArchive.MAX_BYTES,
+        maxEntries: Int = ProfileArchive.MAX_ENTRIES,
+    ) = assertRefused(refusal, ByteArrayInputStream(bytes), message, maxBytes, maxEntries)
+
+    private fun assertRefused(
+        refusal: ProfileArchive.Refusal,
+        input: InputStream,
+        message: String = refusal.name,
+        maxBytes: Long = ProfileArchive.MAX_BYTES,
+        maxEntries: Int = ProfileArchive.MAX_ENTRIES,
+    ) {
+        val result = ProfileArchive.unpack(input, staging, maxBytes, maxEntries)
+        assertTrue("$message: $result", result is ProfileArchive.Unpacked.Refused && result.refusal == refusal)
+        assertFalse("$message left files in staging", staging.exists() && staging.list()!!.isNotEmpty())
+    }
+
+    /** A zip whose first entry is written, after which reading throws a ZipException saying [why]. */
+    private fun failingAfterAnEntry(why: String): InputStream {
+        val first = zip("Evil/current/a.xml" to "x")
+        // The first entry ends where the central directory, or the next entry, begins
+        val end = (0 until first.size - 3).first { i -> first[i] == 'P'.code.toByte() && first[i + 1] == 'K'.code.toByte() && first[i + 2].toInt() == 1 && first[i + 3].toInt() == 2 }
+        return SequenceInputStream(
+            ByteArrayInputStream(first, 0, end),
+            object : InputStream() {
+                override fun read(): Int = throw ZipException(why)
+            },
+        )
+    }
+
+    private fun zip(vararg entries: Pair<String, String>) = ByteArrayOutputStream().also { out ->
+        ZipOutputStream(out).use { zip ->
+            for ((name, text) in entries) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(text.toByteArray())
+                zip.closeEntry()
+            }
+        }
+    }.toByteArray()
+
+    // ZipOutputStream refuses a duplicate name, so the second one is written under a stand-in of the same length
+    private fun zipAllowingDuplicates(first: String, second: String): ByteArray {
+        val standIn = second.dropLast(1) + "~"
+        val bytes = zip(first to "1", standIn to "2")
+        val from = standIn.toByteArray()
+        val to = second.toByteArray()
+        var i = 0
+        while (i <= bytes.size - from.size) {
+            if (bytes.copyOfRange(i, i + from.size).contentEquals(from)) to.copyInto(bytes, i)
+            i++
+        }
+        return bytes
     }
 
     private fun profile(name: String) = File(root, "profiles/$name").apply { mkdirs() }

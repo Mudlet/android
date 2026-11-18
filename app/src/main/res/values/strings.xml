@@ -1590,6 +1590,106 @@
     <string name="scripts_buttons">Buttons</string>
     <!-- A script library chip once the items are listed; %1$s is the kind ("Triggers"), %2$d how many items it has -->
     <string name="scripts_kind_count">%1$s %2$d</string>
+    <!-- The script library's chip, after those of the kinds, that opens the profile's Lua variables, as the desktop
+         editor's "Variables" button does -->
+    <string name="variables_chip">Variables</string>
+    <!-- The Variables screen's title; it lists the profile's Lua variables, read only; %1$s is the profile's name, such
+         as "Achaea" -->
+    <string name="variables_title">Variables: %1$s</string>
+    <!-- The Variables screen's title bar button that reads the variables again from the game, as their values change -->
+    <string name="variables_refresh">Refresh</string>
+    <!-- The Variables screen's search field's placeholder; it finds variables by name among those already read -->
+    <string name="variables_search">Search variable names</string>
+    <!-- The Variables screen's switch, as the desktop editor's "Show hidden variables": the variables Mudlet itself and
+         the packages make are hidden unless it is on -->
+    <string name="variables_show_hidden">Show hidden variables</string>
+    <!-- Under the Variables screen's switch "Show hidden variables" while it is off; %d is how many hidden variables
+         the list leaves out -->
+    <plurals name="variables_hidden_count">
+        <item quantity="one">%d hidden</item>
+        <item quantity="other">%d hidden</item>
+    </plurals>
+    <!-- The Variables screen while the variables, or a table's members, are being read from the game -->
+    <string name="variables_loading">Loading…</string>
+    <!-- The Variables screen when the profile has no variables to list -->
+    <string name="variables_none">No variables.</string>
+    <!-- The Variables screen when a search finds no name; %1$s is the text searched for. Only the variables already
+         read are searched: a table not opened yet is not -->
+    <string name="variables_search_none">No variable read so far has “%1$s” in its name.</string>
+    <!-- The Variables screen when the game would not list a table; %1$s is why, in English, from Mudlet -->
+    <string name="variables_refused">Could not read the variables: %1$s</string>
+    <!-- The Variables screen's row at the end of a long table's members, which reads the next of them; %d is how many
+         are not read yet -->
+    <plurals name="variables_more">
+        <item quantity="one">Show %d more</item>
+        <item quantity="other">Show %d more</item>
+    </plurals>
+    <!-- A Lua type as the Variables screen names it: text -->
+    <string name="variables_type_string">string</string>
+    <!-- A Lua type as the Variables screen names it -->
+    <string name="variables_type_number">number</string>
+    <!-- A Lua type as the Variables screen names it: true or false -->
+    <string name="variables_type_boolean">boolean</string>
+    <!-- A Lua type as the Variables screen names it: a list or a set of named values -->
+    <string name="variables_type_table">table</string>
+    <!-- A Lua type as the Variables screen names it -->
+    <string name="variables_type_function">function</string>
+    <!-- A Lua type as the Variables screen names it: anything Mudlet does not list by its type -->
+    <string name="variables_type_other">other</string>
+    <!-- Under a variable's name on the Variables screen; %1$s is its type ("string"), %2$s its value as the desktop
+         editor shows it -->
+    <string name="variables_type_value">%1$s · %2$s</string>
+    <!-- A string's value on the Variables screen, its first line, in quotes as the desktop editor shows it; %1$s is the
+         text -->
+    <string name="variables_quoted">\"%1$s\"</string>
+    <!-- A Lua table's value on the Variables screen when every key is a number, as the desktop editor shows it; %d is
+         how many it holds; keep the braces -->
+    <plurals name="variables_items">
+        <item quantity="one">{ %d item }</item>
+        <item quantity="other">{ %d items }</item>
+    </plurals>
+    <!-- A Lua table's value on the Variables screen when its keys are names, as the desktop editor shows it; %d is how
+         many it holds; keep the braces -->
+    <plurals name="variables_keys">
+        <item quantity="one">{ %d key }</item>
+        <item quantity="other">{ %d keys }</item>
+    </plurals>
+    <!-- The mark beside a hidden variable's name on the Variables screen, shown with "Show hidden variables" on -->
+    <string name="variables_hidden">hidden</string>
+    <!-- How a screen reader names a hidden variable on the Variables screen; %1$s is its name, %2$s the word
+         "hidden" -->
+    <string name="variables_name_hidden">%1$s, %2$s</string>
+    <!-- How a screen reader reads a variable's row on the Variables screen; %1$s is its name, %2$s its type ("string"),
+         %3$s its value -->
+    <string name="variables_reading">%1$s, %2$s, %3$s</string>
+    <!-- How a screen reader reads the row of a variable with no value to show, a function; %1$s is its name, %2$s its
+         type ("function") -->
+    <string name="variables_reading_bare">%1$s, %2$s</string>
+    <!-- How a screen reader reads a Lua table's row on the Variables screen; %1$s is its name, %2$d how many entries it
+         holds -->
+    <plurals name="variables_reading_table">
+        <item quantity="one">%1$s, table, %2$d entry</item>
+        <item quantity="other">%1$s, table, %2$d entries</item>
+    </plurals>
+    <!-- Read by a screen reader: a table's members, or a string's whole value, show under its row on the Variables
+         screen -->
+    <string name="variables_expanded">Expanded</string>
+    <!-- Read by a screen reader: a table's members, or a string's whole value, do not show on the Variables screen -->
+    <string name="variables_collapsed">Collapsed</string>
+    <!-- What a tap on a Lua table's row on the Variables screen does, read by a screen reader as "Double-tap to …" -->
+    <string name="variables_open">show its members</string>
+    <!-- What a tap on an open Lua table's row on the Variables screen does, read by a screen reader -->
+    <string name="variables_close">hide its members</string>
+    <!-- What a tap on a long string's row on the Variables screen does, read by a screen reader -->
+    <string name="variables_show_whole">show the whole value</string>
+    <!-- What a tap on a string's row showing its whole value does, read by a screen reader -->
+    <string name="variables_show_less">show less</string>
+    <!-- Under a long string's whole value on the Variables screen, when the game sent only its start; %1$d is how many
+         characters it sends at most (1000) -->
+    <plurals name="variables_cut">
+        <item quantity="one">Cut: the game sends a value\'s first %1$d character only.</item>
+        <item quantity="other">Cut: the game sends a value\'s first %1$d characters only.</item>
+    </plurals>
     <!-- The script library's search field's placeholder; it searches the items' names, patterns, commands and Lua, as
          the desktop editor's search box does, and the times and keys shown under them -->
     <string name="scripts_search">Search names, patterns and Lua</string>

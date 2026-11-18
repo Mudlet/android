@@ -258,6 +258,8 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("a toolbar's page")
         assertAtStart("the toolbar's heading", hasText(string(R.string.scripts_bar_place)))
         activate(hasContentDescription(string(R.string.navigate_back)))
+        // The chips above the list take a line more in en-XA, which can leave the button below the screen's foot
+        compose.onNode(hasText("Greet") and hasClickAction()).performScrollTo()
         activate(hasText("Greet"))
         open("button", JSONObject(button.toString()).put("id", 2).put("parent", 1))
         waitFor(hasText(string(R.string.scripts_button_push_down_hint)))

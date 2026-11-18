@@ -51,6 +51,7 @@ import org.mudlet.android.ui.scripts.ScriptItemKey
 import org.mudlet.android.ui.scripts.ScriptItemScreen
 import org.mudlet.android.ui.scripts.ScriptLibraryScreen
 import org.mudlet.android.ui.scripts.TriggerFromLineScreen
+import org.mudlet.android.ui.scripts.VariablesScreen
 import org.mudlet.android.ui.scripts.parseLuaFunctions
 import org.mudlet.android.ui.selftest.SelfTestScreen
 import org.mudlet.android.ui.settings.SettingsPage
@@ -76,6 +77,7 @@ private object Routes {
     const val REPORT = "report"
     const val CHANGELOG = "changelog"
     const val SCRIPTS = "scripts"
+    const val VARIABLES = "variables"
     const val SCRIPT_ITEM = "scriptItem/{key}"
     const val TRIGGER_FROM_LINE = "triggerFromLine/{line}"
     const val PACKAGES = "packages"
@@ -95,7 +97,7 @@ private object Routes {
 
 /**
  * The app's screens: the profile list, where it starts, a profile's editor, the game screen, the front profile's script
- * library with a screen for each item, the settings with a screen for each of their pages, About with a licence screen
+ * library with a screen for each item and one for its Lua variables, the settings with a screen for each of their pages, About with a licence screen
  * for each component it lists and its changelog, and, in debug builds only, the self-test. On an expanded screen, a profile's editor, a
  * script item, a settings page and a component's licence open beside their list ([ListDetail]).
  * A release build has no route to the self-test, so R8 drops it.
@@ -226,6 +228,7 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                             selected = open?.let(ScriptItemKey::decode),
                             console = { front.lines },
                             colors = ConsoleColors.of(front.status["consoleColors"]),
+                            onVariables = { nav.navigate(Routes.VARIABLES) { launchSingleTop = true } },
                         )
                     },
                     detailContent = { key ->
@@ -235,6 +238,10 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                     },
                     empty = { DetailPlaceholder(stringResource(R.string.scripts_pick)) },
                 )
+            }
+            composable(Routes.VARIABLES) { entry ->
+                val front = EngineClient.front
+                VariablesScreen(front.variables, front.name, onBack = entry.whileShown { nav.navigateUp() })
             }
             composable(Routes.SCRIPT_ITEM, listOf(navArgument("key") { type = NavType.StringType })) { entry ->
                 val key = entry.arguments?.getString("key")?.let(ScriptItemKey::decode)

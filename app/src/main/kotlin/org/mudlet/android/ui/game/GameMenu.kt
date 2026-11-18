@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import org.mudlet.android.R
 
 /**
@@ -35,7 +36,7 @@ internal fun GameMenuButton(profile: String, onSearch: () -> Unit, onOpenPackage
                 leadingIcon = { Icon(painterResource(R.drawable.ic_search), null) },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.packages_open, profile)) },
+                text = { Text(stringResource(R.string.packages_open, profile), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 onClick = {
                     expanded = false
                     onOpenPackages()

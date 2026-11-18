@@ -3993,8 +3993,9 @@ def profile_settings():
     name, whatever a script has put in getConfig's place; setSettings changing them as setConfig() does and answering
     with what the profile now holds and what it refused, with why; autoClearInputLine, which Mudlet starts off, deciding
     whether a send empties the input line; the game's text encoding, and a name Mudlet does not have refused; the
-    input line's command separator, history highlight and password masking; the changes in the profile's save; and
-    both refused while no profile is open."""
+    input line's command separator, history highlight and password masking; the log options, a log then written as
+    they say, and a bad name format or file name refused; the changes in the profile's save; and both refused while no
+    profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -4063,6 +4064,27 @@ def profile_settings():
     wanted = {"commandSeparator": "|", "highlightHistory": False, "disablePasswordMasking": True}
     m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
+
+    keys = ["logInHTML", "logTimestamps", "logFileNameFormat", "logFileName"]
+    m = c.ask({"t": "getSettings", "keys": keys}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"logInHTML": False, "logTimestamps": False, "logFileNameFormat": "yyyy-MM-dd#HH-mm-ss",
+                              "logFileName": ""}, f"the log options start as Mudlet starts them: {m}")
+    wanted = {"logTimestamps": True, "logFileNameFormat": "", "logFileName": "Settings Log"}
+    m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
+    m = c.ask({"t": "setSettings", "values": {"logFileNameFormat": "yyyy", "logFileName": "../Settings Log"}},
+              answers=("settings", "error"), collect=seen)
+    refused = m.get("refused", {})
+    check(m.get("values") == {"logFileNameFormat": "", "logFileName": "Settings Log"}
+          and "yyyy-MM-dd" in refused.get("logFileNameFormat", "") and "'/'" in refused.get("logFileName", ""),
+          f"a format not among the preferences' choices and a name with a separator are refused, with why: {m}")
+    log = os.path.join(CONFIG, "profiles", profile, "log", "Settings Log.txt")
+    c.send({"t": "runLua", "code": 'startLogging(true) feedTelnet("SettingsLogLine\\nSettingsLogFlush\\n") startLogging(false)'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    with open(log, errors="replace") if os.path.exists(log) else open(os.devnull) as f:
+        logged = f.read()
+    check(re.search(r"^\d\d:\d\d:\d\d\.\d\d\d ?SettingsLogLine$", logged, re.M) is not None,
+          f"a log is then named by logFileName and its lines start with a timestamp, {log}: {logged!r}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
@@ -4070,7 +4092,8 @@ def profile_settings():
         saved = f.read()
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
           and 'autoClearCommandLineAfterSend="yes"' in saved and 'HighlightHistory="no"' in saved
-          and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved,
+          and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved
+          and 'mIsLoggingTimestamps="yes"' in saved and 'logFileName="Settings Log"' in saved and 'logFileNameFormat=""' in saved,
           f"the changes are in the profile's save: {save}")
     encoding_file = os.path.join(CONFIG, "profiles", profile, "encoding")
     # Mudlet writes it with QDataStream: a QString is its length in bytes, then UTF-16BE

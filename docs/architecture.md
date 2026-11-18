@@ -751,6 +751,8 @@ and the map loaded from and saved to a file as the desktop's Map settings do (`l
 `0026-headless-map-files.patch`; see "Map files" in [`protocol.md`](protocol.md)).
 It carries too the items searched as the desktop editor's search box does (`searchScriptItems()`,
 `0027-headless-script-search.patch`).
+And the log options `getConfig()` and `setConfig()` lacked: timestamps, how a log is named and its name
+(`0028-headless-log-settings.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

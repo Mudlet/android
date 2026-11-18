@@ -1,0 +1,90 @@
+Let getConfig() and setConfig() read and change the profile's log options
+
+The preferences' "Log options" have four settings, and only "Save log files in HTML format instead of plain text"
+had a getConfig() and setConfig() key (logInHTML). A frontend with no window, which changes a profile's settings
+through those keys, could not offer the other three, nor could a script set them.
+
+- logTimestamps: "Add timestamps at the beginning of log lines", true or false.
+- logFileNameFormat: how a new log is named, one of the preferences' choices by its date format
+  ("yyyy-MM-dd#HH-mm-ss", "yyyy-MM-ddTHH-mm-ss", "yyyy-MM-dd", "yyyy-MM"), or "" for "Named file", which names it
+  by logFileName. Any other value is refused with the choices.
+- logFileName: the log's name for "Named file", "" for the default ("logfile"). A name with "/" or "\" is refused,
+  so the log stays in the profile's log folder.
+- As in the preferences, timestamps change the lines logged from then on, and a new name or format names the next
+  log started. The keys are in Other.lua's list of configOptions.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (settings: each key read, changed and read back
+through getSettings/setSettings, the log a startLogging() then writes named and timestamped by them, a bad format
+and a name with a separator refused). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index cb91569..615dc3e 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -10709,6 +10709,29 @@ int TLuaInterpreter::setConfig(lua_State* L)
+         host.mIsNextLogFileInHtmlFormat = getVerifiedBool(L, __func__, 2, "value");
+         return success();
+     }
++    if (key == qsl("logTimestamps")) {
++        host.mIsLoggingTimestamps = getVerifiedBool(L, __func__, 2, "value");
++        return success();
++    }
++    if (key == qsl("logFileNameFormat")) {
++        // The preferences' choices; the empty one names the log by logFileName instead of the date
++        static const QStringList values{qsl("yyyy-MM-dd#HH-mm-ss"), qsl("yyyy-MM-ddTHH-mm-ss"), qsl("yyyy-MM-dd"), qsl("yyyy-MM"), QString()};
++        const auto value = getVerifiedString(L, __func__, 2, "value");
++        if (!values.contains(value)) {
++            return warnArgumentChoice(L, __func__, qsl("logFileNameFormat"), values, value);
++        }
++        host.mLogFileNameFormat = value;
++        return success();
++    }
++    if (key == qsl("logFileName")) {
++        const auto value = getVerifiedString(L, __func__, 2, "value");
++        // The log goes in the profile's log folder, never a folder a separator would name
++        if (value.contains(QLatin1Char('/')) || value.contains(QLatin1Char('\\'))) {
++            return warnArgumentValue(L, __func__, qsl("a log file name cannot contain '/' or '\\'"));
++        }
++        host.mLogFileName = value;
++        return success();
++    }
+     if (key == qsl("f3SearchEnabled")) {
+         const bool value = getVerifiedBool(L, __func__, 2, "value");
+         host.setF3SearchEnabled(value);
+@@ -11200,6 +11223,18 @@ int TLuaInterpreter::getConfig(lua_State* L)
+              [&]() {
+                  lua_pushboolean(L, host.mIsNextLogFileInHtmlFormat);
+              }},
++            {qsl("logTimestamps"),
++             [&]() {
++                 lua_pushboolean(L, host.mIsLoggingTimestamps);
++             }},
++            {qsl("logFileNameFormat"),
++             [&]() {
++                 lua_pushstring(L, host.mLogFileNameFormat.toUtf8().constData());
++             }},
++            {qsl("logFileName"),
++             [&]() {
++                 lua_pushstring(L, host.mLogFileName.toUtf8().constData());
++             }},
+             {qsl("f3SearchEnabled"),
+              [&]() {
+                  lua_pushboolean(L, host.getF3SearchEnabled());
+diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
+index 0746a0c..9474011 100644
+--- a/src/mudlet-lua/lua/Other.lua
++++ b/src/mudlet-lua/lua/Other.lua
+@@ -1678,7 +1678,10 @@ local configOptions = {
+   "ircHostSecure",
+   "lazyCaptureGlobals",
+   "logDirectory",                    -- read-only in getConfig
++  "logFileName",
++  "logFileNameFormat",
+   "logInHTML",
++  "logTimestamps",
+   "mapExitSize",
+   "mapInfoColor",
+   "mapperButton",

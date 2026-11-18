@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
@@ -440,7 +441,7 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                     enabled = attached,
                 ) {
                     // Two lines, as a map panel is as narrow as four buttons
-                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 48.dp))
                     Icon(painterResource(R.drawable.ic_arrow_drop_down), null)
                 }
                 DropdownMenu(listed, { listed = false }) {

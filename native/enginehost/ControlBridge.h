@@ -28,7 +28,6 @@ public:
     static constexpr int maxOpenProfiles = 4;
 
     explicit ControlBridge(QObject* parent = nullptr);
-    ~ControlBridge() override;
     void setEngineControl(IEngineControl* control);
     bool listen(const QString& path);
 
@@ -42,14 +41,11 @@ public:
     QString clipboardText() override;
     void setClipboardText(const QString& text) override;
     QString pickFile(bool folder, const QString& title, const QString& location) override;
+    bool openWebPage(const QUrl& url) override;
 
     enum class Change { lines, connection, attention };
     // From a profile's bridge
     void profileChanged(SocketBridge* profile, Change change);
-
-private slots:
-    // QDesktopServices' handler for a script's openUrl() and openWebPage() while a UI opens them
-    void openUrl(const QUrl& url);
 
 private:
     struct OpenProfile
@@ -82,13 +78,14 @@ private:
     // The open profiles and their connections to the engine notification
     void showProfiles();
     QJsonObject pickFileMessage() const;
-    void handleUrls(bool handle);
 
     static constexpr int changeDelayMs = 500;
     // How long a script's getClipboardText() waits for the UI's answer: the game stalls while it waits
     static constexpr int clipboardWaitMs = 500;
     // How often the socket is read while a pick waits: the game and other requests go on meanwhile
     static constexpr int pickReadMs = 20;
+    // How long a script's openUrl() waits for the UI's answer, as for the clipboard
+    static constexpr int openUrlWaitMs = 500;
 
     IEngineControl* mEngineControl = nullptr;
     QString mSocketDir;
@@ -115,5 +112,7 @@ private:
     std::optional<FilePick> mPick;
     qint64 mPickIds = 0;
     QEventLoop* mPickLoop = nullptr;
-    bool mHandlingUrls = false;
+    // The UI that attached last said opensUrls
+    bool mOpensUrls = false;
+    qint64 mUrlOpens = 0;
 };

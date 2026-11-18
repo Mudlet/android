@@ -1,0 +1,128 @@
+Let a frontend with no window give openUrl() the app's way to open a web page
+
+openUrl() and openWebPage() ask the frontend's openWebPage(), which with no window opens the URL with
+QDesktopServices::openUrl(). A process that may not start a browser itself, as an Android app's service, could only
+take the URL with a QDesktopServices URL handler, which makes openUrl() return true whether or not the page opened.
+
+- TNullAppFrontend::setWebPageOpener() takes a function that is given a valid URL and returns whether it opened
+  it; with it, openWebPage() returns what it returns, so a script gets false for a page that did not open, as on
+  the desktop. THeadlessSession::setWebPageOpener() sets it for every session of the process.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (web_pages: true for a page the app opened, false for
+one it refused, for a scheme it does not take and with no app attached). The desktop is unchanged: nothing calls it
+there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 3058402..1ecb06e 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1578,6 +1578,11 @@ script's title and the folder the dialog would open at, and returns the path cho
+ string for a cancel. The script waits in its call, as for the desktop's modal dialog; the function
+ may run the event loop meanwhile, as that dialog does, so game text, timers and other scripts go on.
+ 
++`openUrl()` and `openWebPage()` ask the frontend's `openWebPage()`, which opens a valid URL with
++`QDesktopServices::openUrl()`, as the desktop does. A process that may not start a browser itself, as
++an Android service, hands the sessions a function with `THeadlessSession::setWebPageOpener()`: it is
++given the URL, during the script's call, and returns whether it was opened, which the script gets.
++
+ ### Waits that remain
+ 
+ These still block the application's thread or run a nested event loop:
+diff --git a/src/TNullAppFrontend.cpp b/src/TNullAppFrontend.cpp
+index 14e46b1..db01b11 100644
+--- a/src/TNullAppFrontend.cpp
++++ b/src/TNullAppFrontend.cpp
+@@ -664,9 +664,17 @@ bool TNullAppFrontend::openWebPage(const QString& path)
+     if (!url.isValid()) {
+         return false;
+     }
++    if (mWebPageOpener) {
++        return mWebPageOpener(url);
++    }
+     return QDesktopServices::openUrl(url);
+ }
+ 
++void TNullAppFrontend::setWebPageOpener(std::function<bool(const QUrl& url)> open)
++{
++    mWebPageOpener = std::move(open);
++}
++
+ static void raiseProfileFocusChange(Host* pHost, const bool gained)
+ {
+     TEvent event{};
+diff --git a/src/TNullAppFrontend.h b/src/TNullAppFrontend.h
+index 80d6faa..5a094db 100644
+--- a/src/TNullAppFrontend.h
++++ b/src/TNullAppFrontend.h
+@@ -32,6 +32,8 @@
+ #include <QSet>
+ #include <QSize>
+ 
++class QUrl;
++
+ // The application shell core code sees while there is no main window: before it is made, after it
+ // has gone, and in a run with no GUI. Most queries have no value and most actions fail or do nothing,
+ // and a file or folder dialog answers as if the player cancelled it. Profiles open and close through
+@@ -102,6 +104,9 @@ public:
+     // The file picker of an app that embeds the session: getOpenFileName() (folder false) and getExistingDirectory()
+     // (folder true) answer what pick returns, an empty string for a cancel, from here on. Empty, back to nothing.
+     void setFilePicker(std::function<QString(bool folder, const QString& title, const QString& location)> pick);
++    // How an app that embeds the session opens a web page: openWebPage() answers what open returns for a valid URL from
++    // here on, in place of QDesktopServices. Empty, back to QDesktopServices.
++    void setWebPageOpener(std::function<bool(const QUrl& url)> open);
+     // Refuses what the main window refuses whatever its bars show, bar clashes with the main window's own shortcuts, and
+     // keeps each command for a frontend to show and activate
+     int addAddonCommand(const CommandRequest& request, Host* pHost, const QString& package, QString& error) override;
+@@ -170,6 +175,7 @@ private:
+     std::function<QString()> mClipboardRead;
+     std::function<void(const QString&)> mClipboardWrite;
+     std::function<QString(bool, const QString&, const QString&)> mFilePicker;
++    std::function<bool(const QUrl&)> mWebPageOpener;
+     bool mShowTabConnectionIndicators = false;
+     // A pointer, as the main window keeps it, so a profile opened again under the name is not in front
+     QPointer<Host> mpActiveHost;
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 5acfb35..7ed2e77 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -435,6 +435,13 @@ void THeadlessSession::setFilePicker(std::function<QString(bool folder, const QS
+     }
+ }
+ 
++void THeadlessSession::setWebPageOpener(std::function<bool(const QUrl& url)> open)
++{
++    if (auto* pView = dynamic_cast<TNullAppFrontend*>(TAppFrontend::instance())) {
++        pView->setWebPageOpener(std::move(open));
++    }
++}
++
+ THeadlessSession::THeadlessSession(QObject* parent)
+ : QObject(parent)
+ {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index be7ac8b..d3d93eb 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -54,6 +54,7 @@ class HostManager;
+ class QPainter;
+ class QSize;
+ class QTimer;
++class QUrl;
+ class TBuffer;
+ class TConsoleModel;
+ class TLineFormat;
+@@ -168,6 +169,11 @@ public:
+     // desktop's modal dialog; it may run the event loop while the player chooses. Empty, invokeFileDialog() answers
+     // an empty string at once.
+     static void setFilePicker(std::function<QString(bool folder, const QString& title, const QString& location)> pick);
++    // How the app opens a web page, for a platform where this process cannot start a browser itself (on Android the
++    // engine's service may not): openUrl() and openWebPage() in every session return what open returns for a valid
++    // URL, false when it did not open it, as the desktop's QDesktopServices::openUrl() does. It is called during the
++    // script's call, so it may not call a session. Empty, QDesktopServices opens it again.
++    static void setWebPageOpener(std::function<bool(const QUrl& url)> open);
+ 
+     // Names mudlet_core's own Qt resources (":/" images, translations and fonts), so a program linking it statically
+     // keeps them; Qt registers them before main() runs

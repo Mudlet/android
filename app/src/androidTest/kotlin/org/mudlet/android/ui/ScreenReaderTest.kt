@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -69,7 +70,8 @@ import org.mudlet.android.ui.settings.encodingLabels
  * What TalkBack is given, against a fake engine, as the semantics tree shows it: new lines read as one announcement
  * while touch exploration is on (the Announcer's switch stands in for the system's), a script's announce(), the
  * console's lines as plain text, a Variables row as one node read as name, type and value, and the settings, which are each game's own: a game added here is given the app's, then a
- * settings page shows and changes the game's, and says once that a change waits for the game's next connection.
+ * settings page shows and changes the game's, and says once that a change waits for the game's next connection; and an
+ * open game's proxy in its profile's editor.
  */
 @RunWith(AndroidJUnit4::class)
 class ScreenReaderTest {
@@ -735,6 +737,29 @@ class ScreenReaderTest {
         val mudlets = Settings.mapColours.associate { it.key to Settings.colourName(it.mudletDefault) }
         assertEquals("the map's colours in one request, as desktop's reset", mudlets, values(session.receive("setSettings")))
         compose.runOnIdle { assertEquals("new games keep Mudlet's", 5, Settings.mapExitSize.value) }
+    }
+
+    @Test
+    fun anOpenGamesProxyIsAHeadedSectionOfLabelledControls() {
+        loaded()
+        activate(hasContentDescription(string(R.string.navigate_back)))
+        activate(hasContentDescription(compose.activity.getString(R.string.profile_edit, GAME.name)))
+        session.proxy(true, "socks.example", 1080, "proxy-user", session.receive("getProxy").get("id"))
+        val host = hasSetTextAction() and hasText(string(R.string.profile_proxy_host))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(host).fetchSemanticsNodes().isNotEmpty() }
+
+        compose.onNode(hasText(string(R.string.profile_proxy_title)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)).assertExists()
+        // The switch and its words are one control, read as a switch that is on
+        compose.onNode(hasText(string(R.string.profile_proxy_use)) and hasClickAction())
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        compose.onNode(host).assert(hasText("socks.example"))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_proxy_port))).assert(hasText("1080"))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_proxy_user))).assert(hasText("proxy-user"))
+        compose.onNode(hasSetTextAction() and hasText(string(R.string.profile_proxy_password)))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
+        compose.onNode(host).performScrollTo()
+        compose.onRoot().tryPerformAccessibilityChecks()
     }
 
     @Test

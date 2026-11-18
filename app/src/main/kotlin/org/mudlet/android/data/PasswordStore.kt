@@ -23,34 +23,44 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * The profiles' passwords, which the app sends with each `openProfile` and the engine never keeps. Each is encrypted
- * with an AES-GCM key that never leaves the Android KeyStore, in a private file that backups and device transfers leave
- * out and a restore does not keep ([BackupScope]). Names match ignoring case, as the engine's do.
+ * The profiles' passwords, the game's and the proxy's ([Kind]), which the app sends with each `openProfile` and the
+ * engine never keeps. Each is encrypted with an AES-GCM key that never leaves the Android KeyStore, in a private file
+ * that backups and device transfers leave out and a restore does not keep ([BackupScope]). Names match ignoring case,
+ * as the engine's do.
  */
 class PasswordStore(context: Context) {
     private val file = AtomicFile(File(context.filesDir, FILE))
 
-    fun has(profile: String): Boolean = read()?.has(key(profile)) ?: false
+    /** Which of a profile's passwords: the game's, or its proxy's (desktop Mudlet's "proxy" credential). */
+    enum class Kind(internal val prefix: String) {
+        GAME(""),
+
+        // No name made in the app or Mudlet holds a colon (Profile::newNameProblem), so no game's key is a proxy's
+        PROXY("proxy:"),
+    }
+
+    fun has(profile: String, kind: Kind = Kind.GAME): Boolean = read()?.has(key(profile, kind)) ?: false
 
     /**
      * The stored password, or null. One that can never be decrypted (its key is gone, or it was not sealed for this
      * profile) is forgotten; after any other failure it is kept for the next try.
      */
-    fun get(profile: String): String? {
+    fun get(profile: String, kind: Kind = Kind.GAME): String? {
         val all = read() ?: return null
-        val sealed = all.optString(key(profile)).ifEmpty { return null }
+        val name = key(profile, kind)
+        val sealed = all.optString(name).ifEmpty { return null }
         return try {
             val bytes = Base64.decode(sealed, Base64.NO_WRAP)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, bytes, 0, IV_BYTES))
-            cipher.updateAAD(key(profile).toByteArray())
+            cipher.updateAAD(name.toByteArray())
             String(cipher.doFinal(bytes, IV_BYTES, bytes.size - IV_BYTES), Charsets.UTF_8)
         } catch (e: AEADBadTagException) {
-            forgetUnreadable(all, profile, e)
+            forgetUnreadable(all, name, e)
         } catch (e: KeyPermanentlyInvalidatedException) {
-            forgetUnreadable(all, profile, e)
+            forgetUnreadable(all, name, e)
         } catch (e: IllegalArgumentException) {
-            forgetUnreadable(all, profile, e)
+            forgetUnreadable(all, name, e)
         } catch (e: GeneralSecurityException) {
             Log.w(TAG, "a stored password could not be decrypted this time", e)
             null
@@ -61,8 +71,8 @@ class PasswordStore(context: Context) {
     }
 
     /**
-     * Every stored password, for a problem report to take out of what it sends; null if any of them, or the file,
-     * cannot be read now.
+     * Every stored password, the proxies' too, for a problem report to take out of what it sends; null if any of them,
+     * or the file, cannot be read now.
      */
     fun all(): List<String>? {
         val all = read() ?: return null
@@ -70,11 +80,12 @@ class PasswordStore(context: Context) {
     }
 
     /** False if it could not be stored. */
-    fun set(profile: String, password: String): Boolean {
+    fun set(profile: String, password: String, kind: Kind = Kind.GAME): Boolean {
+        val name = key(profile, kind)
         val sealed = try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, secretKey())
-            cipher.updateAAD(key(profile).toByteArray())
+            cipher.updateAAD(name.toByteArray())
             cipher.iv + cipher.doFinal(password.toByteArray(Charsets.UTF_8))
         } catch (e: GeneralSecurityException) {
             Log.w(TAG, "a password could not be encrypted", e)
@@ -84,22 +95,22 @@ class PasswordStore(context: Context) {
             return false
         }
         val all = read() ?: return false
-        return write(all.put(key(profile), Base64.encodeToString(sealed, Base64.NO_WRAP)))
+        return write(all.put(name, Base64.encodeToString(sealed, Base64.NO_WRAP)))
     }
 
     /** False if it could not be removed. */
-    fun forget(profile: String): Boolean {
+    fun forget(profile: String, kind: Kind = Kind.GAME): Boolean {
         val all = read() ?: return false
-        if (all.remove(key(profile)) == null) return true
+        if (all.remove(key(profile, kind)) == null) return true
         return write(all)
     }
 
-    // The ciphertext is bound to the name, so one profile's cannot be moved to another
-    private fun key(profile: String) = profile.lowercase(Locale.ROOT)
+    // The ciphertext is bound to the name, so one profile's cannot be moved to another, nor a game's to a proxy
+    private fun key(profile: String, kind: Kind) = kind.prefix + profile.lowercase(Locale.ROOT)
 
-    private fun forgetUnreadable(all: JSONObject, profile: String, e: Exception): String? {
+    private fun forgetUnreadable(all: JSONObject, name: String, e: Exception): String? {
         Log.w(TAG, "a stored password can never be decrypted, so it is forgotten", e)
-        all.remove(key(profile))
+        all.remove(name)
         write(all)
         return null
     }

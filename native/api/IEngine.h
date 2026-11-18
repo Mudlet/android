@@ -172,6 +172,9 @@ public:
     // Answers IFrontend::secureOffer() as the GUI's Yes and No do: yes stores the secure port with TLS on and connects
     // there; no connects again where it was and stops the profile asking. Else why it was not taken.
     virtual QString answerSecureOffer(bool accept) = 0;
+    // The GUI's emergency stop: true turns off the profile's triggers, aliases, timers and key bindings and keeps events
+    // from its scripts, false turns on again what it turned off, as IFrontend::scriptsStopped() follows. Else why not.
+    virtual QString setScriptsStopped(bool stopped) = 0;
 
     // Loads the map file at that whole path in place of the profile's map, or saves the map to it, as the Mapper tab of
     // Mudlet's preferences does, within the call, with IFrontend::mapFile() saying how it goes and how it ended; at

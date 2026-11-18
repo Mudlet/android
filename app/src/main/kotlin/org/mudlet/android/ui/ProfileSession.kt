@@ -162,6 +162,10 @@ class ProfileSession internal constructor(
     var sounds by mutableStateOf(EngineMessage.Sounds(played = false, scriptsMuted = false, gameMuted = false))
         private set
 
+    /** Desktop Mudlet's emergency stop holds this game's scripts, as the engine last said ([setScriptsStopped]). */
+    var scriptsStopped by mutableStateOf(false)
+        private set
+
     /** The profile whose suggestions the input line shows: this one, unless the engine's status `profile` named another as loaded. */
     var suggestionsProfile by mutableStateOf(name.ifEmpty { NO_PROFILE_SUGGESTIONS })
         private set
@@ -501,6 +505,13 @@ class ProfileSession internal constructor(
         return true
     }
 
+    /**
+     * Desktop Mudlet's emergency stop: [stopped] turns off the game's triggers, aliases, timers and key bindings and its
+     * scripts' events, false turns them on again; [scriptsStopped] follows once the engine has done it. False, sending
+     * nothing, while its profile has not loaded or the link is down.
+     */
+    fun setScriptsStopped(stopped: Boolean): Boolean = settingsAvailable && link?.send(Requests.setScriptsStopped(stopped)) == true
+
     private fun onSounds(message: EngineMessage.Sounds) {
         sounds = message
         settings[Settings.muteScripts.key] = message.scriptsMuted
@@ -638,6 +649,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Sounds -> post { onSounds(message) }
 
+                is EngineMessage.ScriptsStopped -> post { scriptsStopped = message.stopped }
+
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
                 // One in the background says whose it is, and does not interrupt what the front one is saying
@@ -723,6 +736,9 @@ class ProfileSession internal constructor(
                         // The connection stays as it was, so a drop after this is no answer's doing
                         disconnectAsked = false
                         secureOfferRefusal = reason
+                    } else if (request == "setScriptsStopped") {
+                        // The switch follows scriptsStopped alone, so it already shows the state the engine kept
+                        Log.w(TAG, "the emergency stop: ${message.message}")
                     } else if (request in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(request, reason, message.replyTo)
                     } else if (!links.onError(message)) {

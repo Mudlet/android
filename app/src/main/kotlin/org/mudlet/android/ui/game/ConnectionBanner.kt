@@ -39,12 +39,13 @@ fun ConnectionBanner(state: ConnectionState, game: String, onReconnect: (() -> U
         ConnectionState.Reconnecting -> stringResource(R.string.connection_banner_reconnecting, game)
         ConnectionState.Lost -> stringResource(R.string.connection_banner_lost, game)
         is ConnectionState.Failed -> stringResource(R.string.connection_banner_failed, game, state.reason)
+        ConnectionState.Disconnected -> stringResource(R.string.connection_banner_lost, game)
         else -> return
     }
     val colors = MaterialTheme.colorScheme
     Surface(modifier.testTag(CONNECTION_BANNER_TAG), color = colors.errorContainer, contentColor = colors.onErrorContainer) {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 8.dp)) {
-            Text(message, Modifier.padding(end = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium)
+            Text(message, Modifier.padding(end = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 if (state == ConnectionState.Reconnecting && onStop != null) {
                     BannerButton(stringResource(R.string.connection_stop), stringResource(R.string.connection_stop_to, game), onStop)

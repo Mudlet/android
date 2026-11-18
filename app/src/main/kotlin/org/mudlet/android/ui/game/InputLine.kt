@@ -387,14 +387,14 @@ fun InputLine(
                 onKeyboardAction = { submit() },
                 lineLimits = TextFieldLineLimits.SingleLine,
             )
-            if (onHistory != null) {
-                IconButton(onHistory) { Icon(painterResource(R.drawable.ic_history), stringResource(R.string.history_open)) }
-            }
             IconButton(::back, enabled = at.canGoBack(history)) {
                 Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.input_history_previous))
             }
             IconButton({ move(at.forward()) }, enabled = at.canGoForward) {
                 Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.input_history_next))
+            }
+            if (onHistory != null) {
+                IconButton(onHistory) { Icon(painterResource(R.drawable.ic_history), stringResource(R.string.history_open)) }
             }
             IconButton({
                 submit()

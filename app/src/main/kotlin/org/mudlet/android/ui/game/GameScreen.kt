@@ -315,7 +315,6 @@ private fun ProfileGameScreen(
             },
         ) {
             Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
-                ConnectionBanner(state, name, onReconnect = onReconnect, onStop = if (c.name.isNotEmpty()) ::disconnect else null, Modifier.fillMaxWidth())
                 if (searching) {
                     ConsoleSearchBar(search, c.lines, c.linesAdded, onClose = {
                         searching = false
@@ -387,6 +386,7 @@ private fun ProfileGameScreen(
                     onHistory = { historyOpen = true },
                 )
             }
+            ConnectionBanner(state, name, onReconnect = onReconnect, onStop = if (c.name.isNotEmpty()) ::disconnect else null, Modifier.fillMaxWidth())
             QuickBar(if (hidden) emptyList() else suggestions.pinned, onSend = ::sendNow, Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                 val sounds = c.sounds
                 if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {

@@ -36,7 +36,7 @@ fun QuickBar(
     modifier: Modifier = Modifier,
     leading: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         leading()
         if (pinned.isEmpty()) return@Row
         Row(

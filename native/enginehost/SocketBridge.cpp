@@ -613,6 +613,7 @@ void SocketBridge::sendState()
     }
     sendFrame(hiddenInputMessage());
     sendFrame(secureOfferMessage());
+    sendFrame(scriptsStoppedMessage());
     sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
@@ -829,6 +830,9 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, accept.isBool() ? mEngine->answerSecureOffer(accept.toBool()) : QStringLiteral("accept must be true or false"));
     } else if (type == QLatin1String("deleteMap")) {
         refuse(type, mEngine->deleteMap());
+    } else if (type == QLatin1String("setScriptsStopped")) {
+        const QJsonValue stopped = message.value(QLatin1String("stopped"));
+        refuse(type, stopped.isBool() ? mEngine->setScriptsStopped(stopped.toBool()) : QStringLiteral("stopped must be true or false"));
     } else if (type == QLatin1String("loadMapFile") || type == QLatin1String("saveMapFile")) {
         const QString path = message.value(QLatin1String("path")).toString();
         const auto cancelAsked = [this] {
@@ -1801,6 +1805,11 @@ QJsonObject SocketBridge::secureOfferMessage() const
     return {{QStringLiteral("t"), QStringLiteral("secureOffer")}, {QStringLiteral("offered"), mSecureOffer}};
 }
 
+QJsonObject SocketBridge::scriptsStoppedMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("scriptsStopped")}, {QStringLiteral("stopped"), mScriptsStopped}};
+}
+
 QJsonObject SocketBridge::certificateMessage() const
 {
     QJsonObject message{{QStringLiteral("t"), QStringLiteral("certificateRefused")}, {QStringLiteral("refused"), mRefusedCertificate.has_value()}};
@@ -2165,6 +2174,20 @@ void SocketBridge::secureOffer(bool offered)
     mSecureOffer = offered;
     if (outputLive()) {
         sendFrame(secureOfferMessage());
+    }
+}
+
+void SocketBridge::scriptsStopped(bool stopped)
+{
+    if (mMirror) {
+        mMirror->scriptsStopped(stopped);
+    }
+    if (stopped == mScriptsStopped) {
+        return;
+    }
+    mScriptsStopped = stopped;
+    if (outputLive()) {
+        sendFrame(scriptsStoppedMessage());
     }
 }
 

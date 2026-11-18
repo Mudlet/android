@@ -186,6 +186,9 @@ class ProfileSession internal constructor(
     /** Its error console: the Lua errors its scripts raised, each with the item that raised it. */
     internal val errors = ErrorConsoleClient(::send)
 
+    /** Its Lua variables, as the Variables screen lists them. */
+    internal val variables = VariablesClient(::newRequestId, ::send)
+
     /** The text sizes the player pinched this profile's script consoles to. */
     internal val consoleZoom = ConsoleZoomClient(name, ::prefs, ::runAppLua)
 
@@ -582,6 +585,7 @@ class ProfileSession internal constructor(
                 scripts.onAttached(sameInstance)
                 packages.onAttached(sameInstance)
                 errors.onAttached(sameInstance)
+                variables.onAttached()
             }
         }
 
@@ -706,6 +710,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ErrorConsole -> post { errors.onMessage(message) }
 
+                is EngineMessage.Variables -> post { variables.onVariables(message) }
+
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }
@@ -739,6 +745,8 @@ class ProfileSession internal constructor(
                         scripts.onRefused(request, reason, message.replyTo)
                     } else if (request in PackagesClient.REQUESTS) {
                         packages.onRefused(request, reason, message.replyTo)
+                    } else if (request == VariablesClient.REQUEST) {
+                        variables.onRefused(reason, message.replyTo)
                     } else if (!links.onError(message)) {
                         windows.onError(message)
                     }

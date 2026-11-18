@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -118,6 +119,7 @@ internal val ScriptItemKind.newName: Int
  * in ([adds]). A search lists the items of every kind it finds the text in, with where each lives and, under it, the
  * first places the engine found it, by the desktop editor's options, each a chip. At the foot, the last of the game's lines, [console] in [colors], go back to the game as [onBack] does. [actions] go first in
  * the title bar.
+ * After the kinds' chips, one opens the profile's Lua variables through [onVariables].
  */
 @Composable
 internal fun ScriptLibraryScreen(
@@ -128,6 +130,7 @@ internal fun ScriptLibraryScreen(
     selected: ScriptItemKey? = null,
     console: () -> List<UiLine> = { emptyList() },
     colors: ConsoleColors = ConsoleColors(),
+    onVariables: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     var kindWire by rememberSaveable { mutableStateOf(ScriptItemKind.TRIGGER.wire) }
@@ -205,7 +208,7 @@ internal fun ScriptLibraryScreen(
         ) {
             item(key = "search") { SearchField(query) { query = it } }
             if (query.isBlank()) {
-                item(key = "kinds") { KindChips(kind, lists) { enter(it, 0) } }
+                item(key = "kinds") { KindChips(kind, lists, onVariables) { enter(it, 0) } }
                 folderRows(kind, folder, items, selected, scripts, onEnter = { openFolder = it }, onOpen = onOpen)
             } else {
                 item(key = "options") {
@@ -247,9 +250,12 @@ private fun SearchOptionChips(options: SearchOptions, onOptions: (SearchOptions)
     }
 }
 
-/** A chip for each kind, with how many items it has, folders aside, once listed; on as many lines as they need, so all show. */
+/**
+ * A chip for each kind, with how many items it has, folders aside, once listed, then one that opens the variables; on as
+ * many lines as they need, so all show.
+ */
 @Composable
-private fun KindChips(kind: ScriptItemKind, lists: Map<ScriptItemKind, List<ScriptItemNode>?>, onKind: (ScriptItemKind) -> Unit) {
+private fun KindChips(kind: ScriptItemKind, lists: Map<ScriptItemKind, List<ScriptItemNode>?>, onVariables: (() -> Unit)?, onKind: (ScriptItemKind) -> Unit) {
     FlowRow(itemWidth.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (k in ScriptItemKind.entries) {
             val name = stringResource(k.title)
@@ -258,6 +264,14 @@ private fun KindChips(kind: ScriptItemKind, lists: Map<ScriptItemKind, List<Scri
                 k == kind,
                 { onKind(k) },
                 label = { Text(if (count == null) name else stringResource(R.string.scripts_kind_count, name, count)) },
+            )
+        }
+        // Not a kind to pick but a screen of its own, so a chip that goes there rather than one that is on or off
+        if (onVariables != null) {
+            AssistChip(
+                onVariables,
+                label = { Text(stringResource(R.string.variables_chip)) },
+                trailingIcon = { Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null) },
             )
         }
     }

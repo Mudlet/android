@@ -26,7 +26,7 @@ Both rely on Qt private API (`Qt6::CorePrivate`), which ties the build to one ex
 
 | Where | What |
 |---|---|
-| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About with its Help links and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, the script library and an item's page in `ui/scripts/` ("The script library" below) and the package manager in `ui/packages/` ("The package manager" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt`, the packages in `ui/PackagesClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
+| `app/` (`:app`) | The UI process: `MudletApp`, `ui/MainActivity.kt` with the screens it navigates between (`ui/AppNavigation.kt`: the profile list and its editor in `ui/profiles/`, the game screen in `ui/game/` (the console with the windows, the map and the button bars the game's scripts draw around it, the input line with its suggestions, the row below it with the game pill (`GamePill.kt`), its connection chip and the game sheet (`GameSheet.kt`), the quick bar with the history sheet and pinned commands, and the `Announcer`, which has TalkBack read new lines and `announce`), the settings in `ui/settings/` ("Settings" below), About with its Help links and the licences in `ui/about/` (their data in `about/` and `assets/licences/`, [`licences.md`](licences.md)) and, in debug builds, the self-test in `ui/selftest/`, the script library and an item's page in `ui/scripts/` ("The script library" below) and the package manager in `ui/packages/` ("The package manager" below)), the renderer of game text (`ui/AnsiText.kt`), the theme (`ui/theme/`) and the parts every screen shares (`ui/MudletTopBar.kt`, `ui/MudletList.kt`, `ui/ListDetail.kt`: "How the app looks" below), the model of the engine (`ui/EngineClient.kt`, holding a `ui/ProfileSession.kt` per open profile, with the script windows' part in `ui/ScriptWindowsClient.kt` the app's own map in `ui/AppMapClient.kt`, the triggers, aliases, scripts, timers, keys and buttons the library edits in `ui/ScriptItemsClient.kt`, the packages in `ui/PackagesClient.kt`, the Lua variables the library lists in `ui/VariablesClient.kt` and the script consoles' pinched text sizes in `ui/ConsoleZoomClient.kt`), the app's own settings and what new games start with (`data/Settings.kt`, in SharedPreferences) and the profiles' passwords (`data/PasswordStore.kt`). Every string the app shows is in `res/values/strings.xml`, translated on Crowdin ([`translations.md`](translations.md)) |
 | `engine-service/` (`:engine-service`) | The engine process's Kotlin side: `EngineService` (a `QtServiceBase`), its notifications (their text in `res/values/strings.xml`), `EngineNative` (the JNI handshake). Its manifest declares the service and the permissions. It also carries the Qt libraries and jars that `scripts/build-apk.sh` stages into `engine-service/qtdeploy/`, with Mudlet's version and commit (`res/values/engine_info.xml`) |
 | `protocol/` (`:protocol`) | Plain Kotlin/JVM with no `android.*`: the frame codec, message types and `EngineLink`, the reconnecting client; the script windows' state (`ScriptWindows`) and where the game screen puts them (`WindowLayout`); what a label draws, read from its style sheet (`LabelStyle`) and rich text (`RichText`), its links (`LabelLink`) and Geyser's gauges (`Gauge`); where the button bars go, what their buttons draw of their style sheets and the commands' menu (`ButtonBarLayout`, `ButtonStyle`, `CommandMenu`); where the map is drawn, a pinch as wheel notches and how faintly the map shows behind text (`MapFit`, `ZoomNotches`, `MapBehindText`); the text size the player pinches a script console to (`ConsoleZoom`). Its tests run on the JVM, against the desktop engine too |
 | `suggest/` (`:suggest`) | Plain Kotlin/JVM with no dependencies: the input line's command suggestions, the session that loads, feeds and saves them, and the pinned commands ("Command suggestions" below). Its tests run on the JVM, with Gradle or with kotlinc alone (`suggest/run-tests.sh`) |
@@ -692,6 +692,17 @@ kept by `ScriptItemsClient`:
     (`searchScriptItems`: commands, patterns, event handlers, a button's style sheet, Lua), and shows under each
     item the first three places, each with what it is in and the text marked. The desktop's two options, Match case
     and Whole words, are chips; with either on, only the engine's answer counts.
+- A Variables chip after the kinds' opens the profile's Lua variables (`VariablesScreen.kt`, kept by `VariablesClient`;
+  `variables` in `docs/protocol.md`, "Reading the Lua variables"), read only, as the desktop editor's Variables view
+  lists them: the globals in its order, each row its name (a number key in brackets), type and value as the view
+  writes it (a string's first line to 80 characters, a table's `{ 3 keys }`), and TalkBack reads a row as one: name,
+  type, value, or how many entries a table has. A table opens to its members, read as it opens, 500 at a time with a
+  "Show more" row; one under a table or function key does not open, as its key's name changes at each read
+  (`docs/divergences.md`, "The Variables view"). A long string opens to its whole value, of which the engine sends
+  1000 characters at most, saying so when it cut one. "Show hidden variables" lists what desktop hides; it stays as
+  set while the profile is open, as the desktop editor's box does, and is not stored. The search finds names among
+  what has been read. The screen reads everything again as it
+  opens and with Refresh, as the values change all the time. The values are the player's data: nothing logs them.
 - An item's page (`ScriptItemScreen.kt`) edits its name, what its kind has and its Lua: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
@@ -739,6 +750,8 @@ kept by `ScriptItemsClient`:
 - Not yet: moving an item onto another
   to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the
   Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called).
+  - Nor, in the Variables screen, editing, adding or deleting a variable, or desktop's saving of the variables a player
+    picks with the profile.
 - A hardware keyboard's key that the profile's key bindings take (`keyBindings`, by Qt's key code and modifier bits,
   which `HardwareKeys` makes from Android's, the number pad's by Num Lock as on the desktop) goes to the engine as
   `pressKey`, from the input line or anywhere on the game screen but a script's text box, which on the desktop offers
@@ -2050,6 +2063,11 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       is followed by "got bat". Back goes to the game. A long press on a blank line opens nothing.
     - With TalkBack on: a line's actions offer "Make a trigger from this line"; on its page a word reads "Kept as it
       is", "Captured" or "Optional", and a double tap changes it.
+    - Send `lua myTable = {hp = 10, name = "Ana"}`, then tap Variables after the kinds' chips: the globals show as on
+      the desktop editor's Variables view, `myTable` among them; tap it: its members show under it, and again: they go. A string of over 1000
+      characters (`lua x = string.rep("a", 1500)`) opens to its start with a note that it was cut. "Show hidden
+      variables" adds Mudlet's own, `mudlet` among them. Type `hp` in the search: only names with it show. With
+      TalkBack on, a row reads its name, type and value, and a table how many entries it has.
 
 32. The package manager, with the libmudlet APK: on the game screen, tap More options, then Packages.
     - The bundled packages are listed, each with its icon, title, version and author; a tap on one shows its whole

@@ -1792,7 +1792,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
 15. The game screen, connected to a game (Connect on one of the start screen's games).
     - The tour (`ui/game/GameTour.kt`), on a fresh install (or after About's "Take a UI tour"): the first game screen
       dims under a card, "Welcome to Mudlet!", "1 of 6", with Skip tour, Back and Next. Next goes to the console, the
-      input line, the scripts button and the settings button, each lit through the dimming with a ring around it, the
+      input line, the scripts button and the menu button with Settings, each lit through the dimming with a ring around it, the
       card at the other end of the screen; the last step has Finish and no Skip. Nothing under the card takes a tap, and
       Back closes it. With TalkBack, each step is read once as it comes and swiping reaches the card alone. Close the
       app partway through and reopen a game: the tour does not come back. While the explanation of the notification

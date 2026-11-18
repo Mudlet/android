@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QLocalSocket>
+#include <QTimer>
 
 #include <cmath>
 
@@ -204,6 +205,15 @@ QString ControlBridge::pickFile(bool folder, const QString& title, const QString
     sendFrame(pickFileMessage());
     QEventLoop loop;
     mPickLoop = &loop;
+    // Qt emits no readyRead inside a readyRead slot, and a script's runLua is handled in one: without reading here the
+    // answer, and every other request, would wait for the pick to end
+    QTimer reader;
+    connect(&reader, &QTimer::timeout, this, [this] {
+        const QJsonValue outerRequest = mCurrentRequestId;
+        onReadyRead();
+        mCurrentRequestId = outerRequest;
+    });
+    reader.start(pickReadMs);
     loop.exec();
     mPickLoop = nullptr;
     const QString path = mPick->path.value_or(QString());

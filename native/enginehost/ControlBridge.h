@@ -80,6 +80,8 @@ private:
     static constexpr int changeDelayMs = 500;
     // How long a script's getClipboardText() waits for the UI's answer: the game stalls while it waits
     static constexpr int clipboardWaitMs = 500;
+    // How often the socket is read while a pick waits: the game and other requests go on meanwhile
+    static constexpr int pickReadMs = 20;
 
     IEngineControl* mEngineControl = nullptr;
     QString mSocketDir;

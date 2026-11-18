@@ -338,6 +338,9 @@ one. A `Geyser.Gauge` is three labels in the gauge's parent, `<name>_back`, `<na
 in that order: the front's width (or height, for a vertical gauge) against the back's is the gauge's value, and the
 text label, transparent, holds the text.
 
+A console's `bg` may be transparent the same way, with its own `bgAlpha` (what shows through it: `docs/phase-f.md`,
+"Mini consoles and user windows").
+
 ### Labels
 
 What `label` carries, from libmudlet's `THeadlessSession::labelContent()`, which scripts set with `echo()`,

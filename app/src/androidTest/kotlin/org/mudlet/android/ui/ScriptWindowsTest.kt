@@ -7,6 +7,9 @@ import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -14,6 +17,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -58,6 +62,7 @@ import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
+import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_UNDERLINE
 import org.mudlet.android.ui.game.Announcer
 import kotlin.math.abs
@@ -354,6 +359,25 @@ class ScriptWindowsTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Look")).fetchSemanticsNodes().isEmpty() }
     }
 
+    @Test
+    fun aTransparentMiniConsoleShowsTheLabelUnderItAndAnOpaqueOneHidesIt() {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        // A Geyser HUD: a label, and over it a mini console whose colour the script gave an alpha
+        val back = FakeEngine.window("back", kind = "label", x = 400, y = 0, w = 400, h = 300).put("bg", RUN_RGB or MAROON)
+        fun chat(alpha: Int?) = FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 50).put("stack", 1)
+            .put("bg", RUN_RGB or GREEN).apply { if (alpha != null) put("bgAlpha", alpha) }
+        session.windows(listOf(back, chat(0)), full = true)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(windowNamed("chat")).fetchSemanticsNodes().isNotEmpty() }
+        assertMiddleDrawnIn(MAROON, windowNamed("chat"))
+        // Qt draws rgba() over what is under it, so half see-through mixes the two
+        session.windows(listOf(chat(128)))
+        assertMiddleDrawnIn(0x404000, windowNamed("chat"))
+        session.windows(listOf(chat(null)))
+        assertMiddleDrawnIn(GREEN, windowNamed("chat"))
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
     private fun showChat() {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
         session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
@@ -517,6 +541,25 @@ class ScriptWindowsTest {
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
+    /** That the middle of [node] comes to be drawn in [rgb], near enough for mixed colours to round either way. */
+    private fun assertMiddleDrawnIn(rgb: Int, node: SemanticsMatcher) {
+        val expected = Color(0xFF000000.toInt() or rgb)
+        fun near(c: Color) = abs(c.red - expected.red) < NEAR && abs(c.green - expected.green) < NEAR && abs(c.blue - expected.blue) < NEAR
+        val deadline = SystemClock.uptimeMillis() + WAIT_MS
+        var drawn = middleColour(node)
+        while (!near(drawn) && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(POLL_MS)
+            drawn = middleColour(node)
+        }
+        assertTrue("drawn in %06x, not %06x".format(drawn.toArgb() and 0xFFFFFF, rgb), near(drawn))
+    }
+
+    private fun middleColour(node: SemanticsMatcher): Color {
+        compose.waitForIdle()
+        val image = compose.onNode(node).captureToImage().toPixelMap()
+        return image[image.width / 2, image.height / 2]
+    }
+
     private fun editableText(text: String) = SemanticsMatcher("EditableText = '$text'") {
         it.config.getOrNull(SemanticsProperties.EditableText)?.text == text
     }
@@ -566,6 +609,14 @@ class ScriptWindowsTest {
 
         // Well past the Announcer's wait for more lines
         const val QUIET_MS = 1_000L
+        const val POLL_MS = 50L
+
+        // As runs' colours: rrggbb
+        const val MAROON = 0x800000
+        const val GREEN = 0x008000
+
+        // Of a colour's channel, from 0 to 1: about 8 of 255
+        const val NEAR = 0.03f
         const val TIMEOUT_MS = 240_000L
     }
 }

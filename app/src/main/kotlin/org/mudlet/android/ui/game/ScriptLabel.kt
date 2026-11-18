@@ -112,6 +112,7 @@ import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RichText
 import org.mudlet.android.protocol.ScriptWindow
 import org.mudlet.android.protocol.VAlign
+import org.mudlet.android.protocol.backgroundArgb
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
@@ -520,7 +521,7 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
     val scale = min(sx, sy)
     // The colour `setBackgroundColor()` gave the label, where its sheet draws no box of its own: Qt fills the whole
     // label with it then, its margin too, and draws the sheet's box without it
-    val ownColour = window.bg.takeIf { it != -1 && !style.drawsBox }?.let { windowColour(it, Color.Transparent).copy(alpha = window.bgAlpha / 255f) }
+    val ownColour = window.backgroundArgb()?.takeIf { !style.drawsBox }?.let { Color(it) }
     val borderImage = engineImage(style.borderImage?.let { ImageRequest(it) })
     val backgroundImage = engineImage(style.backgroundImage?.let { ImageRequest(it) })
     val border = style.drawnBorderWidth * scale

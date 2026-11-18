@@ -177,6 +177,17 @@ that points at the desktop's menus and windows, which the app does not have.
   draws the other edges, in their style (`docs/phase-f.md`, "Labels"). The app draws one border for all four edges,
   and a native top edge is what Qt draws no border of where the sheet draws nothing else.
 
+## A see-through user window or switcher page
+
+A user window whose colour a script made partly or wholly transparent shows the game area's black under it, docked or as
+a page of the window switcher (`docs/phase-f.md`, "Mini consoles and user windows"). On the desktop a user window is a
+dock widget, and what shows under it is the colour of Mudlet's main window, or of its own window when floating: the
+desktop style's, or what the profile's style sheet gives. The app's user windows are part of the game area, with no
+window or Qt style of their own, and a desktop theme's window colour drawn there would sit in the game screen beside the
+console's black. A mini console in the game area shows what is under it, as on the desktop; one the stacked layout makes
+a page of the switcher, from a side border, shows black too, as that layout draws no label from those borders and the
+page's pane covers the console.
+
 ## Button bars
 
 A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f.md`, "Button bars and commands").

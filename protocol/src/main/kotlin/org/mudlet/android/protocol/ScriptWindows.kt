@@ -158,6 +158,12 @@ data class ScriptWindows(
 }
 
 /**
+ * [ScriptWindow.bg] as ARGB, with [ScriptWindow.bgAlpha] as its alpha, or null for a window without one. A label's or
+ * a console's colour whose alpha is below 255 shows what is under it: Mudlet draws a console's over a transparent palette.
+ */
+fun ScriptWindow.backgroundArgb(): Int? = if (bg >= RUN_RGB) (bg and 0xFFFFFF) or (bgAlpha.coerceIn(0, 255) shl 24) else null
+
+/**
  * The width of a character of Mudlet's main console in its pixels: more than [low] and at most [high]. A grid of
  * `columns` in a text area `textW` wide says it is in `(textW / (columns + 1), textW / columns]`, and each `mainArea`
  * narrows that down, until one that does not fit says the font changed.

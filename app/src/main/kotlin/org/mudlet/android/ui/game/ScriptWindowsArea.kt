@@ -84,6 +84,7 @@ import org.mudlet.android.protocol.ScriptWindows
 import org.mudlet.android.protocol.WindowKey
 import org.mudlet.android.protocol.WindowKind
 import org.mudlet.android.protocol.WindowLayout
+import org.mudlet.android.protocol.backgroundArgb
 import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
@@ -414,7 +415,7 @@ private fun WindowConsole(
         )
     }
     Column(
-        modifier.background(windowColour(window.bg, CONSOLE_BACKGROUND)).windowSemantics(description).semantics { customActions = zoomActions },
+        modifier.background(window.backgroundArgb()?.let { Color(it) } ?: CONSOLE_BACKGROUND).windowSemantics(description).semantics { customActions = zoomActions },
     ) {
         val sideways = if (rowsWidth != null) Modifier.horizontalScroll(rememberScrollState()) else Modifier
         Box(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {

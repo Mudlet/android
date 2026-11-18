@@ -93,7 +93,7 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
         fun ofAppMap(area: PxRect, others: List<PxRect>, dp: Float): MapCorner? {
             val side = MIN_DP * dp
             val seed = PxRect(area.right - side, area.y, side, side)
-            if (area.w < side || others.any { it.intersect(seed) != null }) return null
+            if (area.w < side) return null
             return of(seed, area, others, dp)
         }
     }

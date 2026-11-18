@@ -61,7 +61,7 @@ class MapFit(val frameW: Int, val frameH: Int, val box: PxRect, asRedrawn: Boole
             val scale = MapFit(frameW, frameH, whole, asRedrawn = true).scale
             val w = frameW * scale
             val h = frameH * scale
-            return MapFit(frameW, frameH, PxRect(box.x + (box.w - w) / 2, box.y + (box.h - h) / 2, w, h))
+            return MapFit(frameW, frameH, PxRect(box.x, box.y, w, h))
         }
     }
 }

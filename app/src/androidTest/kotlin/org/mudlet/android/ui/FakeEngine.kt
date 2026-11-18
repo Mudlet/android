@@ -324,6 +324,15 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
                 .put("runs", JSONArray(runs.map { JSONArray(it) })),
         )
 
+        /** A script changed the line [seq] to [text] and [runs], or with [deleted], deleted it. */
+        fun lineUpdated(seq: Long, text: String = "", runs: List<List<Int>> = emptyList(), deleted: Boolean = false) = send(
+            if (deleted) {
+                JSONObject().put("t", "lineUpdated").put("seq", seq).put("deleted", true)
+            } else {
+                JSONObject().put("t", "lineUpdated").put("seq", seq).put("text", text).put("prompt", false).put("runs", JSONArray(runs.map { JSONArray(it) }))
+            },
+        )
+
         fun tail(text: String, prompt: Boolean = true) = send(JSONObject().put("t", "tail").put("text", text).put("prompt", prompt))
 
         fun status(key: String, value: String) = send(JSONObject().put("t", "status").put("key", key).put("value", value))

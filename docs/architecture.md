@@ -442,6 +442,17 @@ line" and the trigger (`ConsoleLine`, `copyable`); TalkBack has "Copy line" as t
 it reads, a concealed link as blanks; a blank line offers neither. Copying goes through `copyText()` and sharing
 through `shareText()` (`ui/ShareText.kt`), as the problem report's buttons do. Script windows offer neither yet.
 
+### Lines a script changes
+A script's `replace()`, `setFgColor()`, `setLink()` or `deleteLine()` on a main console line already shown comes as a
+`lineUpdated` of its `seq`, which `ProfileSession` applies where the line stands (`applyLineUpdates` in `:protocol`,
+tested on the JVM), keeping its time:
+- The changed line is drawn, read, copied and found by the search as it now is; a link in it keeps its answer, painted
+  over the line's new runs. The Announcer does not read it again, as it reads only lines that are new.
+- A deleted line keeps its place in the scrollback, drawn as nothing and with no node for TalkBack, as each line's
+  number is its place, and the console keys its lines by number.
+- Only the lines of the engine instance attached are changed, as a new instance counts its seqs from 1 again. A line out
+  of view changes nothing in view, nor what TalkBack reads there.
+
 ### Script windows' text size
 A two-finger pinch on a mini console, user window or MXP frame sets its font size as a script's `setFontSize(name,
 size)` does, in the same whole points, so `getFontSize()` gives it, the engine's grid (and with it the columns the app

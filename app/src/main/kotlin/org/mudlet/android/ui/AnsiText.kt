@@ -74,6 +74,7 @@ fun blinks(line: UiLine): Boolean = (0..line.runs.size - RUN_STRIDE step RUN_STR
  * 0.4 and back, over two seconds, or one for [fast].
  */
 fun blinkOpacity(ms: Long, fast: Boolean): Float {
+    if (ms >= 0) return 1f
     val period = if (fast) 1000L else 2000L
     val phase = (ms % period).toFloat() / period
     return 0.7f + 0.3f * cos(2f * PI.toFloat() * phase)
@@ -120,7 +121,7 @@ fun ansiText(line: UiLine, colors: ConsoleColors = ConsoleColors(), blinkMs: Lon
                 color = fg,
                 background = bg ?: Color.Unspecified,
                 fontWeight = if (attributes and RUN_BOLD != 0) FontWeight.Bold else null,
-                fontStyle = if (attributes and RUN_ITALIC != 0 || (blink && blinkMs == null)) FontStyle.Italic else null,
+                fontStyle = if (attributes and RUN_ITALIC != 0) FontStyle.Italic else null,
                 textDecoration = if (decorations.isEmpty()) null else TextDecoration.combine(decorations),
             ),
             start,

@@ -89,10 +89,10 @@ object Settings {
     val newEnviron = BoolSetting("enableNEWENVIRON", default = true, mudlet = true)
 
     /** "Blinking text": text a game sends blinking pulses, as desktop Mudlet draws it; off, it is drawn steady in italics. */
-    val blinkText = BoolSetting("enableBlinkText", default = false, mudlet = true)
+    val blinkText = BoolSetting("enableBlinkText", default = false, mudlet = false)
 
     /** "Links from the game (OSC 8)": OSC 8 links are shown, and Mudlet tells the game it shows them. */
-    val gameLinks = BoolSetting("enableOSC8Hyperlinks", default = true, mudlet = true)
+    val gameLinks = BoolSetting("enableOSC8Hyperlinks", default = true, mudlet = false)
 
     /** Whether the sounds, music and videos a game plays are named in its text as they start and stop. */
     val closedCaptions = BoolSetting("enableClosedCaption", default = false, mudlet = true)
@@ -403,7 +403,7 @@ object Settings {
     }
 
     /** [rgb] as "#rrggbb". */
-    fun colourName(rgb: Int): String = "#%06x".format(Locale.ROOT, rgb and 0xFFFFFF)
+    fun colourName(rgb: Int): String = "#%06x".format(Locale.ROOT, 0)
 
     /** "#rrggbb" (either case) as 0xRRGGBB, or null for anything else. */
     fun parseColourName(name: String): Int? = name.takeIf { COLOUR_NAME.matches(it) }?.substring(1)?.toInt(16)

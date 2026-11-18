@@ -19,9 +19,10 @@ its own getConfig in the globals would answer for Mudlet.
 - They also gain serverEncoding, the game's text encoding as getServerEncoding() and setServerEncoding() read and
   change it: by the names getServerEncodingsList() gives, ASCII for none, kept with the profile as the preferences'
   encoding is, and refused with setServerEncoding()'s message for a name Mudlet does not have.
-- And the input line's three, kept with the profile as the preferences' Input line tab keeps them: commandSeparator
+- And the input line's four, kept with the profile as the preferences' Input line tab keeps them: commandSeparator
   (the text a sent line is split at, none when empty), highlightHistory (a command brought back from the history is
-  selected whole) and disablePasswordMasking (no hidden-input box when the game hides what is typed).
+  selected whole), disablePasswordMasking (no hidden-input box when the game hides what is typed) and runAllKeyMatches
+  (every key binding on a key runs, not only the first, as "React to all keybindings on the same key").
 - And the console's colours, as #rrggbb text kept with the profile as the preferences' Color view tab keeps them: the
   sixteen ANSI ones by the names color_table gives them (ansiBlack to ansiLightWhite), foregroundColor,
   backgroundColor, commandForegroundColor and commandBackgroundColor. A change refreshes the console's colours and
@@ -31,7 +32,7 @@ its own getConfig in the globals would answer for Mudlet.
 
 Tested in HeadlessSessionTest (reading, a script's replacement getConfig, an unknown key, a change taken and three
 refused, the refusals with no profile, the encoding refused, changed and read again by a new session, the input line's
-three changed and read again by a new session, and a colour refused, then colours and the display's three changed,
+four changed and read again by a new session, and a colour refused, then colours and the display's three changed,
 the background reaching consoleColorsChanged, and read again by a new session), and the new keys in Other_spec.lua.
 The desktop's preferences are unchanged.
 
@@ -39,7 +40,7 @@ Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet 
 Upstream: not opened yet
 
 diff --git a/docs/headless.md b/docs/headless.md
-index 07707a4..5abe254 100644
+index 07707a4..1ae5d22 100644
 --- a/docs/headless.md
 +++ b/docs/headless.md
 @@ -1673,6 +1673,29 @@ and also a call that left it as it was, so an app's mute buttons can follow it a
@@ -52,8 +53,8 @@ index 07707a4..5abe254 100644
 +`setSettings()`, by the keys Lua's `getConfig()` and `setConfig()` take, rather than building Lua for
 +`runLua()` that cannot answer with what it read.
 +The game's text encoding is the key `serverEncoding`, by the names `getServerEncodingsList()` gives.
-+The input line's are `commandSeparator`, `highlightHistory` and `disablePasswordMasking`, as the preferences' Input line
-+tab has them.
++The input line's are `commandSeparator`, `highlightHistory`, `disablePasswordMasking` and `runAllKeyMatches`, as the
++preferences' Input line tab has them.
 +The console's colours are text in `#rrggbb` form: the sixteen ANSI ones by the names `color_table` gives them
 +(`ansiBlack` to `ansiLightWhite`), then `foregroundColor`, `backgroundColor`, `commandForegroundColor` and
 +`commandBackgroundColor`, with `serverMayRedefineColors` beside them; a change reaches text decoded after it.
@@ -73,7 +74,7 @@ index 07707a4..5abe254 100644
  
  `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
 diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
-index 61b99d0..d4a013a 100644
+index 61b99d0..1427265 100644
 --- a/src/TLuaInterpreter.cpp
 +++ b/src/TLuaInterpreter.cpp
 @@ -85,6 +85,7 @@
@@ -162,7 +163,7 @@ index 61b99d0..d4a013a 100644
      if (key == qsl("promptForMXPProcessorOn")) {
          host.mPromptedForMXPProcessorOn = getVerifiedBool(L, __func__, 2, "value");
          return success();
-@@ -10409,6 +10474,33 @@ int TLuaInterpreter::setConfig(lua_State* L)
+@@ -10409,6 +10474,37 @@ int TLuaInterpreter::setConfig(lua_State* L)
          host.mAutoClearCommandLineAfterSend = getVerifiedBool(L, __func__, 2, "value");
          return success();
      }
@@ -176,6 +177,10 @@ index 61b99d0..d4a013a 100644
 +    }
 +    if (key == qsl("disablePasswordMasking")) {
 +        host.setDisablePasswordMasking(getVerifiedBool(L, __func__, 2, "value"));
++        return success();
++    }
++    if (key == qsl("runAllKeyMatches")) {
++        host.getKeyUnit()->mRunAllKeyMatches = getVerifiedBool(L, __func__, 2, "value");
 +        return success();
 +    }
 +    if (QColor Host::*member = consoleColorMember(QString::fromUtf8(lua_tostring(L, 1)))) {
@@ -196,7 +201,7 @@ index 61b99d0..d4a013a 100644
      if (key == qsl("showSentText")) {
          // Handle both legacy boolean and new string values
          if (lua_isboolean(L, 2)) {
-@@ -10700,6 +10792,14 @@ int TLuaInterpreter::setConfig(lua_State* L)
+@@ -10700,6 +10796,14 @@ int TLuaInterpreter::setConfig(lua_State* L)
          host.setEnableBlinkText(getVerifiedBool(L, __func__, 2, "value"));
          return success();
      }
@@ -211,7 +216,7 @@ index 61b99d0..d4a013a 100644
  
      // Handle experiment keys
      if (key.startsWith(qsl("experiment."))) {
-@@ -10956,6 +11056,41 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -10956,6 +11060,41 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.mAskTlsAvailable);
               }},
@@ -253,7 +258,7 @@ index 61b99d0..d4a013a 100644
              {qsl("promptForMXPProcessorOn"),
               [&]() {
                   lua_pushboolean(L, host.mPromptedForMXPProcessorOn);
-@@ -10980,6 +11115,23 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -10980,6 +11119,27 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.mAutoClearCommandLineAfterSend);
               }},
@@ -270,6 +275,10 @@ index 61b99d0..d4a013a 100644
 +             [&]() {
 +                 lua_pushboolean(L, host.disablePasswordMasking());
 +             }},
++            {qsl("runAllKeyMatches"),
++             [&]() {
++                 lua_pushboolean(L, host.getKeyUnit()->mRunAllKeyMatches);
++             }},
 +            {qsl("serverMayRedefineColors"),
 +             [&]() {
 +                 lua_pushboolean(L, host.getMayRedefineColors());
@@ -277,7 +286,7 @@ index 61b99d0..d4a013a 100644
              {qsl("showSentText"),
               [&]() {
                   if (useStringFormat) {
-@@ -11143,6 +11295,14 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -11143,6 +11303,14 @@ int TLuaInterpreter::getConfig(lua_State* L)
               [&]() {
                   lua_pushboolean(L, host.getEnableBlinkText());
               }},
@@ -292,7 +301,7 @@ index 61b99d0..d4a013a 100644
              {qsl("showUpperLowerLevels"),
               [&]() {
                   lua_pushboolean(L, TAppFrontend::instance()->drawUpperLowerLevels());
-@@ -11184,6 +11344,10 @@ int TLuaInterpreter::getConfig(lua_State* L)
+@@ -11184,6 +11352,10 @@ int TLuaInterpreter::getConfig(lua_State* L)
          it->second();
          return 1;
      }
@@ -473,7 +482,7 @@ index 0000000..94d5408
 +    return true;
 +}
 diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
-index a15c1c2..1bd6d18 100644
+index a15c1c2..91d2c10 100644
 --- a/src/mudlet-lua/lua/Other.lua
 +++ b/src/mudlet-lua/lua/Other.lua
 @@ -1635,17 +1635,42 @@ local oldgetConfig = getConfig
@@ -532,16 +541,17 @@ index a15c1c2..1bd6d18 100644
    "inputLineStrictUnixEndings",
    "ircChannels",
    "ircHostName",
-@@ -1690,6 +1718,8 @@ local configOptions = {
+@@ -1690,6 +1718,9 @@ local configOptions = {
    "muteMediaGame",
    "promptForMXPProcessorOn",
    "promptForVersionInTTYPE",
++  "runAllKeyMatches",
 +  "serverEncoding",
 +  "serverMayRedefineColors",
    "show3dMapView",
    "showRoomIdsOnMap", 
    "showSentText",
-@@ -1700,6 +1730,9 @@ local configOptions = {
+@@ -1700,6 +1731,9 @@ local configOptions = {
    "specialForceGAOff",
    "specialForceMxpNegotiationOff",
    "specialForceMXPProcessorOn",
@@ -552,7 +562,7 @@ index a15c1c2..1bd6d18 100644
    "undoServerWrapWidth",
    "versionInTTYPE",
 diff --git a/src/mudlet-lua/tests/Other_spec.lua b/src/mudlet-lua/tests/Other_spec.lua
-index e864915..3f0c65a 100644
+index e864915..23c726d 100644
 --- a/src/mudlet-lua/tests/Other_spec.lua
 +++ b/src/mudlet-lua/tests/Other_spec.lua
 @@ -2216,6 +2216,87 @@ describe("Tests Other.lua functions", function()
@@ -584,8 +594,8 @@ index e864915..3f0c65a 100644
 +      restore("serverEncoding")
 +    end)
 +
-+    it("reads and changes the input line's command separator, history highlight and password masking", function()
-+      for _, key in ipairs({ "commandSeparator", "highlightHistory", "disablePasswordMasking" }) do
++    it("reads and changes the input line's command separator, history highlight, password masking and key bindings run", function()
++      for _, key in ipairs({ "commandSeparator", "highlightHistory", "disablePasswordMasking", "runAllKeyMatches" }) do
 +        snapshot(key)
 +      end
 +      assert.equals(getCommandSeparator(), getConfig("commandSeparator"))
@@ -594,13 +604,13 @@ index e864915..3f0c65a 100644
 +      assert.equals("|", getCommandSeparator())
 +      assert.is_true(setConfig("commandSeparator", ""))
 +      assert.equals("", getCommandSeparator())
-+      for _, key in ipairs({ "highlightHistory", "disablePasswordMasking" }) do
++      for _, key in ipairs({ "highlightHistory", "disablePasswordMasking", "runAllKeyMatches" }) do
 +        local was = getConfig(key)
 +        assert.equals("boolean", type(was))
 +        assert.is_true(setConfig(key, not was))
 +        assert.equals(not was, getConfig(key))
 +      end
-+      for _, key in ipairs({ "commandSeparator", "highlightHistory", "disablePasswordMasking" }) do
++      for _, key in ipairs({ "commandSeparator", "highlightHistory", "disablePasswordMasking", "runAllKeyMatches" }) do
 +        restore(key)
 +      end
 +    end)
@@ -644,10 +654,10 @@ index e864915..3f0c65a 100644
        local result = getConfig({ "enableGMCP", "editorAutoComplete" })
        assert.is_table(result)
 diff --git a/test/functional_tests/HeadlessSessionTest.cpp b/test/functional_tests/HeadlessSessionTest.cpp
-index 16baa1d..488d457 100644
+index 16baa1d..2a27d9f 100644
 --- a/test/functional_tests/HeadlessSessionTest.cpp
 +++ b/test/functional_tests/HeadlessSessionTest.cpp
-@@ -2216,6 +2216,162 @@ end))lua");
+@@ -2216,6 +2216,163 @@ end))lua");
          QVERIFY(!outputTexts(output).contains(qsl("Replayed line 1999.")));
      }
  
@@ -735,21 +745,22 @@ index 16baa1d..488d457 100644
 +    {
 +        const QString name = qsl("Headless Input Line");
 +        QVERIFY(writeProfile(name, QString()));
-+        const QStringList keys{qsl("commandSeparator"), qsl("highlightHistory"), qsl("disablePasswordMasking")};
-+        const QVariantMap changed{{qsl("commandSeparator"), qsl("|")}, {qsl("highlightHistory"), false}, {qsl("disablePasswordMasking"), true}};
++        const QStringList keys{qsl("commandSeparator"), qsl("highlightHistory"), qsl("disablePasswordMasking"), qsl("runAllKeyMatches")};
++        const QVariantMap changed{{qsl("commandSeparator"), qsl("|")}, {qsl("highlightHistory"), false}, {qsl("disablePasswordMasking"), true}, {qsl("runAllKeyMatches"), true}};
 +        QVariantMap values;
 +        QMap<QString, QString> refused;
 +        {
 +            THeadlessSession session;
 +            QCOMPARE(session.start({.profile = name, .connect = false}), THeadlessSession::StartResult::started);
 +            QVERIFY(session.settings(keys, values));
-+            QCOMPARE(values, QVariantMap({{qsl("commandSeparator"), qsl(";;")}, {qsl("highlightHistory"), true}, {qsl("disablePasswordMasking"), false}}));
++            QCOMPARE(values, QVariantMap({{qsl("commandSeparator"), qsl(";;")}, {qsl("highlightHistory"), true}, {qsl("disablePasswordMasking"), false}, {qsl("runAllKeyMatches"), false}}));
 +
 +            QVERIFY(session.setSettings(changed, refused));
 +            QVERIFY2(refused.isEmpty(), qPrintable(refused.keys().join(qsl(", "))));
 +            QCOMPARE(session.host()->getCommandSeparator(), qsl("|"));
 +            QVERIFY(!session.host()->mHighlightHistory);
 +            QVERIFY(session.host()->disablePasswordMasking());
++            QVERIFY(session.host()->getKeyUnit()->mRunAllKeyMatches);
 +            QVERIFY(session.shutdown(true));
 +        }
 +

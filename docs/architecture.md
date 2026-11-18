@@ -294,6 +294,18 @@ copies it into the cache (`ReplayShare`), the only folder the app's FileProvider
 and offers it to Android's share sheet, for desktop Mudlet's replay to play. `ReplayRecordingTest` tries the switch,
 the button and the copy against the fake engine, and `replay_recording` in the host test the engine against Mudlet.
 
+### Timestamps and the lag
+Desktop Mudlet's timestamp button is a switch under the replay recording on the game sheet's card (`GameSheet.kt`). A
+tap sends `setTimeStamps`, which the engine does with libmudlet's `THeadlessSession::setTimeStampsShown()`, saved for
+the profile's next load as the button saves it; the switch follows status `timeStamps`, which a script's
+`enableTimeStamps()` and `disableTimeStamps()` change too. Each `line` and `tail` carries its `time`, when the game's
+text arrived (lineShown's `arrivalMSecs`) or when the profile wrote it, so the console (`Console.kt`) draws
+desktop's `hh:mm:ss.zzz ` in its colour before each line while they show, also for lines from before the switch, as
+the desktop does; TalkBack reads it as the start of the line's one node, and a copy leaves it out. Under the game's
+address the card shows the lag as desktop's latency box does (`N:… S:…`, or `<no GA> S:…`), from status `lag`
+(`latencyChanged`), which TalkBack spells out. `TimeStampsTest` tries the switch, the lines and the lag against the
+fake engine, and `time_stamps` in the host test the engine against Mudlet.
+
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
 scales; text sizes are in sp, so the system font size scales them.

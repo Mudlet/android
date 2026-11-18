@@ -317,10 +317,10 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
 
         /**
          * [runs]: each [start, length, fg, bg, attributes], as docs/protocol.md's "Runs" says. [replay]: one of the
-         * lines an engine sends again to a UI that attached.
+         * lines an engine sends again to a UI that attached. [time]: when it came, in milliseconds since the epoch.
          */
-        fun line(seq: Long, text: String, runs: List<List<Int>> = emptyList(), prompt: Boolean = false, replay: Boolean = false) = send(
-            JSONObject().put("t", "line").put("seq", seq).put("text", text).put("prompt", prompt).put("replay", replay)
+        fun line(seq: Long, text: String, runs: List<List<Int>> = emptyList(), prompt: Boolean = false, replay: Boolean = false, time: Long = 0) = send(
+            JSONObject().put("t", "line").put("seq", seq).put("text", text).put("prompt", prompt).put("replay", replay).put("time", time)
                 .put("runs", JSONArray(runs.map { JSONArray(it) })),
         )
 

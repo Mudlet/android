@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
-                       clipboard, file_dialog, web_pages, packages, error_console, key_bindings, scripts_stopped, replay_recording):
+                       clipboard, file_dialog, web_pages, packages, error_console, key_bindings, scripts_stopped, replay_recording, time_stamps):
             checks()
         checks = secure_offer
         checks(port)
@@ -5347,6 +5347,82 @@ def scripts_stopped():
     check(stops_told(since) == [False], f"a profile that closes is told as no longer stopped: {stops_told(since)}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def time_stamps():
+    """Each line's and the tail's time, the game's and the profile's own; setTimeStamps, desktop's timestamp button, and
+    status timeStamps: refused with no profile and for a shown that is not a boolean, told at the load, for the button
+    and a script's enableTimeStamps() and disableTimeStamps(), to a UI that attaches, as off once the profile closes,
+    and kept for its next load; and status lag, the latency box's two numbers, empty once it closes."""
+    game = fake_telnet.start_in_thread()
+    profile = "Timestamp Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    m = c.ask({"t": "setTimeStamps", "shown": True}, answers=("error",), collect=seen)
+    check(m["message"] == "setTimeStamps: no profile running", f"setTimeStamps with no profile open is refused: {m}")
+
+    def told(key, since):
+        return [m["value"] for m in seen[since:] if m["t"] == "status" and m["key"] == key]
+
+    # As Qt's QDateTime::currentMSecsSinceEpoch() rounds on Unix: an engine time can read up to half a millisecond
+    # after a later time.time(), but rounding keeps the order of the two readings
+    def now_ms():
+        return (time.time_ns() + 500_000) // 1_000_000
+
+    started = now_ms()
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "timeStamps", lambda v: True, seen, timeout=30)
+    check(told("timeStamps", 0) == ["false"], f"a profile that loads tells its timestamps are off: {told('timeStamps', 0)}")
+    tail = c.wait_for(lambda m: m["t"] == "tail" and m["text"].startswith("HP:100"), timeout=10, collect=seen)
+    line = next(m for m in seen if m["t"] == "line" and "Red bold" in m["text"])
+    check(started <= line["time"] <= tail["time"] <= now_ms(),
+          f"the game's line and the tail carry when they arrived: {started} {line['time']} {tail['time']}")
+    m = wait_status(c, "lag", lambda v: True, seen, timeout=10)
+    check(re.fullmatch(r"(-|\d+\.\d{3}) \d+\.\d{3}", m["value"]) is not None, f"lag gives the latency box's two numbers: {m}")
+    for shown in ("yes", 1, None):
+        request = {"t": "setTimeStamps"} if shown is None else {"t": "setTimeStamps", "shown": shown}
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == "setTimeStamps: shown must be true or false", f"setTimeStamps {shown!r} is refused: {m}")
+
+    before = now_ms()
+    c.send({"t": "runLua", "code": 'echo("written here\\n")'})
+    m = c.wait_for(lambda m: m["t"] == "line" and m["text"] == "written here", collect=seen)
+    check(before <= m["time"] <= now_ms(), f"a line the profile wrote carries when it was written: {m}")
+
+    since = len(seen)
+    c.send({"t": "setTimeStamps", "shown": True})
+    wait_status(c, "timeStamps", lambda v: v == "true", seen)
+    c.send({"t": "runLua", "code": 'disableTimeStamps("main")'})
+    wait_status(c, "timeStamps", lambda v: v == "false", seen)
+    c.send({"t": "runLua", "code": 'enableTimeStamps("main")'})
+    wait_status(c, "timeStamps", lambda v: v == "true", seen)
+    c.send({"t": "setTimeStamps", "shown": True})
+    c.ask({"t": "runLua", "code": "return 1"}, answers=("status", "error"), collect=seen)
+    check(told("timeStamps", since) == ["true", "false", "true"],
+          f"the button and a script's enable and disable are told once each: {told('timeStamps', since)}")
+
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(told("timeStamps", 0) == ["true"], f"a UI that attaches is told the timestamps are on: {told('timeStamps', 0)}")
+    replayed = [m for m in seen if m["t"] == "line" and m.get("replay")]
+    check(replayed and all(m["time"] >= started for m in replayed), "the lines replayed to it keep their times")
+
+    since = len(seen)
+    c.send({"t": "closeProfile", "name": profile})
+    wait_status(c, "profile", lambda v: v == f"{profile} closed", seen, timeout=30)
+    check(told("timeStamps", since) == ["false"] and told("lag", since)[-1:] == [""],
+          f"a profile that closes is told as showing no timestamps and no lag: {told('timeStamps', since)} {told('lag', since)}")
+    since = len(seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen, timeout=30)
+    wait_status(c, "timeStamps", lambda v: True, seen, timeout=10)
+    check(told("timeStamps", since) == ["true"], f"the timestamps stay on for the profile's next load: {told('timeStamps', since)}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
 
 def replay_recording():
     """setReplayRecording, desktop's replay recording button, and replayRecording: refused with no profile, for a record

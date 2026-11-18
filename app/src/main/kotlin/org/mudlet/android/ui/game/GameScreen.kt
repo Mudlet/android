@@ -362,6 +362,7 @@ private fun ProfileGameScreen(
                             searchQuery = if (searching) search.query else "",
                             searchFound = search.found.takeIf { searching },
                             blinkText = c.setting(Settings.blinkText),
+                            timeStamps = c.timeStampsShown,
                         ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {

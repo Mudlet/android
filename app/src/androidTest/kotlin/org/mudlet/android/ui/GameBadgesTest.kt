@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -87,8 +88,8 @@ class GameBadgesTest {
 
         activate(gameTitle)
         waitFor(hasTestTag(GAME_SHEET_TAG))
-        compose.onNode(openGame(ALPHA.name, unread = 151, attention = true)).assertIsDisplayed()
-        compose.onNode(openGame(BETA.name)).assertIsDisplayed()
+        compose.onNode(openGame(ALPHA.name, unread = 151, attention = true)).performScrollTo().assertIsDisplayed()
+        compose.onNode(openGame(BETA.name)).performScrollTo().assertIsDisplayed()
     }
 
     @Test

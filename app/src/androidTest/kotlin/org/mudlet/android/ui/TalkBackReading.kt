@@ -33,10 +33,20 @@ class TalkBackReading(private val compose: AndroidComposeTestRule<*, MainActivit
         return places
     }
 
-    // Every control is reached by swiping, none by touch alone
-    fun assertEveryControlRead() {
+    /**
+     * Whether TalkBack reads [matcher]'s node now: it or a node within it, not only a node it is within, as for one
+     * scrolled out of view, which TalkBack reaches only by scrolling to it.
+     */
+    fun reads(matcher: SemanticsMatcher): Boolean {
+        val target = compose.onNode(matcher).fetchSemanticsNode().id
+        return order.any { it == target || target in nodes.getValue(it).ancestorIds() }
+    }
+
+    // Every control is reached by swiping, none by touch alone: here, or in [others], of the screen scrolled elsewhere
+    fun assertEveryControlRead(others: List<TalkBackReading> = emptyList()) {
+        val readings = listOf(this) + others
         for (control in compose.onAllNodes(hasClickAction()).fetchSemanticsNodes()) {
-            assertTrue("${describe(control)} is read: TalkBack reads $read", order.any { related(it, control.id) })
+            assertTrue("${describe(control)} is read: TalkBack reads ${readings.map { it.read }}", readings.any { r -> r.order.any { r.related(it, control.id) } })
         }
     }
 

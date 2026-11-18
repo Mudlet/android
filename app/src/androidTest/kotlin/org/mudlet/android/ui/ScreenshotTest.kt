@@ -28,6 +28,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -70,6 +71,11 @@ class ScreenshotTest {
         .around(NightMode())
         .around(compose)
 
+    @After
+    fun defaults() {
+        compose.runOnIdle { Settings.mapBehindText.reset() }
+    }
+
     @Test
     fun light() = takeScreenshots("light")
 
@@ -79,7 +85,8 @@ class ScreenshotTest {
     private fun takeScreenshots(mode: String) {
         if (Build.VERSION.SDK_INT < 31) return
         compose.runOnIdle {
-            Settings.mapBehindText.reset()
+            // Off by default, and the game screen is shown with the map behind its text
+            Settings.mapBehindText.set(true)
             Settings.setAwaitsDefaults(PROFILES[0].name, false)
         }
         // A new engine instance, so no map or lines of an earlier test are left

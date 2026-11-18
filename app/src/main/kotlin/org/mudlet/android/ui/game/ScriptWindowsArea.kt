@@ -100,6 +100,7 @@ import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.DrawnWindow
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LabelStyle
+import org.mudlet.android.protocol.MapCorner
 import org.mudlet.android.protocol.PlacedWindow
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RUN_RGB
@@ -222,10 +223,25 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         // row, which is the app's own and stays black
         Box(Modifier.placeAt(layout.main, density).background(windowColour(windows.mainArea?.borderColor ?: -1, CONSOLE_BACKGROUND)))
         content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
-        // The windows in a scroll box are drawn in it, to scroll with it
-        val drawn = remember(layout.windows) { DrawnWindow.of(layout.windows) }
+        // A mapper's panel goes beside it where there is room, and a small mapper is drawn larger, over what is under it
+        // but never over another window it was clear of
+        val mapper = layout.windows.firstOrNull { it.window.kind == WindowKind.MAPPER && it.scrollBox == null }
+        val mapperKey = mapper?.window?.key
+        val corner = remember(layout, w, h, switcherHeight, density.density) {
+            mapper?.let { m ->
+                val others = layout.windows.filter { it !== m && it.scrollBox == null }.map { it.rect } + layout.dockHeaders.map { it.rect } + layout.frameTabs.map { it.rect }
+                val areaH = if (layout.pages.isEmpty()) h else (h - switcherHeight).coerceAtLeast(0f)
+                MapCorner.of(m.rect, PxRect(0f, 0f, w, areaH), others, density.density)
+            }
+        }
+        // The windows in a scroll box are drawn in it, to scroll with it; the map and its panel beside it go over the
+        // windows it was drawn among
+        val drawn = remember(layout.windows, corner) {
+            DrawnWindow.of(layout.windows).let { all -> if (corner == null) all else all.sortedBy { it.placed.window.key == mapperKey } }
+        }
         for (window in drawn) {
-            key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density, Modifier.coveredBy(window.placed.rect)) }
+            val placedCorner = corner?.takeIf { window.placed.window.key == mapperKey }
+            key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density, Modifier.coveredBy(placedCorner?.bounds ?: window.placed.rect), placedCorner) }
         }
         for (header in layout.dockHeaders) {
             key(header.window.key) { WindowHeader(header.window, onBack = null, Modifier.placeAt(header.rect, density)) }
@@ -294,8 +310,9 @@ private fun title(window: ScriptWindow): String = if (window.kind == WindowKind.
 
 internal fun windowColour(code: Int, default: Color): Color = if (code >= RUN_RGB) Color(0xFF000000.toInt() or (code and 0xFFFFFF)) else default
 
+// [corner] is where a mapper with room beside it for its panel goes, and the panel
 @Composable
-private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier) {
+private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics: ConsoleMetrics, density: Density, modifier: Modifier = Modifier, corner: MapCorner? = null) {
     val placed = drawn.placed
     val window = placed.window
     val placedModifier = Modifier.placeAt(placed.rect, density).then(modifier)
@@ -322,7 +339,8 @@ private fun PlacedWindowView(drawn: DrawnWindow, windows: ScriptWindows, metrics
             WindowCommandLine(window.name, windows.commandLines[window.name], window.styleSheet, placedModifier.windowSemantics(description))
         }
 
-        WindowKind.MAPPER -> ScriptMap(placed, placedModifier)
+        // The map places itself, as its panel may go beside it and a small one is drawn larger
+        WindowKind.MAPPER -> ScriptMap(placed, corner, density, modifier)
 
         // A text box places itself too, as a small one's touch bounds are larger than it
         WindowKind.TEXT_BOX -> ScriptTextBox(placed, windows.textBoxes[window.name], windows.textBoxEdits[window.name], density, modifier)

@@ -57,7 +57,8 @@ class TalkBackOrderTest {
     @Before
     fun openTheGameScreen() {
         if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
-        compose.runOnIdle { Settings.mapBehindText.reset() }
+        // Off by default; the first test reads past the map behind the text
+        compose.runOnIdle { Settings.mapBehindText.set(true) }
         // A new engine instance, so no window or bar of an earlier test is left
         val first = fake.engine.nextSession()
         fake.engine.instance = "$INSTANCE-${System.nanoTime()}"
@@ -76,7 +77,10 @@ class TalkBackOrderTest {
 
     @After
     fun defaults() {
-        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.AUTO }
+        compose.runOnIdle {
+            ScriptWindowsClient.layoutMode = LayoutMode.AUTO
+            Settings.mapBehindText.reset()
+        }
     }
 
     @Test

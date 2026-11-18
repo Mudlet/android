@@ -115,7 +115,8 @@ class AppMapTest {
     @Before
     fun openTheGameScreen() {
         if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
-        compose.runOnIdle { Settings.mapBehindText.reset() }
+        // Off by default, and most of these tests are of the map behind the text
+        compose.runOnIdle { Settings.mapBehindText.set(true) }
         button = hasContentDescription(string(R.string.app_map_show)) and hasClickAction()
         // A new engine instance for each test, so no map of an earlier test is left
         val first = fake.engine.nextSession()
@@ -217,13 +218,18 @@ class AppMapTest {
     }
 
     @Test
-    fun theSettingsSwitchTurnsTheMapBehindTheTextOff() {
+    fun theSettingsSwitchIsOffForAPlayerWhoNeverChoseAndTurnsTheMapBehindTheTextOnAndOff() {
         assertTrue(lastRequest("setAppMapSize", readPast = true).getInt("w") > 0)
         compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_appearance)))
         val row = hasText(string(R.string.settings_map_behind_text)) and hasClickAction()
+        compose.runOnIdle { Settings.mapBehindText.reset() }
         // The settings screen scrolls, and TalkBack scrolls to what it moves to
         compose.onNode(row).performScrollTo()
+        compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
+        activate(row)
+        compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+        compose.runOnIdle { assertTrue(Settings.mapBehindText.value) }
         activate(row)
         compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         compose.runOnIdle { assertFalse(Settings.mapBehindText.value) }

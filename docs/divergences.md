@@ -23,9 +23,19 @@ they did not make it (`0001-headless-app-map.patch`; `docs/architecture.md`, "Th
 main window always offers its mapper; a phone has no room for that window beside the console, and a player should not
 need a script to see the map.
 
+## A script's small mapper
+
+A mapper window smaller than two fifths of the game area is drawn that large on the screen, its shape kept, and its
+zoom buttons, edit switch, the button that centres it on the player, its area and level and its map info go in a
+panel beside it rather than over it (`docs/architecture.md`, "The map"). The window's size scripts see, and the size
+the engine draws the map at, stay what the script set. A desktop's mapper is laid out for a screen many times a
+phone's: scaled to fit, a 200 pixel mapper is a few dp across, too small to read a room or touch one, and controls
+drawn over it hide most of it.
+
 ## The map info box
 
-The map info (the built-in `Short` and `Full`, and a script's `registerMapInfo()`) is text the app lays over the map,
+The map info (the built-in `Short` and `Full`, and a script's `registerMapInfo()`) is text the app lays over its own
+map and beside a script's (above, "A script's small mapper"),
 not part of the map's picture: in the app's font at Android's font scale, wrapped to the map's width, with a line
 break at a part's end trimmed and a part of nothing but space left out, at most two fifths of the map's height, and
 not shown on the map behind the text. The parts, their order, colours, bold and italic and the box's colour are the

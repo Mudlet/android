@@ -71,7 +71,7 @@ import kotlin.math.min
  * gesture, the button that centres the map on the player, the switch between viewing and editing it, the room a tap
  * picks with its exits and a walk there, and on an edited map what can be done to it, TalkBack's moves between levels,
  * a refusal shown until dismissed, a frame of another size not drawn, openMapWidget()'s docked map as a page, and the
- * map info as text over it.
+ * map info as text beside it. ScriptMapCornerTest has where the map and its panel go on screens of each size.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptMapTest {
@@ -265,7 +265,7 @@ class ScriptMapTest {
     }
 
     @Test
-    fun theMapInfoIsTextUnderTheButtonsThatTalkBackReadsAsOneAndADragOnItPansTheMap() {
+    fun theMapInfoIsTextUnderTheButtonsThatTalkBackReadsAsOneAndCoversNoneOfTheMap() {
         showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
         val colour = """"bold":false,"italic":false,"color":"#000080""""
@@ -285,18 +285,8 @@ class ScriptMapTest {
         val drawn = bounds(map)
         val box = bounds(info)
         val buttons = touchBounds(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction())
-        assertTrue("the info $box is not in the map $drawn", box.left >= drawn.left && box.right <= drawn.right && box.bottom <= drawn.bottom)
+        assertFalse("the info $box is over the map $drawn", box.overlaps(drawn))
         assertTrue("the info $box is not under the buttons $buttons", box.top >= buttons.bottom - 1)
-
-        // It takes no touch: a drag that starts on it is the map's
-        val scale = shownScale(drawn)
-        compose.onNode(info).performTouchInput {
-            down(center)
-            repeat(DRAG_STEPS) { moveBy(Offset((DRAG_STEP * scale).toFloat(), 0f)) }
-            advanceEventTime(300)
-            up()
-        }
-        assertEquals("mapper", session.receiveLast("moveMap").getString("map"))
 
         session.send(frame("""[{"text":"\n",$colour}]"""))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isEmpty() }
@@ -305,11 +295,12 @@ class ScriptMapTest {
         session.send(frame(null))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isEmpty() }
 
-        // A script's long one leaves most of the map in sight
+        // A script's long one is no higher than two fifths of the map, so that the panel leaves the text under it in sight
         session.send(frame("""[{"text":"${(1..60).joinToString("\\n")}",$colour}]"""))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(anyInfo).fetchSemanticsNodes().isNotEmpty() }
         val long = bounds(anyInfo)
-        assertTrue("the info $long takes more than two fifths of the map $drawn", long.height <= drawn.height * 0.4f && long.bottom <= drawn.bottom)
+        assertTrue("the info $long is higher than two fifths of the map $drawn", long.height <= drawn.height * 0.4f + 1)
+        assertFalse("the info $long is over the map $drawn", long.overlaps(drawn))
     }
 
     @Test

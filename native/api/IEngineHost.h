@@ -26,4 +26,8 @@ public:
     virtual void engineStatus(const QString& key, const QString& value) = 0;
     // Where what an engine shows with no profile open goes
     virtual IFrontend* controlFrontend() = 0;
+    // The device's clipboard, as a script's getClipboardText() reads it, during the script's call, and
+    // setClipboardText() writes it
+    virtual QString clipboardText() = 0;
+    virtual void setClipboardText(const QString& text) = 0;
 };

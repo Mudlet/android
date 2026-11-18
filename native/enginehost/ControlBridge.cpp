@@ -143,12 +143,41 @@ bool ControlBridge::handleControl(const QString& type, const QJsonObject& messag
         markSeen(message);
     } else if (type == QLatin1String("setAppState")) {
         setAppState(message);
+    } else if (type == QLatin1String("answerClipboardRead")) {
+        // One that came after its script stopped waiting
     } else if (!mProfileOutput) {
         sendError(QStringLiteral("%1: send it on the profile's socket").arg(type));
     } else {
         return false;
     }
     return true;
+}
+
+// Android lets only the app in front read the clipboard, so the UI reads it. The script waits in its call, as for any
+// clipboard read, but at most clipboardWaitMs, and not at all with no UI: a frozen UI or none reads as an empty clipboard.
+QString ControlBridge::clipboardText()
+{
+    if (!mClient || !mClientGreeted) {
+        return {};
+    }
+    const QJsonValue id(double(++mClipboardReads));
+    sendFrame({{QStringLiteral("t"), QStringLiteral("clipboardRead")}, {QStringLiteral("id"), id}});
+    // Written now, as the event loop that would write it does not run while the script waits
+    mClient->flush();
+    const std::optional<QJsonObject> answer = takeFrame(QLatin1StringView("answerClipboardRead"), id, clipboardWaitMs);
+    if (!answer) {
+        qWarning("ControlBridge: the UI did not answer clipboardRead %lld within %d ms", mClipboardReads, clipboardWaitMs);
+        return {};
+    }
+    return answer->value(QLatin1String("text")).toString();
+}
+
+// With no UI the text goes nowhere, as the app is not in front to put it on the clipboard
+void ControlBridge::setClipboardText(const QString& text)
+{
+    if (mClient && mClientGreeted) {
+        sendFrame({{QStringLiteral("t"), QStringLiteral("clipboardWrite")}, {QStringLiteral("text"), text}});
+    }
 }
 
 // Checked here rather than taken with defaults, as a profile stored with a wrong field would only fail later, at its connect

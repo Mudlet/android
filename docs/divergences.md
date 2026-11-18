@@ -41,6 +41,16 @@ When the app goes to the background, the open profiles are saved as Mudlet saves
 front, so waiting for a close as the desktop does would lose what the session changed; raising `sysExitEvent` would
 tell scripts the profile is closing when it is not.
 
+## A script and the clipboard
+
+A script's `getClipboardText()` reads the device's clipboard only while the app is in front, as Android lets only the
+app with focus read it: in the background, or with another app's window focused beside it, the script reads an empty
+clipboard. It waits for the app's answer at most half a second, and reads empty if none comes. Its `setClipboardText()`
+puts the text on the clipboard only while the app is attached to the engine; in the background the text goes nowhere,
+though the call still returns true. Desktop Mudlet reads and writes its clipboard at any time. The engine runs in a
+service, which Android does not let read the clipboard, and a script that waited for the app to come back would stall
+the game. From Android 12 the system says so when the app reads what another app put there, as for any app.
+
 ## Settings the app keeps for every profile
 
 "Read new text aloud", "Tell games I use a screen reader" and what becomes of blank lines are the app's settings: each

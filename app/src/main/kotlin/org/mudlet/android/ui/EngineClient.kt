@@ -2,6 +2,8 @@ package org.mudlet.android.ui
 
 import android.annotation.SuppressLint
 import android.app.ActivityManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.LocalSocket
@@ -9,6 +11,7 @@ import android.net.LocalSocketAddress
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,6 +59,8 @@ object EngineClient {
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
     private const val PREF_LAST_PROFILE = "lastProfile"
+
+    private const val TAG = "EngineClient"
 
     /** How many profiles the engine keeps open at once (docs/protocol.md, `openProfile`): it refuses another. */
     const val MAX_OPEN_GAMES = 4
@@ -524,8 +529,30 @@ object EngineClient {
                     answerProfileRequest(message.replyTo, null)
                 }
 
+                // Read here, not on the main thread, as a script waits in its call; Android gives no clip to an app
+                // without focus. Only the first item's text: a URI's content is not read for a script
+                is EngineMessage.ClipboardRead -> {
+                    val clip = clipboard("read") { it.primaryClip }
+                    val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString().orEmpty()
+                    link.send(Requests.answerClipboardRead(message.id, text))
+                }
+
+                is EngineMessage.ClipboardWrite -> main.post {
+                    val clip = ClipData.newPlainText(app.getString(R.string.script_clipboard_label), message.text)
+                    clipboard("write") { it.setPrimaryClip(clip) }
+                }
+
                 else -> {}
             }
+        }
+
+        // Binder refuses a clip too large for one transaction with a RuntimeException, which a script's text may be. Only
+        // the exception's class is logged, as the text is the player's
+        private fun <T> clipboard(what: String, use: (ClipboardManager) -> T): T? = try {
+            use(app.getSystemService(ClipboardManager::class.java))
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "a script's clipboard $what failed: ${e.javaClass.simpleName}")
+            null
         }
 
         override fun onDetached(reason: String) {

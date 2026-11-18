@@ -97,9 +97,9 @@ data class LabelStyle(
         val text = color?.takeIf { it ushr 24 != 0 }
         val fill = background?.colour()?.takeIf { it ushr 24 != 0 }
         return when {
-            text != null && fill == null -> copy(background = LabelFill.Solid(contrasting(text)))
-            text == null && fill != null -> copy(color = contrasting(MapBehindText.blend(under, fill, (fill ushr 24) / 255f)))
-            else -> copy(color = text)
+            text != null && fill == null -> copy(background = LabelFill.Solid(text))
+            text == null && fill != null -> copy(color = contrasting(fill))
+            else -> this
         }
     }
 
@@ -940,7 +940,7 @@ data class LabelStyle(
         val TEXT_BOX_SELECTORS = setOf("TTextBox", ".TTextBox", "QPlainTextEdit", "QAbstractScrollArea", "QFrame", "QWidget", "QObject", "*")
 
         /** The rules of a command line's sheet that apply to it: Mudlet's `TCommandLine` is a `QPlainTextEdit` too. */
-        val COMMAND_LINE_SELECTORS = setOf("TCommandLine", ".TCommandLine", "QPlainTextEdit", "QAbstractScrollArea", "QFrame", "QWidget", "QObject", "*")
+        val COMMAND_LINE_SELECTORS = setOf(".TCommandLine", "QPlainTextEdit", "QAbstractScrollArea", "QFrame", "QWidget", "QObject", "*")
 
         // Qt's repeats, which its `background` shorthand passes over
         private val REPEATS = setOf("no-repeat", "repeat-x", "repeat-xy", "repeat-y")

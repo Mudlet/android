@@ -869,7 +869,6 @@ void MudletProfile::connectSession()
     connect(session, &THeadlessSession::mainConsoleAreaChanged, this, [this](const QString&, const QSize& grid, const QRect& textRect) {
         mFrontend->mainArea({mMainWindowSize, grid, textRect, colourCode(mSession->mainBorderColor(), false)});
     });
-    connect(session, &THeadlessSession::mainBorderColorChanged, this, &MudletProfile::pushMainArea);
     connect(session, &THeadlessSession::connecting, this, [this] {
         // Mudlet forgets the refused certificate as it dials
         mFrontend->certificateRefused(std::nullopt);

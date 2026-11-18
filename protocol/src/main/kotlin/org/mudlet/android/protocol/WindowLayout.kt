@@ -351,7 +351,7 @@ data class WindowLayout(
                 scale = scale,
                 mainWindowSize = mainWindowSize,
                 console = console,
-                main = if (area.fitted) pane else whole,
+                main = if (area.fitted) console else whole,
                 windows = placed,
                 dockHeaders = headers,
                 pages = pages,

@@ -155,6 +155,18 @@ engine kept before it took the profile's setting, and still more than the 2,000 
 profile's own, so a player who wants more sets it for a game, or for new games, and a profile copied from the desktop
 keeps what it had.
 
+## The most lines a game keeps comes from the phone
+
+Desktop Mudlet's "Use maximum lines possible" gives the main console as many lines as four fifths of the computer's
+memory would hold, and clips a bigger scrollback length, the profile's or a script's `setConsoleBufferSize()`, to the
+same. On a phone with 8 GB that is millions of lines for each game, and Android stops the engine, and with it every
+game's connection, long before they are kept. The app names its own most instead (`ScrollbackBudget.maxLines`): a
+sixteenth of the device's memory, a thirty-second on a low-RAM one, for the four games the engine can have open at
+once, at Mudlet's own estimate of 1,600 bytes a line, in whole thousands and never below the screen's 2,000. A phone
+with 8 GB keeps up to 73,000 lines in each game. Past it a console sheds its oldest lines a batch at a time, with
+`sysBufferShrinkEvent`, as on the desktop; `getConsoleBufferSize()` answers the clipped size, as the desktop does on a
+computer with less memory than the one a profile was saved on, and the profile keeps the size it saved.
+
 ## A script's style sheet for the input line
 
 A script's `setCmdLineStyleSheet()` with no name, or with `"main"`, styles the desktop's main command line. The app

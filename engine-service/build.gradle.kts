@@ -59,8 +59,8 @@ dependencies {
     // Qt6Android.jar (QtServiceBase) and the other jars androiddeployqt staged
     implementation(fileTree(qtDeployDir.resolve("libs")) { include("*.jar") })
     implementation(libs.androidx.core.ktx)
+    implementation(project(":protocol"))
 
-    androidTestImplementation(project(":protocol"))
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
 }

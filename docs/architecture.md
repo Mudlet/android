@@ -54,6 +54,8 @@ Startup:
    `:engine` process and creates the notification channels.
 2. `EngineService.onCreate` uses `Os.setenv` to set the socket path, the
    timestamps and `QT_QPA_PLATFORM`.
+   It sets `MUDLET_SCROLLBACK_MAX_LINES` too, the most lines a console keeps on
+   this device (`EngineScrollback`), which `MudletEngine` gives libmudlet.
 3. It calls `startForeground(..., FOREGROUND_SERVICE_TYPE_SPECIAL_USE)` before
    Qt loads, so a slow library load cannot miss the start-foreground deadline.
 4. It calls `super.onCreate()`. That is QtServiceBase, which loads the Qt
@@ -971,6 +973,9 @@ And a script's web page, opened by the app with its answer the script's (`THeadl
 `0032-headless-web-page-opener.patch`; see "A script opens a web page" in [`divergences.md`](divergences.md)).
 And the profile's console buffer size given to a main console with no window, and read and changed by `getConfig()` and
 `setConfig()` (`consoleBufferSize`, `useMaxConsoleBufferSize`, `0033-headless-console-buffer-size.patch`).
+And the most lines a console keeps, named by the app from the device in place of Mudlet's estimate from the machine's
+memory (`THeadlessSession::setMaxConsoleBufferSize()`, `0041-headless-max-console-buffer-size.patch`; see "The most
+lines a game keeps comes from the phone" in [`divergences.md`](divergences.md)).
 And the Lua variables, one table at a time, as the desktop editor's Variables view lists them (`variables()`,
 `0034-headless-variables.patch`; see "Reading the Lua variables" in [`protocol.md`](protocol.md)).
 And a replay file played as the GUI's replay button plays it (`playReplay()`, `0037-headless-play-replay.patch`).

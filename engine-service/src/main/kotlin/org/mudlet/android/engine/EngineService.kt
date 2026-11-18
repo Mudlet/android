@@ -37,6 +37,7 @@ class EngineService : QtServiceBase() {
         Os.setenv("MUDLET_ENGINE_STOPPED", EngineSession.stopMarkerPath(this), true)
         Os.setenv("MUDLET_APP_ONCREATE_MS", EngineProcess.appOnCreateElapsedMs.toString(), true)
         Os.setenv("MUDLET_SERVICE_ONCREATE_MS", SystemClock.elapsedRealtime().toString(), true)
+        Os.setenv("MUDLET_SCROLLBACK_MAX_LINES", EngineScrollback.maxLines(this).toString(), true)
         val platform = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_PLATFORM, "android") ?: "android"
         Os.setenv("QT_QPA_PLATFORM", platform, true)
         // Before Qt loads, so a slow library load cannot miss the startForeground() deadline

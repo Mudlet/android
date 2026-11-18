@@ -69,6 +69,9 @@ MudletEngine::MudletEngine(IEngineHost* host, int heartbeatMs, QObject* parent)
     THeadlessSession::setWebPageOpener([host](const QUrl& url) {
         return host->openWebPage(url);
     });
+    // On Android the app sizes it from the device (ScrollbackBudget.kt); unset, 0 keeps Mudlet's estimate from the
+    // machine's memory
+    THeadlessSession::setMaxConsoleBufferSize(qEnvironmentVariableIntValue("MUDLET_SCROLLBACK_MAX_LINES"));
     reportFont();
     mHost->engineStatus(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
     mHost->engineStatus(QStringLiteral("configDir"), mConfigDir);
@@ -109,6 +112,7 @@ MudletEngine::~MudletEngine()
     THeadlessSession::setClipboard({}, {});
     THeadlessSession::setFilePicker({});
     THeadlessSession::setWebPageOpener({});
+    THeadlessSession::setMaxConsoleBufferSize(0);
 }
 
 // At start-up: the profiles the engine before this one ran, if it was killed rather than stopped. The front one is

@@ -126,7 +126,9 @@ python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/a
 `android_instrumented.py` also copies the screenshots `ScreenshotTest` takes (the profile list, the game screen with
 the map behind its text, the settings, the map in front and a trigger's page, light and dark, on Android 12 and
 later) into `<out>/screenshots/`, which CI's emulator jobs upload with their results: before and after shots for a pull
-request that changes how the app looks.
+request that changes how the app looks. It stops a suite as hung, with the stacks of the app's threads, when no test
+has ended for 7 minutes (a test the runner fails at its own 5-minute limit counts as ended); the suites' overall limits
+are only a backstop, with room for the suite to grow.
 
 The on-device checklist is in [`docs/architecture.md`](docs/architecture.md#on-device-checklist); its plain-words version
 for testers, by kind of phone, is [`docs/device-pass.md`](docs/device-pass.md).
@@ -149,7 +151,7 @@ names the Mudlet commits.
 ## Lint
 
 ```sh
-scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored code, games, the release plan's tests and the push-base tests, as CI's Checks workflow
+scripts/lint.sh                  # ktlint, clang-format, ShellCheck, actionlint, strings, conflict markers, vendored code, games, the release plan's tests, the push-base tests and the instrumented tests' watchdog tests, as CI's Checks workflow
 ./gradlew ktlintFormat           # fix the Kotlin
 FIX=1 scripts/lint.sh clang-format   # fix native/
 ./gradlew -PqtRoot=$QT_ROOT :app:lintDebug :engine-service:lintDebug   # Android lint, after scripts/build-apk.sh

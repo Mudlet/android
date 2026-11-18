@@ -72,10 +72,35 @@ sealed class SettingEntry(
     @StringRes val hint: Int?,
     @StringRes val keywords: Int,
 ) {
-    abstract val setting: Settings.Setting<*>
+    /** What names it on its page, which search opens at. */
+    abstract val key: String
+
+    /** Whether a page of [game]'s, or of "New games" for null, has it. */
+    fun shownFor(game: String?) = game != null || this !is Action
+
+    /** A row that changes [setting]. */
+    sealed class Value(category: SettingsCategory, label: Int, hint: Int?, keywords: Int) : SettingEntry(category, label, hint, keywords) {
+        abstract val setting: Settings.Setting<*>
+
+        override val key get() = setting.key
+    }
 
     /** A switch, which turns where search finds it too. */
-    class Switch(category: SettingsCategory, override val setting: Settings.BoolSetting, label: Int, hint: Int, keywords: Int) : SettingEntry(category, label, hint, keywords)
+    class Switch(category: SettingsCategory, override val setting: Settings.BoolSetting, label: Int, hint: Int, keywords: Int) : Value(category, label, hint, keywords)
+
+    /**
+     * Something done to an open game at once, by [button], which works where search finds it too. Only a game's page
+     * has it, as "New games" has nothing to do it to.
+     */
+    class Action(
+        category: SettingsCategory,
+        override val key: String,
+        label: Int,
+        hint: Int,
+        keywords: Int,
+        @StringRes val button: Int,
+        val run: (game: String) -> Unit,
+    ) : SettingEntry(category, label, hint, keywords)
 
     /** One of a few choices, a radio button each. */
     class Choice<E : Enum<E>>(
@@ -84,7 +109,7 @@ sealed class SettingEntry(
         label: Int,
         keywords: Int,
         val choiceLabel: (E) -> Int,
-    ) : SettingEntry(category, label, null, keywords) {
+    ) : Value(category, label, null, keywords) {
         fun choiceLabels(): List<Int> = setting.entries.map(choiceLabel)
 
         /** The index in [choiceLabels] of [owner]'s choice. */
@@ -124,8 +149,11 @@ sealed class SettingEntry(
         @StringRes val less: Int,
         @StringRes val more: Int,
         val sample: Boolean = false,
-    ) : SettingEntry(category, label, hint, keywords)
+    ) : Value(category, label, hint, keywords)
 }
+
+/** The key of desktop Mudlet's "Clear stored media", which is no setting's. */
+const val CLEAR_MEDIA_KEY = "clearStoredMedia"
 
 /** Every setting the settings screen has, in the order its pages show them. A game category's are each game's own. */
 val settingsCatalogue: List<SettingEntry> by lazy {
@@ -335,6 +363,14 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_accept_any_certificate_hint,
             R.string.settings_certificate_keywords,
         ),
+        SettingEntry.Action(
+            SettingsCategory.SECURITY,
+            CLEAR_MEDIA_KEY,
+            R.string.settings_clear_media,
+            R.string.settings_clear_media_hint,
+            R.string.settings_clear_media_keywords,
+            R.string.settings_clear_media_button,
+        ) { game -> EngineClient.session(game)?.clearStoredMedia() },
         SettingEntry.Number(
             SettingsCategory.APPEARANCE,
             Settings.textSize,
@@ -367,7 +403,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         ),
     ).also { entries ->
         // A game's page changes the game's settings in Mudlet, which only Mudlet's own settings can be
-        check(entries.all { it.category.forGame == it.setting.mudlet }) { "a game category holds exactly the Mudlet settings" }
+        check(entries.all { it.category.forGame == ((it as? SettingEntry.Value)?.setting?.mudlet ?: true) }) { "a game category holds exactly the Mudlet settings, and the actions" }
     }
 }
 
@@ -379,7 +415,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
 data class SettingsPage(val category: SettingsCategory, val game: String?, val highlight: String? = null) {
     val owner: SettingsOwner get() = game?.let(::GameSettings) ?: AppSettings
 
-    val entries get() = settingsCatalogue.filter { it.category == category }
+    val entries get() = settingsCatalogue.filter { it.category == category && it.shownFor(game) }
 
     /** As a navigation argument, and for rememberSaveable. */
     fun encode(): String = listOf(category.name, highlight.orEmpty(), game?.let { GAME_PREFIX + it } ?: NO_GAME).joinToString(SEPARATOR)

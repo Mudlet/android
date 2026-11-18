@@ -203,7 +203,8 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   server data encoding, picked from a list of Mudlet's names for its encodings, `ServerEncodings`, with desktop
   Mudlet's labels; offering a secure connection, and the protocols Mudlet negotiates with the game: GMCP, MSDP, MSSP,
   MSP, MXP, MTTS, MNES, NAWS, CHARSET, NEW-ENVIRON), Sound (the mutes), Security (the certificate errors a secure
-  connection lets past, and whether the game may install its packages or play its media) and Advanced (desktop
+  connection lets past, whether the game may install its packages or play its media, and desktop Mudlet's "Clear
+  stored media", which runs `purgeMediaCache()` in the game and puts desktop's message in its text) and Advanced (desktop
   Mudlet's "Special options", and a script's errors shown in the game's text, as the app has no error console). A
   number's slider changes it as the finger lifts, so a game's is sent once a slide. Mudlet's settings for how its own
   console draws text (control characters, East Asian characters of either width) are not among them, as the app draws

@@ -154,12 +154,12 @@ private fun Filters(sections: List<HubSection>, filter: String?, onFilter: (Stri
 }
 
 private class SearchResult(val section: HubSection, val entry: SettingEntry) {
-    val page get() = SettingsPage(entry.category, section.game, entry.setting.key)
+    val page get() = SettingsPage(entry.category, section.game, entry.key)
 }
 
 private fun LazyListScope.searchResults(query: String, sections: List<HubSection>, resources: Resources, onOpen: (SettingsPage) -> Unit) {
     val results = sections.flatMap { section ->
-        settingsCatalogue.filter { section.holds(it.category) }
+        settingsCatalogue.filter { section.holds(it.category) && it.shownFor(section.game) }
             .filter { searchMatches(query, it.searchTexts(resources) + section.place(resources)) }
             .map { SearchResult(section, it) }
     }
@@ -174,11 +174,13 @@ private fun LazyListScope.searchResults(query: String, sections: List<HubSection
         }
         return
     }
-    itemsIndexed(results, key = { _, result -> "${result.section.key}/${result.entry.setting.key}" }) { i, result ->
+    itemsIndexed(results, key = { _, result -> "${result.section.key}/${result.entry.key}" }) { i, result ->
         val crumb = stringResource(R.string.settings_breadcrumb, result.section.place(resources), stringResource(result.entry.category.title))
         ListSegment(i, results.size, itemWidth) {
             when (val entry = result.entry) {
                 is SettingEntry.Switch -> SwitchRow(entry, result.page.owner, overline = crumb)
+
+                is SettingEntry.Action -> result.section.game?.let { ActionRow(entry, it, overline = crumb) }
 
                 else -> ListItem(
                     headlineContent = { Text(stringResource(entry.label)) },

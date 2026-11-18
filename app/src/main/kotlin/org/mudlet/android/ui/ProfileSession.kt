@@ -654,12 +654,6 @@ class ProfileSession internal constructor(
                     scheduleFlush()
                 }
 
-                // Not news: the Announcer reads only lines that are new
-                is EngineMessage.LineUpdated -> synchronized(pendingLock) {
-                    pendingUpdates.add(message)
-                    scheduleFlush()
-                }
-
                 is EngineMessage.Clear -> synchronized(pendingLock) {
                     pendingLines.clear()
                     pendingNews.clear()

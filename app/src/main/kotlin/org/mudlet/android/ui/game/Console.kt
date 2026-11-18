@@ -198,7 +198,6 @@ fun Console(
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lineCount) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lineCount) lines.getOrNull(i) ?: return@items else tail ?: return@items
-                if (line.deleted) return@items
                 val spans = remember(line) { linkSpans(line.runs, line.text.length) }
                 // A line from before a new engine instance names links that instance does not hold; the tail is its own
                 val held = links?.takeIf { spans.isNotEmpty() && (i >= lineCount || firstLine + i >= it.firstLine) }

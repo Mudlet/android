@@ -439,7 +439,11 @@ def run(dev, apk):
     step("ttsSpeak(): what the engine's text to speech does, for the record")
     dev.command("lua", code='for _, e in ipairs({"ttsSpeechStarted", "ttsSpeechReady", "ttsSpeechError"}) do '
                             'registerAnonymousEventHandler(e, function(name) echo("[smoke tts] " .. name .. "\\n") end) '
-                            'end ttsSpeak("Hello from Mudlet")')
+                            'end echo("[smoke tts] built " .. ttsGetState() .. "\\n") ttsSpeak("Hello from Mudlet") '
+                            'echo("[smoke tts] after the first say " .. ttsGetState() .. "\\n")')
+    time.sleep(8)
+    dev.command("lua", code='echo("[smoke tts] 8 s later " .. ttsGetState() .. ", " .. #ttsGetVoices() .. " voices\\n") '
+                            'ttsSpeak("Hello again from Mudlet")')
     time.sleep(8)
     state = dev.command("state")
     events = [line["text"] for line in state.get("lines", []) if "[smoke tts]" in line.get("text", "")]
@@ -447,6 +451,12 @@ def run(dev, apk):
                                               check=False).splitlines() if "/" in line]
     log(f"  ttsSpeak(): luaResult {state['status'].get('luaResult')!r}, events {events or 'none'}, "
         f"TTS engines {engines or 'none'}")
+    for line in adb("logcat", "-d", "-v", "threadtime", "-s", "QtTextToSpeech:*", "UtteranceProgressListener:*",
+                    "TextToSpeech:*", check=False).splitlines()[-30:]:
+        log(f"  tts logcat: {line}")
+    for line in adb("logcat", "-d", "-v", "threadtime", f"--pid={engine_pid}", check=False).splitlines():
+        if "speech" in line.lower() or "tts" in line.lower():
+            log(f"  engine logcat: {line}")
 
     step("memory per profile: the engine's PSS with one, two and three profiles open")
     pss = {1: engine_pss(engine_pid)}

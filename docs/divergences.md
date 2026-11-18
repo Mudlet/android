@@ -103,6 +103,16 @@ history sheet already repeat a command. The setting is the profile's own (`autoC
 wants the desktop's way turns it off for a game, or for new games, and a profile copied from the desktop keeps what
 it had.
 
+## A new game keeps 10,000 lines
+
+A game added in the app starts with a scrollback length (`consoleBufferSize`, desktop Mudlet's "Main display size")
+of 10,000 lines (`Settings.consoleBufferSize`), where the desktop starts a profile with 100,000. The engine keeps each
+line with a colour and a format for every character, so 100,000 lines of a busy game take hundreds of megabytes, for
+each of up to four games open at once, on a phone that may stop the engine to get its memory back. 10,000 is what the
+engine kept before it took the profile's setting, and still more than the 2,000 the screen keeps. The setting is the
+profile's own, so a player who wants more sets it for a game, or for new games, and a profile copied from the desktop
+keeps what it had.
+
 ## A game's details changed while it is open
 
 What the editor saves reaches a game that is open, and the game stays open. Its next connection logs in with the

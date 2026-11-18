@@ -50,6 +50,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.settings.encodingLabels
@@ -484,6 +485,43 @@ class ScreenReaderTest {
         assertEquals(mapOf("sslIgnoreAll" to true), values(session.receive("setSettings")))
     }
 
+    // As desktop's Connection page lists the certificate beside the boxes it highlights
+    @Test
+    fun theSecurityPageShowsTheRefusedCertificateAndTheSwitchesThatLetItThrough() {
+        loaded()
+        val question = hasText(string(R.string.certificate_refused_title))
+        session.certificateRefused(EXPIRED_SELF_SIGNED)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isNotEmpty() }
+        // The dialog is a window of its own, which activate()'s single-root checks do not take
+        compose.onNode(hasText(string(R.string.certificate_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isEmpty() }
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_security)), scroll = true)
+        session.receive("getSettings")
+
+        val heading = hasText(string(R.string.settings_refused_certificate_title))
+        compose.onNode(heading).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)).assertIsDisplayed()
+        for (error in EXPIRED_SELF_SIGNED.errors) compose.onNodeWithText(compose.activity.getString(R.string.certificate_error, error)).assertIsDisplayed()
+        compose.onNodeWithText(compose.activity.getString(R.string.certificate_serial, EXPIRED_SELF_SIGNED.serial)).assertIsDisplayed()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        // TalkBack reads it with the switch, not by its colour alone
+        val letsThrough = hasText(string(R.string.settings_certificate_lets_through))
+        for (label in listOf(R.string.settings_accept_expired_certificate, R.string.settings_accept_self_signed_certificate)) {
+            compose.onNode(hasText(string(label)) and letsThrough and hasClickAction()).performScrollTo().assertIsDisplayed()
+        }
+        compose.onNode(hasText(string(R.string.settings_accept_any_certificate)) and letsThrough).assertDoesNotExist()
+
+        // One only "Ignore all certificate errors" lets past points at no switch, as desktop's page does not
+        session.certificateRefused(EXPIRED_SELF_SIGNED.copy(others = true))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.certificate_only_ignore_all))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(letsThrough).assertDoesNotExist()
+
+        // Gone as the next connection is tried
+        session.certificateRefused(null)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(heading).fetchSemanticsNodes().isEmpty() }
+        session.assertNoRequest("setSettings", 500)
+    }
+
     @Test
     fun theFirstRunWithTouchExplorationOffersToTellGames() {
         loaded()
@@ -547,6 +585,16 @@ class ScreenReaderTest {
         // The app's values of the settings Mudlet keeps, as the app starts
         val APP_VALUES = mapOf("announceIncomingText" to true, "advertiseScreenReader" to false, "blankLinesBehaviour" to "show")
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+        val EXPIRED_SELF_SIGNED = RefusedCertificate(
+            "localhost",
+            "localhost",
+            "2020-01-02T00:00:00Z",
+            "4A:2B",
+            true,
+            true,
+            false,
+            listOf("The certificate has expired", "The certificate is self-signed, and untrusted"),
+        )
 
         const val WAIT_MS = 10_000L
 

@@ -51,6 +51,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -59,12 +60,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
+import org.mudlet.android.ui.CertificateFacts
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.LocalInDetailPane
 import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.certificateSwitches
 import kotlin.math.roundToInt
 
 internal val MAX_WIDTH = 640.dp
@@ -106,12 +110,18 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                val refused = page.game?.takeIf { page.category == SettingsCategory.SECURITY }?.let { EngineClient.session(it)?.refusedCertificate }
+                val letsRefusedThrough = refused?.let(::certificateSwitches).orEmpty()
+                if (refused != null) RefusedCertificateFacts(refused)
                 val entries = page.entries
                 entries.forEachIndexed { i, entry ->
                     val lit = entry.key == highlight
+                    val letsThrough = (entry as? SettingEntry.Value)?.setting in letsRefusedThrough
                     val requester = remember { BringIntoViewRequester() }
                     if (lit) LaunchedEffect(Unit) { requester.bringIntoView() }
-                    ListSegment(i, entries.size, Modifier.bringIntoViewRequester(requester), selected = lit) { EntryRows(entry, owner, page.game) }
+                    ListSegment(i, entries.size, Modifier.bringIntoViewRequester(requester), selected = lit || letsThrough) {
+                        EntryRows(entry, owner, page.game, if (letsThrough) stringResource(R.string.settings_certificate_lets_through) else null)
+                    }
                 }
             }
         }
@@ -126,11 +136,24 @@ private fun scopeLine(page: SettingsPage): String = when {
     else -> stringResource(R.string.settings_for_app)
 }
 
+// Desktop's "TLS/SSL secure connection" group lists the certificate and its errors above the switches it highlights
 @Composable
-private fun EntryRows(entry: SettingEntry, owner: SettingsOwner, game: String?) {
+private fun RefusedCertificateFacts(certificate: RefusedCertificate) {
+    ListSegment(0, 1, Modifier.padding(bottom = 16.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.settings_refused_certificate_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.settings_refused_certificate_text), Modifier.padding(top = 4.dp))
+            CertificateFacts(certificate)
+            if (certificate.others) Text(stringResource(R.string.certificate_only_ignore_all), Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun EntryRows(entry: SettingEntry, owner: SettingsOwner, game: String?, overline: String?) {
     when (entry) {
         is SettingEntry.Action -> game?.let { ActionRow(entry, it) }
-        is SettingEntry.Switch -> SwitchRow(entry, owner)
+        is SettingEntry.Switch -> SwitchRow(entry, owner, overline)
         is SettingEntry.Choice<*> -> ChoiceRows(entry, owner)
         is SettingEntry.Number -> NumberRows(entry, owner)
         is SettingEntry.Pick -> PickRow(entry, owner)

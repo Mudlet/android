@@ -399,6 +399,26 @@ class ScreenReaderTest {
     }
 
     @Test
+    fun theScrollbackLengthIsTheGamesBufferSizeAThousandLinesAStep() {
+        loaded()
+        activate(hasContentDescription(string(R.string.settings_title)))
+        activate(hasText(string(R.string.settings_display)))
+        session.receive("getSettings")
+        val more = hasContentDescription(string(R.string.settings_console_buffer_more))
+        val less = hasContentDescription(string(R.string.settings_console_buffer_less))
+        activate(more, scroll = true)
+        assertEquals(mapOf("consoleBufferSize" to 11_000), values(session.receive("setSettings")))
+        activate(less, scroll = true)
+        assertEquals(mapOf("consoleBufferSize" to 10_000), values(session.receive("setSettings")))
+        activate(less, scroll = true)
+        assertEquals(mapOf("consoleBufferSize" to 9_000), values(session.receive("setSettings")))
+        val length = hasContentDescription(string(R.string.settings_console_buffer)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        val shown = compose.activity.resources.getQuantityString(R.plurals.settings_console_buffer_value, 9_000, 9_000)
+        compose.onNode(length).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, shown))
+        compose.runOnIdle { assertEquals("new games keep the app's own", 10_000, Settings.consoleBufferSize.value) }
+    }
+
+    @Test
     fun theAdvancedPageChangesTheGamesOwnSettings() {
         loaded()
         activate(hasContentDescription(string(R.string.settings_title)))

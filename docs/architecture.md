@@ -1300,6 +1300,14 @@ that attaches later is told too. The UI shows it as a marker line.
     Back hides it until the next engine. The app does not ask for
     `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, which Google Play allows only for a
     few kinds of app.
+  - When the engine before it crashed (`REASON_CRASH`, `REASON_CRASH_NATIVE` or
+    an ANR, since the device last started; `EngineCrash.kt`), the UI offers once
+    to report it. "Report" opens Report a problem, where the player sees the
+    report and chooses whether to send it; nothing is sent by the offer, and no
+    crash is uploaded. "Report", "Not now" or closing it keeps that crash's time
+    as `crashReportOffered` in the `ui` preferences, so each crash is offered
+    once.
+    Android 10 and earlier record no reason, so there it is never offered.
   - Host timings: the restarted engine is reachable 33 ms after it starts, and
     the JVM link reattaches 110 ms after the kill.
   - On a phone, expect a few hundred ms for the process fork and Qt library load.

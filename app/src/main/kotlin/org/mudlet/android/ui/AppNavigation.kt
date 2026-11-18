@@ -100,7 +100,7 @@ private object Routes {
  * to tell games a screen reader is in use.
  */
 @Composable
-fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
+fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0, reportsAsked: Int = 0) {
     val nav = rememberNavController()
     // Each time a notification's tap brings its game to the front; at 0, none has
     LaunchedEffect(gamesShown) {
@@ -110,6 +110,10 @@ fun AppNavigation(onKillUi: () -> Unit, gamesShown: Int = 0) {
                 launchSingleTop = true
             }
         }
+    }
+    // Each time the player chooses to report a crash of the engine's; at 0, none has
+    LaunchedEffect(reportsAsked) {
+        if (reportsAsked > 0) nav.navigate(Routes.REPORT) { launchSingleTop = true }
     }
     Box(Modifier.fillMaxSize()) {
         // Material's shared axis: forward slides in from the end, Back (and its predictive gesture) the other way

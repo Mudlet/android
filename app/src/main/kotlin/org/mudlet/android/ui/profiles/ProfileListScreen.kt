@@ -51,6 +51,7 @@ import org.mudlet.android.ui.game.ConnectionState
 import org.mudlet.android.ui.game.GameBadges
 import org.mudlet.android.ui.game.gameDescription
 import org.mudlet.android.ui.game.text
+import org.mudlet.android.update.PtbUpdates
 
 /**
  * The start screen: the games open, if any, then the engine's profiles, the last used first, each with Connect and
@@ -59,7 +60,8 @@ import org.mudlet.android.ui.game.text
  * begun to open it; while games are open, it opens one beside them, and one already open just comes to the front, as
  * a tap on an open game does (docs/multi-profile.md, "The switcher"). A tap on one of Mudlet's games adds it as a
  * profile of its name, then connects the same way. Its top bar opens the settings and the About screen. [selected] is
- * the profile whose editor is open beside the list, if one is.
+ * the profile whose editor is open beside the list, if one is. A PTB from GitHub tells of a newer one above the list
+ * ([PtbUpdateNotice]).
  */
 @Composable
 fun ProfileListScreen(
@@ -130,57 +132,62 @@ fun ProfileListScreen(
             )
         },
     ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
-            list,
-            // Room below the last item for the Add button, which floats over the list
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
-        ) {
-            error?.let {
-                item {
-                    Text(
-                        it,
-                        Modifier.padding(bottom = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-            if (hasGames) {
-                item { SectionHeader(stringResource(R.string.games_title)) }
-                itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
-                    OpenGameItem(game, i, games.size) {
-                        EngineClient.setFront(game.name)
-                        onOpenGame()
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            // Above the list, not in it: a lazy list keeps its first visible item in place when an item is put before
+            // it, so a notice that comes while the list shows would be out of sight
+            if (PtbUpdates.notice != null) PtbUpdateNotice(Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp))
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                list,
+                // Room below the last item for the Add button, which floats over the list
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
+            ) {
+                error?.let {
+                    item {
+                        Text(
+                            it,
+                            Modifier.padding(bottom = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
-                item { SectionHeader(stringResource(R.string.profiles_all)) }
-            }
-            when {
-                profiles == null -> item { Text(stringResource(R.string.profiles_waiting), style = MaterialTheme.typography.bodyLarge) }
-
-                profiles.isEmpty() -> item { Text(stringResource(R.string.profiles_empty), style = MaterialTheme.typography.bodyLarge) }
-
-                else -> itemsIndexed(profiles, key = { _, profile -> "profile:" + profile.name }) { i, profile ->
-                    ProfileItem(
-                        profile,
-                        i,
-                        profiles.size,
-                        selected = profile.name == selected,
-                        onConnect = { connect(profile.name) },
-                        onEdit = { onEditProfile(profile.name) },
-                    )
+                if (hasGames) {
+                    item { SectionHeader(stringResource(R.string.games_title)) }
+                    itemsIndexed(games, key = { _, game -> "game:" + game.name }) { i, game ->
+                        OpenGameItem(game, i, games.size) {
+                            EngineClient.setFront(game.name)
+                            onOpenGame()
+                        }
+                    }
+                    item { SectionHeader(stringResource(R.string.profiles_all)) }
                 }
-            }
-            item(key = "import") { ProfileImport(Modifier.padding(top = 12.dp)) }
-            if (onOpenSelfTest != null) {
-                item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
-            }
-            // Only once the profiles are known, as those already added are left out
-            val offered = profiles?.let { DefaultGames.offered(defaultGames, it) }.orEmpty()
-            if (offered.isNotEmpty()) {
-                item { SectionHeader(stringResource(R.string.default_games_title)) }
-                itemsIndexed(offered, key = { _, game -> "default:" + game.name }) { i, game ->
-                    DefaultGameItem(game, i, offered.size, enabled = !adding, onConnect = { connectGame(game) }, onInfo = { info = game.name })
+                when {
+                    profiles == null -> item { Text(stringResource(R.string.profiles_waiting), style = MaterialTheme.typography.bodyLarge) }
+
+                    profiles.isEmpty() -> item { Text(stringResource(R.string.profiles_empty), style = MaterialTheme.typography.bodyLarge) }
+
+                    else -> itemsIndexed(profiles, key = { _, profile -> "profile:" + profile.name }) { i, profile ->
+                        ProfileItem(
+                            profile,
+                            i,
+                            profiles.size,
+                            selected = profile.name == selected,
+                            onConnect = { connect(profile.name) },
+                            onEdit = { onEditProfile(profile.name) },
+                        )
+                    }
+                }
+                item(key = "import") { ProfileImport(Modifier.padding(top = 12.dp)) }
+                if (onOpenSelfTest != null) {
+                    item { OutlinedButton(onOpenSelfTest, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.selftest_title)) } }
+                }
+                // Only once the profiles are known, as those already added are left out
+                val offered = profiles?.let { DefaultGames.offered(defaultGames, it) }.orEmpty()
+                if (offered.isNotEmpty()) {
+                    item { SectionHeader(stringResource(R.string.default_games_title)) }
+                    itemsIndexed(offered, key = { _, game -> "default:" + game.name }) { i, game ->
+                        DefaultGameItem(game, i, offered.size, enabled = !adding, onConnect = { connectGame(game) }, onInfo = { info = game.name })
+                    }
                 }
             }
         }

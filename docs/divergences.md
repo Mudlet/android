@@ -128,6 +128,15 @@ updater's feed. The app is released apart from Mudlet, and what a player notices
 the engine's Mudlet version and commit are in About. The desktop also shows its changelog once after an update, which
 the app leaves to Google Play's "What's new", the same text.
 
+## A newer test build
+
+Desktop Mudlet's updater asks its feed at start and every 12 hours, and downloads and installs a new release itself
+unless the player has turned automatic updates off (`Updater::checkUpdatesOnStart`, `src/updater.cpp`). The app has no
+updater: Google Play updates its copies. Only a PTB installed from GitHub asks, at most once a day, as PTBs are built
+once a night, and it only tells the player, its Download opening the release page in the browser
+([`ptb.md`](ptb.md), "A newer build from GitHub"). Installing the APK itself would take `REQUEST_INSTALL_PACKAGES`,
+which Play reviews and the app has no other use for, and a download and install the player did not start.
+
 ## The UI tour
 
 The game screen's tour (`ui/game/GameTour.kt`; `docs/architecture.md`, "On-device checklist") shows the first time the

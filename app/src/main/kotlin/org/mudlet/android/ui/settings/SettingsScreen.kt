@@ -61,7 +61,7 @@ const val SETTINGS_HUB_TAG = "settingsHub"
 private data class HubSection(val game: String?, val forGame: Boolean) {
     val categories get() = SettingsCategory.entries.filter(::holds)
 
-    fun holds(category: SettingsCategory) = category.forGame == forGame && (game != null || !category.sharedByGames)
+    fun holds(category: SettingsCategory) = category.forGame == forGame && (game != null || !category.sharedByGames) && category.offered()
 
     // For rememberSaveable, as the search's filter
     val key get() = game?.let { "g:$it" } ?: if (forGame) "new" else "app"

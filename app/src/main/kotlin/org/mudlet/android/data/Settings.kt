@@ -212,6 +212,9 @@ object Settings {
      */
     val mapInCorner = BoolSetting("mapInCorner", default = true)
 
+    /** "Check for new test builds": a PTB installed from GitHub asks GitHub once a day for a newer one (docs/ptb.md). */
+    val checkTestBuilds = BoolSetting("checkTestBuilds", default = true)
+
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)
 
@@ -275,6 +278,7 @@ object Settings {
         screenReaderOffered,
         mapBehindText,
         mapInCorner,
+        checkTestBuilds,
         wallpaperColours,
     )
 

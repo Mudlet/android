@@ -5,7 +5,7 @@
 > in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
 > change both together.
 
-**Effective date:** 2026-11-17; the file's
+**Effective date:** 2026-11-18; the file's
 [history](https://github.com/Mudlet/android/commits/main/docs/privacy-policy.md) shows every earlier version.
 
 This policy covers Mudlet for Android and Mudlet PTB, its nightly test build, made by the Mudlet team, a group of
@@ -26,9 +26,14 @@ Mudlet is a client for text-based online games (MUDs). Those games are run by ot
   packages you install can download files, send web requests, chat with other players directly (MMCP) or join IRC
   chat. Mudlet makes these connections only when the game or your scripts ask, and to the addresses they give. A
   script you install can do anything a program can, so install scripts and packages only from people you trust.
-- **No one else.** Mudlet does not contact the Mudlet team, check for updates, show ads, measure how you use it or
-  send crash reports. On Android, Mudlet's desktop features that contact other services, such as the updater, Discord
-  status and the package repository, are not built in.
+- **GitHub, from Mudlet PTB installed from GitHub.** Mudlet PTB, the test build, when you installed it from GitHub
+  rather than Google Play, asks GitHub at most once a day for the number of the newest test build, to tell you when
+  there is a newer one. It sends nothing about you, your games or your device; GitHub sees the request come from your
+  internet address, as any website would, and GitHub's privacy statement covers that. You can turn it off in Settings,
+  Test builds. Mudlet itself, and Mudlet PTB installed from Google Play, never ask.
+- **No one else.** Mudlet does not contact the Mudlet team, check for updates (but for the test build's check above),
+  show ads, measure how you use it or send crash reports. On Android, Mudlet's desktop features that contact other
+  services, such as the updater, Discord status and the package repository, are not built in.
 
 ## What Mudlet keeps on your device
 

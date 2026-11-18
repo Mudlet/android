@@ -281,6 +281,17 @@ title's state, so the state stays in sight with the sheet closed. TalkBack reads
 switch, with what it does. `EmergencyStopTest` tries the switch and the title against the fake engine, and
 `scripts_stopped` in the host test the engine against Mudlet.
 
+### Recording a replay
+Desktop Mudlet's replay recording button is a switch under the emergency stop on the game sheet's card
+(`ReplayRecording.kt`). A tap sends `setReplayRecording`, which the engine does with libmudlet's
+`THeadlessSession::setReplayRecording()`: Mudlet records what the game sends into a new `.dat` file in the profile's
+log folder, and says so in the game's text, as on the desktop; turning it off, or the connection ending, saves it. The
+switch follows the engine's `replayRecording`, which also names the file the last recording was saved to, found by the
+engine as the one new in the folder, as libmudlet does not name it. Once one is saved and none runs, "Share the replay"
+copies it into the cache (`ReplayShare`), the only folder the app's FileProvider serves (`res/xml/replay_files.xml`),
+and offers it to Android's share sheet, for desktop Mudlet's replay to play. `ReplayRecordingTest` tries the switch,
+the button and the copy against the fake engine, and `replay_recording` in the host test the engine against Mudlet.
+
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
 scales; text sizes are in sp, so the system font size scales them.

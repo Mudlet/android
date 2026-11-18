@@ -175,6 +175,9 @@ public:
     // The GUI's emergency stop: true turns off the profile's triggers, aliases, timers and key bindings and keeps events
     // from its scripts, false turns on again what it turned off, as IFrontend::scriptsStopped() follows. Else why not.
     virtual QString setScriptsStopped(bool stopped) = 0;
+    // The main console's replay recording button: true records what the game sends into a new file in the profile's
+    // log folder, false stops and saves it, as IFrontend::replayRecording() follows. Else why not.
+    virtual QString setReplayRecording(bool record) = 0;
 
     // Loads the map file at that whole path in place of the profile's map, or saves the map to it, as the Mapper tab of
     // Mudlet's preferences does, within the call, with IFrontend::mapFile() saying how it goes and how it ended; at

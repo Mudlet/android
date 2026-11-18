@@ -36,6 +36,8 @@ public:
     void profilesChanged() override;
     void engineStatus(const QString& key, const QString& value) override;
     IFrontend* controlFrontend() override { return this; }
+    QString clipboardText() override;
+    void setClipboardText(const QString& text) override;
 
     enum class Change { lines, connection, attention };
     // From a profile's bridge
@@ -73,6 +75,8 @@ private:
     void showProfiles();
 
     static constexpr int changeDelayMs = 500;
+    // How long a script's getClipboardText() waits for the UI's answer: the game stalls while it waits
+    static constexpr int clipboardWaitMs = 500;
 
     IEngineControl* mEngineControl = nullptr;
     QString mSocketDir;
@@ -87,4 +91,5 @@ private:
     QTimer mNotificationTimer;
     // What the engine notification was last given, as names and their connections
     std::optional<std::pair<QStringList, QStringList>> mShown;
+    qint64 mClipboardReads = 0;
 };

@@ -1083,6 +1083,14 @@ class ProtocolTest {
     }
 
     @Test
+    fun theClipboardsReadItsAnswerAndAWrite() {
+        assertEquals(EngineMessage.ClipboardRead(7), FrameReader.parse(JSONObject("""{"t":"clipboardRead","id":7}""")))
+        assertEquals(mapOf("t" to "answerClipboardRead", "id" to 7L, "text" to "copied"), Requests.answerClipboardRead(7, "copied").toMap())
+        assertEquals(EngineMessage.ClipboardWrite("from a script"), FrameReader.parse(JSONObject("""{"t":"clipboardWrite","text":"from a script"}""")))
+        assertEquals(EngineMessage.ClipboardWrite(""), FrameReader.parse(JSONObject("""{"t":"clipboardWrite"}""")))
+    }
+
+    @Test
     fun aRefusedCertificate() {
         val refused = JSONObject(
             """{"t":"certificateRefused","refused":true,"issuedTo":"localhost","issuer":"Test CA","expires":"2020-01-02T00:00:00Z",

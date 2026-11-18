@@ -1,0 +1,362 @@
+Let getConfig() and setConfig() read and change the preferences' Mapper view options, colours and player room marker
+
+An app with its own settings screen and no preferences dialog sets a profile's options through getConfig() and
+setConfig() (THeadlessSession::settings() and setSettings() call them). Of the preferences' Mapper tab they already
+have the room and exit size, room borders and upper and lower levels; this gives them the rest a 2D map draws with:
+
+- mapRoomBorderSize: the room border's size as Mudlet keeps it (mRoomBorderSize), a number of at least 1, as
+  mapExitSize is for the exits.
+- mapLargeAreaExitArrows: "Use large area exit arrows in 2D view", a bool.
+- The Mapper colors tab, as #rrggbb, each keeping the alpha it had (the preferences can pick one; #rrggbb cannot say
+  it): mapBackgroundColor, mapLinkColor, mapRoomBorderColor, mapRoomCollisionBorderColor, mapLowerLevelColor,
+  mapUpperLevelColor, mapGridColor, and the sixteen default environment colours mapAnsiBlack to mapAnsiLightWhite, by
+  the names color_table gives the console's. Anything not #rrggbb is refused.
+- The player room marker: mapPlayerRoomStyle ("original", "redRing", "blueYellowRing" or "customRing", the
+  preferences' list in its order), mapPlayerRoomOuterDiameter (50 to 200) and mapPlayerRoomInnerDiameter (0 to 96),
+  the spin boxes' ranges, and mapPlayerRoomOuterColor and mapPlayerRoomInnerColor. They are read from the Host's
+  copy, which the profile keeps, and set on it and on the map's, which a map view draws: the map's is unset until a
+  mapper is made, so it cannot be the one to start from.
+- Each change, and now mapShowRoomBorders' too, asks the map to repaint, so a map view that keeps its frame between
+  changes draws it; a default environment colour also refreshes the map's copy of the sixteen, as the preferences do.
+- The getConfig() table lists the new keys.
+
+Tested in Other_spec.lua (the colours read, changed and refused, the background reaching getMapBackgroundColor(), the
+border size, the arrows, each marker style, and the diameters changed and refused out of range). The desktop's
+preferences are unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/src/TLuaInterpreter.cpp b/src/TLuaInterpreter.cpp
+index bec4ca3..02eb9b5 100644
+--- a/src/TLuaInterpreter.cpp
++++ b/src/TLuaInterpreter.cpp
+@@ -10166,6 +10166,91 @@ static QColor Host::*consoleColorMember(QStringView key)
+     return nullptr;
+ }
+ 
++// The 2D map's colours, as the preferences' Mapper colors tab keeps them; the sixteen colour the default environments
++static QColor Host::*mapColorMember(QStringView key)
++{
++    static const std::array<std::pair<QStringView, QColor Host::*>, 23> members{{
++            {u"mapBackgroundColor", &Host::mBgColor_2},
++            {u"mapLinkColor", &Host::mFgColor_2},
++            {u"mapRoomBorderColor", &Host::mRoomBorderColor},
++            {u"mapRoomCollisionBorderColor", &Host::mRoomCollisionBorderColor},
++            {u"mapLowerLevelColor", &Host::mLowerLevelColor},
++            {u"mapUpperLevelColor", &Host::mUpperLevelColor},
++            {u"mapGridColor", &Host::mMapGridColor},
++            {u"mapAnsiBlack", &Host::mBlack_2},
++            {u"mapAnsiRed", &Host::mRed_2},
++            {u"mapAnsiGreen", &Host::mGreen_2},
++            {u"mapAnsiYellow", &Host::mYellow_2},
++            {u"mapAnsiBlue", &Host::mBlue_2},
++            {u"mapAnsiMagenta", &Host::mMagenta_2},
++            {u"mapAnsiCyan", &Host::mCyan_2},
++            {u"mapAnsiWhite", &Host::mWhite_2},
++            {u"mapAnsiLightBlack", &Host::mLightBlack_2},
++            {u"mapAnsiLightRed", &Host::mLightRed_2},
++            {u"mapAnsiLightGreen", &Host::mLightGreen_2},
++            {u"mapAnsiLightYellow", &Host::mLightYellow_2},
++            {u"mapAnsiLightBlue", &Host::mLightBlue_2},
++            {u"mapAnsiLightMagenta", &Host::mLightMagenta_2},
++            {u"mapAnsiLightCyan", &Host::mLightCyan_2},
++            {u"mapAnsiLightWhite", &Host::mLightWhite_2},
++    }};
++    for (const auto& [name, member] : members) {
++        if (name == key) {
++            return member;
++        }
++    }
++    return nullptr;
++}
++
++// The player room marker's styles, by the index the preferences' list and the profile keep them at
++static const QStringList& playerRoomStyles()
++{
++    static const QStringList styles{qsl("original"), qsl("redRing"), qsl("blueYellowRing"), qsl("customRing")};
++    return styles;
++}
++
++// The player room marker's style, sizes and colours
++struct PlayerRoomMarker
++{
++    quint8 style = 0;
++    quint8 outerDiameter = 0;
++    quint8 innerDiameter = 0;
++    QColor outerColor;
++    QColor innerColor;
++};
++
++// From the Host's copy, which the profile keeps: the map's, which a map view draws, is unset until a mapper is made
++static PlayerRoomMarker playerRoomMarker(Host& host)
++{
++    PlayerRoomMarker marker;
++    host.getPlayerRoomStyleDetails(marker.style, marker.outerDiameter, marker.innerDiameter, marker.outerColor, marker.innerColor);
++    return marker;
++}
++
++static void setPlayerRoomMarker(Host& host, const PlayerRoomMarker& marker)
++{
++    host.setPlayerRoomStyleDetails(marker.style, marker.outerDiameter, marker.innerDiameter, marker.outerColor, marker.innerColor);
++    TMap* pMap = host.mpMap.data();
++    pMap->mPlayerRoomStyle = marker.style;
++    pMap->mPlayerRoomOuterDiameterPercentage = marker.outerDiameter;
++    pMap->mPlayerRoomInnerDiameterPercentage = marker.innerDiameter;
++    pMap->mPlayerRoomOuterColor = marker.outerColor;
++    pMap->mPlayerRoomInnerColor = marker.innerColor;
++    pMap->requestMapRepaint();
++}
++
++// "#rrggbb" with the alpha of the colour it replaces, which the preferences can pick and #rrggbb cannot say; invalid for anything else
++static QColor hexColorKeepingAlpha(const QString& name, const QColor& replaced)
++{
++    static const QRegularExpression hexColor(qsl("^#[0-9A-Fa-f]{6}$"));
++    if (!hexColor.match(name).hasMatch()) {
++        return {};
++    }
++    QColor color = QColor::fromString(name);
++    color.setAlpha(replaced.alpha());
++    return color;
++}
++
+ // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setConfig
+ // Please use same options with same names in setConfig and getConfig and keep them in sync
+ // The table argument case for setting multiple properties at once is handled
+@@ -10272,8 +10357,78 @@ int TLuaInterpreter::setConfig(lua_State* L)
+ #endif
+         if (key == qsl("mapShowRoomBorders")) {
+             host.mMapperShowRoomBorders = getVerifiedBool(L, __func__, 2, "value");
++            host.mpMap->requestMapRepaint();
++            return success();
++        }
++        if (key == qsl("mapRoomBorderSize")) {
++            // As mapExitSize: it divides the border pen's width and is saved to one decimal place
++            const double size = getVerifiedDouble(L, __func__, 2, "value");
++            if (!std::isfinite(size) || size < 1.0) {
++                return warnArgumentValue(L, __func__, qsl("mapRoomBorderSize must be a number of at least 1, got %1").arg(size));
++            }
++            host.mRoomBorderSize = size;
++            host.mpMap->requestMapRepaint();
+             return success();
+         }
++        if (key == qsl("mapLargeAreaExitArrows")) {
++            host.setLargeAreaExitArrows(getVerifiedBool(L, __func__, 2, "value"));
++            host.mpMap->requestMapRepaint();
++            return success();
++        }
++        if (QColor Host::*member = mapColorMember(QString::fromUtf8(lua_tostring(L, 1)))) {
++            const QString name = getVerifiedString(L, __func__, 2, "value");
++            const QColor color = hexColorKeepingAlpha(name, host.*member);
++            if (!color.isValid()) {
++                return warnArgumentValue(L, __func__, qsl("%1 takes a colour as #rrggbb, got '%2'").arg(QString::fromUtf8(lua_tostring(L, 1)), name));
++            }
++            host.*member = color;
++            if (member == &Host::mBgColor_2) {
++                host.mpMap->announceMapperSettingChanged(TMap::MapperSetting::BackgroundColor);
++            }
++            // The map keeps its own copy of the sixteen for the environments 257 to 272, as the preferences refresh it
++            if (key.startsWith(QLatin1StringView("mapAnsi"))) {
++                host.mpMap->restore16ColorSet();
++            }
++            host.mpMap->requestMapRepaint();
++            return success();
++        }
++        if (key.startsWith(QLatin1StringView("mapPlayerRoom"))) {
++            PlayerRoomMarker marker = playerRoomMarker(host);
++            if (key == qsl("mapPlayerRoomStyle")) {
++                const QString value = getVerifiedString(L, __func__, 2, "value");
++                const qsizetype style = playerRoomStyles().indexOf(value);
++                if (style < 0) {
++                    return warnArgumentChoice(L, __func__, qsl("mapPlayerRoomStyle"), playerRoomStyles(), value);
++                }
++                marker.style = static_cast<quint8>(style);
++                setPlayerRoomMarker(host, marker);
++                return success();
++            }
++            if (key == qsl("mapPlayerRoomOuterDiameter") || key == qsl("mapPlayerRoomInnerDiameter")) {
++                // The preferences' spin boxes' ranges: a percentage of the room, and of the outer diameter
++                const bool outer = key == qsl("mapPlayerRoomOuterDiameter");
++                const int percent = getVerifiedInt(L, __func__, 2, "value");
++                const int lowest = outer ? 50 : 0;
++                const int highest = outer ? 200 : 96;
++                if (percent < lowest || percent > highest) {
++                    return warnArgumentValue(L, __func__, qsl("%1 must be from %2 to %3, got %4").arg(QString::fromUtf8(lua_tostring(L, 1))).arg(lowest).arg(highest).arg(percent));
++                }
++                (outer ? marker.outerDiameter : marker.innerDiameter) = static_cast<quint8>(percent);
++                setPlayerRoomMarker(host, marker);
++                return success();
++            }
++            if (key == qsl("mapPlayerRoomOuterColor") || key == qsl("mapPlayerRoomInnerColor")) {
++                QColor& replaced = key == qsl("mapPlayerRoomOuterColor") ? marker.outerColor : marker.innerColor;
++                const QString name = getVerifiedString(L, __func__, 2, "value");
++                const QColor color = hexColorKeepingAlpha(name, replaced);
++                if (!color.isValid()) {
++                    return warnArgumentValue(L, __func__, qsl("%1 takes a colour as #rrggbb, got '%2'").arg(QString::fromUtf8(lua_tostring(L, 1)), name));
++                }
++                replaced = color;
++                setPlayerRoomMarker(host, marker);
++                return success();
++            }
++        }
+         if (key == qsl("mapShowGrid")) {
+             host.mMapperShowGrid = getVerifiedBool(L, __func__, 2, "value");
+             host.mpMap->announceMapperSettingChanged(TMap::MapperSetting::ShowGrid);
+@@ -10997,6 +11152,35 @@ int TLuaInterpreter::getConfig(lua_State* L)
+              [&]() {
+                  lua_pushboolean(L, host.mMapperShowRoomBorders);
+              }},
++            {qsl("mapRoomBorderSize"),
++             [&]() {
++                 lua_pushnumber(L, host.mRoomBorderSize);
++             }},
++            {qsl("mapLargeAreaExitArrows"),
++             [&]() {
++                 lua_pushboolean(L, host.getLargeAreaExitArrows());
++             }},
++            {qsl("mapPlayerRoomStyle"),
++             [&]() {
++                 const QByteArray style = playerRoomStyles().value(playerRoomMarker(host).style, playerRoomStyles().constFirst()).toUtf8();
++                 lua_pushlstring(L, style.constData(), style.size());
++             }},
++            {qsl("mapPlayerRoomOuterDiameter"),
++             [&]() {
++                 lua_pushnumber(L, playerRoomMarker(host).outerDiameter);
++             }},
++            {qsl("mapPlayerRoomInnerDiameter"),
++             [&]() {
++                 lua_pushnumber(L, playerRoomMarker(host).innerDiameter);
++             }},
++            {qsl("mapPlayerRoomOuterColor"),
++             [&]() {
++                 lua_pushstring(L, playerRoomMarker(host).outerColor.name().toUtf8().constData());
++             }},
++            {qsl("mapPlayerRoomInnerColor"),
++             [&]() {
++                 lua_pushstring(L, playerRoomMarker(host).innerColor.name().toUtf8().constData());
++             }},
+             {qsl("mapInfoColor"),
+              [&]() {
+                  lua_newtable(L);
+@@ -11395,6 +11579,10 @@ int TLuaInterpreter::getConfig(lua_State* L)
+         lua_pushstring(L, (host.*member).name().toUtf8().constData());
+         return 1;
+     }
++    if (QColor Host::*member = mapColorMember(key)) {
++        lua_pushstring(L, (host.*member).name().toUtf8().constData());
++        return 1;
++    }
+ 
+     // Handle experiment keys
+     if (key.startsWith(qsl("experiment."))) {
+diff --git a/src/mudlet-lua/lua/Other.lua b/src/mudlet-lua/lua/Other.lua
+index 72ebc2e..b28f0eb 100644
+--- a/src/mudlet-lua/lua/Other.lua
++++ b/src/mudlet-lua/lua/Other.lua
+@@ -1704,10 +1704,39 @@ local configOptions = {
+   "logFileNameFormat",
+   "logInHTML",
+   "logTimestamps",
++  "mapAnsiBlack",
++  "mapAnsiBlue",
++  "mapAnsiCyan",
++  "mapAnsiGreen",
++  "mapAnsiLightBlack",
++  "mapAnsiLightBlue",
++  "mapAnsiLightCyan",
++  "mapAnsiLightGreen",
++  "mapAnsiLightMagenta",
++  "mapAnsiLightRed",
++  "mapAnsiLightWhite",
++  "mapAnsiLightYellow",
++  "mapAnsiMagenta",
++  "mapAnsiRed",
++  "mapAnsiWhite",
++  "mapAnsiYellow",
++  "mapBackgroundColor",
+   "mapExitSize",
++  "mapGridColor",
+   "mapInfoColor",
++  "mapLargeAreaExitArrows",
++  "mapLinkColor",
++  "mapLowerLevelColor",
+   "mapperButton",
+   "mapperPanelVisible",
++  "mapPlayerRoomInnerColor",
++  "mapPlayerRoomInnerDiameter",
++  "mapPlayerRoomOuterColor",
++  "mapPlayerRoomOuterDiameter",
++  "mapPlayerRoomStyle",
++  "mapRoomBorderColor",
++  "mapRoomBorderSize",
++  "mapRoomCollisionBorderColor",
+   "mapRoomSize",
+   "mapRoundRooms",
+   "mapShowGrid",
+@@ -1717,6 +1746,7 @@ local configOptions = {
+   "mapSymbolFont",
+   "mapSymbolFontOnlyUseSelected",
+   "mapSymbolFontScaling",
++  "mapUpperLevelColor",
+   "muteMediaAPI",
+   "muteMediaGame",
+   "promptForMXPProcessorOn",
+diff --git a/src/mudlet-lua/tests/Other_spec.lua b/src/mudlet-lua/tests/Other_spec.lua
+index 23c726d..ba82449 100644
+--- a/src/mudlet-lua/tests/Other_spec.lua
++++ b/src/mudlet-lua/tests/Other_spec.lua
+@@ -2297,6 +2297,54 @@ describe("Tests Other.lua functions", function()
+       end
+     end)
+ 
++    it("reads and changes the map's colours as #rrggbb, keeping each one's alpha", function()
++      local keys = { "mapBackgroundColor", "mapLinkColor", "mapRoomBorderColor", "mapGridColor", "mapAnsiRed", "mapAnsiLightWhite", "mapPlayerRoomOuterColor" }
++      for _, key in ipairs(keys) do
++        snapshot(key)
++        assert.truthy(getConfig(key):match("^#%x%x%x%x%x%x$"))
++        assert.is_true(setConfig(key, "#12AB34"))
++        assert.equals("#12ab34", getConfig(key))
++      end
++      local r, g, b = getMapBackgroundColor()
++      assert.same({ 0x12, 0xab, 0x34 }, { r, g, b })
++      for _, bad in ipairs({ "red", "#12ab3", "#12ab345", "12ab34" }) do
++        local ok, message = setConfig("mapLinkColor", bad)
++        assert.is_nil(ok)
++        assert.truthy(message:find("#rrggbb", 1, true))
++      end
++      for _, key in ipairs(keys) do
++        restore(key)
++      end
++    end)
++
++    it("reads and changes the map's border size, area exit arrows and player room marker", function()
++      local keys = { "mapRoomBorderSize", "mapLargeAreaExitArrows", "mapPlayerRoomStyle", "mapPlayerRoomOuterDiameter", "mapPlayerRoomInnerDiameter" }
++      for _, key in ipairs(keys) do
++        snapshot(key)
++      end
++      assert.is_true(setConfig("mapRoomBorderSize", 12.5))
++      assert.equals(12.5, getConfig("mapRoomBorderSize"))
++      assert.is_nil(setConfig("mapRoomBorderSize", 0.5))
++      local arrows = getConfig("mapLargeAreaExitArrows")
++      assert.is_true(setConfig("mapLargeAreaExitArrows", not arrows))
++      assert.equals(not arrows, getConfig("mapLargeAreaExitArrows"))
++      for _, style in ipairs({ "redRing", "blueYellowRing", "customRing", "original" }) do
++        assert.is_true(setConfig("mapPlayerRoomStyle", style))
++        assert.equals(style, getConfig("mapPlayerRoomStyle"))
++      end
++      assert.is_nil(setConfig("mapPlayerRoomStyle", "square"))
++      assert.is_true(setConfig("mapPlayerRoomOuterDiameter", 150))
++      assert.equals(150, getConfig("mapPlayerRoomOuterDiameter"))
++      assert.is_nil(setConfig("mapPlayerRoomOuterDiameter", 201))
++      assert.is_true(setConfig("mapPlayerRoomInnerDiameter", 0))
++      assert.equals(0, getConfig("mapPlayerRoomInnerDiameter"))
++      assert.is_nil(setConfig("mapPlayerRoomInnerDiameter", 97))
++      assert.equals(150, getConfig("mapPlayerRoomOuterDiameter"))
++      for _, key in ipairs(keys) do
++        restore(key)
++      end
++    end)
++
+     it("getConfig returns a keyed table when given a list of keys", function()
+       local result = getConfig({ "enableGMCP", "editorAutoComplete" })
+       assert.is_table(result)

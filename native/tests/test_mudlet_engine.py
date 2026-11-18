@@ -4009,9 +4009,10 @@ def profile_settings():
     input line's command separator, history highlight and password masking; the log options, a log then written as
     they say, and a bad name format or file name refused; the console's colours, a colour not as #rrggbb refused and a
     new background reaching consoleColors; the game's colour redefinition, OSC 8 links and the new text alert; the
-    console buffer size and its maximum, which the main console takes at once, a size below 100 refused; the changes in
-    the profile's save, the buffer size taken again as the profile next opens; and both refused while no profile is
-    open."""
+    console buffer size and its maximum, which the main console takes at once, a size below 100 refused; the map's view
+    options, colours and player room marker, a bad colour, style and border size refused; the changes in the profile's
+    save, the buffer size taken again as the profile next opens, a map colour keeping its alpha; and both refused while
+    no profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -4148,6 +4149,26 @@ def profile_settings():
     size = buffer_size()
     check(m.get("values") == {"useMaxConsoleBufferSize": False} and size == "5000 1000",
           f"and without it the size chosen before: {m}, {size}")
+    keys = ["mapRoomSize", "mapExitSize", "mapRoomBorderSize", "mapShowRoomBorders", "mapLargeAreaExitArrows",
+            "mapBackgroundColor", "mapLinkColor", "mapGridColor", "mapAnsiLightBlack", "mapPlayerRoomStyle",
+            "mapPlayerRoomOuterDiameter", "mapPlayerRoomInnerDiameter", "mapPlayerRoomOuterColor", "mapPlayerRoomInnerColor"]
+    m = c.ask({"t": "getSettings", "keys": keys}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"mapRoomSize": 5, "mapExitSize": 10, "mapRoomBorderSize": 10, "mapShowRoomBorders": True,
+                              "mapLargeAreaExitArrows": False, "mapBackgroundColor": "#000000", "mapLinkColor": "#c0c0c0",
+                              "mapGridColor": "#d3d3d3", "mapAnsiLightBlack": "#808080", "mapPlayerRoomStyle": "original",
+                              "mapPlayerRoomOuterDiameter": 120, "mapPlayerRoomInnerDiameter": 70,
+                              "mapPlayerRoomOuterColor": "#ff0000", "mapPlayerRoomInnerColor": "#ffffff"},
+          f"the map's view options, colours and player room marker start as Mudlet starts them: {m}")
+    m = c.ask({"t": "setSettings", "values": {"mapLinkColor": "grey", "mapPlayerRoomStyle": "square", "mapRoomBorderSize": 0.5}},
+              answers=("settings", "error"), collect=seen)
+    check(m.get("values") == {"mapLinkColor": "#c0c0c0", "mapPlayerRoomStyle": "original", "mapRoomBorderSize": 10}
+          and sorted(m.get("refused", {})) == ["mapLinkColor", "mapPlayerRoomStyle", "mapRoomBorderSize"],
+          f"a map colour not as #rrggbb, a marker style Mudlet lacks and a border under 1 are refused: {m}")
+    wanted = {"mapRoomBorderSize": 12.5, "mapLargeAreaExitArrows": True, "mapBackgroundColor": "#102030",
+              "mapGridColor": "#405060", "mapAnsiLightBlack": "#708090", "mapPlayerRoomStyle": "customRing",
+              "mapPlayerRoomOuterDiameter": 150, "mapPlayerRoomInnerDiameter": 40, "mapPlayerRoomOuterColor": "#00ff00"}
+    m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
+    check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     save = newest_save(profile)[0]
@@ -4162,6 +4183,11 @@ def profile_settings():
           and 'enableOSC8Hyperlinks="no"' in saved and 'mAlertOnNewData="no"' in saved
           and "<consoleBufferSize>5000</consoleBufferSize>" in saved and "<useMaxConsoleBufferSize>no</useMaxConsoleBufferSize>" in saved,
           f"the changes are in the profile's save: {save}")
+    check('mRoomBorderSize="12.5"' in saved and 'Large2DMapAreaExitArrows="yes"' in saved and 'playerRoomStyle="3"' in saved
+          and 'playerRoomOuterDiameter="150"' in saved and 'playerRoomInnerDiameter="40"' in saved
+          and 'playerRoomPrimaryColor="#ff00ff00"' in saved and '<mBgColor2 alpha="255">#102030</mBgColor2>' in saved
+          and '<mMapGridColor alpha="64">#405060</mMapGridColor>' in saved and "<mLightBlack2>#708090</mLightBlack2>" in saved,
+          f"and the map's, a colour keeping its alpha: {save}")
     encoding_file = os.path.join(CONFIG, "profiles", profile, "encoding")
     # Mudlet writes it with QDataStream: a QString is its length in bytes, then UTF-16BE
     with open(encoding_file, "rb") if os.path.exists(encoding_file) else open(os.devnull, "rb") as f:

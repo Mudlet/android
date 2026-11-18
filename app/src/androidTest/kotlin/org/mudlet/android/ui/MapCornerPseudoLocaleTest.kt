@@ -103,7 +103,8 @@ class MapCornerPseudoLocaleTest(private val locale: String) {
         }
     }
 
-    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    // In the merged tree, where a button's click and its icon's label are on one node
+    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 
     private fun activate(label: SemanticsMatcher) {
         waitFor(label)

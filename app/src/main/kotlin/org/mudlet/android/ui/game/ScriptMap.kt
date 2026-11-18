@@ -224,8 +224,8 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
         isTraversalGroup = true
         traversalIndex = WINDOWS_TRAVERSAL_INDEX
     }
-    val mapModifier = Modifier.background(CONSOLE_BACKGROUND).semantics { traversalIndex = 0f }
-    val panelModifier = Modifier.semantics { traversalIndex = 1f }
+    val mapModifier = Modifier.background(CONSOLE_BACKGROUND).readAsOne(0f)
+    val panelModifier = Modifier.readAsOne(1f)
 
     if (corner != null) {
         val bounds = corner.bounds
@@ -266,6 +266,16 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
 
 // This rect in the pixels of a node at [origin]'s top left
 private fun PxRect.from(origin: PxRect) = PxRect(x - origin.x, y - origin.y, w, h)
+
+// Read as one, at [index] among what is read with it. By where things are drawn, Compose would read one that a panel
+// has scrolled out of its sight first, as it takes that one's bounds to be the window's top left corner
+private fun Modifier.readAsOne(index: Float) = semantics {
+    isTraversalGroup = true
+    traversalIndex = index
+}
+
+// Read at [index] among what is read with it, wherever it is drawn: see readAsOne
+private fun Modifier.readAt(index: Float) = semantics { traversalIndex = index }
 
 /**
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways,
@@ -375,21 +385,23 @@ internal fun MapView(
  * on them; the area and level shown ([MapPlaceBar]); and the frame's map info, [info], at most [infoHeight] high
  * ([MapInfoBox]). It scrolls where it has not the room.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MapPanel(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, info: MapInfo?, infoHeight: Dp, modifier: Modifier = Modifier) {
     val view = source.movableView(frame)
     Surface(modifier, shape = MaterialTheme.shapes.small) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(CONTROLS_PADDING)) {
-            Row {
-                MapButtons(source, frame, fit, viewOnly, drawn)
+            // The button that centres the map goes under the others in a strip narrower than four buttons
+            FlowRow(Modifier.readAsOne(0f)) {
+                MapButtons(source, frame, fit, viewOnly, drawn, Modifier.readAsOne(0f))
                 if (view != null && !source.mover.following) {
-                    IconButton({ source.mover.followPlayer() }) {
+                    IconButton({ source.mover.followPlayer() }, Modifier.readAt(1f)) {
                         Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_follow))
                     }
                 }
             }
-            view?.let { MapPlaceBar(it, source.rooms, it.levelAbove(), it.levelBelow()) }
-            info?.let { MapInfoBox(it, Modifier.heightIn(max = infoHeight)) }
+            view?.let { MapPlaceBar(it, source.rooms, it.levelAbove(), it.levelBelow(), Modifier.readAt(1f)) }
+            info?.let { MapInfoBox(it, Modifier.heightIn(max = infoHeight).readAt(2f)) }
         }
     }
 }
@@ -412,7 +424,7 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
     val attached = EngineClient.enginePid > 0
     var listed by remember { mutableStateOf(false) }
     Surface(
-        modifier.padding(CONTROLS_PADDING),
+        modifier.semantics { isTraversalGroup = true }.padding(CONTROLS_PADDING),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -449,12 +461,12 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                 }
             }
             if (view.levels.size > 1) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.readAsOne(1f), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ below?.let(rooms::showLevel) }, enabled = attached && below != null) {
                         Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.map_level_down))
                     }
-                    Text(stringResource(R.string.map_level, view.level), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelLarge, maxLines = 2)
-                    IconButton({ above?.let(rooms::showLevel) }, enabled = attached && above != null) {
+                    Text(stringResource(R.string.map_level, view.level), Modifier.weight(1f, fill = false).readAt(1f), style = MaterialTheme.typography.labelLarge, maxLines = 2)
+                    IconButton({ above?.let(rooms::showLevel) }, Modifier.readAt(2f), enabled = attached && above != null) {
                         Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.map_level_up))
                     }
                 }

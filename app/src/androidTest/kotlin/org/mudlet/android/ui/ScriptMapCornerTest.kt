@@ -35,6 +35,11 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.rule.GrantPermissionRule
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityViewCheckResult
+import com.google.android.apps.common.testing.accessibility.framework.checks.TouchTargetSizeCheck
+import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
+import org.hamcrest.BaseMatcher
+import org.hamcrest.Description
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertFalse
@@ -80,11 +85,16 @@ class ScriptMapCornerTest(private val screen: Screen) {
 
     @Before
     fun openTheGameScreen() {
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
         val metrics = compose.activity.resources.displayMetrics
         // The device's dp scaled so that the screen wanted fits on it
         val scale = minOf(metrics.widthPixels / metrics.density / screen.widthDp, metrics.heightPixels / metrics.density / screen.heightDp)
         dp = metrics.density * scale
+        if (Build.VERSION.SDK_INT >= 34) {
+            // Scaled down, a 48 dp target is fewer of the device's dp than the touch target check allows; the test
+            // checks each of the panel's targets in the screen's dp instead
+            val validator = AccessibilityValidator().setRunChecksFromRootView(true)
+            compose.enableAccessibilityChecks(if (scale < 1) validator.setSuppressingResultMatcher(TouchTargetOfAScreenScaledDown) else validator)
+        }
         compose.runOnUiThread {
             compose.activity.setContent {
                 val density = LocalDensity.current
@@ -214,6 +224,15 @@ class ScriptMapCornerTest(private val screen: Screen) {
         waitFor(label)
         compose.onRoot().tryPerformAccessibilityChecks()
         compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    /** Any TouchTargetSizeCheck result: see [openTheGameScreen]. */
+    private object TouchTargetOfAScreenScaledDown : BaseMatcher<Any>() {
+        override fun matches(item: Any?): Boolean = (item as? AccessibilityViewCheckResult)?.sourceCheckClass == TouchTargetSizeCheck::class.java
+
+        override fun describeTo(description: Description) {
+            description.appendText("a touch target of a screen drawn smaller than the device's")
+        }
     }
 
     companion object {

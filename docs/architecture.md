@@ -542,6 +542,8 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   as the map, scrolls, and goes over what is under it, but for a map that did not grow it goes only where it covers no
   other window. Otherwise, and on a page or in a scroll box, the panel is a strip at the window's top, at most three
   fifths of it, and the map fills the rest, cut where the window is cut. TalkBack reads the map, then the panel.
+  It reads the panel's parts in the order they show, however far it has scrolled, as Compose would otherwise read
+  one scrolled out of sight first; the button that centres the map goes under the others in a strip narrower than four.
 - The frame is drawn only while it is the window's size, as the engine draws one at each new size; scaled alike both
   ways to fit and centred, so a touch maps back to the frame's pixel under it.
 - The engine is asked (`setMapScale`) to draw it at the scale it is shown at, `MapFit.renderScale`, as Mudlet's pixels

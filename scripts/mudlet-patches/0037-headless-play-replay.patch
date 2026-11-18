@@ -1,0 +1,96 @@
+Let a frontend with no window play a replay file as the GUI's replay button does
+
+A headless session could pause, resume, stop and change the speed of a replay, and follow it by replayStarted,
+replaySpeedChanged and replayFinished, but it could not start one the way the GUI's replay button does: only a
+script's loadReplay() starts a replay there, and that plays it as a script's, which says nothing in the main console
+when it loads or ends. An app that offers the player a file of their own to play had no way to do it.
+
+- THeadlessSession::playReplay(path) plays the replay file at that whole path in the session's profile through
+  MudletReplay::load() without an error string, as mudlet::slot_replay() does, so localText says it is loading and
+  when it is over, and replayStarted follows from the event loop.
+- It is false, with the reason in errorString(), while a replay plays in any profile, for a file that cannot be read
+  (with the system's reason) or is not a replay, while a script of the profile runs, and where submit() is refused.
+- docs/headless.md says so beside pauseReplay().
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (replay_playback: a recorded file played, its lines
+shown, paused, resumed, faster and slower, stopped, played to its end; refused for a missing file, a file that is not
+a replay and while one plays). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index d0b86c1..b36cf1d 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -612,6 +612,12 @@ What it guarantees about hidden input is narrow:
+   `hiddenInputWanted` false; text set then is taken, and scripts can read it, as they can read the
+   GUI's command line then.
+ 
++`playReplay()` is the GUI's replay button: it plays the replay file at a whole path in the session's
++profile as the player's replay, not a script's, so `localText` says it is loading and when it is over as
++the main console does, and `replayStarted` follows from the event loop. It is false, with the reason in
++`errorString()`, while a replay plays in any profile, for a file that cannot be read or is not a replay,
++and where `pauseReplay()` is refused for anything but a replay playing.
++
+ `pauseReplay()`, `resumeReplay()` and `stopReplay()` are the GUI's replay toolbar for a replay of the
+ session's profile. A paused replay plays nothing more until it is resumed, and then carries on with what
+ was left of the wait it was paused in. `replayPaused()` says whether it is held, as the toolbar reads it;
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 9a3263a..0ca6fe3 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -2306,6 +2306,37 @@ bool replayPlaysIn(Host* pHost, QString& errorString)
+ 
+ } // namespace
+ 
++bool THeadlessSession::playReplay(const QString& path)
++{
++    if (!usable()) {
++        return false;
++    }
++    if (mpHost->busyRunning()) {
++        //: Error from a frontend with no window that was asked to play a replay while a script of its profile is running
++        mErrorString = tr("The profile is running a script, so a replay cannot start until that has ended.");
++        return false;
++    }
++    MudletReplay* pReplay = MudletReplay::self();
++    if (!pReplay || pReplay->running()) {
++        //: Error from a frontend with no window that was asked to play a replay while one plays, in this profile or another
++        mErrorString = tr("A replay is playing already; stop it or wait until it has finished.");
++        return false;
++    }
++    // Read here for the reason, as load() without an error string gives it only to the main console
++    if (QFile file(path); !file.open(QIODevice::ReadOnly)) {
++        //: Error from a frontend with no window that was asked to play a replay file it cannot read; %1 is the file's path, %2 the system's reason
++        mErrorString = tr("The replay file \"%1\" cannot be read: %2").arg(path, file.errorString());
++        return false;
++    }
++    // No error string, as the GUI's replay button calls it, so the replay plays as the player's and not a script's
++    if (!pReplay->load(mpHost, path)) {
++        //: Error from a frontend with no window that was asked to play a file that is not a replay Mudlet can read; %1 is the file's path
++        mErrorString = tr("The file \"%1\" is not a replay that can be played.").arg(path);
++        return false;
++    }
++    return true;
++}
++
+ bool THeadlessSession::pauseReplay()
+ {
+     if (!usable() || !replayPlaysIn(mpHost, mErrorString)) {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index b93153b..0094524 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -510,6 +510,11 @@ public:
+     // windowCommandLineTextChanged tells. Before it returns. False as setWindowCommandLineText() is, and when the
+     // profile begins to close part-way; a line a script deletes part-way takes no more commands.
+     bool submitWindowCommandLine(const QString& commandLine, const QString& line);
++    // The GUI's replay button: plays the replay file at that whole path in the session's profile, saying so in
++    // localText as the GUI says it in the main console, with replayStarted following from the event loop. False,
++    // with errorString() saying why, if a replay plays already in any profile, if the file cannot be read or is
++    // not a replay, and where pauseReplay() is refused but for a replay playing.
++    bool playReplay(const QString& path);
+     // The GUI's replay toolbar, for a replay of the session's profile: pauseReplay() holds it where it is and
+     // resumeReplay() lets it carry on, each false unless it is playing or held as it needs; stopReplay() ends it
+     // as the toolbar's Stop does, saying so in localText. False with no replay of this profile playing, though one

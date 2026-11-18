@@ -181,6 +181,13 @@ public:
     // The main console's replay recording button: true records what the game sends into a new file in the profile's
     // log folder, false stops and saves it, as IFrontend::replayRecording() follows. Else why not.
     virtual QString setReplayRecording(bool record) = 0;
+    // The GUI's replay button and toolbar: plays the replay file at that whole path in the profile, holds the replay
+    // or lets it go on, ends it, and doubles or halves its speed within 1 and 1024 times, as IFrontend::replay()
+    // follows. Else why not.
+    virtual QString playReplay(const QString& path) = 0;
+    virtual QString setReplayPaused(bool paused) = 0;
+    virtual QString stopReplay() = 0;
+    virtual QString changeReplaySpeed(bool faster) = 0;
 
     // Loads the map file at that whole path in place of the profile's map, or saves the map to it, as the Mapper tab of
     // Mudlet's preferences does, within the call, with IFrontend::mapFile() saying how it goes and how it ended; at

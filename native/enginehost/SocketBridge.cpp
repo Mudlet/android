@@ -622,6 +622,7 @@ void SocketBridge::sendState()
     sendFrame(secureOfferMessage());
     sendFrame(scriptsStoppedMessage());
     sendFrame(replayRecordingMessage());
+    sendFrame(replayMessage());
     sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
@@ -862,6 +863,17 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("setReplayRecording")) {
         const QJsonValue record = message.value(QLatin1String("record"));
         refuse(type, record.isBool() ? mEngine->setReplayRecording(record.toBool()) : QStringLiteral("record must be true or false"));
+    } else if (type == QLatin1String("playReplay")) {
+        const QString path = message.value(QLatin1String("path")).toString();
+        refuse(type, path.isEmpty() ? QStringLiteral("path must be a file's path") : mEngine->playReplay(path));
+    } else if (type == QLatin1String("setReplayPaused")) {
+        const QJsonValue paused = message.value(QLatin1String("paused"));
+        refuse(type, paused.isBool() ? mEngine->setReplayPaused(paused.toBool()) : QStringLiteral("paused must be true or false"));
+    } else if (type == QLatin1String("stopReplay")) {
+        refuse(type, mEngine->stopReplay());
+    } else if (type == QLatin1String("changeReplaySpeed")) {
+        const QJsonValue faster = message.value(QLatin1String("faster"));
+        refuse(type, faster.isBool() ? mEngine->changeReplaySpeed(faster.toBool()) : QStringLiteral("faster must be true or false"));
     } else if (type == QLatin1String("loadMapFile") || type == QLatin1String("saveMapFile")) {
         const QString path = message.value(QLatin1String("path")).toString();
         const auto cancelAsked = [this] {
@@ -1861,6 +1873,11 @@ QJsonObject SocketBridge::replayRecordingMessage() const
     return {{QStringLiteral("t"), QStringLiteral("replayRecording")}, {QStringLiteral("recording"), mReplayRecording}, {QStringLiteral("file"), mRecordedReplay}};
 }
 
+QJsonObject SocketBridge::replayMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("replay")}, {QStringLiteral("playing"), mReplay.playing}, {QStringLiteral("paused"), mReplay.paused}, {QStringLiteral("speed"), mReplay.speed}};
+}
+
 QJsonObject SocketBridge::certificateMessage() const
 {
     QJsonObject message{{QStringLiteral("t"), QStringLiteral("certificateRefused")}, {QStringLiteral("refused"), mRefusedCertificate.has_value()}};
@@ -2297,6 +2314,20 @@ void SocketBridge::replayRecording(bool recording, const QString& file)
     mRecordedReplay = file;
     if (outputLive()) {
         sendFrame(replayRecordingMessage());
+    }
+}
+
+void SocketBridge::replay(const Replay& replay)
+{
+    if (mMirror) {
+        mMirror->replay(replay);
+    }
+    if (replay == mReplay) {
+        return;
+    }
+    mReplay = replay;
+    if (outputLive()) {
+        sendFrame(replayMessage());
     }
 }
 

@@ -1189,6 +1189,17 @@ class ProtocolTest {
     }
 
     @Test
+    fun playingAReplay() {
+        assertEquals(EngineMessage.Replay(true, false, 1), FrameReader.parse(JSONObject("""{"t":"replay","playing":true,"paused":false,"speed":1}""")))
+        assertEquals(EngineMessage.Replay(true, true, 1024), FrameReader.parse(JSONObject("""{"t":"replay","playing":true,"paused":true,"speed":1024}""")))
+        assertEquals(EngineMessage.Replay(false, false, 0), FrameReader.parse(JSONObject("""{"t":"replay"}""")))
+        assertEquals(mapOf("t" to "playReplay", "path" to "/data/r.dat"), Requests.playReplay("/data/r.dat").toMap())
+        assertEquals(mapOf("t" to "setReplayPaused", "paused" to true), Requests.setReplayPaused(true).toMap())
+        assertEquals(mapOf("t" to "stopReplay"), Requests.stopReplay().toMap())
+        assertEquals(mapOf("t" to "changeReplaySpeed", "faster" to false), Requests.changeReplaySpeed(false).toMap())
+    }
+
+    @Test
     fun aRefusedCertificate() {
         val refused = JSONObject(
             """{"t":"certificateRefused","refused":true,"issuedTo":"localhost","issuer":"Test CA","expires":"2020-01-02T00:00:00Z",

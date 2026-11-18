@@ -780,6 +780,19 @@ void MudletProfile::connectSession()
         mFrontend->packageInstalled(path, packageInstallResult(result), error);
     });
     connect(session, &THeadlessSession::keyBindingsChanged, this, &MudletProfile::pushKeyBindings);
+    // From the event loop; a pause asked for before the start arrived holds it already
+    connect(session, &THeadlessSession::replayStarted, this, [this] {
+        mReplay = {true, mSession->replayPaused(), 1};
+        mFrontend->replay(mReplay);
+    });
+    connect(session, &THeadlessSession::replaySpeedChanged, this, [this](const QString&, int speed) {
+        mReplay.speed = speed;
+        mFrontend->replay(mReplay);
+    });
+    connect(session, &THeadlessSession::replayFinished, this, [this] {
+        mReplay = {};
+        mFrontend->replay(mReplay);
+    });
     // A repaint comes from the event loop, once a turn; the view-only flag is in each frame
     const auto pushShownMap = [this] {
         pushMap(shownMapperSize(mSession->scriptWindows()));
@@ -1569,6 +1582,8 @@ void MudletProfile::onProfileClosed()
     mReplaysBefore.clear();
     mRecordedFile.clear();
     mFrontend->replayRecording(false, QString());
+    mReplay = {};
+    mFrontend->replay(mReplay);
 }
 
 void MudletProfile::pushWindows(bool withText)
@@ -2349,6 +2364,47 @@ void MudletProfile::pushRecordingEnded()
         mRecordedFile = saved.constFirst();
     }
     mFrontend->replayRecording(false, mRecordedFile);
+}
+
+QString MudletProfile::playReplay(const QString& path)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    // A name alone is one in the log folder, as for a script's loadReplay()
+    return mSession->playReplay(QDir(replayFolder()).absoluteFilePath(path)) ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::setReplayPaused(bool paused)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (!(paused ? mSession->pauseReplay() : mSession->resumeReplay())) {
+        return mSession->errorString();
+    }
+    // Libmudlet says nothing of a pause; one before replayStarted is told with the start
+    if (mReplay.playing) {
+        mReplay.paused = paused;
+        mFrontend->replay(mReplay);
+    }
+    return {};
+}
+
+QString MudletProfile::stopReplay()
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->stopReplay() ? QString() : mSession->errorString();
+}
+
+QString MudletProfile::changeReplaySpeed(bool faster)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->changeReplaySpeed(faster) ? QString() : mSession->errorString();
 }
 
 QString MudletProfile::answerSecureOffer(bool accept)

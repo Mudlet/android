@@ -7,7 +7,6 @@
 #include "AndroidNotifier.h"
 #endif
 
-#include <QDesktopServices>
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
@@ -50,11 +49,6 @@ ControlBridge::ControlBridge(QObject* parent)
     connect(&mNotificationTimer, &QTimer::timeout, this, &ControlBridge::showProfiles);
 }
 
-ControlBridge::~ControlBridge()
-{
-    handleUrls(false);
-}
-
 void ControlBridge::setEngineControl(IEngineControl* control)
 {
     mEngineControl = control;
@@ -87,7 +81,7 @@ void ControlBridge::listenFor(SocketBridge* bridge) const
 void ControlBridge::greet(const QJsonObject& hello)
 {
     mProfileOutput = !hello.value(QLatin1String("profileSockets")).toBool();
-    handleUrls(hello.value(QLatin1String("opensUrls")).toBool());
+    mOpensUrls = hello.value(QLatin1String("opensUrls")).toBool();
     SocketBridge::greet(hello);
 }
 
@@ -157,7 +151,7 @@ bool ControlBridge::handleControl(const QString& type, const QJsonObject& messag
         markSeen(message);
     } else if (type == QLatin1String("setAppState")) {
         setAppState(message);
-    } else if (type == QLatin1String("answerClipboardRead")) {
+    } else if (type == QLatin1String("answerClipboardRead") || type == QLatin1String("answerOpenUrl")) {
         // One that came after its script stopped waiting
     } else if (type == QLatin1String("answerPickFile")) {
         // A second answer, as from a UI asked again, or one for a pick that ended, is ignored
@@ -229,28 +223,28 @@ QString ControlBridge::pickFile(bool folder, const QString& title, const QString
     return path;
 }
 
-// Only the schemes a browser or mail app takes: any other, such as file: or a game's own, is left to Qt, which cannot
-// start an app from the engine's service. Handled, openUrl() returns true whether or not the UI opens it.
-void ControlBridge::handleUrls(bool handle)
+// Only the schemes a browser or mail app takes: a file: URL, a content: or intent: one, or a game's own scheme, is
+// never handed to the app. The script gets the app's answer, false when it did not open the page, as the desktop's
+// QDesktopServices::openUrl() returns; the URL is the script's, so it is never logged.
+bool ControlBridge::openWebPage(const QUrl& url)
 {
-    if (handle == mHandlingUrls) {
-        return;
+    const QString scheme = url.scheme().toLower();
+    if (scheme != QLatin1String("http") && scheme != QLatin1String("https") && scheme != QLatin1String("mailto")) {
+        return false;
     }
-    mHandlingUrls = handle;
-    for (const QLatin1String scheme : {QLatin1String("http"), QLatin1String("https"), QLatin1String("mailto")}) {
-        if (handle) {
-            QDesktopServices::setUrlHandler(scheme, this, "openUrl");
-        } else {
-            QDesktopServices::unsetUrlHandler(scheme);
-        }
+    if (!mClient || !mClientGreeted || !mOpensUrls) {
+        return false;
     }
-}
-
-void ControlBridge::openUrl(const QUrl& url)
-{
-    if (mClient && mClientGreeted) {
-        sendFrame({{QStringLiteral("t"), QStringLiteral("openUrl")}, {QStringLiteral("url"), url.toString(QUrl::FullyEncoded)}});
+    const QJsonValue id(double(++mUrlOpens));
+    sendFrame({{QStringLiteral("t"), QStringLiteral("openUrl")}, {QStringLiteral("id"), id}, {QStringLiteral("url"), url.toString(QUrl::FullyEncoded)}});
+    // Written now, as the event loop that would write it does not run while the script waits
+    mClient->flush();
+    const std::optional<QJsonObject> answer = takeFrame(QLatin1StringView("answerOpenUrl"), id, openUrlWaitMs);
+    if (!answer) {
+        qWarning("ControlBridge: the UI did not answer openUrl %lld within %d ms", mUrlOpens, openUrlWaitMs);
+        return false;
     }
+    return answer->value(QLatin1String("opened")).toBool();
 }
 
 QJsonObject ControlBridge::pickFileMessage() const

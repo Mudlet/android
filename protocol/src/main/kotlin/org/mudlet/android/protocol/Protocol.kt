@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 37
+const val PROTOCOL_VERSION = 38
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -815,8 +815,11 @@ sealed interface EngineMessage {
      */
     data class PickFile(val id: Long, val title: String, val into: String) : EngineMessage
 
-    /** A script's openUrl() or openWebPage() for [url], sent only to a UI whose hello said opensUrls. */
-    data class OpenUrl(val url: String) : EngineMessage
+    /**
+     * A script's openUrl() or openWebPage() for [url], sent only to a UI whose hello said opensUrls: the script waits for
+     * [Requests.answerOpenUrl] with [id], whether the page was opened.
+     */
+    data class OpenUrl(val id: Long, val url: String) : EngineMessage
 
     /**
      * What the link [link] of the console [window] offers now, the answer to [Requests.getLink]; [window] is null for
@@ -1327,6 +1330,9 @@ object Requests {
     /** The answer to [EngineMessage.PickFile] [id]: the [path] of the file chosen, now in its folder, or empty for a cancel. */
     fun answerPickFile(id: Long, path: String): JSONObject = JSONObject().put("t", "answerPickFile").put("id", id).put("path", path)
 
+    /** Whether the page of [EngineMessage.OpenUrl] [id] was [opened]: false when it was refused or no app took it. */
+    fun answerOpenUrl(id: Long, opened: Boolean): JSONObject = JSONObject().put("t", "answerOpenUrl").put("id", id).put("opened", opened)
+
     /** Empties the profile's error console, which an [EngineMessage.ErrorConsole] with no entries follows. */
     fun clearErrorConsole(): JSONObject = JSONObject().put("t", "clearErrorConsole")
 
@@ -1469,7 +1475,7 @@ class FrameReader(input: InputStream) {
 
             "pickFile" -> EngineMessage.PickFile(o.optLong("id"), o.optString("title"), o.optString("into"))
 
-            "openUrl" -> EngineMessage.OpenUrl(o.optString("url"))
+            "openUrl" -> EngineMessage.OpenUrl(o.optLong("id"), o.optString("url"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

@@ -118,6 +118,7 @@ fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: ()
     // Not the profile's either: a slide carries on across the switch it makes
     val scope = rememberCoroutineScope()
     val swipe = remember { GameSwipe(scope) }
+    ScriptWebPageOpener()
     kept.SaveableStateProvider(front.name) { ProfileGameScreen(front, switched, mapOpen, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onOpenPackages, onMakeTrigger) }
 }
 

@@ -28,6 +28,8 @@ class EngineLink(
     private val listener: Listener,
     // On the control socket: the UI attaches to each open profile's socket for its traffic (docs/protocol.md)
     private val profileSockets: Boolean = false,
+    // On the control socket: the UI opens the web pages scripts ask for (docs/protocol.md, openUrl)
+    private val opensUrls: Boolean = false,
 ) {
     interface Listener {
         fun onAttached(hello: EngineMessage.Hello, sameInstance: Boolean)
@@ -150,7 +152,7 @@ class EngineLink(
             try {
                 val w = FrameWriter(t.output)
                 val reader = FrameReader(t.input)
-                w.write(Requests.hello(instance, lastSeq, profileSockets, opensUrls = false))
+                w.write(Requests.hello(instance, lastSeq, profileSockets, opensUrls))
                 val first = reader.read()
                 if (first !is EngineMessage.Hello) {
                     throw IOException("engine answered hello with $first")

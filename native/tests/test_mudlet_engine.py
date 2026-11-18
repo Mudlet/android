@@ -4728,9 +4728,12 @@ def file_dialog():
 
 
 def web_pages():
-    """A script's openUrl() and openWebPage() for an http, https or mailto URL go to a UI whose hello said opensUrls, as
-    openUrl with the URL encoded, and the script gets true; with no UI attached nothing is sent."""
+    """A script's openUrl() and openWebPage() for an http, https or mailto URL ask a UI whose hello said opensUrls with
+    openUrl, the URL encoded, and return the UI's answerOpenUrl, false when it does not answer in time; any other
+    scheme, a UI without opensUrls and no UI at all answer false at once, asking nothing. The URL never reaches the
+    engine's log."""
     profile = "Web Page Test"
+    secret = "web-page-5c1d"
     proc, c = start_engine(profile)
     c.close()
     c = Client(SOCK, opens_urls=True)
@@ -4741,13 +4744,47 @@ def web_pages():
     c.send({"t": "openProfile", "name": profile, "connect": False})
     wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
 
-    for code, url, result in (('openUrl("https://example.org/a b?c=1")', "https://example.org/a%20b?c=1", "https"),
-                              ('openWebPage("http://example.org/")', "http://example.org/", "http"),
-                              ('openUrl("mailto:someone@example.org")', "mailto:someone@example.org", "mailto")):
+    # The secret in upper case in the scripts, so only the URL the engine builds can put it in the log
+    ids = set()
+    for code, url, result, opened in ((f'openUrl("https://example.org/a b?c=" .. ("{secret.upper()}"):lower())',
+                                       f"https://example.org/a%20b?c={secret}", "https", True),
+                                      ('openWebPage("http://example.org/")', "http://example.org/", "http", False),
+                                      ('openUrl("MAILTO:someone@example.org")', "mailto:someone@example.org", "mailto", True)):
         c.send({"t": "runLua", "code": f'echo("{result}:" .. tostring({code}) .. "\\n")'})
         message = c.wait_for(lambda m: m["t"] == "openUrl", collect=seen)
-        check(message.get("url") == url, f"{code} asks the UI to open {url}: {message}")
-        c.wait_for(shown(f"{result}:true"), collect=seen)
+        check(message.get("url") == url and isinstance(message.get("id"), int),
+              f"{code} asks the UI to open {url}, with an id: {message}")
+        ids.add(message["id"])
+        c.send({"t": "answerOpenUrl", "id": message["id"] + 100, "opened": not opened})
+        c.send({"t": "answerOpenUrl", "id": message["id"], "opened": opened})
+        c.wait_for(shown(f"{result}:{str(opened).lower()}"), collect=seen)
+    check(len(ids) == 3, f"each page has its own id: {ids}")
+
+    c.send({"t": "runLua", "code": 'echo("slow:" .. tostring(openUrl("https://example.org/slow")) .. "\\n")'})
+    late = c.wait_for(lambda m: m["t"] == "openUrl", collect=seen)
+    c.wait_for(shown("slow:false"), collect=seen)
+    since = len(seen)
+    c.send({"t": "answerOpenUrl", "id": late["id"], "opened": True})
+    c.send({"t": "ping", "id": 1})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "error"], f"an answer after the script stopped waiting is ignored: {seen[since:]}")
+
+    since = len(seen)
+    for url in ("file:///etc/hosts", "content://org.mudlet.mudlet/x", "intent://x#Intent;scheme=http;end", "game://open",
+                "javascript:alert(1)", "not a url"):
+        c.send({"t": "runLua", "code": f'echo("scheme:" .. tostring(openUrl("{url}")) .. "\\n")'})
+        c.wait_for(shown("scheme:false"), collect=seen)
+    c.send({"t": "ping", "id": 2})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "openUrl"], f"any other scheme is refused, asking nothing: {seen[since:]}")
+    c.close()
+
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "runLua", "code": 'echo("unasked:" .. tostring(openUrl("https://example.org/")) .. "\\n")'})
+    c.wait_for(shown("unasked:false"), collect=seen)
+    check(not [m for m in seen if m["t"] == "openUrl"], f"a UI that did not say opensUrls is not asked: {seen}")
 
     c.send({"t": "runLua", "code": 'tempTimer(1, function() echo("alone:" .. tostring(openUrl("https://example.org/alone")) .. "\\n") end)'})
     wait_status(c, "luaResult", lambda v: True, seen)
@@ -4755,12 +4792,14 @@ def web_pages():
     time.sleep(2)
     c = Client(SOCK, opens_urls=True)
     seen = []
-    c.wait_for(shown("alone:true"), collect=seen)
-    c.send({"t": "ping", "id": 1})
+    c.wait_for(shown("alone:false"), collect=seen)
+    c.send({"t": "ping", "id": 3})
     c.wait_for(lambda m: m["t"] == "pong", collect=seen)
-    check(not [m for m in seen if m["t"] == "openUrl"], f"with no UI attached nothing is sent: {seen}")
+    check(not [m for m in seen if m["t"] == "openUrl"], f"with no UI attached the page is refused and not kept for the next UI: {seen}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    with open(LOG, errors="replace") as f:
+        check(secret not in f.read(), "the URL is not in the engine's log")
 
 
 def package_file(name, folder, details, icon=None):

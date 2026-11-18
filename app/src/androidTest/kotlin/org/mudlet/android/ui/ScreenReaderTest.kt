@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
@@ -36,6 +37,7 @@ import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -58,7 +60,7 @@ import org.mudlet.android.ui.settings.encodingLabels
 /**
  * What TalkBack is given, against a fake engine, as the semantics tree shows it: new lines read as one announcement
  * while touch exploration is on (the Announcer's switch stands in for the system's), a script's announce(), the
- * console's lines as plain text, and the settings, which are each game's own: a game added here is given the app's, then a
+ * console's lines as plain text, a Variables row as one node read as name, type and value, and the settings, which are each game's own: a game added here is given the app's, then a
  * settings page shows and changes the game's, and says once that a change waits for the game's next connection.
  */
 @RunWith(AndroidJUnit4::class)
@@ -157,6 +159,35 @@ class ScreenReaderTest {
             assertEquals(text, shown.text)
             assertTrue("'$text' is read without its styles: ${shown.spanStyles}", shown.spanStyles.isEmpty() && shown.paragraphStyles.isEmpty())
         }
+    }
+
+    @Test
+    fun aVariablesRowIsOneNodeReadAsNameTypeAndValue() {
+        activate(hasContentDescription(compose.activity.getString(R.string.scripts_open, GAME.name)))
+        for (kind in listOf("trigger", "alias", "script", "timer", "key", "button")) {
+            compose.waitForIdle()
+            val asked = session.receive("scriptItems")
+            session.send(JSONObject().put("t", "scriptItems").put("kind", kind).put("items", JSONArray()).put("re", asked.get("id")))
+        }
+        activate(hasText(string(R.string.variables_chip)))
+        compose.waitForIdle()
+        val asked = session.receive("variables")
+        val entries = JSONArray()
+            .put(JSONObject().put("name", "name").put("key", "string").put("type", "string").put("hidden", false).put("value", "Ana").put("cut", false))
+            .put(JSONObject().put("name", "gmcp").put("key", "string").put("type", "table").put("hidden", false).put("members", 3).put("indexed", false))
+        session.send(
+            JSONObject().put("t", "variables").put("path", JSONArray()).put("showHidden", false).put("from", 0).put("total", 2)
+                .put("hiddenLeftOut", 0).put("entries", entries).put("re", asked.get("id")),
+        )
+        val text = compose.activity.getString(R.string.variables_reading, "name", string(R.string.variables_type_string), compose.activity.getString(R.string.variables_quoted, "Ana"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(text)).fetchSemanticsNodes().isNotEmpty() }
+        // The drawn name and value are not nodes of their own, which TalkBack would stop at one by one
+        compose.onAllNodes(hasText("name")).assertCountEquals(0)
+        val table = compose.onNode(hasContentDescription(compose.activity.resources.getQuantityString(R.plurals.variables_reading_table, 3, "gmcp", 3)) and hasClickAction())
+        val config = table.fetchSemanticsNode().config
+        assertEquals(string(R.string.variables_collapsed), config[SemanticsProperties.StateDescription])
+        assertEquals(string(R.string.variables_open), config[SemanticsActions.OnClick].label)
+        compose.onRoot().tryPerformAccessibilityChecks()
     }
 
     @Test

@@ -59,7 +59,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.takeOrElse
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -212,7 +211,7 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         // The borders' colour fills the main window's area, showing where the console leaves room for them, as the
         // desktop paints its main frame; not under the docks, which are outside that frame there, nor the switcher's
         // row, which is the app's own and stays black
-        Box(Modifier.placeAt(layout.main, density).background(windowColour(windows.mainArea?.borderColor ?: -1, CONSOLE_BACKGROUND)))
+        Box(Modifier.placeAt(layout.main, density).background(windowColour(-1, CONSOLE_BACKGROUND)))
         content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
         for (placed in layout.windows) {
             key(placed.window.key) { PlacedWindowView(placed, windows, metrics, density, Modifier.coveredBy(placed.rect)) }
@@ -587,10 +586,10 @@ private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: Str
     // colours could not be read over the sheet's fill; where it gives only one of the two, the other by contrast with
     // it as drawn, not the theme's. A sheet that gives neither leaves the line as with none, on the theme's surface
     val surface = MaterialTheme.colorScheme.surface
-    val style = remember(styleSheet, surface) { LabelStyle.parse(styleSheet, LabelStyle.COMMAND_LINE_SELECTORS).paired(surface.toArgb()) }
+    val style = remember(styleSheet, surface) { LabelStyle.parse(styleSheet, LabelStyle.COMMAND_LINE_SELECTORS) }
     val textColour = style.color?.let { Color(it) } ?: Color.Unspecified
     Row(
-        modifier.background(surface).drawBehind { drawLabelFrame(style.background, style, 0f, 0f, 1f, null, null) },
+        modifier.background(surface).drawBehind { drawLabelFrame(style.background.takeUnless { "background" in styleSheet }, style, 0f, 0f, 1f, null, null) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         OutlinedTextField(
@@ -621,7 +620,6 @@ private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: Str
                 errorLabelColor = textColour,
                 errorCursorColor = textColour,
                 errorSupportingTextColor = textColour,
-                focusedBorderColor = textColour,
                 errorBorderColor = textColour,
             ),
         )

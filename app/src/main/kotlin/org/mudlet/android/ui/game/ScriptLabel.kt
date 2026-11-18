@@ -111,6 +111,7 @@ import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RichText
 import org.mudlet.android.protocol.ScriptWindow
 import org.mudlet.android.protocol.VAlign
+import org.mudlet.android.protocol.backgroundArgb
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
@@ -516,9 +517,7 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
     val style = text.style
     val density = LocalDensity.current
     val scale = min(sx, sy)
-    val fill = style.background ?: window.bg.takeIf { it != -1 }?.let {
-        LabelFill.Solid(windowColour(it, Color.Transparent).copy(alpha = window.bgAlpha / 255f).toArgb())
-    }
+    val fill = style.background ?: window.backgroundArgb()?.let { LabelFill.Solid(it) }
     val borderImage = engineImage(style.borderImage?.let { ImageRequest(it) })
     val backgroundImage = engineImage(style.backgroundImage?.let { ImageRequest(it) })
     val border = style.drawnBorderWidth * scale

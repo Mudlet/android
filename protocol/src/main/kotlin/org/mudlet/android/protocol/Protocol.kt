@@ -138,7 +138,7 @@ data class ScriptWindow(
     val stack: Int,
     /** As a run's colour; -1 for none. */
     val bg: Int,
-    /** [bg]'s alpha, from 0 (transparent) to 255, which a label's may be below. */
+    /** [bg]'s alpha, from 0 (transparent) to 255, which a label's or a console's may be below. */
     val bgAlpha: Int,
     val fontFamily: String?,
     /** In points; 0 for none. */

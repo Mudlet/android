@@ -178,7 +178,14 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
 
 They reuse the main console's renderer: the rows of `windowText` as `UiLine`s through `ansiText()`, in a `LazyColumn`
 the size of the window, with its `bg` and font scaled by `s`. Each window keeps the last 300 rows it was sent and asks
-`getWindowText` for older ones as the player scrolls back. Scrolling stays local; a script's `scrollTo()` arrives as
+`getWindowText` for older ones as the player scrolls back. The `bg` keeps its `bgAlpha`: Mudlet's
+`TConsole::changeColors()` styles a mini console's or user window's colour as `rgba()` over a transparent palette, so
+one a script gave an alpha below 255 (`setBackgroundColor(name, r, g, b, a)`, or a Geyser colour with one) shows what
+is under it. For a mini console in the game area that is the windows below it in its parent, by `stack`, and the main
+console, as on the desktop; for a user window, or a mini console that is a page of the stacked layout's switcher, black
+(`docs/divergences.md`). A row's text is drawn on it, a run's own `bg` opaque: the desktop leaves a cell in the
+console's colour unfilled and fills others with their own, but a run's colour carries no alpha, so one made see-through
+by `setBgColor(name, r, g, b, a)` is drawn opaque. Scrolling stays local; a script's `scrollTo()` arrives as
 `scrolledBackTo` and moves the list there. Links in them are asked about and followed with the extended `getLink` and
 `followLink` (version 12). A console's own command line is an input line along its bottom, sending with
 `sendWindowCommandLine`. MXP frames draw as mini consoles. A frame's tab header (`tabs`, gap 5), where Mudlet gives

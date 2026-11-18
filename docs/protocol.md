@@ -327,10 +327,11 @@ The engine keeps the list. Between attaches it sends one `windows` for each turn
 some, with only what changed. libmudlet sends every window of a profile as it loads, and `removed` for all of them
 as it closes. `windowText` is not kept: each console's last 300 rows come again on attach.
 
-A label's `bg` may be partly or wholly transparent: `bgAlpha`, from 0 to 254, is its alpha, absent for an opaque
-one. A `Geyser.Gauge` is three labels in the gauge's parent, `<name>_back`, `<name>_front` and `<name>_text`, drawn
-in that order: the front's width (or height, for a vertical gauge) against the back's is the gauge's value, and the
-text label, transparent, holds the text.
+A label's or a console's `bg` may be partly or wholly transparent: `bgAlpha`, from 0 to 254, is its alpha, absent for an
+opaque one (what shows through a console: `docs/phase-f.md`, "Mini consoles and user windows"). A `Geyser.Gauge` is
+three labels in the gauge's parent, `<name>_back`, `<name>_front` and `<name>_text`, drawn in that order: the front's
+width (or height, for a vertical gauge) against the back's is the gauge's value, and the text label, transparent, holds
+the text.
 
 ### Labels
 

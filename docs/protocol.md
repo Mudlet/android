@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **45**.
+The current version is **46**.
 
 ## Transport
 
@@ -287,7 +287,7 @@ names no table (`There is no such table.`), as one gone since it was listed, or 
 | `attention` | `ms` | A script's `alert()` or the game's bell asks for the player's attention for `ms` milliseconds (3000 for the bell), or, with 0, until they come back to the app; 0 is also game text that arrived while `setAppState` had the app minimized and the profile notifies on new data while minimized, once each time the app is minimized (libmudlet's `attentionRequested`). Not kept for a UI that attaches later. |
 | `moveTypedLine` | | What the player typed ahead of the game hiding input has left Mudlet's copy of the input line, as the GUI's password box takes it from its command line (libmudlet's `typedLineMoveRequested`): the UI moves what is on its input line into its masked one and empties the input line. It comes just before `hiddenInput` true, and only when the input line held text Mudlet took as typed (`complete` sets that). Not kept for a UI that attaches later. |
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, a `prompt:` link that `followLabelLink` followed put its text there, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. None comes while the game hides input (`hiddenInput`): Mudlet's desktop then writes a script's text to its hidden-input box, which the engine does not pass on, and the engine refuses a `prompt:` link. Not kept for a UI that attaches later. |
-| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
+| `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?, `styleSheet`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
 | `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH`, `borderColor` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. `borderColor` is the colour a script's `setBorderColor` gives those borders, as a run's colour: black until a script sets one, as on the desktop, and -1 when there is none (as after a `setBorderColor` out of range, which Qt makes no colour of), where the UI draws its own background. Sent as a profile loads, on each change and to each UI that attaches. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. |
@@ -352,6 +352,10 @@ What `windows` and `windowText` carry, from libmudlet's `THeadlessSession::scrip
   from 0. Each page is a window of its own, at the place and size of the console under the header, and only the one
   in front is `shown`. A page, and a frame with no header, has none of the three. `selectFrameTab` brings a page
   forward, as a tap on its tab.
+- A command line has `styleSheet`, what a script's `setCmdLineStyleSheet` gave it (Geyser's `CommandLine` calls it
+  from `setStyleSheet`, and `MiniConsole` from `setCmdLineStyleSheet`), which the engine does not interpret, as a
+  label's; absent while it has none. The input line's own sheet, `setCmdLineStyleSheet` with no name or `main`, is
+  not sent: that line is the app's.
 - The runs of a console's rows are a `line`'s, with two differences: `fg` is always a colour, never -1, as the UI is
   not told a console's own; a `bg` of -1 is the window's `bg`. Their `link` ids are the window's own, which `getLink`
   and `followLink` take with the window's name, and a change to one of those links sends the window's `windowText`
@@ -899,7 +903,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 45, which added the colour of the border around the main console (`borderColor` on `mainArea`);
+As implemented in version 46, which added a command line's style sheet (`styleSheet` on a `commandLine` window);
+version 45 added the colour of the border around the main console (`borderColor` on `mainArea`);
 version 44 added playing a replay (`playReplay`, `setReplayPaused`, `stopReplay`,
 `changeReplaySpeed`, `replay`);
 version 43 added a script's changes to lines already sent (`lineUpdated`);

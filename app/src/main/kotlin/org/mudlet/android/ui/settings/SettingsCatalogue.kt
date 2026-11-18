@@ -317,13 +317,6 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_show_passwords_hint,
             R.string.settings_show_passwords_keywords,
         ),
-        SettingEntry.Switch(
-            SettingsCategory.INPUT,
-            Settings.runAllKeyBindings,
-            R.string.settings_run_all_key_bindings,
-            R.string.settings_run_all_key_bindings_hint,
-            R.string.settings_run_all_key_bindings_keywords,
-        ),
         SettingEntry.Pick(
             SettingsCategory.CONNECTION,
             Settings.serverEncoding,

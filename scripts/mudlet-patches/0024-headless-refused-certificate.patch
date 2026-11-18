@@ -1,0 +1,183 @@
+Let a frontend with no window show the certificate a secure connection was refused for
+
+When a game's certificate has an error the profile does not let past, cTelnet ends the connection and prints the
+errors as "[ ALERT ]" lines, and the GUI's preferences show the certificate's details on the Security tab, where
+the player can choose to accept expired or self-signed certificates for the profile. A frontend with no window had
+the console's lines and nothing else: it could not tell a refused certificate from any other lost connection, nor
+offer the profile's choices for it.
+
+- cTelnet::refusedSslErrors() keeps the errors finishDisconnection() refused the connection for (those not let past
+  by "Accept expired certificates", "Accept self-signed certificates" or "Accept all certificate errors"), until the
+  next connection is dialled.
+- THeadlessSession::refusedCertificate() gives them with the certificate's common name and its issuer's, its expiry
+  and serial number, whether it had expired or was self-signed (the errors those two settings let past) or had
+  another error, as the GUI's preferences show them; none when the last connection was not refused for its
+  certificate.
+- Nothing is accepted by it: the player's choice still goes through the profile's settings.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (tls_checks: a self-signed certificate refused and
+its details, an expired one refused with its expiry, nothing refused for a plain connection or once the self-signed
+one is accepted). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 385d9fe..deaed3f 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -381,6 +381,14 @@ the player to answer with `answerSecureConnectionOffer()`. The offer lapses when
+ until then, or an answer, the profile offers nothing more. A yes stores the secure port with TLS on, as
+ the GUI does, so an app that passes its own port to a later `start()` passes `tls` with it.
+ 
++`refusedCertificate()` says why a secure connection that `disconnected` reports ended, when it was the
++game's certificate: its common name and its issuer's, its expiry and serial number, whether it had
++expired or was self-signed or had any other error, and every error refused, as the GUI's preferences show them after the
++console's "[ ALERT ]" lines. Only errors the profile does not let past count, so it is empty with
++`mSslIgnoreAll` on, and it is kept until the next connection is made. A frontend shows it so the player
++can choose, as in the GUI's preferences, to accept that kind of certificate for the profile; Mudlet
++never accepts one by itself.
++
+ `packageDownloadStarted`, `packageDownloadProgress` and `packageDownloadFinished` follow a GUI package
+ the game sends, as the GUI's progress dialog does, and `cancelPackageDownload()` is its Cancel.
+ 
+diff --git a/src/ctelnet.cpp b/src/ctelnet.cpp
+index 3027780..9982a62 100644
+--- a/src/ctelnet.cpp
++++ b/src/ctelnet.cpp
+@@ -779,6 +779,7 @@ void cTelnet::connectIt(const QString& address, int port)
+ #if !defined(QT_NO_SSL)
+         mSslErrors.clear();
+         mPeerCertificate = QSslCertificate();
++        mRefusedSslErrors.clear();
+         mSslHandshakeFailed = false;
+ #endif
+ 
+@@ -1644,6 +1645,7 @@ void cTelnet::finishDisconnection()
+                 // We also have SSL/TLS errors that are not ones we are ignoring
+                 // so do not auto-reconnect:
+                 mDontReconnect = true;
++                mRefusedSslErrors = sslErrors;
+ 
+                 for (const auto& error : std::as_const(sslErrors)) {
+                     reasons.append(error.errorString());
+diff --git a/src/ctelnet.h b/src/ctelnet.h
+index 60bcbb1..777d269 100644
+--- a/src/ctelnet.h
++++ b/src/ctelnet.h
+@@ -241,6 +241,9 @@ public:
+ #if !defined(QT_NO_SSL)
+     QSslCertificate getPeerCertificate();
+     QList<QSslError> getSslErrors();
++    // The errors the last secure connection ended for, those the profile does not let past; empty when it did not
++    // end for its certificate. Kept until the next connection is made.
++    QList<QSslError> refusedSslErrors() const { return mRefusedSslErrors; }
+ #endif
+     QByteArray decodeBytes(const char*);
+     std::string encodeAndCookBytes(const std::string&);
+@@ -566,6 +569,7 @@ private:
+     // Stores the peer certificate from slot_socketSslError() so it can be
+     // used by getPeerCertificate() when mpSocket is null:
+     QSslCertificate mPeerCertificate;
++    QList<QSslError> mRefusedSslErrors;
+     // Set by slot_socketError(), as a handshake that fails leaves mpSocket null
+     // and so no socket for finishDisconnection() to ask about it
+     bool mSslHandshakeFailed = false;
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 7bfbf5a..2cef910 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -46,6 +46,10 @@
+ #include <QKeyEvent>
+ #include <QMetaMethod>
+ #include <QScopeGuard>
++#if !defined(QT_NO_SSL)
++#include <QSslCertificate>
++#include <QSslError>
++#endif
+ #include <QTimer>
+ 
+ #include <algorithm>
+@@ -1759,6 +1763,41 @@ bool THeadlessSession::cancelMapOperation()
+     return true;
+ }
+ 
++std::optional<THeadlessSession::RefusedCertificate> THeadlessSession::refusedCertificate() const
++{
++#if !defined(QT_NO_SSL)
++    if (!mpHost) {
++        return std::nullopt;
++    }
++    cTelnet& telnet = mpHost->mTelnet;
++    const QList<QSslError> refused = telnet.refusedSslErrors();
++    if (refused.isEmpty()) {
++        return std::nullopt;
++    }
++    const QSslCertificate certificate = telnet.getPeerCertificate();
++    RefusedCertificate result;
++    result.issuedTo = certificate.subjectInfo(QSslCertificate::CommonName).join(QLatin1Char(','));
++    result.issuer = certificate.issuerInfo(QSslCertificate::CommonName).join(QLatin1Char(','));
++    result.expires = certificate.expiryDate();
++    result.serial = QString::fromLatin1(certificate.serialNumber());
++    for (const auto& error : refused) {
++        // As cTelnet::finishDisconnection(): the two settings let these past only for the game's own certificate
++        const bool own = error.certificate() == certificate;
++        if (own && error.error() == QSslError::CertificateExpired) {
++            result.expired = true;
++        } else if (own && error.error() == QSslError::SelfSignedCertificate) {
++            result.selfSigned = true;
++        } else {
++            result.others = true;
++        }
++        result.errors.append(error.errorString());
++    }
++    return result;
++#else
++    return std::nullopt;
++#endif
++}
++
+ QString THeadlessSession::offeredMapUrl() const
+ {
+     return mpHost ? mpHost->getMmpMapLocation() : QString();
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index e612e82..38c554d 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -23,6 +23,7 @@
+ #include "TDebug.h"
+ 
+ #include <QColor>
++#include <QDateTime>
+ #include <QFlags>
+ #include <QFont>
+ #include <QHash>
+@@ -385,6 +386,27 @@ public:
+     // taken back its secure port, and where submit() is refused. It may run the event loop, where shutdown() and
+     // save() are refused and a session deleted waits for it to return before its profiles close.
+     bool answerSecureConnectionOffer(bool accept);
++    // A secure connection's certificate that was refused for errors the profile does not let past, as the GUI's
++    // preferences show it after the connection ended: the certificate's common names, its expiry and serial
++    // number, and the errors. Kept until the next connection is made.
++    struct RefusedCertificate
++    {
++        QString issuedTo;
++        QString issuer;
++        QDateTime expires;
++        QString serial;
++        // The errors the GUI's "Accept expired certificates" and "Accept self-signed certificates" let past
++        bool expired = false;
++        bool selfSigned = false;
++        // Any other error, which only "Accept all certificate errors" lets past
++        bool others = false;
++        // Every error refused, in Qt's words, as the GUI lists them, those two included
++        QStringList errors;
++    };
++    // The certificate the profile's last secure connection was refused for; none when it was not refused for its
++    // certificate, as when "Accept all certificate errors" is on, the connection was not secure or it was made.
++    // Read from a handler of disconnected, it says why that connection ended.
++    std::optional<RefusedCertificate> refusedCertificate() const;
+     // As the Cancel of the GUI's progress dialog: packageDownloadFinished follows. False with no download
+     // running, and where submit() is refused.
+     bool cancelPackageDownload();

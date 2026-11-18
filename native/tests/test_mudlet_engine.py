@@ -104,6 +104,10 @@ def texts_of(msgs):
     return texts
 
 
+def disconnected(m):
+    return m["t"] == "status" and m["key"] == "connection" and m["value"] == "disconnected"
+
+
 def wait_status(c, key, pred, msgs, timeout=30):
     return c.wait_for(lambda m: m["t"] == "status" and m["key"] == key and pred(m["value"]), timeout=timeout, collect=msgs)
 
@@ -119,6 +123,8 @@ def main():
                        map_info, map_moves, map_rooms, map_edits, map_download, profile_settings, script_items, sounds,
                        packages, error_console):
             checks()
+        checks = secure_offer
+        checks(port)
     except Exception as e:
         # A wait that timed out, or an engine that did not start: the rest cannot run, but the log says why
         check(False, f"stopped in {checks.__name__}: {e!r}")
@@ -315,12 +321,35 @@ def engine_basics(port):
     check(bool(saves), f"the profile was saved at exit: {saves}")
 
 
-def self_signed_context():
-    """A TLS server context with a new self-signed certificate for localhost, as many games have."""
-    key, cert = os.path.join(TMP, "server.key"), os.path.join(TMP, "server.crt")
-    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", "/CN=localhost",
-                    "-addext", "subjectAltName=DNS:localhost", "-keyout", key, "-out", cert],
+def self_signed_context(host="localhost"):
+    """A TLS server context with a new self-signed certificate for host, as many games have."""
+    key, cert = os.path.join(TMP, f"{host}.key"), os.path.join(TMP, f"{host}.crt")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", f"/CN={host}",
+                    "-addext", f"subjectAltName=DNS:{host}", "-keyout", key, "-out", cert],
                    check=True, capture_output=True)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert, key)
+    return ctx
+
+
+def expired_context():
+    """A TLS server context with a self-signed certificate for localhost that ran out on 2 January 2020."""
+    folder = os.path.join(TMP, "expired")
+    os.makedirs(folder, exist_ok=True)
+    key, csr, cert = (os.path.join(folder, n) for n in ("server.key", "server.csr", "server.crt"))
+    with open(os.path.join(folder, "index.txt"), "w", encoding="utf-8"):
+        pass
+    with open(os.path.join(folder, "serial"), "w", encoding="utf-8") as f:
+        f.write("01\n")
+    config = os.path.join(folder, "ca.cnf")
+    with open(config, "w", encoding="utf-8") as f:
+        f.write(f"[ca]\ndefault_ca = d\n[d]\ndatabase = {folder}/index.txt\nnew_certs_dir = {folder}\nserial = {folder}/serial\n"
+                "default_md = sha256\npolicy = p\ncopy_extensions = copy\nunique_subject = no\n[p]\ncommonName = supplied\n")
+    subprocess.run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost",
+                    "-addext", "subjectAltName=DNS:localhost", "-keyout", key, "-out", csr], check=True, capture_output=True)
+    # openssl req takes no date in the past; openssl ca does
+    subprocess.run(["openssl", "ca", "-batch", "-config", config, "-selfsign", "-keyfile", key, "-in", csr, "-out", cert,
+                    "-startdate", "20200101000000Z", "-enddate", "20200102000000Z"], check=True, capture_output=True)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
     return ctx
@@ -329,11 +358,18 @@ def self_signed_context():
 def tls_checks(plain_port):
     """TLS through the engine's Qt and OpenSSL. Certificates are checked as in Mudlet's GUI: one that is not trusted ends
     the connection with the reasons, unless the profile accepts what is wrong with it (the GUI's "Accept self-signed
-    certificates" and its other two boxes, which the app does not offer yet)."""
+    certificates" and its other two boxes). The certificate refused is passed on, certificateRefused, with what the
+    GUI's preferences show of it: a self-signed one, then, once self-signed ones are accepted, an expired one and one
+    for another server."""
     tls_port = fake_telnet.start_in_thread(tls=self_signed_context())
+    expired_port = fake_telnet.start_in_thread(tls=expired_context())
+    elsewhere_port = fake_telnet.start_in_thread(tls=self_signed_context("elsewhere.invalid"))
     profile = "TLS Test"
     proc, c = start_engine(profile)
-    c.wait_for(lambda m: m["t"] == "synced")
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    told = [m for m in seen if m["t"] == "certificateRefused"]
+    check(told == [{"t": "certificateRefused", "refused": False}], f"an attach is told no certificate was refused: {told}")
 
     # Refused: the certificate is self-signed. A secure connection needs the server's name, as its certificate names it.
     msgs = []
@@ -346,12 +382,21 @@ def tls_checks(plain_port):
     check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
     check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed"],
           f"the server saw the handshake end unfinished: {fake_telnet.TLS_HANDSHAKES}")
+    m = seen_or_next(c, lambda m: m["t"] == "certificateRefused", msgs, 0, timeout=10, what="certificateRefused")
+    check(m.get("refused") is True and m.get("selfSigned") is True and m.get("expired") is False and m.get("others") is False,
+          f"the self-signed certificate is passed on as refused: {m}")
+    check(m.get("issuedTo") == "localhost" and m.get("issuer") == "localhost" and m.get("serial", "") != ""
+          and m.get("expires", "").endswith("Z"), f"with what the GUI's preferences show of it: {m}")
+    check(any("self-signed" in e for e in m.get("errors", [])), f"and Mudlet's reasons: {m.get('errors')}")
 
     # TLS to a port that does not speak it
     msgs = []
     c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": True})
     c.wait_for(lambda m: m["t"] in ("line", "tail") and "Secure handshake failed" in m["text"], timeout=30, collect=msgs)
     check(not any("Red bold" in t for t in texts_of(msgs)), "TLS to a plain port: the handshake fails, no game text")
+    seen_or_next(c, disconnected, msgs, 0, timeout=10, what="disconnected")
+    told = [m["refused"] for m in msgs if m["t"] == "certificateRefused"]
+    check(told == [False], f"the refused certificate is forgotten as the next connection is tried, which had none: {told}")
 
     # The profile keeps the TLS it started with
     c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": False})
@@ -384,6 +429,118 @@ def tls_checks(plain_port):
     m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
     check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")
     check([r for r, _ in fake_telnet.TLS_HANDSHAKES] == ["failed", "ok"], f"handshakes: {fake_telnet.TLS_HANDSHAKES}")
+
+    # An expired certificate is still refused: accepting self-signed ones lets only that error past
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", [], timeout=10)
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": expired_port, "tls": True})
+    m = c.wait_for(lambda m: m["t"] == "certificateRefused" and m["refused"], timeout=30, collect=msgs)
+    check(m.get("expired") is True and m.get("selfSigned") is False and m.get("others") is False,
+          f"refused for its expiry alone, the self-signed error let past: {m}")
+    check(m.get("expires") == "2020-01-02T00:00:00Z", f"it ran out on 2 January 2020: {m.get('expires')}")
+    check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
+
+    # A certificate for another server: an error only "Accept all certificate errors" lets past
+    seen_or_next(c, disconnected, msgs, 0, timeout=10, what="disconnected")
+    msgs = []
+    c.send({"t": "connect", "host": "localhost", "port": elsewhere_port, "tls": True})
+    m = c.wait_for(lambda m: m["t"] == "certificateRefused" and m["refused"], timeout=30, collect=msgs)
+    check(m.get("others") is True and m.get("expired") is False and m.get("selfSigned") is False
+          and m.get("issuedTo") == "elsewhere.invalid", f"refused for naming another server: {m}")
+    check(not any("Red bold" in t for t in texts_of(msgs)), "and none of the game's text")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def secure_offer(plain_port):
+    """The game's offer of its secure port (MSSP's TLS), passed on as secureOffer and answered with answerSecureOffer as
+    desktop Mudlet's question is: refused with no offer, lapsing with its connection, a no reconnecting where it was and
+    stopping the asking, a yes storing the secure port with TLS on, as the profile list then says, and connecting
+    there."""
+    tls_port = fake_telnet.start_in_thread(tls=self_signed_context())
+    handshakes = len(fake_telnet.TLS_HANDSHAKES)
+    profile = "Secure Offer"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "secureOffer", "offered": False} in seen, f"an attach is told no offer waits: {[m for m in seen if m['t'] == 'secureOffer']}")
+    c.ask({"t": "saveProfile", "name": profile, "host": "localhost", "port": plain_port, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    m = c.ask({"t": "answerSecureOffer", "accept": True}, answers=("error",), collect=seen)
+    check(m["message"] == "answerSecureOffer: the game has offered no secure port to answer", f"no offer, no answer: {m}")
+    m = c.ask({"t": "answerSecureOffer", "accept": "yes"}, answers=("error",), collect=seen)
+    check(m["message"] == "answerSecureOffer: accept must be true or false", f"accept is a boolean: {m}")
+    # The fake game's certificate is its own
+    c.ask({"t": "setSettings", "values": {"sslIgnoreSelfSigned": True}}, answers=("settings", "error"), collect=seen)
+
+    def offered(msgs):
+        c.send({"t": "connect", "host": "localhost", "port": plain_port, "tls": False})
+        wait_status(c, "connection", lambda v: v == "connected", msgs)
+        c.send({"t": "send", "text": f"mssp {tls_port}"})
+        c.wait_for(lambda m: m["t"] == "secureOffer" and m["offered"], timeout=10, collect=msgs)
+
+    msgs = []
+    offered(msgs)
+    check(any(f"secure connection on port {tls_port} is available" in t for t in texts_of(msgs)),
+          f"Mudlet's console says so too: {texts_of(msgs)[-3:]}")
+    msgs = []
+    c.send({"t": "disconnect"})
+    c.wait_for(lambda m: m["t"] == "secureOffer" and not m["offered"], timeout=10, collect=msgs)
+    m = c.ask({"t": "answerSecureOffer", "accept": True}, answers=("error",), collect=msgs)
+    check("no secure port" in m["message"], f"the offer lapses with its connection: {m}")
+    # The status can come before the lapsed offer or the refusal, already collected
+    seen_or_next(c, lambda m: m["t"] == "status" and m["key"] == "connection" and m["value"] == "disconnected", msgs, 0,
+                 timeout=30, what="disconnected")
+
+    # No: connects again where it was, and asks no more
+    msgs = []
+    offered(msgs)
+    accepted = len(fake_telnet.ACCEPTED)
+    c.send({"t": "answerSecureOffer", "accept": False})
+    c.wait_for(lambda m: m["t"] == "secureOffer" and not m["offered"], timeout=10, collect=msgs)
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    check(len(fake_telnet.ACCEPTED) == accepted + 1, "a no connects again to the same port")
+    m = c.ask({"t": "getSettings", "keys": ["askTlsAvailable"]}, answers=("settings", "error"), collect=msgs)
+    check(m.get("values") == {"askTlsAvailable": False}, f"and the profile no longer offers a secure connection: {m}")
+    since = len(msgs)
+    c.send({"t": "send", "text": f"mssp {tls_port}"})
+    c.wait_for(shown("MSSP sent"), collect=msgs)
+    later = seen_or_none(c, lambda m: m["t"] == "secureOffer" and m["offered"], msgs, since, timeout=3)
+    check(later is None, "the game's next offer is not passed on")
+    check(not any(f"port {tls_port} is available" in t for t in texts_of(msgs[since:])), "nor told in the console")
+
+    # Yes: the secure port, stored with TLS on and connected to
+    c.ask({"t": "setSettings", "values": {"askTlsAvailable": True}}, answers=("settings", "error"), collect=msgs)
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs)
+    msgs = []
+    offered(msgs)
+    c.send({"t": "answerSecureOffer", "accept": True})
+    m = c.wait_for(lambda m: m["t"] == "profiles", timeout=10, collect=msgs)
+    listed = [p for p in m["profiles"] if p["name"] == profile]
+    check(listed and listed[0]["port"] == tls_port and listed[0]["tls"] is True,
+          f"the profile list says the secure port, with TLS, unasked: {listed}")
+    check("re" not in m, f"as no request's answer: {m}")
+    wait_status(c, "connection", lambda v: v == "connected", msgs)
+    # The fake game notes its side of the handshake after the engine may already say it is connected
+    deadline = time.monotonic() + 5
+    while "ok" not in [r for r, _ in fake_telnet.TLS_HANDSHAKES[handshakes:]] and time.monotonic() < deadline:
+        time.sleep(0.05)
+    check("ok" in [r for r, _ in fake_telnet.TLS_HANDSHAKES[handshakes:]], f"the game's port saw a handshake: {fake_telnet.TLS_HANDSHAKES[handshakes:]}")
+    c.send({"t": "send", "text": "tls"})
+    m = c.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("TLS: "), collect=msgs)
+    check(m["text"].startswith("TLS: TLSv1."), f"the game sees an encrypted connection: {m['text']}")
+    items = {item: mudlet_item(profile, item) for item in ("url", "port", "ssl_tsl")}
+    check(items == {"url": "localhost", "port": str(tls_port), "ssl_tsl": "2"}, f"stored as the connection dialog stores it: {items}")
+    # The UI's next connect, with what the list now says, is taken
+    c.send({"t": "disconnect"})
+    wait_status(c, "connection", lambda v: v == "disconnected", msgs)
+    c.send({"t": "connect", "host": "localhost", "port": tls_port, "tls": True})
+    m = wait_status(c, "connection", lambda v: v == "connected" or v.startswith("error:"), msgs)
+    check(m["value"] == "connected", f"a connect with the secure port and TLS is taken: {m['value']}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

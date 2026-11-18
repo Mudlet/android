@@ -17,6 +17,8 @@ Commands a client may send (one per line):
                      "Look" (sends "look stew") and "Eat" (sends "eat stew"), with the tooltip "the stew"
   map <path>      -> GMCP Client.Map offering MAP_URL_BASE + "/" + <path> as the game's map, then "Map offered", so the
                      URL, which can hold a user name and password, is never a line the client sent
+  mssp <port>     -> IAC WILL MSSP and the MSSP variable TLS with <port>, as a game tells of its secure port, then
+                     "MSSP sent"
   quit            -> close
 Any other line gets "Huh?", without the line, so a password the client sends never comes back as text.
 
@@ -31,7 +33,8 @@ import threading
 import time
 
 IAC, DONT, DO, WONT, WILL, SB, GA, SE = 255, 254, 253, 252, 251, 250, 249, 240
-TTYPE, ECHO, NAWS, MXP, GMCP = 24, 1, 31, 91, 201
+TTYPE, ECHO, NAWS, MXP, GMCP, MSSP = 24, 1, 31, 91, 201, 70
+MSSP_VAR, MSSP_VAL = 1, 2
 # (lines, start, end) of each flood, as seen by the sender
 FLOOD_TIMES = []
 # When each game connection was accepted (time.monotonic())
@@ -195,6 +198,9 @@ class Session(threading.Thread):
         elif line.startswith("map "):
             offer = json.dumps({"url": f"{MAP_URL_BASE}/{line[4:]}"}).encode()
             conn.sendall(bytes([IAC, SB, GMCP]) + b"Client.Map " + offer + bytes([IAC, SE]) + b"Map offered\r\n")
+        elif line.startswith("mssp "):
+            variables = bytes([MSSP_VAR]) + b"TLS" + bytes([MSSP_VAL]) + line[5:].encode()
+            conn.sendall(bytes([IAC, WILL, MSSP, IAC, SB, MSSP]) + variables + bytes([IAC, SE]) + b"MSSP sent\r\n")
         elif line == "quit":
             conn.sendall(b"Bye\r\n")
             return False

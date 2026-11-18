@@ -410,6 +410,8 @@ void SocketBridge::sendState()
         sendFrame({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), it.key()}, {QStringLiteral("value"), it.value()}});
     }
     sendFrame(hiddenInputMessage());
+    sendFrame(secureOfferMessage());
+    sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
         sendFrame(errorConsoleMessage(mEngine->errorConsole(), true));
@@ -619,6 +621,9 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, mEngine->downloadMap());
     } else if (type == QLatin1String("cancelMapDownload")) {
         refuse(type, mEngine->cancelMapDownload());
+    } else if (type == QLatin1String("answerSecureOffer")) {
+        const QJsonValue accept = message.value(QLatin1String("accept"));
+        refuse(type, accept.isBool() ? mEngine->answerSecureOffer(accept.toBool()) : QStringLiteral("accept must be true or false"));
     } else if (type == QLatin1String("scriptItems")) {
         scriptItems(message);
     } else if (type == QLatin1String("scriptItem")) {
@@ -1423,6 +1428,28 @@ QJsonObject SocketBridge::hiddenInputMessage() const
     return {{QStringLiteral("t"), QStringLiteral("hiddenInput")}, {QStringLiteral("wanted"), mHiddenInput}};
 }
 
+QJsonObject SocketBridge::secureOfferMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("secureOffer")}, {QStringLiteral("offered"), mSecureOffer}};
+}
+
+QJsonObject SocketBridge::certificateMessage() const
+{
+    QJsonObject message{{QStringLiteral("t"), QStringLiteral("certificateRefused")}, {QStringLiteral("refused"), mRefusedCertificate.has_value()}};
+    if (mRefusedCertificate) {
+        const RefusedCertificate& certificate = *mRefusedCertificate;
+        message.insert(QStringLiteral("issuedTo"), certificate.issuedTo);
+        message.insert(QStringLiteral("issuer"), certificate.issuer);
+        message.insert(QStringLiteral("expires"), certificate.expires.isValid() ? certificate.expires.toUTC().toString(Qt::ISODate) : QString());
+        message.insert(QStringLiteral("serial"), certificate.serial);
+        message.insert(QStringLiteral("expired"), certificate.expired);
+        message.insert(QStringLiteral("selfSigned"), certificate.selfSigned);
+        message.insert(QStringLiteral("others"), certificate.others);
+        message.insert(QStringLiteral("errors"), QJsonArray::fromStringList(certificate.errors));
+    }
+    return message;
+}
+
 QJsonObject SocketBridge::historyMessage(const QStringList& lines)
 {
     return {{QStringLiteral("t"), QStringLiteral("history")}, {QStringLiteral("lines"), QJsonArray::fromStringList(lines)}};
@@ -1747,6 +1774,34 @@ void SocketBridge::hiddenInput(bool wanted)
     mHiddenInput = wanted;
     if (outputLive()) {
         sendFrame(hiddenInputMessage());
+    }
+}
+
+void SocketBridge::secureOffer(bool offered)
+{
+    if (mMirror) {
+        mMirror->secureOffer(offered);
+    }
+    if (offered == mSecureOffer) {
+        return;
+    }
+    mSecureOffer = offered;
+    if (outputLive()) {
+        sendFrame(secureOfferMessage());
+    }
+}
+
+void SocketBridge::certificateRefused(const std::optional<RefusedCertificate>& certificate)
+{
+    if (mMirror) {
+        mMirror->certificateRefused(certificate);
+    }
+    if (certificate == mRefusedCertificate) {
+        return;
+    }
+    mRefusedCertificate = certificate;
+    if (outputLive()) {
+        sendFrame(certificateMessage());
     }
 }
 

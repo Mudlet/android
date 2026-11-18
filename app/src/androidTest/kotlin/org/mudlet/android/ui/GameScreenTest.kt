@@ -39,7 +39,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import androidx.test.uiautomator.UiDevice
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityViewCheckException
 import org.junit.Assert.assertEquals
@@ -54,6 +56,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_REVERSE
+import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.game.GAME_PILL_TAG
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
 import kotlin.math.abs
@@ -235,6 +238,114 @@ class GameScreenTest {
         activate(hasTestTag(GAME_PILL_TAG))
         activate(hasContentDescription(compose.activity.getString(R.string.connection_disconnect_from, GAME.name)))
         session.receive("disconnect")
+    }
+
+    @Test
+    fun theGamesOfferOfASecurePortIsAskedAboutAndAnswered() {
+        // An address Reconnect remembers, which a yes must not leave it going back to
+        compose.runOnIdle { EngineClient.front.connect(GAME.host, GAME.port, false) }
+        session.receive("connect")
+        session.status("connection", "connected")
+        waitForPill(string(R.string.connection_connected))
+        assertFalse("no question before the game offers", displayed(string(R.string.secure_offer_title)))
+
+        session.secureOffer(true)
+        waitUntilDisplayed(string(R.string.secure_offer_title))
+        activate(hasText(string(R.string.secure_offer_accept)))
+        assertEquals(true, session.receive("answerSecureOffer").getBoolean("accept"))
+        session.secureOffer(false)
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.secure_offer_title)) }
+        session.profiles(listOf(GAME.copy(port = SECURE_PORT, tls = true)))
+        compose.waitUntil(WAIT_MS) { EngineClient.front.lastAddress == GameAddress(GAME.host, SECURE_PORT, true) }
+
+        // A refusal is said, and the offer, still standing, is asked about again
+        session.secureOffer(true)
+        activate(hasText(string(R.string.secure_offer_decline)))
+        val no = session.receive("answerSecureOffer")
+        assertEquals(false, no.getBoolean("accept"))
+        session.refuse(no, "the profile is busy; answer again in a moment")
+        waitUntilDisplayed(compose.activity.getString(R.string.secure_offer_refused, "the profile is busy; answer again in a moment"))
+        compose.onNodeWithText(string(R.string.secure_offer_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun backPutsTheSecurePortOffAndItIsAskedAgainOnlyWhenOfferedAgain() {
+        session.status("connection", "connected")
+        session.secureOffer(true)
+        waitUntilDisplayed(string(R.string.secure_offer_title))
+        // The system's Back, which the dialog's own window takes
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.secure_offer_title)) }
+        session.assertNoRequest("answerSecureOffer", 1_000)
+        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+
+        // Mudlet takes the offer back with its connection, and makes it again on the next
+        session.secureOffer(false)
+        session.secureOffer(true)
+        waitUntilDisplayed(string(R.string.secure_offer_title))
+    }
+
+    @Test
+    fun aRefusedCertificateIsShownAndAcceptingTurnsOnItsSettingAndConnectsAgain() {
+        compose.runOnIdle { EngineClient.front.connect(GAME.host, GAME.port, true) }
+        session.receive("connect")
+        session.status("connection", "disconnected")
+        waitForPill(R.string.connection_disconnected)
+
+        // Before the profile has loaded its settings cannot change: said, and still asked
+        session.certificateRefused(SELF_SIGNED)
+        activate(hasText(string(R.string.certificate_accept)))
+        waitUntilDisplayed(compose.activity.getString(R.string.certificate_not_accepted, string(R.string.profiles_error_not_attached)))
+        compose.onNodeWithText(string(R.string.certificate_refused_title)).assertIsDisplayed()
+        session.assertNoRequest(setOf("setSettings", "connect"), 500)
+
+        session.status("profile", "Game loaded")
+        for (fact in listOf(
+            compose.activity.getString(R.string.certificate_error, SELF_SIGNED.errors.single()),
+            compose.activity.getString(R.string.certificate_issued_to, "localhost"),
+            compose.activity.getString(R.string.certificate_issuer, "localhost"),
+            compose.activity.getString(R.string.certificate_serial, SELF_SIGNED.serial),
+            compose.activity.getString(R.string.certificate_turns_on, string(R.string.settings_accept_self_signed_certificate)),
+        )) {
+            compose.onNodeWithText(fact).assertIsDisplayed()
+        }
+        assertFalse(
+            "only the switch this certificate needs",
+            displayed(compose.activity.getString(R.string.certificate_turns_on, string(R.string.settings_accept_expired_certificate))),
+        )
+
+        activate(hasText(string(R.string.certificate_accept)))
+        val accepted = generateSequence { session.receive("setSettings") }.first { it.getJSONObject("values").has("sslIgnoreSelfSigned") }
+        assertEquals("sslIgnoreSelfSigned", accepted.getJSONObject("values").keys().asSequence().single())
+        assertEquals(true, accepted.getJSONObject("values").getBoolean("sslIgnoreSelfSigned"))
+        val again = session.receive("connect")
+        assertEquals(GAME.port, again.getInt("port"))
+        assertTrue(again.getBoolean("tls"))
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.certificate_refused_title)) }
+    }
+
+    @Test
+    fun aCertificateOnlyIgnoringAllLetsPastSendsThePlayerToTheGamesSettings() {
+        session.status("connection", "disconnected")
+        val elsewhere = SELF_SIGNED.copy(issuedTo = "elsewhere.invalid", selfSigned = false, others = true, errors = listOf("The host name did not match any of the valid hosts for this certificate"))
+        session.certificateRefused(elsewhere)
+        waitUntilDisplayed(string(R.string.certificate_only_ignore_all))
+        assertFalse("nothing to accept here", displayed(string(R.string.certificate_accept)))
+
+        // Cancel puts it off; the same certificate, told again as an attach tells it, is not asked about again
+        activate(hasText(string(R.string.certificate_cancel)))
+        compose.waitUntil(WAIT_MS) { !displayed(string(R.string.certificate_refused_title)) }
+        session.certificateRefused(elsewhere)
+        session.line(1, "after")
+        waitUntilDisplayed("after")
+        assertFalse(displayed(string(R.string.certificate_refused_title)))
+
+        // Refused again after another try, it is asked about again
+        session.certificateRefused(null)
+        session.certificateRefused(elsewhere)
+        activate(hasText(string(R.string.certificate_open_settings)))
+        waitUntilDisplayed(string(R.string.settings_title))
+        session.assertNoRequest("setSettings", 500)
     }
 
     @Test
@@ -426,9 +537,11 @@ class GameScreenTest {
 
     private companion object {
         val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+        val SELF_SIGNED = RefusedCertificate("localhost", "localhost", "2030-01-02T00:00:00Z", "4A:2B", false, true, false, listOf("The certificate is self-signed, and untrusted"))
 
         // More lines than any emulator screen shows
         const val MANY = 200
+        const val SECURE_PORT = 4443
         const val WAIT_MS = 10_000L
 
         // Of 1 for the same shape, and 0.71 at worst when drawn part of a pixel off; the pencil, the most like the wand

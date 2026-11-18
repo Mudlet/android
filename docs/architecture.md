@@ -722,8 +722,9 @@ changed for its next connection (`setLogin()`, `setPassword()`, `0018-headless-l
 TLS choice and automatic reconnect changed for the connections after the one that is open (`setAddress()`,
 `setAutoReconnect()`, `0019-headless-connection-change.patch`), and the timers,
 keys and buttons edited as the triggers are, with what each item's row shows under its name
-(`0020-headless-script-items-more.patch`), and the error console's entries, each with the item that raised it
-(`0023-headless-error-console-entries.patch`).
+(`0020-headless-script-items-more.patch`), the error console's entries, each with the item that raised it
+(`0023-headless-error-console-entries.patch`), and the certificate a secure connection was refused for
+(`refusedCertificate()`, `0024-headless-refused-certificate.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -930,8 +931,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   form and the URL cut to its host, as is another URL whose user name is an e-mail address; a user name with a space
   that the reason repeats in the URL cut with it, and the query it repeats after the path masked; and a password that
   is a word of the reason in another case masked as it is, the word kept;
-- TLS (see "TLS" below): a self-signed certificate refused, TLS to a port that does not speak it, then the same
-  certificate accepted once the profile accepts self-signed ones.
+- TLS (see "TLS" below): a self-signed certificate refused and passed on with its details, TLS to a port that does
+  not speak it, then the same certificate accepted once the profile accepts self-signed ones, while an expired one
+  and one for another server are still refused.
 
 `native/tests/test_mudlet_restore.py` checks the restore below the same way, killing the engine with SIGKILL, with
 one profile open and with two: a profile opened with a password comes back without it (`passwordGiven`), the
@@ -1454,9 +1456,25 @@ job summary gives the size of each APK with them.
 name; a certificate that fails ends the connection, the reasons are printed in the main console ("[ ALERT ] - Socket
 got disconnected", then reasons such as "The certificate is self-signed, and untrusted"), status `connection`
 becomes `disconnected`, and the profile does not reconnect. A profile that accepts expired or self-signed certificates, or any error (the GUI's three boxes, saved
-with the profile), connects anyway. The app has no screen for those boxes yet, so a self-signed game needs a
-profile from the GUI or edited by hand. A secure connection needs the game's name, not an IP address, as Mudlet
+with the profile), connects anyway; the app has them as the three switches of the game's Security settings. The
+engine then passes on the certificate refused (`certificateRefused`, `0024-headless-refused-certificate.patch`): its
+names, expiry, serial number and the errors, and whether only "Ignore all certificate errors" would let it past. The
+game screen shows them in a dialog. "Accept and connect" turns on the switch for each error ("Accept an expired
+certificate", "Accept a self-signed certificate") and connects again; a certificate with any other error, such as one
+for another server, offers the game's settings instead, so ignoring every error is never one tap from the dialog.
+Nothing is accepted without the player, and what is accepted stays visible and can be turned off in the game's
+Security settings. Back or Cancel accepts nothing, and the same certificate is not asked about again until a later
+connection is refused (divergences.md). A secure connection needs the game's name, not an IP address, as Mudlet
 refuses TLS to a raw address.
+
+**The game's secure port.** A game connected without TLS may say in MSSP that it has a secure port. Mudlet then
+asks, as its GUI does, whether to move there, unless the profile's "Offer a secure connection" (`askTlsAvailable`) is
+off or its server is an address; the engine passes the question on (`secureOffer`) and the game screen asks it in a
+dialog of the app's own words, as Mudlet's are not translated in the engine. "Connect securely" stores the port with
+TLS on and connects there; "No, don't ask again" connects again where it was and turns the setting off, both as on
+the desktop (`answerSecureOffer`). Back answers neither, and the offer is asked again with the game's next one
+(divergences.md). The engine sends `profiles` after a yes, so the UI's next connect asks for the new port with TLS,
+and the UI forgets the address it remembered for Reconnect.
 
 On Android Qt does not read a certificate folder. The first TLS connection asks Java's default `TrustManagerFactory`
 for its accepted issuers (`QtNative.getSSLCertificates()`), Android's system CAs, and Qt keeps them for the process.
@@ -1478,6 +1496,9 @@ against `fake_telnet.py` behind Python's `ssl` with a certificate it makes with 
 - a `connect` without TLS to the running TLS profile is refused;
 - after the profile's `mSslIgnoreSelfSigned` is set in its save, the same server's banner arrives and the game sees
   a TLS 1.x connection.
+- the game's offer of its secure port (`fake_telnet.py`'s `mssp`) is passed on, lapses with its connection, and is
+  answered: no reconnects and turns `askTlsAvailable` off, after which an offer is not passed on; yes stores the port
+  with TLS on, says so in `profiles` and connects there over TLS.
 
 CI's APK check (`.github/actions/check-apk`) looks in each APK for the files Qt will load: `libcrypto_3.so`,
 `libssl_3.so` and Qt's OpenSSL plugin, that plugin's `_3` suffix, the SONAMEs, `libssl_3.so`'s dependency on

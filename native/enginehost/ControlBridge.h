@@ -33,6 +33,7 @@ public:
     void profileState(const QString& name, ProfileState state) override;
     void profilePasswordGiven(const QString& name, bool given) override;
     void profileClosed(const QString& name) override;
+    void profilesChanged() override;
     void engineStatus(const QString& key, const QString& value) override;
     IFrontend* controlFrontend() override { return this; }
 

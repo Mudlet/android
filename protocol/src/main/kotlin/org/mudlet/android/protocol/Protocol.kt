@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 29
+const val PROTOCOL_VERSION = 30
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -45,6 +45,23 @@ const val MODIFIER_SHIFT = 0x02000000
 const val MODIFIER_CONTROL = 0x04000000
 const val MODIFIER_ALT = 0x08000000
 const val MODIFIER_META = 0x10000000
+
+/**
+ * The game's certificate a secure connection was refused for, as desktop Mudlet's preferences show it: the common names
+ * it was issued to and by, when it runs out (ISO 8601, UTC; empty if it does not say), its serial number, whether it had
+ * [expired] or was [selfSigned] (what the game's sslIgnoreExpired and sslIgnoreSelfSigned settings let past) or had
+ * [others], which only sslIgnoreAll lets past, and every error refused, in Qt's English words.
+ */
+data class RefusedCertificate(
+    val issuedTo: String,
+    val issuer: String,
+    val expires: String,
+    val serial: String,
+    val expired: Boolean,
+    val selfSigned: Boolean,
+    val others: Boolean,
+    val errors: List<String>,
+)
 
 /** A profile as the engine lists it; the password is never part of one. */
 data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
@@ -694,6 +711,12 @@ sealed interface EngineMessage {
     /** The game hides what the player types, as for a password ([wanted]), or has stopped. */
     data class HiddenInput(val wanted: Boolean) : EngineMessage
 
+    /** The game's offer of a secure port waits for the player's answer ([Requests.answerSecureOffer]), or no longer does. */
+    data class SecureOffer(val offered: Boolean) : EngineMessage
+
+    /** Why the last secure connection ended, when it was the game's [certificate]; null once the next one is tried. */
+    data class CertificateRefused(val certificate: RefusedCertificate?) : EngineMessage
+
     /** The input line's history, newest first. */
     data class History(val lines: List<String>) : EngineMessage
 
@@ -1165,6 +1188,13 @@ object Requests {
     /** Stops that download while it is cancelable. Answered only by an Error, when refused. */
     fun cancelMapDownload(): JSONObject = JSONObject().put("t", "cancelMapDownload")
 
+    /**
+     * The player's answer to [EngineMessage.SecureOffer], as desktop Mudlet's Yes and No: [accept] stores the secure port
+     * with TLS on and connects there, else connects again where it was and asks no more. Answered only by an Error, when
+     * refused.
+     */
+    fun answerSecureOffer(accept: Boolean): JSONObject = JSONObject().put("t", "answerSecureOffer").put("accept", accept)
+
     /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
     fun getSettings(keys: List<String>, id: Long): JSONObject {
         require(keys.isNotEmpty()) { "getSettings takes at least one key" }
@@ -1270,6 +1300,25 @@ class FrameReader(input: InputStream) {
             "openProfiles" -> EngineMessage.OpenProfiles(objects(o.optJSONArray("profiles")).map(::parseOpenProfile), o.opt("re"))
 
             "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
+
+            "secureOffer" -> EngineMessage.SecureOffer(o.optBoolean("offered"))
+
+            "certificateRefused" -> EngineMessage.CertificateRefused(
+                if (!o.optBoolean("refused")) {
+                    null
+                } else {
+                    RefusedCertificate(
+                        o.optString("issuedTo"),
+                        o.optString("issuer"),
+                        o.optString("expires"),
+                        o.optString("serial"),
+                        o.optBoolean("expired"),
+                        o.optBoolean("selfSigned"),
+                        o.optBoolean("others"),
+                        parseStrings(o.optJSONArray("errors")),
+                    )
+                },
+            )
 
             "history" -> EngineMessage.History(parseStrings(o.optJSONArray("lines")))
 

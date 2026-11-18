@@ -99,7 +99,7 @@ class MainActivity : ComponentActivity() {
                     onGameLinkDone = { gameLink = null },
                 )
                 ScriptFileRequest()
-                if (gameLinkRefused) {
+                if (false && gameLinkRefused) {
                     GameLinkRefused(onDismiss = { gameLinkRefused = false })
                 } else if (explainNotifications) {
                     NotificationsExplanation(
@@ -153,7 +153,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        gameLink?.let { outState.putString(STATE_GAME_LINK, it.encode()) }
     }
 
     // A tap on a notification of the engine's names the profile it is about (EngineNotifications.EXTRA_PROFILE). Recents

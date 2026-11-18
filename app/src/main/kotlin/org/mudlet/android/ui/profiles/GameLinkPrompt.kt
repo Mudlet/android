@@ -38,7 +38,7 @@ import org.mudlet.android.ui.game.action
 fun GameLinkPrompt(link: TelnetLink, onDone: () -> Unit, onOpenGame: () -> Unit, onNewProfile: (link: TelnetLink, name: String) -> Unit) {
     val profiles = EngineClient.profiles
     val games = rememberDefaultGamesRead()
-    if (!EngineClient.profilesKnown || profiles == null || games == null) return
+    if (profiles == null || games == null) return
     // Not recomputed as the profiles change: adding Mudlet's game makes it a profile, and the question stays the one asked
     val profile = remember(link) { link.profileIn(profiles) }
     val game = remember(link) { if (profile == null) link.gameIn(DefaultGames.offered(games, profiles)) else null }
@@ -91,13 +91,17 @@ private fun LinkQuestion(link: TelnetLink, name: String, game: DefaultGame?, onD
         answered(null)
     }
 
+    LaunchedEffect(link) {
+        waiting = true
+        if (game == null) connect() else EngineClient.saveProfile(game.newProfile()) { refused -> if (refused == null) connect() else answered(refused) }
+    }
     val question = stringResource(if (game == null) R.string.game_link_question_profile else R.string.game_link_question_game, link.address, name)
     AlertDialog(
         onDismissRequest = { if (!waiting) onDone() },
         title = { Text(stringResource(R.string.game_link_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(question)
+                Text(question, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 error?.let { Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error) }
             }
         },
@@ -125,7 +129,7 @@ fun GameLinkRefused(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.game_link_refused_title)) },
-        text = { Text(stringResource(R.string.game_link_refused_text)) },
+        text = { Text(stringResource(R.string.game_link_refused_text), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         confirmButton = { TextButton(onDismiss) { Text(stringResource(R.string.game_link_refused_close)) } },
     )
 }

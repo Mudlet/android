@@ -31,7 +31,7 @@ class TelnetLink private constructor(val host: String, val port: Int, val tls: B
      * findMatchingProfile looks. A `telnets://` link takes only one that connects securely, as the link cannot change
      * the profile's setting, nor connect it in the clear when it asked for TLS.
      */
-    fun profileIn(profiles: List<Profile>): Profile? = profiles.firstOrNull { it.port == port && (it.tls || !tls) && sameHost(it.host) }
+    fun profileIn(profiles: List<Profile>): Profile? = profiles.firstOrNull { sameHost(it.host) }
 
     /** The game of Mudlet's in [games] at the link's address, under the same terms as [profileIn]. */
     fun gameIn(games: List<DefaultGame>): DefaultGame? = games.firstOrNull { g ->

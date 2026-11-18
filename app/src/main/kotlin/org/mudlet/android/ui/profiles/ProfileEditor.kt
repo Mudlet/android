@@ -56,8 +56,8 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null)
     val context = LocalContext.current
     val passwords = remember { PasswordStore(context) }
     val existing = remember(name) { name?.let { n -> EngineClient.profiles?.firstOrNull { it.name.equals(n, ignoreCase = true) } } }
-    val start = existing ?: fromLink
-    var newName by rememberSaveable { mutableStateOf(fromLink?.name.orEmpty()) }
+    val start = existing
+    var newName by rememberSaveable { mutableStateOf("") }
     var host by rememberSaveable { mutableStateOf(start?.host ?: "") }
     var port by rememberSaveable { mutableStateOf(start?.port?.toString() ?: "23") }
     var tls by rememberSaveable { mutableStateOf(start?.tls ?: false) }
@@ -103,7 +103,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null)
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (fromLink != null) {
-                Text(stringResource(R.string.game_link_check), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.game_link_check), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             if (name == null) {
                 OutlinedTextField(

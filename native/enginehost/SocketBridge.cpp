@@ -622,7 +622,6 @@ void SocketBridge::sendState()
     sendFrame(secureOfferMessage());
     sendFrame(scriptsStoppedMessage());
     sendFrame(replayRecordingMessage());
-    sendFrame(replayMessage());
     sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));

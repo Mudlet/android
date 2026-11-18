@@ -740,7 +740,7 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ReplayRecording -> post { replayRecording = message }
 
-                is EngineMessage.Replay -> post { replay = message }
+                is EngineMessage.Replay -> {}
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 

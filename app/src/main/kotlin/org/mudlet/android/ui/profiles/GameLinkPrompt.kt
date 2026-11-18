@@ -31,13 +31,14 @@ import org.mudlet.android.ui.game.action
  * address, or the game of Mudlet's there they have no profile for yet, connects once they have said yes to a question
  * that names the address, as desktop's connectFromGameLink asks; any other address opens a new game's editor filled
  * in from the link ([onNewProfile], with the name to suggest), which connects nothing. A link never changes a saved
- * profile. Nothing shows until the engine has listed its profiles. [onDone] once the link is dealt with.
+ * profile. Nothing shows until the engine has listed its profiles since the UI attached: a list from an earlier
+ * attach may be out of date. [onDone] once the link is dealt with.
  */
 @Composable
 fun GameLinkPrompt(link: TelnetLink, onDone: () -> Unit, onOpenGame: () -> Unit, onNewProfile: (link: TelnetLink, name: String) -> Unit) {
     val profiles = EngineClient.profiles
     val games = rememberDefaultGamesRead()
-    if (profiles == null || games == null) return
+    if (!EngineClient.profilesKnown || profiles == null || games == null) return
     // Not recomputed as the profiles change: adding Mudlet's game makes it a profile, and the question stays the one asked
     val profile = remember(link) { link.profileIn(profiles) }
     val game = remember(link) { if (profile == null) link.gameIn(DefaultGames.offered(games, profiles)) else null }

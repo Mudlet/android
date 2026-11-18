@@ -104,6 +104,9 @@ class GameLinkTest {
         val question = text(R.string.game_link_question_profile, "a.example:23", ALPHA.name)
         waitFor(hasText(question))
         compose.activityRule.scenario.recreate()
+        // The new Activity attaches to the engine again, and the prompt waits for its list since then
+        engine = fake.engine.nextSession()
+        listed(ALPHA)
         waitFor(hasText(question))
         engine.assertNoRequest(setOf("openProfile", "saveProfile"), QUIET_MS)
         activate(inDialog(text(R.string.game_link_cancel)))
@@ -290,9 +293,43 @@ class GameLinkColdStartTest {
             GameLinkTest.activate(compose, GameLinkTest.inDialog(context.getString(R.string.game_link_connect)))
             assertEquals(GameLinkTest.ALPHA.name, engine.receive("openProfile").getString("name"))
         } finally {
-            instrumentation.runOnMainSync {
-                ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).forEach { it.finish() }
-            }
+            finishAll()
         }
+    }
+
+    @Test
+    fun aLinkIsJudgedByTheEnginesListNotTheOneFromTheLastTimeTheAppWasOpen() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        try {
+            // The app was used with other profiles, then left, so that its list is no longer the engine's word
+            context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val before = fake.engine.nextSession()
+            before.profiles(listOf(OTHER), before.receive("listProfiles"))
+            compose.waitUntil(10_000) { compose.onAllNodes(hasText(context.getString(R.string.default_games_title))).fetchSemanticsNodes().isNotEmpty() }
+            finishAll()
+            compose.waitUntil(10_000) { !EngineClient.profilesKnown }
+
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("telnet://a.example:23")).setPackage(context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            val engine = fake.engine.nextSession()
+            val list = engine.receive("listProfiles")
+            // The prompt has had its chance to judge the link by the old list
+            compose.waitForIdle()
+            engine.profiles(listOf(OTHER, GameLinkTest.ALPHA), list)
+            val question = context.getString(R.string.game_link_question_profile, "a.example:23", GameLinkTest.ALPHA.name)
+            compose.waitUntil(10_000) { compose.onAllNodes(hasText(question)).fetchSemanticsNodes().isNotEmpty() }
+        } finally {
+            finishAll()
+        }
+    }
+
+    private fun finishAll() = InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).forEach { it.finish() }
+    }
+
+    private companion object {
+        val OTHER = Profile("Other", "127.0.0.1", 4001, false, "", false)
     }
 }

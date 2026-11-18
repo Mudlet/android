@@ -122,6 +122,10 @@ object EngineClient {
     var profiles by mutableStateOf<List<Profile>?>(null)
         private set
 
+    /** Whether [profiles] is the engine's word on this link: from its list until the link goes down. */
+    var profilesKnown by mutableStateOf(false)
+        private set
+
     /** A session for each profile the engine has open, in the order they were opened. */
     val sessions: List<ProfileSession> get() = openSessions
 
@@ -227,6 +231,7 @@ object EngineClient {
         if (!attached) return
         attached = false
         openProfilesKnown = false
+        profilesKnown = false
         passwordOffered.clear()
         link.stop()
         sessions.forEach(ProfileSession::stop)
@@ -561,6 +566,7 @@ object EngineClient {
 
                 is EngineMessage.Profiles -> main.post {
                     profiles = message.profiles
+                    profilesKnown = true
                     answerProfileRequest(message.replyTo, null)
                 }
 
@@ -604,6 +610,7 @@ object EngineClient {
         override fun onDetached(reason: String) {
             main.post {
                 openProfilesKnown = false
+                profilesKnown = false
                 passwordOffered.clear()
                 engineStatus.clear()
                 engineLosses++

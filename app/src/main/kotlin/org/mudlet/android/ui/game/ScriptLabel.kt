@@ -463,8 +463,8 @@ private suspend fun PointerInputScope.labelGestures(
     var lastTap = 0L
     awaitEachGesture {
         // Out of a box that scrolls too, where the pass makes no difference: the same down comes again in Main, unmoved
-        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         val inBox = inScrollingBox()
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         if (inBox && down.isConsumed) {
             // The box took the touch to stop its fling
             lastTap = 0L

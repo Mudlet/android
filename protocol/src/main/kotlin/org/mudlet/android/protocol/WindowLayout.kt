@@ -40,8 +40,7 @@ fun layoutSize(w: Float, h: Float): Pair<Int, Int> {
         0,
         when {
             big < 0x7FFF -> big
-            big < 0xFFFF -> 0x7FFE
-            else -> 0x1FFE
+            else -> big
         },
     )
     return if (w >= h) big to small else small to big
@@ -80,7 +79,7 @@ data class DrawnWindow(val placed: PlacedWindow, val scrolled: List<DrawnWindow>
             // Those in no scroll box are under the null key
             val byBox = windows.groupBy { it.scrollBox }
             fun drawn(placed: PlacedWindow, dx: Float, dy: Float): DrawnWindow {
-                val content = placed.content
+                val content = placed.offset(-dx, -dy).content
                 val scrolled = if (content == null) emptyList() else byBox[placed.window.key].orEmpty().map { drawn(it, content.x, content.y) }
                 return DrawnWindow(placed.offset(-dx, -dy), scrolled)
             }
@@ -336,6 +335,7 @@ data class WindowLayout(
                 // No page is a scroll box today; one would keep its content, so DrawnWindow.of keeps its windows
                 paneWindows.add(PlacedWindow(selected, content, content, content = tree.scrollContent(selected, content)))
                 tree.placeChildren(selected, content, content, paneWindows, clips)
+                paneWindows.retainAll { it.rect.intersect(content) != null }
                 // Those of the frames opened in the page
                 paneWindows.drop(1).mapNotNullTo(paneFrameTabs, ::tabsAbove)
             }
@@ -386,12 +386,13 @@ data class WindowLayout(
             val sx = if (parent.w > 0) rect.w / parent.w else 1f
             val sy = if (parent.h > 0) rect.h / parent.h else 1f
             val content = scrollContent(parent, rect)
-            val childClip = content ?: clip
+            val childClip = content?.let { it.copy(w = minOf(it.w, rect.w)) } ?: clip
             val box = if (content != null) parent.key else scrollBox
             for (child in children(parent.key)) {
                 if (!child.shown) continue
                 val full = PxRect(rect.x + child.x * sx, rect.y + child.y * sy, child.w * sx, child.h * sy)
-                val shown = full.intersect(childClip) ?: continue
+                val reach = if (content != null) childClip.copy(x = childClip.x - full.w, y = childClip.y - full.h, w = childClip.w + full.w, h = childClip.h + full.h) else childClip
+                val shown = full.intersect(reach) ?: continue
                 out.add(PlacedWindow(child, shown, full, box, scrollContent(child, full)))
                 clips[child.key] = childClip
                 placeChildren(child, full, shown, out, clips, box)
@@ -411,17 +412,14 @@ data class WindowLayout(
             if (box.kind != WindowKind.SCROLL_BOX) return null
             val sx = if (box.w > 0) rect.w / box.w else 1f
             val sy = if (box.h > 0) rect.h / box.h else 1f
-            val inside = children(box.key).filter { it.visible && (it.w != 0 || it.h != 0) }
-            // The box's own size is a script's too
-            val own = PxRect(rect.x, rect.y, min(rect.w, MAX_CONTENT_PX), min(rect.h, MAX_CONTENT_PX))
-            if (inside.isEmpty()) return own
+            val inside = children(box.key)
+            if (inside.isEmpty()) return rect
             val left = inside.minOf { it.x }
             val top = inside.minOf { it.y }
-            // The rectangle's size and twice its top left: as far past its far edge as its near one is from the widget's.
-            // As Longs: two Ints' sum may be past an Int
-            val w = inside.maxOf { it.x.toLong() + it.w } + left
-            val h = inside.maxOf { it.y.toLong() + it.h } + top
-            return if (w < 0 || h < 0) own else PxRect(rect.x, rect.y, min(w * sx, MAX_CONTENT_PX), min(h * sy, MAX_CONTENT_PX))
+            // The rectangle's size and twice its top left: as far past its far edge as its near one is from the widget's
+            val w = inside.maxOf { it.x + it.w } + left
+            val h = inside.maxOf { it.y + it.h } + top
+            return if (w < 0 || h < 0) rect else PxRect(rect.x, rect.y, w * sx, h * sy)
         }
     }
 }

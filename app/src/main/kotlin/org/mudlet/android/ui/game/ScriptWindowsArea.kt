@@ -331,16 +331,16 @@ private fun ScrollBox(drawn: DrawnWindow, windows: ScriptWindows, metrics: Conso
         // The whole box scrolls, though only part of it may show
         Box(Modifier.placeIn(full.x - placed.rect.x, full.y - placed.rect.y, full.w, full.h).verticalScroll(rememberScrollState(), enabled = scrollsDown)) {
             Box(Modifier.horizontalScroll(rememberScrollState(), enabled = scrollsAcross)) {
-                CompositionLocalProvider(LocalScrollingBox provides (LocalScrollingBox.current || scrollsDown || scrollsAcross)) {
+                CompositionLocalProvider(LocalScrollingBox provides (LocalScrollingBox.current || scrollsAcross)) {
                     // Never smaller than the box, as each scroll clips what it holds to its size: a window's 48 dp touch
                     // bounds are cut where the box cuts them, not where content smaller than the box ends. Each window
                     // places itself, at a size of its own, as in the area.
                     Layout(content = {
-                        for (window in drawn.scrolled) {
+                        for (window in drawn.scrolled.filter { it.placed.full.y < full.h }) {
                             key(window.placed.window.key) { PlacedWindowView(window, windows, metrics, density) }
                         }
                     }) { measurables, _ ->
-                        val placeables = measurables.map { it.measure(Constraints()) }
+                        val placeables = measurables.map { it.measure(Constraints(maxWidth = contentW, maxHeight = contentH)) }
                         layout(max(contentW, boxW), max(contentH, boxH)) { placeables.forEach { it.place(0, 0) } }
                     }
                 }

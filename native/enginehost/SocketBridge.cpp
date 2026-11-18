@@ -531,7 +531,6 @@ void SocketBridge::sendState()
     }
     sendFrame(hiddenInputMessage());
     sendFrame(secureOfferMessage());
-    sendFrame(scriptsStoppedMessage());
     sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));

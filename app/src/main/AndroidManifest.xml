@@ -45,5 +45,16 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/map_file_paths" />
         </provider>
+
+        <!-- Hands a replay copied into the cache (ReplayShare, in ReplayRecording.kt) to the app the player shares it with -->
+        <provider
+            android:name="org.mudlet.android.ui.game.ReplayFileProvider"
+            android:authorities="${applicationId}.replays"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/replay_files" />
+        </provider>
     </application>
 </manifest>

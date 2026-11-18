@@ -614,6 +614,7 @@ void SocketBridge::sendState()
     sendFrame(hiddenInputMessage());
     sendFrame(secureOfferMessage());
     sendFrame(scriptsStoppedMessage());
+    sendFrame(replayRecordingMessage());
     sendFrame(certificateMessage());
     if (mEngine) {
         sendFrame(historyMessage(mEngine->history()));
@@ -833,6 +834,9 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("setScriptsStopped")) {
         const QJsonValue stopped = message.value(QLatin1String("stopped"));
         refuse(type, stopped.isBool() ? mEngine->setScriptsStopped(stopped.toBool()) : QStringLiteral("stopped must be true or false"));
+    } else if (type == QLatin1String("setReplayRecording")) {
+        const QJsonValue record = message.value(QLatin1String("record"));
+        refuse(type, record.isBool() ? mEngine->setReplayRecording(record.toBool()) : QStringLiteral("record must be true or false"));
     } else if (type == QLatin1String("loadMapFile") || type == QLatin1String("saveMapFile")) {
         const QString path = message.value(QLatin1String("path")).toString();
         const auto cancelAsked = [this] {
@@ -1810,6 +1814,11 @@ QJsonObject SocketBridge::scriptsStoppedMessage() const
     return {{QStringLiteral("t"), QStringLiteral("scriptsStopped")}, {QStringLiteral("stopped"), mScriptsStopped}};
 }
 
+QJsonObject SocketBridge::replayRecordingMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("replayRecording")}, {QStringLiteral("recording"), mReplayRecording}, {QStringLiteral("file"), mRecordedReplay}};
+}
+
 QJsonObject SocketBridge::certificateMessage() const
 {
     QJsonObject message{{QStringLiteral("t"), QStringLiteral("certificateRefused")}, {QStringLiteral("refused"), mRefusedCertificate.has_value()}};
@@ -2188,6 +2197,21 @@ void SocketBridge::scriptsStopped(bool stopped)
     mScriptsStopped = stopped;
     if (outputLive()) {
         sendFrame(scriptsStoppedMessage());
+    }
+}
+
+void SocketBridge::replayRecording(bool recording, const QString& file)
+{
+    if (mMirror) {
+        mMirror->replayRecording(recording, file);
+    }
+    if (recording == mReplayRecording && file == mRecordedReplay) {
+        return;
+    }
+    mReplayRecording = recording;
+    mRecordedReplay = file;
+    if (outputLive()) {
+        sendFrame(replayRecordingMessage());
     }
 }
 

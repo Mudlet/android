@@ -4,6 +4,7 @@
 #include "THeadlessSession.h"
 
 #include <QBuffer>
+#include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QHash>
@@ -858,6 +859,10 @@ void MudletProfile::connectSession()
         // Mudlet takes the offer back with its connection
         setSecureOffer(false);
         pushRefusedCertificate();
+        // Mudlet saves a recording as its connection ends
+        if (mRecording && !mSession->replayRecording()) {
+            pushRecordingEnded();
+        }
         mFrontend->status(QStringLiteral("connection"), QStringLiteral("disconnected"));
         if (mState == State::stopping) {
             return;
@@ -1540,6 +1545,10 @@ void MudletProfile::onProfileClosed()
     setSecureOffer(false);
     mFrontend->certificateRefused(std::nullopt);
     mFrontend->scriptsStopped(false);
+    mRecording = false;
+    mReplaysBefore.clear();
+    mRecordedFile.clear();
+    mFrontend->replayRecording(false, QString());
 }
 
 void MudletProfile::pushWindows(bool withText)
@@ -2255,6 +2264,55 @@ QString MudletProfile::setScriptsStopped(bool stopped)
     }
     mFrontend->scriptsStopped(mSession->scriptsStopped());
     return {};
+}
+
+QString MudletProfile::replayFolder() const
+{
+    // As MudletApp::getMudletPath(enums::profileReplayAndLogFilesPath) names it
+    return QStringLiteral("%1/profiles/%2/log").arg(mEngine.mConfigDir, mProfile);
+}
+
+QStringList MudletProfile::replays() const
+{
+    return QDir(replayFolder()).entryList({QStringLiteral("*.dat")}, QDir::Files);
+}
+
+QString MudletProfile::setReplayRecording(bool record)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    const QStringList before = record ? replays() : QStringList();
+    if (!mSession->setReplayRecording(record)) {
+        // A stop that could not save still ends the recording
+        if (mRecording && !mSession->replayRecording()) {
+            pushRecordingEnded();
+        }
+        return mSession->errorString();
+    }
+    if (record) {
+        mRecording = true;
+        mReplaysBefore = before;
+        mFrontend->replayRecording(true, mRecordedFile);
+    } else {
+        pushRecordingEnded();
+    }
+    return {};
+}
+
+void MudletProfile::pushRecordingEnded()
+{
+    mRecording = false;
+    QStringList saved = replays();
+    saved.removeIf([this](const QString& file) {
+        return mReplaysBefore.contains(file);
+    });
+    mReplaysBefore.clear();
+    // None where Mudlet could not save it, so the one saved before is still the last
+    if (!saved.isEmpty()) {
+        mRecordedFile = saved.constFirst();
+    }
+    mFrontend->replayRecording(false, mRecordedFile);
 }
 
 QString MudletProfile::answerSecureOffer(bool accept)

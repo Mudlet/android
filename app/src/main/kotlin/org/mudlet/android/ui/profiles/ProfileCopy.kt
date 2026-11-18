@@ -246,14 +246,20 @@ internal fun copyProfile(context: Context, source: String, name: String, kind: C
 
 /**
  * Gives the copy [name] what the app keeps for the profile [source] beside its folder, on the main thread, as their
- * other writers are: with [withPassword] the stored password, else none.
+ * other writers are: with [withPassword] the stored password, else none, and never a proxy's password.
  */
 private fun copyAppState(context: Context, source: String, name: String, withPassword: Boolean): PasswordTrouble? {
     // The copy has its source's settings, or like it none yet, so it is given what its source is still to be given
     Settings.setAwaitsDefaults(name, Settings.awaitsDefaults(source))
     Settings.setAwaitsInputClear(name, Settings.awaitsInputClear(source))
     val passwords = PasswordStore(context)
-    if (withPassword) return if (passwords.get(source)?.let { passwords.set(name, it) } == true) null else PasswordTrouble.NOT_COPIED
-    // Or the copy would log in with one a profile of its name left behind
-    return if (passwords.forget(name)) null else PasswordTrouble.NOT_CLEARED
+    val trouble = if (withPassword) {
+        if (passwords.get(source)?.let { passwords.set(name, it) } == true) null else PasswordTrouble.NOT_COPIED
+    } else {
+        // Or the copy would log in with one a profile of its name left behind
+        if (passwords.forget(name)) null else PasswordTrouble.NOT_CLEARED
+    }
+    // A proxy's password never goes to a copy, as on desktop, nor stays from a profile of the copy's name
+    val proxyCleared = passwords.forget(name, PasswordStore.Kind.PROXY)
+    return trouble ?: if (proxyCleared) null else PasswordTrouble.NOT_CLEARED
 }

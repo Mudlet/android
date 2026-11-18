@@ -343,6 +343,11 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         /** The answer to a getSettings or setSettings whose "id" was [re]: the profile's [values] of the settings it named. */
         fun settings(values: Map<String, Any>, re: Any) = send(JSONObject().put("t", "settings").put("values", JSONObject(values)).put("re", re))
 
+        /** The answer to a getProxy or setProxy whose "id" was [re]: the proxy the profile then holds. */
+        fun proxy(use: Boolean, host: String, port: Int, user: String, re: Any) = send(
+            JSONObject().put("t", "proxy").put("use", use).put("host", host).put("port", port).put("user", user).put("re", re),
+        )
+
         fun hiddenInput(wanted: Boolean) = send(JSONObject().put("t", "hiddenInput").put("wanted", wanted))
 
         fun secureOffer(offered: Boolean) = send(JSONObject().put("t", "secureOffer").put("offered", offered))

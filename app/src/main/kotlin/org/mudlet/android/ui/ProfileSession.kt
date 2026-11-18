@@ -22,6 +22,7 @@ import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.MediaCache
 import org.mudlet.android.protocol.OpenProfile
+import org.mudlet.android.protocol.ProxySettings
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.Requests
 import org.mudlet.android.protocol.applyLineUpdates
@@ -229,6 +230,7 @@ class ProfileSession internal constructor(
 
     // Main thread only
     private val completions = HashMap<Long, (String) -> Unit>()
+    private val proxyAnswers = HashMap<Long, (proxy: ProxySettings?, refused: String?) -> Unit>()
     private val sendsAwaitingClear = ArrayDeque<Long>()
 
     // The number of the first line the engine instance attached now sent, as a new instance counts its seqs from 1 again
@@ -495,6 +497,18 @@ class ProfileSession internal constructor(
         if (settingsAvailable) sendSettings(Requests.getSettings(Settings.mudletSettings.map { it.key }, newRequestId()))
     }
 
+    /**
+     * Asks for this game's proxy, or changes it to [set] first; [onAnswer] gets the proxy Mudlet then holds, or null and
+     * why it did not. False, asking nothing, while its profile has not loaded or the link is down.
+     */
+    fun requestProxy(set: ProxySettings?, onAnswer: (proxy: ProxySettings?, refused: String?) -> Unit): Boolean {
+        if (!settingsAvailable) return false
+        val id = newRequestId()
+        if (!send(if (set == null) Requests.getProxy(id) else Requests.setProxy(set, id))) return false
+        proxyAnswers[id] = onAnswer
+        return true
+    }
+
     /** Whether this game's settings can be read and changed: once its profile has loaded. */
     val settingsAvailable: Boolean get() = status["profile"]?.endsWith(LOADED) == true
 
@@ -705,6 +719,10 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.Synced -> replaying = false
 
+                is EngineMessage.Proxy -> post {
+                    (message.replyTo as? Number)?.toLong()?.let(proxyAnswers::remove)?.invoke(message.proxy, null)
+                }
+
                 is EngineMessage.Status -> if (message.key == "completion") {
                     val id = (message.replyTo as? Number)?.toLong()
                     if (id != null) post { completions.remove(id)?.invoke(message.value) }
@@ -845,6 +863,8 @@ class ProfileSession internal constructor(
                         // The controls follow the engine's state alone, so they already show what the engine kept, and
                         // Mudlet says why a recording failed in the game's text
                         Log.w(TAG, message.message)
+                    } else if (id != null && id in proxyAnswers) {
+                        proxyAnswers.remove(id)?.invoke(null, reason)
                     } else if (request in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(request, reason, message.replyTo)
                     } else if (request in PackagesClient.REQUESTS) {
@@ -864,6 +884,9 @@ class ProfileSession internal constructor(
             resetStatus()
             post {
                 completions.clear()
+                val unanswered = proxyAnswers.values.toList()
+                proxyAnswers.clear()
+                unanswered.forEach { it(null, app.getString(R.string.profiles_error_not_attached)) }
                 linkState = "connection lost ($reason); reconnecting"
             }
         }

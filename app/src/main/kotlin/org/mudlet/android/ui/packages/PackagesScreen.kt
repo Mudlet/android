@@ -53,9 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.mudlet.android.R
 import org.mudlet.android.protocol.InstalledPackage
 import org.mudlet.android.protocol.PackageInstallResult
@@ -64,6 +62,7 @@ import org.mudlet.android.ui.PackageNotice
 import org.mudlet.android.ui.PackagesClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
 import org.mudlet.android.ui.game.engineImage
+import org.mudlet.android.ui.inBackground
 import org.mudlet.android.ui.settings.MAX_WIDTH
 import java.io.File
 import java.util.UUID
@@ -92,7 +91,7 @@ internal fun PackagesScreen(packages: PackagesClient, game: String, onBack: () -
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            val copy = withContext(Dispatchers.IO) { copyPicked(context, uri) }
+            val copy = inBackground { copyPicked(context, uri) }
             if (copy == null) {
                 host.showSnackbar(resources.getString(R.string.packages_unreadable), withDismissAction = true)
             } else {

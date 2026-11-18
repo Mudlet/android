@@ -25,8 +25,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.mudlet.android.R
 import org.mudlet.android.report.CollectedReport
 import org.mudlet.android.report.ReportCollector
@@ -37,6 +35,7 @@ import org.mudlet.android.ui.about.Heading
 import org.mudlet.android.ui.about.Paragraph
 import org.mudlet.android.ui.about.openLink
 import org.mudlet.android.ui.copyText
+import org.mudlet.android.ui.inBackground
 import org.mudlet.android.ui.shareText
 
 /**
@@ -49,7 +48,8 @@ fun ReportProblemScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val report by produceState<CollectedReport?>(null) {
-        value = withContext(Dispatchers.IO) { ReportCollector.collect(context.applicationContext, EngineClient.profiles) }
+        val known = EngineClient.profiles
+        value = inBackground { ReportCollector.collect(context.applicationContext, known) }
     }
     val ready = report
     val enabled = ready != null

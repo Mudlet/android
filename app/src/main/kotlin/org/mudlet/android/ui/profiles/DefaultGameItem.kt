@@ -39,13 +39,12 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.mudlet.android.R
 import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.about.openLink
 import org.mudlet.android.ui.about.readAsset
+import org.mudlet.android.ui.inBackground
 import java.io.IOException
 import java.text.Collator
 
@@ -64,7 +63,7 @@ fun rememberDefaultGames(): List<DefaultGame> = rememberDefaultGamesRead() ?: em
 fun rememberDefaultGamesRead(): List<DefaultGame>? {
     val context = LocalContext.current
     val games by produceState(GameAssets.games) {
-        if (GameAssets.games == null) value = withContext(Dispatchers.IO) { GameAssets.loadGames(context) }
+        if (GameAssets.games == null) value = inBackground { GameAssets.loadGames(context) }
     }
     return games
 }
@@ -136,7 +135,7 @@ fun DefaultGameInfo(game: DefaultGame, onConnect: () -> Unit, onDismiss: () -> U
 private fun GameLogo(file: String, modifier: Modifier) {
     val context = LocalContext.current
     val logo by produceState(GameAssets.cachedLogo(file), file) {
-        if (value == null) value = withContext(Dispatchers.IO) { GameAssets.loadLogo(context, file) }
+        if (value == null) value = inBackground { GameAssets.loadLogo(context, file) }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
         logo?.let { Image(it, contentDescription = null, contentScale = ContentScale.Fit) }

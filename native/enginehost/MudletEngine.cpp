@@ -66,6 +66,9 @@ MudletEngine::MudletEngine(IEngineHost* host, int heartbeatMs, QObject* parent)
     THeadlessSession::setFilePicker([host](bool folder, const QString& title, const QString& location) {
         return host->pickFile(folder, title, location);
     });
+    THeadlessSession::setWebPageOpener([host](const QUrl& url) {
+        return host->openWebPage(url);
+    });
     reportFont();
     mHost->engineStatus(QStringLiteral("engineKind"), QStringLiteral("libmudlet"));
     mHost->engineStatus(QStringLiteral("configDir"), mConfigDir);
@@ -105,6 +108,7 @@ MudletEngine::~MudletEngine()
     delete mIdle;
     THeadlessSession::setClipboard({}, {});
     THeadlessSession::setFilePicker({});
+    THeadlessSession::setWebPageOpener({});
 }
 
 // At start-up: the profiles the engine before this one ran, if it was killed rather than stopped. The front one is

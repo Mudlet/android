@@ -1085,8 +1085,13 @@ class ProtocolTest {
     }
 
     @Test
-    fun aScriptsWebPage() {
-        assertEquals(EngineMessage.OpenUrl("https://example.org/a%20b"), FrameReader.parse(JSONObject("""{"t":"openUrl","url":"https://example.org/a%20b"}""")))
+    fun aScriptsWebPageAndItsAnswer() {
+        assertEquals(
+            EngineMessage.OpenUrl(3, "https://example.org/a%20b"),
+            FrameReader.parse(JSONObject("""{"t":"openUrl","id":3,"url":"https://example.org/a%20b"}""")),
+        )
+        assertEquals(mapOf("t" to "answerOpenUrl", "id" to 3L, "opened" to true), Requests.answerOpenUrl(3, true).toMap())
+        assertEquals(mapOf("t" to "answerOpenUrl", "id" to 4L, "opened" to false), Requests.answerOpenUrl(4, false).toMap())
     }
 
     @Test

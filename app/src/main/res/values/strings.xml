@@ -1321,6 +1321,46 @@
     <string name="map_download_failed">The map download failed: %1$s</string>
     <!-- The button, read by a screen reader, that hides the map download's message -->
     <string name="map_download_dismiss">Dismiss the map download</string>
+    <!-- The full-screen map's button that opens its menu of map files (load, save, share), read by a screen reader -->
+    <string name="map_file_menu">Map file</string>
+    <!-- The map file menu's item that opens Android's file picker to load a map (.dat, .json or .xml) in place of the profile's -->
+    <string name="map_file_load">Load map from file…</string>
+    <!-- The map file menu's item that saves the map as Mudlet's own map file (.dat) where the player picks -->
+    <string name="map_file_save">Save map to file…</string>
+    <!-- The map file menu's item that saves the map as a JSON map file where the player picks -->
+    <string name="map_file_save_json">Save map as JSON…</string>
+    <!-- The map file menu's item that offers the map file to other apps through Android's share sheet -->
+    <string name="map_file_share">Share map…</string>
+    <!-- The title of Android's share sheet offering the map file -->
+    <string name="map_file_share_title">Share the map</string>
+    <!-- Shown while a map file is being loaded, before the engine's own progress label comes -->
+    <string name="map_file_loading">Loading the map…</string>
+    <!-- Shown while the map is being saved to a file, before the engine's own progress label comes -->
+    <string name="map_file_saving">Saving the map…</string>
+    <!-- The map file's progress bar, read by a screen reader -->
+    <string name="map_file_progress">Map file progress</string>
+    <!-- The button that stops loading or saving the map file -->
+    <string name="map_file_cancel">Cancel</string>
+    <!-- Shown, and read out by TalkBack, when a map file has loaded -->
+    <string name="map_file_loaded">Map loaded</string>
+    <!-- Shown, and read out by TalkBack, when the map has been saved to the file the player picked -->
+    <string name="map_file_saved">Map saved</string>
+    <!-- Shown, and read out by TalkBack, when the map file has been handed to Android's share sheet -->
+    <string name="map_file_shared">Map ready to share</string>
+    <!-- Shown, and read out by TalkBack, when the player stopped a map file loading -->
+    <string name="map_file_load_cancelled">Map load cancelled</string>
+    <!-- Shown, and read out by TalkBack, when the player stopped the map being saved -->
+    <string name="map_file_save_cancelled">Map save cancelled</string>
+    <!-- Shown, and read out by TalkBack, when a map file did not load; %1$s is why, in Mudlet's or Android's words -->
+    <string name="map_file_load_failed">The map did not load: %1$s</string>
+    <!-- Shown, and read out by TalkBack, when the map could not be saved; %1$s is why, in Mudlet's or Android's words -->
+    <string name="map_file_save_failed">The map was not saved: %1$s</string>
+    <!-- Why a picked file was not loaded: it is too large to be a map; %1$d is the most, in megabytes -->
+    <string name="map_file_too_large">the file is larger than %1$d MB</string>
+    <!-- Why a map file was not loaded or saved: the game engine stopped and started again while it ran -->
+    <string name="map_file_engine_restarted">the game engine restarted</string>
+    <!-- The button that closes the message saying how loading or saving a map file ended, read by a screen reader -->
+    <string name="map_file_dismiss">Dismiss the map file message</string>
 
     <!-- The state of the connection to the game, on the game pill (read by TalkBack) and in the game sheet: while the app
          is not attached to Mudlet's engine -->

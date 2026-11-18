@@ -114,6 +114,9 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
         session.send(it)
     }
 
+    /** Loading the map from a file, and saving or sharing it. */
+    val files = MapFileClient(session.app, session::send)
+
     /** The map the game offers and how its download goes, as the engine last said: [NO_DOWNLOAD] until it says. */
     var download by mutableStateOf(NO_DOWNLOAD)
         private set
@@ -227,6 +230,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             }
             return true
         }
+        if (files.onRefused(request, reason)) return true
         when (request) {
             "appMapPointer", "showRoom", "setAppMapSize", "cancelMapDownload" -> {}
             "downloadMap" -> downloadAsked = false
@@ -266,6 +270,7 @@ internal class AppMapClient internal constructor(private val session: ProfileSes
             downloadEnd = null
         }
         downloadAsked = false
+        files.onAttached(sameInstance)
         rooms.onAttached(sameInstance)
         sent = Size.NONE
         if (pendingSearch != null) closeSearch()

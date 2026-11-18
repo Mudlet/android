@@ -362,6 +362,12 @@ window's are, through the same `ConsoleLine`: a tap, a long press for the menu, 
   `sendCmdLine()`, whose `commandLine` puts the text in the input line (dropped while the game hides input, as for any
   `commandLine`). An OSC 8 web link runs `openUrl()`, which the engine, a service, cannot open yet.
 
+### Copying the game's text
+A long press on a line of the main console, anywhere but on a link with a menu, opens a menu with "Copy line", "Share
+line" and the trigger (`ConsoleLine`, `copyable`); TalkBack has "Copy line" as the line's action. The line is copied as
+it reads, a concealed link as blanks; a blank line offers neither. Copying goes through `copyText()` and sharing
+through `shareText()` (`ui/ShareText.kt`), as the problem report's buttons do. Script windows offer neither yet.
+
 ### Script windows' text size
 A two-finger pinch on a mini console, user window or MXP frame sets its font size as a script's `setFontSize(name,
 size)` does, in the same whole points, so `getFontSize()` gives it, the engine's grid (and with it the columns the app

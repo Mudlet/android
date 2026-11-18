@@ -42,6 +42,8 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LinkSpan
 import org.mudlet.android.protocol.linkLabel
+import org.mudlet.android.ui.copyText
+import org.mudlet.android.ui.shareText
 
 /**
  * The links of a line: [spans] where they are in it, [info] what `getLink` last said of one (null until it answers),
@@ -67,8 +69,9 @@ internal class LineLinks(
  * has not disabled as an action that follows it, and one with a menu as another that opens it. A link that could not
  * be sent says so.
  *
- * With [onMakeTrigger], which a line of the game's own text has, a long press on a line that is not blank, anywhere but
- * on a link with a menu, opens a menu that offers to make a trigger from it, and TalkBack offers the same as an action.
+ * With [onMakeTrigger], which a line of the game's own text has, or [copyable], a long press on a line that is not
+ * blank, anywhere but on a link with a menu, opens a menu that offers to make a trigger from it, or to copy or share it
+ * as it reads, and TalkBack offers making the trigger and copying the line as actions.
  */
 @Composable
 internal fun ConsoleLine(
@@ -81,6 +84,7 @@ internal fun ConsoleLine(
     singleLine: Boolean = false,
     links: LineLinks? = null,
     onMakeTrigger: (() -> Unit)? = null,
+    copyable: Boolean = false,
 ) {
     val space = stringResource(R.string.console_blank_line_space)
 
@@ -100,17 +104,19 @@ internal fun ConsoleLine(
     }
 
     val spans = links?.spans.orEmpty()
-    // Nothing matches a blank line alone
+    // A blank line alone matches nothing and has nothing to copy
     val makeTrigger by rememberUpdatedState(onMakeTrigger?.takeIf { plain.isNotBlank() })
     val offersTrigger = makeTrigger != null
-    if (spans.isEmpty() && !offersTrigger) {
+    val offersCopy = copyable && plain.isNotBlank()
+    val offersLineMenu = offersTrigger || offersCopy
+    if (spans.isEmpty() && !offersLineMenu) {
         LineText(text, modifier.then(read(emptyList())), color, style, singleLine)
         return
     }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var menu by remember { mutableStateOf<LinkMenu?>(null) }
-    // Where along the line the menu that offers a trigger is open, in pixels
-    var triggerMenuAt by remember { mutableStateOf<Float?>(null) }
+    // Where along the line the line's own menu is open, in pixels
+    var lineMenuAt by remember { mutableStateOf<Float?>(null) }
     // The gestures read what the engine now says of a link, without starting again each time it answers
     val current by rememberUpdatedState(links)
     val context = LocalContext.current
@@ -125,13 +131,27 @@ internal fun ConsoleLine(
         makeTrigger?.invoke()
         true
     }.takeIf { offersTrigger }
+    val copyLabel = stringResource(R.string.console_copy_line)
+    val shareLabel = stringResource(R.string.console_share_line)
+    val clipLabel = stringResource(R.string.app_name)
+    val copied = stringResource(R.string.console_line_copied)
+    val noShare = stringResource(R.string.console_line_no_share)
+
+    fun copyLine() = copyText(context, clipLabel, plain, copied)
+
+    fun shareLine() = shareText(context, plain, shareLabel, noShare)
+
+    val copyAction = CustomAccessibilityAction(copyLabel) {
+        copyLine()
+        true
+    }.takeIf { offersCopy }
 
     fun spanAt(position: Offset): LinkSpan? {
         val character = layout?.characterAt(position, plain.length) ?: return null
         return current?.spans?.firstOrNull { character >= it.start && character < it.end }
     }
 
-    val touches = Modifier.pointerInput(spans, offersTrigger) {
+    val touches = Modifier.pointerInput(spans, offersLineMenu) {
         detectTapGestures(
             onTap = { position ->
                 spanAt(position)?.let { span -> if (current?.info(span.link)?.disabled != true) follow(span.link, null) }
@@ -140,7 +160,7 @@ internal fun ConsoleLine(
                 val link = spanAt(position)?.link
                 when {
                     link != null && current?.info(link)?.menu == true -> menu = LinkMenu(link, position.x)
-                    offersTrigger -> triggerMenuAt = position.x
+                    offersLineMenu -> lineMenuAt = position.x
                 }
             },
         )
@@ -151,19 +171,37 @@ internal fun ConsoleLine(
     val openInfo = open?.let { links?.info(it.link) }?.takeIf { it.menu }
     if (open != null && (openSpan == null || openInfo == null)) SideEffect { menu = null }
     Box(modifier) {
-        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction))), color, style, singleLine) { layout = it }
+        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction, copyAction))), color, style, singleLine) { layout = it }
         if (open != null && openSpan != null && openInfo != null) {
             LinkMenuView(openInfo, open.x, linkLabel(openInfo, plain.substring(openSpan.start, openSpan.end)), ::follow) { menu = null }
         }
-        triggerMenuAt?.let { x ->
-            DropdownMenu(expanded = true, onDismissRequest = { triggerMenuAt = null }, offset = DpOffset(with(LocalDensity.current) { x.toDp() }, 0.dp)) {
-                DropdownMenuItem(
-                    text = { Text(triggerLabel) },
-                    onClick = {
-                        triggerMenuAt = null
-                        makeTrigger?.invoke()
-                    },
-                )
+        lineMenuAt?.let { x ->
+            DropdownMenu(expanded = true, onDismissRequest = { lineMenuAt = null }, offset = DpOffset(with(LocalDensity.current) { x.toDp() }, 0.dp)) {
+                if (offersCopy) {
+                    DropdownMenuItem(
+                        text = { Text(copyLabel) },
+                        onClick = {
+                            lineMenuAt = null
+                            copyLine()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(shareLabel) },
+                        onClick = {
+                            lineMenuAt = null
+                            shareLine()
+                        },
+                    )
+                }
+                if (offersTrigger) {
+                    DropdownMenuItem(
+                        text = { Text(triggerLabel) },
+                        onClick = {
+                            lineMenuAt = null
+                            makeTrigger?.invoke()
+                        },
+                    )
+                }
             }
         }
     }

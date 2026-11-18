@@ -52,7 +52,7 @@ class ProtocolSpecTest {
         // The hello check, then the dispatch on the message type
         val handled = Regex("type [!=]= QLatin1String\\(\"(\\w+)\"\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
         assertEquals("requests SocketBridge.cpp and ControlBridge.cpp handle", toEngine.keys, handled)
-        val read = Regex("\\.value\\(QLatin1String\\(\"(\\w+)\"\\)\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
+        val read = Regex("(?:\\.|->)value\\(QLatin1String\\(\"(\\w+)\"\\)\\)").findAll(bridge).map { it.groupValues[1] }.toSet()
         // client is the one field the engine ignores
         assertEquals("request fields SocketBridge.cpp and ControlBridge.cpp read", toEngine.values.flatten().toSet() - "client" + "t", read)
     }

@@ -27,6 +27,7 @@ import org.mudlet.android.engine.EngineNotifications
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.ScriptFileRequest
+import org.mudlet.android.ui.game.ScriptWebPages
 import org.mudlet.android.ui.theme.MudletTheme
 
 class MainActivity : ComponentActivity() {
@@ -105,6 +106,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         EngineClient.attach()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ScriptWebPages.resumed()
     }
 
     override fun onNewIntent(intent: Intent) {

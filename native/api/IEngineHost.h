@@ -4,6 +4,7 @@
 
 class IEngine;
 class IFrontend;
+class QUrl;
 
 // What an engine tells the host of its profiles as they open and close, and of itself
 class IEngineHost
@@ -33,4 +34,6 @@ public:
     // A script's invokeFileDialog(): the path of the file the player chose, copied into location, or empty for a
     // cancel. Returns only once the player has answered, running the event loop meanwhile.
     virtual QString pickFile(bool folder, const QString& title, const QString& location) = 0;
+    // A script's openUrl() or openWebPage() for a valid URL: whether the app opened it, during the script's call
+    virtual bool openWebPage(const QUrl& url) = 0;
 };

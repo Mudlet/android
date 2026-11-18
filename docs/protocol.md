@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **37**.
+The current version is **38**.
 
 ## Transport
 
@@ -69,6 +69,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `setAppState` | `active`, `minimized` | The app is in front (`active`) or not, and its window is minimized or sent to the background (`minimized`), each a boolean (else `error`). libmudlet gives `active` to `setApplicationActive()`, so a change raises `sysApplicationFocusChangeEvent` once in each open profile, as the GUI's window gaining or losing focus does, and `minimized` to each profile's `setWindowMinimized()`, so that, with the profile's "notify on new data while minimized" on, game text then asks for `attention`. When `active` turns false, the open profiles are saved as Mudlet saves them at a close, but with no `sysExitEvent`, as the system may stop the engine without warning once the app has left the front: status `save` tells how that went. Until the first, `active` is true and `minimized` false; each holds for the profiles opened later. |
 | `answerClipboardRead` | `id`, `text` | The answer to `clipboardRead` with its `id`: the text on the device's clipboard, or empty when it holds no text or Android does not let the app read it, as when the app is not in front. Only on the control socket. One that comes after the script stopped waiting is ignored. |
 | `answerPickFile` | `id`, `path` | The answer to `pickFile` with its `id`: the path of the file the player chose, once it is in `into`, or empty for a cancel, as the desktop's dialog answers. Only on the control socket. A second answer, or one for a pick that ended, is ignored. |
+| `answerOpenUrl` | `id`, `opened` | The answer to `openUrl` with its `id`: whether the UI opened the page, a boolean; false when it refused it, as the app does unless the game's screen shows with the app in front. Only on the control socket. One that comes after the script stopped waiting is ignored. |
 | `listProfiles` | `id`? | Asks for `profiles`. |
 | `saveProfile` | `name`, `host`, `port`, `tls`, `login`, `autoReconnect`, `id`? | Creates the profile `name`, or updates the one of that name, ignoring case; an update keeps the name it was created with. All the fields are needed: `host` not empty, `port` from 1 to 65535, `tls` and `autoReconnect` booleans, `login` a string, which may be empty. A new `name` must be one Mudlet can make a folder of: only the letters A to Z, the digits, spaces and `. _ ( ) - # &`, no space at either end, and neither `.` nor `..` in it. A running profile is given all of them at once, with no close: the `login` for its next connection, and `host`, `port` and `tls` for the next connection that is made, the reconnect Mudlet makes on its own included, while the one that is open stays as it is. `autoReconnect` counts from the next time the connection is lost or fails; a retry Mudlet is already waiting to make is still made, and `disconnect` calls it off. An address Mudlet refuses, as TLS to an IP address, leaves the running profile with the one it had, and its `connect` then says why. |
 | `deleteProfile` | `name`, `id`? | Deletes the profile, with everything Mudlet keeps for it. Refused while it is running, being opened or closed, or waited for by a restore. |
@@ -254,7 +255,7 @@ no refusal: `luaCheck` says what is wrong with it.
 | `clipboardRead` | `id` | A script calls `getClipboardText()`, which Mudlet answers in the call: the UI answers at once with `answerClipboardRead` and the same `id`. The script waits for it at most 500 ms, then reads an empty clipboard, as it does at once while no UI is attached. Only on the control socket, and sent even to a lagging UI. |
 | `clipboardWrite` | `text` | A script's `setClipboardText()`: the UI puts `text` on the device's clipboard. With no UI attached, nothing is sent and the text goes nowhere. Only on the control socket, and sent even to a lagging UI. |
 | `pickFile` | `id`, `title`, `into` | A script calls `invokeFileDialog()` for a file and waits in its call, as for the desktop's dialog, while the game, timers and other scripts go on: the UI asks the player for a file with `title`, copies it into the folder `into` and answers with `answerPickFile`. Sent again, with the same `id`, to each UI that attaches while it waits. For a folder, with no UI attached, or while another pick waits, nothing is sent and the script gets an empty string, as a cancel. Only on the control socket, and sent even to a lagging UI. |
-| `openUrl` | `url` | A script's `openUrl()` or `openWebPage()` for an `http`, `https` or `mailto` URL, while the UI that attached last said `opensUrls`: the UI may open `url`, encoded. The script gets true whether or not it does, and with no UI attached nothing is sent. Without `opensUrls`, or for another scheme, the engine leaves the URL to Qt, which cannot open it from a service. Only on the control socket. |
+| `openUrl` | `id`, `url` | A script's `openUrl()` or `openWebPage()` for an `http`, `https` or `mailto` URL, while the UI that attached last said `opensUrls`: the UI answers at once with `answerOpenUrl` and the same `id`, whether it opened `url`, encoded, which the script gets, as Mudlet's `QDesktopServices::openUrl()` returns. The script waits in its call at most half a second, and gets false if no answer comes. Another scheme, a UI that did not say `opensUrls`, or none attached, and the script gets false with nothing sent. Only on the control socket. |
 | `pong` | `id` | The answer to `ping`. `id` is absent if the ping had none. |
 | `gap` | `skipped` | `skipped` lines fell out of the ring buffer before the UI could get them. They come just before the next line. |
 | `synced` | `seq` | Ends the answer to `hello`: the newest line's `seq` (0 for none) when the engine greeted the UI. |
@@ -790,7 +791,8 @@ What the control socket carries depends on the UI's `hello`:
   gets `error` (`<t>: send it on the profile's socket`).
   The clipboard's messages go on the control socket too, as the clipboard is the whole app's, and a profile's
   socket refuses `answerClipboardRead` as it refuses the control requests.
-  So do `pickFile` and `answerPickFile`, as the system's picker is the whole app's.
+  So do `pickFile` and `answerPickFile`, as the system's picker is the whole app's, and `openUrl` and
+  `answerOpenUrl`, as the app opens the page.
 - Without it, as in version 14: the front profile's lines, statuses and windows too, and the other requests go to the
   front profile, or, with none open, to the engine (in libmudlet a `connect` or `runLua` starts a profile). When the
   front changes, the new front's statuses that differ are sent. No `openProfiles` is sent unasked.
@@ -851,7 +853,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 37, which added deleting the map (`deleteMap`);
+As implemented in version 38, which had a script's web page answered (`id` in `openUrl`, `answerOpenUrl`);
+version 37 added deleting the map (`deleteMap`);
 version 36 added a script's web pages (`opensUrls` in `hello`, `openUrl`);
 version 35 added a script's file picker (`pickFile`, `answerPickFile`);
 version 34 added a script's use of the device's clipboard (`clipboardRead`, `answerClipboardRead`,

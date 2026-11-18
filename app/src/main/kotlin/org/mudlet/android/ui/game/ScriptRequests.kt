@@ -2,21 +2,27 @@ package org.mudlet.android.ui.game
 
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -156,6 +162,71 @@ internal object ScriptFiles {
             return Files.move(part.toPath(), freeFile(dir, safeName(displayName)).toPath()).toFile()
         } finally {
             part.delete()
+        }
+    }
+}
+
+/**
+ * A game script's openUrl() and openWebPage(): the page opens, in the app the system gives the link to, only from the
+ * game's screen while the app is in front, as on the desktop, where the player sees the window the script runs in; in
+ * the background, or from another screen, it is refused and the script gets false, as for a page the desktop could not
+ * open. Only web and mail links: a file:, content: or intent: link, or a game's own scheme, is refused. One page opens
+ * each time the player comes back to the app, so a script in a loop opens one, not one per call. The link is the
+ * script's: it is never logged.
+ */
+object ScriptWebPages {
+    private val schemes = setOf("http", "https", "mailto")
+
+    // Set by the game's screen while it shows; called on the main thread
+    internal var opener: ((Uri) -> Boolean)? = null
+    private var openedSinceResumed = false
+
+    /** The app came back to the front: the next page may open. */
+    fun resumed() {
+        openedSinceResumed = false
+    }
+
+    /** Whether the page at [url] opened. On the main thread. */
+    fun open(url: String): Boolean {
+        // An intent filter's scheme is case-sensitive
+        val uri = url.toUri().normalizeScheme()
+        if (uri.scheme !in schemes || openedSinceResumed) return false
+        val opened = opener?.invoke(uri) == true
+        if (opened) openedSinceResumed = true
+        return opened
+    }
+
+    internal fun intent(uri: Uri): Intent = if (uri.scheme == "mailto") {
+        Intent(Intent.ACTION_SENDTO, uri)
+    } else {
+        Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+}
+
+private const val WEB_TAG = "ScriptWebPages"
+
+/** Lets a script's page open while this game's screen shows and the app is in front ([ScriptWebPages]). */
+@Composable
+fun ScriptWebPageOpener() {
+    val activity = LocalActivity.current ?: return
+    DisposableEffect(activity) {
+        val open: (Uri) -> Boolean = open@{ uri ->
+            if ((activity as? LifecycleOwner)?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return@open false
+            // Not the exception, whose message names the link
+            try {
+                activity.startActivity(ScriptWebPages.intent(uri))
+                true
+            } catch (_: ActivityNotFoundException) {
+                Log.w(WEB_TAG, "no app opens a script's page")
+                false
+            } catch (_: SecurityException) {
+                Log.w(WEB_TAG, "the app the system chose for a script's page refused it")
+                false
+            }
+        }
+        ScriptWebPages.opener = open
+        onDispose {
+            if (ScriptWebPages.opener === open) ScriptWebPages.opener = null
         }
     }
 }

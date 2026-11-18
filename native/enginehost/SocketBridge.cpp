@@ -856,7 +856,8 @@ bool SocketBridge::handleControl(const QString& type, const QJsonObject&)
                                                             QLatin1StringView("markSeen"),
                                                             QLatin1StringView("setAppState"),
                                                             QLatin1StringView("answerClipboardRead"),
-                                                            QLatin1StringView("answerPickFile")};
+                                                            QLatin1StringView("answerPickFile"),
+                                                            QLatin1StringView("answerOpenUrl")};
     if (std::find(std::begin(controlRequests), std::end(controlRequests), type) == std::end(controlRequests)) {
         return false;
     }

@@ -62,6 +62,19 @@ cancel. Asking for a folder gives an empty string at once, as does asking with n
 script's request waits: Android's picker lends a folder only as a URI, not as a path a script could open. While the
 dialog and the picker show, the game, its timers and other scripts go on, as they do behind the desktop's dialog.
 
+## A script opens a web page
+
+A script's `openUrl()` or `openWebPage()` opens the page, in the app Android gives the link to, while the app is in
+front with the game's screen showing, and the script gets true, as on the desktop. In the background, from another of
+the app's screens, or for a scheme other than `http`, `https` and `mailto`, it is refused and the script gets false, as
+desktop Mudlet answers a page it could not open. The engine runs in a service, from which Android does not let an app
+start a browser, and a page that opened over another app while the player was elsewhere would take them away from what
+they were doing. A `file:`, `content:` or `intent:` link, or a game's own scheme, would reach the app's files or other
+apps' components rather than a page. Opening a page sends the player to another app, so a second one opens only once
+they come back: a script that opens pages in a loop opens one ("Calls the user may overrule" below). The script waits
+for the app's answer at most half a second, and gets false if none comes. A script of a game open beside the one
+showing can open a page too, as the engine does not say whose script asked.
+
 ## Settings the app keeps for every profile
 
 "Read new text aloud", "Tell games I use a screen reader" and what becomes of blank lines are the app's settings: each
@@ -320,3 +333,10 @@ sound, music or video since it loaded, or while either mute is on (`docs/archite
 desktop's toolbar always has it. The row below a phone's input line has room for a few controls only, which a button
 for a game that never plays a sound would take from the pinned commands. The two mutes are on each game's Sound
 settings page at all times, and are Mudlet's own, shared by every game, as on the desktop.
+
+## Calls the user may overrule
+
+Differences the app chose rather than had to, which the user may decide otherwise:
+
+- One web page a script opens each time the player comes back to the app, where the desktop opens every page a script
+  asks for ("A script opens a web page").

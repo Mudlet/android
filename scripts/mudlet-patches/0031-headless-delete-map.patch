@@ -1,0 +1,69 @@
+Let a frontend with no window delete the map
+
+The desktop's Map settings have a "Delete map" button, which empties the profile's map (TMap::mapClear()) and
+has the mapper show the default area (TMap::updateArea(-1)). A frontend with no window has no such dialog.
+
+- THeadlessSession::deleteMap() does the same, refusing while a map download, import or export runs, as
+  loadMapFile() and saveMapFile() do. The map files saved before stay, as on the desktop.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_files: a map with rooms emptied to no room and
+only the default area, the map files saved before kept and one loaded back, and the refusal with no profile open).
+The desktop is unchanged: nothing calls it there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index d0b86c1..c9b13a9 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -405,6 +405,7 @@ a binary map is saved in the format the profile saves its maps in, and the main
+ the GUI. They run within their call, as a script's `loadMap()` does, so a JSON or XML map's progress arrives as
+ for a script's import, and `cancelMapOperation()` from a handler of it aborts a JSON one, leaving the profile's map
+ as it was. They take only a whole path, and refuse while a map download, import or export runs.
++`deleteMap()` is that tab's "Delete map": the map is emptied, and the files saved before stay, as in the GUI.
+ 
+ A map operation or package download still open when its profile closes, or when `shutdown()` or a later
+ `start()` lets the profile go, gets its end there, so every start an app is sent is followed by one end.
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 9a3263a..888da94 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -1917,6 +1917,21 @@ bool THeadlessSession::saveMapFile(const QString& fileName)
+     return true;
+ }
+ 
++bool THeadlessSession::deleteMap()
++{
++    if (!usable()) {
++        return false;
++    }
++    if (mpHost->mpMap->importRunning() || mpHost->mpMap->hasActiveTransferProgress()) {
++        //: Error from a frontend with no window that was asked to delete the map while a map download, import or export runs
++        mErrorString = tr("A map download, import or export is running; wait for it to end.");
++        return false;
++    }
++    mpHost->mpMap->mapClear();
++    mpHost->mpMap->updateArea(-1);
++    return true;
++}
++
+ namespace {
+ 
+ // The combinations TCommandLine::event() acts on without offering them to a binding, or for a keypad key, once
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index b93153b..fb4ba05 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -457,6 +457,11 @@ public:
+     // with its progress as above, and anything else as its binary map in the format the profile saves its maps in.
+     // False, with errorString() saying why, as for loadMapFile(), and for a file that could not be written.
+     bool saveMapFile(const QString& fileName);
++    // Empties the profile's map, as the Mapper tab's "Delete map" does: no rooms or areas but the default one, the
++    // default colours, and no custom data, while the map files saved before stay. The map is drawn again as after a
++    // load. False, with errorString() saying why, while a map download, import or export runs, and where submit() is
++    // refused.
++    bool deleteMap();
+     // A key pressed as on the GUI's input line, which offers it to the profile's key bindings where that line
+     // would: the first that matches runs, or each one when the profile runs them all. The key and modifiers are
+     // those of Qt's key event, which a binding must match exactly, so a key on the keypad carries

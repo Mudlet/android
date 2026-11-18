@@ -1156,6 +1156,7 @@ class ProtocolTest {
         assertEquals(mapOf("t" to "loadMapFile", "path" to "/data/map.json"), Requests.loadMapFile("/data/map.json").toMap())
         assertEquals(mapOf("t" to "saveMapFile", "path" to "/data/map.dat"), Requests.saveMapFile("/data/map.dat").toMap())
         assertEquals(mapOf("t" to "cancelMapFile"), Requests.cancelMapFile().toMap())
+        assertEquals(mapOf("t" to "deleteMap"), Requests.deleteMap().toMap())
     }
 
     @Test

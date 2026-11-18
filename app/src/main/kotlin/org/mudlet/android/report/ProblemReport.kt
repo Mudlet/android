@@ -84,7 +84,7 @@ const val ISSUES_URL = "https://github.com/Mudlet/android/issues/new"
 
 // The player pastes the whole report into a GitHub issue, whose body GitHub refuses over 65,536 characters; the rest
 // is room for the issue's own text and what the player writes in it
-const val MAX_REPORT_CHARS = 60_000
+const val MAX_REPORT_CHARS = 80_000
 
 private const val LOG_HEADING = "Log (newest last):"
 const val LOG_WITHHELD = "Log: left out, as a saved password or login could not be read to take it out of the log."

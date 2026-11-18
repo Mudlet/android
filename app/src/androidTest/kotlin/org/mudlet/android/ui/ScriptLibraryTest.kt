@@ -332,7 +332,11 @@ class ScriptLibraryTest {
         activate(hasText(string(R.string.scripts_color_background, any)))
         val other = field(R.string.scripts_color_other)
         waitFor(other)
-        compose.onNode(other).performScrollTo().performTextReplacement("300")
+        try {
+            compose.onNode(other).performScrollTo().performTextReplacement("300")
+        } catch (e: Throwable) {
+            throw AssertionError("DIAG\n" + diagDump() + "\nENDDIAG", e)
+        }
         waitFor(hasText(string(R.string.scripts_number_range, 16, 255)))
         // Not the 16 held from before, while the field shows what is not a colour
         compose.onNode(hasText(string(R.string.scripts_color_use)) and hasClickAction()).assertIsNotEnabled()
@@ -843,6 +847,54 @@ class ScriptLibraryTest {
     private fun items(kind: String, items: List<JSONObject>, request: JSONObject) = session.send(JSONObject().put("t", "scriptItems").put("kind", kind).put("items", JSONArray(items)).put("re", request.get("id")))
 
     private fun fields(kind: String, fields: JSONObject, request: JSONObject): JSONObject = JSONObject().put("t", "scriptItem").put("kind", kind).put("fields", fields).put("re", request.get("id"))
+
+    private fun diagDump(): String {
+        val out = StringBuilder()
+        val res = compose.activity.resources
+        val dm = res.displayMetrics
+        out.append("display ${dm.widthPixels}x${dm.heightPixels} density=${dm.density} fontScale=${res.configuration.fontScale} screenDp=${res.configuration.screenWidthDp}x${res.configuration.screenHeightDp}\n")
+        compose.runOnUiThread {
+            val view = compose.activity.window.decorView
+            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+            out.append("decor ${view.width}x${view.height} insets sys=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())} ime=${insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())}\n")
+        }
+        val ui = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        val info = ui.serviceInfo
+        info.flags = info.flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+        ui.serviceInfo = info
+        fun walk(node: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
+            if (node == null) return
+            val r = android.graphics.Rect()
+            node.getBoundsInScreen(r)
+            out.append("  ".repeat(depth)).append("A ${node.className} $r text=${node.text} desc=${node.contentDescription} click=${node.isClickable} scroll=${node.isScrollable} vis=${node.isVisibleToUser} id=${node.viewIdResourceName}\n")
+            for (i in 0 until node.childCount) walk(node.getChild(i), depth + 1)
+        }
+        for (w in ui.windows) {
+            val r = android.graphics.Rect()
+            w.getBoundsInScreen(r)
+            out.append("WINDOW type=${w.type} layer=${w.layer} $r title=${w.title}\n")
+            walk(w.root, 1)
+        }
+        for (merged in listOf(false, true)) {
+            val roots = compose.onAllNodes(isRoot(), useUnmergedTree = !merged).fetchSemanticsNodes()
+            for (root in roots) {
+                out.append("SEMANTICS merged=$merged root ${root.boundsInWindow}\n")
+                fun sem(n: androidx.compose.ui.semantics.SemanticsNode, depth: Int) {
+                    val c = n.config
+                    val role = c.getOrElseNullable(SemanticsProperties.Role) { null }
+                    val click = c.contains(SemanticsActions.OnClick)
+                    val text = c.getOrElseNullable(SemanticsProperties.Text) { null }?.joinToString()
+                    val desc = c.getOrElseNullable(SemanticsProperties.ContentDescription) { null }?.joinToString()
+                    val tag = c.getOrElseNullable(SemanticsProperties.TestTag) { null }
+                    out.append("  ".repeat(depth)).append("S#${n.id} win=${n.boundsInWindow} size=${n.size} role=$role click=$click text=$text desc=$desc tag=$tag\n")
+                    for (child in n.children) sem(child, depth + 1)
+                }
+                sem(root, 1)
+            }
+        }
+        android.util.Log.i("DIAG", out.toString())
+        return out.toString()
+    }
 
     /** The library's chip of a kind, [title], that has [count] items. */
     private fun kind(@StringRes title: Int, count: Int) = hasText(string(R.string.scripts_kind_count, string(title), count)) and hasClickAction()

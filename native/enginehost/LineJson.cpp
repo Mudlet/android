@@ -17,7 +17,7 @@ void appendNumber(QByteArray& out, qint64 n)
 
 char hexDigit(unsigned n)
 {
-    return "0123456789abcdef"[n & 0xf];
+    return "0123456789ABCDEF"[n & 0xf];
 }
 
 char namedEscape(char16_t u)

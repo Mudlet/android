@@ -1613,13 +1613,67 @@
     <string name="scripts_pattern_type">Pattern type</string>
     <!-- The button, read by a screen reader, that closes the sheet that picks a trigger pattern's type -->
     <string name="scripts_pattern_type_close">Close the pattern types</string>
-    <!-- A colour trigger pattern, which the app shows but does not edit yet; %1$s is the text colour, %2$s the
-         background's, each an ANSI colour number or one of scripts_color_any and scripts_color_default -->
-    <string name="scripts_color_pattern">Text colour %1$s on %2$s</string>
+    <!-- On a colour trigger pattern, the button that picks the text colour it matches; %1$s is that colour: one of
+         scripts_color_any, scripts_color_default, scripts_color_named or scripts_color_number -->
+    <string name="scripts_color_text">Text colour: %1$s</string>
+    <!-- On a colour trigger pattern, the button that picks the background colour it matches; %1$s as in scripts_color_text -->
+    <string name="scripts_color_background">Background: %1$s</string>
+    <!-- Under a colour trigger pattern whose text and background both match any colour, which Mudlet does not run -->
+    <string name="scripts_color_none">Pick a text or background colour: with both any, this pattern does not run</string>
+    <!-- Title of the sheet that picks a colour trigger pattern's text colour; %1$d is the pattern's number -->
+    <string name="scripts_color_text_title">Text colour of pattern %1$d</string>
+    <!-- Title of the sheet that picks a colour trigger pattern's background colour; %1$d is the pattern's number -->
+    <string name="scripts_color_background_title">Background of pattern %1$d</string>
+    <!-- What a screen reader reads for the button that closes the colour sheet without picking -->
+    <string name="scripts_color_close">Close the colours</string>
+    <!-- A named ANSI colour; %1$s is its name (one of the ansi_ strings), %2$d its ANSI number, as Mudlet's "Red [1]" -->
+    <string name="scripts_color_named">%1$s (%2$d)</string>
+    <!-- An ANSI colour past the 16 named ones; %1$d is its number, 16 to 255 -->
+    <string name="scripts_color_number">colour %1$d</string>
+    <!-- In the colour sheet, the field for an ANSI colour number past the 16 named ones, as Mudlet's "More colors" -->
+    <string name="scripts_color_other">Another colour, 16 to 255</string>
+    <!-- In the colour sheet, the button that picks the number typed in scripts_color_other -->
+    <string name="scripts_color_use">Use</string>
+    <!-- ANSI colour 0, as Mudlet's colour trigger dialog names it -->
+    <string name="ansi_black">Black</string>
+    <!-- ANSI colour 1 -->
+    <string name="ansi_red">Red</string>
+    <!-- ANSI colour 2 -->
+    <string name="ansi_green">Green</string>
+    <!-- ANSI colour 3 -->
+    <string name="ansi_yellow">Yellow</string>
+    <!-- ANSI colour 4 -->
+    <string name="ansi_blue">Blue</string>
+    <!-- ANSI colour 5 -->
+    <string name="ansi_magenta">Magenta</string>
+    <!-- ANSI colour 6 -->
+    <string name="ansi_cyan">Cyan</string>
+    <!-- ANSI colour 7, as Mudlet's "White (Light gray)" -->
+    <string name="ansi_white">White (light grey)</string>
+    <!-- ANSI colour 8, as Mudlet's "Light black (Dark gray)" -->
+    <string name="ansi_light_black">Light black (dark grey)</string>
+    <!-- ANSI colour 9 -->
+    <string name="ansi_light_red">Light red</string>
+    <!-- ANSI colour 10 -->
+    <string name="ansi_light_green">Light green</string>
+    <!-- ANSI colour 11 -->
+    <string name="ansi_light_yellow">Light yellow</string>
+    <!-- ANSI colour 12 -->
+    <string name="ansi_light_blue">Light blue</string>
+    <!-- ANSI colour 13 -->
+    <string name="ansi_light_magenta">Light magenta</string>
+    <!-- ANSI colour 14 -->
+    <string name="ansi_light_cyan">Light cyan</string>
+    <!-- ANSI colour 15 -->
+    <string name="ansi_light_white">Light white</string>
     <!-- A side of a colour trigger pattern that matches any colour -->
     <string name="scripts_color_any">any</string>
     <!-- A side of a colour trigger pattern that matches the game's default colour -->
     <string name="scripts_color_default">default</string>
+    <!-- In the colour sheet, the choice that matches any colour, as Mudlet's "Ignore" -->
+    <string name="scripts_color_any_choice">Any colour</string>
+    <!-- In the colour sheet, the choice that matches the game's colour where it sets none, as Mudlet's "Default" -->
+    <string name="scripts_color_default_choice">The game\'s default colour</string>
     <!-- A trigger pattern type, as Mudlet's "substring" -->
     <string name="pattern_substring">Substring</string>
     <!-- In the pattern type sheet, under "Substring": what that type matches -->

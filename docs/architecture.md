@@ -676,8 +676,10 @@ kept by `ScriptItemsClient`:
   what it sends; a key binding's key, picked from a sheet, the keys held with it, and what it sends; a button's
   commands, and a toolbar's place, direction and columns, with a style sheet for each (`ScriptKindFields.kt`; which
   of them a button's folder is, `buttonPart`). A new timer, button or toolbar is switched off, as on the desktop, and
-  its row's switch starts it; a toolbar shows once it and a button in it are on. A colour pattern is shown, not
-  edited. The edit is
+  its row's switch starts it; a toolbar shows once it and a button in it are on. A colour pattern's text and
+  background are each picked from a sheet (`ScriptColorPattern.kt`), as the desktop's colour trigger dialog offers
+  them: any, the game's default, the 16 named or a number up to 255.
+  The edit is
   a draft kept by `ScriptItemsClient` until Apply sends `editScriptItem`, whose snackbar offers Undo: a rotation keeps
   it, and so does the page's Game button, which goes to the game to come back from, the library marking the item
   "Draft" meanwhile; Back with a draft asks whether to discard it. Delete hides the item with Undo, and sends
@@ -711,7 +713,7 @@ kept by `ScriptItemsClient`:
 - An item's page moves it, last, into a folder picked from a sheet (`moveScriptItem`), each folder with those it is
   in: not where it is, nor into itself, and among the buttons a button only into a toolbar or a menu; a package's
   own folder stays put. The snackbar says where it went once the list after the move has come.
-- Not yet: a colour pattern's picker, moving an item onto another
+- Not yet: moving an item onto another
   to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the
   Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called).
 - A hardware keyboard's key that the profile's key bindings take (`keyBindings`, by Qt's key code and modifier bits,

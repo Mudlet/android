@@ -8,6 +8,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
@@ -27,6 +28,8 @@ import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.withKeyDown
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.rule.GrantPermissionRule
@@ -118,10 +121,37 @@ abstract class GameSwipeTestBase(locale: String?) {
         compose.waitForIdle()
     }
 
-    /** The engine is asked to bring [name] to the front, and the pill reads it. */
+    /** The engine is asked to bring [name] to the front, the pill reads it, and it has settled where a touch finds it. */
     protected fun switchedTo(name: String) {
         assertEquals(name, gamma.receive("setFront").getString("name"))
         waitFor(pillReading(name))
+        pillAboveTheKeyboard()
+    }
+
+    /**
+     * Waits for the pill to be above the keyboard the switched-to game's input line opens as it takes the focus. The
+     * keyboard comes in its own time and pushes the quick bar up; a touch aimed at the pill before then lands where it
+     * was, as performTouchInput aims from the pill's bounds once, before its events reach the screen.
+     */
+    private fun pillAboveTheKeyboard() {
+        try {
+            compose.waitUntil(KEYBOARD_MS) { keyboardTop() != null }
+        } catch (_: ComposeTimeoutException) {
+            // A device with no keyboard on the screen moves nothing
+            return
+        }
+        compose.waitUntil(WAIT_MS) {
+            val top = keyboardTop()
+            top == null || compose.onNode(pill).fetchSemanticsNode().boundsInWindow.bottom <= top + 1
+        }
+    }
+
+    // In the window's pixels, or null with no keyboard on the screen
+    private fun keyboardTop(): Float? = compose.runOnUiThread {
+        val view = compose.activity.window.decorView
+        val insets = ViewCompat.getRootWindowInsets(view)
+        val ime = WindowInsetsCompat.Type.ime()
+        if (insets == null || !insets.isVisible(ime)) null else (view.height - insets.getInsets(ime).bottom).toFloat()
     }
 
     /** No game is brought to the front: the engine is not asked, and the pill still reads [name]. */
@@ -150,6 +180,7 @@ abstract class GameSwipeTestBase(locale: String?) {
         // Below the per-test timeout native/tests/android_instrumented.py gives the runner, so this one reports first
         const val TIMEOUT_MS = 240_000L
         const val WAIT_MS = 10_000L
+        const val KEYBOARD_MS = 5_000L
 
         // Long enough for a request that went astray to have arrived
         const val QUIET_MS = 500

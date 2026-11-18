@@ -49,10 +49,11 @@ import org.mudlet.android.ui.MudletScaffold
  * Adds a profile ([name] null) or edits the one named [name], whose name cannot change, as the engine keeps the name a
  * profile was created with. A stored password is never shown again: a new one replaces it, and "Forget password"
  * removes it. [onClose] leaves, as Back does, once the engine has saved or deleted the profile. A new profile can start
- * [fromLink], a telnet:// link's, which the editor says to check.
+ * [fromLink], a telnet:// link's, which the editor says to check. A saved one can be opened without connecting, as
+ * desktop's Offline, to work on its scripts: [onOpenGame] then shows it.
  */
 @Composable
-fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null) {
+fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null, onOpenGame: () -> Unit = {}) {
     val context = LocalContext.current
     val passwords = remember { PasswordStore(context) }
     val existing = remember(name) { name?.let { n -> EngineClient.profiles?.firstOrNull { it.name.equals(n, ignoreCase = true) } } }
@@ -71,28 +72,45 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null)
     var confirmDelete by remember { mutableStateOf(false) }
     val passwordNotStored = stringResource(R.string.profile_password_not_stored)
     val passwordNotForgotten = stringResource(R.string.profile_password_not_forgotten)
+    val notAttached = stringResource(R.string.profiles_error_not_attached)
 
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val profileName = name ?: newName.trim()
     val canSave = !waiting && profileName.isNotEmpty() && host.isNotBlank() && portNumber != null
-    val save = {
+    val edited = portNumber?.let { Profile(profileName, host.trim(), it, tls, login.trim(), autoReconnect) }
+
+    fun save(then: () -> Unit) {
         error = null
         waiting = true
-        val profile = Profile(profileName, host.trim(), portNumber!!, tls, login.trim(), autoReconnect)
+        val profile = edited!!
         EngineClient.saveProfile(profile) { refused ->
             waiting = false
             when {
                 refused != null -> error = refused
 
-                password.isEmpty() -> onClose()
+                password.isEmpty() -> then()
 
                 !passwords.set(profile.name, password) -> error = passwordNotStored
 
                 else -> {
                     EngineClient.givePassword(profile.name, password)
-                    onClose()
+                    then()
                 }
             }
+        }
+    }
+
+    fun openOffline(name: String) {
+        error = null
+        // One open already only comes to the front, as it is, connected or not
+        if (EngineClient.session(name) != null) {
+            if (EngineClient.setFront(name)) onOpenGame() else error = notAttached
+            return
+        }
+        waiting = true
+        EngineClient.openProfileOffline(name, passwords.get(name)) { refused ->
+            waiting = false
+            if (refused == null) onOpenGame() else error = refused
         }
     }
 
@@ -166,12 +184,18 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null)
                 Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(save, enabled = canSave) { Text(stringResource(R.string.profile_save)) }
+                Button({ save(onClose) }, enabled = canSave) { Text(stringResource(R.string.profile_save)) }
                 if (name != null) {
                     OutlinedButton({ confirmDelete = true }, enabled = !waiting) { Text(stringResource(R.string.profile_delete)) }
                 }
             }
             if (name != null) {
+                // What is typed is saved first, as desktop's dialog keeps each change, or leaving would lose it
+                val unsaved = edited != existing || password.isNotEmpty()
+                OutlinedButton(
+                    { if (unsaved) save { openOffline(name) } else openOffline(name) },
+                    enabled = !waiting && (!unsaved || canSave),
+                ) { Text(stringResource(R.string.profile_open_offline)) }
                 ProfileExport(name, open = EngineClient.session(name) != null)
             }
         }

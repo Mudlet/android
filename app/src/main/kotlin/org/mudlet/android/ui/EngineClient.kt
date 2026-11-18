@@ -379,6 +379,21 @@ object EngineClient {
     }) { Requests.openProfile(name, password, connect = true, alongside = true, id = it) }
 
     /**
+     * Opens the profile [name] without connecting it, as desktop's Offline, with [password] for a later connection; beside
+     * those open, as the front, when any are.
+     */
+    fun openProfileOffline(name: String, password: String?, onAnswer: (error: String?) -> Unit) {
+        val alongside = sessions.isNotEmpty()
+        profileRequest({ error ->
+            if (error == null) {
+                opened(name)
+                if (alongside) setFront(name)
+            }
+            onAnswer(error)
+        }) { Requests.openProfile(name, password, connect = false, alongside = alongside, id = it) }
+    }
+
+    /**
      * Gives the open profile [name] its [password], null for none, for its next connection: the engine is told a
      * profile's password only as it opens it, and keeps none. A profile that is not open gets it when it opens.
      */

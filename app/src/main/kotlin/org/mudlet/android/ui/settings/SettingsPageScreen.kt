@@ -406,7 +406,7 @@ private fun NumberRows(entry: SettingEntry.Number, owner: SettingsOwner) {
     val setting = entry.setting
     var dragged by remember { mutableStateOf<Int?>(null) }
     val range = setting.range
-    val atMost = entry.heldAtMostBy?.let { owner.value(it) } == true
+    val atMost = false
     val size = if (atMost) range.last else dragged ?: owner.value(setting)
     val step = entry.step
     val label = stringResource(entry.label)

@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
-import org.mudlet.android.engine.EngineScrollback
 import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
 import java.util.Locale
@@ -337,7 +336,6 @@ object Settings {
         if (prefs != null) return
         val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         prefs = p
-        consoleBufferSize.range = consoleBufferSize.range.first..EngineScrollback.maxLines(context)
         all.forEach { it.load(p) }
         noteGamesBeforeInputClear(p, File(context.filesDir, PROFILES_DIR))
     }

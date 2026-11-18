@@ -19,8 +19,8 @@ Pushing a tag `android-v<version>` on a commit of `main` starts it:
 3. **notes**: the GitHub release's notes: the release's section, the two commits built and the signing certificate.
 4. **play**: uploads the AAB to the Play track, once the smoke test passed and the source bundle was built.
 5. **github-release**: the release `android-v<version>` on the tag, with `mudlet-arm64-v8a.apk`, `mudlet-x86_64.apk`,
-   `mudlet-source.tar` and `SHA256SUMS.txt`; a pre-release while the version is on a testing track. As for the PTB, it
-   waits for Play to take the AAB, or runs alone when no Play credentials are set.
+   `mudlet-source.tar` and `SHA256SUMS.txt`; a pre-release while the version is on a testing track. Unlike the PTB's, it
+   waits for Play to take the AAB, or runs alone when no Play credentials are set: a tag is released once.
 6. **result**: says in the run's summary what was published, or why nothing was.
 
 **Dry runs.** Any other run publishes nothing: by hand (Actions, Release, "Run workflow") on a branch, and on a pull

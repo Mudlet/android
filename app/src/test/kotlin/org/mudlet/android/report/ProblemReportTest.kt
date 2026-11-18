@@ -47,6 +47,14 @@ class ProblemReportTest {
     }
 
     @Test
+    fun aLongReportStillFitsAGitHubIssueWithRoomForWhatHappened() {
+        val log = (1..10_000).map { "line $it ".padEnd(120, '.') }
+        val text = composeReport(listOf("head"), log, redactor)
+        assertTrue(text, text.contains("line 10000 "))
+        assertTrue("${text.length} characters", text.length + 5_000 <= GITHUB_ISSUE_BODY_MAX_CHARS)
+    }
+
+    @Test
     fun aLogThatCouldNotBeCleanedIsLeftOutWhole() {
         val text = composeReport(listOf("head $login"), null, redactor)
         assertEquals("head ${Redactor.LOGIN}\n\n$LOG_WITHHELD\n", text)
@@ -75,5 +83,10 @@ class ProblemReportTest {
         assertEquals("", readQString(item(null)))
         assertNull(readQString(byteArrayOf(0, 0, 0, 9, 0)))
         assertNull(readQString(byteArrayOf(0, 0)))
+    }
+
+    private companion object {
+        // The most GitHub takes in an issue's body
+        const val GITHUB_ISSUE_BODY_MAX_CHARS = 65_536
     }
 }

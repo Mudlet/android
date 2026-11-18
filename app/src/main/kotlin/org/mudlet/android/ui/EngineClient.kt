@@ -96,6 +96,16 @@ object EngineClient {
     @VisibleForTesting
     internal var stoppedByAndroid: () -> Boolean = { EngineStopped.lastExitByAndroid(app) }
 
+    /**
+     * When the last engine found to have crashed ([EngineCrash]) did, in wall-clock ms, or 0 if none has since the UI
+     * started: set at a new engine's first restore status, for the UI to offer Report a problem once per crash.
+     */
+    var engineCrashedAtMs by mutableLongStateOf(0L)
+
+    /** When the engine before this one crashed, if it did; the instrumented tests put their answer here. */
+    @VisibleForTesting
+    internal var lastEngineCrashMs: () -> Long? = { EngineCrash.lastCrashMs(app) }
+
     // Whether the attached engine's restore status has had how the engine before it ended checked: it resends its
     // statuses at every attach, but that is asked once
     private var restoreChecked = false
@@ -445,6 +455,7 @@ object EngineClient {
             if (!restoreChecked) {
                 restoreChecked = true
                 if (stoppedByAndroid()) engineStoppedInBackground = true
+                lastEngineCrashMs()?.let { engineCrashedAtMs = it }
             }
             EngineRestore.marker(engineStatus[key], value)?.let { marker ->
                 val session = frontSession

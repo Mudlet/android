@@ -724,6 +724,46 @@ class ProtocolTest {
     }
 
     @Test
+    fun variablesDecode() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"variables","path":[{"name":"gmcp","key":"string"},{"name":"1","key":"number"}],"showHidden":true,""" +
+                    """"from":500,"total":502,"hiddenLeftOut":3,"re":7,"entries":[""" +
+                    """{"name":"hp","key":"string","type":"number","value":"12.5","hidden":false},""" +
+                    """{"name":"1","key":"number","type":"table","hidden":true,"members":2,"indexed":true},""" +
+                    """{"name":"note","key":"string","type":"string","value":"long","cut":true},""" +
+                    """{"name":"x","key":"gizmo","type":"coroutine"},"junk"]}""",
+            ),
+        ) as EngineMessage.Variables
+        assertEquals(listOf(VariableKey("gmcp", VariableType.STRING), VariableKey("1", VariableType.NUMBER)), message.path)
+        assertTrue(message.showHidden)
+        assertEquals(500, message.from)
+        assertEquals(502, message.total)
+        assertEquals(3, message.hiddenLeftOut)
+        assertEquals(7, message.replyTo)
+        assertEquals(
+            listOf(
+                LuaVariable(VariableKey("hp", VariableType.STRING), VariableType.NUMBER, "12.5"),
+                LuaVariable(VariableKey("1", VariableType.NUMBER), VariableType.TABLE, hidden = true, members = 2, indexed = true),
+                LuaVariable(VariableKey("note", VariableType.STRING), VariableType.STRING, "long", cut = true),
+                // Kept, so that the next page starts where the engine thinks it does
+                LuaVariable(VariableKey("x", VariableType.OTHER), VariableType.OTHER),
+            ),
+            message.entries,
+        )
+        assertEquals(
+            mapOf(
+                "t" to "variables",
+                "path" to listOf(mapOf("name" to "a.b", "key" to "string"), mapOf("name" to "2", "key" to "number")),
+                "showHidden" to false,
+                "from" to 0,
+                "id" to 8L,
+            ),
+            Requests.variables(listOf(VariableKey("a.b", VariableType.STRING), VariableKey("2", VariableType.NUMBER)), showHidden = false, from = 0, id = 8).toMap(),
+        )
+    }
+
+    @Test
     fun packagesDecode() {
         val list = FrameReader.parse(
             JSONObject(

@@ -272,6 +272,38 @@ std::pair<QString, int> searchSnippet(const QString& text, int start, int length
     return {snippet, moved};
 }
 
+// The most variables a variables frame carries, and the most of a value: a table of thousands of rooms, or a string a
+// script read a whole file into, would otherwise fill a frame many times over
+constexpr int maxVariablesPerFrame = 500;
+constexpr int maxVariableValueChars = 1000;
+
+constexpr std::pair<QLatin1StringView, IEngine::VariableType> variableTypes[]{{QLatin1StringView("boolean"), IEngine::VariableType::boolean},
+                                                                              {QLatin1StringView("number"), IEngine::VariableType::number},
+                                                                              {QLatin1StringView("string"), IEngine::VariableType::string},
+                                                                              {QLatin1StringView("table"), IEngine::VariableType::table},
+                                                                              {QLatin1StringView("function"), IEngine::VariableType::function},
+                                                                              {QLatin1StringView("other"), IEngine::VariableType::other}};
+
+QString wireName(IEngine::VariableType type)
+{
+    for (const auto& [name, value] : variableTypes) {
+        if (type == value) {
+            return name;
+        }
+    }
+    return {};
+}
+
+std::optional<IEngine::VariableType> variableType(const QJsonValue& value)
+{
+    for (const auto& [name, type] : variableTypes) {
+        if (value.toString() == name) {
+            return type;
+        }
+    }
+    return std::nullopt;
+}
+
 constexpr QLatin1StringView scriptItemKindProblem("kind must be trigger, alias, script, timer, key or button");
 
 // The kind and item a script item request names, or why it names none
@@ -829,6 +861,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         uninstallPackage(message);
     } else if (type == QLatin1String("searchScriptItems")) {
         searchScriptItems(message);
+    } else if (type == QLatin1String("variables")) {
+        variables(message);
     } else if (type == QLatin1String("checkLua")) {
         checkLua(message);
     } else if (type == QLatin1String("clearErrorConsole")) {
@@ -1522,6 +1556,71 @@ void SocketBridge::searchScriptItems(const QJsonObject& message)
                {QStringLiteral("wholeWord"), wholeWord.toBool()},
                {QStringLiteral("matches"), matches},
                {QStringLiteral("more"), search.more}});
+}
+
+void SocketBridge::variables(const QJsonObject& message)
+{
+    const QJsonValue path = message.value(QLatin1String("path"));
+    const QJsonValue showHidden = message.value(QLatin1String("showHidden"));
+    const QJsonValue fromValue = message.value(QLatin1String("from"));
+    if (!(path.isArray() || path.isUndefined())) {
+        sendError(QStringLiteral("variables: path must be a list"));
+        return;
+    }
+    QList<IEngine::VariableKey> keys;
+    for (const QJsonValue& step : path.toArray()) {
+        const QJsonValue name = step.toObject().value(QLatin1String("name"));
+        const std::optional<IEngine::VariableType> key = variableType(step.toObject().value(QLatin1String("key")));
+        if (!name.isString() || !key) {
+            sendError(QStringLiteral("variables: each step of path must have a name and a key type"));
+            return;
+        }
+        keys.append({name.toString(), *key});
+    }
+    if (!(showHidden.isBool() || showHidden.isUndefined())) {
+        sendError(QStringLiteral("variables: showHidden must be true or false"));
+        return;
+    }
+    const std::optional<int> from = fromValue.isUndefined() ? std::optional<int>(0) : wholeNumber(fromValue, 0);
+    if (!from) {
+        sendError(QStringLiteral("variables: from must be a whole number from 0"));
+        return;
+    }
+    const std::variant<IEngine::Variables, QString> listed = mEngine->variables(keys, showHidden.toBool());
+    if (const QString* problem = std::get_if<QString>(&listed)) {
+        sendError(QStringLiteral("variables: %1").arg(*problem));
+        return;
+    }
+    const IEngine::Variables& variables = std::get<IEngine::Variables>(listed);
+    QJsonArray entries;
+    for (const IEngine::Variable& variable : variables.variables.mid(*from, maxVariablesPerFrame)) {
+        QJsonObject entry{{QStringLiteral("name"), variable.key.name},
+                          {QStringLiteral("key"), wireName(variable.key.type)},
+                          {QStringLiteral("type"), wireName(variable.type)},
+                          {QStringLiteral("hidden"), variable.hidden}};
+        if (variable.type == IEngine::VariableType::table) {
+            entry.insert(QStringLiteral("members"), variable.members);
+            entry.insert(QStringLiteral("indexed"), variable.membersIndexed);
+        } else if (variable.type != IEngine::VariableType::function) {
+            qsizetype length = std::min(variable.value.size(), qsizetype(maxVariableValueChars));
+            // A surrogate pair cut in two would be no character
+            if (length < variable.value.size() && variable.value.at(length).isLowSurrogate()) {
+                --length;
+            }
+            entry.insert(QStringLiteral("value"), variable.value.left(length));
+            if (length < variable.value.size()) {
+                entry.insert(QStringLiteral("cut"), true);
+            }
+        }
+        entries.append(entry);
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("variables")},
+               {QStringLiteral("path"), path.toArray()},
+               {QStringLiteral("showHidden"), showHidden.toBool()},
+               {QStringLiteral("from"), *from},
+               {QStringLiteral("total"), int(variables.variables.size())},
+               {QStringLiteral("hiddenLeftOut"), variables.hiddenLeftOut},
+               {QStringLiteral("entries"), entries}});
 }
 
 void SocketBridge::checkLua(const QJsonObject& message)

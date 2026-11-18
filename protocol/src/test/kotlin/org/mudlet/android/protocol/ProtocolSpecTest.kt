@@ -72,7 +72,7 @@ class ProtocolSpecTest {
         val built = Requests::class.java.declaredMethods
             .filter { it.returnType == JSONObject::class.java }
             .map { method ->
-                val args: List<Any> = method.parameterTypes.map { type ->
+                val args: List<Any> = method.parameterTypes.zip(method.genericParameterTypes).map { (type, generic) ->
                     when (type) {
                         String::class.java -> "x"
                         Int::class.javaPrimitiveType, Int::class.javaObjectType -> 1
@@ -83,7 +83,7 @@ class ProtocolSpecTest {
                         PointerType::class.java -> PointerType.PRESS
                         MapPointerType::class.java -> MapPointerType.PRESS
                         MapTarget::class.java -> MapTarget.APP
-                        List::class.java -> listOf("x")
+                        List::class.java -> if (VariableKey::class.java.name in generic.typeName) listOf(VariableKey("x", VariableType.STRING)) else listOf("x")
                         Map::class.java -> mapOf("x" to true)
                         RoomEdit::class.java -> RoomEdit("x", "x", 1, 1, true, Triple(1, 1, 1))
                         ScriptItemKind::class.java -> ScriptItemKind.TRIGGER

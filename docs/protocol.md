@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **38**.
+The current version is **39**.
 
 ## Transport
 
@@ -128,6 +128,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
 | `searchScriptItems` | `text`, `caseSensitive`?, `wholeWord`?, `id`? | Finds `text` in the open profile's triggers, aliases, scripts, buttons, timers and keys, as the desktop script editor's search box does (`THeadlessSession::searchScriptItems()`; "Searching triggers, aliases and scripts" below): whatever its case unless `caseSensitive`, and with `wholeWord` only where it is a word of its own. Answered by `scriptSearch`. |
 | `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, for a script editor to say what is wrong with it (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
+| `variables` | `path`?, `showHidden`?, `from`?, `id`? | Lists one level of the open profile's Lua variables, as the desktop script editor's Variables view does (`THeadlessSession::variables()`; "Reading the Lua variables" below): the globals for an empty or absent `path`, else the members of the table it names, from the globals down, each step an object of a `name` and its `key` type, as an entry of the answer has them. The hidden variables only with `showHidden`. From the `from`th, from 0 (0 when absent). Answered by `variables`. |
 | `clearErrorConsole` | | Empties the open profile's error console, which an `errorConsole` with `full` true and no `entries` follows. |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
 | `setSettings` | `values`, `id`? | Changes the open profile's settings: `values` is an object of `getConfig()`'s keys, each with its new value, true or false, a number or a string, and each is set as Lua's `setConfig()` sets it (`THeadlessSession::setSettings()`), so the profile keeps it and saves it with the rest. Answered by `settings`. `values` must be an object, not empty. |
@@ -137,6 +138,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
 handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `scriptSearch`, `luaCheck`, `packages`, `keyPressed` or `error` that answers it,
+of the `variables` that answers a `variables`,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -242,6 +244,11 @@ profile loaded (`no profile running`). An empty `text` finds nothing.
 `checkLua` is answered by `luaCheck`, or by `error` for a `code` that is not a string. Code that does not compile is
 no refusal: `luaCheck` says what is wrong with it.
 
+`variables` is answered by `variables`, or by `error` whose `message` is `variables`, a colon and why: a `path` that
+is not a list or a step of it without a `name` string and a `key` type, a `showHidden` that is not true or false, a
+`from` that is not a whole number from 0, and in libmudlet no profile loaded (`no profile running`) and a `path` that
+names no table (`There is no such table.`), as one gone since it was listed, or under a table's or a function's key.
+
 ### Engine to UI
 
 | Message | Fields | Meaning |
@@ -289,6 +296,7 @@ no refusal: `luaCheck` says what is wrong with it.
 | `scriptItem` | `kind`, `fields`, `re`? | The answer to `scriptItem` and the changes that give an item: its `kind` and its `fields`, an object of what `scriptItems` gives of it, `script`, its Lua, and those of its kind: a trigger's `patterns`, each with its `text` and its `type` (`substring`, `regex`, `startOfLine`, `exact`, `lua`, `spacer`, whose text is the number of lines, `color`, whose text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`, or `prompt`), `command`, `lineDelta` (the lines a trigger's patterns may be spread over, -1 for a trigger of one line), `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`, `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour; an alias's `pattern` and `command`; a script's `eventHandlers`, a list of event names; a timer's `command`, `time` and `offset`; a key's `command`, `key`, `modifiers` and `keyName`; a button's `commandDown`, `commandUp`, `pushDown`, `location`, `orientation`, `columns` and `css` ("Editing triggers, aliases and scripts" below). |
 | `scriptSearch` | `text`, `caseSensitive`, `wholeWord`, `matches`: `kind`, `item`, `name`, `field`, `index`, `text`, `start`; `more`; `re`? | The answer to `searchScriptItems`: the `text`, `caseSensitive` and `wholeWord` searched for, and its `matches` in the desktop's order, the triggers first, then the aliases, scripts, buttons, timers and keys, each kind depth first; at most 500, with `more` true when there were others. Each has its item's `kind` (as in `scriptItems`), id, `item`, and `name`, the `field` it is in, which pattern, event handler or line of the field it is, `index`, from 0, that field or line as `text`, and `start`, where the match starts in it, from 0, in UTF-16 code units. "Searching triggers, aliases and scripts" below says what each field is. |
 | `luaCheck` | `ok`, `line`?, `message`?; `re`? | The answer to `checkLua`: `ok` when the code compiles; else `line`, the line Lua names, from 1, or 0 where it names none, and `message`, what Lua says is wrong, in English. |
+| `variables` | `path`, `showHidden`, `from`, `total`, `hiddenLeftOut`, `entries`: `name`, `key`, `type`, `value`?, `cut`?, `hidden`, `members`?, `indexed`?; `re`? | The answer to `variables`: the `path` and `showHidden` asked for, and from the `from`th, at most 500 `entries` of the `total` listed, in the desktop's order; `hiddenLeftOut` is how many hidden ones were left out. Each has its `name` and its `key` type, its `type`, and whether it is `hidden`; a `string`, `number` or `boolean` its `value`, as text, at most its first 1000 UTF-16 code units, with `cut` true when there was more; a `table` how many `members` it has and whether every key is a number, `indexed`. "Reading the Lua variables" below says what each type is. |
 | `packages` | `packages`: `name`, `title`, `author`, `version`, `description`, `icon`; `re`? | The answer to `packages` and `uninstallPackage`: the profile's packages in the order they were installed, as Lua's `getPackages()` gives them, each with its `name` and the `title`, `author`, `version` and `description` its `config.lua` gave, empty where it gave none, as for a plain `.xml` package. `description` is Markdown, as the Package Manager shows it, with `$packagePath` already standing for the package's folder. `icon` is the icon's file, for `getImage`, or empty when it gave none or the file is missing. |
 | `packagesChanged` | | A package was installed or removed, by the UI, a script or the profile's default packages: a UI that lists them asks with `packages` again. Not sent to a UI that attaches later. |
 | `packageInstalled` | `path`, `result`, `error` | The answer to `installPackage`, by the `path` it gave: `result` is `installed`; `installedWithErrors`, installed, as the desktop leaves it, but a part of it could not be read or an item's Lua failed; `alreadyInstalled`, a package of that name is installed and is left as it is; or `failed`. `error` says why, in English, for all but `installed`. Not sent to a UI that attaches later. |
@@ -636,6 +644,24 @@ match's `field` is one of:
 A line longer than 80 characters either side of its match is cut to them, with an ellipsis (U+2026) where it is cut,
 and `start` counts from the start of what is left, so a minified script kept on one line does not fill the frame.
 
+### Reading the Lua variables
+
+`variables` reads the profile's Lua variables as the desktop editor's Variables view does when it is shown, afresh at
+each request, one table at a time, so that a frame never holds more than the level the player opened.
+
+- `type` and `key` are `boolean`, `number`, `string`, `table` or `function`; `other` is any type the view does not
+  list, which none of them is today.
+- As in the view, a `number` key comes first, in numeric order, then the rest whatever their case, and what the view
+  leaves out is left out: the functions Mudlet holds for triggers, aliases, timers, keys and buttons, the `package`
+  table, `_G`, a table already listed under another name, userdata and threads.
+- The startup globals Mudlet hides are left out unless `showHidden`, as the view's "Show hidden variables" does, and
+  `hiddenLeftOut` says how many.
+- A table or a function used as a key is named by a number the engine makes up at each read, as in the view, so a
+  table under such a key cannot be asked for: `variables` answers `There is no such table.`
+- A level of more than 500 comes in pages: the next is asked for with `from` at the count already shown. A table
+  changed between pages may show a member twice or leave one out.
+- The values are the player's data. Neither side logs them.
+
 ### Downloading the map
 
 A game offers its map with GMCP's `Client.Map`, `{"url": "..."}` (the MMP's map location), which the desktop's mapper
@@ -853,7 +879,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 38, which had a script's web page answered (`id` in `openUrl`, `answerOpenUrl`);
+As implemented in version 39, which added reading the profile's Lua variables (`variables`);
+version 38 had a script's web page answered (`id` in `openUrl`, `answerOpenUrl`);
 version 37 added deleting the map (`deleteMap`);
 version 36 added a script's web pages (`opensUrls` in `hello`, `openUrl`);
 version 35 added a script's file picker (`pickFile`, `answerPickFile`);

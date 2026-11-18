@@ -236,9 +236,14 @@ class GameSwipeTest : GameSwipeTestBase(locale = null) {
         assertEquals(rest, left(BETA.name), 1f)
         assertEquals(0, ticks())
 
+        // Bite: the drag aimed where the pill was before the switch's keyboard came, as performTouchInput's aim could be
+        val before = compose.onNode(pill).fetchSemanticsNode().boundsInRoot
         swipePill(towardStart = true, rtl = false)
         switchedTo(GAMMA.name)
-        dragPill()
+        compose.onRoot().performTouchInput {
+            down(before.center)
+            repeat(10) { moveBy(Offset(-before.width * 0.09f, 0f)) }
+        }
         val shift = rest - left(GAMMA.name)
         assertTrue("the console moved $shift of $screen with no game beside", shift > 0 && shift < screen * 0.15f + 1)
         compose.onNode(pill).performTouchInput { up() }

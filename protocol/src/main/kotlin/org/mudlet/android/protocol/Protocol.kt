@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 33
+const val PROTOCOL_VERSION = 34
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -803,6 +803,12 @@ sealed interface EngineMessage {
     /** What a script asks screen readers to say; [assertive] interrupts what they are saying. */
     data class Announce(val text: String, val assertive: Boolean) : EngineMessage
 
+    /** A script's getClipboardText() waits for [Requests.answerClipboardRead] with [id], on the control socket. */
+    data class ClipboardRead(val id: Long) : EngineMessage
+
+    /** A script's setClipboardText() puts [text] on the device's clipboard. */
+    data class ClipboardWrite(val text: String) : EngineMessage
+
     /**
      * What the link [link] of the console [window] offers now, the answer to [Requests.getLink]; [window] is null for
      * the main console. [fg], [bg] and [styles] (run colours and attribute bits) are how it is painted now, null where
@@ -1305,6 +1311,9 @@ object Requests {
     /** Answered by [EngineMessage.LuaCheck] with [id] as its replyTo, or an Error: whether [code] compiles as Lua; it is not run. */
     fun checkLua(code: String, id: Long): JSONObject = JSONObject().put("t", "checkLua").put("code", code).put("id", id)
 
+    /** The device clipboard's [text] for [EngineMessage.ClipboardRead] [id]: empty when it holds none or may not be read. */
+    fun answerClipboardRead(id: Long, text: String): JSONObject = JSONObject().put("t", "answerClipboardRead").put("id", id).put("text", text)
+
     /** Empties the profile's error console, which an [EngineMessage.ErrorConsole] with no entries follows. */
     fun clearErrorConsole(): JSONObject = JSONObject().put("t", "clearErrorConsole")
 
@@ -1437,6 +1446,10 @@ class FrameReader(input: InputStream) {
             "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
 
             "secureOffer" -> EngineMessage.SecureOffer(o.optBoolean("offered"))
+
+            "clipboardRead" -> EngineMessage.ClipboardRead(o.optLong("id"))
+
+            "clipboardWrite" -> EngineMessage.ClipboardWrite(o.optString("text"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

@@ -1,0 +1,217 @@
+Let a frontend with no window give scripts the device's clipboard
+
+getClipboardText() and setClipboardText() used QGuiApplication::clipboard() directly. An app that runs the engine
+where it may not use the system's clipboard, as an Android service (only the app in front may read the clipboard),
+could not give scripts its own, and with no QGuiApplication at all the two crashed.
+
+- TAppFrontend::clipboardText() answers what getClipboardText() reads, at once; the main window reads Qt's clipboard,
+  as before, and getClipboardText() and setClipboardText() go through the frontend.
+- TNullAppFrontend keeps its own answer (the system's clipboard with a QGuiApplication, else text it keeps), unless
+  THeadlessSession::setClipboard() hands it the app's: a function that answers a read and one that takes a write,
+  for every session of the process.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (clipboard: a script reads the text the app answers
+with, an empty clipboard when no app answers, and a script's write reaches the app). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 4e06a95..656581e 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1564,6 +1564,12 @@ browser refuses. Nothing in Mudlet calls them yet, and no Lua function changes:
+ and `getClipboardText()` still answer at once. With no window the pickers answer none, and the
+ clipboard is the system's while there is a `QGuiApplication`, else text the frontend keeps.
+ 
++`getClipboardText()` and `setClipboardText()` go through the frontend's `clipboardText()` and
++`setClipboardText()`. An app whose engine runs where it may not use the system's clipboard, as an
++Android service, which only the app in front may read from, hands the session its own with
++`THeadlessSession::setClipboard()`: a function that answers a read, during the script's call, and
++one that takes a script's write, for every session of the process.
++
+ ### Waits that remain
+ 
+ These still block the application's thread or run a nested event loop:
+diff --git a/src/TAppFrontend.h b/src/TAppFrontend.h
+index 55f318a..6eb900d 100644
+--- a/src/TAppFrontend.h
++++ b/src/TAppFrontend.h
+@@ -123,6 +123,8 @@ public:
+     // The clipboard's text, told as those are, as a browser's clipboard answers only that way; none if it could
+     // not be read, as when a browser refuses
+     virtual void clipboardTextAsync(QObject* context, std::function<void(const std::optional<QString>&)> done) = 0;
++    // What a script's getClipboardText() reads, at once; empty if the clipboard holds no text or cannot be read
++    virtual QString clipboardText() = 0;
+     virtual void setClipboardText(const QString& text) = 0;
+ 
+     // Surfaces a command can be placed on. A client with different chrome maps
+diff --git a/src/TLuaInterpreterUI.cpp b/src/TLuaInterpreterUI.cpp
+index ebff892..9ea917d 100644
+--- a/src/TLuaInterpreterUI.cpp
++++ b/src/TLuaInterpreterUI.cpp
+@@ -30,7 +30,6 @@
+ #include "MudletApp.h"
+ #include "TLuaInterpreter.h"
+ 
+-#include <QClipboard>
+ #include <QGuiApplication>
+ 
+ #include <iterator>
+@@ -1539,8 +1538,7 @@ int TLuaInterpreter::getBorderColor(lua_State* L)
+ // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#getClipboardText
+ int TLuaInterpreter::getClipboardText(lua_State* L)
+ {
+-    QClipboard* clipboard = QGuiApplication::clipboard();
+-    lua_pushstring(L, clipboard->text().toUtf8().constData());
++    lua_pushstring(L, TAppFrontend::instance()->clipboardText().toUtf8().constData());
+     return 1;
+ }
+ 
+@@ -3409,8 +3407,7 @@ int TLuaInterpreter::setButtonStyleSheet(lua_State* L)
+ // Documentation: https://wiki.mudlet.org/w/Manual:Lua_Functions#setClipboardText
+ int TLuaInterpreter::setClipboardText(lua_State* L)
+ {
+-    QClipboard* clipboard = QGuiApplication::clipboard();
+-    clipboard->setText(getVerifiedString(L, __func__, 1, "text"));
++    TAppFrontend::instance()->setClipboardText(getVerifiedString(L, __func__, 1, "text"));
+     lua_pushboolean(L, true);
+     return 1;
+ }
+diff --git a/src/TNullAppFrontend.cpp b/src/TNullAppFrontend.cpp
+index 7caaf53..bb0ff27 100644
+--- a/src/TNullAppFrontend.cpp
++++ b/src/TNullAppFrontend.cpp
+@@ -196,12 +196,24 @@ void TNullAppFrontend::getExistingDirectoryAsync(const QString&, const QString&,
+ void TNullAppFrontend::clipboardTextAsync(QObject* context, std::function<void(const std::optional<QString>&)> done)
+ {
+     QTimer::singleShot(0ms, context, [this, done = std::move(done)]() {
+-        done(qobject_cast<QGuiApplication*>(QCoreApplication::instance()) ? QGuiApplication::clipboard()->text() : mClipboardText);
++        done(clipboardText());
+     });
+ }
+ 
++QString TNullAppFrontend::clipboardText()
++{
++    if (mClipboardRead) {
++        return mClipboardRead();
++    }
++    return qobject_cast<QGuiApplication*>(QCoreApplication::instance()) ? QGuiApplication::clipboard()->text() : mClipboardText;
++}
++
+ void TNullAppFrontend::setClipboardText(const QString& text)
+ {
++    if (mClipboardWrite) {
++        mClipboardWrite(text);
++        return;
++    }
+     if (qobject_cast<QGuiApplication*>(QCoreApplication::instance())) {
+         QGuiApplication::clipboard()->setText(text);
+         return;
+@@ -209,6 +221,16 @@ void TNullAppFrontend::setClipboardText(const QString& text)
+     mClipboardText = text;
+ }
+ 
++void TNullAppFrontend::setClipboard(std::function<QString()> read, std::function<void(const QString&)> write)
++{
++    if (!read || !write) {
++        read = nullptr;
++        write = nullptr;
++    }
++    mClipboardRead = std::move(read);
++    mClipboardWrite = std::move(write);
++}
++
+ TAppFrontend* TAppFrontend::nullView()
+ {
+     // Function-local, so it exists before any static initialiser can ask for it
+diff --git a/src/TNullAppFrontend.h b/src/TNullAppFrontend.h
+index 7c5630c..11f55f1 100644
+--- a/src/TNullAppFrontend.h
++++ b/src/TNullAppFrontend.h
+@@ -91,9 +91,13 @@ public:
+     // None, there being nobody to choose
+     void getOpenFileNameAsync(const QString&, const QString&, QObject* context, std::function<void(const std::optional<QString>&)> done) override;
+     void getExistingDirectoryAsync(const QString&, const QString&, QObject* context, std::function<void(const std::optional<QString>&)> done) override;
+-    // The system's clipboard while there is a QGuiApplication, else text kept here
++    // The system's clipboard while there is a QGuiApplication, else text kept here, unless setClipboard() gave one
+     void clipboardTextAsync(QObject* context, std::function<void(const std::optional<QString>&)> done) override;
++    QString clipboardText() override;
+     void setClipboardText(const QString& text) override;
++    // The clipboard of an app that embeds the session, where this process may not use the system's: read answers
++    // clipboardText() and write takes setClipboardText()'s text from here on. Without both, back to the system's.
++    void setClipboard(std::function<QString()> read, std::function<void(const QString&)> write);
+     // Refuses what the main window refuses whatever its bars show, bar clashes with the main window's own shortcuts, and
+     // keeps each command for a frontend to show and activate
+     int addAddonCommand(const CommandRequest& request, Host* pHost, const QString& package, QString& error) override;
+@@ -159,6 +163,8 @@ private:
+     // with no saved settings, until a pool with no main window reads Mudlet.ini's.
+     bool mDrawUpperLowerLevels = true;
+     QString mClipboardText;
++    std::function<QString()> mClipboardRead;
++    std::function<void(const QString&)> mClipboardWrite;
+     bool mShowTabConnectionIndicators = false;
+     // A pointer, as the main window keeps it, so a profile opened again under the name is not in front
+     QPointer<Host> mpActiveHost;
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 9a3263a..950ecbb 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -421,6 +421,13 @@ bool THeadlessSession::setDictionaryFolder(const QString& folder)
+     return MudletApp::setAppDictionaryFolder(folder);
+ }
+ 
++void THeadlessSession::setClipboard(std::function<QString()> read, std::function<void(const QString&)> write)
++{
++    if (auto* pView = dynamic_cast<TNullAppFrontend*>(TAppFrontend::instance())) {
++        pView->setClipboard(std::move(read), std::move(write));
++    }
++}
++
+ THeadlessSession::THeadlessSession(QObject* parent)
+ : QObject(parent)
+ {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index b93153b..cf8e90b 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -157,6 +157,11 @@ public:
+     // of Mudlet's bundled ones by every dictionary opened afterwards. Refused (false) for a :/ or assets:/ path, which
+     // Hunspell cannot read; empty forgets it.
+     static bool setDictionaryFolder(const QString& folder);
++    // The device's clipboard as the app reaches it, for a platform where this process may not use the system's (on
++    // Android only the app in front may read it): getClipboardText() in every session answers what read returns, and
++    // setClipboardText() hands its text to write, each called during the script's call, so neither may call a
++    // session or run the event loop. Without both, the clipboard is the system's again.
++    static void setClipboard(std::function<QString()> read, std::function<void(const QString&)> write);
+ 
+     // Names mudlet_core's own Qt resources (":/" images, translations and fonts), so a program linking it statically
+     // keeps them; Qt registers them before main() runs
+diff --git a/src/mudlet.cpp b/src/mudlet.cpp
+index 668078d..5d1cb2b 100644
+--- a/src/mudlet.cpp
++++ b/src/mudlet.cpp
+@@ -4574,6 +4574,11 @@ void mudlet::clipboardTextAsync(QObject* context, std::function<void(const std::
+     });
+ }
+ 
++QString mudlet::clipboardText()
++{
++    return QGuiApplication::clipboard()->text();
++}
++
+ void mudlet::setClipboardText(const QString& text)
+ {
+     QGuiApplication::clipboard()->setText(text);
+diff --git a/src/mudlet.h b/src/mudlet.h
+index 61f4e12..9eb5d67 100644
+--- a/src/mudlet.h
++++ b/src/mudlet.h
+@@ -224,6 +224,7 @@ public:
+     void getOpenFileNameAsync(const QString& title, const QString& location, QObject* context, std::function<void(const std::optional<QString>&)> done) override;
+     void getExistingDirectoryAsync(const QString& title, const QString& location, QObject* context, std::function<void(const std::optional<QString>&)> done) override;
+     void clipboardTextAsync(QObject* context, std::function<void(const std::optional<QString>&)> done) override;
++    QString clipboardText() override;
+     void setClipboardText(const QString& text) override;
+     void readEarlySettings(const QSettings&);
+     void readLateSettings(const QSettings&);

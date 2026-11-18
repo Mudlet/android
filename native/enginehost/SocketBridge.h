@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 33;
+    static constexpr int protocolVersion = 34;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -106,6 +106,9 @@ protected:
     void onBytesWritten();
     // Whether a cancelMapFile has come on this socket, which it takes out of the frames still to be handled
     bool mapFileCancelAsked();
+    // The first frame of type, with id if one is given, among those still to be handled, taken out of them; the socket
+    // is read for up to waitMs while none has come. The others wait for the event loop.
+    std::optional<QJsonObject> takeFrame(QLatin1StringView type, const QJsonValue& id, int waitMs);
     void handleMessage(const QJsonObject& message);
     // True once the request is answered here: one for the whole engine, or a refusal of a request sent on the wrong
     // socket; false to pass it to the profile
@@ -208,7 +211,8 @@ protected:
     bool mClientLagging = false;
     qint64 mLastSentSeq = 0;
     QByteArray mReadBuffer;
-    bool mPeekingForCancel = false;
+    bool mTakingFrame = false;
+    bool mReadQueued = false;
     IEngine* mEngine = nullptr;
     QHash<QString, QString> mStatus;
     bool mHiddenInput = false;

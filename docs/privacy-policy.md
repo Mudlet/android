@@ -38,8 +38,17 @@ Mudlet is a client for text-based online games (MUDs). Those games are run by ot
   device.
 - A small file that lets Mudlet reconnect you if Android stops it in the background. It never holds a password.
 
-Mudlet does not back any of this up to the cloud, and does not let Android copy it to a new device. Android's own
-system logs on your device may hold Mudlet's error messages; they never hold a password.
+## Backups and moving to a new phone
+
+Mudlet lets Android back up your profiles, scripts, packages, maps and settings to your Google account, but only when
+Android encrypts the backup with your phone's screen lock (PIN, pattern or password); without a screen lock there is no
+backup. When you move to a new phone with Android's transfer, by cable or over Wi-Fi, these go with you, and so do the
+logs of your games and the command suggestions Mudlet learned from what you typed. Logs and suggestions never go to a
+cloud backup. Your passwords, the sign-in tokens Mudlet keeps for games, and the small reconnect file never leave your
+phone: on a new phone, or after a restore, Mudlet asks you for each game's password again. You can turn backups off in
+your phone's settings, under Google or System, Backup. A backup can hold up to 25 MB; a bigger one is not made at all.
+
+Android's own system logs on your device may hold Mudlet's error messages; they never hold a password.
 
 You can export a profile to a file yourself, from the profile's editor: it goes only where you choose in Android's file
 picker, and Mudlet leaves your passwords out of it. Who can read it then depends on where you put it. Importing one
@@ -66,8 +75,9 @@ Mudlet does not ask for your location, contacts, camera, microphone, files or an
 ## Deleting your data
 
 Everything Mudlet keeps is on your device. To delete it, uninstall Mudlet, or open Android's Settings, Apps, Mudlet,
-Storage and choose "Clear storage". There is no copy anywhere else for the Mudlet team to delete. To have a game delete
-your character or account, ask that game.
+Storage and choose "Clear storage". A backup Android made of it is in your Google account, which you can delete there
+(Google Drive, Backups). There is no copy anywhere the Mudlet team can reach, so there is none for it to delete. To have
+a game delete your character or account, ask that game.
 
 ## Google Play
 

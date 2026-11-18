@@ -123,6 +123,10 @@ python3 native/tests/android_instrumented.py --app app/build/outputs/apk/debug/a
     --out instrumented-test --symbols native/build-android-x86_64-mudlet/enginehost
 ```
 
+From Android 12 it also backs the app up through `bmgr`'s local transport, once as a cloud backup and once as a
+transfer to a new phone, restores it and has `BackupRestoreTest` check what came back; that class runs only that way,
+as its `check` reads what its `seed` wrote before the round trip.
+
 `android_instrumented.py` also copies the screenshots `ScreenshotTest` takes (the profile list, the game screen with
 the map behind its text, the settings, the map in front and a trigger's page, light and dark, on Android 12 and
 later) into `<out>/screenshots/`, which CI's emulator jobs upload with their results: before and after shots for a pull

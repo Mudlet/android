@@ -25,7 +25,7 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * The profiles' passwords, which the app sends with each `openProfile` and the engine never keeps. Each is encrypted
  * with an AES-GCM key that never leaves the Android KeyStore, in a private file that backups and device transfers leave
- * out (`res/xml/data_extraction_rules.xml`). Names match ignoring case, as the engine's do.
+ * out and a restore does not keep ([BackupScope]). Names match ignoring case, as the engine's do.
  */
 class PasswordStore(context: Context) {
     private val file = AtomicFile(File(context.filesDir, FILE))
@@ -153,7 +153,7 @@ class PasswordStore(context: Context) {
     }
 
     companion object {
-        /** Under the app's files; `data_extraction_rules.xml` excludes its folder. */
+        /** Under the app's files; [BackupScope] and the backup rules leave its folder out. */
         const val FILE = "passwords/profiles.json"
 
         private const val TAG = "MudletPasswords"

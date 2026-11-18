@@ -200,8 +200,11 @@ object Settings {
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
 
-    /** "Map behind the text": the profile's map, faint, behind the game's text (docs/architecture.md, "The map behind the text"). */
-    val mapBehindText = BoolSetting("mapBehindText", default = true)
+    /**
+     * "See-through map and text": the profile's map, faint, behind the game's text (docs/architecture.md, "The map behind
+     * the text"). Off by default; as no default is ever stored, a player who never chose has the default of the app they run.
+     */
+    val mapBehindText = BoolSetting("mapBehindText", default = false)
 
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)

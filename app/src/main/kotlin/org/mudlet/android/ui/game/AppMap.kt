@@ -317,7 +317,6 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                             viewOnly,
                             drawn,
                             modifier = Modifier.fillMaxSize(),
-                            controls = false,
                             info = map?.info,
                         )
                         if (offerInMap) {

@@ -17,12 +17,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
@@ -80,6 +81,8 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Velocity
@@ -88,6 +91,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
+import org.mudlet.android.protocol.MapCorner
 import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.MapInfo
 import org.mudlet.android.protocol.MapPoint
@@ -100,6 +104,7 @@ import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RoomEdit
 import org.mudlet.android.protocol.RoomInfo
 import org.mudlet.android.protocol.ZoomNotches
+import org.mudlet.android.protocol.wholeIn
 import org.mudlet.android.ui.AppMapClient
 import org.mudlet.android.ui.CONSOLE_BACKGROUND
 import org.mudlet.android.ui.EngineClient
@@ -117,10 +122,10 @@ private const val BUTTON_NOTCHES = 3
 // TalkBack's moves go a third of the map's narrow side
 private const val PAN_FRACTION = 1.0 / 3
 
-// The buttons' backing lets a little of the map show through
+// The area and level bar's backing lets a little of the map show through
 private const val CONTROLS_ALPHA = 0.85f
 
-// The space round the buttons' backing
+// The space round the area and level bar's backing, and inside a map panel's (MapCorner.ROW_DP)
 private val CONTROLS_PADDING = 4.dp
 
 // A second tap further than this from the first is a tap of its own, as Android's and Qt's double-tap slop has it
@@ -142,14 +147,15 @@ private val MIN_FLING_SPEED = 50.dp
 private val FOLLOW_PADDING = 8.dp
 private val FOLLOW_SPACE = 48.dp + FOLLOW_PADDING * 2
 
-// The area and level bar shows on a map at least this high, room for it and the buttons over it; the room picked takes
-// at most this much of the map's height; nothing at the bottom reaches up over the buttons, which keep their 48 dp
+// The area and level bar shows on a map at least this high; the room picked takes at most this much of the map's height
 private val PLACE_BAR_LEAST_HEIGHT = 144.dp
-private val CONTROLS_SPACE = 48.dp + CONTROLS_PADDING * 2
 private const val ROOM_CARD_FRACTION = 0.5f
 
 // The most of the map's height its info takes, so that a script's long one leaves the map in sight
 private const val INFO_FRACTION = 0.4f
+
+// The most of a mapper window its panel takes, above the map, where it has no room beside the window
+private const val PANEL_FRACTION = 0.6f
 
 // TalkBack's reach is worked out against a fit at least this large, so a map not laid out yet does not divide by 0
 private const val MIN_FIT_SCALE = 0.01f
@@ -199,44 +205,86 @@ private object MapperWindow : MapSource {
 }
 
 /**
- * The mapper window (docs/architecture.md, "The map") at [placed]'s place, where [modifier] puts it: the engine's last
- * `map`, while it is the window's size, drawn as [MapView] draws it, which the engine is asked to draw at the scale it
- * is shown at.
+ * The mapper window (docs/architecture.md, "The map") shown at [placed]'s rect: the engine's last `map`, while it is the
+ * window's size, drawn as [MapView] draws it, which the engine is asked to draw at the scale it is shown at, and its
+ * [MapPanel], which covers none of it. With room beside the window for the panel, the two are where [corner] says, a
+ * window small for the game area drawn larger; without, the map fills the window's rect below its panel. One group for
+ * TalkBack, the map before its panel, after the game screen's own controls; [modifier] goes on the group.
  */
 @Composable
-internal fun ScriptMap(placed: PlacedWindow, modifier: Modifier = Modifier) {
+internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Density, modifier: Modifier = Modifier) {
     val window = placed.window
-    val rect = placed.rect
-    val full = placed.full
     val map = EngineClient.front.windows.map
     // One of another size is from before the mapper changed size (docs/protocol.md, "The map")
     val frame: ImageBitmap? = map?.bitmap?.takeIf { map.w == window.w && map.h == window.h }
-    // In this node's pixels: the window as a whole, of which [rect] may show only a part
-    val fit = remember(window.w, window.h, rect, full) { MapFit(window.w, window.h, PxRect(full.x - rect.x, full.y - rect.y, full.w, full.h)) }
-    // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred
-    LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
-    MapView(
-        MapperWindow,
-        frame,
-        fit,
-        viewOnly = map?.viewOnly ?: true,
-        drawn = map != null,
-        info = map?.info,
-        modifier = modifier.background(CONSOLE_BACKGROUND).semantics {
-            isTraversalGroup = true
-            traversalIndex = WINDOWS_TRAVERSAL_INDEX
-        },
-    )
+    val viewOnly = map?.viewOnly ?: true
+    val drawn = map != null
+    val info = map?.info?.takeIf { frame != null }
+    val group = Modifier.semantics {
+        isTraversalGroup = true
+        traversalIndex = WINDOWS_TRAVERSAL_INDEX
+    }
+    val mapModifier = Modifier.background(CONSOLE_BACKGROUND).readAsOne(0f)
+    val panelModifier = Modifier.readAsOne(1f)
+
+    if (corner != null) {
+        val bounds = corner.bounds
+        val mapRect = corner.map.from(bounds)
+        val fit = remember(window.w, window.h, placed, mapRect) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, mapRect.w, mapRect.h))) }
+        // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred
+        LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
+        // Touches between the map and the panel, and on the panel's room it leaves empty, reach what is under them
+        Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
+            MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.placeAt(mapRect, density).then(mapModifier), panel = true)
+            Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
+                val align = when {
+                    corner.below && corner.right -> Alignment.TopEnd
+                    corner.below -> Alignment.TopStart
+                    corner.right -> Alignment.BottomEnd
+                    else -> Alignment.BottomStart
+                }
+                val infoHeight = with(density) { (corner.map.h * INFO_FRACTION).toDp() }
+                MapPanel(MapperWindow, frame, fit, viewOnly, drawn, info, infoHeight, Modifier.align(align).then(panelModifier))
+            }
+        }
+    } else {
+        val rect = placed.rect
+        val height = with(density) { rect.h.toDp() }
+        // The buttons zoom about the frame's middle, whichever box it is fitted to
+        val whole = remember(window.w, window.h, placed) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, rect.w, rect.h))) }
+        Column(Modifier.placeAt(rect, density).then(modifier).background(CONSOLE_BACKGROUND).then(group)) {
+            MapPanel(MapperWindow, frame, whole, viewOnly, drawn, info, height * INFO_FRACTION, Modifier.fillMaxWidth().heightIn(max = height * PANEL_FRACTION).then(panelModifier))
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val box = PxRect(0f, 0f, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
+                val fit = remember(window.w, window.h, placed, box) { MapFit(window.w, window.h, placed.wholeIn(box)) }
+                LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
+                MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.fillMaxSize().then(mapModifier), panel = true)
+            }
+        }
+    }
 }
+
+// This rect in the pixels of a node at [origin]'s top left
+private fun PxRect.from(origin: PxRect) = PxRect(x - origin.x, y - origin.y, w, h)
+
+// Read as one, at [index] among what is read with it. By where things are drawn, Compose would read one that a panel
+// has scrolled out of its sight first, as it takes that one's bounds to be the window's top left corner
+private fun Modifier.readAsOne(index: Float) = semantics {
+    isTraversalGroup = true
+    traversalIndex = index
+}
+
+// Read at [index] among what is read with it, wherever it is drawn: see readAsOne
+private fun Modifier.readAt(index: Float) = semantics { traversalIndex = index }
 
 /**
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways,
  * and moved at once by what the player's touches moved it by until the engine draws that ([MapMover]). A tap selects
  * the room nearest it and shows it ([RoomCard]), a double tap walks there, a drag pans the map and glides on when
- * flung, a pinch zooms about the fingers and a double tap that drags zooms about it, each sent to [source]. In its
- * corner, with [controls], are its [MapButtons]; at its top the frame's map info, [info] ([MapInfoBox]); at its bottom why
- * the engine refused a request, the area and level shown ([MapPlaceBar]) beside a button that centres it on the player
- * while it does not follow them, and the room picked.
+ * flung, a pinch zooms about the fingers and a double tap that drags zooms about it, each sent to [source]. At its top
+ * the frame's map info, [info] ([MapInfoBox]); at its bottom why the engine refused a request, the area and level shown
+ * ([MapPlaceBar]) beside a button that centres it on the player while it does not follow them, and the room picked.
+ * With [panel], the info, the bar and the button are left to a [MapPanel] beside it.
  * TalkBack reads it as the map, viewed or edited and whether it follows the player, whose actions select or walk to the
  * room in its middle, zoom, move it, show the level above or below and centre it on the player.
  */
@@ -248,15 +296,16 @@ internal fun MapView(
     viewOnly: Boolean,
     drawn: Boolean,
     modifier: Modifier = Modifier,
-    controls: Boolean = true,
     info: MapInfo? = null,
+    panel: Boolean = false,
 ) {
     val touchable = frame != null && EngineClient.enginePid > 0
     val currentFit by rememberUpdatedState(fit.takeIf { touchable })
     val editing by rememberUpdatedState(touchable && !viewOnly)
     var roomDrag by remember { mutableStateOf<RoomDrag?>(null) }
     val mover = source.mover
-    val movable = touchable && mover.view != null
+    val view = source.movableView(frame)
+    val movable = view != null
     val followShown = movable && !mover.following
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -277,9 +326,8 @@ internal fun MapView(
         CustomAccessibilityAction(stringResource(label)) { mover.move(side * direction.x, side * direction.y, 1.0, fit.centre, fit.centre, now = true) }
     }
     val follow = CustomAccessibilityAction(stringResource(R.string.map_follow)) { mover.followPlayer() }
-    val view = mover.view.takeIf { movable }
-    val above = view?.let { v -> v.levels.firstOrNull { it > v.level } }
-    val below = view?.let { v -> v.levels.lastOrNull { it < v.level } }
+    val above = view?.levelAbove()
+    val below = view?.levelBelow()
     val levelUp = above?.let { CustomAccessibilityAction(stringResource(R.string.map_level_up)) { source.rooms.showLevel(it) } }
     val levelDown = below?.let { CustomAccessibilityAction(stringResource(R.string.map_level_down)) { source.rooms.showLevel(it) } }
     val actions = listOf(
@@ -307,19 +355,17 @@ internal fun MapView(
             if (frame != null) drawFrame(frame, fit, shift = mover.shift)
             roomDrag?.let { drawRoomGhost(it, fit, mover, ghost) }
         }
-        if (frame != null && info != null) {
-            // Under the buttons' row, which it would otherwise share the top of a narrow map with
-            MapInfoBox(info, Modifier.align(Alignment.TopStart).padding(top = if (controls) CONTROLS_SPACE else 0.dp).heightIn(max = maxHeight * INFO_FRACTION))
-        }
+        if (frame != null && info != null && !panel) MapInfoBox(info, Modifier.align(Alignment.TopStart).heightIn(max = maxHeight * INFO_FRACTION))
         // Under one another, so none takes another's touches: in a short map the bar waits for the room it needs
-        val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT }
+        val placeBar = view?.takeIf { maxHeight >= PLACE_BAR_LEAST_HEIGHT && !panel }
+        val followHere = followShown && !panel
         val roomCardHeight = maxHeight * ROOM_CARD_FRACTION
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(top = if (controls) CONTROLS_SPACE else 0.dp)) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
             source.refusal?.let { MapRefusal(it, source::dismissRefusal) }
             linking?.let { ExitLinkBanner(it, { source.rooms.pickExitRoom(null) }) }
             Box(Modifier.fillMaxWidth()) {
-                placeBar?.let { MapPlaceBar(it, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followShown) FOLLOW_SPACE else 0.dp)) }
-                if (followShown) {
+                placeBar?.let { MapPlaceBar(it, source.rooms, above, below, Modifier.align(Alignment.BottomStart).padding(end = if (followHere) FOLLOW_SPACE else 0.dp)) }
+                if (followHere) {
                     SmallFloatingActionButton(
                         { mover.followPlayer() },
                         Modifier.align(Alignment.BottomEnd).padding(FOLLOW_PADDING).minimumInteractiveComponentSize(),
@@ -330,37 +376,60 @@ internal fun MapView(
             }
             room?.let { RoomCard(it, source.rooms, editing = !viewOnly, Modifier.fillMaxWidth().heightIn(max = roomCardHeight)) }
         }
-        if (controls) {
-            // Never squeezed by a small map: they keep their 48 dp, reaching past its left edge. Over the room card, as
-            // TalkBack takes a button's touch area unclipped: one scrolled out of a card the keyboard shortens would take theirs
-            Surface(
-                Modifier.align(Alignment.TopEnd).wrapContentSize(Alignment.TopEnd, unbounded = true).padding(CONTROLS_PADDING),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
-                // Not the surface's own colour, which contentColorFor() would not know as it
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                MapButtons(source, frame, fit, viewOnly, drawn)
-            }
-        }
     }
 }
 
 /**
- * The area [view] shows, a button that lists the map's areas to show another, and while the area has more than one
- * level, the level shown between buttons to the level [above] and [below] it; each asked of [rooms].
+ * What a [MapView] of the same arguments leaves out with `panel`, on a backing of its own beside a script's map so that
+ * none of it covers the map: its [MapButtons] and, while the map does not follow the player, a button that centres it
+ * on them; the area and level shown ([MapPlaceBar]); and the frame's map info, [info], at most [infoHeight] high
+ * ([MapInfoBox]). It scrolls where it has not the room.
  */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MapPanel(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, info: MapInfo?, infoHeight: Dp, modifier: Modifier = Modifier) {
+    val view = source.movableView(frame)
+    Surface(modifier, shape = MaterialTheme.shapes.small) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(CONTROLS_PADDING)) {
+            // The button that centres the map goes under the others in a strip narrower than four buttons
+            FlowRow(Modifier.readAsOne(0f)) {
+                MapButtons(source, frame, fit, viewOnly, drawn, Modifier.readAsOne(0f))
+                if (view != null && !source.mover.following) {
+                    IconButton({ source.mover.followPlayer() }, Modifier.readAt(1f)) {
+                        Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_follow))
+                    }
+                }
+            }
+            view?.let { MapPlaceBar(it, source.rooms, it.levelAbove(), it.levelBelow(), Modifier.readAt(1f)) }
+            info?.let { MapInfoBox(it, Modifier.heightIn(max = infoHeight).readAt(2f)) }
+        }
+    }
+}
+
+// The view of the map the player can move, while a frame is drawn and an engine attached to take the moves
+private fun MapSource.movableView(frame: ImageBitmap?): MapViewInfo? = mover.view.takeIf { frame != null && EngineClient.enginePid > 0 }
+
+private fun MapViewInfo.levelAbove(): Int? = levels.firstOrNull { it > level }
+
+private fun MapViewInfo.levelBelow(): Int? = levels.lastOrNull { it < level }
+
+/**
+ * The area [view] shows, a button that lists the map's areas to show another, and while the area has more than one
+ * level, the level shown between buttons to the level [above] and [below] it, under the area where they do not fit
+ * beside it; each asked of [rooms].
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: Int?, modifier: Modifier = Modifier) {
     val attached = EngineClient.enginePid > 0
     var listed by remember { mutableStateOf(false) }
     Surface(
-        modifier.padding(CONTROLS_PADDING),
+        modifier.semantics { isTraversalGroup = true }.padding(CONTROLS_PADDING),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA),
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        FlowRow {
             Box {
                 TextButton(
                     {
@@ -370,7 +439,8 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                     Modifier.heightIn(min = 48.dp),
                     enabled = attached,
                 ) {
-                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    // Two lines, as a map panel is as narrow as four buttons
+                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Icon(painterResource(R.drawable.ic_arrow_drop_down), null)
                 }
                 DropdownMenu(listed, { listed = false }) {
@@ -391,12 +461,14 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                 }
             }
             if (view.levels.size > 1) {
-                IconButton({ below?.let(rooms::showLevel) }, enabled = attached && below != null) {
-                    Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.map_level_down))
-                }
-                Text(stringResource(R.string.map_level, view.level), style = MaterialTheme.typography.labelLarge, maxLines = 1)
-                IconButton({ above?.let(rooms::showLevel) }, enabled = attached && above != null) {
-                    Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.map_level_up))
+                Row(Modifier.readAsOne(1f), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton({ below?.let(rooms::showLevel) }, enabled = attached && below != null) {
+                        Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.map_level_down))
+                    }
+                    Text(stringResource(R.string.map_level, view.level), Modifier.weight(1f, fill = false).readAt(1f), style = MaterialTheme.typography.labelLarge, maxLines = 2)
+                    IconButton({ above?.let(rooms::showLevel) }, Modifier.readAt(2f), enabled = attached && above != null) {
+                        Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.map_level_up))
+                    }
                 }
             }
         }

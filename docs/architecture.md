@@ -533,6 +533,17 @@ The game screen draws `buttonBars` and `commands` (`ui/game/ScriptButtonBars.kt`
 The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted by `MapFit` in `:protocol`):
 - A `Geyser.Mapper`, or another mapper a script put in the main window, is placed as any window. openMapWidget()'s map,
   a dock the main window's size, is a "Map" page in either layout, and a mapper beside the text is one when stacked.
+- None of what works the map covers it: its buttons, the button that centres it on the player, its area and level and
+  its map info are in a panel of their own (`MapPanel`) beside it, where `MapCorner` in `:protocol` puts the two, with
+  room for a row of buttons under the window, or over it for one in the area's bottom half. A window smaller than two
+  fifths of the game area's width and height, within 120 and 320 dp, is drawn that large, its shape kept, from its
+  corner nearest the area's, as a desktop's mapper is a few dp across on a phone; it grows over the console's text
+  but stops short of another window it was clear of. The panel is as wide as four buttons or the map, at most as high
+  as the map, scrolls, and goes over what is under it, but for a map that did not grow it goes only where it covers no
+  other window. Otherwise, and on a page or in a scroll box, the panel is a strip at the window's top, at most three
+  fifths of it, and the map fills the rest, cut where the window is cut. TalkBack reads the map, then the panel.
+  It reads the panel's parts in the order they show, however far it has scrolled, as Compose would otherwise read
+  one scrolled out of sight first; the button that centres the map goes under the others in a strip narrower than four.
 - The frame is drawn only while it is the window's size, as the engine draws one at each new size; scaled alike both
   ways to fit and centred, so a touch maps back to the frame's pixel under it.
 - The engine is asked (`setMapScale`) to draw it at the scale it is shown at, `MapFit.renderScale`, as Mudlet's pixels
@@ -546,7 +557,7 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   by `MapRooms`): its name in bold, its area and number, how far it is ("You are here", so many steps, or no known
   way), its exits, each a chip naming the way and the room it leads to, which shows that room, and "Walk here"
   (`walkToRoom`, with a tick), off where there is no way or the player is there. It is read out as it comes, takes at
-  most half the map's height, never reaching up over the map's buttons, scrolls past that (another room shows from
+  most half the map's height, scrolls past that (another room shows from
   its top), and closes with its button, a tap on no room, or Back on the map
   in front, and as that map closes, but not as a rotation remakes it; it is asked for again when the player moves, as
   its steps change. Each map's answers carry the `id` it
@@ -564,10 +575,12 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   Cancel, and the next tap on a room leads it there; viewing the map cancels it. A drag that starts on the room shown
   moves it by whole places, outlined where it will go as the finger moves (`MapMoves.roomsMoved`), and sent as one
   `editRoom` as the finger lifts. Each edit answers with the room as it now is, which the card shows.
-- A bar at the map's bottom start (`MapPlaceBar`), where the map is at least 144 dp high, names the area shown, a
+- A bar (`MapPlaceBar`), in a script's map's panel and at the app's map's bottom start where it is at least 144 dp
+  high, names the area shown, a
   button that lists the map's areas (`mapAreas`, asked each time it opens) to show another (`showMapArea`), and,
   while the area has more than one level (`view.levels`), the level shown between buttons to the level above and below
-  (`showMapLevel`). Either stops the map following the player, as a pan does.
+  (`showMapLevel`), under the area where they do not fit beside it. Either stops the map following the player, as a
+  pan does.
 - A drag pans the map and, let go quickly, glides on as a fling slows; a pinch pans with the fingers and zooms about
   their middle; a double tap whose second touch drags zooms about it, in as it goes down (`mapGestures`). Each is
   drawn at once by moving the frame shown (`MapMoves` in `:protocol`, held by `MapMover`), and sent as `moveMap`, at
@@ -575,10 +588,12 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   has not drawn yet until a frame's `view.moved` reaches it, and as it was when a move is refused. The zoom stays
   within the frame's `minZoom` and `maxZoom`, as the engine keeps it, so what is shown is what it draws next.
 - A pan, or a zoom about a point other than the middle, stops the map following the player (`view.following`):
-  a button at its bottom end then centres it on the player again (`followPlayer`), until the player moves to another
+  a button at its bottom end, or in a script's map's panel, then centres it on the player again (`followPlayer`),
+  until the player moves to another
   room, which follows them again anyway. The map in front sends `followPlayer` as it goes back behind the text, so
   the map behind the text follows the player.
-- Buttons in its corner (`MapButtons`) zoom out and in by a quarter about the map's middle (`moveMap`, which keeps
+- Buttons (`MapButtons`), in a script's map's panel and the app's map's title bar, zoom out and in by a quarter
+  about the map's middle (`moveMap`, which keeps
   following the player; three wheel notches while a frame has no `view`), and a switch, on while the map is edited,
   sends `setMapViewOnly`; it follows the next `map`, not the tap. A refused request shows the engine's reason at the
   map's bottom, above the bar and the button that centres it, until dismissed or the next request; a refusal of
@@ -595,10 +610,11 @@ The desktop paints the map info box into the map: the room's name, number and ar
 contributor, more from `Full`, and whatever a script adds with `registerMapInfo()`. The engine leaves it out of the
 pictures it sends (`0016-headless-map-info.patch`) and sends its parts as `info` in `map` and `appMap`
 (`docs/protocol.md`, "The map info"); `MapInfoBox` (`ui/game/MapInfoBox.kt`) shows them at the top of the map
-(`MapView`), under the buttons of a script's mapper:
+(`MapView`), or in a script's map's panel, under its buttons:
 - Each part keeps the colour, bold and italic the engine gives it, over the box's own colour, so a script's colours
   mean what they do on the desktop; the text is the app's, at the size Android's font scale gives.
-- It stays where it is while a drag or a pinch moves the picture under it, and takes no touches, which reach the map.
+- On the app's map it stays where it is while a drag or a pinch moves the picture under it, and takes no touches,
+  which reach the map.
   It takes at most two fifths of the map's height.
 - TalkBack reads it as one, "Map info:" and the parts in order.
 - The map behind the text shows none: the picture there is a backdrop TalkBack skips, and the box's text would lie
@@ -610,7 +626,7 @@ pictures it sends (`0016-headless-map-info.patch`) and sends its parts as `info`
 ### The map behind the text
 The game screen also has a map of its own, which needs no script: `appMap`, the engine's second map view
 (docs/protocol.md, "The app's map"; `ui/AppMapClient.kt`, drawn by `ui/game/AppMap.kt`).
-- Behind the text, while the setting "See-through map and text" (`Settings.mapBehindText`, on by default) has it there: it
+- Behind the text, while the setting "See-through map and text" (`Settings.mapBehindText`, off by default) has it there: it
   fills the main console, between the console's background and its text (Console's `behindText`), and follows the player
   as the desktop's mapper does: asked for, it opens the map for scripts as opening the desktop's mapper does, so a
   mapper script's `centerview()` moves the player on it with no script mapper. Its alpha is the most at which the
@@ -1275,7 +1291,8 @@ device shows, below the UI's debug hook:
   `activateCommand`; the map: drawn in the mapper
   window, a tap, a double tap and a pinch sent as `mapPointer` at the frame's point under them, the zoom buttons and
   TalkBack's actions, the switch to editing, a refusal until dismissed, a frame of another size not drawn, and the
-  docked map as a page; an MXP frame's tabs (`ScriptFrameTabsTest`): each page a tab by its title, at least 48 dp,
+  docked map as a page, and a small one drawn larger with its panel beside it, none of the panel over the map, on
+  five screens (`ScriptMapCornerTest`); an MXP frame's tabs (`ScriptFrameTabsTest`): each page a tab by its title, at least 48 dp,
   selected for the page in front, a tap on another sending `selectFrameTab` and the page brought forward then drawn,
   and stacked, the page called by its tab's title, the tabs at the top of the pane, which stays open on that page,
   with its chip in the switcher selected; the app's map (`AppMapTest`): asked at the console's size, again at each attach, and drawn
@@ -2087,8 +2104,12 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       "mapModeChangeEvent", function(_, mode) echo(mode .. "\n") end)` prints `editing`), and off again.
     - With TalkBack on: the map reads as "Map of the game, Viewing" after the console, and its actions walk to the
       room in the middle and zoom; the zoom buttons and the switch read their names.
+    - On a phone, a mapper a few dp across (`lua myMapper = Geyser.Mapper:new({name = "map", x = "-100px", y = 0,
+      width = 100, height = 100})`) is drawn about two fifths of the screen across, with its buttons, area and level
+      and map info under it, none of them over the map, and the newest text in sight below.
 24. The map behind the text, with the libmudlet APK and a profile with a map but no `Geyser.Mapper` (rooms made with
     `addRoom()`, `setExit()`, `setRoomArea()` and `centerview()` do).
+    - "See-through map and text" is off in the settings until turned on, and with it on:
     - The map shows faintly behind the console's text, filling it, and follows the player as they walk
       (`lua centerview(<room>)` moves it there); the text and its ANSI colours read as without it, and a swipe scrolls
       the text and a pinch sizes it, as before.

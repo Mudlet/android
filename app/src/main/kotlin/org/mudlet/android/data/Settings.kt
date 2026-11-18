@@ -223,6 +223,9 @@ object Settings {
     /** "Check for new test builds": a PTB installed from GitHub asks GitHub once a day for a newer one (docs/ptb.md). */
     val checkTestBuilds = BoolSetting("checkTestBuilds", default = true)
 
+    /** "Movement pad": the game screen's keys for walking with one thumb (docs/architecture.md, "The movement pad"). */
+    val movementPad = BoolSetting("movementPad", default = true)
+
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)
 
@@ -291,6 +294,7 @@ object Settings {
         mapBehindText,
         mapInCorner,
         checkTestBuilds,
+        movementPad,
         wallpaperColours,
     )
 

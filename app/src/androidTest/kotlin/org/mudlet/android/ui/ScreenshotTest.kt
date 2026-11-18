@@ -42,6 +42,8 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.ui.game.GAME_SHEET_TAG
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
+import org.mudlet.android.ui.game.HardwareKeyboard
+import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -50,7 +52,8 @@ import java.util.Base64
 import java.util.concurrent.CompletableFuture
 
 /**
- * Screenshots of the profile list, the game screen with the map behind its text, connected and after a drop, the
+ * Screenshots of the profile list, the game screen with the map behind its text, connected, with its movement pad and
+ * after a drop, the
  * settings (the hub, a search and seven pages, one as a change says it waits for the next connection, and in light
  * mode the hub and a page side by side on a tablet), the input line keeping the command sent, the
  * map in front with a downloaded map and dragged off the player, a room's exits on it edited with the rooms found by
@@ -110,6 +113,17 @@ class ScreenshotTest {
         session.status("connection", "connected")
         compose.waitUntil(WAIT_MS) { EngineClient.front.status["connection"] == "connected" }
         save("game-$mode")
+        // The fake engine's rule keeps the pad away, and so would a keyboard the emulator may have
+        compose.runOnIdle {
+            HardwareKeyboard.attachedOverride = false
+            Settings.movementPad.set(true)
+        }
+        waitFor(hasTestTag(MOVEMENT_PAD_TAG))
+        save("game-movement-pad-$mode")
+        compose.runOnIdle {
+            Settings.movementPad.set(false)
+            HardwareKeyboard.attachedOverride = null
+        }
         session.status("connection", "disconnected")
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.connection_reconnect_to, PROFILES[0].name))).fetchSemanticsNodes().isNotEmpty() }
         save("game-lost-$mode")

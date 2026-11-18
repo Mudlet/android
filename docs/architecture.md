@@ -332,6 +332,33 @@ address the card shows the lag as desktop's latency box does (`N:… S:…`, or 
 (`latencyChanged`), which TalkBack spells out. `TimeStampsTest` tries the switch, the lines and the lag against the
 fake engine, and `time_stamps` in the host test the engine against Mudlet.
 
+### The movement pad
+Below the bottom row the game screen has a movement pad for walking with one thumb (`ui/game/MovementPad.kt`): the
+eight compass directions around a gap, with in and out before them and up and down after, three rows of 48 dp keys at
+the row's end, where the thumb of the hand that holds the phone is. West is on the left in every language, as on a
+map. It is a block of the screen's column, not an overlay, so it covers neither the game's text nor the input line;
+the console is that much lower.
+
+A tap does what `MovementKey.press()` (`ui/game/MovementKeys.kt`) says. A compass key whose number pad digit, with
+Num Lock on, is among the profile's `keyBindings` presses that binding (`pressKey`), as the key does for a desktop
+player (8 north, 9 north-east, 6 east, 3 south-east, 2 south, 1 south-west, 4 west, 7 north-west), so a profile's own
+walking is used. Any other key, and up, down, in and out always, sends its short word (`n`, `ne`, `e`, `se`, `s`,
+`sw`, `w`, `nw`, `u`, `d`, `in`, `out`: the ones Mudlet's generic mapper follows the player by) as if typed, so the
+profile's aliases see it and the history and the suggestions learn it.
+
+The pad is on from the first start (`Settings.movementPad`). `MovementPadLayout.shown()` keeps it away while the game
+hides input, when a tap would send a direction as the password; with a hardware keyboard that has letters attached,
+which walks as on the desktop; while the on-screen keyboard is up, which leaves the game's text too little room for
+both; and in a window less than 320 dp wide or 480 dp tall, a phone on its side for one. The button at the row's start
+puts it away for good: it turns the setting off and a snackbar says where it is turned on again, with Undo. "Movement
+pad" on the Appearance settings page is that switch.
+
+TalkBack reads the pad after the bottom row and before the script windows: "Hide the movement pad", then the keys row
+by row, each a button named by where it goes ("Go north-east"). `MovementKeysTest` tries the keys' commands, the layout
+and when the pad shows on the JVM; `MovementPadTest`, `MovementPadPseudoLocaleTest` and the pad's tests in
+`TalkBackOrderTest` and `ScreenReaderTest` the pad on the game screen against the fake engine, whose rule
+(`FakeEngineRule`) turns the pad off for every other test.
+
 ### How the app looks
 The app's own screens are Material 3 (`ui/theme/`), light or dark as the system is set, in Material's type and shape
 scales; text sizes are in sp, so the system font size scales them.
@@ -1978,6 +2005,15 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       and closes the sheet; its Send button sends it. Pin one: it shows as a button below the line, which sends it
       at a tap, and it is still there after the app is closed from the recent apps and reopened. Unpin it from the
       sheet's Pinned section. With a hardware keyboard, Ctrl+R opens the sheet; Back closes it.
+    - The movement pad: it is below the input line from the first start, at the right, and covers neither the game's
+      text nor the input line. Each key walks that way with one tap of the thumb of the hand that holds the
+      phone; in a profile with key bindings on the number pad, a compass key runs the binding. It goes while the
+      keyboard is up, at a password prompt, with a Bluetooth or USB keyboard and with the phone on its side, and comes
+      back after each. Its close button puts it away, the snackbar's Undo brings it back, and put away it is still away
+      after the app is closed from the recent apps and reopened, until "Movement pad" in Settings, Appearance is turned
+      on. In Arabic (or ar-XB) the pad is at the left and west still on the pad's left. With TalkBack on: after the
+      input line's Send button it reads "Hide the movement pad", then "Go in", "Go north-west", "Go north" and so on
+      row by row, each a button.
     - Scroll up while the game sends text: the console stays put and "Jump to the bottom: N new lines" counts up; the
       button goes back to the newest line, which the console then follows again. Rotate the phone while scrolled up,
       and again with a half-typed line: both stay. The same in split screen.

@@ -45,12 +45,14 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -101,6 +103,9 @@ import kotlin.reflect.KClass
  * slides across with it ([GameSwipe]). Each change of the front game's connection is said once, with the game's name
  * first, so Mudlet's retries after a drop are not each read out. Desktop's Alt shortcuts open the screens they open
  * there ([desktopShortcut]), and a hardware key a key binding of the profile takes goes to the engine.
+ *
+ * Below the row is the movement pad ([MovementPad]), unless the player has put it away, a keyboard is in use, the game
+ * hides input or the screen is too small ([movementPadShown]). A tap on a key walks that way ([MovementKey.press]).
  */
 @Composable
 fun GameScreen(
@@ -173,6 +178,7 @@ private fun ProfileGameScreen(
     val resources = LocalResources.current
     val hidden = c.hiddenInput
     val boundKeysDown = remember { HashSet<Int>() }
+    var screen by remember { mutableStateOf(IntSize.Zero) }
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
     // The map behind the text is not there to be moved or picked in: once the map in front closes, not as a rotation
@@ -256,6 +262,27 @@ private fun ProfileGameScreen(
         if (c.sendCommand(command)) suggestions.sent(command) else scope.launch { snackbars.showSnackbar(notSent) }
     }
 
+    fun walk(key: MovementKey) {
+        when (val press = key.press(c.windows.keyBindings)) {
+            is MovementPress.Command -> sendNow(press.line)
+            is MovementPress.Binding -> if (!c.windows.pressKey(press.key, press.text)) scope.launch { snackbars.showSnackbar(notSent) }
+        }
+    }
+
+    // Says where the switch is, as the pad is on from the start and the player may never have seen the setting
+    fun hideMovementPad() {
+        Settings.movementPad.set(false)
+        scope.launch {
+            val undone = snackbars.showSnackbar(
+                resources.getString(R.string.movement_pad_hidden),
+                resources.getString(R.string.movement_pad_undo),
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            if (undone == SnackbarResult.ActionPerformed) Settings.movementPad.set(true)
+        }
+    }
+
     Scaffold(
         topBar = {
             BoxWithConstraints {
@@ -307,7 +334,7 @@ private fun ProfileGameScreen(
         },
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
+            Modifier.fillMaxSize().onSizeChanged { screen = it }.padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
                 desktopShortcut(event)?.let { shortcut ->
                     if (event.type == KeyEventType.KeyDown) {
                         when (shortcut) {
@@ -427,6 +454,9 @@ private fun ProfileGameScreen(
                 if (sounds.played || sounds.scriptsMuted || sounds.gameMuted) {
                     SoundButton(sounds.scriptsMuted && sounds.gameMuted, onToggle = { c.toggleAllSoundsMuted() })
                 }
+            }
+            if (movementPadShown(hidden, screen)) {
+                MovementPad(onPress = ::walk, onHide = ::hideMovementPad, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
             }
         }
     }

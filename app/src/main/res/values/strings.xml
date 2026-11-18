@@ -903,6 +903,23 @@
     <!-- What TalkBack reads for a blank line of a mini console or user window with "Blank lines from the game" on
          "Replace them with a space": the name of the space character -->
     <string name="console_blank_line_space">Space</string>
+    <!-- The game screen's top bar button that opens the bar that searches the game's text -->
+    <string name="console_search">Search the game's text</string>
+    <!-- The field of the bar that searches the game's text, for the words to find -->
+    <string name="console_search_field">Find</string>
+    <!-- The search bar's button that goes to the next line up, older, that holds the words, as desktop Mudlet's up arrow -->
+    <string name="console_search_older">Older match</string>
+    <!-- The search bar's button that goes to the next line down, newer, that holds the words, as desktop Mudlet's down arrow -->
+    <string name="console_search_newer">Newer match</string>
+    <!-- The search bar's button that closes it -->
+    <string name="console_search_close">Close search</string>
+    <!-- What the search bar says when there is no further line that way holding the words -->
+    <string name="console_search_none">No more matches that way</string>
+    <!-- What the search bar says once typing pauses: how many lines of the game's text hold the words -->
+    <plurals name="console_search_count">
+        <item quantity="one">%d line matches</item>
+        <item quantity="other">%d lines match</item>
+    </plurals>
 
     <!-- A script's labels and gauges: the actions TalkBack offers on a label (%1$s is a link's text, as the script
          wrote it), and a gauge's value where it has no text of its own -->

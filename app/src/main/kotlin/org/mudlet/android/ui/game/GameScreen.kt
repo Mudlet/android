@@ -135,6 +135,8 @@ private fun ProfileGameScreen(
 ) {
     val suggestions = rememberEngineSuggestions()
     var historyOpen by rememberSaveable { mutableStateOf(false) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    val search = rememberSaveable(saver = ConsoleSearch.Saver) { ConsoleSearch() }
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
     var picked by remember { mutableStateOf<String?>(null) }
     val snackbars = remember { SnackbarHostState() }
@@ -215,6 +217,7 @@ private fun ProfileGameScreen(
                 ScriptCommandsButton()
                 IconButton(onOpenScripts) { Icon(painterResource(R.drawable.ic_auto_fix_high), stringResource(R.string.scripts_open, c.name)) }
                 MapButton(mapOpen, onMapOpen)
+                IconButton({ searching = true }) { Icon(painterResource(R.drawable.ic_search), stringResource(R.string.console_search)) }
                 IconButton(onOpenSettings) {
                     Icon(painterResource(R.drawable.ic_settings), stringResource(R.string.settings_title))
                 }
@@ -225,6 +228,8 @@ private fun ProfileGameScreen(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
                 val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
+                val ctrlF = event.key == Key.F && event.isCtrlPressed
+                if (ctrlF && event.type == KeyEventType.KeyDown) searching = true
                 // Both halves of the press, so the focused field types no "r" and the focus stays where it is
                 if (ctrlR && event.type == KeyEventType.KeyDown) historyOpen = true
                 if (ctrlTab && event.type == KeyEventType.KeyDown) {
@@ -232,10 +237,16 @@ private fun ProfileGameScreen(
                     val target = if (forward) next else previous
                     if (target != null && EngineClient.setFront(target)) swipe.arrive(left = forward != rtl)
                 }
-                ctrlR || ctrlTab
+                ctrlR || ctrlTab || ctrlF
             },
         ) {
             Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
+                if (searching) {
+                    ConsoleSearchBar(search, c.lines, c.linesAdded, onClose = {
+                        searching = false
+                        search.queryChanged("")
+                    }, Modifier.fillMaxWidth())
+                }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val textSizeSp = Settings.textSize.value
                     val colors = ConsoleColors.of(c.status["consoleColors"])
@@ -264,6 +275,8 @@ private fun ProfileGameScreen(
                             consoleModifier,
                             links = c.links,
                             onMakeTrigger = onMakeTrigger,
+                            searchQuery = if (searching) search.query else "",
+                            searchFound = search.found.takeIf { searching },
                         ) { if (!mapperDrawn) BackgroundMap(colors, behind, inFront = mapOpen) }
                     }
                     if (mapOpen) {

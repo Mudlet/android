@@ -1331,7 +1331,7 @@ object Requests {
     fun cancelMapFile(): JSONObject = JSONObject().put("t", "cancelMapFile")
 
     /** Empties the profile's map, keeping the map files saved before; a new [EngineMessage.AppMap] follows. Answered only by an Error, when refused. */
-    fun deleteMap(): JSONObject = JSONObject().put("t", "deleteMap")
+    fun deleteMap(): JSONObject = JSONObject().put("t", "clearMap")
 
     /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
     fun getSettings(keys: List<String>, id: Long): JSONObject {

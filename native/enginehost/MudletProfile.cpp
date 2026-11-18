@@ -2275,7 +2275,7 @@ QString MudletProfile::deleteMap()
     if (mMapDownload.state == MapDownload::State::downloading) {
         return QStringLiteral("the map is downloading");
     }
-    return mSession->deleteMap() ? QString() : mSession->errorString();
+    return {};
 }
 
 QString MudletProfile::runMapFile(MapFile::Operation operation, const QString& path, const std::function<bool()>& cancelAsked)

@@ -1706,6 +1706,30 @@
     <string name="game_share_replay_failed">The replay file could not be read</string>
     <!-- Shown when no app on the device takes a file to share -->
     <string name="game_share_replay_no_app">No app here takes a file to share</string>
+    <!-- The button on the game sheet's card for the game in front that opens Android's file picker to choose a replay
+         file to play, as desktop Mudlet's replay button does. Use desktop Mudlet's translation of "Replay" where your
+         language has one. -->
+    <string name="game_play_replay">Play a replay</string>
+    <!-- Shown when the chosen replay file could not be read to play it -->
+    <string name="game_play_replay_failed">The chosen file could not be read</string>
+    <!-- Shown when the engine did not play the chosen replay file; %1$s is Mudlet's reason, as "A replay is playing
+         already" -->
+    <string name="game_play_replay_refused">Not played: %1$s</string>
+    <!-- The bar under the game's input line while a replay plays, as desktop Mudlet's replay toolbar; what it shows and
+         TalkBack reads: %1$d is how many times its recorded pace it plays at, 1 to 1024 -->
+    <string name="replay_bar_playing">Replay, %1$d× speed</string>
+    <!-- As replay_bar_playing while the replay is paused -->
+    <string name="replay_bar_paused">Replay paused, %1$d× speed</string>
+    <!-- The replay bar's button that holds the replay where it is, as desktop Mudlet's replay toolbar's pause -->
+    <string name="replay_pause">Pause the replay</string>
+    <!-- The replay bar's button that lets a paused replay carry on -->
+    <string name="replay_resume">Resume the replay</string>
+    <!-- The replay bar's button that halves the replay's speed -->
+    <string name="replay_slower">Slower</string>
+    <!-- The replay bar's button that doubles the replay's speed -->
+    <string name="replay_faster">Faster</string>
+    <!-- The replay bar's button that ends the replay -->
+    <string name="replay_stop">Stop the replay</string>
     <!-- The switch on the game sheet's card for the game in front that shows the time each line came beside it, as
          desktop Mudlet's timestamp button does. Use desktop Mudlet's translation of "Timestamps" where your language has
          one. -->

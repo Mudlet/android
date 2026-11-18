@@ -176,6 +176,14 @@ class ProfileSession internal constructor(
     var replayRecording by mutableStateOf(EngineMessage.ReplayRecording(recording = false, file = ""))
         private set
 
+    /** A replay playing in the game ([playReplay], or a script's), held or not and at what speed, as the engine last said. */
+    var replay by mutableStateOf(EngineMessage.Replay(playing = false, paused = false, speed = 0))
+        private set
+
+    /** Why the engine did not play the last [playReplay], until [replayRefusalShown]. */
+    var replayRefusal by mutableStateOf<String?>(null)
+        private set
+
     /** The profile whose suggestions the input line shows: this one, unless the engine's status `profile` named another as loaded. */
     var suggestionsProfile by mutableStateOf(name.ifEmpty { NO_PROFILE_SUGGESTIONS })
         private set
@@ -360,6 +368,10 @@ class ProfileSession internal constructor(
 
     fun putOffSecureOffer() {
         secureOfferPutOff = true
+    }
+
+    fun replayRefusalShown() {
+        replayRefusal = null
     }
 
     fun secureOfferRefusalShown() {
@@ -559,6 +571,19 @@ class ProfileSession internal constructor(
      */
     fun setTimeStamps(shown: Boolean): Boolean = settingsAvailable && link?.send(Requests.setTimeStamps(shown)) == true
 
+    /**
+     * Desktop Mudlet's replay button: plays the replay file at the whole [path]; [replay] follows once it starts, or
+     * [replayRefusal] says why not. False, sending nothing, while its profile has not loaded or the link is down.
+     */
+    fun playReplay(path: String): Boolean = settingsAvailable && link?.send(Requests.playReplay(path)) == true
+
+    /** The replay toolbar's pause, stop, and faster or slower buttons; [replay] follows. False, sending nothing, as for [playReplay]. */
+    fun setReplayPaused(paused: Boolean): Boolean = settingsAvailable && link?.send(Requests.setReplayPaused(paused)) == true
+
+    fun stopReplay(): Boolean = settingsAvailable && link?.send(Requests.stopReplay()) == true
+
+    fun changeReplaySpeed(faster: Boolean): Boolean = settingsAvailable && link?.send(Requests.changeReplaySpeed(faster)) == true
+
     private fun onSounds(message: EngineMessage.Sounds) {
         sounds = message
         settings[Settings.muteScripts.key] = message.scriptsMuted
@@ -715,6 +740,8 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ReplayRecording -> post { replayRecording = message }
 
+                is EngineMessage.Replay -> post { replay = message }
+
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 
                 // One in the background says whose it is, and does not interrupt what the front one is saying
@@ -812,8 +839,10 @@ class ProfileSession internal constructor(
                         // The connection stays as it was, so a drop after this is no answer's doing
                         disconnectAsked = false
                         secureOfferRefusal = reason
-                    } else if (request == "setScriptsStopped" || request == "setReplayRecording") {
-                        // The switch follows the engine's state alone, so it already shows what the engine kept, and
+                    } else if (request == "playReplay") {
+                        replayRefusal = reason
+                    } else if (request in REPLAY_REQUESTS) {
+                        // The controls follow the engine's state alone, so they already show what the engine kept, and
                         // Mudlet says why a recording failed in the game's text
                         Log.w(TAG, message.message)
                     } else if (request in ScriptItemsClient.REQUESTS) {
@@ -972,6 +1001,8 @@ class ProfileSession internal constructor(
 
     companion object {
         const val MAX_LINES = 2000
+
+        private val REPLAY_REQUESTS = setOf("setScriptsStopped", "setReplayRecording", "setReplayPaused", "stopReplay", "changeReplaySpeed")
 
         /** As [ProfileSession.forgetAddress], for the profile [name] while it has no session. */
         internal fun forgetAddress(prefs: SharedPreferences, name: String) = prefs.edit {

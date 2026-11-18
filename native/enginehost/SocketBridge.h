@@ -33,7 +33,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 43;
+    static constexpr int protocolVersion = 44;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -95,6 +95,7 @@ public:
     void certificateRefused(const std::optional<RefusedCertificate>& certificate) override;
     void scriptsStopped(bool stopped) override;
     void replayRecording(bool recording, const QString& file) override;
+    void replay(const Replay& replay) override;
 
 protected:
     struct StoredLine
@@ -199,6 +200,7 @@ protected:
     QJsonObject secureOfferMessage() const;
     QJsonObject scriptsStoppedMessage() const;
     QJsonObject replayRecordingMessage() const;
+    QJsonObject replayMessage() const;
     QJsonObject certificateMessage() const;
     static QJsonObject historyMessage(const QStringList& lines);
     static QJsonObject linksChangedMessage(const QList<int>& ids);
@@ -243,6 +245,7 @@ protected:
     bool mScriptsStopped = false;
     bool mReplayRecording = false;
     QString mRecordedReplay;
+    Replay mReplay;
     std::optional<RefusedCertificate> mRefusedCertificate;
     // A linksChanged went to no live UI, so the next to attach or catch up is told any link may have changed
     bool mLinksMissed = false;

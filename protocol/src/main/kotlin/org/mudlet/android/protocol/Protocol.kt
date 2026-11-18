@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 43
+const val PROTOCOL_VERSION = 44
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -838,6 +838,12 @@ sealed interface EngineMessage {
      */
     data class ReplayRecording(val recording: Boolean, val file: String) : EngineMessage
 
+    /**
+     * A replay playing in the profile ([Requests.playReplay], or a script's), held by [Requests.setReplayPaused], at
+     * [speed] times its recorded pace, 1 to 1024; not playing and [speed] 0 with none.
+     */
+    data class Replay(val playing: Boolean, val paused: Boolean, val speed: Int) : EngineMessage
+
     /** Why the last secure connection ended, when it was the game's [certificate]; null once the next one is tried. */
     data class CertificateRefused(val certificate: RefusedCertificate?) : EngineMessage
 
@@ -1441,6 +1447,21 @@ object Requests {
      */
     fun setReplayRecording(record: Boolean): JSONObject = JSONObject().put("t", "setReplayRecording").put("record", record)
 
+    /**
+     * Desktop Mudlet's replay button: plays the replay file at [path], a whole path or a name in the profile's log
+     * folder, as [EngineMessage.Replay] follows. Answered only by an Error, when refused.
+     */
+    fun playReplay(path: String): JSONObject = JSONObject().put("t", "playReplay").put("path", path)
+
+    /** The replay toolbar's pause: [paused] holds the replay, false lets it go on. Answered only by an Error, when refused. */
+    fun setReplayPaused(paused: Boolean): JSONObject = JSONObject().put("t", "setReplayPaused").put("paused", paused)
+
+    /** The replay toolbar's stop. Answered only by an Error, when refused. */
+    fun stopReplay(): JSONObject = JSONObject().put("t", "stopReplay")
+
+    /** The replay toolbar's faster ([faster]) or slower button, within 1 and 1024 times. Answered only by an Error, when refused. */
+    fun changeReplaySpeed(faster: Boolean): JSONObject = JSONObject().put("t", "changeReplaySpeed").put("faster", faster)
+
     /** Loads the map file at the whole [path] in place of the profile's map, as [EngineMessage.MapFile] follows. Answered only by an Error, when refused. */
     fun loadMapFile(path: String): JSONObject = JSONObject().put("t", "loadMapFile").put("path", path)
 
@@ -1581,6 +1602,8 @@ class FrameReader(input: InputStream) {
             "scriptsStopped" -> EngineMessage.ScriptsStopped(o.optBoolean("stopped"))
 
             "replayRecording" -> EngineMessage.ReplayRecording(o.optBoolean("recording"), o.optString("file"))
+
+            "replay" -> EngineMessage.Replay(o.optBoolean("playing"), o.optBoolean("paused"), o.optInt("speed"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

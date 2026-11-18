@@ -283,6 +283,17 @@ struct MapFile
     bool operator==(const MapFile&) const = default;
 };
 
+// A replay playing in the profile, as the GUI's replay toolbar shows it: held by IEngine::setReplayPaused(), and how
+// many times its recorded pace it plays at, 1 to 1024; 0 with none playing
+struct Replay
+{
+    bool playing = false;
+    bool paused = false;
+    int speed = 0;
+
+    bool operator==(const Replay&) const = default;
+};
+
 // Whether the profile has set a sound, music or video going since it loaded, and the main window's mutes, which are
 // every profile's: the sounds scripts play (Mudlet's muteMediaAPI) and those the game sends (muteMediaGame)
 struct Sounds
@@ -579,4 +590,7 @@ public:
     // Whether the profile records a replay, on each change, and the name of the file in its log folder of the last
     // recording saved since it loaded, empty for none; false and empty once it closes
     virtual void replayRecording(bool recording, const QString& file) = 0;
+    // A replay of the profile, whether the player or a script began it, as it starts, is held or let go, changes speed
+    // and ends; none playing once the profile closes
+    virtual void replay(const Replay& replay) = 0;
 };

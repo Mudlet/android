@@ -73,13 +73,14 @@ const val LAG_TAG = "lag"
 
 /**
  * The game sheet, which the game title opens (docs/multi-profile.md, "The switcher"): first a card for the game in
- * front, [front] (named [name]), with its state, its address, Reconnect ([onReconnect], while [canReconnect]),
- * Disconnect ([onDisconnect]) and desktop Mudlet's emergency stop as a switch, which leaves the sheet open; then a row
- * for each of the open [games], in the order opened, the front one ticked, which a tap brings to the front ([onSwitch])
- * and whose close button closes it ([onClose]) after asking first when it is connected; last "Open another game"
- * ([onOpenAnother]), which says why not once [EngineClient.MAX_OPEN_GAMES] are open. Every button but a game's close
- * button closes the sheet once it has acted, as do the sheet's own close button, Back and a tap outside it; [onDismiss]
- * is called once it has gone.
+ * front, [front] (named [name]), with its state, its address, the game's lag, Reconnect ([onReconnect], while
+ * [canReconnect]), Disconnect ([onDisconnect]), desktop Mudlet's emergency stop and replay recording as switches, the
+ * last recording's share button, Play a replay, and the timestamps switch; then a row for each of the open [games], in
+ * the order opened, the front one ticked, which a tap brings to the front ([onSwitch]) and whose close button closes it
+ * ([onClose]) after asking first when it is connected; last "Open another game" ([onOpenAnother]), which says why not
+ * once [EngineClient.MAX_OPEN_GAMES] are open. Every button but a game's close button, the switches and the share
+ * button closes the sheet once it has acted, Play a replay once the file is picked, as do the sheet's own close button,
+ * Back and a tap outside it; [onDismiss] is called once it has gone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,7 +128,7 @@ fun GameSheet(
                 Text(stringResource(R.string.games_title), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
                 IconButton(::hide) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.games_close)) }
             }
-            FrontCard(front, name, canReconnect, andHide(onReconnect), andHide(onDisconnect))
+            FrontCard(front, name, canReconnect, andHide(onReconnect), andHide(onDisconnect), onReplayStarted = ::hide)
             for (game in games) {
                 val state = ConnectionState.of(game)
                 GameRow(
@@ -160,7 +161,14 @@ fun GameSheet(
 }
 
 @Composable
-private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean, onReconnect: () -> Unit, onDisconnect: () -> Unit) {
+private fun FrontCard(
+    front: ProfileSession,
+    name: String,
+    canReconnect: Boolean,
+    onReconnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onReplayStarted: () -> Unit,
+) {
     val state = ConnectionState.of(front)
     Surface(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -193,6 +201,7 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
             }
             EmergencyStop(front.scriptsStopped, enabled = front.settingsAvailable, onChange = front::setScriptsStopped)
             ReplayRecording(front)
+            PlayReplayButton(front, onStarted = onReplayStarted)
             SheetSwitch(
                 R.drawable.ic_schedule,
                 stringResource(R.string.game_time_stamps),

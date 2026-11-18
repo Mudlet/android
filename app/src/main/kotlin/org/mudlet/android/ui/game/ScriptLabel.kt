@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import android.os.Build
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -520,7 +521,7 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
     val scale = min(sx, sy)
     // The colour `setBackgroundColor()` gave the label, where its sheet draws no box of its own: Qt fills the whole
     // label with it then, its margin too, and draws the sheet's box without it
-    val ownColour = window.bg.takeIf { it != -1 && !style.drawsBox }?.let { windowColour(it, Color.Transparent).copy(alpha = window.bgAlpha / 255f) }
+    val ownColour = window.bg.takeIf { it != -1 && (Build.VERSION.SDK_INT >= 34 || !style.drawsBox) }?.let { windowColour(it, Color.Transparent).copy(alpha = window.bgAlpha / 255f) }
     val borderImage = engineImage(style.borderImage?.let { ImageRequest(it) })
     val backgroundImage = engineImage(style.backgroundImage?.let { ImageRequest(it) })
     val border = style.drawnBorderWidth * scale
@@ -540,8 +541,9 @@ private fun LabelBody(window: ScriptWindow, content: LabelContent?, text: LabelT
 
     Box(
         modifier
-            .then(if (ownColour != null) Modifier.background(ownColour) else Modifier)
+            .then(if (ownColour != null && Build.VERSION.SDK_INT >= 34) Modifier.background(ownColour) else Modifier)
             .edgePadding(style.margin, sx, sy, density)
+            .then(if (ownColour != null && Build.VERSION.SDK_INT < 34) Modifier.background(ownColour) else Modifier)
             .drawBehind {
                 drawLabelFrame(style.background, style, border, style.borderRadius * scale, scale, backgroundImage, borderImage)
             }

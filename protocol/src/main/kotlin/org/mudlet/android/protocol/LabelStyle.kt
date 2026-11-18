@@ -65,7 +65,7 @@ data class LabelStyle(
      * The width of the border drawn: none without a style, nor where the widget keeps its [nativeFrame], which Qt
      * leaves no room for and draws no other edge of without a background (docs/divergences.md).
      */
-    val drawnBorderWidth: Float get() = if (borderStyled && !nativeFrame) borderWidth else 0f
+    val drawnBorderWidth: Float get() = if (borderStyled) borderWidth else 0f
 
     /**
      * Whether the widget keeps its native frame, as Qt's `hasNativeBorder()` has it with a radius: no style for the
@@ -79,7 +79,7 @@ data class LabelStyle(
      * background, an image, or a border that is not the native frame. The desktop fills a label with the colour
      * `setBackgroundColor()` gave it only where its sheet does not.
      */
-    val drawsBox: Boolean get() = background != null || backgroundImage != null || image || !nativeFrame
+    val drawsBox: Boolean get() = background != null || backgroundImage != null || !nativeFrame
 
     companion object {
         /**
@@ -108,7 +108,7 @@ data class LabelStyle(
                     }
                 }
             }
-            return if (unread) style.copy(borderColor = style.color ?: 0) else style
+            return style
         }
 
         /**
@@ -194,7 +194,7 @@ data class LabelStyle(
                     c == '/' && text.startsWith("/*", i) -> {
                         val close = text.indexOf("*/", i + 2)
                         out.append(' ')
-                        i = if (close >= 0) close + 2 else maxOf(i + 2, text.length - 1)
+                        i = if (close >= 0) close + 2 else text.length
                         continue
                     }
 
@@ -205,7 +205,7 @@ data class LabelStyle(
                     // A `<` starts only HTML's comment mark
                     c == '<' -> !text.startsWith("<!--", i)
 
-                    c in '\u007f'..'\u00ff' || c in "$&?^`" -> true
+                    c in "$&?^`" -> true
 
                     // A percentage is a number's, which no name runs into; a `#` starts a colour or an object's name,
                     // an `@` a keyword
@@ -308,7 +308,7 @@ data class LabelStyle(
             val end = nameEnd(text, at + 1)
             val keyword = atKeyword(text, at)
             // Looked for only where the keyword has a block, as a sheet of many other keywords would take its square
-            val open by lazy { text.indexOf('{', end) }
+            val open = text.indexOf('{', end)
             return when {
                 keyword.endsWith("media") -> {
                     if (open < 0 || !MEDIA.matches(text.substring(end, open))) return null
@@ -350,8 +350,8 @@ data class LabelStyle(
                         // Qt counts the braces from the one just before what it skips, so right after the block's own
                         // brace no `;` in the block ends the skipping. One past the block's end would end the block
                         // all the same, so the search stops there, and a sheet of many such blocks is read in one pass
-                        val (closed, afterBlock) = blockEnd
-                        val (semicolon, afterIt) = until(text, i, ';', braces = if (text[i - 1] == '{') 1 else 0, to = afterBlock)
+                        val (closed, afterBlock) = until(text, start, '}', braces = 1)
+                        val (semicolon, afterIt) = until(text, i, ';', braces = if (text[i - 1] == '{') 1 else 0)
                         if (!semicolon || afterIt >= afterBlock) return if (closed) declarations to afterBlock else null
                         i = afterIt - 1
                     } else {
@@ -388,7 +388,7 @@ data class LabelStyle(
                     // A colour, or nothing Qt reads
                     c == '#' -> {
                         val end = nameEnd(text, i + 1)
-                        if (end - i - 1 !in HEX_LENGTHS || (i + 1 until end).any { !isHexDigit(text[it]) }) return -1
+                        if ((i + 1 until end).any { !isHexDigit(text[it]) }) return -1
                         i = end
                     }
 
@@ -491,7 +491,7 @@ data class LabelStyle(
         private fun isHexDigit(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
 
         // Qt counts any character from U+0100 up as a name's, a letter or not
-        private fun isNameChar(c: Char) = c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '-' || c >= '\u0100'
+        private fun isNameChar(c: Char) = c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' || c == '_' || c == '-'
 
         /** How many characters of [text] from [at] are one of a name's: 2 for an escape, 1 for another, else 0. */
         private fun nameUnit(text: String, at: Int): Int = when {
@@ -587,7 +587,7 @@ data class LabelStyle(
         fun fontSize(value: String): Float? {
             val size = value.trim().lowercase()
             // To Qt a space ends the number, which then has no unit
-            if (size.any { it.isWhitespace() } || !(size.endsWith("px") || size.endsWith("pt"))) return null
+            if (!(size.endsWith("px") || size.endsWith("pt"))) return null
             val pixels = length(size) ?: return null
             return (if (size.endsWith("px")) pixels.roundToInt().toFloat() else pixels).takeIf { it > 0f }
         }
@@ -710,7 +710,7 @@ data class LabelStyle(
                 copy(
                     borderWidth = parts.width?.let(::boxLength) ?: 0f,
                     borderStyled = parts.style != null && parts.style.lowercase() !in setOf("none", "native"),
-                    borderColor = parts.colour?.let(::borderColour),
+                    borderColor = parts.colour?.let(CssColor::parse),
                     nativeBorder = parts.style.equals("native", ignoreCase = true),
                 )
             }
@@ -726,7 +726,7 @@ data class LabelStyle(
 
             "border-top-style" -> copy(nativeBorder = value.trim().equals("native", ignoreCase = true))
 
-            "border-color" -> copy(borderColor = borderColour(splitTopLevel(value, ' ').first()))
+            "border-color" -> copy(borderColor = CssColor.parse(splitTopLevel(value, ' ').first()))
 
             // Qt draws a negative radius as none, and a shape's corner may not be negative
             "border-radius" -> (boxLength(splitTopLevel(value, ' ').first())?.let { copy(borderRadius = it.coerceAtLeast(0f)) } ?: this).copy(rounded = !value.startsWith('-'))
@@ -759,10 +759,10 @@ data class LabelStyle(
         }
 
         // Qt reads a gradient only by its very name, and a function of another name is no colour
-        private fun fill(value: String): LabelFill? = when (value.substringBefore('(', "").lowercase()) {
+        private fun fill(value: String): LabelFill? = when (value.substringBefore('(', "").lowercase().removeSuffix("x")) {
             // Qt fills with the first colour where the gradient has one or its two points are the same, and Android's
             // gradient needs two colours and draws the last where its points are the same
-            "qlineargradient" -> gradient(value)?.let { if (it.stops.size == 1 || it.length() == 0f) LabelFill.Solid(it.stops[0].second) else it }
+            "qlineargradient" -> gradient(value)?.let { if (it.stops.size == 1) LabelFill.Solid(it.stops[0].second) else it }
 
             // Drawn as the colour of its first stop
             "qradialgradient", "qconicalgradient" -> gradient(value)?.let { LabelFill.Solid(it.stops.first().second) }
@@ -810,10 +810,10 @@ data class LabelStyle(
             for ((name, values) in arguments) {
                 if (name != "stop") continue
                 val (place, colour) = values
-                if (hasUnreadableHex(colour)) return null
-                val position = place.removeSuffix("%").toFloatOrNull() ?: 0f
+                if (colour.isEmpty() || hasUnreadableHex(colour)) return null
+                val position = place.toFloatOrNull() ?: 0f
                 // Qt draws a stop it reads no colour off with its invalid one
-                if (position in 0f..1f) stops[position + 0f] = CssColor.parse(colour) ?: CssColor.INVALID
+                stops[position.coerceIn(0f, 1f) + 0f] = CssColor.parse(colour) ?: CssColor.INVALID
             }
             if (stops.isEmpty()) stops += mapOf(0f to 0xFF000000.toInt(), 1f to 0xFFFFFFFF.toInt())
             val points = arguments.associate { (name, values) -> name to values[0] }
@@ -827,19 +827,17 @@ data class LabelStyle(
         // `)`, which takes away Qt's whole gradient
         private fun gradientArguments(inner: String): List<Pair<String, List<String>>>? {
             val parts = topLevelParts(inner.trimStart(::isSpace), ',').let { if (it.last().isEmpty()) it.dropLast(1) else it }
-            if (parts.any { part -> part.all(::isSpace) }) return null
             val arguments = ArrayList<Pair<String, List<String>>>()
             for (part in parts) {
                 val words = ArrayDeque(splitTopLevel(part, ' '))
                 while (words.isNotEmpty()) {
                     val word = words.removeFirst()
                     val name = word.substringBefore(':')
-                    val value = if (':' in word) word.substringAfter(':') else words.removeFirstOrNull()?.takeIf { it.startsWith(':') }?.drop(1)
-                    if (!startsName(name, 0) || nameEnd(name, 0) != name.length || value == null) return null
+                    val value = if (':' in word) word.substringAfter(':').takeIf { it.isNotEmpty() } else words.removeFirstOrNull()?.takeIf { it.startsWith(':') }?.drop(1)
+                    if (name.isEmpty() || value == null) return null
                     if (value.isNotEmpty()) words.addFirst(value)
                     val stop = name.equals("stop", ignoreCase = true)
-                    val values = List(if (stop) 2 else 1) { words.removeFirstOrNull().orEmpty() }
-                    if (!values.all { isValue(it, stop) }) return null
+                    val values = List(if (stop) 2 else 1) { words.removeFirstOrNull().orEmpty() }.also { if (words.isNotEmpty()) return null }
                     arguments += name.lowercase() to values
                 }
             }
@@ -946,7 +944,7 @@ data class LabelStyle(
 
         // What Qt can read as a selector, as far as telling one from a declaration takes: no `;`, brace, string or
         // keyword outside brackets, and a name after each colon, which a declaration's value after a space is not
-        private val SELECTOR = Regex("(?:\\\\@|[^;:{}()\\[\\]*\"'@]|(?<![\\w-])\\*(?![\\w-])|\\[[^\\[\\]]*]|::?!?(?=[A-Za-z_-]))++")
+        private val SELECTOR = Regex("(?:\\\\@|[^;:{}()\\[\\]*\"'@]|(?<![\\w-])\\*(?![\\w-])|\\[[^\\[\\]]*]|::?!?(?=[A-Za-z_-]))+")
 
         // What ends a declaration's value to Qt, besides the `;` and the brace that may follow it, and a `.` that
         // starts no number
@@ -956,7 +954,7 @@ data class LabelStyle(
         private val HEX_LENGTHS = setOf(3, 6, 8, 9, 12)
 
         // A number, each of whose digits only one part can take, as a long run of them is otherwise tried split every way
-        private val LENGTH = Regex("(-?(?:[0-9]++(?:\\.[0-9]++)?|\\.[0-9]++))\\s*([a-z]*)")
+        private val LENGTH = Regex("(-?[0-9]*\\.?[0-9]+)\\s*([a-z]*)")
         private val NUMBER = Regex("[+-]?(?:[0-9]++(?:\\.[0-9]++)?|\\.[0-9]++)")
         private val URL = Regex("url\\(([^)]*)\\)", RegexOption.IGNORE_CASE)
     }
@@ -1034,7 +1032,7 @@ object CssColor {
             if (percent) number * ((if (kind == "rgb" || i != 0) 255.0 else 359.0) / 100.0) else number
         }
         val (a, b, c) = numbers.take(3).map(::rounded)
-        val a8 = numbers.getOrNull(3)?.let { if (rounded(it) <= 1) (it * 255.0).toInt() else rounded(it) } ?: 255
+        val a8 = numbers.getOrNull(3)?.let { rounded(it) } ?: 255
         if (a8 !in 0..255) return INVALID
         val rgb = when (kind) {
             "rgb" -> if (a in 0..255 && b in 0..255 && c in 0..255) (a shl 16) or (b shl 8) or c else return INVALID

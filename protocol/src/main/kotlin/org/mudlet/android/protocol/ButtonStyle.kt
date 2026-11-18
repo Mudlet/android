@@ -82,7 +82,7 @@ data class ButtonStyle(val style: LabelStyle, val padding: Edges?, val margin: E
             val unset = Edges(0f, 0f, 0f, 0f)
             val read = LabelStyle.of(declarations, LabelStyle(padding = unset, margin = unset))
             // Left as `unset` where the sheets set none, which is Edges.ZERO's value
-            return ButtonStyle(read, read.padding.takeIf { it !== unset }, read.margin.takeIf { it !== unset }, read.nativeFrame)
+            return ButtonStyle(read, read.padding.takeIf { it !== unset }, read.margin.takeIf { it !== unset }, read.nativeBorder)
         }
 
         /**

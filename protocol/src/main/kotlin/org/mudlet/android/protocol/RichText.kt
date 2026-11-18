@@ -214,7 +214,7 @@ data class RichText(val blocks: List<Block>) {
                 '\'' -> written.substring(1, written.length - 1)
                 else -> decodeEntities(written)
             }
-            if (equals.isNotEmpty() && value.isEmpty()) null else name.lowercase() to value
+            name.lowercase() to value
         }.toMap()
 
         private fun open(name: String, attributes: Map<String, String>, selfClosing: Boolean) {

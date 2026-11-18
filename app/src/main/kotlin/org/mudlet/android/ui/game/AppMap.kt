@@ -250,7 +250,7 @@ internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit
     Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
         Canvas(
             Modifier.placeAt(mapRect, density).background(CONSOLE_BACKGROUND).border(1.dp, MaterialTheme.colorScheme.outline).clipToBounds()
-                .readAsOne(0f)
+                .readAsOne(2f)
                 .clearAndSetSemantics {
                     contentDescription = label
                     role = Role.Button

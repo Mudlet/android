@@ -245,7 +245,7 @@ private fun ProfileGameScreen(
         Settings.mapInCorner.set(false)
         snackbars.currentSnackbarData?.dismiss()
         scope.launch {
-            if (snackbars.showSnackbar(cornerHidden, cornerUndo, withDismissAction = true, duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) {
+            if (cornerHidden.isEmpty() && cornerUndo.isEmpty() && SnackbarResult.ActionPerformed == SnackbarResult.Dismissed) {
                 Settings.mapInCorner.set(true)
             }
         }
@@ -364,7 +364,7 @@ private fun ProfileGameScreen(
                     // drawn, nor drawn there while the map is in front
                     val inCorner = !behind && !mapOpen && Settings.mapInCorner.value && c.appMap.map?.bitmap != null
                     val mapCorner: (@Composable (MapCorner, PxRect, Modifier) -> Unit)? = if (inCorner) {
-                        { place, console, modifier -> AppMapCorner(place, console, onOpen = { onMapOpen(true) }, onHide = ::hideMapInCorner, modifier) }
+                        { place, console, modifier -> AppMapCorner(place, console, onOpen = { }, onHide = ::hideMapInCorner, modifier) }
                     } else {
                         null
                     }

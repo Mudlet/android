@@ -27,6 +27,9 @@ class BackupRestoreTest {
     @Test
     fun seed() {
         write(File(profile, "url"), "probe.example")
+        write(File(profile, "current/$OLDER_SAVE"), "<MudletPackage/>")
+        write(File(profile, "current/$LATEST_SAVE"), "<MudletPackage/>")
+        assertTrue(File(profile, "current/$OLDER_SAVE").setLastModified(1_000_000_000_000))
         write(File(profile, "log/probe.txt"), "a line of the game")
         write(File(files, "suggest/$PROFILE.txt"), "typed")
         write(File(files, "suggest/$PROFILE.pins"), "pinned")
@@ -46,6 +49,8 @@ class BackupRestoreTest {
         assertEquals("the app's settings came back", "kept", prefs("settings").getString(KEY, null))
         assertEquals("the log came back only to a new phone", toNewPhone, File(profile, "log/probe.txt").exists())
         assertEquals("the suggestions came back only to a new phone", toNewPhone, File(files, "suggest/$PROFILE.txt").exists())
+        assertTrue("the latest profile save came back", File(profile, "current/$LATEST_SAVE").exists())
+        assertEquals("an older save came back only to a new phone", toNewPhone, File(profile, "current/$OLDER_SAVE").exists())
 
         assertFalse("the passwords' file came back", File(files, PasswordStore.FILE).exists())
         val passwords = PasswordStore(context)
@@ -67,5 +72,9 @@ class BackupRestoreTest {
     private companion object {
         const val PROFILE = "Backup Probe"
         const val KEY = "backupProbe"
+
+        // Named older than it is written, as the latest is the last modified, not the last by name
+        const val OLDER_SAVE = "2026-11-19#10-00-00.xml"
+        const val LATEST_SAVE = "2026-11-18#10-00-00.xml"
     }
 }

@@ -369,6 +369,9 @@
     <!-- What tapping a page in the list of settings pages, or a setting search found, does: TalkBack says "Double-tap
          to open" -->
     <string name="settings_open">open</string>
+    <!-- What a screen reader reads for a page in the list of settings pages: %1$s is the page's name (settings_display),
+         %2$s what it holds (settings_display_summary) -->
+    <string name="settings_category_reading">%1$s, %2$s</string>
     <!-- The search field at the top of the settings screen, before anything is typed in it -->
     <string name="settings_search">Search settings</string>
     <!-- The button, read by a screen reader, that empties the settings' search field -->
@@ -412,39 +415,39 @@
     <string name="settings_colour_command_foreground">Command foreground</string>
     <!-- A colour on the Colours page: the background the commands the player sends show on, in the game's text -->
     <string name="settings_colour_command_background">Command background</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_black">Black</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_red">Red</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_green">Green</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_yellow">Yellow</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_blue">Blue</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_magenta">Magenta</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_cyan">Cyan</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_white">White</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_black">Light black</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_red">Light red</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_green">Light green</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_yellow">Light yellow</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_blue">Light blue</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_magenta">Light magenta</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_cyan">Light cyan</string>
-    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <!-- One of the sixteen ANSI colours games use, on the Colours page and the Map page, as desktop Mudlet names it -->
     <string name="settings_colour_light_white">Light white</string>
-    <!-- What TalkBack says a tap on a colour of the Colours page does: "Double tap to change colour" -->
+    <!-- What TalkBack says a tap on a colour of the Colours or Map page does: "Double tap to change colour" -->
     <string name="settings_colour_change">change colour</string>
     <!-- The slider for the amount of red in a colour, in the dialog that changes one -->
     <string name="settings_colour_red_amount">Red</string>
@@ -463,6 +466,115 @@
     <string name="settings_colour_ok">OK</string>
     <!-- The button at the foot of the Colours page that puts every colour back to Mudlet's own -->
     <string name="settings_colours_reset">Reset to Mudlet\'s colours</string>
+    <!-- A page of each game's own settings: how the game's map is drawn, as desktop Mudlet's Mapper and Mapper colors
+         tabs have it -->
+    <string name="settings_map">Map</string>
+    <!-- Under "Map" in the list of settings pages, what that page holds -->
+    <string name="settings_map_summary">Room and line sizes, the player\'s marker and the map\'s colours</string>
+    <!-- Words a player might search the settings for to find the sizes of what the map draws, separated by commas. Use
+         the words a player of your language would search for. -->
+    <string name="settings_map_size_keywords">mapper, rooms, exits, lines, borders, thickness, width, size</string>
+    <!-- A setting on a game's Map page, desktop Mudlet's "Room size": how big the map draws each room -->
+    <string name="settings_map_room_size">Room size</string>
+    <!-- Under "Room size", what the setting changes -->
+    <string name="settings_map_room_size_hint">How much of its square on the map each room fills</string>
+    <!-- %1$d is a size on the game's Map page, a whole number from 1 to 11, as desktop Mudlet shows it -->
+    <plurals name="settings_map_size_value">
+        <item quantity="one">Size %1$d of 11</item>
+        <item quantity="other">Size %1$d of 11</item>
+    </plurals>
+    <!-- The button, read by a screen reader, that makes the map's rooms one step smaller -->
+    <string name="settings_map_room_size_less">Smaller rooms</string>
+    <!-- The button, read by a screen reader, that makes the map's rooms one step larger -->
+    <string name="settings_map_room_size_more">Larger rooms</string>
+    <!-- A setting on a game's Map page, desktop Mudlet's "Exit size": how thick the map draws the lines between rooms -->
+    <string name="settings_map_exit_size">Exit size</string>
+    <!-- Under "Exit size", what the setting changes -->
+    <string name="settings_map_exit_size_hint">How thick the lines between rooms are</string>
+    <!-- The button, read by a screen reader, that makes the map's exit lines one step thinner -->
+    <string name="settings_map_exit_size_less">Thinner exits</string>
+    <!-- The button, read by a screen reader, that makes the map's exit lines one step thicker -->
+    <string name="settings_map_exit_size_more">Thicker exits</string>
+    <!-- A switch on a game's Map page, desktop Mudlet's "Show room borders" -->
+    <string name="settings_map_room_borders">Show room borders</string>
+    <!-- Under "Show room borders", what the switch does -->
+    <string name="settings_map_room_borders_hint">Each room has a line around it, in the room border colour below</string>
+    <!-- A setting on a game's Map page, desktop Mudlet's "Border size": how thick the line around each room is -->
+    <string name="settings_map_border_size">Border size</string>
+    <!-- Under "Border size", what the setting changes -->
+    <string name="settings_map_border_size_hint">How thick the line around each room is</string>
+    <!-- The button, read by a screen reader, that makes the line around each room on the map one step thinner -->
+    <string name="settings_map_border_size_less">Thinner borders</string>
+    <!-- The button, read by a screen reader, that makes the line around each room on the map one step thicker -->
+    <string name="settings_map_border_size_more">Thicker borders</string>
+    <!-- A switch on a game's Map page, desktop Mudlet's "Use large area exit arrows in 2D view" -->
+    <string name="settings_map_large_area_exit_arrows">Large area exit arrows</string>
+    <!-- Under "Large area exit arrows", what the switch does -->
+    <string name="settings_map_large_area_exit_arrows_hint">Exits that lead to another area are drawn as large arrows</string>
+    <!-- Words a player might search the settings for to find "Large area exit arrows", separated by commas. Use the
+         words a player of your language would search for. -->
+    <string name="settings_map_large_area_exit_arrows_keywords">mapper, exits, areas, zones, arrows, big</string>
+    <!-- A setting on a game's Map page, the heading of four choices: how the map marks the room the player is in, as
+         desktop Mudlet's "2D map player room marker style" -->
+    <string name="settings_map_player_room">Player room marker</string>
+    <!-- Words a player might search the settings for to find the player room marker's settings, separated by commas.
+         Use the words a player of your language would search for. -->
+    <string name="settings_map_player_room_keywords">mapper, you, position, location, current room, ring, circle</string>
+    <!-- One of the choices under "Player room marker", desktop Mudlet's "Original" -->
+    <string name="settings_map_player_room_original">Original</string>
+    <!-- One of the choices under "Player room marker", desktop Mudlet's "Red ring" -->
+    <string name="settings_map_player_room_red_ring">Red ring</string>
+    <!-- One of the choices under "Player room marker", desktop Mudlet's "Blue/Yellow ring" -->
+    <string name="settings_map_player_room_blue_yellow_ring">Blue and yellow ring</string>
+    <!-- One of the choices under "Player room marker", desktop Mudlet's "Custom ring": a ring in the two colours
+         below -->
+    <string name="settings_map_player_room_custom_ring">Custom ring</string>
+    <!-- A setting on a game's Map page, desktop Mudlet's "Outer diameter": the marker's size against its room -->
+    <string name="settings_map_player_room_outer_diameter">Marker\'s outer diameter</string>
+    <!-- Under "Marker's outer diameter", what the setting changes -->
+    <string name="settings_map_player_room_outer_diameter_hint">The ring\'s size, against the space the room has</string>
+    <!-- A setting on a game's Map page, desktop Mudlet's "Inner diameter": the marker's hole against its outside -->
+    <string name="settings_map_player_room_inner_diameter">Marker\'s inner diameter</string>
+    <!-- Under "Marker's inner diameter", what the setting changes -->
+    <string name="settings_map_player_room_inner_diameter_hint">The ring\'s hole, against its outer diameter</string>
+    <!-- %1$d is a size on the game's Map page in percent, a whole number such as 120 -->
+    <plurals name="settings_map_percent_value">
+        <item quantity="one">%1$d%%</item>
+        <item quantity="other">%1$d%%</item>
+    </plurals>
+    <!-- The button, read by a screen reader, that makes the player room marker one step smaller -->
+    <string name="settings_map_player_room_outer_diameter_less">Smaller marker</string>
+    <!-- The button, read by a screen reader, that makes the player room marker one step larger -->
+    <string name="settings_map_player_room_outer_diameter_more">Larger marker</string>
+    <!-- The button, read by a screen reader, that makes the hole in the player room marker one step smaller -->
+    <string name="settings_map_player_room_inner_diameter_less">Smaller hole</string>
+    <!-- The button, read by a screen reader, that makes the hole in the player room marker one step larger -->
+    <string name="settings_map_player_room_inner_diameter_more">Larger hole</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Outer ring color": the outside of the custom ring marker -->
+    <string name="settings_map_player_room_outer_colour">Marker\'s outer colour</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Inner ring color": the inside of the custom ring marker -->
+    <string name="settings_map_player_room_inner_colour">Marker\'s inner colour</string>
+    <!-- Words a player might search the settings for to find the map's colours, separated by commas. Use the words a
+         player of your language would search for. -->
+    <string name="settings_map_colours_keywords">mapper, color, colour, palette, environment, rooms, background, grid</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Background color": behind the rooms -->
+    <string name="settings_map_colour_background">Map background</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Link color": the lines between rooms -->
+    <string name="settings_map_colour_link">Exits</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Room border color": the line around each room -->
+    <string name="settings_map_colour_room_border">Room borders</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Overlapping rooms border": the line around rooms drawn on the
+         same spot -->
+    <string name="settings_map_colour_collision_border">Overlapping rooms\' borders</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Lower level color": rooms on the level below -->
+    <string name="settings_map_colour_lower_level">Level below</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Upper level color": rooms on the level above -->
+    <string name="settings_map_colour_upper_level">Level above</string>
+    <!-- A colour on a game's Map page, desktop Mudlet's "Grid color" -->
+    <string name="settings_map_colour_grid">Grid</string>
+    <!-- The button at the foot of a game's Map page that puts the map's colours back to Mudlet's own, as desktop
+         Mudlet's "Reset all colors to default" on its Mapper colors tab -->
+    <string name="settings_map_colours_reset">Reset to Mudlet\'s map colours</string>
     <!-- A message that shows for a moment at the bottom of the settings, when the player changes a setting of a game
          that is connected and Mudlet reads that setting only as it connects, such as a game protocol's switch -->
     <string name="settings_next_connection">This takes effect the next time you connect.</string>

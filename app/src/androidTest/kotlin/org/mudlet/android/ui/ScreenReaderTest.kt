@@ -212,7 +212,7 @@ class ScreenReaderTest {
 
         // A page asks for the game's own values as it opens: a script, or desktop Mudlet, may have changed them
         compose.pickFromGameMenu(string(R.string.settings_title))
-        activate(hasText(string(R.string.settings_accessibility)))
+        activate(hasText(string(R.string.settings_accessibility)), scroll = true)
         val asked = session.receive("getSettings")
         session.settings(mapOf("announceIncomingText" to false, "advertiseScreenReader" to true, "blankLinesBehaviour" to "hide"), asked.getLong("id"))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { !EngineClient.front.setting(Settings.readNewText) } }
@@ -646,6 +646,31 @@ class ScreenReaderTest {
         session.certificateRefused(null)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(heading).fetchSemanticsNodes().isEmpty() }
         session.assertNoRequest("setSettings", 500)
+    }
+
+    @Test
+    fun theMapPageChangesTheGamesMapAsDesktopsPreferencesDo() {
+        loaded()
+        compose.pickFromGameMenu(string(R.string.settings_title))
+        activate(hasText(string(R.string.settings_map)), scroll = true)
+        // A profile keeps 50 / 3 as 16.7, which desktop's preferences show as 3
+        session.settings(mapOf("mapExitSize" to 16.7, "mapPlayerRoomStyle" to "redRing"), session.receive("getSettings").getLong("id"))
+        val exits = hasContentDescription(string(R.string.settings_map_exit_size)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        val three = compose.activity.resources.getQuantityString(R.plurals.settings_map_size_value, 3, 3)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(exits and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, three)).fetchSemanticsNodes().isNotEmpty() }
+        activate(hasContentDescription(string(R.string.settings_map_exit_size_more)), scroll = true)
+        assertEquals(mapOf("mapExitSize" to 12.5), values(session.receive("setSettings")))
+
+        compose.onNode(hasText(string(R.string.settings_map_player_room_red_ring)) and isSelected()).performScrollTo().assertIsDisplayed()
+        activate(hasText(string(R.string.settings_map_player_room_custom_ring)), scroll = true)
+        assertEquals(mapOf("mapPlayerRoomStyle" to "customRing"), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_map_large_area_exit_arrows)), scroll = true)
+        assertEquals(mapOf("mapLargeAreaExitArrows" to true), values(session.receive("setSettings")))
+
+        activate(hasText(string(R.string.settings_map_colours_reset)), scroll = true)
+        val mudlets = Settings.mapColours.associate { it.key to Settings.colourName(it.mudletDefault) }
+        assertEquals("the map's colours in one request, as desktop's reset", mudlets, values(session.receive("setSettings")))
+        compose.runOnIdle { assertEquals("new games keep Mudlet's", 5, Settings.mapExitSize.value) }
     }
 
     @Test

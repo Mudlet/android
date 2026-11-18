@@ -10,6 +10,7 @@ import androidx.core.content.edit
 import org.mudlet.android.protocol.ServerEncodings
 import java.io.File
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * The app's own settings, kept in SharedPreferences. Each one is Compose state, read and set on the main thread. A new
@@ -160,6 +161,42 @@ object Settings {
     /** "Let the game change colours": the game may redefine the sixteen ANSI colours, by OSC P, and reset them, by OSC R. */
     val gameChangesColours = BoolSetting("serverMayRedefineColors", default = false, mudlet = true)
 
+    // The 2D map's view options, as desktop Mudlet's Mapper tab has them and with its defaults
+    val mapRoomSize = IntSetting("mapRoomSize", default = 5, range = 1..11, mudlet = true)
+    val mapExitSize = PenSizeSetting("mapExitSize")
+    val mapRoomBorders = BoolSetting("mapShowRoomBorders", default = true, mudlet = true)
+    val mapRoomBorderSize = PenSizeSetting("mapRoomBorderSize")
+    val mapLargeAreaExitArrows = BoolSetting("mapLargeAreaExitArrows", default = false, mudlet = true)
+
+    /** How the map marks the player's room, with the marker's sizes in percent and the colours of [PlayerRoomStyle.CUSTOM_RING]. */
+    val playerRoomStyle = EnumSetting("mapPlayerRoomStyle", PlayerRoomStyle.ORIGINAL, PlayerRoomStyle.entries, mudlet = true) { it.mudletValue }
+    val playerRoomOuterDiameter = IntSetting("mapPlayerRoomOuterDiameter", default = 120, range = 50..200, mudlet = true)
+    val playerRoomInnerDiameter = IntSetting("mapPlayerRoomInnerDiameter", default = 70, range = 0..96, mudlet = true)
+    val playerRoomOuterColour = ColourSetting("mapPlayerRoomOuterColor", 0xFF0000)
+    val playerRoomInnerColour = ColourSetting("mapPlayerRoomInnerColor", 0xFFFFFF)
+
+    // The map's colours, as desktop Mudlet's Mapper colors tab has them: the background, the exits, the room borders,
+    // overlapping rooms' borders, the levels below and above, the grid, then the sixteen default environments'
+    val mapBackgroundColour = ColourSetting("mapBackgroundColor", 0x000000)
+    val mapLinkColour = ColourSetting("mapLinkColor", 0xC0C0C0)
+    val mapRoomBorderColour = ColourSetting("mapRoomBorderColor", 0xC0C0C0)
+    val mapCollisionBorderColour = ColourSetting("mapRoomCollisionBorderColor", 0xFFFF00)
+    val mapLowerLevelColour = ColourSetting("mapLowerLevelColor", 0x808080)
+    val mapUpperLevelColour = ColourSetting("mapUpperLevelColor", 0xFFFFFF)
+    val mapGridColour = ColourSetting("mapGridColor", 0xD3D3D3)
+    val mapAnsiColours = ansiColours.map { ColourSetting("map" + it.key.replaceFirstChar(Char::uppercaseChar), it.default) }
+
+    /** The map colours desktop Mudlet's "Reset all colors to default" on its Mapper colors tab puts back, as the Map page's reset does. */
+    val mapColours = listOf(
+        mapBackgroundColour,
+        mapLinkColour,
+        mapRoomBorderColour,
+        mapCollisionBorderColour,
+        mapLowerLevelColour,
+        mapUpperLevelColour,
+        mapGridColour,
+    ) + mapAnsiColours
+
     /** Whether the first run with TalkBack on has asked about [advertiseScreenReader] yet. */
     val screenReaderOffered = BoolSetting("screenReaderOffered", default = false)
 
@@ -215,6 +252,17 @@ object Settings {
         muteGame,
         gameChangesColours,
     ) + colours + listOf(
+        mapRoomSize,
+        mapExitSize,
+        mapRoomBorders,
+        mapRoomBorderSize,
+        mapLargeAreaExitArrows,
+        playerRoomStyle,
+        playerRoomOuterDiameter,
+        playerRoomInnerDiameter,
+        playerRoomOuterColour,
+        playerRoomInnerColour,
+    ) + mapColours + listOf(
         screenReaderOffered,
         mapBehindText,
         wallpaperColours,
@@ -301,6 +349,14 @@ object Settings {
         SPACE("replacewithspace"),
     }
 
+    /** The values `setConfig("mapPlayerRoomStyle", ...)` takes, in the order of desktop Mudlet's list. */
+    enum class PlayerRoomStyle(val mudletValue: String) {
+        ORIGINAL("original"),
+        RED_RING("redRing"),
+        BLUE_YELLOW_RING("blueYellowRing"),
+        CUSTOM_RING("customRing"),
+    }
+
     /** The values `setConfig("showSentText", ...)` takes; SCRIPT shows them unless a script sends them hidden. */
     enum class SentText(val mudletValue: String) {
         SCRIPT("script"),
@@ -356,7 +412,7 @@ object Settings {
     }
 
     /** A whole number within [range]: a value outside it is taken as the nearest end. */
-    class IntSetting(key: String, default: Int, val range: IntRange, mudlet: Boolean = false, mudletDefault: Int = default) : Setting<Int>(key, default, mudlet, mudletDefault) {
+    open class IntSetting(key: String, default: Int, val range: IntRange, mudlet: Boolean = false, mudletDefault: Int = default) : Setting<Int>(key, default, mudlet, mudletDefault) {
         override fun normalise(v: Int) = v.coerceIn(range)
 
         override fun fromMudlet(v: Any) = (v as? Number)?.toInt()?.coerceIn(range)
@@ -366,6 +422,16 @@ object Settings {
         override fun write(editor: SharedPreferences.Editor, v: Int) {
             editor.putInt(key, v)
         }
+    }
+
+    /**
+     * A map line's thickness from 1 to 11, as desktop Mudlet's preferences show it. Mudlet keeps 50 over it, which
+     * divides the pen's width, and the preferences turn it back by qRound(50 / size), as [fromMudlet] does.
+     */
+    class PenSizeSetting(key: String) : IntSetting(key, default = 5, range = 1..11, mudlet = true) {
+        override fun toMudlet(v: Int): Any = 50.0 / v
+
+        override fun fromMudlet(v: Any) = (v as? Number)?.toDouble()?.takeIf { it.isFinite() && it > 0 }?.let { (50 / it).roundToInt().coerceIn(range) }
     }
 
     class BoolSetting(key: String, default: Boolean, mudlet: Boolean = false, mudletDefault: Boolean = default) : Setting<Boolean>(key, default, mudlet, mudletDefault) {

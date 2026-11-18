@@ -253,6 +253,13 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   blue and the colour as hex to type, and changes the game's as OK is pressed. "Reset to Mudlet's colours" sends all
   twenty of Mudlet's in one request (`SettingsOwner.resetToMudlets`), as desktop Mudlet's reset button puts them back.
   Desktop Mudlet's input line colours are not among them, as the app's input line follows the app's theme.
+- A further game category, Map (desktop Mudlet's Mapper and Mapper colors tabs), holds how the engine draws the
+  profile's map, by `getConfig()` keys: the room size, the exits' and room borders' thickness, room borders, large area
+  exit arrows, the player room marker's style, diameters and colours, and the map's colours. Desktop shows a line's
+  thickness from 1 to 11 and Mudlet keeps 50 over it, so `PenSizeSetting` turns one into the other as the preferences
+  do. Each change repaints the map at once, and "Reset to Mudlet's map colours"
+  sends the 23 colours desktop's reset puts back in one request ([`divergences.md`](divergences.md), "The Map
+  settings page").
 - "Blinking text" on the Accessibility page (`enableBlinkText`, off as on desktop) pulses a blinking run's opacity from
   1 to 0.4 and back over two seconds, or one for a fast blink, by desktop Mudlet's `computeBlinkPulseOpacity()`; off,
   the run is steady and italic, as desktop Mudlet draws it. Only a console line in view that blinks reads the frame

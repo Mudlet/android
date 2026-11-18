@@ -107,11 +107,11 @@ class TalkBackOrderTest {
             "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
             "the last announcement" to hasContentDescription(ANNOUNCEMENT),
         )
-        val places = reading.assertInOrder(expected)
+        val places = reading.assertInOrder(expected).toMap()
 
         // The map behind the text adds nothing between the console's lines and the input line
         val console = compose.onNode(hasScrollToIndexAction() and !hasAnyAncestor(window)).fetchSemanticsNode().id
-        val beforeInput = reading.order.subList(places[5].second, places[6].second)
+        val beforeInput = reading.order.subList(places.getValue("the console"), places.getValue("the input line"))
         assertTrue("only the console's lines before the input line: ${reading.read}", beforeInput.all { console in reading.nodes.getValue(it).ancestorIds() })
 
         reading.assertEveryControlRead()

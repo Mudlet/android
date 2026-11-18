@@ -222,6 +222,8 @@ private fun ProfileGameScreen(
             scope.launch { snackbars.showSnackbar(resources.getString(R.string.connection_disconnect_refused, resources.getString(R.string.profiles_error_not_attached)), withDismissAction = true) }
         }
     }
+    val onReconnect = if (canReconnect) ::reconnect else null
+    val onDisconnect = if (canDisconnect) ::disconnect else null
 
     fun close(game: String) = EngineClient.closeProfile(game) { error ->
         if (error != null) {
@@ -247,8 +249,8 @@ private fun ProfileGameScreen(
                     othersUnread = games.sumOf { if (it === c) 0L else it.unread },
                     othersAttention = games.any { it !== c && it.attention },
                     onShowGames = { gamesOpen = true },
-                    onReconnect = if (canReconnect) ::reconnect else null,
-                    onDisconnect = if (canDisconnect) ::disconnect else null,
+                    onReconnect = onReconnect,
+                    onDisconnect = onDisconnect,
                     previous = previous,
                     next = next,
                     onSwitch = EngineClient::setFront,
@@ -268,8 +270,8 @@ private fun ProfileGameScreen(
                     name,
                     reconnectName,
                     connecting = state is ConnectionState.Connecting,
-                    onReconnect = if (canReconnect) ::reconnect else null,
-                    onDisconnect = if (canDisconnect) ::disconnect else null,
+                    onReconnect = onReconnect,
+                    onDisconnect = onDisconnect,
                     onSearch = { searching = true },
                     onOpenPackages = onOpenPackages,
                     onOpenSettings = onOpenSettings,
@@ -311,7 +313,7 @@ private fun ProfileGameScreen(
             },
         ) {
             Column(Modifier.weight(1f).fillMaxWidth().graphicsLayer { translationX = swipe.offset * size.width }) {
-                ConnectionBanner(state, name, onReconnect = if (canReconnect) ::reconnect else null, onStop = if (c.name.isNotEmpty()) ::disconnect else null, Modifier.fillMaxWidth())
+                ConnectionBanner(state, name, onReconnect = onReconnect, onStop = if (c.name.isNotEmpty()) ::disconnect else null, Modifier.fillMaxWidth())
                 if (searching) {
                     ConsoleSearchBar(search, c.lines, c.linesAdded, onClose = {
                         searching = false

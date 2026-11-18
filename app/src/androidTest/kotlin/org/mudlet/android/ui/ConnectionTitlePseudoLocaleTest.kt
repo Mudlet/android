@@ -78,20 +78,17 @@ class ConnectionTitlePseudoLocaleTest(private val locale: String) {
     @Test
     fun theTitleBarTheInputLineTheBannerAndTheMenuFit() {
         session.status("connection", "disconnected")
-        val connectButton = hasContentDescription(string(R.string.connection_connect_to, game.name)) and hasClickAction()
-        waitFor(connectButton)
-        val history = hasContentDescription(string(R.string.history_open)) and hasClickAction()
-        assertWithinTheScreen(
-            "the title bar and the input line",
-            listOf(
-                connectButton,
-                hasContentDescription(string(R.string.scripts_open, game.name)) and hasClickAction(),
-                hasContentDescription(string(R.string.app_map_show)) and hasClickAction(),
-                hasContentDescription(string(R.string.game_menu)) and hasClickAction(),
-                history,
-                hasContentDescription(string(R.string.input_send)) and hasClickAction(),
-            ),
+        val connect = string(R.string.connection_connect_to, game.name)
+        waitFor(hasContentDescription(connect) and hasClickAction())
+        val buttons = listOf(
+            connect,
+            string(R.string.scripts_open, game.name),
+            string(R.string.app_map_show),
+            string(R.string.game_menu),
+            string(R.string.history_open),
+            string(R.string.input_send),
         )
+        assertWithinTheScreen("the title bar and the input line", buttons.map { hasContentDescription(it) and hasClickAction() })
         val title = compose.onNode(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNode().boundsInRoot
         val minimum = with(compose.density) { 48.dp.toPx() }
         assertTrue("$locale: the game title, ${title.width} px wide, is at least 48 dp ($minimum px)", title.width >= minimum - SLACK_PX)

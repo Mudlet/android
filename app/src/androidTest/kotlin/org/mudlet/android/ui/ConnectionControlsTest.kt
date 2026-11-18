@@ -16,9 +16,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -33,11 +31,11 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.suggest.PinnedCommands
 import org.mudlet.android.suggest.SuggestFile
 import org.mudlet.android.ui.game.CONNECTION_BANNER_TAG
 import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
-import org.mudlet.android.ui.game.HISTORY_SHEET_TAG
 
 /**
  * The game screen's connection controls against a fake engine (docs/multi-profile.md, "The switcher"): the title bar
@@ -58,6 +56,8 @@ class ConnectionControlsTest {
     private lateinit var session: FakeEngine.Session
     private val game = Profile("controls ${System.nanoTime()}", "127.0.0.1", 4000, false, "", false)
     private val banner = hasTestTag(CONNECTION_BANNER_TAG)
+    private val pinnedProfile = "${game.name} pinned"
+    private val pins get() = SuggestFile.pinsForProfile(CommandSuggestions.dir(compose.activity), pinnedProfile).file
     private val input get() = hasSetTextAction() and hasText(string(R.string.input_label))
 
     @Before
@@ -82,7 +82,7 @@ class ConnectionControlsTest {
 
     @After
     fun forgetThePins() {
-        SuggestFile.pinsForProfile(CommandSuggestions.dir(compose.activity), game.name).file.delete()
+        pins.delete()
     }
 
     @Test
@@ -136,21 +136,19 @@ class ConnectionControlsTest {
 
     @Test
     fun theRowBelowTheInputLineTakesNoRoomWithNothingInIt() {
-        compose.onNode(hasTestTag(GAME_TITLE_TAG)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { CommandSuggestions.profile } == game.name }
+        compose.waitForIdle()
         val alone = bounds(input).bottom
 
-        compose.onNode(input).performTextInput(PINNED)
-        compose.onNode(input).performImeAction()
-        assertEquals(PINNED, session.receive("send").getString("text"))
-        activate(hasContentDescription(string(R.string.history_open)))
-        activate(hasContentDescription(string(R.string.history_pin, PINNED)))
-        activate(hasContentDescription(string(R.string.history_close)))
-        waitUntilGone(hasTestTag(HISTORY_SHEET_TAG))
+        // Pins loaded from a file rather than pinned from the sheet: the keyboard that typing brings would move the line too
+        pins.parentFile?.mkdirs()
+        pins.writeText(listOf(PinnedCommands.HEADER, PINNED).joinToString("\n", postfix = "\n"))
+        session.status("profile", "$pinnedProfile loaded")
         val pinned = hasContentDescription(string(R.string.pinned_command, PINNED)) and hasClickAction()
         waitFor(pinned)
         compose.waitForIdle()
 
-        // The pinned command's row pushes the input line up by its own height, which it would not if the empty row had taken that room already
+        // The row pushes the input line up by its own height, which it would not if it took that room while empty
         val raised = alone - bounds(input).bottom
         val row = bounds(pinned).height
         val minimum = with(compose.density) { 48.dp.toPx() }

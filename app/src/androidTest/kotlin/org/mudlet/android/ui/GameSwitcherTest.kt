@@ -53,8 +53,7 @@ import androidx.compose.ui.R as ComposeUiR
  * Two games open against a fake engine (docs/multi-profile.md, "The switcher"): the profile list's open games, the game
  * title with what TalkBack reads and its actions, the title bar's Connect, the menu's Stop and the banner under the
  * title bar for each state of the connection, and the game sheet's Reconnect, Disconnect, switch, close and "Open
- * another game". Controls are found by the labels TalkBack reads
- * and activated through their accessibility actions.
+ * another game". Controls are found by the labels TalkBack reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class GameSwitcherTest {

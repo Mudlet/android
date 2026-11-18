@@ -119,7 +119,7 @@ sealed class SettingEntry(
     }
 
     /** Some text typed in, such as the command separator, which changes as the field is left or its Done key pressed. */
-    class Typed(category: SettingsCategory, override val setting: Settings.TextSetting, label: Int, hint: Int, keywords: Int) : SettingEntry(category, label, hint, keywords)
+    class Typed(category: SettingsCategory, override val setting: Settings.TextSetting, label: Int, hint: Int, keywords: Int) : Value(category, label, hint, keywords)
 
     /**
      * One of many [choices], such as Mudlet's names for something: a row with the current one, which opens the list to
@@ -133,7 +133,7 @@ sealed class SettingEntry(
         keywords: Int,
         val choices: List<String>,
         val choiceLabel: (String) -> Int?,
-    ) : SettingEntry(category, label, hint, keywords)
+    ) : Value(category, label, hint, keywords)
 
     /**
      * A whole number: a slider, with buttons a step [less] and [more], its value as [valueText] has it and, for the

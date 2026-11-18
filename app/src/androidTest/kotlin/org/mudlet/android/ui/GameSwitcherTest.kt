@@ -20,6 +20,7 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -268,6 +269,7 @@ class GameSwitcherTest {
         waitFor(pillReading(ALPHA.name, R.string.connection_connected, 1, 2))
 
         openTheSheet()
+        compose.onNode(hasText(string(R.string.game_open_another)) and hasClickAction()).performScrollTo()
         activate(hasText(string(R.string.game_open_another)))
         activate(hasContentDescription(string(R.string.profile_connect_to, GAMMA.name)))
         val open = beta.receive("openProfile")
@@ -283,7 +285,7 @@ class GameSwitcherTest {
         compose.waitUntil(WAIT_MS) { EngineClient.sessions.size == EngineClient.MAX_OPEN_GAMES }
         openTheSheet()
         val full = compose.activity.resources.getQuantityString(R.plurals.game_open_another_full, EngineClient.MAX_OPEN_GAMES, EngineClient.MAX_OPEN_GAMES)
-        compose.onNode(hasText(full)).assertIsDisplayed()
+        compose.onNode(hasText(full)).performScrollTo().assertIsDisplayed()
         compose.onNode(hasText(string(R.string.game_open_another), substring = true) and hasClickAction()).assertIsNotEnabled()
         checkAccessibility()
     }

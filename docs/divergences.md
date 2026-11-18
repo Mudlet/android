@@ -240,6 +240,13 @@ input line has room for a few controls only, and a button there that one stray t
 scripts silently off; the stop sign keeps the state in sight, and TalkBack reads it with the pill. What it stops, and
 that it holds across a reconnect but not once the profile closes, are the desktop's.
 
+## Recording a replay
+
+Desktop Mudlet's replay recording button, under the main console, is a switch on the game sheet's card for the game in
+front, as the emergency stop is, for the same reason (`docs/architecture.md`, "Recording a replay"). The desktop leaves
+a recording in the profile's log folder for the player to find; the app, whose folders the player cannot browse, offers
+the last one to Android's share sheet. The file, its name and what it holds are the desktop's.
+
 ## The Sound button
 
 The game screen's Sound button, desktop Mudlet's toolbar "Mute all media", is there only once the game has played a

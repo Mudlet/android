@@ -572,4 +572,7 @@ public:
     virtual void certificateRefused(const std::optional<RefusedCertificate>& certificate) = 0;
     // Whether the profile's scripts are stopped, by IEngine::setScriptsStopped(), on each change, and false once it closes
     virtual void scriptsStopped(bool stopped) = 0;
+    // Whether the profile records a replay, on each change, and the name of the file in its log folder of the last
+    // recording saved since it loaded, empty for none; false and empty once it closes
+    virtual void replayRecording(bool recording, const QString& file) = 0;
 };

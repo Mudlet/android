@@ -1336,10 +1336,10 @@ device shows, below the UI's debug hook:
   The app's map in the corner (`AppMapCornerTest`), on the five screens of `ScriptMapCornerTest`: there where the
   console has room, grown and placed as a small mapper is, none of its panel over it, each button touched within 48 dp,
   the newest line's text clear of it and its panel, and TalkBack reading it after the console, then its panel, with the
-  panel scrolled to its top and to its end; none while a script's mapper, the map in front or the map behind the text
-  shows, a script's label is where it would be, or with no rooms; hidden, undone and shown again from the settings,
-  which is kept; a tap on it, not on its buttons, bringing the map to the front; at the top end in en-XA and ar-XB with
-  its text whole (`AppMapCornerPseudoLocaleTest`).
+  panel scrolled to its top and to its end; on the phone alone (`AppMapCornerOnThePhoneTest`), none while a script's
+  mapper, the map in front or the map behind the text shows, a script's label is where it would be, or with no rooms;
+  hidden, undone and shown again from the settings, which is kept; a tap on it, not on its buttons, bringing the map to
+  the front; at the top end in en-XA and ar-XB with its text whole (`AppMapCornerPseudoLocaleTest`).
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only. `ScriptLibraryTest` and `PseudoLocaleTest` turn them on through `AccessibilityChecks.kt`, which

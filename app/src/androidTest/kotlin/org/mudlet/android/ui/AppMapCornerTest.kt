@@ -1,7 +1,6 @@
 package org.mudlet.android.ui
 
 import android.Manifest
-import android.content.Context
 import android.os.Build
 import androidx.activity.compose.setContent
 import androidx.annotation.StringRes
@@ -14,17 +13,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
@@ -35,10 +28,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -49,12 +40,10 @@ import com.google.android.apps.common.testing.accessibility.framework.checks.Tou
 import com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator
 import org.hamcrest.BaseMatcher
 import org.hamcrest.Description
-import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -71,37 +60,32 @@ import org.mudlet.android.ui.EngineMessages.mapView
 import org.mudlet.android.ui.theme.MudletTheme
 
 /**
- * The app's own map in the console's corner (docs/architecture.md, "The map in the corner") on the screens of [screen],
- * against a fake engine: where the console has room, the map at its top right, grown as a script's small mapper is,
- * none of its panel over it, each button touched within 48 dp, TalkBack reading it after the console, then its panel,
- * and the text of the console's newest line clear of the map and its panel; none while a script's mapper, the map in
- * front or the map behind the text shows, a script's window is where it would be, or the game has no rooms; hidden and
- * shown again, which is kept; and a tap on it bringing the map to the front. The tests of what the screen's size does not change run on the phone's alone.
+ * What the tests of the app's map in the console's corner (docs/architecture.md, "The map in the corner") share: the
+ * game screen of [screen] drawn on the device, against a fake engine with a game's lines in its console.
  */
-@RunWith(Parameterized::class)
-class AppMapCornerTest(private val screen: Screen) {
+abstract class AppMapCornerFixture(protected val screen: Screen) {
     class Screen(private val name: String, val widthDp: Float, val heightDp: Float, val fontScale: Float) {
         override fun toString() = name
     }
 
-    private val fake = FakeEngineRule()
-    private val compose = createAndroidComposeRule<MainActivity>()
+    protected val fake = FakeEngineRule()
+    protected val compose = createAndroidComposeRule<MainActivity>()
 
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
         .around(compose)
 
-    private lateinit var session: FakeEngine.Session
+    protected lateinit var session: FakeEngine.Session
 
     // The map in the corner, read as the area and the player's room of the frame mapView lays out
-    private val corner: SemanticsMatcher get() = hasContentDescription(string(R.string.app_map_corner_room, AREA, ROOM)) and hasClickAction()
+    protected val corner: SemanticsMatcher get() = hasContentDescription(string(R.string.app_map_corner_room, AREA, ROOM)) and hasClickAction()
 
     // The map in front, which has the frame from the first
-    private val mapInFront: SemanticsMatcher get() = hasContentDescription(string(R.string.map_description))
+    protected val mapInFront: SemanticsMatcher get() = hasContentDescription(string(R.string.map_description))
 
     // A dp of the screen wanted, in the device's pixels
-    private var dp = 1f
+    protected var dp = 1f
 
     @Before
     fun openTheGameScreen() {
@@ -158,6 +142,81 @@ class AppMapCornerTest(private val screen: Screen) {
         }
     }
 
+    protected fun button(@StringRes label: Int) = hasContentDescription(string(label)) and hasClickAction()
+
+    /** Where the one-line text [text] is drawn, not the console's whole width its line takes. */
+    protected fun drawnText(text: String): Rect {
+        val node = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes()
+            .first { it.config.getOrNull(SemanticsActions.GetTextLayoutResult) != null }
+        val layouts = ArrayList<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        val layout = layouts.single()
+        val at = node.boundsInRoot
+        return Rect(at.left + layout.getLineLeft(0), at.top, at.left + layout.getLineRight(0), at.top + layout.size.height)
+    }
+
+    protected fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
+
+    protected fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
+
+    protected fun waitForNone(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty() }
+
+    protected fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
+
+    /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
+    protected fun activate(label: SemanticsMatcher) {
+        waitFor(label)
+        compose.onRoot().tryPerformAccessibilityChecks()
+        compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
+    }
+
+    /** Any TouchTargetSizeCheck result: see [openTheGameScreen]. */
+    private object TouchTargetOfAScreenScaledDown : BaseMatcher<Any>() {
+        override fun matches(item: Any?): Boolean = (item as? AccessibilityViewCheckResult)?.sourceCheckClass == TouchTargetSizeCheck::class.java
+
+        override fun describeTo(description: Description) {
+            description.appendText("a touch target of a screen drawn smaller than the device's")
+        }
+    }
+
+    companion object {
+        internal val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
+        internal const val INSTANCE = "fake-app-map-corner"
+
+        // A frame of the map behind the text, of any size: the corner shows the middle of whichever came
+        internal const val FRAME_W = 400
+        internal const val FRAME_H = 700
+
+        // As EngineMessages.mapView names them
+        internal const val AREA = "Castle"
+        internal const val ROOM = "Room 1"
+
+        // The stored names: players' apps have them
+        internal const val APP_PREFS = "settings"
+        internal const val MAP_IN_CORNER = "mapInCorner"
+
+        // More than the screen holds, so the newest is at the console's bottom
+        internal const val LINES = 60
+        internal const val NEWEST_LINE = "the newest line"
+
+        internal const val WAIT_MS = 10_000L
+        internal const val TIMEOUT_MS = 240_000L
+
+        internal val PHONE = Screen("412x915 dp", 412f, 915f, 1f)
+    }
+}
+
+/**
+ * The app's own map in the console's corner (docs/architecture.md, "The map in the corner") on the screens of [screen],
+ * against a fake engine: where the console has room, the map at its top right, grown as a script's small mapper is,
+ * none of its panel over it, each button touched within 48 dp, TalkBack reading it after the console, then its panel,
+ * and the text of the console's newest line clear of the map and its panel; none while a script's mapper, the map in
+ * front or the map behind the text shows, a script's window is where it would be, or the game has no rooms; hidden and
+ * shown again, which is kept; and a tap on it bringing the map to the front, which the screen's size does not change
+ * and [AppMapCornerOnThePhoneTest] tests.
+ */
+@RunWith(Parameterized::class)
+class AppMapCornerTest(screen: AppMapCornerFixture.Screen) : AppMapCornerFixture(screen) {
     @Test
     fun theMapIsInTheCornerWhereThereIsRoomAndNothingOfItsPanelOrTheNewestLineIsUnderIt() {
         // Off the player, so the button that centres the map on them shows
@@ -220,164 +279,7 @@ class AppMapCornerTest(private val screen: Screen) {
         readings.first().assertEveryControlRead(readings.drop(1))
     }
 
-    @Test
-    fun noMapIsInTheCornerWhileAnotherMapOrAScriptsWindowIsThereOrTheGameHasNone() {
-        assumeTrue("once, on the phone", screen === PHONE)
-        session.send(appMap(FRAME_W, FRAME_H, view = mapView(FRAME_W, FRAME_H)))
-        waitFor(corner)
-
-        // A Geyser.Mapper shows the map: one map on the screen
-        session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", x = 700, y = 0, w = 100, h = 100)), full = true)
-        waitFor(hasContentDescription(string(R.string.map_not_drawn)))
-        waitForNone(corner)
-        session.windows(listOf(FakeEngine.window("mapper", kind = "mapper", x = 700, y = 0, w = 100, h = 100).put("shown", false)), full = true)
-        waitFor(corner)
-
-        // A script's label where the map would be, which it would hide
-        session.windows(listOf(FakeEngine.window("gauge", kind = "label", x = 700, y = 0, w = 100, h = 20)), full = true)
-        waitForNone(corner)
-        session.windows(listOf(FakeEngine.window("gauge", kind = "label", x = 700, y = 0, w = 100, h = 20).put("shown", false)), full = true)
-        waitFor(corner)
-
-        // The map in front, from the title bar's button
-        activate(button(R.string.app_map_show))
-        waitFor(mapInFront)
-        waitForNone(corner)
-        activate(button(R.string.app_map_show))
-        waitFor(corner)
-
-        // The map behind the text
-        compose.runOnIdle { Settings.mapBehindText.set(true) }
-        waitForNone(corner)
-        compose.runOnIdle { Settings.mapBehindText.reset() }
-        waitFor(corner)
-
-        // A profile whose map has no rooms
-        session.send(JSONObject().put("t", "appMap").put("png", "").put("w", 0).put("h", 0).put("viewOnly", true))
-        waitForNone(corner)
-    }
-
-    @Test
-    fun theMapIsHiddenAndShownAgainAndThatIsKept() {
-        assumeTrue("once, on the phone", screen === PHONE)
-        val prefs = compose.activity.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
-        session.send(appMap(FRAME_W, FRAME_H, view = mapView(FRAME_W, FRAME_H)))
-        waitFor(corner)
-
-        activate(button(R.string.app_map_corner_hide))
-        waitForNone(corner)
-        compose.runOnIdle { assertFalse(Settings.mapInCorner.value) }
-        assertFalse("hidden is kept as players' apps will have it", prefs.getBoolean(MAP_IN_CORNER, true))
-        // Undone from the message that says where to show it again
-        waitFor(hasText(string(R.string.app_map_corner_hidden, string(R.string.settings_map_in_corner))))
-        activate(hasText(string(R.string.app_map_corner_undo)))
-        waitFor(corner)
-        assertTrue("shown is kept", prefs.getBoolean(MAP_IN_CORNER, false))
-
-        // Hidden again, the settings' switch shows it
-        activate(button(R.string.app_map_corner_hide))
-        waitForNone(corner)
-        compose.pickFromGameMenu(string(R.string.settings_title))
-        compose.scrollSettingsHubTo(hasText(string(R.string.settings_appearance)))
-        activate(hasText(string(R.string.settings_appearance)))
-        val row = hasText(string(R.string.settings_map_in_corner)) and hasClickAction()
-        compose.onNode(row).performScrollTo()
-        compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
-        activate(row)
-        compose.onNode(row).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
-        assertTrue("shown from the settings is kept", prefs.getBoolean(MAP_IN_CORNER, false))
-        activate(hasContentDescription(string(R.string.navigate_back)))
-        activate(hasContentDescription(string(R.string.navigate_back)))
-        waitFor(corner)
-    }
-
-    @Test
-    fun theFrameIsDrawnInTheCornerAndATapOnItBringsTheMapToTheFrontButOneOnItsButtonsDoesNot() {
-        assumeTrue("once, on the phone", screen === PHONE)
-        session.send(appMap(FRAME_W, FRAME_H, view = mapView(FRAME_W, FRAME_H)))
-        waitFor(corner)
-        // The frame is white all over, the corner's backing the console's black
-        compose.waitForIdle()
-        val drawn = compose.onNode(corner).captureToImage().toPixelMap()
-        assertEquals(Color.White, drawn[drawn.width / 2, drawn.height / 2])
-
-        compose.onNode(button(R.string.map_zoom_in)).performClick()
-        compose.waitForIdle()
-        assertTrue("a zoom button brought the map to the front", compose.onAllNodes(mapInFront).fetchSemanticsNodes().isEmpty())
-
-        compose.onNode(corner).performTouchInput { click(center) }
-        waitFor(mapInFront)
-        waitForNone(corner)
-
-        // And as TalkBack's double tap
-        activate(button(R.string.app_map_show))
-        waitFor(corner)
-        activate(corner)
-        waitFor(mapInFront)
-    }
-
-    private fun button(@StringRes label: Int) = hasContentDescription(string(label)) and hasClickAction()
-
-    /** Where the one-line text [text] is drawn, not the console's whole width its line takes. */
-    private fun drawnText(text: String): Rect {
-        val node = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes()
-            .first { it.config.getOrNull(SemanticsActions.GetTextLayoutResult) != null }
-        val layouts = ArrayList<TextLayoutResult>()
-        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
-        val layout = layouts.single()
-        val at = node.boundsInRoot
-        return Rect(at.left + layout.getLineLeft(0), at.top, at.left + layout.getLineRight(0), at.top + layout.size.height)
-    }
-
-    private fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
-
-    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
-
-    private fun waitForNone(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty() }
-
-    private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
-
-    /** What a double tap does under TalkBack: the node's accessibility click, after the checks on the whole screen. */
-    private fun activate(label: SemanticsMatcher) {
-        waitFor(label)
-        compose.onRoot().tryPerformAccessibilityChecks()
-        compose.onNode(label and hasClickAction()).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
-    }
-
-    /** Any TouchTargetSizeCheck result: see [openTheGameScreen]. */
-    private object TouchTargetOfAScreenScaledDown : BaseMatcher<Any>() {
-        override fun matches(item: Any?): Boolean = (item as? AccessibilityViewCheckResult)?.sourceCheckClass == TouchTargetSizeCheck::class.java
-
-        override fun describeTo(description: Description) {
-            description.appendText("a touch target of a screen drawn smaller than the device's")
-        }
-    }
-
     companion object {
-        private val GAME = Profile("Game", "127.0.0.1", 4000, false, "", false)
-        private const val INSTANCE = "fake-app-map-corner"
-
-        // A frame of the map behind the text, of any size: the corner shows the middle of whichever came
-        private const val FRAME_W = 400
-        private const val FRAME_H = 700
-
-        // As EngineMessages.mapView names them
-        private const val AREA = "Castle"
-        private const val ROOM = "Room 1"
-
-        // The stored names: players' apps have them
-        private const val APP_PREFS = "settings"
-        private const val MAP_IN_CORNER = "mapInCorner"
-
-        // More than the screen holds, so the newest is at the console's bottom
-        private const val LINES = 60
-        private const val NEWEST_LINE = "the newest line"
-
-        private const val WAIT_MS = 10_000L
-        private const val TIMEOUT_MS = 240_000L
-
-        private val PHONE = Screen("412x915 dp", 412f, 915f, 1f)
-
         @JvmStatic
         @Parameterized.Parameters(name = "{0}")
         fun screens() = listOf(

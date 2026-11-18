@@ -834,6 +834,9 @@ void SocketBridge::handleMessage(const QJsonObject& message)
     } else if (type == QLatin1String("setScriptsStopped")) {
         const QJsonValue stopped = message.value(QLatin1String("stopped"));
         refuse(type, stopped.isBool() ? mEngine->setScriptsStopped(stopped.toBool()) : QStringLiteral("stopped must be true or false"));
+    } else if (type == QLatin1String("setTimeStamps")) {
+        const QJsonValue shown = message.value(QLatin1String("shown"));
+        refuse(type, shown.isBool() ? mEngine->setTimeStamps(shown.toBool()) : QStringLiteral("shown must be true or false"));
     } else if (type == QLatin1String("setReplayRecording")) {
         const QJsonValue record = message.value(QLatin1String("record"));
         refuse(type, record.isBool() ? mEngine->setReplayRecording(record.toBool()) : QStringLiteral("record must be true or false"));
@@ -1771,7 +1774,8 @@ QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
                         {QStringLiteral("seq"), stored.seq},
                         {QStringLiteral("text"), stored.text},
                         {QStringLiteral("runs"), runsJson(stored.runs)},
-                        {QStringLiteral("prompt"), stored.prompt}};
+                        {QStringLiteral("prompt"), stored.prompt},
+                        {QStringLiteral("time"), stored.time}};
     if (replay) {
         message.insert(QStringLiteral("replay"), true);
     }
@@ -1796,7 +1800,11 @@ QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
 
 QJsonObject SocketBridge::tailMessage() const
 {
-    return {{QStringLiteral("t"), QStringLiteral("tail")}, {QStringLiteral("text"), mTail.text}, {QStringLiteral("runs"), runsJson(mTail.runs)}, {QStringLiteral("prompt"), mTail.prompt}};
+    return {{QStringLiteral("t"), QStringLiteral("tail")},
+            {QStringLiteral("text"), mTail.text},
+            {QStringLiteral("runs"), runsJson(mTail.runs)},
+            {QStringLiteral("prompt"), mTail.prompt},
+            {QStringLiteral("time"), mTail.time}};
 }
 
 QJsonObject SocketBridge::hiddenInputMessage() const
@@ -2081,12 +2089,12 @@ void SocketBridge::sendFrame(const QJsonObject& message)
     }
 }
 
-void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool isPrompt)
+void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time)
 {
     if (mMirror) {
-        mMirror->line(text, runs, isPrompt);
+        mMirror->line(text, runs, isPrompt, time);
     }
-    mScrollback.push_back({mNextSeq++, text, runs, isPrompt});
+    mScrollback.push_back({mNextSeq++, text, runs, isPrompt, time});
     if (qsizetype(mScrollback.size()) > scrollbackLines) {
         mScrollback.pop_front();
     }
@@ -2099,12 +2107,12 @@ void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool i
     }
 }
 
-void SocketBridge::tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt)
+void SocketBridge::tail(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time)
 {
     if (mMirror) {
-        mMirror->tail(text, runs, isPrompt);
+        mMirror->tail(text, runs, isPrompt, time);
     }
-    mTail = {0, text, runs, isPrompt};
+    mTail = {0, text, runs, isPrompt, time};
     if (outputLive()) {
         sendFrame(tailMessage());
     }
@@ -2117,7 +2125,7 @@ void SocketBridge::cleared()
     }
     mScrollback.clear();
     mClearedAfterSeq = mNextSeq - 1;
-    mTail = {0, {}, {}, false};
+    mTail = {0, {}, {}, false, 0};
     if (outputLive()) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("clear")}});
     }

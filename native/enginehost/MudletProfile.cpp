@@ -4,6 +4,7 @@
 #include "THeadlessSession.h"
 
 #include <QBuffer>
+#include <QDateTime>
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
@@ -627,8 +628,8 @@ void MudletProfile::connectSession()
         ++(isPrompt ? mPromptsReceived : mLinesReceived);
         markCountersDirty();
     });
-    connect(session, &THeadlessSession::lineShown, this, [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64, bool continuesLine) {
-        onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mEngine.mLinkTop), continuesLine);
+    connect(session, &THeadlessSession::lineShown, this, [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64 arrivalMSecs, bool continuesLine) {
+        onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mEngine.mLinkTop), arrivalMSecs, continuesLine);
     });
     connect(session, &THeadlessSession::localTextStyled, this, [this](const QString&, const QString& text, const QList<TextRun>& runs, bool continuesLine) {
         mLocalLines += text.count(QLatin1Char('\n'));
@@ -683,6 +684,14 @@ void MudletProfile::connectSession()
     connect(session, &THeadlessSession::consoleColorsChanged, this, [this](const QString&, const QColor& foreground, const QColor& background) {
         reportConsoleColors(foreground, background);
     });
+    connect(session, &THeadlessSession::latencyChanged, this, [this](const QString&, std::optional<double> networkSeconds, double processingSeconds) {
+        // docs/protocol.md, "lag": the latency box's two numbers, to the millisecond as it shows them
+        const QString network = networkSeconds ? QString::number(*networkSeconds, 'f', 3) : QStringLiteral("-");
+        mFrontend->status(QStringLiteral("lag"), QStringLiteral("%1 %2").arg(network, QString::number(processingSeconds, 'f', 3)));
+    });
+    connect(session, &THeadlessSession::timeStampsShownChanged, this, [this](const QString&, bool shown) {
+        reportTimeStamps(shown);
+    });
     connect(session, &THeadlessSession::linksChanged, this, [this](const QString&, const QList<int>& links) {
         QList<int> ids;
         ids.reserve(links.size());
@@ -698,6 +707,7 @@ void MudletProfile::connectSession()
         mFrontend->status(QStringLiteral("profileLoadMs"), QString::number(mStartClock.elapsed()));
         mFrontend->history(mSession->commandHistory());
         reportConsoleColors(mSession->consoleForeground(), mSession->consoleBackground());
+        reportTimeStamps(mSession->timeStampsShown());
         mLoaded = true;
         if (!mMainWindowSize.isEmpty() && !mSession->setMainWindowSize(mMainWindowSize)) {
             qWarning("MudletEngine: the main window's size %dx%d was refused: %s", mMainWindowSize.width(), mMainWindowSize.height(), qPrintable(mSession->errorString()));
@@ -1545,6 +1555,8 @@ void MudletProfile::onProfileClosed()
     setSecureOffer(false);
     mFrontend->certificateRefused(std::nullopt);
     mFrontend->scriptsStopped(false);
+    reportTimeStamps(false);
+    mFrontend->status(QStringLiteral("lag"), QString());
     mRecording = false;
     mReplaysBefore.clear();
     mRecordedFile.clear();
@@ -2266,6 +2278,22 @@ QString MudletProfile::setScriptsStopped(bool stopped)
     return {};
 }
 
+QString MudletProfile::setTimeStamps(bool shown)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    if (!mSession->setTimeStampsShown(shown)) {
+        return mSession->errorString();
+    }
+    return {};
+}
+
+void MudletProfile::reportTimeStamps(bool shown)
+{
+    mFrontend->status(QStringLiteral("timeStamps"), shown ? QStringLiteral("true") : QStringLiteral("false"));
+}
+
 QString MudletProfile::replayFolder() const
 {
     // As MudletApp::getMudletPath(enums::profileReplayAndLogFilesPath) names it
@@ -2735,7 +2763,7 @@ void MudletProfile::reportConsoleColors(const QColor& foreground, const QColor& 
 
 // A line as the main console shows it once its triggers ran. It stays open, as the tail, until the next line or
 // piece of text that does not continue it, so that one that does can still be put on its end.
-void MudletProfile::onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine)
+void MudletProfile::onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, qint64 arrivalMSecs, bool continuesLine)
 {
     if (continuesLine && mOpen.kind != OpenLine::Kind::none) {
         appendToOpen(text, runs);
@@ -2746,7 +2774,7 @@ void MudletProfile::onLineShown(const QString& text, bool isPrompt, const QList<
             mDropLineFeed = true;
         }
         commitOpen();
-        mOpen = {OpenLine::Kind::shown, text, runs, isPrompt};
+        mOpen = {OpenLine::Kind::shown, text, runs, isPrompt, arrivalMSecs >= 0 ? arrivalMSecs : QDateTime::currentMSecsSinceEpoch()};
     }
     commitCompleteLines(OpenLine::Kind::shown);
     scheduleTailSync();
@@ -2768,7 +2796,7 @@ void MudletProfile::onLocalText(const QString& text, const QList<ColorRun>& runs
         appendToOpen(piece, pieceRuns);
     } else {
         commitOpen();
-        mOpen = {OpenLine::Kind::local, piece, pieceRuns, false};
+        mOpen = {OpenLine::Kind::local, piece, pieceRuns, false, QDateTime::currentMSecsSinceEpoch()};
     }
     commitCompleteLines(OpenLine::Kind::local);
     scheduleTailSync();
@@ -2799,7 +2827,7 @@ void MudletProfile::commitCompleteLines(OpenLine::Kind remainder)
     qsizetype end;
     while ((end = mOpen.text.indexOf(QLatin1Char('\n'))) >= 0) {
         const int size = int(mOpen.text.size());
-        mFrontend->line(mOpen.text.left(end), sliceRuns(mOpen.runs, 0, int(end)), mOpen.prompt && remainder == OpenLine::Kind::local);
+        mFrontend->line(mOpen.text.left(end), sliceRuns(mOpen.runs, 0, int(end)), mOpen.prompt && remainder == OpenLine::Kind::local, mOpen.time);
         mOpen.runs = sliceRuns(mOpen.runs, int(end) + 1, size);
         mOpen.text.remove(0, end + 1);
         if (remainder == OpenLine::Kind::local) {
@@ -2817,12 +2845,12 @@ void MudletProfile::commitOpen()
     if (mOpen.kind == OpenLine::Kind::none) {
         return;
     }
-    mFrontend->line(mOpen.text, mOpen.runs, mOpen.prompt);
+    mFrontend->line(mOpen.text, mOpen.runs, mOpen.prompt, mOpen.time);
     mOpen = {};
     // The UI would otherwise show the line twice until the tail is next synced
     if (!mSentTail.text.isEmpty()) {
         mSentTail = {};
-        mFrontend->tail({}, {}, false);
+        mFrontend->tail({}, {}, false, 0);
     }
 }
 
@@ -2839,11 +2867,11 @@ void MudletProfile::scheduleTailSync()
 void MudletProfile::syncTail()
 {
     mTailSyncPending = false;
-    if (mOpen.text == mSentTail.text && mOpen.runs == mSentTail.runs && mOpen.prompt == mSentTail.prompt) {
+    if (mOpen.text == mSentTail.text && mOpen.runs == mSentTail.runs && mOpen.prompt == mSentTail.prompt && mOpen.time == mSentTail.time) {
         return;
     }
     mSentTail = mOpen;
-    mFrontend->tail(mSentTail.text, mSentTail.runs, mSentTail.prompt);
+    mFrontend->tail(mSentTail.text, mSentTail.runs, mSentTail.prompt, mSentTail.time);
 }
 
 void MudletProfile::markCountersDirty()

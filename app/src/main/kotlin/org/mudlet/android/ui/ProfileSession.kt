@@ -541,6 +541,15 @@ class ProfileSession internal constructor(
      */
     fun setReplayRecording(record: Boolean): Boolean = settingsAvailable && link?.send(Requests.setReplayRecording(record)) == true
 
+    /** Desktop Mudlet's timestamp button, as status `timeStamps` last said ([setTimeStamps]). */
+    val timeStampsShown: Boolean get() = status["timeStamps"] == "true"
+
+    /**
+     * Shows each line's time beside it, or hides it, as desktop Mudlet's timestamp button does; [timeStampsShown] follows
+     * once the engine has done it. False, sending nothing, while its profile has not loaded or the link is down.
+     */
+    fun setTimeStamps(shown: Boolean): Boolean = settingsAvailable && link?.send(Requests.setTimeStamps(shown)) == true
+
     private fun onSounds(message: EngineMessage.Sounds) {
         sounds = message
         settings[Settings.muteScripts.key] = message.scriptsMuted
@@ -628,7 +637,7 @@ class ProfileSession internal constructor(
             if (misdirected) return
             when (message) {
                 is EngineMessage.Line -> synchronized(pendingLock) {
-                    pendingLines.add(UiLine(message.text, message.runs, message.prompt))
+                    pendingLines.add(UiLine(message.text, message.runs, message.prompt, time = message.time))
                     if (!message.replay) pendingNews.add(message.text)
                     scheduleFlush()
                 }
@@ -643,7 +652,7 @@ class ProfileSession internal constructor(
                 }
 
                 is EngineMessage.Tail -> synchronized(pendingLock) {
-                    pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt)
+                    pendingTail = if (message.text.isEmpty()) null else UiLine(message.text, message.runs, message.prompt, time = message.time)
                     pendingTailSet = true
                     scheduleFlush()
                 }

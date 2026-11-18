@@ -1706,6 +1706,23 @@
     <string name="game_share_replay_failed">The replay file could not be read</string>
     <!-- Shown when no app on the device takes a file to share -->
     <string name="game_share_replay_no_app">No app here takes a file to share</string>
+    <!-- The switch on the game sheet's card for the game in front that shows the time each line came beside it, as
+         desktop Mudlet's timestamp button does. Use desktop Mudlet's translation of "Timestamps" where your language has
+         one. -->
+    <string name="game_time_stamps">Timestamps</string>
+    <!-- Under "Timestamps": what the switch shows, whether on or off. The game keeps the choice for its next load. -->
+    <string name="game_time_stamps_summary">Show the time each line came beside it</string>
+    <!-- The game's lag on the game sheet's card, as desktop Mudlet's latency box shows it: N is the network's, from a
+         command sent to the game's reply, and S how long Mudlet took over the game's last text, in seconds, as
+         0.123. Use desktop Mudlet's translation of "N:%1 S:%2" where your language has one. -->
+    <string name="game_lag">N:%1$s S:%2$s</string>
+    <!-- As game_lag, while the game marks no prompts with GA, so the network's lag cannot be told. Use desktop Mudlet's
+         translation of "<no GA> S:%1" where your language has one. -->
+    <string name="game_lag_no_ga">&lt;no GA&gt; S:%1$s</string>
+    <!-- What TalkBack reads for game_lag; %1$s and %2$s are seconds, as 0.123 -->
+    <string name="game_lag_description">Lag: network %1$s seconds, processing %2$s seconds</string>
+    <!-- What TalkBack reads for game_lag_no_ga; %1$s is seconds, as 0.123 -->
+    <string name="game_lag_no_ga_description">Lag: network unknown, as the game marks no prompts, processing %1$s seconds</string>
     <!-- What TalkBack says a tap on an open game does: brings it to the front -->
     <string name="game_show">Show this game</string>
     <!-- The close button of an open game in the game sheet, read by TalkBack; %1$s is the game's (profile's) name -->

@@ -33,9 +33,10 @@ class ProtocolTest {
 
     @Test
     fun tailAndClearParse() {
-        val tail = FrameReader.parse(JSONObject("""{"t":"tail","text":"HP> ","runs":[[0,2,1,-1,1]],"prompt":true}""")) as EngineMessage.Tail
+        val tail = FrameReader.parse(JSONObject("""{"t":"tail","text":"HP> ","runs":[[0,2,1,-1,1]],"prompt":true,"time":1700000000123}""")) as EngineMessage.Tail
         assertEquals("HP> ", tail.text)
         assertTrue(tail.prompt)
+        assertEquals(1_700_000_000_123L, tail.time)
         assertArrayEquals(intArrayOf(0, 2, 1, -1, 1, 0), tail.runs)
         assertEquals(EngineMessage.Clear, FrameReader.parse(JSONObject("""{"t":"clear"}""")))
     }
@@ -1114,6 +1115,15 @@ class ProtocolTest {
         assertEquals(EngineMessage.SecureOffer(false), FrameReader.parse(JSONObject("""{"t":"secureOffer"}""")))
         assertEquals(mapOf("t" to "answerSecureOffer", "accept" to true), Requests.answerSecureOffer(true).toMap())
         assertEquals(mapOf("t" to "answerSecureOffer", "accept" to false), Requests.answerSecureOffer(false).toMap())
+    }
+
+    @Test
+    fun eachLinesTimeAndTheTimestampButton() {
+        val line = FrameReader.parse(JSONObject("""{"t":"line","seq":3,"text":"x","runs":[],"prompt":false,"time":1700000000456,"replay":true}""")) as EngineMessage.Line
+        assertEquals(1_700_000_000_456L, line.time)
+        assertTrue(line.replay)
+        assertEquals(mapOf("t" to "setTimeStamps", "shown" to true), Requests.setTimeStamps(true).toMap())
+        assertEquals(mapOf("t" to "setTimeStamps", "shown" to false), Requests.setTimeStamps(false).toMap())
     }
 
     @Test

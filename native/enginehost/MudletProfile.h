@@ -99,6 +99,7 @@ public:
     QString cancelMapDownload() override;
     QString answerSecureOffer(bool accept) override;
     QString setScriptsStopped(bool stopped) override;
+    QString setTimeStamps(bool shown) override;
     QString setReplayRecording(bool record) override;
     QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
@@ -180,6 +181,8 @@ private:
         QString text;
         QList<ColorRun> runs;
         bool prompt = false;
+        // Of its first piece, in milliseconds since the epoch
+        qint64 time = 0;
     };
 
     void connectSession();
@@ -211,6 +214,7 @@ private:
     void runNow(const QString& code);
     void applyScreenSize();
     void reportConsoleColors(const QColor& foreground, const QColor& background);
+    void reportTimeStamps(bool shown);
     void flushCounters();
     void markCountersDirty();
     void onProfileClosed();
@@ -249,7 +253,7 @@ private:
     // Mudlet's progress, while a map file runs, into mMapFile and told; asks the UI's bridge whether to stop it
     void takeMapFileProgress(const QString& label, int value, int maximum, bool cancelable);
 
-    void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, bool continuesLine);
+    void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, qint64 arrivalMSecs, bool continuesLine);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
     void onMainConsoleCleared();
     void appendToOpen(const QString& text, const QList<ColorRun>& runs);

@@ -383,6 +383,14 @@ front, as the emergency stop is, for the same reason (`docs/architecture.md`, "R
 a recording in the profile's log folder for the player to find; the app, whose folders the player cannot browse, offers
 the last one to Android's share sheet. The file, its name and what it holds are the desktop's.
 
+## Timestamps and the lag
+
+Desktop Mudlet's timestamp button and latency box, under the main console, are a switch and a line on the game sheet's
+card for the game in front, for the reason the emergency stop is (`docs/architecture.md`, "Timestamps and the lag").
+The desktop wraps a line in its buffer before it draws it, so each row of a long line has a timestamp of its own; the
+app wraps what the engine sends as one line, so its rows after the first start under the line's text, not under a
+time. The times, their format and colour, and the lag's figures are the desktop's.
+
 ## The Sound button
 
 The game screen's Sound button, desktop Mudlet's toolbar "Mute all media", is there only once the game has played a

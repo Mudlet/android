@@ -40,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -63,6 +64,12 @@ const val GAME_SHEET_TAG = "gameSheet"
 
 /** The emergency stop switch's test tag. */
 const val EMERGENCY_STOP_TAG = "emergencyStop"
+
+/** The timestamps switch's test tag. */
+const val TIME_STAMPS_TAG = "timeStamps"
+
+/** The lag line's test tag. */
+const val LAG_TAG = "lag"
 
 /**
  * The game sheet, which the game title opens (docs/multi-profile.md, "The switcher"): first a card for the game in
@@ -173,6 +180,7 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Lag.of(front.status["lag"])?.let { LagText(it) }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val reconnect = stringResource(R.string.connection_reconnect_to, name)
                 val disconnect = stringResource(R.string.connection_disconnect_from, name)
@@ -185,8 +193,35 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
             }
             EmergencyStop(front.scriptsStopped, enabled = front.settingsAvailable, onChange = front::setScriptsStopped)
             ReplayRecording(front)
+            SheetSwitch(
+                R.drawable.ic_schedule,
+                stringResource(R.string.game_time_stamps),
+                stringResource(R.string.game_time_stamps_summary),
+                checked = front.timeStampsShown,
+                enabled = front.settingsAvailable,
+                tag = TIME_STAMPS_TAG,
+                checkedTint = MaterialTheme.colorScheme.primary,
+                onChange = front::setTimeStamps,
+            )
         }
     }
+}
+
+/** Desktop Mudlet's latency box, as it reads it, with a TalkBack reading that spells it out. */
+@Composable
+private fun LagText(lag: Lag) {
+    val network = lag.network
+    val (shown, read) = if (network == null) {
+        stringResource(R.string.game_lag_no_ga, lag.processing) to stringResource(R.string.game_lag_no_ga_description, lag.processing)
+    } else {
+        stringResource(R.string.game_lag, network, lag.processing) to stringResource(R.string.game_lag_description, network, lag.processing)
+    }
+    Text(
+        shown,
+        Modifier.semantics { contentDescription = read }.testTag(LAG_TAG),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /** Desktop Mudlet's emergency stop as a switch, on while [stopped], which [onChange] turns; TalkBack reads its new state once the engine has it. */
@@ -201,7 +236,7 @@ private fun EmergencyStop(stopped: Boolean, enabled: Boolean, onChange: (Boolean
     onChange = onChange,
 )
 
-/** A switch on the game sheet's card, [title] over [summary], tinted [icon] while [checked], which [onChange] turns. */
+/** A switch on the game sheet's card, [title] over [summary], [icon] tinted [checkedTint] while [checked], which [onChange] turns. */
 @Composable
 internal fun SheetSwitch(
     @DrawableRes icon: Int,
@@ -210,6 +245,7 @@ internal fun SheetSwitch(
     checked: Boolean,
     enabled: Boolean,
     tag: String,
+    checkedTint: Color = MaterialTheme.colorScheme.error,
     onChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -219,7 +255,7 @@ internal fun SheetSwitch(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(icon), contentDescription = null, tint = if (checked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(painterResource(icon), contentDescription = null, tint = if (checked) checkedTint else MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

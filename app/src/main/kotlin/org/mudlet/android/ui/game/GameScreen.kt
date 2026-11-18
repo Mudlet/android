@@ -2,6 +2,7 @@ package org.mudlet.android.ui.game
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,7 +71,7 @@ import kotlin.reflect.KClass
  * under a title bar whose title is the game ([GameTitle]): the front game's name and connection, which opens the game
  * sheet ([GameSheet]) with Reconnect, Disconnect, the open games and "Open another game", which goes back to the profile
  * list ([onBack]), where Connect opens one more beside those open. While the player's own Disconnect, or no connection
- * yet, leaves the game disconnected, the bar's first button connects it again; its menu ([GameMenuButton]) has
+ * yet, leaves the game disconnected, the bar's first button connects it again, where the bar has room for it; its menu ([GameMenuButton]) has
  * Reconnect, Disconnect (Stop while connecting), the search of the text, the profile's packages ([onOpenPackages]) and
  * the settings. While a connection the player did not end is being dealt with, a banner under the title bar says so,
  * with what to do about it ([ConnectionBanner]). The row below the input line holds, once the game has played a sound
@@ -223,7 +224,8 @@ private fun ProfileGameScreen(
         }
     }
     val onReconnect = if (canReconnect) ::reconnect else null
-    val connectShown = state == ConnectionState.Disconnected && canReconnect
+    val connectWanted = state == ConnectionState.Disconnected && canReconnect
+    val commandsShown = scriptCommandsShown()
     val onDisconnect = if (canDisconnect) ::disconnect else null
 
     fun close(game: String) = EngineClient.closeProfile(game) { error ->
@@ -241,44 +243,50 @@ private fun ProfileGameScreen(
 
     Scaffold(
         topBar = {
-            MudletTopBar(name, onBack, titleContent = {
-                GameTitle(
-                    name,
-                    state,
-                    index,
-                    games.size,
-                    othersUnread = games.sumOf { if (it === c) 0L else it.unread },
-                    othersAttention = games.any { it !== c && it.attention },
-                    onShowGames = { gamesOpen = true },
-                    onReconnect = onReconnect,
-                    onDisconnect = onDisconnect,
-                    previous = previous,
-                    next = next,
-                    onSwitch = EngineClient::setFront,
-                    swipe = swipe,
-                    stateShown = !connectShown,
-                )
-            }) {
-                if (connectShown) {
-                    FilledTonalIconButton(::reconnect) { Icon(painterResource(R.drawable.ic_link), stringResource(R.string.connection_connect_to, reconnectName)) }
+            BoxWithConstraints {
+                // Back, the title and each button at 48 dp, and the bar's 4 dp at each end: without that room the title
+                // bar squeezes Back and the title under 48 dp, so Connect gives way to the menu's Reconnect
+                val buttons = 4 + (if (commandsShown) 1 else 0)
+                val connectShown = connectWanted && maxWidth >= 4.dp + 48.dp * (2 + buttons) + 4.dp
+                MudletTopBar(name, onBack, titleContent = {
+                    GameTitle(
+                        name,
+                        state,
+                        index,
+                        games.size,
+                        othersUnread = games.sumOf { if (it === c) 0L else it.unread },
+                        othersAttention = games.any { it !== c && it.attention },
+                        onShowGames = { gamesOpen = true },
+                        onReconnect = onReconnect,
+                        onDisconnect = onDisconnect,
+                        previous = previous,
+                        next = next,
+                        onSwitch = EngineClient::setFront,
+                        swipe = swipe,
+                        stateShown = !connectShown,
+                    )
+                }) {
+                    if (connectShown) {
+                        FilledTonalIconButton(::reconnect) { Icon(painterResource(R.drawable.ic_link), stringResource(R.string.connection_connect_to, reconnectName)) }
+                    }
+                    ScriptCommandsButton()
+                    IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
+                        ErrorCountBadge(c.errors.unseen, stringResource(R.string.scripts_open, c.name)) { Icon(painterResource(R.drawable.ic_auto_fix_high), it) }
+                    }
+                    MapButton(mapOpen, onMapOpen)
+                    GameMenuButton(
+                        c.name,
+                        name,
+                        reconnectName,
+                        connecting = state is ConnectionState.Connecting,
+                        onReconnect = onReconnect,
+                        onDisconnect = onDisconnect,
+                        onSearch = { searching = true },
+                        onOpenPackages = onOpenPackages,
+                        onOpenSettings = onOpenSettings,
+                        modifier = Modifier.tourTarget(TourTarget.SETTINGS),
+                    )
                 }
-                ScriptCommandsButton()
-                IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
-                    ErrorCountBadge(c.errors.unseen, stringResource(R.string.scripts_open, c.name)) { Icon(painterResource(R.drawable.ic_auto_fix_high), it) }
-                }
-                MapButton(mapOpen, onMapOpen)
-                GameMenuButton(
-                    c.name,
-                    name,
-                    reconnectName,
-                    connecting = state is ConnectionState.Connecting,
-                    onReconnect = onReconnect,
-                    onDisconnect = onDisconnect,
-                    onSearch = { searching = true },
-                    onOpenPackages = onOpenPackages,
-                    onOpenSettings = onOpenSettings,
-                    modifier = Modifier.tourTarget(TourTarget.SETTINGS),
-                )
             }
         },
     ) { padding ->

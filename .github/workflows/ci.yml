@@ -16,6 +16,8 @@ name: CI
 #                                 the release-plan check (scripts/lint.sh release-plan)
 #   scripts/ci-push-base.sh and its test
 #                                 the ci-push-base check (scripts/lint.sh ci-push-base)
+#   native/tests/android_instrumented.py and its watchdog's test
+#                                 the instrumented-watchdog check (scripts/lint.sh instrumented-watchdog)
 #   docs, README and the like     only this workflow's own small jobs (docs/protocol.md: the real engine on the host,
 #                                 whose ProtocolSpecTest reads it)
 #   Kotlin (app/, engine-service/, protocol/, suggest/)
@@ -175,6 +177,12 @@ jobs:
               - scripts/test-ci-push-base.sh
               - *lint-tools
               - *everything
+            instrumented-watchdog:
+              - native/tests/android_instrumented.py
+              - native/tests/android_smoke.py
+              - native/tests/test_instrumented_watchdog.py
+              - *lint-tools
+              - *everything
             libmudlet-android:
               - *kotlin
               - native/**
@@ -220,7 +228,7 @@ jobs:
             esac
           }
           checks=()
-          for check in clang-format shellcheck actionlint strings conflict-markers vendored games release-plan ci-push-base; do
+          for check in clang-format shellcheck actionlint strings conflict-markers vendored games release-plan ci-push-base instrumented-watchdog; do
             if [ "$(wanted "$check")" = true ]; then checks+=("\"$check\""); fi
           done
           {

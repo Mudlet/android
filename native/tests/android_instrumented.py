@@ -7,19 +7,23 @@ every runtime permission: NotificationPermissionTest needs the app freshly insta
 runs first, on its own, and the other app tests after it. The engine-service tests run from their own test APK,
 installed with -g, which instruments itself and runs EngineService in its own :engine process.
 
-A test fails the run if it fails or runs past TEST_TIMEOUT_MS, if the instrumentation crashes, hangs or reports fewer
-tests than it started, or if no test ran at all. A crash of one of the app's processes is given from logcat,
-symbolised as android_smoke.py does; for a hang, the stacks of the hung process's threads. The screenshots the app's
-ScreenshotTest takes (API 31 and later) are copied into <out>/screenshots.
+A test fails the run if it fails or runs past TEST_TIMEOUT_MS, if the instrumentation crashes, hangs (no test ends for
+STALL_S, or it runs past its overall limit) or reports fewer tests than it started, or if no test ran at all. A crash
+of one of the app's processes is given from logcat, symbolised as android_smoke.py does; for a hang, the stacks of the
+hung process's threads. The screenshots the app's ScreenshotTest takes (API 31 and later) are copied into
+<out>/screenshots.
 
 usage: android_instrumented.py --app <app-debug.apk> --app-tests <app-debug-androidTest.apk>
                                --engine-tests <engine-service-debug-androidTest.apk> --out <dir> [--symbols <dir>]
 """
 import argparse
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from android_smoke import Device, SmokeFailure, adb, install, shell  # noqa: E402
@@ -34,6 +38,10 @@ CODES = {0: "PASS", -1: "ERROR", -2: "FAIL", -3: "IGNORED", -4: "ASSUMPTION FAIL
 # AndroidJUnitRunner fails a test that runs longer, with the stack it was stuck in; the longest, EngineServiceTest's
 # restore, waits up to 180 s for the new engine
 TEST_TIMEOUT_MS = 300_000
+# A test past TEST_TIMEOUT_MS is failed by the runner, with its stack, and the next one starts: this long with no test
+# ending is a hang the runner cannot report. The suites' overall limits are a backstop, well above how long they take,
+# so that a slow runner or a growing suite does not fail them
+STALL_S = TEST_TIMEOUT_MS // 1000 + 120
 
 LOG = None
 
@@ -72,18 +80,66 @@ def parse(output):
     return tests, result
 
 
-def instrument(dev, name, package, process, title, timeout, *args):
-    """Runs one am instrument, keeping its output as instrument-<name>.txt; returns the failures, as text. If it is
-    still running after timeout seconds, the stacks of process's threads go to the log and the run is stopped."""
+class Watchdog:
+    """Whether an am instrument -r has hung: no test has ended for stall seconds, or it has run for limit."""
+
+    def __init__(self, stall, limit, now):
+        self.stall, self.limit = stall, limit
+        self.started = self.progress = now
+
+    def line(self, text, now):
+        if (m := re.match(r"INSTRUMENTATION_STATUS_CODE: (-?\d+)", text)) and int(m.group(1)) != 1:
+            self.progress = now
+
+    def hung(self, now):
+        if now - self.started >= self.limit:
+            return f"still running after {self.limit} s"
+        if now - self.progress >= self.stall:
+            return f"no test ended for {self.stall} s"
+        return None
+
+
+def watched(argv, stall, limit):
+    """Runs argv, stopping it when Watchdog says it has hung; returns its output and why it was stopped, or None."""
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="replace")
+    lines = queue.Queue()
+
+    def read():
+        for line in proc.stdout:
+            lines.put(line)
+        lines.put(None)
+
+    threading.Thread(target=read, daemon=True).start()
+    dog = Watchdog(stall, limit, time.monotonic())
+    output = []
+    while True:
+        try:
+            line = lines.get(timeout=1)
+        except queue.Empty:
+            line = ""
+        if line is None:
+            proc.wait()
+            return "".join(output), None
+        output.append(line)
+        dog.line(line, time.monotonic())
+        if why := dog.hung(time.monotonic()):
+            proc.kill()
+            proc.wait()
+            return "".join(output), why
+
+
+def instrument(dev, name, package, process, title, limit, *args):
+    """Runs one am instrument, keeping its output as instrument-<name>.txt; returns the failures, as text. If no test
+    ends for STALL_S, or it is still running after limit seconds, the stacks of process's threads go to the log and the
+    run is stopped."""
     log(f"--- {title}")
     command = " ".join(["am", "instrument", "-w", "-r", "-e", "timeout_msec", str(TEST_TIMEOUT_MS), *args,
                         f"{package}/{RUNNER}"])
+    started = time.monotonic()
+    output, why = watched(["adb", "shell", command], STALL_S, limit)
     hung = None
-    try:
-        output = adb("shell", command, check=False, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        output = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else e.stdout or ""
-        hung = f"{title}: still running after {timeout} s; the threads of {process}:\n{thread_stacks(dev, name, process)}"
+    if why:
+        hung = f"{title}: {why}; the threads of {process}:\n{thread_stacks(dev, name, process)}"
         shell(f"am force-stop {process.split(':')[0]}", check=False)
     with open(os.path.join(dev.out, f"instrument-{name}.txt"), "w") as f:
         f.write(output)
@@ -103,6 +159,7 @@ def instrument(dev, name, package, process, title, timeout, *args):
         failures.append(f"{title}: no test ran")
     if summary:
         log(summary[-1])
+    log(f"({len(tests)} tests in {time.monotonic() - started:.0f} s of the {limit} s allowed)")
     crash = dev.crash()
     if crash:
         failures.append(f"{title}: a process crashed:\n{crash}")
@@ -168,8 +225,7 @@ def run(dev, args):
     install(args.app_tests)
     failures += instrument(dev, "app-permission", APP_TESTS, APP, "the app, freshly installed: the notification permission",
                            480, "-e", "class", PERMISSION_TEST)
-    # They took about 630 s on the API 36 emulator in November 2026: room to grow, still well inside the job's hour
-    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 900, "-e", "notClass", PERMISSION_TEST)
+    failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400, "-e", "notClass", PERMISSION_TEST)
     pull_screenshots(dev)
     install(args.engine_tests, "-g")
     failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",

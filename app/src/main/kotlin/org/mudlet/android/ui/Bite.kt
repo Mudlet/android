@@ -4,4 +4,7 @@ package org.mudlet.android.ui
 object Bite {
     @Volatile
     var stage = ""
+
+    /** The JVM tests' breaks stay off the device, where they would end the instrumented tests first. */
+    val offDevice = System.getProperty("java.vm.name") != "Dalvik"
 }

@@ -25,6 +25,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A game's telnet:// link, as desktop Mudlet registers itself for: MainActivity asks before it connects -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="telnet" />
+                <data android:scheme="telnets" />
+            </intent-filter>
         </activity>
 
         <!-- Hands a shared map file, from the cache's map-files folder alone, to the app the player shares it with -->

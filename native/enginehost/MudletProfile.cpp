@@ -484,6 +484,44 @@ IEngine::ScriptSearchField engineField(const THeadlessSession::ScriptSearchField
     return IEngine::ScriptSearchField::lua;
 }
 
+IEngine::VariableType engineType(const THeadlessSession::VariableType type)
+{
+    switch (type) {
+    case THeadlessSession::VariableType::boolean:
+        return IEngine::VariableType::boolean;
+    case THeadlessSession::VariableType::number:
+        return IEngine::VariableType::number;
+    case THeadlessSession::VariableType::string:
+        return IEngine::VariableType::string;
+    case THeadlessSession::VariableType::table:
+        return IEngine::VariableType::table;
+    case THeadlessSession::VariableType::function:
+        return IEngine::VariableType::function;
+    case THeadlessSession::VariableType::other:
+        break;
+    }
+    return IEngine::VariableType::other;
+}
+
+THeadlessSession::VariableType sessionType(const IEngine::VariableType type)
+{
+    switch (type) {
+    case IEngine::VariableType::boolean:
+        return THeadlessSession::VariableType::boolean;
+    case IEngine::VariableType::number:
+        return THeadlessSession::VariableType::number;
+    case IEngine::VariableType::string:
+        return THeadlessSession::VariableType::string;
+    case IEngine::VariableType::table:
+        return THeadlessSession::VariableType::table;
+    case IEngine::VariableType::function:
+        return THeadlessSession::VariableType::function;
+    case IEngine::VariableType::other:
+        break;
+    }
+    return THeadlessSession::VariableType::other;
+}
+
 QString cut(const QString& text)
 {
     return text.size() > IEngine::maxErrorConsoleText ? text.left(IEngine::maxErrorConsoleText) + QChar(0x2026) : text;
@@ -2447,6 +2485,26 @@ std::variant<IEngine::ScriptSearch, QString> MudletProfile::searchScriptItems(co
         search.matches.append({engineKind(match.kind), match.id, match.name, engineField(match.field), match.index, match.text, match.start});
     }
     return search;
+}
+
+std::variant<IEngine::Variables, QString> MudletProfile::variables(const QList<VariableKey>& path, bool showHidden)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    QList<THeadlessSession::VariableKey> sessionPath;
+    for (const VariableKey& key : path) {
+        sessionPath.append({key.name, sessionType(key.type)});
+    }
+    const THeadlessSession::VariableListing listing = mSession->variables(sessionPath, showHidden);
+    if (!listing.found) {
+        return mSession->errorString();
+    }
+    Variables variables{.hiddenLeftOut = listing.hiddenLeftOut};
+    for (const THeadlessSession::Variable& variable : listing.variables) {
+        variables.variables.append({{variable.key.name, engineType(variable.key.keyType)}, engineType(variable.type), variable.value, variable.hidden, variable.members, variable.membersIndexed});
+    }
+    return variables;
 }
 
 std::optional<IEngine::LuaProblem> MudletProfile::checkLua(const QString& code) const

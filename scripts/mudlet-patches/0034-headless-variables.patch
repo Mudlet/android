@@ -1,0 +1,188 @@
+Let a frontend with no window read the profile's Lua variables
+
+The editor's Variables view (dlgTriggerEditor::repopulateVars()) reads every Lua global into a VarUnit tree with
+LuaInterface::getVars() and lists it in a tree widget: each variable's name, its type and its value, tables
+opened to show their members, and the hidden variables left out unless "Show hidden variables" is ticked. A
+frontend with no window has no dlgTriggerEditor, and nothing else gives that tree.
+
+- THeadlessSession::variables() reads the globals as the view does, afresh at each call, and gives one level: the
+  globals, or the members of the table a path of keys names. Each Variable has its key (name and key type), its
+  type (VariableType), the whole value of a string, number or boolean, whether it is hidden, and for a table how
+  many members it has and whether every key is a number, from which the view writes "{ n items }" or
+  "{ n keys }". They come in the view's order (TVarLessThan), leaving out what LuaInterface::iterateTable() leaves
+  out, and the hidden ones unless asked for, with how many those were.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (variables: a string, a number, a boolean, a
+function and a table of the globals, a table's members by number and by name in the view's order, a nested
+table by its path, the hidden globals left out and counted, then listed when asked for, a path that names no
+table, and the refusal with no profile open). The desktop is unchanged: nothing calls it there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 3058402..72847b3 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1894,6 +1894,15 @@ field or line itself and where the match starts in it. The text is found whateve
+ asked otherwise, and with whole words only where it is a word of its own (`\b` before and after it,
+ as the editor's option does). A frontend gives the most it will take, and is told when there were more.
+ 
++`variables()` lists the profile's Lua variables as the editor's Variables view does, one table at a time:
++the globals for an empty path, else the members of the table the path names, each step a name and its
++key's type. They are read afresh at each call and come in the view's order (number keys first, by
++value, then the rest whatever their case), each with its key, its type (`VariableType`), the whole
++value of a string, number or boolean, whether it is hidden, and for a table how many members it has
++and whether every key is a number. What the view leaves out is left out, and the hidden variables too
++unless asked for, with how many those were. A table or a function used as a key is named, as in the
++view, by a reference that changes at each read, so a table under such a key cannot be asked for.
++
+ ## Embedding it: commands and buttons that scripts add
+ 
+ `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index be7ac8b..585b0fb 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -1040,6 +1040,41 @@ public:
+     // with wholeWord only where it is a word of its own. At most limit, with more set when there were others; none
+     // for empty text or with no profile open. A getter, so it may be called from any handler.
+     QList<ScriptSearchMatch> searchScriptItems(const QString& text, bool caseSensitive, bool wholeWord, int limit, bool& more) const;
++    // The Lua types the editor's Variables view tells apart; other is nil, userdata and threads, which it does not list
++    enum class VariableType { other, boolean, number, string, table, function };
++    Q_ENUM(VariableType)
++    // A member of a table, or a global: a table's or a function's key is named by a registry reference that changes
++    // with every read, as in the Variables view, so it cannot be asked for again
++    struct VariableKey
++    {
++        QString name;
++        VariableType keyType = VariableType::string;
++    };
++    struct Variable
++    {
++        VariableKey key;
++        VariableType type = VariableType::other;
++        // The whole of a string, number or boolean, as the Variables view edits it; empty for the rest
++        QString value;
++        bool hidden = false;
++        // A table's members, the hidden ones among them, and whether every one has a number for its key
++        int members = 0;
++        bool membersIndexed = false;
++    };
++    struct VariableListing
++    {
++        // False when the path names no table, or no profile is open, with errorString() saying why
++        bool found = false;
++        QList<Variable> variables;
++        // How many hidden ones were left out
++        int hiddenLeftOut = 0;
++    };
++    // The members of the table path names, from the globals down, or the globals for an empty path, read afresh and in
++    // the order the editor's Variables view lists them, leaving out what it leaves out (functions it holds for
++    // triggers, aliases, timers, keys and buttons, the package table, _G, a table already listed under another name,
++    // userdata and threads), and the hidden ones unless showHidden. One level, so that a frontend asks only for the
++    // tables the player opens.
++    VariableListing variables(const QList<VariableKey>& path, bool showHidden);
+     // What is wrong with Lua that does not compile: the line Lua names, from 1, or 0 where it names none, and its
+     // message without the chunk's name and line before it
+     struct LuaProblem
+diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
+index 28ee237..8864395 100644
+--- a/src/headless/THeadlessSessionScripts.cpp
++++ b/src/headless/THeadlessSessionScripts.cpp
+@@ -23,6 +23,7 @@
+ #include "AliasUnit.h"
+ #include "Host.h"
+ #include "KeyUnit.h"
++#include "LuaInterface.h"
+ #include "ScriptUnit.h"
+ #include "TAction.h"
+ #include "TAlias.h"
+@@ -31,8 +32,10 @@
+ #include "TScript.h"
+ #include "TTimer.h"
+ #include "TTrigger.h"
++#include "TVar.h"
+ #include "TimerUnit.h"
+ #include "TriggerUnit.h"
++#include "VarUnit.h"
+ 
+ #include <QDateTime>
+ #include <QRegularExpression>
+@@ -970,6 +973,75 @@ QList<THeadlessSession::ScriptSearchMatch> THeadlessSession::searchScriptItems(c
+ 
+ namespace {
+ 
++THeadlessSession::VariableType variableType(const int luaType)
++{
++    using Type = THeadlessSession::VariableType;
++    switch (luaType) {
++    case LUA_TBOOLEAN:
++        return Type::boolean;
++    case LUA_TNUMBER:
++        return Type::number;
++    case LUA_TSTRING:
++        return Type::string;
++    case LUA_TTABLE:
++        return Type::table;
++    case LUA_TFUNCTION:
++        return Type::function;
++    default:
++        return Type::other;
++    }
++}
++
++} // namespace
++
++THeadlessSession::VariableListing THeadlessSession::variables(const QList<VariableKey>& path, const bool showHidden)
++{
++    VariableListing listing;
++    if (!usable()) {
++        return listing;
++    }
++    LuaInterface* lua = mpHost->getLuaInterface();
++    // Read afresh each time, as the Variables view does when it is shown: the next walk, a profile save's among them,
++    // frees the TVars of this one
++    lua->getVars(false);
++    VarUnit* varUnit = lua->getVarUnit();
++    TVar* table = varUnit->getBase();
++    for (const VariableKey& key : path) {
++        const QList<TVar*> members = table->getChildren(false);
++        const auto member = std::find_if(members.cbegin(), members.cend(), [&key](TVar* var) {
++            return var->getValueType() == LUA_TTABLE && var->getName() == key.name && variableType(var->getKeyType()) == key.keyType;
++        });
++        if (member == members.cend()) {
++            //: Error from a frontend with no window that asked for the members of a Lua table that is not there, or no longer
++            mErrorString = tr("There is no such table.");
++            return listing;
++        }
++        table = *member;
++    }
++    listing.found = true;
++    for (TVar* var : table->getChildren(true)) {
++        const bool hidden = varUnit->isHidden(var);
++        if (hidden && !showHidden) {
++            ++listing.hiddenLeftOut;
++            continue;
++        }
++        Variable variable{.key = {var->getName(), variableType(var->getKeyType())}, .type = variableType(var->getValueType()), .hidden = hidden};
++        if (variable.type == VariableType::table) {
++            const QList<TVar*> members = var->getChildren(false);
++            variable.members = members.size();
++            variable.membersIndexed = !members.isEmpty() && std::all_of(members.cbegin(), members.cend(), [](TVar* member) {
++                return member->getKeyType() == LUA_TNUMBER;
++            });
++        } else if (variable.type != VariableType::function) {
++            variable.value = var->getValue();
++        }
++        listing.variables.append(variable);
++    }
++    return listing;
++}
++
++namespace {
++
+ // The calls below each take the item's own class, so they dispatch on kind once, here
+ template <class Call>
+ auto withItemClass(const Kind kind, Call&& call)

@@ -211,6 +211,27 @@ have moved. A thumb that goes while it is dragged, as the script takes the bar a
 drag. TalkBack is told nothing of it: the list's own scroll actions and the rows read as without it, so the thumb is no
 stop of its own.
 
+### Scroll boxes
+
+A `Geyser.ScrollBox` is a `TScrollBox` on the desktop (`src/TScrollBox.cpp`): a `QScrollArea`, framed, with Qt's
+scroll bars as needed on both axes, whose widget keeps its own size (`setWidgetResizable(false)`) and calls
+`adjustSize()` whenever a window in it moves, resizes, shows or hides. With no layout, that sizes the widget to the
+rectangle of its children, those hidden or of no size left out, grown by that rectangle's top left once more: the
+content starts at the box's top left and ends as far past the farthest child as the nearest is from the top left, so a
+child at a negative place counts but no scroll reaches it, and the scroll starts at the top left. `WindowLayout` sizes
+the content so (`PlacedWindow.content`) and places the box's windows in it, cut to it rather than to the box; the box
+draws them in a `verticalScroll` and a `horizontalScroll` over that content, inside what of the box shows. A drag
+scrolls it, as do TalkBack's scroll actions, along each axis the content is larger than the box on, and a box in a box
+scrolls on its own. A window in it keeps its own pixels, so a label in a scrolled box takes a tap as anywhere else, and
+a drag the box takes, along an axis it scrolls on, is not the label's ("Labels"). Content smaller than the box is drawn
+at the box's size, so a window's 48 dp touch bounds are cut only where the box cuts them. Unlike the desktop it has no
+frame and no scroll bars, a drag scrolls it, a box with nothing in it to size its content does not scroll, and one
+hidden and shown again starts at its top left (`docs/divergences.md`).
+Script geometry sets the content's size, so it is kept within what Compose lays out, whatever a script asks: the content
+is at most 16 777 215 pixels on a side (`MAX_CONTENT_PX`), and a window, in a box or not, is measured at no more than
+`Constraints` holds (`layoutSize`: 262 142 pixels on one side, less on the other where both are large). What lies past
+that is not drawn.
+
 ### Labels
 
 A `label` is a `Box` at its geometry, drawn in this order:
@@ -289,6 +310,11 @@ A `label` is a `Box` at its geometry, drawn in this order:
 Taps reach the label with `pointer`, in its own Mudlet pixels: a tap is `enter`, `press` and `release`, a double tap
 adds `doubleClick`, a long press is the right button's `press` and `release` (Geyser's right-click menus); `leave`
 follows when another window is touched. A drag sends `move` with the button held, so sliders built of labels work.
+In a scroll box that scrolls, a drag along an axis the box scrolls on is the box's, even at the end of its range, where
+nothing moves, and sends the label nothing, not even `enter`, nor does a tap that stops the box's fling; one the box
+has not taken by twice the touch slop, as along an axis the box does not scroll on, is the label's drag, and the box
+stays put. There a label's `enter` comes once the touch is its own. Whether the box scrolls is what holds as the finger
+lands, so a label touched before windows shown in its box made it scroll leaves its next drag to the box too.
 Click-through and the grab are upstream's to resolve: the app names the topmost shown label under the finger. A
 click-through label's links are drawn as links but not followed, by a tap or as actions: Mudlet's
 `TLabel::setClickThrough()` turns the label's text interaction off, so its links take neither the mouse nor the
@@ -405,6 +431,10 @@ Phase E's requirements apply to every pull request here; in short, and what they
   (`Role.Switch` with `toggleableState`); a folder says it opens a menu. An icon-only one has its name as its content
   description. Whatever its style sheet asks, a button is 48 dp at least, and a down push-down button keeps its state
   and its tick, so neither TalkBack nor a player who cannot tell its colours apart depends on the sheet's colours.
+- **Scroll boxes** scroll with TalkBack's scroll actions as well as a drag, each axis a node with its own, which has no
+  action on an axis the box does not scroll on. The windows in one are read together, as one scrollable group, where
+  the box comes in the reading order, in reading order among themselves, and keep their 48 dp touch bounds, cut only
+  where the box cuts them.
 - **Mini consoles** are lists TalkBack moves through line by line, as the main console after U6. Their new lines are
   not announced: Mudlet announces only the main console's (`announceIncomingText`).
 - **48 dp.** Script geometry can make a clickable label or a text box small: its touch bounds grow to 48 dp around

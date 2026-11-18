@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -113,6 +114,7 @@ import org.mudlet.android.protocol.RichText
 import org.mudlet.android.protocol.ScriptWindow
 import org.mudlet.android.protocol.VAlign
 import org.mudlet.android.protocol.backgroundArgb
+import org.mudlet.android.protocol.layoutSize
 import org.mudlet.android.ui.CONSOLE_FOREGROUND
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.ScriptWindowsClient.ImageRequest
@@ -168,6 +170,7 @@ internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Ga
     val currentToMudlet by rememberUpdatedState(toMudlet)
     // A tool tip set after the label was first drawn is shown too
     val currentTooltip by rememberUpdatedState(tooltip)
+    val inScrollingBox by rememberUpdatedState(LocalScrollingBox.current)
     val centre = (window.w / 2.0) to (window.h / 2.0)
 
     val reading = labelReading(window, content, gauge, text, tooltip, centre)
@@ -176,7 +179,12 @@ internal fun ScriptLabel(placed: PlacedWindow, content: LabelContent?, gauge: Ga
         Modifier
     } else {
         Modifier.pointerInput(window.name) {
-            labelGestures(window.name, { currentToMudlet }, onLongPress = { if (currentTooltip.isNotEmpty()) showTip = true })
+            labelGestures(
+                window.name,
+                { currentToMudlet },
+                inScrollingBox = { inScrollingBox },
+                onLongPress = { if (currentTooltip.isNotEmpty()) showTip = true },
+            )
         }
     }
 
@@ -233,9 +241,13 @@ internal fun PxRect.grownTo(min: Float): PxRect {
     return PxRect(x - (w2 - w) / 2, y - (h2 - h) / 2, w2, h2)
 }
 
-/** Lays its content out [w] by [h] pixels at [x], [y] in its parent, whatever the parent's size. */
+/**
+ * Lays its content out [w] by [h] pixels at [x], [y] in its parent, whatever the parent's size; a size past what
+ * Compose can measure, which only a script's geometry asks for, is cut to that ([layoutSize]).
+ */
 internal fun Modifier.placeIn(x: Float, y: Float, w: Float, h: Float): Modifier = layout { measurable, constraints ->
-    val placeable = measurable.measure(Constraints.fixed(w.roundToInt().coerceAtLeast(0), h.roundToInt().coerceAtLeast(0)))
+    val (width, height) = layoutSize(w, h)
+    val placeable = measurable.measure(Constraints.fixed(width, height))
     layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x.roundToInt(), y.roundToInt()) }
 }
 
@@ -425,36 +437,56 @@ private enum class Touch { TAP, DRAG, LONG_PRESS, CANCELLED }
 /**
  * The player's touches on the label [name] as a mouse's, by docs/phase-f.md's "Labels": a tap is the left button's
  * press and release, a second tap soon after a double click, a long press the right button's (and [onLongPress]), and
- * a drag the left button held as it moves. Nothing is consumed, so the label's links still see their taps.
+ * a drag the left button held as it moves. Out of a scroll box that scrolls nothing is consumed, so the label's links
+ * still see their taps.
+ *
+ * In a scroll box that scrolls ([inScrollingBox]) a drag the box takes is the box's, and the label hears nothing of it,
+ * not even enter, so a scroll leaves the engine's hover as it was. The box takes a drag along an axis it scrolls on
+ * even at the end of its range, where nothing moves. Compose gives an event to the box and then the label in the
+ * Initial pass, and to the label and then the box in the Main pass: the box's scrollable stops a fling by consuming the
+ * down in Initial, before the label sees it, and takes a drag past its touch slop by consuming the move in Main, after
+ * the label. So the label reads the down in the Initial pass and each change again in the Final pass, after the box's
+ * Main, and a change consumed there that was not as the label first saw it is the box's. A drag the box has not taken
+ * by twice the touch slop, as along an axis it does not scroll on, is the label's, which from then on consumes its
+ * changes (as it does a long press's) so the box does not scroll by it.
+ *
+ * Whether the box scrolls is read once the touch has come down, not before: the wait for a touch starts as the last
+ * one ends, and windows shown in the box since then may have made it scroll.
  */
-private suspend fun PointerInputScope.labelGestures(name: String, mapping: () -> (Offset) -> Pair<Double, Double>, onLongPress: () -> Unit) {
+private suspend fun PointerInputScope.labelGestures(
+    name: String,
+    mapping: () -> (Offset) -> Pair<Double, Double>,
+    inScrollingBox: () -> Boolean,
+    onLongPress: () -> Unit,
+) {
     val client = EngineClient.front.windows
     var lastTap = 0L
     awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
+        // Out of a box that scrolls too, where the pass makes no difference: the same down comes again in Main, unmoved
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val inBox = inScrollingBox()
+        if (inBox && down.isConsumed) {
+            // The box took the touch to stop its fling
+            lastTap = 0L
+            return@awaitEachGesture
+        }
         val toMudlet = mapping()
         val (x, y) = toMudlet(down.position)
-        client.pointer(name, PointerType.ENTER, x, y)
-        var touch = Touch.LONG_PRESS
+        // In a box the label is entered once the touch is known to be its own
+        if (!inBox) client.pointer(name, PointerType.ENTER, x, y)
         var last = down.position
-        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-            while (true) {
-                val change = awaitChange(down.id)
-                if (change == null) {
-                    touch = Touch.CANCELLED
-                    break
-                }
-                last = change.position
-                if (!change.pressed) {
-                    touch = Touch.TAP
-                    break
-                }
-                if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
-                    touch = Touch.DRAG
-                    break
-                }
+        var touch = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            awaitTouch(down, viewConfiguration.touchSlop, inBox) { last = it }
+        } ?: Touch.LONG_PRESS
+        // A drag in a box is the label's only once the box has left it long enough
+        var lifted = false
+        if (inBox && touch == Touch.DRAG) {
+            when (val next = awaitTouch(down, 2 * viewConfiguration.touchSlop, inBox) { last = it }) {
+                Touch.TAP -> lifted = true
+                else -> touch = next
             }
         }
+        if (inBox && touch != Touch.CANCELLED) client.pointer(name, PointerType.ENTER, x, y)
         when (touch) {
             Touch.TAP -> {
                 if (lastTap != 0L && down.uptimeMillis - lastTap <= viewConfiguration.doubleTapTimeoutMillis) {
@@ -472,11 +504,14 @@ private suspend fun PointerInputScope.labelGestures(name: String, mapping: () ->
                 client.pointer(name, PointerType.PRESS, x, y, POINTER_LEFT, POINTER_LEFT)
                 var at = toMudlet(last)
                 client.pointer(name, PointerType.MOVE, at.first, at.second, 0, POINTER_LEFT)
-                while (true) {
+                while (!lifted) {
                     val change = awaitChange(down.id) ?: break
                     at = toMudlet(change.position)
                     if (!change.pressed) break
-                    if (change.positionChanged()) client.pointer(name, PointerType.MOVE, at.first, at.second, 0, POINTER_LEFT)
+                    // Read before consuming, which makes a change read as unmoved
+                    val moved = change.positionChanged()
+                    if (inBox) change.consume()
+                    if (moved) client.pointer(name, PointerType.MOVE, at.first, at.second, 0, POINTER_LEFT)
                 }
                 client.pointer(name, PointerType.RELEASE, at.first, at.second, POINTER_LEFT, 0)
             }
@@ -485,8 +520,11 @@ private suspend fun PointerInputScope.labelGestures(name: String, mapping: () ->
                 lastTap = 0L
                 client.pointer(name, PointerType.PRESS, x, y, POINTER_RIGHT, POINTER_RIGHT)
                 onLongPress()
-                while (awaitChange(down.id)?.pressed == true) {
+                while (true) {
                     // The finger stays down; the right button is let go when it lifts
+                    val change = awaitChange(down.id) ?: break
+                    if (!change.pressed) break
+                    if (inBox) change.consume()
                 }
                 client.pointer(name, PointerType.RELEASE, x, y, POINTER_RIGHT, 0)
             }
@@ -494,6 +532,31 @@ private suspend fun PointerInputScope.labelGestures(name: String, mapping: () ->
             Touch.CANCELLED -> lastTap = 0L
         }
     }
+}
+
+/**
+ * What the touch that came [down] turns out to be: a tap once it lifts, a drag once it is more than [slop] from where
+ * it came down, or cancelled once it is gone or, [inBox], once the scroll box takes it. [seen] is told each place it is
+ * seen at before then, but for one the box takes.
+ */
+private suspend fun AwaitPointerEventScope.awaitTouch(down: PointerInputChange, slop: Float, inBox: Boolean, seen: (Offset) -> Unit): Touch {
+    while (true) {
+        val change = awaitChange(down.id) ?: return Touch.CANCELLED
+        if (inBox && awaitTakenByBox(change)) return Touch.CANCELLED
+        seen(change.position)
+        if (!change.pressed) return Touch.TAP
+        if ((change.position - down.position).getDistance() > slop) return Touch.DRAG
+    }
+}
+
+/**
+ * Whether the scroll box took [change], which the label has just seen in the Main pass: consumed once the box has seen
+ * it too, in the Final pass, though it was not as the label saw it (a link in the label consumes its own taps first).
+ */
+private suspend fun AwaitPointerEventScope.awaitTakenByBox(change: PointerInputChange): Boolean {
+    val seen = change.isConsumed
+    val after = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == change.id }
+    return after != null && after.isConsumed && !seen
 }
 
 // The next change to the pointer [id], or null once it is gone

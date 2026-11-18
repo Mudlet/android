@@ -4,7 +4,10 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** A rectangle in the game area's pixels, its origin at the area's top left. */
+/**
+ * A rectangle in the game area's pixels, its origin at the area's top left, or, for a window in a scroll box as
+ * [DrawnWindow] gives it, at the top left of the box's content.
+ */
 data class PxRect(val x: Float, val y: Float, val w: Float, val h: Float) {
     val right: Float get() = x + w
     val bottom: Float get() = y + h
@@ -17,6 +20,31 @@ data class PxRect(val x: Float, val y: Float, val w: Float, val h: Float) {
         val b = min(bottom, other.bottom)
         return if (r > left && b > top) PxRect(left, top, r - left, b - top) else null
     }
+
+    /** This rectangle moved [dx] across and [dy] down. */
+    fun offset(dx: Float, dy: Float): PxRect = PxRect(x + dx, y + dy, w, h)
+}
+
+/** The most pixels a scroll box's content has on a side: Compose's `layout()` refuses a larger one. */
+const val MAX_CONTENT_PX = 16_777_215f
+
+/**
+ * [w] by [h] pixels as whole pixels Compose can measure with, as a script's geometry may ask for more, which must not
+ * throw. Its `Constraints` hold a side of up to 262 142 pixels, and the other one only as far as the 31 bits the two
+ * share allow (32 766 beside one of 32 767 or more, 8 190 beside one of 65 535 or more). A size that fits is kept; of
+ * one that does not, the smaller side gives way.
+ */
+fun layoutSize(w: Float, h: Float): Pair<Int, Int> {
+    val big = max(w, h).roundToInt().coerceIn(0, 0x3FFFE)
+    val small = min(w, h).roundToInt().coerceIn(
+        0,
+        when {
+            big < 0x7FFF -> big
+            big < 0xFFFF -> 0x7FFE
+            else -> 0x1FFE
+        },
+    )
+    return if (w >= h) big to small else small to big
 }
 
 /** A size in Mudlet's pixels. */
@@ -25,8 +53,41 @@ data class MudletSize(val w: Int, val h: Int)
 /** Where the app put a user window, in Mudlet's pixels from the game area's top left: `placeUserWindow`'s fields. */
 data class Placement(val x: Int, val y: Int, val w: Int, val h: Int, val floating: Boolean)
 
-/** A window to draw at [rect], cut to what its parents show; [full] is where it is before that cut. */
-data class PlacedWindow(val window: ScriptWindow, val rect: PxRect, val full: PxRect)
+/**
+ * A window to draw at [rect], cut to what its parents show; [full] is where it is before that cut. A window in a scroll
+ * box is placed as it is with the box scrolled to its top left, and cut to the box's content, not to what of the box
+ * shows: [scrollBox] is the innermost box it scrolls in. A scroll box's [content] is the area its windows scroll in.
+ */
+data class PlacedWindow(
+    val window: ScriptWindow,
+    val rect: PxRect,
+    val full: PxRect,
+    val scrollBox: WindowKey? = null,
+    val content: PxRect? = null,
+) {
+    /** This window, its [content] too, moved [dx] across and [dy] down. */
+    fun offset(dx: Float, dy: Float): PlacedWindow = copy(rect = rect.offset(dx, dy), full = full.offset(dx, dy), content = content?.offset(dx, dy))
+}
+
+/**
+ * A window as drawn: [placed] in what holds it, the game area or, for a window in a scroll box, the box's content from
+ * its top left; for a scroll box, the windows that scroll in it, the same way, in the order [WindowLayout] gives them.
+ */
+data class DrawnWindow(val placed: PlacedWindow, val scrolled: List<DrawnWindow> = emptyList()) {
+    companion object {
+        /** [windows], as [WindowLayout] places them, with those in a scroll box under it instead of after it. */
+        fun of(windows: List<PlacedWindow>): List<DrawnWindow> {
+            // Those in no scroll box are under the null key
+            val byBox = windows.groupBy { it.scrollBox }
+            fun drawn(placed: PlacedWindow, dx: Float, dy: Float): DrawnWindow {
+                val content = placed.content
+                val scrolled = if (content == null) emptyList() else byBox[placed.window.key].orEmpty().map { drawn(it, content.x, content.y) }
+                return DrawnWindow(placed.offset(-dx, -dy), scrolled)
+            }
+            return byBox[null].orEmpty().map { drawn(it, 0f, 0f) }
+        }
+    }
+}
 
 /** A docked user window's title row, with its close button, above its content. */
 data class DockHeader(val window: ScriptWindow, val rect: PxRect)
@@ -51,6 +112,8 @@ enum class LayoutMode { AUTO, FITTED, STACKED }
  * them, and the docked map are pages in either layout.
  *
  * Only the page in front of an MXP frame's tab header is shown, so only it is placed, with the header's tabs above it.
+ * A scroll box's windows are placed in its content, which scrolls under it; [DrawnWindow.of] nests them under it, to be
+ * drawn in it.
  */
 data class WindowLayout(
     val fitted: Boolean,
@@ -66,7 +129,10 @@ data class WindowLayout(
     val pages: List<ScriptWindow>,
     /** The selected page's pane, its header row at the top, or null for no page selected. */
     val pane: PxRect?,
-    /** The selected page's window and its children, inside [pane] below the header, and below its [paneFrameTabs]. */
+    /**
+     * The selected page's window and its children, inside [pane] below the header, and below its [paneFrameTabs]; a
+     * scroll box's windows may lie past it, in the box's content.
+     */
     val paneWindows: List<PlacedWindow>,
     /** Where the user windows are, by name, for `placeUserWindow`; empty while [scale] is null. */
     val placements: Map<String, Placement>,
@@ -138,7 +204,7 @@ data class WindowLayout(
             // [full] where the window would be, [clip] what may show of it
             fun place(window: ScriptWindow, full: PxRect, clip: PxRect) {
                 val shown = full.intersect(clip) ?: return
-                placed.add(PlacedWindow(window, shown, full))
+                placed.add(PlacedWindow(window, shown, full, content = tree.scrollContent(window, full)))
                 clips[window.key] = clip
                 tree.placeChildren(window, full, shown, placed, clips)
             }
@@ -267,7 +333,8 @@ data class WindowLayout(
                     paneFrameTabs.add(FrameTabStrip(header.first, header.second, paneContent.copy(h = area.headerHeight)))
                     content = PxRect(paneContent.x, paneContent.y + area.headerHeight, paneContent.w, paneContent.h - area.headerHeight)
                 }
-                paneWindows.add(PlacedWindow(selected, content, content))
+                // No page is a scroll box today; one would keep its content, so DrawnWindow.of keeps its windows
+                paneWindows.add(PlacedWindow(selected, content, content, content = tree.scrollContent(selected, content)))
                 tree.placeChildren(selected, content, content, paneWindows, clips)
                 // Those of the frames opened in the page
                 paneWindows.drop(1).mapNotNullTo(paneFrameTabs, ::tabsAbove)
@@ -304,18 +371,57 @@ data class WindowLayout(
 
         fun children(parent: WindowKey?): List<ScriptWindow> = byParent[parent].orEmpty()
 
-        /** Adds [parent]'s shown children, and theirs, as drawn in [rect] and cut to [clip], and what may show of each to [clips]. */
-        fun placeChildren(parent: ScriptWindow, rect: PxRect, clip: PxRect, out: MutableList<PlacedWindow>, clips: MutableMap<WindowKey, PxRect>) {
+        /**
+         * Adds [parent]'s shown children, and theirs, as drawn in [rect] and cut to [clip], and what may show of each to
+         * [clips]; [scrollBox] is the box [parent] scrolls in. A scroll box's children are cut to its content instead.
+         */
+        fun placeChildren(
+            parent: ScriptWindow,
+            rect: PxRect,
+            clip: PxRect,
+            out: MutableList<PlacedWindow>,
+            clips: MutableMap<WindowKey, PxRect>,
+            scrollBox: WindowKey? = null,
+        ) {
             val sx = if (parent.w > 0) rect.w / parent.w else 1f
             val sy = if (parent.h > 0) rect.h / parent.h else 1f
+            val content = scrollContent(parent, rect)
+            val childClip = content ?: clip
+            val box = if (content != null) parent.key else scrollBox
             for (child in children(parent.key)) {
                 if (!child.shown) continue
                 val full = PxRect(rect.x + child.x * sx, rect.y + child.y * sy, child.w * sx, child.h * sy)
-                val shown = full.intersect(clip) ?: continue
-                out.add(PlacedWindow(child, shown, full))
-                clips[child.key] = clip
-                placeChildren(child, full, shown, out, clips)
+                val shown = full.intersect(childClip) ?: continue
+                out.add(PlacedWindow(child, shown, full, box, scrollContent(child, full)))
+                clips[child.key] = childClip
+                placeChildren(child, full, shown, out, clips, box)
             }
+        }
+
+        /**
+         * The area a scroll box drawn at [rect] scrolls its windows in, from the box's top left, or null for a window
+         * that is not a scroll box. Mudlet's `TScrollBox` is a `QScrollArea` whose widget calls `adjustSize()` as a
+         * child moves, resizes, shows or hides: with no layout, that sizes it to the rectangle of the children not hidden
+         * and not of no size, grown by as much again as that rectangle's top left is from the widget's, which counts a
+         * child at a negative place but leaves it where no scroll reaches. One with no such child has the box's own area
+         * and does not scroll here. The content is no larger than [MAX_CONTENT_PX] on a side, the box's own area too,
+         * whatever a script's geometry asks.
+         */
+        fun scrollContent(box: ScriptWindow, rect: PxRect): PxRect? {
+            if (box.kind != WindowKind.SCROLL_BOX) return null
+            val sx = if (box.w > 0) rect.w / box.w else 1f
+            val sy = if (box.h > 0) rect.h / box.h else 1f
+            val inside = children(box.key).filter { it.visible && (it.w != 0 || it.h != 0) }
+            // The box's own size is a script's too
+            val own = PxRect(rect.x, rect.y, min(rect.w, MAX_CONTENT_PX), min(rect.h, MAX_CONTENT_PX))
+            if (inside.isEmpty()) return own
+            val left = inside.minOf { it.x }
+            val top = inside.minOf { it.y }
+            // The rectangle's size and twice its top left: as far past its far edge as its near one is from the widget's.
+            // As Longs: two Ints' sum may be past an Int
+            val w = inside.maxOf { it.x.toLong() + it.w } + left
+            val h = inside.maxOf { it.y.toLong() + it.h } + top
+            return if (w < 0 || h < 0) own else PxRect(rect.x, rect.y, min(w * sx, MAX_CONTENT_PX), min(h * sy, MAX_CONTENT_PX))
         }
     }
 }

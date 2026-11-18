@@ -1087,6 +1087,9 @@ device shows, below the UI's debug hook:
   progress, and of a label as a progress bar's with its text and percentage as its state, a button's not, a live
   label with a value not live, its new text said but not a new value, a live label as one live node from blank (no
   stop) to text, a named one with its text as its state,
+  a label in a scroll box scrolled into view by the box's scroll action and tapped at its middle, a drag on a
+  clickable one scrolling the box and sending the label nothing, also on one tapped before the box came to scroll, a
+  narrow one's touch bounds kept but for the box's cut,
   a link sent for the engine to follow, by its action or a tap, with the name of the label tapped, of two with the same
   link, and the link as Qt reads it from the text, a `prompt:` link giving the input line the focus and a `send:` one
   not, and neither sent again nor run by the app on a refusal, a web link opened with an intent and not sent, a
@@ -1138,6 +1141,12 @@ CI runs both on API 28, the app's minSdk, and on API 36.
   the links of script windows (see "Script windows' text" above), not yet the main console's.
 - The game screen and the self-test each send `setScreenSize` from their own console, so the one laid out last
   sets what a game that asks is told.
+- A scroll box scrolls in the app alone, so the engine places a window in one as though the box were not scrolled:
+  `getMousePosition()` and a label callback's `globalX` and `globalY` are off by the box's scroll (`inMainArea` in
+  `THeadlessSessionWindows.cpp`), where the desktop's positions, which Qt gives (`mapFromGlobal(QCursor::pos())` and
+  the event's `globalPosition()`), count it. The callback's `x` and `y`, in the label's own pixels, are right.
+- A scroll box at a side border has no page in the stacked layout, where only consoles and the map are pages, so it
+  and the windows in it are not shown there.
 - No bundled fonts.
 - A label's movie does not play: while it plays the label shows its first frame, still, and once `pauseMovie()` paused
   it or it played to its end, the frame it stopped at, so `setMovieSpeed()` changes only which frame a pause stops at
@@ -1845,6 +1854,14 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
     - With TalkBack on: swiping goes from the console to the input line, then the game pill and the quick bar, then
       the windows, each read as "<name> window", then the tabs; a window's command line, its Send button and a user
       window's close button read their names.
+    - A scroll box: `lua sb = Geyser.ScrollBox:new({name = "sb", x = 0, y = 0, width = 300, height = 150})
+      Geyser.Label:new({name = "near", x = 0, y = 0, width = 300, height = 100, message = "near"}, sb)
+      Geyser.Label:new({name = "far", x = 0, y = 300, width = 300, height = 100, message = "far"}, sb)
+      setLabelClickCallback("near", function() echo("near tapped\n") end)
+      setLabelClickCallback("far", function() echo("far tapped\n") end)`, on one line. A drag up that starts on
+      "near" brings "far" into view and shows no "near tapped", and a tap on "far" shows "far tapped". With TalkBack
+      on, the box is a scrollable node with Compose's scroll forward and back actions, and TalkBack's scroll forward
+      on it does the same; swiping then reaches "far".
 21. Labels and gauges, with the same package and the libmudlet APK.
     - Labels look as on the desktop: their colours, borders, rounded corners, text and its alignment, and images,
       scaled with their windows. A gauge's front follows its value.

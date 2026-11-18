@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MapFileStaging.folder(): the one folder FileProvider may hand out files from -->
+<paths>
+    <cache-path name="map-files" path="map-files/" />
+</paths>

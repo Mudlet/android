@@ -634,6 +634,23 @@ drawn by `ui/game/AppMap.kt`):
   no map is drawn, so a newer map the game offers over a loaded one is not offered; Mudlet sets no
   time limit, so a stalled download runs until cancelled.
 
+### Map files
+The full-screen map's folder button opens a menu that loads a map from a file, saves the map to one as Mudlet's own
+format or as JSON, or shares it, as the desktop's Map settings do (`MapFileClient`, drawn by `ui/game/MapFiles.kt`;
+docs/protocol.md, "Map files"):
+- Files come and go through Android's own picker (`OpenDocument`, `CreateDocument`), so the app asks for no storage
+  permission. The engine reads and writes only a whole path, so a picked file is copied into the cache's `map-files/`
+  folder under a name of the app's choosing (`MapFileStaging`), never the file's own, which is untrusted, as is all of
+  it: a file over 256 MiB is refused. Its format is its extension's, as on the desktop, else how it begins. A saved map
+  is written there by the engine, then copied out to where the player chose (a file left half written is deleted), or
+  offered through Android's share sheet by a `FileProvider` that reaches that folder alone.
+- While it runs, a bar under the search shows Mudlet's progress label, or "Loading the map…" or "Saving the map…"
+  until it comes, with a progress bar read as "Map file progress" and Cancel while the engine can stop it (a JSON
+  file's). How it ended stays until dismissed and is read out once (`Announcer`), a failure in the error colour with
+  Mudlet's or Android's words, interrupting TalkBack. The menu waits while one runs.
+- It lives in the profile's session, not the screen, so a rotation or Back does not lose it; a restarted engine ends it
+  as failed, as it will say nothing of it.
+
 ### The script library
 The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
 (`ui/scripts/ScriptLibraryScreen.kt`), over the requests in `docs/protocol.md`, "Editing triggers, aliases and scripts",

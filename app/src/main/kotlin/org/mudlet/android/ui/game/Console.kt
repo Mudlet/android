@@ -221,7 +221,7 @@ fun Console(
                 }
                 // The app's own markers are not the game's text: no trigger sees them
                 val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
-                val stamp = if (timeStamps && line.time > 0) remember(line.time) { timeStamp(line.time) } else null
+                val stamp: String? = null
                 val consoleLine = @Composable { m: Modifier ->
                     ConsoleLine(text, plain, style, m, color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger, copyable = true, readingPrefix = stamp.orEmpty())
                 }

@@ -180,7 +180,6 @@ private fun FrontCard(front: ProfileSession, name: String, canReconnect: Boolean
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Lag.of(front.status["lag"])?.let { LagText(it) }
             Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val reconnect = stringResource(R.string.connection_reconnect_to, name)
                 val disconnect = stringResource(R.string.connection_disconnect_from, name)

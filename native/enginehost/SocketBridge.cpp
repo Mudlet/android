@@ -1774,8 +1774,7 @@ QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
                         {QStringLiteral("seq"), stored.seq},
                         {QStringLiteral("text"), stored.text},
                         {QStringLiteral("runs"), runsJson(stored.runs)},
-                        {QStringLiteral("prompt"), stored.prompt},
-                        {QStringLiteral("time"), stored.time}};
+                        {QStringLiteral("prompt"), stored.prompt}};
     if (replay) {
         message.insert(QStringLiteral("replay"), true);
     }
@@ -1803,8 +1802,7 @@ QJsonObject SocketBridge::tailMessage() const
     return {{QStringLiteral("t"), QStringLiteral("tail")},
             {QStringLiteral("text"), mTail.text},
             {QStringLiteral("runs"), runsJson(mTail.runs)},
-            {QStringLiteral("prompt"), mTail.prompt},
-            {QStringLiteral("time"), mTail.time}};
+            {QStringLiteral("prompt"), mTail.prompt}};
 }
 
 QJsonObject SocketBridge::hiddenInputMessage() const

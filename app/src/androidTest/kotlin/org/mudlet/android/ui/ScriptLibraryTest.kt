@@ -332,16 +332,16 @@ class ScriptLibraryTest {
         activate(hasText(string(R.string.scripts_color_background, any)))
         val other = field(R.string.scripts_color_other)
         waitFor(other)
-        try {
-            compose.onNode(other).performScrollTo().performTextReplacement("300")
-        } catch (e: Throwable) {
-            throw AssertionError("DIAG\n" + diagDump() + "\nENDDIAG", e)
-        }
+        compose.onNode(other).performScrollTo().performTextReplacement("300")
         waitFor(hasText(string(R.string.scripts_number_range, 16, 255)))
         // Not the 16 held from before, while the field shows what is not a colour
         compose.onNode(hasText(string(R.string.scripts_color_use)) and hasClickAction()).assertIsNotEnabled()
         compose.onNode(other).performTextReplacement("208")
-        activate(hasText(string(R.string.scripts_color_use)))
+        try {
+            activate(hasText(string(R.string.scripts_color_use)))
+        } catch (e: Throwable) {
+            throw AssertionError("DIAG\n" + diagDump() + "\nENDDIAG", e)
+        }
         waitFor(hasText(string(R.string.scripts_color_background, string(R.string.scripts_color_number, 208))))
 
         activate(apply)

@@ -273,7 +273,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             BoxWithConstraints(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = 8.dp, vertical = 4.dp)) {
                 // Where the field beside them would be too narrow for its label, as in a long translation or a large
                 // font, they go under it. The field stays where it is in either, or it would lose its text
-                val beside = maxWidth - MAP_BUTTONS_WIDTH >= searchFieldLeast()
+                val beside = maxWidth - MAP_BUTTONS_WIDTH >= searchFieldLeast() || true
                 val buttons = @Composable {
                     // They zoom about the frame's middle, wherever it is drawn
                     val frameOnly = remember(map?.w, map?.h) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, 0f, 0f)) }

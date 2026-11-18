@@ -634,11 +634,6 @@ void MudletProfile::connectSession()
             [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64 arrivalMSecs, bool continuesLine, const QList<qint64>& lineIds) {
                 onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mEngine.mLinkTop), arrivalMSecs, continuesLine, lineIds);
             });
-    connect(session, &THeadlessSession::linesUpdated, this, [this](const QString&, const QList<THeadlessSession::LineUpdate>& updates) {
-        for (const THeadlessSession::LineUpdate& update : updates) {
-            onLineUpdated(update.lineId, update.text, colorRuns(update.runs, mLinkBase, mEngine.mLinkTop), update.isPrompt, update.deleted);
-        }
-    });
     connect(session, &THeadlessSession::localTextStyled, this, [this](const QString&, const QString& text, const QList<TextRun>& runs, bool continuesLine) {
         mLocalLines += text.count(QLatin1Char('\n'));
         markCountersDirty();

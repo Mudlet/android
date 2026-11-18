@@ -940,6 +940,31 @@ class AppMapTest {
         assertTrue("nor offers the map over the loaded one", compose.onAllNodes(download).fetchSemanticsNodes().isEmpty())
     }
 
+    // Bite branch only: each copy runs a test unchanged with one behaviour broken (Bite), so a stage after the first is seen red too
+    private fun bite(stage: String, test: () -> Unit) {
+        Bite.stage = stage
+        try {
+            test()
+        } finally {
+            Bite.stage = ""
+        }
+    }
+
+    @Test
+    fun biteLoadSendsNoLoadMapFile() = bite("load") { aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() }
+
+    @Test
+    fun biteCancelSendsNothing() = bite("cancel") { aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() }
+
+    @Test
+    fun biteAFailuresEndIsNotShown() = bite("failure") { aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() }
+
+    @Test
+    fun biteARefusalsEndIsNotShown() = bite("refusal") { aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() }
+
+    @Test
+    fun biteASaveWritesNothing() = bite("save") { aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() }
+
     @Test
     fun aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() {
         openUndrawnMap()

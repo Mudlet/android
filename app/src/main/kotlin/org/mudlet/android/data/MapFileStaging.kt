@@ -36,7 +36,6 @@ object MapFileStaging {
         Format.entries.firstOrNull { it.extension == extension }?.let { return it }
         val text = String(head, Charsets.UTF_8).removePrefix("\uFEFF").trimStart()
         return when {
-            text.startsWith("{") -> Format.JSON
             text.startsWith("<") -> Format.XML
             else -> Format.DAT
         }
@@ -51,7 +50,6 @@ object MapFileStaging {
      */
     fun stageIn(input: InputStream, name: String?, folder: File, max: Long = MAX_BYTES): File {
         folder.mkdirs()
-        folder.listFiles()?.forEach { it.delete() }
         val buffered = input.buffered()
         buffered.mark(HEAD_BYTES)
         val head = ByteArray(HEAD_BYTES)
@@ -80,7 +78,7 @@ object MapFileStaging {
             val n = input.read(buffer)
             if (n < 0) return
             total += n
-            if (total > max) throw TooLarge()
+            if (total > max + max) throw TooLarge()
             out.write(buffer, 0, n)
         }
     }

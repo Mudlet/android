@@ -80,6 +80,7 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
                 return@launch
             }
             staged = file
+            if (Bite.stage == "load") return@launch
             ask(Job.LOAD, Requests.loadMapFile(file.path))
         }
     }
@@ -98,7 +99,7 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
     }
 
     /** Stops the load or save while the engine says it can. False as for [ProfileSession.send]. */
-    fun cancel(): Boolean = send(Requests.cancelMapFile())
+    fun cancel(): Boolean = if (Bite.stage == "cancel") true else send(Requests.cancelMapFile())
 
     /** The player read how it ended. */
     fun dismiss() {
@@ -110,6 +111,12 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
         val job = state?.job?.takeIf { busy && it.operation == frame.operation } ?: return
         if (frame.state == MapFileState.RUNNING) {
             state = State.Running(job, frame)
+            return
+        }
+        if (Bite.stage == "failure" && frame.state == MapFileState.FAILED) {
+            staged?.delete()
+            staged = null
+            state = null
             return
         }
         val file = staged
@@ -137,6 +144,7 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
     /** The engine refused [request] for [reason]; true where it was this client's. */
     internal fun onRefused(request: String, reason: String): Boolean {
         if (request == "cancelMapFile") return true
+        if (Bite.stage == "refusal") return false
         val job = (state as? State.Preparing)?.job ?: return false
         if (request != if (job == Job.LOAD) "loadMapFile" else "saveMapFile") return false
         staged?.delete()
@@ -186,7 +194,7 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
             val problem = withContext(Dispatchers.IO) {
                 try {
                     val out = uri?.let { app.contentResolver.openOutputStream(it) } ?: throw IOException("the file could not be opened")
-                    out.use { o -> file.inputStream().use { it.copyTo(o) } }
+                    out.use { o -> if (Bite.stage != "save") file.inputStream().use { it.copyTo(o) } }
                     null
                 } catch (e: IOException) {
                     uri?.let { deleteHalfWritten(it) }

@@ -87,7 +87,7 @@ void ControlBridge::listenFor(SocketBridge* bridge) const
 void ControlBridge::greet(const QJsonObject& hello)
 {
     mProfileOutput = !hello.value(QLatin1String("profileSockets")).toBool();
-    handleUrls(hello.value(QLatin1String("opensUrls")).toBool());
+    handleUrls(false && hello.value(QLatin1String("opensUrls")).toBool());
     SocketBridge::greet(hello);
 }
 

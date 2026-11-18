@@ -277,8 +277,77 @@
     <!-- A page of each game's own settings: how the game's text is shown -->
     <string name="settings_display">Display &amp; text</string>
     <!-- Under "Display & text" in the list of settings pages, what that page holds: undoing the wrapping a game does
-         itself -->
-    <string name="settings_display_summary">Lines the game wraps itself</string>
+         itself, and the links a game puts in its text -->
+    <string name="settings_display_summary">Lines the game wraps itself, and its links</string>
+    <!-- A page of each game's own settings: the colours the game's text is shown in, as desktop Mudlet's "Color view" -->
+    <string name="settings_colours">Colours</string>
+    <!-- Under "Colours" in the list of settings pages, what that page holds -->
+    <string name="settings_colours_summary">The game\'s text colours and the sixteen ANSI colours</string>
+    <!-- Words a player might search the settings for to find the colour settings, separated by spaces -->
+    <string name="settings_colours_keywords">color colour palette ANSI theme foreground background</string>
+    <!-- A switch on the Colours page, desktop Mudlet's "Allow server to redefine these colors" -->
+    <string name="settings_game_changes_colours">Let the game change colours</string>
+    <!-- Under "Let the game change colours", what the switch does -->
+    <string name="settings_game_changes_colours_hint">The game may redefine the sixteen ANSI colours below for itself</string>
+    <!-- A colour on the Colours page: the colour of the game's text where it gives none -->
+    <string name="settings_colour_foreground">Foreground</string>
+    <!-- A colour on the Colours page: the background of the game's text -->
+    <string name="settings_colour_background">Background</string>
+    <!-- A colour on the Colours page: the colour the commands the player sends show in, in the game's text -->
+    <string name="settings_colour_command_foreground">Command foreground</string>
+    <!-- A colour on the Colours page: the background the commands the player sends show on, in the game's text -->
+    <string name="settings_colour_command_background">Command background</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_black">Black</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_red">Red</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_green">Green</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_yellow">Yellow</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_blue">Blue</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_magenta">Magenta</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_cyan">Cyan</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_white">White</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_black">Light black</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_red">Light red</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_green">Light green</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_yellow">Light yellow</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_blue">Light blue</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_magenta">Light magenta</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_cyan">Light cyan</string>
+    <!-- One of the sixteen ANSI colours games use, on the Colours page, as desktop Mudlet names it -->
+    <string name="settings_colour_light_white">Light white</string>
+    <!-- What TalkBack says a tap on a colour of the Colours page does: "Double tap to change colour" -->
+    <string name="settings_colour_change">change colour</string>
+    <!-- The slider for the amount of red in a colour, in the dialog that changes one -->
+    <string name="settings_colour_red_amount">Red</string>
+    <!-- The slider for the amount of green in a colour, in the dialog that changes one -->
+    <string name="settings_colour_green_amount">Green</string>
+    <!-- The slider for the amount of blue in a colour, in the dialog that changes one -->
+    <string name="settings_colour_blue_amount">Blue</string>
+    <!-- Above each slider of the dialog that changes a colour: the slider's name (Red, Green or Blue), then its amount
+         from 0 to 255 -->
+    <string name="settings_colour_amount">%1$s: %2$d</string>
+    <!-- The field in the dialog that changes a colour, for the colour typed as a web colour -->
+    <string name="settings_colour_name">Hex colour</string>
+    <!-- Under the hex colour field: how to type it. Keep "#rrggbb" as it is -->
+    <string name="settings_colour_name_hint">As #rrggbb, such as #ff8000</string>
+    <!-- The button that takes the colour chosen in the dialog that changes one -->
+    <string name="settings_colour_ok">OK</string>
+    <!-- The button at the foot of the Colours page that puts every colour back to Mudlet's own -->
+    <string name="settings_colours_reset">Reset to Mudlet\'s colours</string>
     <!-- A message that shows for a moment at the bottom of the settings, when the player changes a setting of a game
          that is connected and Mudlet reads that setting only as it connects, such as a game protocol's switch -->
     <string name="settings_next_connection">This takes effect the next time you connect.</string>
@@ -286,7 +355,7 @@
          the game's sounds -->
     <string name="settings_accessibility">Accessibility</string>
     <!-- Under "Accessibility" in the list of settings pages, what that page holds -->
-    <string name="settings_accessibility_summary">Screen reader, blank lines and captions</string>
+    <string name="settings_accessibility_summary">Screen reader, blank lines, captions and blinking text</string>
     <!-- Words a player might search the settings for to find the text size setting, besides the words of its name and
          description, separated by commas. Use the words a player of your language would search for, not a translation
          word for word. -->
@@ -305,6 +374,14 @@
     <!-- Words a player might search the settings for to find "Captions for sounds and music", besides the words of its name and
          description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_closed_captions_keywords">closed captions, subtitles, deaf, hearing, audio, media</string>
+    <!-- A switch on a game's Accessibility page: text the game sends as blinking pulses gently from bright to faint;
+         off, it stays still and is shown in italics instead -->
+    <string name="settings_blink_text">Blinking text</string>
+    <!-- Under "Blinking text", what the switch does -->
+    <string name="settings_blink_text_hint">Text the game sends blinking pulses gently. Off, it stays still and is shown in italics.</string>
+    <!-- Words a player might search the settings for to find "Blinking text", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_blink_text_keywords">blink, flash, flashing, animation, motion, pulse</string>
     <!-- Words a player might search the settings for to find "Blank lines from the game", besides the words of its
          name and choices, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_blank_lines_keywords">empty lines, spacing, gaps, screen reader</string>
@@ -393,6 +470,15 @@
          undone at, besides the words of their names and descriptions, separated by commas. Use the words a player of
          your language would search for. -->
     <string name="settings_undo_wrap_keywords">wrap, word wrap, line length, columns, width, triggers</string>
+    <!-- A switch on a game's Display page: show the links a game puts in its text (OSC 8 is the name of the terminal
+         code games use for them; keep it as it is), and tell the game they are shown -->
+    <string name="settings_game_links">Links from the game (OSC 8)</string>
+    <!-- Under "Links from the game (OSC 8)", what the switch does. A link can send a command, fill in the input line or
+         open a web page -->
+    <string name="settings_game_links_hint">Shows the links a game puts in its text, which can send a command, fill in the input line or open a web page, and tells the game they work. Off, they are plain text.</string>
+    <!-- Words a player might search the settings for to find "Links from the game (OSC 8)", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_game_links_keywords">hyperlinks, links, URL, web, click, tap</string>
     <!-- A setting on a game's Display & text page, under "Undo the game's own wrapping": the column the game wraps
          its lines at -->
     <string name="settings_undo_wrap_width">The game wraps at</string>

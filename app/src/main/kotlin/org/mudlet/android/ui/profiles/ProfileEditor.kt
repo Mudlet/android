@@ -196,7 +196,9 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                     { if (unsaved) save { openOffline(name) } else openOffline(name) },
                     enabled = !waiting && (!unsaved || canSave),
                 ) { Text(stringResource(R.string.profile_open_offline)) }
-                ProfileExport(name, open = EngineClient.session(name) != null)
+                val open = EngineClient.session(name) != null
+                ProfileExport(name, open)
+                ProfileCopy(name, open, passwordStored)
             }
         }
     }
@@ -231,7 +233,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
 
 // One control with its label, so TalkBack reads the label with the switch and a tap on the words toggles it
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().minimumInteractiveComponentSize().toggleable(checked, role = Role.Switch, onValueChange = onChange),
         verticalAlignment = Alignment.CenterVertically,

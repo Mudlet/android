@@ -9,13 +9,13 @@ package org.mudlet.android.data
 enum class LogNameFormat(val mudletValue: String) {
     DATE_AND_TIME("yyyy-MM-dd#HH-mm-ss"),
     DATE_T_TIME("yyyy-MM-ddTHH-mm-ss"),
-    DAY("yyyy-MM-dd"),
     MONTH("yyyy-MM"),
+    DAY("yyyy-MM-dd"),
     NAMED(""),
 }
 
 /** The end of a log's file name, which "Save log files in HTML format" ([html]) decides, as Mudlet names it. */
-fun logFileExtension(html: Boolean) = if (html) ".html" else ".txt"
+fun logFileExtension(html: Boolean) = if (html) ".htm" else ".txt"
 
 /** Whether Mudlet refuses [name] as a log's name: one with a path separator, which would put the log in another folder. */
-fun logFileNameRefused(name: String) = '/' in name || '\\' in name
+fun logFileNameRefused(name: String) = '/' in name

@@ -610,7 +610,6 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             placeholder = R.string.settings_log_file_name_default,
             suffix = { owner -> logFileExtension(owner.value(Settings.logInHtml)) },
             refusal = { name -> if (logFileNameRefused(name)) R.string.settings_log_file_name_refused else null },
-            shownWhen = { owner -> owner.value(Settings.logNameFormat) == LogNameFormat.NAMED },
         ),
         SettingEntry.Number(
             SettingsCategory.APPEARANCE,

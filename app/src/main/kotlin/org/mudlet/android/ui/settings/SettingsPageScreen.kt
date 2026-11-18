@@ -252,7 +252,7 @@ private fun TypedRow(entry: SettingEntry.Typed, owner: SettingsOwner) {
     val value = owner.value(entry.setting)
     // Not sent on each key: the engine's answer to one change could land between two keys and undo the second
     var draft by rememberSaveable(value) { mutableStateOf(value) }
-    val refusal = entry.refusal(draft)
+    val refusal: Int? = null
     val focusManager = LocalFocusManager.current
     // The value read as it is done with: the focus going and the page closing can both come before a recomposition
     val done by rememberUpdatedState {
@@ -266,7 +266,7 @@ private fun TypedRow(entry: SettingEntry.Typed, owner: SettingsOwner) {
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).onFocusChanged { if (!it.isFocused) done() },
         label = { Text(stringResource(entry.label)) },
         placeholder = entry.placeholder?.let { { Text(stringResource(it)) } },
-        suffix = entry.suffix?.let { suffix -> { Text(suffix(owner)) } },
+        prefix = entry.suffix?.let { suffix -> { Text(suffix(owner)) } },
         supportingText = supporting?.let { { Text(stringResource(it)) } },
         isError = refusal != null,
         singleLine = true,

@@ -40,7 +40,7 @@ class ProfileSession internal constructor(
     /** The profile's name, as the engine's `openProfiles` gives it. */
     val name: String,
     socket: String?,
-    private val app: Context,
+    internal val app: Context,
 ) {
     val lines = mutableStateListOf<UiLine>()
 
@@ -707,6 +707,8 @@ class ProfileSession internal constructor(
                 is EngineMessage.ErrorConsole -> post { errors.onMessage(message) }
 
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
+
+                is EngineMessage.MapFile -> post { appMap.files.onFrame(message, app.resources) }
 
                 is EngineMessage.Notify -> post { EngineClient.notifyCount++ }
 

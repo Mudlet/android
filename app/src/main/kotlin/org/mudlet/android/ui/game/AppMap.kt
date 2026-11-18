@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,6 +61,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
@@ -77,8 +79,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -105,6 +109,14 @@ private const val BACK_SHRINK = 0.1f
 private val RESULT_ROW = 56.dp
 private val RESULTS_HEAD = 48.dp
 private const val RESULTS_FRACTION = 0.75f
+
+// An outlined field's padding on both sides of its label, and its trailing button
+private val SEARCH_FIELD_CHROME = 16.dp + 48.dp + 16.dp
+
+// The map's three buttons and the file menu's beside the search, each its 48 dp touch target
+private val MAP_BUTTON_SIZE = 48.dp
+private val MAP_BUTTONS_WIDTH = MAP_BUTTON_SIZE * 4
+private val SEARCH_ROW_PADDING = 8.dp
 
 // The results are filtered by area once they are in at least this many
 private const val FILTER_LEAST_AREAS = 3
@@ -210,6 +222,7 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
  * out ([AppMapClient.overText]), for the console's text to show through faintly ([textBehindMap]); otherwise it covers
  * what is under it.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgress: (Float) -> Unit, modifier: Modifier = Modifier) {
     // How far a predictive back gesture has gone: the map shrinks with it, and closes when it is let go
@@ -239,7 +252,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
         scaleX = scale
         scaleY = scale
     }
-    Box(modifier.then(shrunk).then(if (textBehind) Modifier else Modifier.background(CONSOLE_BACKGROUND))) {
+    BoxWithConstraints(modifier.then(shrunk).then(if (textBehind) Modifier else Modifier.background(CONSOLE_BACKGROUND))) {
         // Touches between its controls stay off what it covers; under them, so they still take theirs
         Box(Modifier.matchParentSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } })
         // While the search is edited its last results are not shown: they are of the text before, and they would sit
@@ -250,6 +263,12 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
         // Registered after the map's own, so each takes Back first while it is shown
         BackHandler(appMap.rooms.room != null) { appMap.rooms.close() }
         BackHandler(resultsShown) { appMap.closeSearch() }
+        // Where the field beside the buttons would be too narrow for its label, as in a long translation or a large
+        // font, they go under it. The field stays where it is in either, or it would lose its text
+        val beside = maxWidth - SEARCH_ROW_PADDING * 2 - MAP_BUTTONS_WIDTH >= searchFieldLeast()
+        // Under the field with the keyboard up they would leave the map less than its 48 dp, and the map's touch
+        // target, grown to that, would cover them. Still composed, as the file menu's pickers answer into it
+        val buttonsAway = !beside && WindowInsets.isImeVisible
         Column(Modifier.matchParentSize()) {
             val map = appMap.map
             val drawn = map != null
@@ -262,11 +281,20 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             }
             // The buttons are beside the search, not over the map, where they would hide the room's name the engine
             // draws along its top
-            Row(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
-                // They zoom about the frame's middle, wherever it is drawn
-                val frameOnly = remember(map?.w, map?.h) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, 0f, 0f)) }
-                MapButtons(appMap, map?.bitmap, frameOnly, viewOnly, drawn)
+            Box(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = SEARCH_ROW_PADDING, vertical = 4.dp)) {
+                val buttons = @Composable {
+                    // They zoom about the frame's middle, wherever it is drawn
+                    val frameOnly = remember(map?.w, map?.h) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, 0f, 0f)) }
+                    MapButtons(appMap, map?.bitmap, frameOnly, viewOnly, drawn)
+                    MapFileMenu()
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
+                        if (beside) buttons()
+                    }
+                    if (!beside) Row(Modifier.unplacedIf(buttonsAway)) { buttons() }
+                }
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.matchParentSize()) {
@@ -275,7 +303,8 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                     // TalkBack. With a map drawn, none: the map is there
                     val offerInMap = !drawn && !resultsShown && appMap.refusal == null
                     MapDownloadBar(offerHere = !drawn && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
-                    MapBox(Modifier.weight(1f).fillMaxWidth(), keyboardGoes) { size ->
+                    MapFileBar(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+                    MapBox(Modifier.weight(1f).fillMaxWidth(), keyboardGoes, returning = if (buttonsAway) MAP_BUTTON_SIZE else 0.dp) { size ->
                         // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
                         val fit = remember(map?.w, map?.h, size) {
                             MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, size.width.toFloat(), size.height.toFloat()), asRedrawn = true)
@@ -331,23 +360,41 @@ private fun AskForMap(owner: AppMapClient.Owner, size: IntSize) {
 
 /**
  * A box for a map that ends above the keyboard: [content], each part of which fills it, is told the size the box has
- * once the keyboard is where it is going, or, with [keyboardGoes], gone. A map laid out and asked for at that size stays
- * still while the keyboard slides, and is drawn anew once for it, not at each step. The content is composed as the box
+ * once the keyboard is where it is going, or, with [keyboardGoes], gone, less [returning] when it goes, which what is
+ * above it takes back then. A map laid out and asked for at that size stays still while the keyboard slides, and is
+ * drawn anew once for it, not at each step. The content is composed as the box
  * is measured: it has the size for its first frame, and the box's size and the keyboard's are of the same frame.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MapBox(modifier: Modifier, keyboardGoes: Boolean = false, content: @Composable (IntSize) -> Unit) {
+private fun MapBox(modifier: Modifier, keyboardGoes: Boolean = false, returning: Dp = 0.dp, content: @Composable (IntSize) -> Unit) {
     // What the game screen's `imePadding` takes: its scaffold has taken its bars' part already
     val bars = WindowInsets.systemBars
     val keyboard = WindowInsets.ime.exclude(bars)
     val keyboardAtRest = WindowInsets.imeAnimationTarget.exclude(bars)
     SubcomposeLayout(modifier) { constraints ->
-        val leaves = keyboard.getBottom(this) - if (keyboardGoes) 0 else keyboardAtRest.getBottom(this)
+        val going = keyboardGoes || keyboardAtRest.getBottom(this) == 0
+        val leaves = keyboard.getBottom(this) - (if (keyboardGoes) 0 else keyboardAtRest.getBottom(this)) - if (going) returning.roundToPx() else 0
         val atRest = IntSize(constraints.maxWidth, (constraints.maxHeight + leaves).coerceAtLeast(0))
         val placeables = subcompose(Unit) { content(atRest) }.map { it.measure(constraints) }
         layout(constraints.maxWidth, constraints.maxHeight) { placeables.forEach { it.place(0, 0) } }
     }
+}
+
+/** Measured, and so still composed, but neither placed nor given room while [away]. */
+private fun Modifier.unplacedIf(away: Boolean) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    if (away) layout(placeable.width, 0) {} else layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
+/** The narrowest the room search's field shows its label whole in: the label's width, beside the field's padding and its button. */
+@Composable
+private fun searchFieldLeast(): Dp {
+    val label = stringResource(R.string.app_map_search)
+    val style = MaterialTheme.typography.bodyLarge
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(label, style, density) { with(density) { measurer.measure(label, style, maxLines = 1).size.width.toDp() } } + SEARCH_FIELD_CHROME
 }
 
 /** The room search's field: Enter, or its button, asks the engine for the rooms whose name holds the text, or whose number it is. */

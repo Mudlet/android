@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.Manifest
+import android.net.Uri
 import android.os.Build
 import androidx.activity.BackEventCompat
 import androidx.annotation.StringRes
@@ -45,7 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
+import androidx.test.uiautomator.UiDevice
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -60,6 +63,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.MapFileStaging
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapBehindText
@@ -73,6 +77,7 @@ import org.mudlet.android.ui.EngineMessages.room
 import org.mudlet.android.ui.EngineMessages.rooms
 import org.mudlet.android.ui.game.Announcer
 import java.io.EOFException
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
@@ -87,8 +92,8 @@ import kotlin.math.roundToInt
  * button, with the frame the engine drew last and without letting go of the map, over the input line and the quick bar,
  * where a tap selects, a double tap walks, a drag moves it, the buttons zoom and TalkBack's actions do the same, and
  * Back sends it back, following the player again; the bar under it that shows another area or
- * level; the room search, whose results say how many, filter by area, centre the map on a room and walk there; and the
- * download of the map the game offers.
+ * level; the room search, whose results say how many, filter by area, centre the map on a room and walk there; the
+ * download of the map the game offers; and loading and saving the map as a file.
  */
 @RunWith(AndroidJUnit4::class)
 class AppMapTest {
@@ -936,6 +941,82 @@ class AppMapTest {
     }
 
     @Test
+    fun aMapFileIsLoadedAndSavedThroughTheCacheWithItsProgressCancelAndHowItEnded() {
+        openUndrawnMap()
+        val menu = hasContentDescription(string(R.string.map_file_menu)) and hasClickAction()
+        assertTouchTarget(menu)
+        activate(menu)
+        for (item in listOf(R.string.map_file_load, R.string.map_file_save, R.string.map_file_save_json, R.string.map_file_share)) {
+            waitFor("the menu offers ${string(item)}") { compose.onAllNodes(hasText(string(item)) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        }
+        checkAccessibility()
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        waitFor("the menu closes") { compose.onAllNodes(hasText(string(R.string.map_file_load))).fetchSemanticsNodes().isEmpty() }
+
+        // Android's picker is its own app, so the picked file comes to the client as the picker would hand it over; its
+        // name tries to reach outside the cache, which the engine is never given
+        val context = compose.activity
+        val files = compose.runOnIdle { EngineClient.front.appMap.files }
+        val picked = File(context.filesDir, "picked map.json").apply { writeText("""{"areas": []}""") }
+        compose.runOnIdle { files.load(Uri.fromFile(picked)) }
+        val load = request("loadMapFile", "a picked file is loaded from the cache")
+        val staged = File(load.getString("path"))
+        assertEquals(File(MapFileStaging.folder(context.cacheDir), "map.json"), staged)
+        assertEquals("""{"areas": []}""", staged.readText())
+
+        // Mudlet's progress, a quarter of the way, and Cancel while it can stop it
+        session.send(mapFile("load", "running", label = LABEL, value = 1, maximum = 4, cancelable = true))
+        waitFor("the load's progress shows") { compose.onAllNodes(hasText(LABEL)).fetchSemanticsNodes().isNotEmpty() }
+        val bar = hasContentDescription(string(R.string.map_file_progress))
+        compose.onNode(bar).assert(SemanticsMatcher.expectValue(SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(0.25f, 0f..1f)))
+        compose.onNode(menu).assertIsNotEnabled()
+        val cancel = hasText(string(R.string.map_file_cancel)) and hasClickAction()
+        assertTouchTarget(cancel)
+        checkAccessibility()
+        activate(cancel)
+        request("cancelMapFile", "Cancel stops the load")
+        session.send(mapFile("load", "cancelled"))
+        val cancelled = hasText(string(R.string.map_file_load_cancelled))
+        waitFor("the load says it was cancelled") { compose.onAllNodes(cancelled).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertTrue("TalkBack is told: ${Announcer.current?.text}", Announcer.current!!.text.endsWith(string(R.string.map_file_load_cancelled))) }
+        assertFalse("the staged copy goes once the engine is done with it", staged.exists())
+        activate(hasContentDescription(string(R.string.map_file_dismiss)))
+        waitFor("the end goes once dismissed") { compose.onAllNodes(cancelled).fetchSemanticsNodes().isEmpty() }
+
+        // A failure says Mudlet's words, at once
+        compose.runOnIdle { files.load(Uri.fromFile(picked)) }
+        request("loadMapFile", "a picked file is loaded again")
+        session.send(mapFile("load", "running"))
+        waitFor("the load shows before Mudlet's progress starts") { compose.onAllNodes(hasText(string(R.string.map_file_loading))).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(cancel).assertIsNotEnabled()
+        val reason = "Could not load map from map.json."
+        session.send(mapFile("load", "failed", error = reason))
+        val failed = hasText(string(R.string.map_file_load_failed, reason))
+        waitFor("the load says why it failed") { compose.onAllNodes(failed).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(failed).assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.LiveRegion))
+        compose.runOnIdle { assertTrue("a failure interrupts TalkBack", Announcer.current!!.assertive) }
+
+        // A refusal ends it with the engine's reason
+        compose.runOnIdle { files.load(Uri.fromFile(picked)) }
+        session.refuse(request("loadMapFile", "a picked file is loaded once more"), "the map is downloading")
+        waitFor("the refusal says why") { compose.onAllNodes(hasText(string(R.string.map_file_load_failed, "the map is downloading"))).fetchSemanticsNodes().isNotEmpty() }
+
+        // A save: the engine writes the cache's file, which then goes where the player chose
+        val chosen = File(context.filesDir, "chosen.json").apply { delete() }
+        compose.runOnIdle { files.save(Uri.fromFile(chosen), MapFileStaging.Format.JSON) }
+        val save = request("saveMapFile", "the map is saved to the cache first")
+        val written = File(save.getString("path"))
+        assertEquals(File(MapFileStaging.folder(context.cacheDir), "map.json"), written)
+        written.writeText("""{"rooms": [1]}""")
+        session.send(mapFile("save", "done"))
+        val saved = hasText(string(R.string.map_file_saved))
+        waitFor("the save says it is done") { compose.onAllNodes(saved).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("""{"rooms": [1]}""", chosen.readText())
+        assertFalse("and the cache's copy is gone", written.exists())
+        checkAccessibility()
+    }
+
+    @Test
     fun aDownloadThatEndsWhileTheUiIsAwayIsToldAsItComesBackAndARestartedEngineForgetsIt() {
         val download = openUndrawnMap()
         session.send(mapDownload())
@@ -1209,6 +1290,17 @@ class AppMapTest {
         error: String = "",
     ): JSONObject = JSONObject().put("t", "mapDownload").put("offered", offered).put("host", host).put("state", state).put("label", label)
         .put("value", value).put("maximum", maximum).put("cancelable", cancelable).put("error", error)
+
+    private fun mapFile(
+        op: String,
+        state: String,
+        label: String = "",
+        value: Int = 0,
+        maximum: Int = 0,
+        cancelable: Boolean = false,
+        error: String = "",
+    ): JSONObject = JSONObject().put("t", "mapFile").put("op", op).put("state", state).put("label", label).put("value", value)
+        .put("maximum", maximum).put("cancelable", cancelable).put("error", error)
 
     private fun assertNone(size: JSONObject) {
         assertEquals("$size", 0, size.getInt("w"))

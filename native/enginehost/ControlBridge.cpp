@@ -372,6 +372,8 @@ void ControlBridge::setFront(qsizetype index)
         return;
     }
     SocketBridge* front = mOpen.at(index).bridge;
+    // The new front's line ids may name other lines of the old one's still kept here
+    forgetLineIds();
     front->setMirror(this);
     setEngine(front->engine());
     if (mEngineControl) {

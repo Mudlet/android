@@ -183,6 +183,8 @@ private:
         bool prompt = false;
         // Of its first piece, in milliseconds since the epoch
         qint64 time = 0;
+        // The lineId of each line of text, as its line feeds part it; 0, or missing, for one with none
+        QList<qint64> lineIds;
     };
 
     void connectSession();
@@ -253,10 +255,12 @@ private:
     // Mudlet's progress, while a map file runs, into mMapFile and told; asks the UI's bridge whether to stop it
     void takeMapFileProgress(const QString& label, int value, int maximum, bool cancelable);
 
-    void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, qint64 arrivalMSecs, bool continuesLine);
+    void onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, qint64 arrivalMSecs, bool continuesLine, const QList<qint64>& lineIds);
+    void onLineUpdated(qint64 lineId, const QString& text, const QList<ColorRun>& runs, bool isPrompt, bool deleted);
     void onLocalText(const QString& text, const QList<ColorRun>& runs, bool continuesLine);
     void onMainConsoleCleared();
-    void appendToOpen(const QString& text, const QList<ColorRun>& runs);
+    // lineIds as lineShown gives them: the first continues the open line, which keeps its own
+    void appendToOpen(const QString& text, const QList<ColorRun>& runs, const QList<qint64>& lineIds = {});
     void commitCompleteLines(OpenLine::Kind remainder);
     void commitOpen();
     void scheduleTailSync();

@@ -573,6 +573,12 @@ void SocketBridge::onBytesWritten()
     if (!mProfileOutput) {
         return;
     }
+    const QSet<qint64> owed = std::exchange(mUpdatesOwed, {});
+    for (const StoredLine& stored : mScrollback) {
+        if (owed.contains(stored.seq)) {
+            sendFrame(lineUpdatedMessage(stored));
+        }
+    }
     sendLinesAfter(mLastSentSeq, false);
     if (!mClientLagging) {
         sendFrame(tailMessage());
@@ -601,6 +607,7 @@ void SocketBridge::greet(const QJsonObject& hello)
     sendState();
     if (mProfileOutput) {
         sendLinesAfter(after, true);
+        sendLineUpdatesUpTo(after);
         sendFrame(tailMessage());
     }
     sendFrame({{QStringLiteral("t"), QStringLiteral("synced")}, {QStringLiteral("seq"), mNextSeq - 1}});
@@ -680,10 +687,25 @@ void SocketBridge::sendLinesAfter(qint64 seq, bool replay)
         if (stored.seq <= seq) {
             continue;
         }
-        sendFrame(lineMessage(stored, replay));
+        if (!stored.deleted) {
+            sendFrame(lineMessage(stored, replay));
+        }
         mLastSentSeq = stored.seq;
         if (mClientLagging) {
             return;
+        }
+    }
+}
+
+void SocketBridge::sendLineUpdatesUpTo(qint64 seq)
+{
+    mUpdatesOwed.clear();
+    for (const StoredLine& stored : mScrollback) {
+        if (stored.seq > seq) {
+            break;
+        }
+        if (stored.edited) {
+            sendFrame(lineUpdatedMessage(stored));
         }
     }
 }
@@ -1782,6 +1804,18 @@ QJsonObject SocketBridge::lineMessage(const StoredLine& stored, bool replay)
     return message;
 }
 
+QJsonObject SocketBridge::lineUpdatedMessage(const StoredLine& stored)
+{
+    if (stored.deleted) {
+        return {{QStringLiteral("t"), QStringLiteral("lineUpdated")}, {QStringLiteral("seq"), stored.seq}, {QStringLiteral("deleted"), true}};
+    }
+    return {{QStringLiteral("t"), QStringLiteral("lineUpdated")},
+            {QStringLiteral("seq"), stored.seq},
+            {QStringLiteral("text"), stored.text},
+            {QStringLiteral("runs"), runsJson(stored.runs)},
+            {QStringLiteral("prompt"), stored.prompt}};
+}
+
 // [start, length, fg], with bg and attributes, then link, only when a run has them
 QJsonArray SocketBridge::runsJson(const QList<ColorRun>& runs)
 {
@@ -2089,13 +2123,21 @@ void SocketBridge::sendFrame(const QJsonObject& message)
     }
 }
 
-void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time)
+void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool isPrompt, qint64 time, qint64 lineId)
 {
     if (mMirror) {
-        mMirror->line(text, runs, isPrompt, time);
+        mMirror->line(text, runs, isPrompt, time, lineId);
     }
-    mScrollback.push_back({mNextSeq++, text, runs, isPrompt, time});
+    mScrollback.push_back({mNextSeq++, text, runs, isPrompt, time, lineId});
+    if (lineId) {
+        mSeqOfLineId.insert(lineId, mScrollback.back().seq);
+    }
     if (qsizetype(mScrollback.size()) > scrollbackLines) {
+        const StoredLine& oldest = mScrollback.front();
+        if (const auto kept = mSeqOfLineId.constFind(oldest.lineId); kept != mSeqOfLineId.cend() && kept.value() == oldest.seq) {
+            mSeqOfLineId.erase(kept);
+        }
+        mUpdatesOwed.remove(oldest.seq);
         mScrollback.pop_front();
     }
     if (mControl) {
@@ -2104,6 +2146,39 @@ void SocketBridge::line(const QString& text, const QList<ColorRun>& runs, bool i
     if (outputLive()) {
         sendFrame(lineMessage(mScrollback.back(), false));
         mLastSentSeq = mScrollback.back().seq;
+    }
+}
+
+void SocketBridge::lineUpdated(qint64 lineId, const QString& text, const QList<ColorRun>& runs, bool isPrompt, bool deleted)
+{
+    if (mMirror) {
+        mMirror->lineUpdated(lineId, text, runs, isPrompt, deleted);
+    }
+    const auto found = mSeqOfLineId.constFind(lineId);
+    if (found == mSeqOfLineId.cend()) {
+        return;
+    }
+    // Sequence numbers run on without a hole from the oldest line kept
+    StoredLine& stored = mScrollback[size_t(found.value() - mScrollback.front().seq)];
+    stored.edited = true;
+    if (deleted) {
+        stored.deleted = true;
+        stored.text.clear();
+        stored.runs.clear();
+        mSeqOfLineId.erase(found);
+    } else {
+        stored.text = text;
+        stored.runs = runs;
+        stored.prompt = isPrompt;
+    }
+    // A line not sent yet goes as it now is, or not at all
+    if (stored.seq > mLastSentSeq) {
+        return;
+    }
+    if (outputLive()) {
+        sendFrame(lineUpdatedMessage(stored));
+    } else if (mClient && mClientGreeted && mProfileOutput) {
+        mUpdatesOwed.insert(stored.seq);
     }
 }
 
@@ -2124,6 +2199,8 @@ void SocketBridge::cleared()
         mMirror->cleared();
     }
     mScrollback.clear();
+    mSeqOfLineId.clear();
+    mUpdatesOwed.clear();
     mClearedAfterSeq = mNextSeq - 1;
     mTail = {0, {}, {}, false, 0};
     if (outputLive()) {

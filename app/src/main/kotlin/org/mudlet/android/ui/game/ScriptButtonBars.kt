@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -183,7 +185,7 @@ private fun BarGrid(placed: PlacedBar, area: DpSize) {
     if (placed.horizontal) {
         Row(group) {
             for (column in 0 until placed.columns) {
-                Column(Modifier.widthOfWidest()) {
+                Column(Modifier.width(IntrinsicSize.Min)) {
                     for (row in 0 until placed.rows) GridPlace(cells[row to column], placed, style, area, Modifier.fillMaxWidth())
                 }
             }
@@ -192,7 +194,7 @@ private fun BarGrid(placed: PlacedBar, area: DpSize) {
         Column(group.widthOfWidest()) {
             for (row in 0 until placed.rows) {
                 Row(Modifier.fillMaxWidth()) {
-                    for (column in 0 until placed.columns) GridPlace(cells[row to column], placed, style, area, Modifier.weight(1f))
+                    for (column in 0 until placed.columns) GridPlace(cells[row to column], placed, style, area, Modifier)
                 }
             }
         }
@@ -289,7 +291,7 @@ private fun BarButtonView(button: BarButton, barSheet: String, barStyle: LabelSt
                     // A name too long for the button gives way to its tick, icon and arrow. The bar's grid asks the
                     // name how wide it would be with no end to its room, and Compose throws on widths that add up
                     // past 2^24
-                    Modifier.weight(1f, fill = false).widthIn(max = area.width),
+                    Modifier.widthIn(max = area.width),
                     color = content,
                     fontSize = style.fontSizePx?.sp ?: TextUnit.Unspecified,
                     fontWeight = style.fontWeight?.let { FontWeight(it.coerceIn(1, 1000)) },

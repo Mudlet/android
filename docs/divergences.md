@@ -75,6 +75,14 @@ they come back: a script that opens pages in a loop opens one ("Calls the user m
 for the app's answer at most half a second, and gets false if none comes. A script of a game open beside the one
 showing can open a page too, as the engine does not say whose script asked.
 
+## The Variables view
+
+The script library's Variables screen opens a table only under a string, number or boolean key; one under a table or
+a function key shows its type and size but does not open, where the desktop editor's Variables view opens it. The
+desktop holds the tree it read between clicks, while the engine is asked again for each table, and Mudlet names a
+table or function key by a reference it makes anew at each read, so the path to such a table would name nothing the
+next time (`docs/protocol.md`, "Reading the Lua variables").
+
 ## Settings the app keeps for every profile
 
 "Read new text aloud", "Tell games I use a screen reader" and what becomes of blank lines are the app's settings: each

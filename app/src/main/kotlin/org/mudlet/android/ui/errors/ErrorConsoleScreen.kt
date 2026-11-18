@@ -65,6 +65,9 @@ import java.util.Locale
 /** The error console's list, for the tests to find. */
 const val ERROR_CONSOLE_TAG = "errorConsole"
 
+/** The Errors button's badge with how many errors are unseen, for the tests to find. */
+const val ERROR_BADGE_TAG = "errorBadge"
+
 // Above this, a badge shows errors_badge_many
 private const val BADGE_MAX = 99
 
@@ -174,27 +177,23 @@ private fun EntryRow(entry: ErrorConsoleEntry, format: DateTimeFormatter, onOpen
     }
 }
 
-/** The script library's title bar button to the error console, with how many errors are unseen. */
-@Composable
-internal fun ErrorConsoleButton(errors: ErrorConsoleClient, onClick: () -> Unit) {
-    IconButton(onClick) {
-        ErrorCountBadge(errors.unseen, stringResource(R.string.errors_open)) { Icon(painterResource(R.drawable.ic_error_outline), it) }
-    }
-}
-
 /**
- * [content], a button's icon whose name is [label], with how many errors are [unseen] on it as a badge, and in its name
- * for a screen reader.
+ * The script library's title bar button to the error console, with how many errors are unseen on it as a badge, and in
+ * its name for a screen reader.
  */
 @Composable
-internal fun ErrorCountBadge(unseen: Int, label: String, content: @Composable (label: String) -> Unit) {
-    if (unseen <= 0) {
-        content(label)
-        return
-    }
-    val count = if (unseen > BADGE_MAX) stringResource(R.string.errors_badge_many) else unseen.toString()
-    BadgedBox(badge = { Badge(Modifier.clearAndSetSemantics {}) { Text(count) } }) {
-        content(pluralStringResource(R.plurals.errors_unseen, unseen, label, unseen))
+internal fun ErrorConsoleButton(errors: ErrorConsoleClient, onClick: () -> Unit) {
+    val unseen = errors.unseen
+    val label = stringResource(R.string.errors_open)
+    IconButton(onClick) {
+        if (unseen <= 0) {
+            Icon(painterResource(R.drawable.ic_error_outline), label)
+        } else {
+            val count = if (unseen > BADGE_MAX) stringResource(R.string.errors_badge_many) else unseen.toString()
+            BadgedBox(badge = { Badge(Modifier.clearAndSetSemantics {}) { Text(count) } }, modifier = Modifier.testTag(ERROR_BADGE_TAG)) {
+                Icon(painterResource(R.drawable.ic_error_outline), pluralStringResource(R.plurals.errors_unseen, unseen, label, unseen))
+            }
+        }
     }
 }
 

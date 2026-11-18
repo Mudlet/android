@@ -63,7 +63,6 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.ScriptWindowsClient
-import org.mudlet.android.ui.errors.ErrorCountBadge
 import kotlin.reflect.KClass
 
 /**
@@ -271,7 +270,7 @@ private fun ProfileGameScreen(
                     }
                     ScriptCommandsButton()
                     IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
-                        ErrorCountBadge(c.errors.unseen, stringResource(R.string.scripts_open, c.name)) { Icon(painterResource(R.drawable.ic_auto_fix_high), it) }
+                        Icon(painterResource(R.drawable.ic_auto_fix_high), stringResource(R.string.scripts_open, c.name))
                     }
                     MapButton(mapOpen, onMapOpen)
                     GameMenuButton(

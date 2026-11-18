@@ -6,7 +6,9 @@ import android.os.Build
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -31,6 +33,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.errors.ERROR_BADGE_TAG
 import org.mudlet.android.ui.errors.ERROR_CONSOLE_TAG
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
@@ -47,11 +50,11 @@ internal fun errorEntry(n: Long, message: String, kind: String = "", item: Int =
 internal const val ERROR_AT = 1_795_381_453_000L
 
 /**
- * The error console (docs/architecture.md, "The error console") against a fake engine: the game's Scripts button and
- * the library's Errors button count the errors not yet seen, debugc() lines aside, on their badge and in what TalkBack
- * reads; the console lists every entry with what raised it, an entry with an item opens that item's page, a new error
- * is said by TalkBack once, Copy all puts the entries on the clipboard and Clear asks the engine to empty it. Controls
- * are found by the labels TalkBack reads and activated through their accessibility actions.
+ * The error console (docs/architecture.md, "The error console") against a fake engine: the library's Errors button
+ * counts the errors not yet seen, debugc() lines aside, on its badge and in what TalkBack reads, and the game's Scripts
+ * button counts none; the console lists every entry with what raised it, an entry with an item opens that item's page,
+ * a new error is said by TalkBack once, Copy all puts the entries on the clipboard and Clear asks the engine to empty
+ * it. Controls are found by the labels TalkBack reads and activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class ErrorConsoleTest {
@@ -90,8 +93,8 @@ class ErrorConsoleTest {
     }
 
     @Test
-    fun theButtonsCountTheUnseenErrorsAndTheConsoleShowsEachWithWhatRaisedIt() {
-        activate(hasContentDescription(plural(R.plurals.errors_unseen, 2, string(R.string.scripts_open, game.name), 2)))
+    fun theErrorsButtonCountsTheUnseenErrorsAndTheConsoleShowsEachWithWhatRaisedIt() {
+        openTheLibrary()
         openTheErrors(2)
         val greetSource = listOf("Greet", "Trigger3", string(R.string.errors_line, 2)).joinToString(string(R.string.errors_separator))
         waitFor(hasText(greetSource))
@@ -99,14 +102,25 @@ class ErrorConsoleTest {
         waitFor(hasText("just saying"))
         assertNotSaid(TRIGGER_ERROR)
 
-        // Seen once shown: neither button counts them, and a new error alone counts after
+        // Seen once shown: the button counts them no more, and a new error alone counts after
         activate(hasContentDescription(string(R.string.navigate_back)))
         waitFor(hasContentDescription(string(R.string.errors_open)))
         session.errorConsole(false, errorEntry(4, "late", "alias", 1, "kick", "Alias1"))
         waitFor(hasContentDescription(plural(R.plurals.errors_unseen, 1, string(R.string.errors_open), 1)))
-        activate(hasContentDescription(string(R.string.navigate_back)))
-        waitFor(hasContentDescription(plural(R.plurals.errors_unseen, 1, string(R.string.scripts_open, game.name), 1)))
         checkAccessibility()
+    }
+
+    @Test
+    fun theGamesScriptsButtonCountsNoErrorsAndTheLibrarysErrorsButtonDoes() {
+        compose.waitUntil(WAIT_MS) { compose.runOnUiThread { EngineClient.sessions.any { it.errors.unseen == 2 } } }
+        compose.waitForIdle()
+        val scripts = string(R.string.scripts_open, game.name)
+        compose.onNode(hasContentDescription(scripts, substring = true) and hasClickAction()).assert(SemanticsMatcher.expectValue(SemanticsProperties.ContentDescription, listOf(scripts)))
+        compose.onNode(hasTestTag(ERROR_BADGE_TAG), useUnmergedTree = true).assertDoesNotExist()
+
+        openTheLibrary()
+        waitFor(hasContentDescription(plural(R.plurals.errors_unseen, 2, string(R.string.errors_open), 2)) and hasClickAction())
+        compose.onNode(hasTestTag(ERROR_BADGE_TAG), useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
@@ -180,7 +194,7 @@ class ErrorConsoleTest {
     }
 
     private fun openTheLibrary() {
-        activate(hasContentDescription(plural(R.plurals.errors_unseen, 2, string(R.string.scripts_open, game.name), 2)))
+        activate(hasContentDescription(string(R.string.scripts_open, game.name)))
     }
 
     /** From the script library, which asks for each kind's items as it opens, the error console with [unseen] errors. */

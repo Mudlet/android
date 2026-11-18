@@ -2316,13 +2316,13 @@
     <string name="errors_title">Errors of %1$s</string>
     <!-- The script library's title bar button, read by a screen reader, that opens the error console -->
     <string name="errors_open">Errors</string>
-    <!-- A button's name, read by a screen reader, with how many errors came since the player last looked at the error
-         console; %1$s is the button's own name, such as "Scripts of Achaea", %2$d how many -->
+    <!-- The script library's Errors button's name, read by a screen reader, with how many errors came since the player
+         last looked at the error console; %1$s is the button's own name, "Errors", %2$d how many -->
     <plurals name="errors_unseen">
         <item quantity="one">%1$s, %2$d new error</item>
         <item quantity="other">%1$s, %2$d new errors</item>
     </plurals>
-    <!-- The count on the error console's buttons once it is over 99: keep it as short -->
+    <!-- The count on the script library's Errors button once it is over 99: keep it as short -->
     <string name="errors_badge_many">99+</string>
     <!-- The error console's title bar button, read by a screen reader, that copies every entry as text -->
     <string name="errors_copy">Copy all</string>

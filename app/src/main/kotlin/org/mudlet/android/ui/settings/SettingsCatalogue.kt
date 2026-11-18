@@ -584,6 +584,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_map_behind_text_hint,
             R.string.settings_map_behind_text_keywords,
         ),
+        SettingEntry.Switch(
+            SettingsCategory.APPEARANCE,
+            Settings.mapInCorner,
+            R.string.settings_map_in_corner,
+            R.string.settings_map_in_corner_hint,
+            R.string.settings_map_in_corner_keywords,
+        ),
     ).also { entries ->
         // A game's page changes the game's settings in Mudlet, which only Mudlet's own settings can be
         check(entries.all { it.category.forGame == ((it as? SettingEntry.Value)?.setting?.mudlet ?: true) }) { "a game category holds exactly the Mudlet settings, and the actions" }

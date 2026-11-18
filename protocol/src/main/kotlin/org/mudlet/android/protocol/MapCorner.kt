@@ -82,6 +82,20 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
             if (most <= 1f && others.any { it.intersect(window) == null && it.intersect(panel) != null }) return null
             return MapCorner(map, panel, below, right)
         }
+
+        /**
+         * Where the app's own map goes in the console [area] (docs/architecture.md, "The map in the corner"), in pixels
+         * of [dp] to the dp, or null where it has no room: as [of] places a square mapper window [MIN_DP] a side at the
+         * area's top right, so it grows as a script's small mapper does, over the console's text but short of any of
+         * [others], and its panel goes under it. None where that square would cover any of [others]: a script's mapper
+         * is its own window, but this map would hide the script's.
+         */
+        fun ofAppMap(area: PxRect, others: List<PxRect>, dp: Float): MapCorner? {
+            val side = MIN_DP * dp
+            val seed = PxRect(area.right - side, area.y, side, side)
+            if (area.w < side || others.any { it.intersect(seed) != null }) return null
+            return of(seed, area, others, dp)
+        }
     }
 }
 

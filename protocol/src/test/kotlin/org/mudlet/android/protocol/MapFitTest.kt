@@ -15,6 +15,23 @@ class MapFitTest {
     }
 
     @Test
+    fun aFrameShownInTheCornerIsAsLargeAsWhereItWasDrawnForWithItsMiddleInTheCorners() {
+        // The frame behind the text, 360 by 580, drawn for a console of 1080 by 1740 pixels: 3 to each of its pixels, as
+        // the map in front shows it, its middle, where the player is, in the corner's middle
+        val corner = PxRect(700f, 0f, 380f, 380f)
+        val fit = MapFit.centred(360, 580, PxRect(0f, 0f, 1080f, 1740f), corner)
+        assertEquals(3f, fit.scale)
+        assertEquals(PxRect(350f, -680f, 1080f, 1740f), fit.drawn)
+        assertEquals(MapPoint(180.0, 290.0), fit.toFrame(890f, 190f))
+        // Above a keyboard the console is wider than tall: Mudlet sizes the rooms by its height then
+        val wide = MapFit.centred(360, 580, PxRect(0f, 0f, 1080f, 540f), corner)
+        assertEquals(1.5f, wide.scale)
+        assertEquals(PxRect(620f, -245f, 540f, 870f), wide.drawn)
+        // Nor is a frame for a console with no size drawn
+        assertEquals(0f, MapFit.centred(360, 580, PxRect(0f, 0f, 0f, 0f), corner).scale)
+    }
+
+    @Test
     fun aFrameDrawnForAnotherSizeIsShownAsTheEngineWillDrawTheMapAtThisOne() {
         // The frame behind the text, 360 by 580, under the map in front's search, 1080 by 1500 pixels: the shorter side of
         // both is across, so the rooms stay 3 pixels to each of theirs, about the same middle, 120 cut off above and below

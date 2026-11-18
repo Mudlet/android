@@ -237,14 +237,8 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
         Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
             MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.placeAt(mapRect, density).then(mapModifier), panel = true)
             Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
-                val align = when {
-                    corner.below && corner.right -> Alignment.TopEnd
-                    corner.below -> Alignment.TopStart
-                    corner.right -> Alignment.BottomEnd
-                    else -> Alignment.BottomStart
-                }
                 val infoHeight = with(density) { (corner.map.h * INFO_FRACTION).toDp() }
-                MapPanel(MapperWindow, frame, fit, viewOnly, drawn, info, infoHeight, Modifier.align(align).then(panelModifier))
+                MapPanel(MapperWindow, frame, fit, viewOnly, drawn, info, infoHeight, Modifier.align(corner.panelAlignment).then(panelModifier))
             }
         }
     } else {
@@ -265,17 +259,25 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
 }
 
 // This rect in the pixels of a node at [origin]'s top left
-private fun PxRect.from(origin: PxRect) = PxRect(x - origin.x, y - origin.y, w, h)
+internal fun PxRect.from(origin: PxRect) = PxRect(x - origin.x, y - origin.y, w, h)
+
+// Where a map panel goes in the panel's rect: against the map and the side of the area it is drawn on
+internal val MapCorner.panelAlignment: Alignment get() = when {
+    below && right -> Alignment.TopEnd
+    below -> Alignment.TopStart
+    right -> Alignment.BottomEnd
+    else -> Alignment.BottomStart
+}
 
 // Read as one, at [index] among what is read with it. By where things are drawn, Compose would read one that a panel
 // has scrolled out of its sight first, as it takes that one's bounds to be the window's top left corner
-private fun Modifier.readAsOne(index: Float) = semantics {
+internal fun Modifier.readAsOne(index: Float) = semantics {
     isTraversalGroup = true
     traversalIndex = index
 }
 
 // Read at [index] among what is read with it, wherever it is drawn: see readAsOne
-private fun Modifier.readAt(index: Float) = semantics { traversalIndex = index }
+internal fun Modifier.readAt(index: Float) = semantics { traversalIndex = index }
 
 /**
  * A map the engine draws, the mapper window's or the app's: [frame] drawn where [fit] puts it, scaled alike both ways,
@@ -380,25 +382,38 @@ internal fun MapView(
 }
 
 /**
- * What a [MapView] of the same arguments leaves out with `panel`, on a backing of its own beside a script's map so that
- * none of it covers the map: its [MapButtons] and, while the map does not follow the player, a button that centres it
- * on them; the area and level shown ([MapPlaceBar]); and the frame's map info, [info], at most [infoHeight] high
- * ([MapInfoBox]). It scrolls where it has not the room.
+ * What a [MapView] of the same arguments leaves out with `panel`, on a backing of its own beside a map in a corner so
+ * that none of it covers the map: its [MapButtons], with the switch to editing it unless not [edit], and, while the map
+ * does not follow the player, a button that centres it on them, then [more], read after them; the area and level shown
+ * ([MapPlaceBar]); and the frame's map info, [info], at most [infoHeight] high ([MapInfoBox]). It scrolls where it has
+ * not the room.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MapPanel(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, info: MapInfo?, infoHeight: Dp, modifier: Modifier = Modifier) {
+internal fun MapPanel(
+    source: MapSource,
+    frame: ImageBitmap?,
+    fit: MapFit,
+    viewOnly: Boolean,
+    drawn: Boolean,
+    info: MapInfo?,
+    infoHeight: Dp,
+    modifier: Modifier = Modifier,
+    edit: Boolean = true,
+    more: @Composable () -> Unit = {},
+) {
     val view = source.movableView(frame)
     Surface(modifier, shape = MaterialTheme.shapes.small) {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(CONTROLS_PADDING)) {
             // The button that centres the map goes under the others in a strip narrower than four buttons
             FlowRow(Modifier.readAsOne(0f)) {
-                MapButtons(source, frame, fit, viewOnly, drawn, Modifier.readAsOne(0f))
+                MapButtons(source, frame, fit, viewOnly, drawn, Modifier.readAsOne(0f), edit)
                 if (view != null && !source.mover.following) {
                     IconButton({ source.mover.followPlayer() }, Modifier.readAt(1f)) {
                         Icon(painterResource(R.drawable.ic_my_location), stringResource(R.string.map_follow))
                     }
                 }
+                Box(Modifier.readAsOne(2f)) { more() }
             }
             view?.let { MapPlaceBar(it, source.rooms, it.levelAbove(), it.levelBelow(), Modifier.readAt(1f)) }
             info?.let { MapInfoBox(it, Modifier.heightIn(max = infoHeight).readAt(2f)) }
@@ -766,10 +781,11 @@ private suspend fun MapMover.glide(velocity: Offset, decay: DecayAnimationSpec<O
 
 /**
  * The buttons of the map [MapView] draws of the same arguments: zoom, about its middle, which works while [frame] is
- * drawn, and the switch between viewing ([viewOnly]) and editing it, which works once the engine has drawn the map ([drawn]).
+ * drawn, and with [edit] the switch between viewing ([viewOnly]) and editing it, which works once the engine has drawn
+ * the map ([drawn]).
  */
 @Composable
-internal fun MapButtons(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier) {
+internal fun MapButtons(source: MapSource, frame: ImageBitmap?, fit: MapFit, viewOnly: Boolean, drawn: Boolean, modifier: Modifier = Modifier, edit: Boolean = true) {
     val attached = EngineClient.enginePid > 0
     val zoomEnabled = frame != null && attached
     Row(modifier) {
@@ -780,8 +796,10 @@ internal fun MapButtons(source: MapSource, frame: ImageBitmap?, fit: MapFit, vie
             Icon(painterResource(R.drawable.ic_zoom_in), stringResource(R.string.map_zoom_in))
         }
         // On while the map is edited; the engine's next map says whether it now is
-        IconToggleButton(checked = !viewOnly, onCheckedChange = { source.setViewOnly(!it) }, enabled = drawn && attached) {
-            Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.map_edit))
+        if (edit) {
+            IconToggleButton(checked = !viewOnly, onCheckedChange = { source.setViewOnly(!it) }, enabled = drawn && attached) {
+                Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.map_edit))
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +57,8 @@ import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.MapCorner
+import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.CertificateFacts
 import org.mudlet.android.ui.ConsoleColors
@@ -235,6 +238,19 @@ private fun ProfileGameScreen(
         }
     }
 
+    val cornerHidden = stringResource(R.string.app_map_corner_hidden, stringResource(R.string.settings_map_in_corner))
+    val cornerUndo = stringResource(R.string.app_map_corner_undo)
+
+    fun hideMapInCorner() {
+        Settings.mapInCorner.set(false)
+        snackbars.currentSnackbarData?.dismiss()
+        scope.launch {
+            if (snackbars.showSnackbar(cornerHidden, cornerUndo, withDismissAction = true, duration = SnackbarDuration.Long) == SnackbarResult.ActionPerformed) {
+                Settings.mapInCorner.set(true)
+            }
+        }
+    }
+
     // A command from the quick bar or the history, sent as the input line sends
     fun sendNow(command: String) {
         if (c.sendCommand(command)) suggestions.sent(command) else scope.launch { snackbars.showSnackbar(notSent) }
@@ -344,9 +360,15 @@ private fun ProfileGameScreen(
                     } else {
                         Modifier.background(textBehind.ground).graphicsLayer { alpha = textBehind.alpha().let { it + (1f - it) * backProgress } }
                     }
-                    // One map on the screen: none behind the text while a script's mapper window is drawn, nor drawn
-                    // there while the map is in front
-                    ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered).then(faint)) { consoleModifier, mapperDrawn ->
+                    // One map on the screen: none behind the text or in its corner while a script's mapper window is
+                    // drawn, nor drawn there while the map is in front
+                    val inCorner = !behind && !mapOpen && Settings.mapInCorner.value && c.appMap.map?.bitmap != null
+                    val mapCorner: (@Composable (MapCorner, PxRect, Modifier) -> Unit)? = if (inCorner) {
+                        { place, console, modifier -> AppMapCorner(place, console, onOpen = { onMapOpen(true) }, onHide = ::hideMapInCorner, modifier) }
+                    } else {
+                        null
+                    }
+                    ScriptWindowsArea(textSizeSp, Modifier.fillMaxSize().then(covered).then(faint), mapCorner) { consoleModifier, mapperDrawn ->
                         Console(
                             c.lines,
                             c.tail,

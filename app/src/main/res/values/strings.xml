@@ -621,6 +621,9 @@
     <!-- Words a player might search the settings for to find "See-through map and text", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_map_behind_text_keywords">mapper, background, rooms, faint, behind, swap, transparent</string>
+    <!-- Words a player might search the settings for to find "Map in the corner", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_map_in_corner_keywords">mapper, minimap, small map, rooms, overlay, hide</string>
     <!-- A setting on the Appearance page: the size of the game's text -->
     <string name="settings_text_size">Text size</string>
     <!-- Under the text size setting, what it does -->
@@ -649,6 +652,11 @@
     <string name="settings_map_behind_text">See-through map and text</string>
     <!-- Under "See-through map and text", what the switch does -->
     <string name="settings_map_behind_text_hint">The game\'s map shows faintly behind the game\'s text, following you. The map button swaps them: the map in front, the text faintly behind it.</string>
+    <!-- A switch on the Appearance page, under "See-through map and text": while that is off, the game's map shows small
+         in a corner over the game's text, as long as the game has a map and its scripts show none of their own -->
+    <string name="settings_map_in_corner">Map in the corner</string>
+    <!-- Under "Map in the corner", what the switch does -->
+    <string name="settings_map_in_corner_hint">While the see-through map is off, the game\'s map shows small in a corner of the game\'s text, following you. Tap it to bring the map to the front.</string>
     <!-- A setting on a game's Accessibility page, the heading of three choices: what becomes of the empty lines the
          game sends, which a screen reader stops at one by one -->
     <string name="settings_blank_lines">Blank lines from the game</string>
@@ -1609,6 +1617,25 @@
     <string name="app_map_walk_to">Walk to %1$s</string>
     <!-- The filter of the room search's results by area: the choice that shows them all -->
     <string name="app_map_all_areas">All areas</string>
+    <!-- What a screen reader reads for the game screen's own map shown small in a corner over the game's text, which a
+         tap brings to the front, before it knows where the player is -->
+    <string name="app_map_corner">Small map of the game</string>
+    <!-- What a screen reader reads for the small map in the corner: %1$s is the area of the game it shows, in the game's
+         own words -->
+    <string name="app_map_corner_area">Small map of %1$s</string>
+    <!-- What a screen reader reads for the small map in the corner: %1$s is the area of the game it shows, %2$s the room
+         the player is in, both in the game's own words -->
+    <string name="app_map_corner_room">Small map of %1$s, you are in %2$s</string>
+    <!-- What a screen reader says a double tap on the small map in the corner does: it brings the map to the front -->
+    <string name="app_map_corner_open">Open the map</string>
+    <!-- The button beside the small map in the corner, read by a screen reader, that hides it -->
+    <string name="app_map_corner_hide">Hide the small map</string>
+    <!-- Shown for a few seconds at the bottom of the game screen once the player hid the small map in the corner, with
+         a button that shows it again; %1$s is the name of the switch in the settings that shows it again, "Map in the
+         corner" -->
+    <string name="app_map_corner_hidden">Small map hidden. Turn on \"%1$s\" in Settings to show it again.</string>
+    <!-- The button beside "Small map hidden" that shows the small map again -->
+    <string name="app_map_corner_undo">Undo</string>
 
     <!-- The download of the map the game offers, above the full-screen map, and in its middle while no map is drawn:
          %1$s is the host the game offers it from (such as mud.example.com); the progress bar's name for TalkBack; how

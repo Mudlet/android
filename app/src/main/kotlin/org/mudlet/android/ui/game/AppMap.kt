@@ -5,6 +5,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -73,8 +74,12 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -89,6 +94,7 @@ import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.MapBehindText
+import org.mudlet.android.protocol.MapCorner
 import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapFit
 import org.mudlet.android.protocol.PxRect
@@ -208,6 +214,72 @@ internal fun textBehindMap(appMap: AppMapClient, colors: ConsoleColors): TextBeh
 internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
     IconToggleButton(open, onOpen) {
         Icon(painterResource(R.drawable.ic_map), stringResource(R.string.app_map_show))
+    }
+}
+
+/**
+ * The app's map small in the console's corner (docs/architecture.md, "The map in the corner"), where [corner] puts it
+ * in [console]: the frame drawn for the map behind the text ([BackgroundMap]) cut down to it, as large as it is drawn
+ * there, the player, whom it follows, in its middle ([MapFit.centred]), and beside it, as beside a script's
+ * small mapper, its [MapPanel], without the switch to editing it and with a button that hides it, [onHide]. A tap on the
+ * map calls [onOpen], to bring the map to the front. One group for TalkBack where a script's mapper would be read, the
+ * map, read as where the player is, before its panel; [modifier] goes on the group.
+ */
+@Composable
+internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit, onHide: () -> Unit, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
+    val appMap = EngineClient.front.appMap
+    val map = appMap.map
+    val frame = map?.bitmap
+    val bounds = corner.bounds
+    val mapRect = corner.map.from(bounds)
+    val fit = remember(map?.w, map?.h, console, mapRect) { MapFit.centred(map?.w ?: 0, map?.h ?: 0, console, PxRect(0f, 0f, mapRect.w, mapRect.h)) }
+    val view = appMap.mover.view
+    val room = view?.rooms?.firstOrNull { it.id == view.player }?.name?.ifEmpty { null }
+    val label = when {
+        view == null -> stringResource(R.string.app_map_corner)
+        room == null -> stringResource(R.string.app_map_corner_area, view.areaName)
+        else -> stringResource(R.string.app_map_corner_room, view.areaName, room)
+    }
+    val openLabel = stringResource(R.string.app_map_corner_open)
+    val group = Modifier.semantics {
+        isTraversalGroup = true
+        traversalIndex = WINDOWS_TRAVERSAL_INDEX
+    }
+    // Touches between the map and the panel, and on the panel's room it leaves empty, reach the console under them
+    Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
+        Canvas(
+            Modifier.placeAt(mapRect, density).background(CONSOLE_BACKGROUND).border(1.dp, MaterialTheme.colorScheme.outline).clipToBounds()
+                .readAsOne(0f)
+                .clearAndSetSemantics {
+                    contentDescription = label
+                    role = Role.Button
+                    onClick(openLabel) {
+                        onOpen()
+                        true
+                    }
+                }
+                .clickable(onClickLabel = openLabel, onClick = onOpen),
+        ) {
+            if (frame != null) drawFrame(frame, fit, shift = appMap.mover.shift)
+        }
+        Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
+            MapPanel(
+                appMap,
+                frame,
+                fit,
+                map?.viewOnly ?: true,
+                map != null,
+                info = null,
+                infoHeight = 0.dp,
+                Modifier.align(corner.panelAlignment).readAsOne(1f),
+                edit = false,
+            ) {
+                IconButton(onHide) {
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.app_map_corner_hide))
+                }
+            }
+        }
     }
 }
 

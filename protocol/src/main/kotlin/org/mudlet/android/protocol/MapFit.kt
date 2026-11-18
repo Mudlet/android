@@ -51,6 +51,18 @@ class MapFit(val frameW: Int, val frameH: Int, val box: PxRect, asRedrawn: Boole
     companion object {
         /** The largest `setMapScale` the engine takes: IEngine::maxMapScale. */
         const val MAX_RENDER_SCALE = 8.0
+
+        /**
+         * A frame the engine drew for [whole], as large as it is drawn there ([asRedrawn]) but with its middle in [box]'s
+         * middle, cut off where it is larger than the box: the map behind the text shown in the corner, its rooms as
+         * large as they are drawn behind the text and the player, whom it follows, in the box's middle.
+         */
+        fun centred(frameW: Int, frameH: Int, whole: PxRect, box: PxRect): MapFit {
+            val scale = MapFit(frameW, frameH, whole, asRedrawn = true).scale
+            val w = frameW * scale
+            val h = frameH * scale
+            return MapFit(frameW, frameH, PxRect(box.x + (box.w - w) / 2, box.y + (box.h - h) / 2, w, h))
+        }
     }
 }
 

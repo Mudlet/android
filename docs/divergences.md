@@ -32,6 +32,14 @@ the engine draws the map at, stay what the script set. A desktop's mapper is lai
 phone's: scaled to fit, a 200 pixel mapper is a few dp across, too small to read a room or touch one, and controls
 drawn over it hide most of it.
 
+## The app's map in the corner
+
+With the see-through map off, a profile with a map and no script mapper shows the app's map small in a corner of the
+game's text, placed and sized as a script's small mapper is, which the player can hide (`docs/architecture.md`, "The
+map in the corner"). The desktop draws no map of its own in a corner: its mapper is a window the player opens beside
+the console. A phone has no room for that window, the map in front hides the text, and without a corner map a player
+with no mapper script would see where they are only by bringing the map to the front.
+
 ## The map info box
 
 The map info (the built-in `Short` and `Full`, and a script's `registerMapInfo()`) is text the app lays over its own

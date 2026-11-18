@@ -146,6 +146,33 @@ class MapCornerTest {
         assertRect(PxRect(0f, 0f, 10f, 10f), PlacedWindow(mapper, PxRect(0f, 0f, 0f, 0f), PxRect(0f, 0f, 0f, 0f)).wholeIn(PxRect(0f, 0f, 10f, 10f)))
     }
 
+    @Test
+    fun theAppsMapGrowsFromASquareAtTheConsolesTopRightAsASmallMapperDoes() {
+        // A phone's console, 360 by 500 dp: 0.4 of its width across and down, its panel under it, four buttons wide
+        val phone = MapCorner.ofAppMap(PxRect(0f, 0f, 360f, 500f), emptyList(), 1f)!!
+        assertRect(PxRect(216f, 0f, 144f, 144f), phone.map)
+        assertRect(PxRect(160f, 144f, 200f, 144f), phone.panel)
+        assertTrue(phone.right && phone.below)
+        // A tablet's, at 2 pixels to the dp, below the title bar: 0.4 of its height, the shorter way
+        val tablet = MapCorner.ofAppMap(PxRect(0f, 100f, 1600f, 1000f), emptyList(), 2f)!!
+        assertRect(PxRect(1200f, 100f, 400f, 400f), tablet.map)
+        assertRect(PxRect(1200f, 500f, 400f, 400f), tablet.panel)
+        // A large one's is no larger than 320 dp
+        assertRect(PxRect(1680f, 0f, 320f, 320f), MapCorner.ofAppMap(PxRect(0f, 0f, 2000f, 2000f), emptyList(), 1f)!!.map)
+
+        // Too short for the least of it and a row of buttons, as a landscape phone's console above the keyboard, or too
+        // narrow for the least of it: none
+        assertNull(MapCorner.ofAppMap(PxRect(0f, 0f, 640f, 150f), emptyList(), 1f))
+        assertNull(MapCorner.ofAppMap(PxRect(0f, 0f, 100f, 500f), emptyList(), 1f))
+
+        // A label over the console that the least of it is clear of stops it short; with one where the least of it
+        // would be, none, as it would hide the label
+        val stopped = MapCorner.ofAppMap(PxRect(0f, 0f, 360f, 500f), listOf(PxRect(220f, 130f, 10f, 10f)), 1f)!!
+        assertEquals(130f, stopped.map.w, NEAR)
+        assertEquals(360f, stopped.map.right, NEAR)
+        assertNull(MapCorner.ofAppMap(PxRect(0f, 0f, 360f, 500f), listOf(PxRect(300f, 50f, 20f, 20f)), 1f))
+    }
+
     private fun assertRect(expected: PxRect, actual: PxRect) {
         val near = listOf(expected.x to actual.x, expected.y to actual.y, expected.w to actual.w, expected.h to actual.h).all { (e, a) -> abs(e - a) < NEAR }
         assertTrue("expected $expected but was $actual", near)

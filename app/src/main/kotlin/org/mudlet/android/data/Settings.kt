@@ -206,6 +206,12 @@ object Settings {
      */
     val mapBehindText = BoolSetting("mapBehindText", default = false)
 
+    /**
+     * "Map in the corner": with [mapBehindText] off, the profile's map small in a corner of the game's text
+     * (docs/architecture.md, "The map in the corner"). On by default; the map's own button there turns it off.
+     */
+    val mapInCorner = BoolSetting("mapInCorner", default = true)
+
     /** "Colours from my wallpaper": the app's colours from the wallpaper (Material You), on Android 12 and later. */
     val wallpaperColours = BoolSetting("wallpaperColours", default = true)
 
@@ -268,6 +274,7 @@ object Settings {
     ) + mapColours + listOf(
         screenReaderOffered,
         mapBehindText,
+        mapInCorner,
         wallpaperColours,
     )
 

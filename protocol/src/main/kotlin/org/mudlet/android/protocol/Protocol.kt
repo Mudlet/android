@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 38
+const val PROTOCOL_VERSION = 39
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -401,6 +401,39 @@ data class ScriptSearchMatch(
     val index: Int,
     val text: String,
     val start: Int,
+)
+
+/** A Lua type as the desktop editor's Variables view tells them apart (docs/protocol.md, "Reading the Lua variables"). */
+enum class VariableType(val wire: String) {
+    BOOLEAN("boolean"),
+    NUMBER("number"),
+    STRING("string"),
+    TABLE("table"),
+    FUNCTION("function"),
+    OTHER("other"),
+    ;
+
+    companion object {
+        fun read(wire: String) = entries.firstOrNull { it.wire == wire } ?: OTHER
+    }
+}
+
+/** A key of a table, or a global's name: its [name] as Mudlet writes it, and the [type] of the key. */
+data class VariableKey(val name: String, val type: VariableType)
+
+/**
+ * A Lua variable as the desktop editor's Variables view lists it: [key], its [type] and, for a string, number or boolean,
+ * its [value] as text, of which the engine sent only the start when [cut]; [hidden] as one of Mudlet's own; for a table
+ * how many [members] it has and whether every one has a number for its key, [indexed].
+ */
+data class LuaVariable(
+    val key: VariableKey,
+    val type: VariableType,
+    val value: String = "",
+    val cut: Boolean = false,
+    val hidden: Boolean = false,
+    val members: Int = 0,
+    val indexed: Boolean = false,
 )
 
 /**
@@ -957,6 +990,20 @@ sealed interface EngineMessage {
     data class LuaCheck(val problem: LuaProblem?, val replyTo: Any?) : EngineMessage
 
     /**
+     * The answer to Requests.variables for [path] and [showHidden]: from the [from]th, [entries] of the [total] the table
+     * has, in the desktop's order, and how many hidden ones were left out, [hiddenLeftOut].
+     */
+    data class Variables(
+        val path: List<VariableKey>,
+        val showHidden: Boolean,
+        val from: Int,
+        val total: Int,
+        val hiddenLeftOut: Int,
+        val entries: List<LuaVariable>,
+        val replyTo: Any?,
+    ) : EngineMessage
+
+    /**
      * The answer to getSettings or setSettings: [values] by Lua's getConfig() keys, each a Boolean, a Double or a
      * String, as the profile holds it now, a key the engine does not know left out; [refused] the keys setSettings did
      * not change, with why.
@@ -1324,6 +1371,17 @@ object Requests {
     /** Answered by [EngineMessage.LuaCheck] with [id] as its replyTo, or an Error: whether [code] compiles as Lua; it is not run. */
     fun checkLua(code: String, id: Long): JSONObject = JSONObject().put("t", "checkLua").put("code", code).put("id", id)
 
+    /**
+     * Answered by [EngineMessage.Variables] with [id] as its replyTo, or an Error: from the [from]th, the members of the
+     * table [path] names, from the globals down, or the globals for none, the hidden ones only when [showHidden].
+     */
+    fun variables(path: List<VariableKey>, showHidden: Boolean, from: Int, id: Long): JSONObject = JSONObject()
+        .put("t", "variables")
+        .put("path", JSONArray(path.map { JSONObject().put("name", it.name).put("key", it.type.wire) }))
+        .put("showHidden", showHidden)
+        .put("from", from)
+        .put("id", id)
+
     /** The device clipboard's [text] for [EngineMessage.ClipboardRead] [id]: empty when it holds none or may not be read. */
     fun answerClipboardRead(id: Long, text: String): JSONObject = JSONObject().put("t", "answerClipboardRead").put("id", id).put("text", text)
 
@@ -1680,6 +1738,16 @@ class FrameReader(input: InputStream) {
 
             "luaCheck" -> EngineMessage.LuaCheck(if (o.optBoolean("ok")) null else LuaProblem(o.optInt("line"), o.optString("message")), o.opt("re"))
 
+            "variables" -> EngineMessage.Variables(
+                objects(o.optJSONArray("path")).map { VariableKey(it.optString("name"), VariableType.read(it.optString("key"))) },
+                o.optBoolean("showHidden"),
+                o.optInt("from"),
+                o.optInt("total"),
+                o.optInt("hiddenLeftOut"),
+                objects(o.optJSONArray("entries")).map(::parseLuaVariable),
+                o.opt("re"),
+            )
+
             "mapDownload" -> EngineMessage.MapDownload(
                 o.optBoolean("offered"),
                 o.optString("host"),
@@ -1747,6 +1815,17 @@ class FrameReader(input: InputStream) {
             index = m.optInt("index"),
             text = m.optString("text"),
             start = m.optInt("start"),
+        )
+
+        // A type this client does not know is kept as OTHER, as dropping it would leave the pages' counts wrong
+        private fun parseLuaVariable(v: JSONObject) = LuaVariable(
+            key = VariableKey(v.optString("name"), VariableType.read(v.optString("key"))),
+            type = VariableType.read(v.optString("type")),
+            value = v.optString("value"),
+            cut = v.optBoolean("cut"),
+            hidden = v.optBoolean("hidden"),
+            members = v.optInt("members"),
+            indexed = v.optBoolean("indexed"),
         )
 
         private fun parseScriptItemNode(i: JSONObject) = ScriptItemNode(

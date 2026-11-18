@@ -120,7 +120,7 @@ def main():
             checks(port)
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
+                       map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
                        clipboard, file_dialog, web_pages, packages, error_console, key_bindings):
             checks()
         checks = secure_offer
@@ -4522,6 +4522,85 @@ def script_items():
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
+
+def variables():
+    """The profile's Lua variables as the desktop editor's Variables view lists them: one level at a time, in its order
+    (number keys first, by value, then the rest whatever their case), a string, number, boolean and function each with
+    its type, a table with how many members it has and whether every key is a number, a nested table by its path, a long
+    value cut short of a surrogate pair, the hidden globals left out and counted, then listed when asked for, a level of
+    more than 500 in pages, a path that names no table, the refusals, and no value in the engine's log."""
+    profile = "Variables Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+
+    def ask(request):
+        return c.ask(request, answers=("variables", "error"), collect=seen)
+
+    m = ask({"t": "variables"})
+    check(m.get("message") == "variables: no profile running", f"variables with no profile open is refused: {m}")
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the variables' profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    c.send({"t": "runLua", "code": 'varTest = {zeta = 1, Alpha = "a secret 4417", beta = true, [2] = "two", [10] = "ten", [1] = {x = 1.5},'
+                                   ' fn = function() end, long = string.rep("a", 999) .. "\\240\\159\\152\\128"}'
+                                   ' varList = {} for i = 1, 600 do varList[i] = i end'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+
+    m = ask({"t": "variables"})
+    names = [e["name"] for e in m.get("entries", [])]
+    shown = {e["name"]: e for e in m.get("entries", [])}
+    check((m.get("t"), m.get("path"), m.get("from"), m.get("total")) == ("variables", [], 0, len(names)),
+          f"the globals come in one variables: {m}")
+    check("varTest" in names and "string" not in names and m.get("hiddenLeftOut", 0) > 0,
+          f"Mudlet's own globals hidden and counted, the profile's shown: {names}, {m.get('hiddenLeftOut')}")
+    check(names == sorted(names, key=lambda n: (n.lower(), n)), f"in the view's order: {names}")
+    check(shown.get("varTest") == {"name": "varTest", "key": "string", "type": "table", "hidden": False, "members": 8, "indexed": False}
+          and shown.get("varList", {}).get("indexed") is True, f"a table with how many members and whether all are numbered: {shown.get('varTest')}")
+    # Mudlet's own functions are globals, so with them the globals take several pages
+    pages = [ask({"t": "variables", "showHidden": True})]
+    while pages[-1].get("entries") and pages[-1]["from"] + len(pages[-1]["entries"]) < pages[-1].get("total", 0):
+        pages.append(ask({"t": "variables", "showHidden": True, "from": pages[-1]["from"] + len(pages[-1]["entries"])}))
+    hidden = {e["name"]: e for p in pages for e in p.get("entries", [])}
+    check(hidden.get("string", {}).get("hidden") is True and hidden.get("varTest", {}).get("hidden") is False
+          and len(hidden) == pages[0].get("total") and (pages[0].get("hiddenLeftOut"), pages[0].get("showHidden")) == (0, True),
+          f"and listed, marked, when asked for: {hidden.get('string')}, {len(pages)} pages")
+
+    m = ask({"t": "variables", "path": [{"name": "varTest", "key": "string"}]})
+    members = {e["name"]: e for e in m.get("entries", [])}
+    check([e["name"] for e in m.get("entries", [])] == ["1", "2", "10", "Alpha", "beta", "fn", "long", "zeta"],
+          f"a table's members, number keys first: {m}")
+    check(members.get("2") == {"name": "2", "key": "number", "type": "string", "value": "two", "hidden": False}
+          and (members.get("beta", {}).get("value"), members.get("zeta", {}).get("value")) == ("true", "1")
+          and members.get("fn") == {"name": "fn", "key": "string", "type": "function", "hidden": False},
+          f"each with its type and value: {members}")
+    check(members.get("long", {}).get("value") == "a" * 999 and members.get("long", {}).get("cut") is True and "cut" not in members.get("2", {}),
+          f"a value over 1000 cut before the pair it would split: {len(members.get('long', {}).get('value', ''))}")
+    m = ask({"t": "variables", "path": [{"name": "varTest", "key": "string"}, {"name": "1", "key": "number"}]})
+    check(m.get("entries") == [{"name": "x", "key": "string", "type": "number", "value": "1.5", "hidden": False}],
+          f"a nested table by its path: {m}")
+    m = ask({"t": "variables", "path": [{"name": "varTest", "key": "string"}, {"name": "1", "key": "string"}]})
+    check(m.get("message") == "variables: There is no such table.", f"a key of another type names no table: {m}")
+
+    m = ask({"t": "variables", "path": [{"name": "varList", "key": "string"}]})
+    check((m.get("total"), len(m.get("entries", [])), m.get("entries", [{}])[0].get("name")) == (600, 500, "1"), f"500 of 600 at a time: {m.get('total')}")
+    m = ask({"t": "variables", "path": [{"name": "varList", "key": "string"}], "from": 500})
+    check((m.get("from"), [e["name"] for e in m.get("entries", [])][:1], len(m.get("entries", []))) == (500, ["501"], 100), f"then the rest: {m.get('from')}")
+
+    for request, message in (({"t": "variables", "path": "varTest"}, "path must be a list"),
+                             ({"t": "variables", "path": [{"name": "varTest"}]}, "each step of path must have a name and a key type"),
+                             ({"t": "variables", "path": [{"name": 1, "key": "string"}]}, "each step of path must have a name and a key type"),
+                             ({"t": "variables", "showHidden": "yes"}, "showHidden must be true or false"),
+                             ({"t": "variables", "from": -1}, "from must be a whole number from 0")):
+        m = ask(request)
+        check(m.get("message") == f"variables: {message}", f"variables is refused with {message}: {m}")
+
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    with open(LOG, errors="replace") as f:
+        check("a secret 4417" not in f.read(), "and logged no value")
 
 def silent_wav():
     """A tenth of a second of silence, as a WAV file's bytes."""

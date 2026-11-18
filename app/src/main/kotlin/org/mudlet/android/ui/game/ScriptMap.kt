@@ -236,7 +236,7 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
         // Touches between the map and the panel, and on the panel's room it leaves empty, reach what is under them
         Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
             MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.placeAt(mapRect, density).then(mapModifier), panel = true)
-            Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
+            Box(Modifier.placeAt(mapRect, density)) {
                 val align = when {
                     corner.below && corner.right -> Alignment.TopEnd
                     corner.below -> Alignment.TopStart
@@ -252,9 +252,9 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
         val height = with(density) { rect.h.toDp() }
         // The buttons zoom about the frame's middle, whichever box it is fitted to
         val whole = remember(window.w, window.h, placed) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, rect.w, rect.h))) }
-        Column(Modifier.placeAt(rect, density).then(modifier).background(CONSOLE_BACKGROUND).then(group)) {
+        Box(Modifier.placeAt(rect, density).then(modifier).background(CONSOLE_BACKGROUND).then(group)) {
             MapPanel(MapperWindow, frame, whole, viewOnly, drawn, info, height * INFO_FRACTION, Modifier.fillMaxWidth().heightIn(max = height * PANEL_FRACTION).then(panelModifier))
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
                 val box = PxRect(0f, 0f, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
                 val fit = remember(window.w, window.h, placed, box) { MapFit(window.w, window.h, placed.wholeIn(box)) }
                 LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
@@ -440,7 +440,7 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                     enabled = attached,
                 ) {
                     // Two lines, as a map panel is as narrow as four buttons
-                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Icon(painterResource(R.drawable.ic_arrow_drop_down), null)
                 }
                 DropdownMenu(listed, { listed = false }) {

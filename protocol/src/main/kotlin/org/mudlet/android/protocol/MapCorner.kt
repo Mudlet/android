@@ -20,8 +20,8 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
 
     companion object {
         /** A small map grows to this share of the game area's width and height, within [MIN_DP] and [MAX_DP]. */
-        const val FRACTION = 0.4f
-        const val MIN_DP = 120f
+        const val FRACTION = 0.45f
+        const val MIN_DP = 110f
         const val MAX_DP = 320f
 
         /** A row of 48 dp buttons with 4 dp round it: the least of the panel's height. */
@@ -51,7 +51,7 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
             val boxH = (area.h * FRACTION).coerceIn(MIN_DP * dp, MAX_DP * dp)
             val roomW = if (right) window.right - area.x else area.right - window.x
             val roomH = (if (below) area.bottom - window.y else window.bottom - area.y) - row
-            if (roomH < window.h) return null
+            if (roomH <= window.h) return null
             val most = minOf(boxW / window.w, boxH / window.h, roomW / window.w, roomH / window.h)
 
             fun grown(g: Float): PxRect {
@@ -61,7 +61,7 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
             }
             var g = max(most, 1f)
             for (other in others) {
-                if (other.intersect(window) != null || other.intersect(grown(g)) == null) continue
+                if (other.intersect(grown(g)) == null) continue
                 var clear = 1f
                 var hits = g
                 repeat(SEARCH_STEPS) {
@@ -74,9 +74,9 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
             val panelW = min(max(map.w, PANEL_WIDTH_DP * dp), area.w)
             val panelX = if (right) max(area.x, map.right - panelW) else min(map.x, area.right - panelW)
             val panel = if (below) {
-                PxRect(panelX, map.bottom, panelW, min(area.bottom - map.bottom, max(map.h, row)))
+                PxRect(panelX, map.bottom - 1, panelW, min(area.bottom - map.bottom, max(map.h, row)))
             } else {
-                val top = max(area.y, map.y - max(map.h, row))
+                val top = max(area.y, map.y - row)
                 PxRect(panelX, top, panelW, map.y - top)
             }
             if (most <= 1f && others.any { it.intersect(window) == null && it.intersect(panel) != null }) return null
@@ -93,5 +93,5 @@ fun PlacedWindow.wholeIn(box: PxRect): PxRect {
     if (rect.w <= 0 || rect.h <= 0) return box
     val sx = box.w / rect.w
     val sy = box.h / rect.h
-    return PxRect(box.x + (full.x - rect.x) * sx, box.y + (full.y - rect.y) * sy, full.w * sx, full.h * sy)
+    return PxRect(box.x, box.y + (full.y - rect.y) * sy, full.w * sx, full.h * sy)
 }

@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -97,6 +99,7 @@ import org.mudlet.android.protocol.MapBehindText
 import org.mudlet.android.protocol.MapCorner
 import org.mudlet.android.protocol.MapDownloadState
 import org.mudlet.android.protocol.MapFit
+import org.mudlet.android.protocol.MapPlacement
 import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RoomMatch
 import org.mudlet.android.protocol.TextBehindMap
@@ -284,14 +287,14 @@ internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit
  * the room picked, then calls [onClose], after the map shrinks with a predictive back gesture, whose progress goes to
  * [onBackProgress]. It takes the touches on what is under it. With [textBehind] the map is drawn with its background cut
  * out ([AppMapClient.overText]), for the console's text to show through faintly ([textBehindMap]); otherwise it covers
- * what is under it.
+ * what is under it. [beside], the map beside the text ([MapBesideText]), leaves the last Back to the game screen.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgress: (Float) -> Unit, modifier: Modifier = Modifier) {
+internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgress: (Float) -> Unit, modifier: Modifier = Modifier, beside: Boolean = false) {
     // How far a predictive back gesture has gone: the map shrinks with it, and closes when it is let go
     var backProgress by remember { mutableFloatStateOf(0f) }
-    PredictiveBackHandler { gesture ->
+    PredictiveBackHandler(enabled = !beside) { gesture ->
         try {
             gesture.collect {
                 backProgress = it.progress
@@ -338,8 +341,8 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             val drawn = map != null
             val viewOnly = map?.viewOnly ?: true
             // As the map comes to the front the input line lets its keyboard go (InputLine), which the keyboard says only
-            // some frames on: the map would be laid out, and asked for, above the keyboard first
-            val keyboardGoes by produceState(true) {
+            // some frames on: the map would be laid out, and asked for, above the keyboard first. Beside the text the keyboard stays
+            val keyboardGoes by produceState(!beside) {
                 delay(KEYBOARD_GOES_MS)
                 value = false
             }
@@ -399,6 +402,25 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                 }
             }
         }
+    }
+}
+
+// After the whole game screen, a traversal group of its own, and before the last announcement
+private const val BESIDE_TRAVERSAL_INDEX = 1f
+
+/**
+ * The app's map beside the console's text on an expanded screen, as desktop Mudlet's mapper is docked beside the main
+ * window's ([MapPlacement]): the map in front's search, buttons and map ([FullScreenMap]), clear of the system bars,
+ * the display's cutout and the keyboard, and read by TalkBack after the game screen beside it.
+ */
+@Composable
+internal fun MapBesideText(modifier: Modifier = Modifier) {
+    val content = modifier.background(CONSOLE_BACKGROUND).semantics {
+        isTraversalGroup = true
+        traversalIndex = BESIDE_TRAVERSAL_INDEX
+    }
+    Box(content.windowInsetsPadding(WindowInsets.safeDrawing)) {
+        FullScreenMap(onClose = {}, textBehind = false, onBackProgress = {}, Modifier.fillMaxSize(), beside = true)
     }
 }
 

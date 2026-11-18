@@ -732,6 +732,9 @@
     <!-- Words a player might search the settings for to find "Map in the corner", besides the words of its name and
          description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_map_in_corner_keywords">mapper, minimap, small map, rooms, overlay, hide</string>
+    <!-- Words a player might search the settings for to find "Map beside the text", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_map_beside_text_keywords">mapper, dock, side by side, tablet, Chromebook, foldable, wide screen</string>
     <!-- A setting on the Appearance page: the size of the game's text -->
     <string name="settings_text_size">Text size</string>
     <!-- Under the text size setting, what it does -->
@@ -765,6 +768,11 @@
     <string name="settings_map_in_corner">Map in the corner</string>
     <!-- Under "Map in the corner", what the switch does -->
     <string name="settings_map_in_corner_hint">While the see-through map is off, the game\'s map shows small in a corner of the game\'s text, following you. Tap it to bring the map to the front.</string>
+    <!-- A switch on the Appearance page: on a wide screen (a tablet, an unfolded phone, a Chromebook) the game's map
+         stands beside the game's text, as desktop Mudlet's map is docked beside the main window's text -->
+    <string name="settings_map_beside_text">Map beside the text</string>
+    <!-- Under "Map beside the text", what the switch does. "The map button" is the map button above the game's text -->
+    <string name="settings_map_beside_text_hint">On a wide screen, such as a tablet, an unfolded phone or a Chromebook, the game\'s map stands beside the game\'s text. The map button puts it away and brings it back.</string>
     <!-- A setting on a game's Accessibility page, the heading of three choices: what becomes of the empty lines the
          game sends, which a screen reader stops at one by one -->
     <string name="settings_blank_lines">Blank lines from the game</string>

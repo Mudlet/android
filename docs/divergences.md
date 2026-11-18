@@ -22,6 +22,8 @@ see the map as open (`Host::mapOpen()`), as after the player opens the desktop's
 they did not make it (`0001-headless-app-map.patch`; `docs/architecture.md`, "The map behind the text"). The desktop's
 main window always offers its mapper; a phone has no room for that window beside the console, and a player should not
 need a script to see the map.
+On an expanded screen the map stands beside the console, as the desktop's dock does, unless the player turns "Map beside
+the text" off.
 
 ## A script's small mapper
 

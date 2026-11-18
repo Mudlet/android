@@ -284,7 +284,7 @@ class GameLinkTest {
          * Waits for a node [matcher] finds. Android 9 pauses the running Activity while it hands it a link (onNewIntent),
          * and ui-test sees no compose hierarchy in a paused Activity: fetchSemanticsNodes() would throw then, not wait.
          */
-        fun waitFor(compose: ComposeTestRule, matcher: SemanticsMatcher) = compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty() }
+        fun waitFor(compose: ComposeTestRule, matcher: SemanticsMatcher) = compose.waitUntil(10_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 
         /** What a double tap does under TalkBack: the node's accessibility click, scrolled into view first. */
         fun activate(compose: ComposeTestRule, label: SemanticsMatcher) {

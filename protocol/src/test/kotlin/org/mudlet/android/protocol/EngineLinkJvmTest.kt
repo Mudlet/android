@@ -194,9 +194,9 @@ class EngineLinkJvmTest {
             control.send(Requests.saveProfile(Profile(name, "127.0.0.1", fakePort, false, "", false), 1))
             next<EngineMessage.Profiles>()
         }
-        control.send(Requests.openProfile("North", null, connect = true, alongside = true, id = 2))
+        control.send(Requests.openProfile("North", null, proxyPassword = null, connect = true, alongside = true, id = 2))
         next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 2 }
-        control.send(Requests.openProfile("South", null, connect = true, alongside = true, id = 3))
+        control.send(Requests.openProfile("South", null, proxyPassword = null, connect = true, alongside = true, id = 3))
         val asked = next<EngineMessage.OpenProfiles> { (it.replyTo as? Number)?.toInt() == 3 }.profiles
         assertEquals(listOf("North", "South"), asked.map { it.name })
         // libmudlet loads a profile after the answer, one at a time

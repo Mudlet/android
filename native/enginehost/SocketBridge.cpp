@@ -915,6 +915,10 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         mEngine->clearErrorConsole();
     } else if (type == QLatin1String("pressKey")) {
         pressKey(message);
+    } else if (type == QLatin1String("getProxy")) {
+        sendProxy(type);
+    } else if (type == QLatin1String("setProxy")) {
+        setProxy(message);
     } else if (type == QLatin1String("getSettings")) {
         getSettings(message);
     } else if (type == QLatin1String("setSettings")) {
@@ -1163,6 +1167,47 @@ void SocketBridge::findRooms(const QJsonObject& message)
                                  {QStringLiteral("steps"), room.steps}});
     }
     sendReply({{QStringLiteral("t"), QStringLiteral("rooms")}, {QStringLiteral("text"), text}, {QStringLiteral("rooms"), rooms}, {QStringLiteral("more"), list.more}});
+}
+
+void SocketBridge::setProxy(const QJsonObject& message)
+{
+    const QJsonValue use = message.value(QLatin1String("use"));
+    const QJsonValue host = message.value(QLatin1String("host"));
+    const QJsonValue user = message.value(QLatin1String("user"));
+    const std::optional<int> port = wholeNumber(message.value(QLatin1String("port")), 0);
+    if (!use.isBool()) {
+        sendError(QStringLiteral("setProxy: use must be true or false"));
+        return;
+    }
+    if (!host.isString() || !user.isString()) {
+        sendError(QStringLiteral("setProxy: host and user must be strings"));
+        return;
+    }
+    if (!port || *port > 65535) {
+        sendError(QStringLiteral("setProxy: port must be a whole number from 0 to 65535"));
+        return;
+    }
+    const QString problem = mEngine->setProxy({use.toBool(), host.toString(), *port, user.toString()});
+    if (!problem.isEmpty()) {
+        sendError(QStringLiteral("setProxy: %1").arg(problem));
+        return;
+    }
+    sendProxy(QStringLiteral("setProxy"));
+}
+
+void SocketBridge::sendProxy(const QString& request)
+{
+    const std::variant<IEngine::Proxy, QString> read = mEngine->proxy();
+    if (const QString* problem = std::get_if<QString>(&read)) {
+        sendError(QStringLiteral("%1: %2").arg(request, *problem));
+        return;
+    }
+    const IEngine::Proxy& proxy = std::get<IEngine::Proxy>(read);
+    sendReply({{QStringLiteral("t"), QStringLiteral("proxy")},
+               {QStringLiteral("use"), proxy.use},
+               {QStringLiteral("host"), proxy.host},
+               {QStringLiteral("port"), proxy.port},
+               {QStringLiteral("user"), proxy.user}});
 }
 
 void SocketBridge::getSettings(const QJsonObject& message)

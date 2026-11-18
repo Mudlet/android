@@ -1007,19 +1007,19 @@ void MudletProfile::open(const Open& open)
     mDisconnectRequested = false;
     // After any Lua a waiting restore held back, which runs all the same
     mPendingLua.append(open.lua);
-    start(open.host, open.port, open.connect, open.tls, open.password);
+    start(open.host, open.port, open.connect, open.tls, open.passwords);
 }
 
-void MudletProfile::start(const QString& host, quint16 port, bool connect, std::optional<bool> tls, const QString& password)
+void MudletProfile::start(const QString& host, quint16 port, bool connect, std::optional<bool> tls, const ProfilePasswords& passwords)
 {
     mStartHost = host;
     mStartPort = port;
     mStartConnect = connect;
     mStartTls = tls;
     // For this run only: THeadlessSession stores none, and a restore has none
-    mStartPassword = password;
+    mStartPasswords = passwords;
     mSaved.reset();
-    mNewPassword.reset();
+    mNewPasswords.reset();
     mAddressProblem.clear();
     mProfileTls = tls;
     if (const QString folder = mEngine.mProfiles.find(mProfile); !tls.has_value() && !folder.isEmpty()) {
@@ -1041,7 +1041,7 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mCloseWhenStarted = false;
     mForSwitch = false;
     mEngine.profileStarting(this);
-    mFrontend = mEngine.mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting, !password.isEmpty());
+    mFrontend = mEngine.mHost->profileOpened(mProfile, this, mRestoring ? IEngineHost::ProfileState::restoring : IEngineHost::ProfileState::starting, !passwords.game.isEmpty());
     mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 starting").arg(mProfile));
     mStartClock.start();
     beginLoad();
@@ -1066,7 +1066,9 @@ void MudletProfile::beginLoad()
     options.port = mStartPort;
     // Stored with the profile, as the connection dialog's box stores it; unset, the profile's own
     options.tls = mStartTls;
-    options.password = std::exchange(mStartPassword, {});
+    const ProfilePasswords passwords = std::exchange(mStartPasswords, {});
+    options.password = passwords.game;
+    options.proxyPassword = passwords.proxy;
     options.configDir = mEngine.mConfigDir;
     // Kept until the start, and a session that joins the pool takes the pool's instead
     mSession->setApplicationActive(mEngine.mAppActive);
@@ -1105,7 +1107,7 @@ void MudletProfile::onStartFinished(int result, const QString& error)
         restoreStatus(QStringLiteral("restored"), mProfile);
     }
     // Before a connect that waited for the start
-    applyPassword();
+    applyPasswords();
     for (const QString& code : pending) {
         runNow(code);
     }
@@ -1341,15 +1343,15 @@ void MudletProfile::connectProfile()
     });
 }
 
-void MudletProfile::openAgain(const QString& password, bool connect)
+void MudletProfile::openAgain(const ProfilePasswords& passwords, bool connect)
 {
     if (mState == State::starting && !mLoadBegun) {
-        mStartPassword = password;
+        mStartPasswords = passwords;
     } else {
-        mNewPassword = password;
-        applyPassword();
+        mNewPasswords = passwords;
+        applyPasswords();
     }
-    mEngine.mHost->profilePasswordGiven(mProfile, !password.isEmpty());
+    mEngine.mHost->profilePasswordGiven(mProfile, !passwords.game.isEmpty());
     if (connect) {
         connectProfile();
     }
@@ -1420,18 +1422,22 @@ void MudletProfile::applySaved()
     }
 }
 
-// As applySaved(), for the password openProfile gave the running profile. It is never logged.
-void MudletProfile::applyPassword()
+// As applySaved(), for the passwords openProfile gave the running profile. Neither is ever logged.
+void MudletProfile::applyPasswords()
 {
-    if (!mNewPassword || !takesChanges([this] {
-            applyPassword();
+    if (!mNewPasswords || !takesChanges([this] {
+            applyPasswords();
         })) {
         return;
     }
-    if (mSession->setPassword(*std::exchange(mNewPassword, std::nullopt))) {
+    const ProfilePasswords passwords = *std::exchange(mNewPasswords, std::nullopt);
+    if (mSession->setPassword(passwords.game)) {
         qInfo("MudletEngine: %s is given a password, or none, for its next connection", qPrintable(mProfile));
     } else {
         qWarning("MudletEngine: %s did not take the password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
+    }
+    if (!mSession->setProxyPassword(passwords.proxy)) {
+        qWarning("MudletEngine: %s did not take the proxy password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
     }
 }
 
@@ -1500,7 +1506,7 @@ void MudletProfile::onShutdownFinished(bool saved, const QString& error)
         mEngine.mHost->profileState(mProfile, IEngineHost::ProfileState::loaded);
         mFrontend->status(QStringLiteral("profile"), QStringLiteral("%1 not closed: %2").arg(mProfile, error));
         applySaved();
-        applyPassword();
+        applyPasswords();
         mEngine.closeRefused();
         return;
     }
@@ -2521,6 +2527,26 @@ void MudletProfile::takeMapFileProgress(const QString& label, int value, int max
         }
     }
     mFrontend->mapFile(file);
+}
+
+std::variant<IEngine::Proxy, QString> MudletProfile::proxy()
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    THeadlessSession::Proxy proxy;
+    if (!mSession->proxy(proxy)) {
+        return mSession->errorString();
+    }
+    return Proxy{proxy.use, proxy.address, proxy.port, proxy.username};
+}
+
+QString MudletProfile::setProxy(const Proxy& proxy)
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    return mSession->setProxy({proxy.use, proxy.host, proxy.port, proxy.user}) ? QString() : mSession->errorString();
 }
 
 std::variant<QVariantMap, QString> MudletProfile::settings(const QStringList& keys)

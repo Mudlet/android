@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 46
+const val PROTOCOL_VERSION = 47
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -65,6 +65,28 @@ data class RefusedCertificate(
 
 /** A profile as the engine lists it; the password is never part of one. */
 data class Profile(val name: String, val host: String, val port: Int, val tls: Boolean, val login: String, val autoReconnect: Boolean)
+
+/**
+ * A profile's SOCKS5 proxy, as desktop Mudlet's preferences hold it: whether the game is reached through it ([use]),
+ * its [host], its [port] (0 for none) and the [user] name it asks for, empty for none. Its password is never part of one.
+ */
+data class ProxySettings(val use: Boolean, val host: String, val port: Int, val user: String) {
+    companion object {
+        /** The port typed as [text]: 0 for none typed, null for what is no port. */
+        fun portOf(text: String): Int? = if (text.isBlank()) 0 else text.trim().toIntOrNull()?.takeIf { it in 1..65535 }
+
+        /**
+         * The proxy typed into a form, [host] and [user] trimmed, or null for one the engine would refuse: a [port]
+         * that is none, or a proxy to [use] with no [host] or no [port].
+         */
+        fun of(use: Boolean, host: String, port: String, user: String): ProxySettings? {
+            val number = portOf(port) ?: return null
+            val address = host.trim()
+            if (use && (address.isEmpty() || number == 0)) return null
+            return ProxySettings(use, address, number, user.trim())
+        }
+    }
+}
 
 /** Where an open profile is in its life (docs/protocol.md, `openProfiles`); a state this client does not know is [LOADED]. */
 enum class OpenProfileState(val wire: String) {
@@ -1014,6 +1036,9 @@ sealed interface EngineMessage {
     /** The answer to Requests.checkLua: [problem] is null for code that compiles. */
     data class LuaCheck(val problem: LuaProblem?, val replyTo: Any?) : EngineMessage
 
+    /** The answer to Requests.getProxy or Requests.setProxy: the profile's [proxy] as it holds it now. */
+    data class Proxy(val proxy: ProxySettings, val replyTo: Any?) : EngineMessage
+
     /**
      * The answer to Requests.variables for [path] and [showHidden]: from the [from]th, [entries] of the [total] the table
      * has, in the desktop's order, and how many hidden ones were left out, [hiddenLeftOut].
@@ -1135,11 +1160,15 @@ object Requests {
 
     fun deleteProfile(name: String, id: Long): JSONObject = JSONObject().put("t", "deleteProfile").put("name", name).put("id", id)
 
-    /** [password] is for this run of the profile only; null sends none. [alongside] keeps the others open. */
-    fun openProfile(name: String, password: String?, connect: Boolean, alongside: Boolean, id: Long): JSONObject = JSONObject()
+    /**
+     * [password] and [proxyPassword], the password of the profile's proxy, are for this run of the profile only; null
+     * sends none. [alongside] keeps the others open.
+     */
+    fun openProfile(name: String, password: String?, proxyPassword: String?, connect: Boolean, alongside: Boolean, id: Long): JSONObject = JSONObject()
         .put("t", "openProfile").put("name", name).put("connect", connect).put("id", id)
         .apply {
             if (password != null) put("password", password)
+            if (proxyPassword != null) put("proxyPassword", proxyPassword)
             if (alongside) put("alongside", true)
         }
 
@@ -1479,6 +1508,13 @@ object Requests {
     /** Empties the profile's map, keeping the map files saved before; a new [EngineMessage.AppMap] follows. Answered only by an Error, when refused. */
     fun deleteMap(): JSONObject = JSONObject().put("t", "deleteMap")
 
+    /** Answered by [EngineMessage.Proxy] with [id] as its replyTo: the profile's proxy. */
+    fun getProxy(id: Long): JSONObject = JSONObject().put("t", "getProxy").put("id", id)
+
+    /** Changes the profile's proxy to [proxy], from its next connection. Answered by [EngineMessage.Proxy] with [id] as its replyTo. */
+    fun setProxy(proxy: ProxySettings, id: Long): JSONObject = JSONObject()
+        .put("t", "setProxy").put("use", proxy.use).put("host", proxy.host).put("port", proxy.port).put("user", proxy.user).put("id", id)
+
     /** Answered by [EngineMessage.SettingValues] with [id] as its replyTo: the profile's settings named in [keys], getConfig()'s keys. */
     fun getSettings(keys: List<String>, id: Long): JSONObject {
         require(keys.isNotEmpty()) { "getSettings takes at least one key" }
@@ -1736,6 +1772,8 @@ class FrameReader(input: InputStream) {
                 o.optBoolean("more"),
                 o.opt("re"),
             )
+
+            "proxy" -> EngineMessage.Proxy(ProxySettings(o.optBoolean("use"), o.optString("host"), o.optInt("port"), o.optString("user")), o.opt("re"))
 
             "settings" -> EngineMessage.SettingValues(
                 o.optJSONObject("values")?.let { values ->

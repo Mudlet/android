@@ -34,7 +34,7 @@ public:
     struct Open
     {
         QString profile;
-        QString password;
+        ProfilePasswords passwords;
         bool connect = true;
         // As SessionStore::Session's: empty, 0 and unset for the profile's own
         QString host;
@@ -108,6 +108,8 @@ public:
     QString loadMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) override;
     QString deleteMap() override;
+    std::variant<Proxy, QString> proxy() override;
+    QString setProxy(const Proxy& proxy) override;
     std::variant<QVariantMap, QString> settings(const QStringList& keys) override;
     QString setSettings(const QVariantMap& values, QMap<QString, QString>& refused) override;
     std::variant<QList<ScriptItemInfo>, QString> scriptItems(ScriptItemKind kind) const override;
@@ -147,9 +149,9 @@ public:
     void open(const Open& open);
     // The running profile, started without connecting or since disconnected, connects to its own address
     void connectProfile();
-    // openProfile for the running profile: it takes the password for its next connection, an empty one for none,
+    // openProfile for the running profile: it takes the passwords for its next connection, an empty one for none,
     // and connects if connect
-    void openAgain(const QString& password, bool connect);
+    void openAgain(const ProfilePasswords& passwords, bool connect);
     // What saveProfile stored for the running profile, for its next connection. addressChanged: its host, port or TLS
     // choice is not the one stored before, so a restart of the engine is to bring the profile back at the stored one
     void profileSaved(const Profile& stored, bool addressChanged);
@@ -200,7 +202,7 @@ private:
     void onShutdownFinished(bool saved, const QString& error);
     bool takesChanges(const std::function<void()>& again);
     void applySaved();
-    void applyPassword();
+    void applyPasswords();
     void setSecureOffer(bool offered);
     QString replayFolder() const;
     QStringList replays() const;
@@ -214,7 +216,7 @@ private:
     void restoreStatus(const QString& phase, const QString& detail = {});
     QString restoreTarget() const;
     bool profileReconnects() const;
-    void start(const QString& host, quint16 port, bool connect, std::optional<bool> tls, const QString& password = {});
+    void start(const QString& host, quint16 port, bool connect, std::optional<bool> tls, const ProfilePasswords& passwords = {});
     void beginLoad();
     void onStartFinished(int result, const QString& error);
     void runNow(const QString& code);
@@ -283,7 +285,7 @@ private:
     quint16 mStartPort = 0;
     bool mStartConnect = false;
     std::optional<bool> mStartTls;
-    QString mStartPassword;
+    ProfilePasswords mStartPasswords;
     // close() while the profile started: it closes once started
     bool mCloseWhenStarted = false;
     // Closing for the profile openProfile opens in place of this one, which connect, disconnect and Lua are then for
@@ -345,10 +347,10 @@ private:
     // The TLS choice the running profile connects with: the one it was started with, unset when that start made
     // none, then the one of a saved profile once Mudlet has taken it
     std::optional<bool> mProfileTls;
-    // The saved profile and a password for the running profile that THeadlessSession has yet to take, as it refuses
+    // The saved profile and the passwords for the running profile that THeadlessSession has yet to take, as it refuses
     // them while the profile, or another of the pool, loads
     std::optional<Profile> mSaved;
-    std::optional<QString> mNewPassword;
+    std::optional<ProfilePasswords> mNewPasswords;
     // Why Mudlet refused the address last saved for the running profile, which keeps the one it had
     QString mAddressProblem;
     // Lua (connects included) asked for while the profile starts, run once it has

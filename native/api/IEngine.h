@@ -197,6 +197,20 @@ public:
     virtual QString saveMapFile(const QString& path, const std::function<bool()>& cancelAsked) = 0;
     // Empties the profile's map as the Mapper tab's "Delete map" does, keeping the map files saved before; else why not
     virtual QString deleteMap() = 0;
+    // The profile's SOCKS5 proxy, as the Connection tab of Mudlet's preferences holds it, but for its password, which
+    // only openProfile gives
+    struct Proxy
+    {
+        bool use = false;
+        QString host;
+        // 0 for none
+        int port = 0;
+        QString user;
+    };
+    // Else why it was not read
+    virtual std::variant<Proxy, QString> proxy() = 0;
+    // Kept with the profile and used from its next connection; else why it was not changed
+    virtual QString setProxy(const Proxy& proxy) = 0;
     // The profile's settings named in keys, by the keys Lua's getConfig() takes, each a bool, a double or a string; a
     // key the engine does not know is left out. Else why none were read.
     virtual std::variant<QVariantMap, QString> settings(const QStringList& keys) = 0;

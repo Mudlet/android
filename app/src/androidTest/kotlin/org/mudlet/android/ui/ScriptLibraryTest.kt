@@ -52,7 +52,8 @@ import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
 
 /**
  * The script library (docs/architecture.md, "The script library") against a fake engine: opened from the game's title
- * bar, it lists each kind one folder at a time, its switches switch items on and off, its search finds names, its
+ * bar, it lists each kind one folder at a time, its switches switch items on and off, its search finds names and shows
+ * where the engine found the text, asked again when an option changes, its
  * buttons make an item, which opens, and a folder, which is gone into, and the game's last line at its foot goes back
  * to the game; an item's page applies an edit with Undo, asks on Back before dropping one not applied, keeps it as a
  * draft over a trip to the game, edits a trigger's patterns and options, an alias's command, a script's events, a
@@ -166,6 +167,29 @@ class ScriptLibraryTest {
         compose.onNode(hasSetTextAction() and hasAnyAncestor(library)).performTextInput("hit")
         waitFor(row("You hit"))
         compose.onNode(hasText(string(R.string.scripts_triggers) + string(R.string.scripts_path_separator) + "Combat")).assertIsDisplayed()
+    }
+
+    @Test
+    fun aSearchShowsWhereTheEngineFoundTheTextAndItsOptionsAskAgain() {
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(library)).performTextInput("hp")
+        // The search waits for a pause in the typing, on the test's clock, which a wait on the socket does not move
+        compose.mainClock.advanceTimeBy(1_000)
+        val asked = received("searchScriptItems")
+        assertEquals(listOf("hp", false, false), listOf(asked.getString("text"), asked.getBoolean("caseSensitive"), asked.getBoolean("wholeWord")))
+        val lua = JSONObject().put("kind", "trigger").put("item", 3).put("name", "Greet").put("field", "lua").put("index", 1).put("text", "send(\"hp\")").put("start", 6)
+        session.send(JSONObject().put("t", "scriptSearch").put("text", "hp").put("caseSensitive", false).put("wholeWord", false).put("matches", JSONArray().put(lua)).put("more", true).put("re", asked.get("id")))
+        // No name has the text: the row is there for what the engine found in its Lua
+        waitFor(row("Greet"))
+        compose.onNode(hasText(string(R.string.scripts_place_lua, 2))).assertIsDisplayed()
+        compose.onNode(hasText("send(\"hp\")")).assertIsDisplayed()
+        compose.onNode(hasText(compose.activity.resources.getQuantityString(R.plurals.scripts_search_more, 1, 1))).assertIsDisplayed()
+        checkAccessibility()
+
+        activate(hasText(string(R.string.scripts_search_case)) and hasClickAction())
+        compose.mainClock.advanceTimeBy(1_000)
+        val again = received("searchScriptItems")
+        assertTrue(again.getBoolean("caseSensitive"))
+        compose.onNode(row("Greet")).assertDoesNotExist()
     }
 
     @Test

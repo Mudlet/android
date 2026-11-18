@@ -200,6 +200,28 @@ public:
     virtual QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) = 0;
     virtual QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) = 0;
     virtual QString deleteScriptItem(ScriptItemKind kind, int item) = 0;
+    // Where in an item searchScriptItems() found its text (THeadlessSession::ScriptSearchField)
+    enum class ScriptSearchField { name, command, commandDown, commandUp, pattern, event, css, lua };
+    struct ScriptSearchMatch
+    {
+        ScriptItemKind kind = ScriptItemKind::trigger;
+        int item = 0;
+        QString name;
+        ScriptSearchField field = ScriptSearchField::name;
+        // Which pattern, event handler or line of the field, from 0
+        int index = 0;
+        // That field or line, and where in it the match starts, from 0
+        QString text;
+        int start = 0;
+    };
+    struct ScriptSearch
+    {
+        QList<ScriptSearchMatch> matches;
+        // There were more than the limit
+        bool more = false;
+    };
+    // Where text is in the items scriptItems() gives, as the desktop editor's search finds it, at most limit places
+    virtual std::variant<ScriptSearch, QString> searchScriptItems(const QString& text, bool caseSensitive, bool wholeWord, int limit) const = 0;
     // The profile's packages in the order they were installed, as the desktop's Package Manager lists them
     virtual std::variant<QList<PackageInfo>, QString> packages() const = 0;
     // Installs the package file at path as the Package Manager's install from a file does, sysInstall included;

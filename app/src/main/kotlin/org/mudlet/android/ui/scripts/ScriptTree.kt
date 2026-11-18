@@ -1,10 +1,13 @@
 package org.mudlet.android.ui.scripts
 
+import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.ScriptItem
 import org.mudlet.android.protocol.ScriptItemDetails
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.protocol.ScriptSearchField
+import org.mudlet.android.protocol.ScriptSearchMatch
 import org.mudlet.android.protocol.TriggerPattern
 import org.mudlet.android.protocol.TriggerPatternType
 import org.mudlet.android.ui.settings.searchMatches
@@ -128,16 +131,42 @@ fun List<ScriptItemNode>.moveTargets(kind: ScriptItemKind, item: ScriptItemNode)
     }
 }
 
-/** An item a search found, with the folders it is in, the outermost first. */
-data class ScriptSearchResult(val kind: ScriptItemKind, val item: ScriptItemNode, val folders: List<ScriptItemNode>)
+/** The engine's search options, the desktop editor's: only text in the case typed, and only whole words. */
+data class SearchOptions(val caseSensitive: Boolean = false, val wholeWord: Boolean = false)
 
 /**
- * The items of every kind whose name or summary (its patterns, time, key or command) has each word of [query], as the
- * settings' search matches, in each kind's order.
+ * An item a search found, with the folders it is in, the outermost first, and the [places] the engine's search found
+ * the text in it, in its order, but for its name, which its row shows.
  */
-fun searchScripts(query: String, lists: Map<ScriptItemKind, List<ScriptItemNode>>): List<ScriptSearchResult> = ScriptItemKind.entries.flatMap { kind ->
-    val items = lists[kind].orEmpty()
-    items.filter { searchMatches(query, listOf(it.name, it.summary)) }.map { ScriptSearchResult(kind, it, items.pathTo(it.parent)) }
+data class ScriptSearchResult(
+    val kind: ScriptItemKind,
+    val item: ScriptItemNode,
+    val folders: List<ScriptItemNode>,
+    val places: List<ScriptSearchMatch> = emptyList(),
+)
+
+/**
+ * The items of every kind, in each kind's order, that the engine's search found [query] in, by [options], with where:
+ * [found], once it answers that search; and with neither option, also those whose name or summary (its patterns, time,
+ * key or command) has each word of [query], as the settings' search matches, which needs no engine and finds a timer
+ * by its time and a key by its name.
+ */
+fun searchScripts(
+    query: String,
+    lists: Map<ScriptItemKind, List<ScriptItemNode>>,
+    options: SearchOptions = SearchOptions(),
+    found: EngineMessage.ScriptSearch? = null,
+): List<ScriptSearchResult> {
+    val answers = found?.takeIf { it.text == query && SearchOptions(it.caseSensitive, it.wholeWord) == options }
+    val places = answers?.matches.orEmpty().groupBy { ScriptItemKey(it.kind, it.item) }
+    return ScriptItemKind.entries.flatMap { kind ->
+        val items = lists[kind].orEmpty()
+        items.mapNotNull { item ->
+            val at = places[ScriptItemKey(kind, item.id)]
+            val named = options == SearchOptions() && searchMatches(query, listOf(item.name, item.summary))
+            if (at == null && !named) null else ScriptSearchResult(kind, item, items.pathTo(item.parent), at.orEmpty().filter { it.field != ScriptSearchField.NAME })
+        }
+    }
 }
 
 /** [patterns] with the one at [from] moved to [to]; as it was if either is out of range. */

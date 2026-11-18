@@ -1,0 +1,248 @@
+Let a frontend search a profile's triggers, aliases, scripts, buttons, timers and keys
+
+The editor's search box (dlgTriggerEditor::slot_searchMudletItems()) finds text in the items' names, commands,
+patterns, event handlers, style sheets and Lua, and fills a tree widget with where. A frontend with no
+dlgTriggerEditor has to read every item's fields to search them, Lua included, which for a profile with a mapper is
+thousands of lines over its link each time a letter is typed.
+
+- THeadlessSession::searchScriptItems() finds text where the editor's search does, in the items scriptItems() gives:
+  a name, a command and an alias's pattern once each, a trigger's patterns, a script's event handlers and each line of
+  a button's style sheet or of the Lua at every place, the triggers first, then the aliases, scripts, buttons, timers
+  and keys. Its options are the editor's: case sensitive, and whole words (\b before and after the text). Each
+  ScriptSearchMatch has its item's kind, id and name, the field (ScriptSearchField), which pattern, event handler or
+  line, and that text with where the match starts. It stops at the limit it is given and says whether there were more.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (script_items: a trigger's name, command, patterns and
+Lua, a push-down button's commands and style sheet, a script's event handler, each option, the temporary items left
+out, and the limit). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index c043e09..d0b86c1 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1865,6 +1865,17 @@ typed: nothing for code that compiles, else the line Lua names (0 where it names
+ message. It compiles in a Lua state of its own, so it needs no profile and touches none, and
+ finds what the save would: Lua 5.1's syntax errors.
+ 
++`searchScriptItems()` finds text in the items `scriptItems()` gives, as the editor's search box does:
++in each item's name and command, a trigger's patterns, an alias's pattern, a script's event handlers,
++a button's commands and style sheet, and the Lua of all of them, the triggers first, then the aliases,
++scripts, buttons, timers and keys, as the editor lists its results. A name, a command and an alias's
++pattern give one match however often the text is in them; a pattern, an event handler and each line
++of a style sheet or of Lua give one for each place it is. Each match has its item's kind, id and name,
++the field it is in (`ScriptSearchField`), which pattern, event handler or line that is, from 0, the
++field or line itself and where the match starts in it. The text is found whatever its case unless
++asked otherwise, and with whole words only where it is a word of its own (`\b` before and after it,
++as the editor's option does). A frontend gives the most it will take, and is told when there were more.
++
+ ## Embedding it: commands and buttons that scripts add
+ 
+ `addonCommands()` lists the commands the session's profile's scripts added with `addCommand()`, which
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index d6cc665..b93153b 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -1001,6 +1001,29 @@ public:
+     bool moveScriptItem(ScriptItemKind kind, int id, int parent, int position);
+     // The item gone, and all in it for a folder, as the editor's delete does
+     bool deleteScriptItem(ScriptItemKind kind, int id);
++    // Where in an item a search found its text, as the editor's search results name it: a push-down button's command
++    // is commandDown, another button's command; css is a button's style sheet
++    enum class ScriptSearchField { name, command, commandDown, commandUp, pattern, event, css, lua };
++    Q_ENUM(ScriptSearchField)
++    struct ScriptSearchMatch
++    {
++        ScriptItemKind kind = ScriptItemKind::trigger;
++        int id = 0;
++        QString name;
++        ScriptSearchField field = ScriptSearchField::name;
++        // Which of a trigger's patterns or a script's event handlers, or which line of the Lua or the style sheet,
++        // from 0; 0 for the rest
++        int index = 0;
++        // The field, or that line of it, as plain text, and where in it the match starts, from 0
++        QString text;
++        int start = 0;
++    };
++    // Each place text is found in the items scriptItems() gives, as the editor's search finds it: in their names,
++    // commands, patterns, event handlers, style sheets and Lua, every match of a line, the triggers first, then the
++    // aliases, scripts, buttons, timers and keys, each kind depth first. Whatever the case unless caseSensitive, and
++    // with wholeWord only where it is a word of its own. At most limit, with more set when there were others; none
++    // for empty text or with no profile open. A getter, so it may be called from any handler.
++    QList<ScriptSearchMatch> searchScriptItems(const QString& text, bool caseSensitive, bool wholeWord, int limit, bool& more) const;
+     // What is wrong with Lua that does not compile: the line Lua names, from 1, or 0 where it names none, and its
+     // message without the chunk's name and line before it
+     struct LuaProblem
+diff --git a/src/headless/THeadlessSessionScripts.cpp b/src/headless/THeadlessSessionScripts.cpp
+index ec97746..28ee237 100644
+--- a/src/headless/THeadlessSessionScripts.cpp
++++ b/src/headless/THeadlessSessionScripts.cpp
+@@ -811,6 +811,165 @@ QList<THeadlessSession::ScriptItemNode> THeadlessSession::scriptItems(const Scri
+ 
+ namespace {
+ 
++using Field = THeadlessSession::ScriptSearchField;
++
++// What the editor's search finds, as dlgTriggerEditor::findSearchMatch() finds it
++class ScriptSearch
++{
++public:
++    ScriptSearch(const QString& text, const bool caseSensitive, const bool wholeWord, const int limit)
++    : mText(text)
++    , mCase(caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive)
++    , mLimit(limit)
++    {
++        if (wholeWord) {
++            mWord = QRegularExpression(qsl("\\b%1\\b").arg(QRegularExpression::escape(text)), caseSensitive ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption);
++        }
++    }
++
++    template <class T>
++    void searchShown(Host& host, const Kind kind)
++    {
++        for (T* pItem : rootItems<T>(host)) {
++            searchTree(host, kind, pItem);
++        }
++    }
++
++    QList<THeadlessSession::ScriptSearchMatch> mMatches;
++    bool mMore = false;
++
++private:
++    template <class T>
++    void searchTree(Host& host, const Kind kind, T* pItem)
++    {
++        if (mMore || !shown(host, pItem)) {
++            return;
++        }
++        mKind = kind;
++        mId = pItem->getID();
++        mName = pItem->getName();
++        once(Field::name, mName);
++        searchFields(pItem);
++        lines(Field::lua, pItem->getScript());
++        for (auto* pChild : *pItem->getChildrenList()) {
++            searchTree(host, kind, static_cast<T*>(pChild));
++        }
++    }
++
++    void searchFields(TTrigger* pItem)
++    {
++        once(Field::command, pItem->getCommand());
++        const QStringList& patterns = pItem->getPatternsList();
++        for (int i = 0; i < patterns.size(); ++i) {
++            every(Field::pattern, i, patterns.at(i));
++        }
++    }
++
++    void searchFields(TAlias* pItem)
++    {
++        once(Field::command, pItem->getCommand());
++        once(Field::pattern, pItem->getRegexCode());
++    }
++
++    void searchFields(TScript* pItem)
++    {
++        const QStringList handlers = pItem->getEventHandlerList();
++        for (int i = 0; i < handlers.size(); ++i) {
++            every(Field::event, i, handlers.at(i));
++        }
++    }
++
++    void searchFields(TTimer* pItem) { once(Field::command, pItem->getCommand()); }
++
++    void searchFields(TKey* pItem) { once(Field::command, pItem->getCommand()); }
++
++    void searchFields(TAction* pItem)
++    {
++        once(pItem->isPushDownButton() ? Field::commandDown : Field::command, pItem->getCommandButtonDown());
++        if (pItem->isPushDownButton()) {
++            once(Field::commandUp, pItem->getCommandButtonUp());
++        }
++        lines(Field::css, pItem->css);
++    }
++
++    int find(const QString& haystack, const int from) const
++    {
++        if (mText.isEmpty()) {
++            return -1;
++        }
++        if (mWord.pattern().isEmpty()) {
++            return haystack.indexOf(mText, from, mCase);
++        }
++        const QRegularExpressionMatch match = mWord.match(haystack, from);
++        return match.hasMatch() ? match.capturedStart() : -1;
++    }
++
++    void add(const Field field, const int index, const QString& text, const int start)
++    {
++        if (mMatches.size() >= mLimit) {
++            mMore = true;
++            return;
++        }
++        mMatches.append({mKind, mId, mName, field, index, text, start});
++    }
++
++    // The editor gives a name, a command and an alias's pattern one result, however often the text is in it
++    void once(const Field field, const QString& text)
++    {
++        if (const int start = find(text, 0); start != -1) {
++            add(field, 0, text, start);
++        }
++    }
++
++    void every(const Field field, const int index, const QString& text)
++    {
++        for (int start = find(text, 0); start != -1 && !mMore; start = find(text, start + 1)) {
++            add(field, index, text, start);
++        }
++    }
++
++    void lines(const Field field, const QString& text)
++    {
++        // Most Lua holds no match, and splitting it into lines costs more than one look at it whole
++        if (find(text, 0) == -1) {
++            return;
++        }
++        const QStringList textLines = text.split(QLatin1Char('\n'));
++        for (int i = 0; i < textLines.size() && !mMore; ++i) {
++            every(field, i, textLines.at(i));
++        }
++    }
++
++    const QString mText;
++    const Qt::CaseSensitivity mCase;
++    const int mLimit;
++    QRegularExpression mWord;
++    Kind mKind = Kind::trigger;
++    int mId = 0;
++    QString mName;
++};
++
++} // namespace
++
++QList<THeadlessSession::ScriptSearchMatch> THeadlessSession::searchScriptItems(const QString& text, const bool caseSensitive, const bool wholeWord, const int limit, bool& more) const
++{
++    more = false;
++    if (!mpHost) {
++        return {};
++    }
++    ScriptSearch search(text, caseSensitive, wholeWord, limit);
++    search.searchShown<TTrigger>(*mpHost, Kind::trigger);
++    search.searchShown<TAlias>(*mpHost, Kind::alias);
++    search.searchShown<TScript>(*mpHost, Kind::script);
++    search.searchShown<TAction>(*mpHost, Kind::button);
++    search.searchShown<TTimer>(*mpHost, Kind::timer);
++    search.searchShown<TKey>(*mpHost, Kind::key);
++    more = search.mMore;
++    return search.mMatches;
++}
++
++namespace {
++
+ // The calls below each take the item's own class, so they dispatch on kind once, here
+ template <class Call>
+ auto withItemClass(const Kind kind, Call&& call)

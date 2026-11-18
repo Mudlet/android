@@ -4086,14 +4086,16 @@ def script_items():
     a trigger that does not compile switched off with its error, a trigger that runs, an alias given no name and one
     that would call itself refused, a script run with its event handler, a timer firing, an offset timer, a key named by
     its key, a button on its bar, and what a list shows under each name; enableScriptItem, moveScriptItem and
-    deleteScriptItem; the edits kept by the save and read back once the profile is opened again; and the refusals."""
+    deleteScriptItem; searchScriptItems finding text where the editor's search does, each place in a pattern or a line of
+    Lua, by case and whole word or not, but not in the temporary ones, at most 500 places with a long line cut around
+    each; the edits kept by the save and read back once the profile is opened again; and the refusals."""
     profile = "Script Items Test"
     proc, c = start_engine(profile)
     seen = []
     c.wait_for(lambda m: m["t"] == "synced", collect=seen)
 
     def ask(request):
-        return c.ask(request, answers=("scriptItems", "scriptItem", "luaCheck", "error"), collect=seen)
+        return c.ask(request, answers=("scriptItems", "scriptItem", "scriptSearch", "luaCheck", "error"), collect=seen)
 
     m = ask({"t": "checkLua", "code": "local mob = matches[2]\nif mob then\n  send(\"kill \" .. mob)\nend"})
     check((m["t"], m.get("ok")) == ("luaCheck", True) and "line" not in m, f"Lua that compiles checks out, with no profile open: {m}")
@@ -4108,7 +4110,7 @@ def script_items():
                 {"t": "editScriptItem", "kind": "trigger", "item": 1, "fields": {}},
                 {"t": "enableScriptItem", "kind": "trigger", "item": 1, "enabled": True},
                 {"t": "moveScriptItem", "kind": "trigger", "item": 1, "parent": 0, "position": 0},
-                {"t": "deleteScriptItem", "kind": "trigger", "item": 1})
+                {"t": "deleteScriptItem", "kind": "trigger", "item": 1}, {"t": "searchScriptItems", "text": "x"})
     for request in requests:
         m = ask(request)
         check(m.get("message") == f"{request['t']}: no profile running", f"{request['t']} with no profile open is refused: {m}")
@@ -4335,6 +4337,40 @@ def script_items():
     for item in (look, quick):
         c.send({"t": "deleteScriptItem", "kind": "button", "item": item})
 
+    def search(text, **options):
+        return ask({"t": "searchScriptItems", "text": text, **options})
+
+    def found(m, kind, item):
+        return [(f["field"], f["index"], f["text"], f["start"]) for f in m.get("matches", []) if (f["kind"], f["item"]) == (kind, item)]
+
+    searched = add("trigger", 0, 9999, "Search HP").get("fields", {}).get("id")
+    edit("trigger", searched, command="say hp", script="local hp = 1\nshow(hp)\nlocal hpMax = 2",
+         patterns=[{"text": "hp is low", "type": "substring"}, {"text": "hp hp", "type": "substring"}])
+    m = search("hp")
+    check((m.get("t"), m.get("text"), m.get("caseSensitive"), m.get("wholeWord"), m.get("more")) == ("scriptSearch", "hp", False, False, False),
+          f"searchScriptItems answers with what it searched for: {m}")
+    check(found(m, "trigger", searched) == [("name", 0, "Search HP", 7), ("command", 0, "say hp", 4), ("pattern", 0, "hp is low", 0),
+                                            ("pattern", 1, "hp hp", 0), ("pattern", 1, "hp hp", 3), ("lua", 0, "local hp = 1", 6),
+                                            ("lua", 1, "show(hp)", 5), ("lua", 2, "local hpMax = 2", 6)],
+          f"it finds text in a trigger's name, command, each place in its patterns and each in its Lua's lines, whatever the case: {m}")
+    check(found(search("hp", wholeWord=True), "trigger", searched)[-1] == ("lua", 1, "show(hp)", 5), "with wholeWord, only where it is a word")
+    check(found(search("HP", caseSensitive=True), "trigger", searched) == [("name", 0, "Search HP", 7)], "with caseSensitive, only in its case")
+    m = search("sword")
+    check(found(m, "button", sword) == [("name", 0, "Sword", 0), ("commandDown", 0, "wield sword", 6), ("commandUp", 0, "remove sword", 7)],
+          f"a push-down button's commands are found as commandDown and commandUp: {m}")
+    check(found(search("color"), "button", bar) == [("css", 0, "QToolBar { color: red; }", 11)], "a button's style sheet is searched")
+    check(found(search("testPing"), "script", script) == [("event", 0, "testPing", 0)], "and a script's event handlers")
+    check(found(search("zzz"), "trigger", temp) == [], "but not the temporary items, which the editor does not show")
+    check(search("").get("matches") == [], "and empty text finds nothing")
+    edit("trigger", searched, script="hp " * 600)
+    m = search("hp")
+    matches = m.get("matches", [])
+    check(len(matches) == 500 and m.get("more") is True, f"at most 500 places are sent, with more when there were others: {len(matches)}, {m.get('more')}")
+    lua_matches = [f for f in found(m, "trigger", searched) if f[0] == "lua"]
+    check(len(lua_matches) > 100 and lua_matches[100][2] == "\u2026" + ("hp " * 600)[220:382] + "\u2026" and lua_matches[100][3] == 81,
+          f"a long line is cut to 80 characters either side of each place: {lua_matches[100] if len(lua_matches) > 100 else lua_matches}")
+    c.send({"t": "deleteScriptItem", "kind": "trigger", "item": searched})
+
     # The temporary trigger made above sits among the top level's items, between "Lua made" and "Combat"
     last = add("trigger", 0, 9999, "Last").get("fields", {}).get("id")
     top = children("trigger", 0)
@@ -4375,7 +4411,9 @@ def script_items():
             ({"t": "moveScriptItem", "kind": "trigger", "item": combat, "parent": combat, "position": 0},
              "A folder cannot be moved into itself or into a folder inside it."),
             ({"t": "moveScriptItem", "kind": "trigger", "item": miss, "parent": hit, "position": 0}, f"There is no folder {hit} of that kind."),
-            ({"t": "deleteScriptItem", "kind": "trigger", "item": temp}, f"There is no item {temp} of that kind.")):
+            ({"t": "deleteScriptItem", "kind": "trigger", "item": temp}, f"There is no item {temp} of that kind."),
+            ({"t": "searchScriptItems", "text": 3}, "text must be a string"),
+            ({"t": "searchScriptItems", "text": "x", "wholeWord": "yes"}, "caseSensitive and wholeWord must be true or false")):
         m = ask(request)
         check(m.get("message") == f"{request['t']}: {message}", f"{request['t']} is refused with {message}: {m}")
     check(children("trigger", combat) == ["Hit", "Miss"], "and the refusals changed nothing")

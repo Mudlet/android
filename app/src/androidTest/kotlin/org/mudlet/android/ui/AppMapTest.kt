@@ -63,6 +63,7 @@ import org.junit.Test
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.MapBackups
 import org.mudlet.android.data.MapFileStaging
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.LayoutMode
@@ -79,6 +80,11 @@ import org.mudlet.android.ui.game.Announcer
 import java.io.EOFException
 import java.io.File
 import java.io.IOException
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import kotlin.math.abs
@@ -1014,6 +1020,66 @@ class AppMapTest {
         assertEquals("""{"rooms": [1]}""", chosen.readText())
         assertFalse("and the cache's copy is gone", written.exists())
         checkAccessibility()
+    }
+
+    @Test
+    fun aSavedMapIsListedAsDesktopListsItAndLoadedFromWhereItIs() {
+        openUndrawnMap()
+        val context = compose.activity
+        val folder = compose.runOnIdle { MapBackups.folder(context.filesDir, EngineClient.front.name) }
+        folder.deleteRecursively()
+        val menu = hasContentDescription(string(R.string.map_file_menu)) and hasClickAction()
+        val item = hasText(string(R.string.map_file_backups)) and hasClickAction()
+        val none = hasText(string(R.string.map_backups_none))
+        activate(menu)
+        waitFor("the menu offers the saved maps") { compose.onAllNodes(item).fetchSemanticsNodes().isNotEmpty() }
+        activate(item)
+        waitFor("a profile with no saved map says so") { compose.onAllNodes(none).fetchSemanticsNodes().isNotEmpty() }
+        checkAccessibility()
+        activate(hasText(string(R.string.map_backups_close)) and hasClickAction())
+        waitFor("Close closes the list") { compose.onAllNodes(none).fetchSemanticsNodes().isEmpty() }
+
+        folder.mkdirs()
+        val dated = File(folder, "18-11-2026#10-20-30.dat").apply {
+            writeText("dat")
+            setLastModified(2_000_000_000_000)
+        }
+        File(folder, "autosave.dat").apply {
+            writeText("dat")
+            setLastModified(2_000_000_100_000)
+        }
+        File(folder, "before the war.json").apply {
+            writeText("{}")
+            setLastModified(1_000_000_000_000)
+        }
+        File(folder, "notes.txt").writeText("not a map")
+        val format = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(context.resources.configuration.locales[0])
+        val datedRow = hasText(format.format(LocalDateTime.of(2026, 11, 18, 10, 20, 30))) and hasClickAction()
+        activate(menu)
+        waitFor("the menu offers the saved maps again") { compose.onAllNodes(item).fetchSemanticsNodes().isNotEmpty() }
+        activate(item)
+        waitFor("a dated save is listed under its date") { compose.onAllNodes(datedRow).fetchSemanticsNodes().isNotEmpty() }
+        val listed = compose.onAllNodes(
+            SemanticsMatcher("a saved map") { it.config.getOrNull(SemanticsActions.OnClick)?.label == string(R.string.map_backups_load) },
+        ).fetchSemanticsNodes().map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+        assertEquals(
+            "the newest first, each with what it is, and only map files",
+            listOf(
+                listOf(format.format(LocalDateTime.ofInstant(Instant.ofEpochMilli(2_000_000_100_000), ZoneId.systemDefault())), string(R.string.map_backups_autosave)),
+                listOf(format.format(LocalDateTime.of(2026, 11, 18, 10, 20, 30)), string(R.string.map_backups_dat)),
+                listOf("before the war.json", string(R.string.map_backups_json)),
+            ),
+            listed,
+        )
+        checkAccessibility()
+
+        activate(datedRow)
+        val load = request("loadMapFile", "a saved map is loaded")
+        assertEquals("from where it is", dated.path, load.getString("path"))
+        session.send(mapFile("load", "done"))
+        waitFor("the load says it is done") { compose.onAllNodes(hasText(string(R.string.map_file_loaded))).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("and the profile keeps it", dated.exists())
+        folder.deleteRecursively()
     }
 
     @Test

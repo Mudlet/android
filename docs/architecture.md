@@ -644,6 +644,10 @@ docs/protocol.md, "Map files"):
   it: a file over 256 MiB is refused. Its format is its extension's, as on the desktop, else how it begins. A saved map
   is written there by the engine, then copied out to where the player chose (a file left half written is deleted), or
   offered through Android's share sheet by a `FileProvider` that reaches that folder alone.
+- "Load a saved map…" lists the maps Mudlet saved in the profile's `map/` folder, the newest first, as the desktop's
+  "Load another map file in" does (`MapBackups`): a dated save under its date in the player's locale, the autosave
+  under its file's time, and any other map file under its name; anything else there, such as an autosave still being
+  written, is left out. One is loaded from where it is, not copied, as it is the profile's own.
 - While it runs, a bar under the search shows Mudlet's progress label, or "Loading the map…" or "Saving the map…"
   until it comes, with a progress bar read as "Map file progress" and Cancel while the engine can stop it (a JSON
   file's). How it ended stays until dismissed and is read out once (`Announcer`), a failure in the error colour with

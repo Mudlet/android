@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.mudlet.android.R
+import org.mudlet.android.data.MapBackups
 import org.mudlet.android.data.MapFileStaging
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.MapFileOperation
@@ -84,6 +85,14 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
         }
     }
 
+    /** Has the engine load [backup], one of the map files the profile keeps, from where it is. */
+    fun load(backup: MapBackups.Backup) {
+        if (busy) return
+        state = State.Preparing(Job.LOAD)
+        staged = backup.file
+        ask(Job.LOAD, Requests.loadMapFile(backup.file.path))
+    }
+
     /** Has the engine save the map in [format] to the cache, then copies it to [uri], a file the player chose. */
     fun save(uri: Uri, format: MapFileStaging.Format) {
         if (busy) return
@@ -113,24 +122,17 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
             return
         }
         val file = staged
+        if (frame.state != MapFileState.DONE || file == null || job == Job.LOAD) {
+            dropStaged()
+            end(job, frame.state, frame.error, resources)
+            return
+        }
         staged = null
-        when {
-            frame.state != MapFileState.DONE || file == null -> {
-                file?.delete()
-                end(job, frame.state, frame.error, resources)
-            }
-
-            job == Job.LOAD -> {
-                file.delete()
-                end(job, MapFileState.DONE, "", resources)
-            }
-
-            job == Job.SHARE -> {
-                val problem = offer(file)
-                end(job, if (problem == null) MapFileState.DONE else MapFileState.FAILED, problem.orEmpty(), resources)
-            }
-
-            else -> copyOut(file, target)
+        if (job == Job.SHARE) {
+            val problem = offer(file)
+            end(job, if (problem == null) MapFileState.DONE else MapFileState.FAILED, problem.orEmpty(), resources)
+        } else {
+            copyOut(file, target)
         }
     }
 
@@ -139,8 +141,7 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
         if (request == "cancelMapFile") return true
         val job = (state as? State.Preparing)?.job ?: return false
         if (request != if (job == Job.LOAD) "loadMapFile" else "saveMapFile") return false
-        staged?.delete()
-        staged = null
+        dropStaged()
         end(job, MapFileState.FAILED, reason)
         return true
     }
@@ -148,8 +149,7 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
     /** A UI attached again; a restarted engine ran none of what this one asked, and will say nothing of it. */
     internal fun onAttached(sameInstance: Boolean) {
         val job = state?.job?.takeIf { busy && !sameInstance && staged != null } ?: return
-        staged?.delete()
-        staged = null
+        dropStaged()
         end(job, MapFileState.FAILED, app.resources.getString(R.string.map_file_engine_restarted))
     }
 
@@ -165,10 +165,15 @@ internal class MapFileClient(private val app: Context, private val send: (JSONOb
 
     private fun ask(job: Job, request: JSONObject) {
         if (!send(request)) {
-            staged?.delete()
-            staged = null
+            dropStaged()
             end(job, MapFileState.FAILED, app.resources.getString(R.string.map_file_engine_restarted))
         }
+    }
+
+    // Only what the client staged in the cache: a saved map loaded from the profile's folder stays there
+    private fun dropStaged() {
+        staged?.takeIf { it.parentFile == MapFileStaging.folder(app.cacheDir) }?.delete()
+        staged = null
     }
 
     private fun stageIn(uri: Uri): File {

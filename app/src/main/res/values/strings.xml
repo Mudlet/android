@@ -1197,6 +1197,24 @@
     <string name="map_file_menu">Map file</string>
     <!-- The map file menu's item that opens Android's file picker to load a map (.dat, .json or .xml) in place of the profile's -->
     <string name="map_file_load">Load map from file…</string>
+    <!-- The map file menu's item that lists the maps Mudlet saved in the profile's own map folder, to load one, as desktop's Map settings' "Load another map file in" does -->
+    <string name="map_file_backups">Load a saved map…</string>
+    <!-- The title of the list of maps Mudlet saved in the profile's map folder -->
+    <string name="map_backups_title">Saved maps</string>
+    <!-- Shown in place of the list of saved maps when the profile has none -->
+    <string name="map_backups_none">Mudlet has saved no map for this profile yet.</string>
+    <!-- Under a saved map in the list: the map Mudlet saves on its own every few minutes -->
+    <string name="map_backups_autosave">Autosave</string>
+    <!-- Under a saved map in the list: a map in Mudlet's own map format (.dat) -->
+    <string name="map_backups_dat">Mudlet map</string>
+    <!-- Under a saved map in the list: a map in JSON -->
+    <string name="map_backups_json">JSON map</string>
+    <!-- Under a saved map in the list: an XML map, as some games serve -->
+    <string name="map_backups_xml">XML map</string>
+    <!-- What TalkBack says a tap on a saved map in the list does: loads it in place of the profile's map -->
+    <string name="map_backups_load">Load this map</string>
+    <!-- The button that closes the list of saved maps without loading one -->
+    <string name="map_backups_close">Close</string>
     <!-- The map file menu's item that saves the map as Mudlet's own map file (.dat) where the player picks -->
     <string name="map_file_save">Save map to file…</string>
     <!-- The map file menu's item that saves the map as a JSON map file where the player picks -->

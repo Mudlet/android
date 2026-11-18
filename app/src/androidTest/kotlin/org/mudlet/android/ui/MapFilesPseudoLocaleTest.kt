@@ -16,9 +16,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
-import androidx.test.uiautomator.UiDevice
 import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -29,6 +27,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
+import org.mudlet.android.data.MapBackups
 import org.mudlet.android.protocol.Profile
 import java.io.File
 
@@ -72,10 +71,31 @@ class MapFilesPseudoLocaleTest(private val locale: String) {
 
         activate(hasContentDescription(compose.string(R.string.map_file_menu)))
         waitFor(hasText(compose.string(R.string.map_file_share)))
-        for (id in listOf(R.string.map_file_load, R.string.map_file_save, R.string.map_file_save_json, R.string.map_file_share)) {
+        for (id in listOf(R.string.map_file_load, R.string.map_file_backups, R.string.map_file_save, R.string.map_file_save_json, R.string.map_file_share)) {
             assertFits(compose.string(id))
         }
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+
+        val folder = compose.runOnIdle { MapBackups.folder(compose.activity.filesDir, EngineClient.front.name) }
+        folder.deleteRecursively()
+        activate(hasText(compose.string(R.string.map_file_backups)))
+        waitFor(hasText(compose.string(R.string.map_backups_none)))
+        for (id in listOf(R.string.map_backups_title, R.string.map_backups_none, R.string.map_backups_close)) {
+            assertFits(compose.string(id))
+        }
+        activate(hasText(compose.string(R.string.map_backups_close)))
+        folder.mkdirs()
+        File(folder, "autosave.dat").writeText("dat")
+        File(folder, "18-11-2026#10-20-30.dat").writeText("dat")
+        File(folder, "18-11-2026#10-20-31.json").writeText("{}")
+        File(folder, "18-11-2026#10-20-32.xml").writeText("<map/>")
+        activate(hasContentDescription(compose.string(R.string.map_file_menu)))
+        activate(hasText(compose.string(R.string.map_file_backups)))
+        waitFor(hasText(compose.string(R.string.map_backups_xml)))
+        for (id in listOf(R.string.map_backups_autosave, R.string.map_backups_dat, R.string.map_backups_json, R.string.map_backups_xml)) {
+            assertFits(compose.string(id))
+        }
+        activate(hasText(compose.string(R.string.map_backups_close)))
+        folder.deleteRecursively()
 
         // The picker is Android's own, so the file comes straight to the client
         val picked = File(compose.activity.cacheDir, "picked.json").apply { writeText("{}") }

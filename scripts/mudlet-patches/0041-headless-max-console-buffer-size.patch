@@ -1,0 +1,124 @@
+Let a frontend with no window name the most lines a console keeps, in place of the estimate from the machine's memory
+
+"Use maximum lines possible" gives the main console as many lines as TBuffer::getMaxBufferSize() estimates four fifths
+of the machine's physical memory holds, and setBufferSize() clips any bigger size to it, the profile's or a script's
+setConsoleBufferSize(). On a phone that is millions of lines, gigabytes, for each profile open: Android stops the
+process long before then, taking the game's connection with it. A profile copied from a desktop with the box ticked,
+or a script asking for a big buffer, gets there by just playing.
+
+- THeadlessSession::setMaxConsoleBufferSize(lines): the most lines a console in any session keeps, which
+  getMaxBufferSize() answers in place of its estimate; below 100 it is 100, and 0 or less goes back to the estimate.
+  An app calls it before it starts a session.
+- A profile keeps the size it saved; only what the console keeps is clipped, as on a desktop with less memory.
+- docs/headless.md describes it ("Embedding it: the most lines a console keeps").
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (profile_settings: an engine given 3000 lines clips a
+saved size of 5000 to it, answers getConsoleBufferSize() 3000 with "use maximum" ticked, clips a script's
+setConsoleBufferSize() to it, sheds a batch at a time past it, and saves the profile's own size). The desktop is
+unchanged: nothing calls it there.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 6e9b1d9..627481f 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1740,6 +1740,22 @@ Hunspell reads the files with plain file calls, so the folder must be a real one
+ app copies its dictionaries into from its package; a `:/` or `assets:/` path is refused, and
+ `setDictionaryFolder()` returns `false`.
+ 
++## Embedding it: the most lines a console keeps
++
++The profile preferences' "Use maximum lines possible" gives the main console as many lines as
++`TBuffer::getMaxBufferSize()` estimates four fifths of the machine's memory holds, and a bigger
++buffer size, the profile's or one `setConsoleBufferSize()` asks for, is clipped to that. A phone
++stops a process long before its memory is used up, so an app there names its own most before it
++starts a session:
++
++```cpp
++THeadlessSession::setMaxConsoleBufferSize(40000);
++```
++
++Every buffer size set afterwards, in any session, takes it in place of the estimate; below 100 it is
++100, and 0 or less goes back to the estimate. A profile keeps the size it saved, as on a desktop with less
++memory than the one it was saved on.
++
+ ## What still needs a window
+ 
+ Some of what a profile can do has nothing to stand in for the GUI's widgets yet, and does nothing,
+diff --git a/src/TBuffer.cpp b/src/TBuffer.cpp
+index fcdfe7f..93393b1 100644
+--- a/src/TBuffer.cpp
++++ b/src/TBuffer.cpp
+@@ -1194,9 +1194,17 @@ void TBuffer::setBufferSize(int requestedLinesLimit, int batch)
+     return lastText;
+ }
+ 
++/* static */ void TBuffer::setPlatformMaxBufferSize(const int lines)
++{
++    smPlatformMaxBufferSize = lines > 0 ? std::max(lines, 100) : 0;
++}
++
+ // naive calculation to get a reasonable limit for a maximum buffer size
+ int TBuffer::getMaxBufferSize()
+ {
++    if (smPlatformMaxBufferSize) {
++        return smPlatformMaxBufferSize;
++    }
+     const int64_t memoryTotal = physicalMemoryTotal();
+     // Mudlet is 32bit mainly on Windows, see where the practical limit for a process 2GB:
+     // https://docs.microsoft.com/en-us/windows/win32/memory/memory-limits-for-windows-releases#memory-and-address-space-limits
+diff --git a/src/TBuffer.h b/src/TBuffer.h
+index 3fa140f..f00a62c 100644
+--- a/src/TBuffer.h
++++ b/src/TBuffer.h
+@@ -548,6 +548,7 @@ class TBuffer
+     static inline const TEncodingTable& csmEncodingTable = TEncodingTable::csmDefaultInstance;
+ 
+     static inline const int TCHAR_IN_BYTES = sizeof(TChar);
++    static inline int smPlatformMaxBufferSize = 0;
+ 
+ public:
+     // limit on how many characters a single echo can accept for performance reasons
+@@ -741,6 +742,9 @@ public:
+     void paste(QPoint&, const TBuffer&);
+     void setBufferSize(int requestedLinesLimit, int batch);
+     int getMaxBufferSize();
++    // The most lines any console may keep, in place of what getMaxBufferSize() estimates from the machine's memory,
++    // for a platform that stops a process long before that is used up (Android); 0 goes back to the estimate
++    static void setPlatformMaxBufferSize(int lines);
+     int getLastClickedLinkIndex() const { return mLastClickedLinkIndex; }
+     void setLastClickedLinkIndex(int index) { mLastClickedLinkIndex = index; }
+     void clearLastClickedLinkIndex() { mLastClickedLinkIndex = 0; }
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index f194136..6194a14 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -442,6 +442,11 @@ void THeadlessSession::setWebPageOpener(std::function<bool(const QUrl& url)> ope
+     }
+ }
+ 
++void THeadlessSession::setMaxConsoleBufferSize(const int lines)
++{
++    TBuffer::setPlatformMaxBufferSize(lines);
++}
++
+ THeadlessSession::THeadlessSession(QObject* parent)
+ : QObject(parent)
+ {
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index aab74d9..f802361 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -188,6 +188,11 @@ public:
+     // URL, false when it did not open it, as the desktop's QDesktopServices::openUrl() does. It is called during the
+     // script's call, so it may not call a session. Empty, QDesktopServices opens it again.
+     static void setWebPageOpener(std::function<bool(const QUrl& url)> open);
++    // The most lines a console in any session may keep, which "use maximum lines possible" gives and to which a
++    // bigger buffer size is clipped, as the desktop does with what it estimates the machine's memory can hold; for a
++    // platform that stops a process long before that is used up (Android). Below 100 it is 100; 0 or less goes back
++    // to the estimate. Taken by every buffer size set afterwards.
++    static void setMaxConsoleBufferSize(int lines);
+ 
+     // Names mudlet_core's own Qt resources (":/" images, translations and fonts), so a program linking it statically
+     // keeps them; Qt registers them before main() runs

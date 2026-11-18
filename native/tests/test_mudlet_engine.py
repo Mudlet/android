@@ -4025,8 +4025,9 @@ def profile_settings():
     new background reaching consoleColors; the game's colour redefinition, OSC 8 links and the new text alert; the
     console buffer size and its maximum, which the main console takes at once, a size below 100 refused; the map's view
     options, colours and player room marker, a bad colour, style and border size refused; the changes in the profile's
-    save, the buffer size taken again as the profile next opens, a map colour keeping its alpha; and both refused while
-    no profile is open."""
+    save, the buffer size taken again as the profile next opens, a map colour keeping its alpha; the device's most lines
+    (MUDLET_SCROLLBACK_MAX_LINES) clipping the saved size, the maximum and a script's console, with a batch shed past it;
+    and both refused while no profile is open."""
     profile = "Settings Test"
     proc, c = start_engine(profile)
     seen = []
@@ -4217,6 +4218,42 @@ def profile_settings():
     check(size == "5000 1000", f"a profile opened again keeps the console buffer size it saved: {size}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    # The most the app gives for the device (EngineScrollback.kt) stands in for the machine's memory
+    proc, c = start_engine(profile, extra_env={"MUDLET_SCROLLBACK_MAX_LINES": "3000"})
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    size = buffer_size()
+    m = c.ask({"t": "getSettings", "keys": ["consoleBufferSize"]}, answers=("settings", "error"), collect=seen)
+    check(size == "3000 1000" and m.get("values") == {"consoleBufferSize": 5000},
+          f"a bigger saved size is clipped to the device's most, and the profile keeps its own: {size}, {m}")
+    m = c.ask({"t": "setSettings", "values": {"useMaxConsoleBufferSize": True}}, answers=("settings", "error"), collect=seen)
+    size = buffer_size()
+    check(m.get("values") == {"useMaxConsoleBufferSize": True} and size == "3000 600",
+          f"the maximum is the device's, with a fifth of it a batch: {m}, {size}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'createMiniConsole("sbMax", 0, 0, 100, 100) setConsoleBufferSize("sbMax", 1000000, 1000) '
+                                   'echo("MiniSize " .. table.concat({getConsoleBufferSize("sbMax")}, " ") .. "\\n")'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("MiniSize "), seen, since)
+    check(m["text"] == "MiniSize 3000 1000", f"and clips a script's console too: {m['text']}")
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'local shrunk = {} registerAnonymousEventHandler("sysBufferShrinkEvent", '
+                                   'function(_, name, n) shrunk[#shrunk + 1] = name .. " " .. n end) '
+                                   'for i = 1, 3700 do echo("spam " .. i .. "\\n") end '
+                                   'echo("Shrunk " .. table.concat(shrunk, ",") .. "\\n")'})
+    m = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("Shrunk "), seen, since, timeout=20)
+    batches = m["text"][len("Shrunk "):].split(",")
+    check(batches[0] and set(batches) == {"main 600"},
+          f"past it the console sheds a batch at a time, as the desktop's does: {m['text']}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+    save = newest_save(profile)[0]
+    with open(save, errors="replace") if save else open(os.devnull) as f:
+        saved = f.read()
+    check("<consoleBufferSize>5000</consoleBufferSize>" in saved and "<useMaxConsoleBufferSize>yes</useMaxConsoleBufferSize>" in saved,
+          f"and the save keeps the profile's size: {save}")
 
 
 def script_items():

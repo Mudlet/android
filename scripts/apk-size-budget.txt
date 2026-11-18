@@ -9,10 +9,10 @@ lower-below-percent 10
 libmudlet-arm64-v8a                  106298978    75545608     31120816
 libmudlet-x86_64                     109624265    78850424     31120816
 # the PTB's release APKs and its AAB, minified, with libmudlet (ptb.yml)
-ptb-arm64-v8a                        80203037     75925824     3586516
-ptb-x86_64                           83512052     79230984     3586516
-ptb-aab                              112257315    71954059     1754825
+ptb-arm64-v8a                        81519129     76418256     3775748
+ptb-x86_64                           84844528     79732216     3775748
+ptb-aab                              113921472    72377965     1846908
 # the stable release's, the same build as the PTB's under its own application id (release.yml)
-stable-arm64-v8a                     80203037     75925824     3586516
-stable-x86_64                        83512052     79230984     3586516
-stable-aab                           112257315    71954059     1754825
+stable-arm64-v8a                     81519129     76418256     3775748
+stable-x86_64                        84844528     79732216     3775748
+stable-aab                           113921472    72377965     1846908

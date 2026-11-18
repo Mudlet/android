@@ -100,7 +100,8 @@ there gets `error`, as a control request sent on a profile socket does.
   with the number of open games, with a dot when another game has unread lines or wants attention. It stays in the
   title bar with the map in front. Reconnect and Disconnect, which act on the front profile, are in its sheet and in
   the title bar's ⋮ menu (Stop connecting while it connects), with Settings; after the player's own Disconnect a tonal
-  Connect button sits in the title bar. While a connection the player did not end is dealt with, a banner under the
+  Connect button sits in the title bar, and the title is then the name alone, as on a 320 dp wide screen it has room
+  for no more. While a connection the player did not end is dealt with, a banner under the
   title bar, a polite live region, says so and offers what it needs: Stop and Reconnect now while Mudlet dials again on
   its own, Reconnect once it has stopped, Try again with the reason when a connect failed. It pushes the console, or
   the map's room search, down, and does not show after the player's own Disconnect. The History button is on the input

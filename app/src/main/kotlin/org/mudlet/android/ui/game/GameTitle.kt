@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
@@ -55,7 +54,8 @@ private const val TITLE_TRAVERSAL_INDEX = -1f
  * and [next] games ([onSwitch]) as actions, so neither the sheet nor a gesture is ever needed; a null action is left
  * out. A horizontal drag on it is [swipe]'s: its name slides with the finger, the neighbour's comes in from the side,
  * and a release far enough, or a fling, switches to that game with a tick; the next game is to the right, or to the
- * left in right-to-left layouts.
+ * left in right-to-left layouts. Without [stateShown] the name is alone: the title bar's Connect button then says the
+ * state, and on a 320 dp wide screen leaves no room for more; TalkBack still reads the state.
  */
 @Composable
 fun GameTitle(
@@ -73,6 +73,7 @@ fun GameTitle(
     onSwitch: (String) -> Boolean,
     swipe: GameSwipe,
     modifier: Modifier = Modifier,
+    stateShown: Boolean = true,
 ) {
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     // What a slide to the left brings: the next game in left-to-right layouts, where the games run left to right
@@ -114,11 +115,11 @@ fun GameTitle(
         color = Color.Transparent,
     ) {
         Row(
-            Modifier.heightIn(min = 48.dp).padding(horizontal = 4.dp),
+            Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ConnectionIcon(state)
+            if (stateShown) ConnectionIcon(state)
             Column(Modifier.weight(1f, fill = false)) {
                 val slide = swipe.offset
                 Box(Modifier.clipToBounds()) {
@@ -130,13 +131,14 @@ fun GameTitle(
                     }
                     if (beside != null) TitleName(beside, slide - sign(slide), Modifier.matchParentSize())
                 }
-                Text(
-                    statusLine(state, stateText),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (state.trouble) colors.error else colors.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                // Wrapped rather than cut short: the bar grows with its title
+                if (stateShown) {
+                    Text(
+                        statusLine(state, stateText),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (state.trouble) colors.error else colors.onSurfaceVariant,
+                    )
+                }
             }
             if (count > 1) {
                 BadgedBox(badge = { if (othersUnread > 0 || othersAttention) Badge() }) {
@@ -170,6 +172,7 @@ private fun TitleName(name: String, slide: Float, modifier: Modifier = Modifier)
 // The state in a few words, as the line under the name has room for; the banner says the rest
 @Composable
 private fun statusLine(state: ConnectionState, stateText: String): String = when (state) {
+    is ConnectionState.Connecting -> stringResource(R.string.connection_connecting)
     ConnectionState.Reconnecting -> stringResource(R.string.connection_reconnecting_short)
     is ConnectionState.Failed -> stringResource(R.string.connection_error_short)
     else -> stateText

@@ -53,7 +53,8 @@ class ConnectionTitlePseudoLocaleTest(private val locale: String) {
         .around(AppLocaleRule(locale))
         .around(compose)
 
-    private val game = Profile("title pseudo ${System.nanoTime()}", "127.0.0.1", 4000, false, "", true)
+    // Short, as the title is the name alone beside Connect on a 320 dp wide screen, and an ellipsis would fail the check
+    private val game = Profile("t${(System.nanoTime() % 1000).toString().padStart(3, '0')}", "127.0.0.1", 4000, false, "", true)
     private lateinit var session: FakeEngine.Session
 
     @Before

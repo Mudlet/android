@@ -290,7 +290,7 @@ it, its connection as an icon whose shape says the state, and how many games are
 Reconnect and Disconnect, a row per open game (a tap brings it to the front, its close button sends `closeProfile`,
 asking first while it is connected) and "Open another game", which goes back to the list. The title bar's ⋮ menu has
 Reconnect, and Disconnect (Stop connecting while connecting), and after the player's own Disconnect a tonal Connect
-button is in the title bar. After a drop a banner under it (`ConnectionBanner.kt`) offers Reconnect, Stop and
+button is in the title bar, the title then the name alone. After a drop a banner under it (`ConnectionBanner.kt`) offers Reconnect, Stop and
 Reconnect now while Mudlet's own "Reconnect automatically" retries (which read as one state, not each attempt), and Try
 again after an error. A drop is the connection ending without the player's Disconnect, which the UI tells from the
 status as it changes. The game screen's Reconnect then

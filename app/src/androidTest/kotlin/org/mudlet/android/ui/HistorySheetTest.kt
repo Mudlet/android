@@ -288,8 +288,10 @@ class HistorySheetTest {
         assertTrue("history $history after the input line $line in its row", history.left >= line.right && history.top < line.bottom && history.bottom > line.top)
         assertTrue("history $history before the up button $previous", history.right <= previous.left)
         assertTrue("pinned $pinned below the input line $line", pinned.top >= line.bottom)
+        // An icon button's bounds are 40 dp; Compose pads its touch target out to 48 dp around them
+        val target = compose.onNode(historyButton).fetchSemanticsNode().touchBoundsInRoot
         val minimum = with(compose.density) { 48.dp.toPx() }
-        assertTrue("a ${history.width} by ${history.height} px History button, at least 48 dp ($minimum px)", history.width >= minimum && history.height >= minimum)
+        assertTrue("a ${target.width} by ${target.height} px History touch target, at least 48 dp ($minimum px)", target.width >= minimum && target.height >= minimum)
     }
 
     private val historyButton get() = hasContentDescription(string(R.string.history_open)) and hasClickAction()

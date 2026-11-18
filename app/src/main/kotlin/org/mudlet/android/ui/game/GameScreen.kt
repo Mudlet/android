@@ -223,6 +223,7 @@ private fun ProfileGameScreen(
         }
     }
     val onReconnect = if (canReconnect) ::reconnect else null
+    val connectShown = state == ConnectionState.Disconnected && canReconnect
     val onDisconnect = if (canDisconnect) ::disconnect else null
 
     fun close(game: String) = EngineClient.closeProfile(game) { error ->
@@ -255,9 +256,10 @@ private fun ProfileGameScreen(
                     next = next,
                     onSwitch = EngineClient::setFront,
                     swipe = swipe,
+                    stateShown = !connectShown,
                 )
             }) {
-                if (state == ConnectionState.Disconnected && canReconnect) {
+                if (connectShown) {
                     FilledTonalIconButton(::reconnect) { Icon(painterResource(R.drawable.ic_link), stringResource(R.string.connection_connect_to, reconnectName)) }
                 }
                 ScriptCommandsButton()

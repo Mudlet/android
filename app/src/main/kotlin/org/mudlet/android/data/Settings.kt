@@ -70,6 +70,9 @@ object Settings {
     /** "Show passwords as you type them": no masked field when the game hides what is typed, as some hide everything. */
     val showPasswords = BoolSetting("disablePasswordMasking", default = false, mudlet = true)
 
+    /** "React to all keybindings on the same key": a key bound more than once runs every binding, not only the first. */
+    val runAllKeyBindings = BoolSetting("runAllKeyMatches", default = false, mudlet = true)
+
     /** Whether Mudlet asks to switch to a secure connection when a game offers one. */
     val offerSecureConnection = BoolSetting("askTlsAvailable", default = true, mudlet = true)
 
@@ -180,6 +183,7 @@ object Settings {
         commandSeparator,
         highlightHistory,
         showPasswords,
+        runAllKeyBindings,
         offerSecureConnection,
         serverEncoding,
         gmcp,

@@ -4072,11 +4072,12 @@ def profile_settings():
     check(m.get("values") == {"serverEncoding": "ISO 8859-2"} and "does not exist" in m.get("refused", {}).get("serverEncoding", ""),
           f"an encoding Mudlet does not have is refused, with why, and changes nothing: {m}")
 
-    keys = ["commandSeparator", "highlightHistory", "disablePasswordMasking"]
+    keys = ["commandSeparator", "highlightHistory", "disablePasswordMasking", "runAllKeyMatches"]
     m = c.ask({"t": "getSettings", "keys": keys}, answers=("settings", "error"), collect=seen)
-    check(m.get("values") == {"commandSeparator": ";;", "highlightHistory": True, "disablePasswordMasking": False},
+    check(m.get("values") == {"commandSeparator": ";;", "highlightHistory": True, "disablePasswordMasking": False,
+                              "runAllKeyMatches": False},
           f"the input line's settings start as Mudlet starts them: {m}")
-    wanted = {"commandSeparator": "|", "highlightHistory": False, "disablePasswordMasking": True}
+    wanted = {"commandSeparator": "|", "highlightHistory": False, "disablePasswordMasking": True, "runAllKeyMatches": True}
     m = c.ask({"t": "setSettings", "values": wanted}, answers=("settings", "error"), collect=seen)
     check(m.get("values") == wanted and "refused" not in m, f"and change: {m}")
 
@@ -4154,6 +4155,7 @@ def profile_settings():
     check('blankLineBehaviour="Hide"' in saved and 'mAcceptServerGUI="no"' in saved and 'mSslIgnoreAll="yes"' in saved
           and 'autoClearCommandLineAfterSend="yes"' in saved and 'HighlightHistory="no"' in saved
           and 'disablePasswordMasking="yes"' in saved and "<mCommandSeparator>|</mCommandSeparator>" in saved
+          and 'runAllKeyMatches="yes"' in saved
           and 'mIsLoggingTimestamps="yes"' in saved and 'logFileName="Settings Log"' in saved and 'logFileNameFormat=""' in saved
           and "<mRed>#123456</mRed>" in saved and ">#0a141e</mBgColor>" in saved and 'mServerMayRedefineColors="yes"' in saved
           and 'enableOSC8Hyperlinks="no"' in saved and 'mAlertOnNewData="no"' in saved

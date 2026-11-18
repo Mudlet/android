@@ -77,8 +77,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -105,6 +107,12 @@ private const val BACK_SHRINK = 0.1f
 private val RESULT_ROW = 56.dp
 private val RESULTS_HEAD = 48.dp
 private const val RESULTS_FRACTION = 0.75f
+
+// An outlined field's padding on both sides of its label, and its trailing button
+private val SEARCH_FIELD_CHROME = 16.dp + 48.dp + 16.dp
+
+// The map's three buttons and the file menu's beside the search, each its 48 dp touch target
+private val MAP_BUTTONS_WIDTH = 48.dp * 4
 
 // The results are filtered by area once they are in at least this many
 private const val FILTER_LEAST_AREAS = 3
@@ -262,11 +270,23 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             }
             // The buttons are beside the search, not over the map, where they would hide the room's name the engine
             // draws along its top
-            Row(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
-                // They zoom about the frame's middle, wherever it is drawn
-                val frameOnly = remember(map?.w, map?.h) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, 0f, 0f)) }
-                MapButtons(appMap, map?.bitmap, frameOnly, viewOnly, drawn)
+            BoxWithConstraints(Modifier.fillMaxWidth().background(CONSOLE_BACKGROUND).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                // Where the field beside them would be too narrow for its label, as in a long translation or a large
+                // font, they go under it. The field stays where it is in either, or it would lose its text
+                val beside = maxWidth - MAP_BUTTONS_WIDTH >= searchFieldLeast()
+                val buttons = @Composable {
+                    // They zoom about the frame's middle, wherever it is drawn
+                    val frameOnly = remember(map?.w, map?.h) { MapFit(map?.w ?: 0, map?.h ?: 0, PxRect(0f, 0f, 0f, 0f)) }
+                    MapButtons(appMap, map?.bitmap, frameOnly, viewOnly, drawn)
+                    MapFileMenu()
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RoomSearchField(Modifier.weight(1f).onFocusChanged { editing = it.hasFocus })
+                        if (beside) buttons()
+                    }
+                    if (!beside) Row { buttons() }
+                }
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.matchParentSize()) {
@@ -275,6 +295,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
                     // TalkBack. With a map drawn, none: the map is there
                     val offerInMap = !drawn && !resultsShown && appMap.refusal == null
                     MapDownloadBar(offerHere = !drawn && !offerInMap, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+                    MapFileBar(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
                     MapBox(Modifier.weight(1f).fillMaxWidth(), keyboardGoes) { size ->
                         // The last frame drawn, whatever size it was asked at, as the engine takes touches at its points
                         val fit = remember(map?.w, map?.h, size) {
@@ -348,6 +369,16 @@ private fun MapBox(modifier: Modifier, keyboardGoes: Boolean = false, content: @
         val placeables = subcompose(Unit) { content(atRest) }.map { it.measure(constraints) }
         layout(constraints.maxWidth, constraints.maxHeight) { placeables.forEach { it.place(0, 0) } }
     }
+}
+
+/** The narrowest the room search's field shows its label whole in: the label's width, beside the field's padding and its button. */
+@Composable
+private fun searchFieldLeast(): Dp {
+    val label = stringResource(R.string.app_map_search)
+    val style = MaterialTheme.typography.bodyLarge
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(label, style, density) { with(density) { measurer.measure(label, style, maxLines = 1).size.width.toDp() } } + SEARCH_FIELD_CHROME
 }
 
 /** The room search's field: Enter, or its button, asks the engine for the rooms whose name holds the text, or whose number it is. */

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,7 +49,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.LayoutDirection
@@ -63,6 +67,7 @@ import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
 import org.mudlet.android.ui.ScriptWindowsClient
+import org.mudlet.android.ui.errors.ERROR_BADGE_TAG
 import kotlin.reflect.KClass
 
 /**
@@ -270,7 +275,15 @@ private fun ProfileGameScreen(
                     }
                     ScriptCommandsButton()
                     IconButton(onOpenScripts, Modifier.tourTarget(TourTarget.SCRIPTS)) {
-                        Icon(painterResource(R.drawable.ic_auto_fix_high), stringResource(R.string.scripts_open, c.name))
+                        val unseen = c.errors.unseen
+                        val label = stringResource(R.string.scripts_open, c.name)
+                        if (unseen <= 0) {
+                            Icon(painterResource(R.drawable.ic_auto_fix_high), label)
+                        } else {
+                            BadgedBox(badge = { Badge(Modifier.clearAndSetSemantics {}) { Text(unseen.toString()) } }, modifier = Modifier.testTag(ERROR_BADGE_TAG)) {
+                                Icon(painterResource(R.drawable.ic_auto_fix_high), pluralStringResource(R.plurals.errors_unseen, unseen, label, unseen))
+                            }
+                        }
                     }
                     MapButton(mapOpen, onMapOpen)
                     GameMenuButton(

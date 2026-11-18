@@ -26,7 +26,6 @@ Please do not report these; they are known and being worked on:
 - Links in the game's main text (words the game underlines) cannot be tapped yet. Links in a script's own windows can.
 - There is no backup. **Uninstalling the app deletes your games, scripts and maps**, and so does "Clear storage" in
   the phone's settings. The test app is a separate app from Mudlet, so it cannot touch the real Mudlet's games.
-- The app has no "Report a problem" button yet: write your report as described at the end of this page.
 
 ## How to write things down
 
@@ -34,6 +33,11 @@ Open a new note on your phone, or use paper. For each part, write its number, th
 happened, in your own words. "3.2: the keyboard closed after Send" is a perfect report. Some steps ask for a time or a
 number: write it down as you go. A screenshot (on most phones, the power and volume-down buttons together) helps
 whenever something looks wrong.
+
+When something goes wrong, the app can collect what the developers need to find out why: tap the "i" button at the
+top of "Profiles", then "Report a problem". The screen shows the whole report first: the app's recent log, its version
+and your phone's model, with saved passwords and logins taken out. Tap Copy and paste it into your report under the
+step's number, or Share to send it another way. Nothing leaves your phone until you do.
 
 When you are done, copy your notes into the report form (the last section).
 
@@ -70,7 +74,7 @@ Multi-Users in Middle-earth (MUME) in the list let you make a character in a few
    2. Name: `lua`. Pattern: `^lua (.*)$`
    3. Tap in the Lua field at the bottom and paste (or type), on one line:
       `local f, e = loadstring("return " .. matches[2]) if not f then f, e = loadstring(matches[2]) end if not f then echo(e .. "\n") return end local ok, r = pcall(f) if not ok then echo(tostring(r) .. "\n") elseif r ~= nil then display(r) end`
-   4. Tap Apply, then go back to the game (Back, then the game's last lines at the foot of the list).
+   4. Tap Apply, then Game beside it: the game shows again.
    5. Type `lua 1 + 1` and Send. The answer `2` shows in the game's text. If it does not, write down what showed.
 
 ## Part 3. Play

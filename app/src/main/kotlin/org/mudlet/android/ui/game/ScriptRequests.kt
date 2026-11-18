@@ -134,15 +134,7 @@ internal object ScriptFiles {
     }
 
     /** A file in [dir] that does not exist yet: [name], else "stem (2).ext", "stem (3).ext" and so on, as downloads are named. */
-    fun freeFile(dir: File, name: String): File {
-        val dot = name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
-        val stem = name.substring(0, dot)
-        val extension = name.substring(dot)
-        var file = File(dir, name)
-        var n = 2
-        while (file.exists()) file = File(dir, "$stem ($n)$extension").also { n++ }
-        return file
-    }
+    fun freeFile(dir: File, name: String): File = File(dir, name)
 
     /** Whether [dir] is a folder within [root], the app's own files, the only place a script's file is copied to. */
     fun inside(dir: File, root: File): Boolean = dir.isDirectory && dir.canonicalFile.toPath().startsWith(root.canonicalFile.toPath())

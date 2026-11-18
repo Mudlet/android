@@ -369,12 +369,19 @@ class ScreenReaderTest {
         loaded()
         activate(hasContentDescription(string(R.string.settings_title)))
         activate(hasText(string(R.string.settings_input)), scroll = true)
-        val mudlets = mapOf("commandSeparator" to ";;", "highlightHistory" to true, "disablePasswordMasking" to false)
+        val mudlets = mapOf(
+            "commandSeparator" to ";;",
+            "highlightHistory" to true,
+            "disablePasswordMasking" to false,
+            "runAllKeyMatches" to false,
+        )
         session.settings(mudlets, session.receive("getSettings").getLong("id"))
         activate(hasText(string(R.string.settings_highlight_history)), scroll = true)
         assertEquals(mapOf("highlightHistory" to false), values(session.receive("setSettings")))
         activate(hasText(string(R.string.settings_show_passwords)), scroll = true)
         assertEquals(mapOf("disablePasswordMasking" to true), values(session.receive("setSettings")))
+        activate(hasText(string(R.string.settings_run_all_key_bindings)), scroll = true)
+        assertEquals(mapOf("runAllKeyMatches" to true), values(session.receive("setSettings")))
         val field = hasSetTextAction() and hasText(string(R.string.settings_command_separator))
         compose.onNode(field).performScrollTo().assert(hasText(";;"))
         compose.onRoot().tryPerformAccessibilityChecks()

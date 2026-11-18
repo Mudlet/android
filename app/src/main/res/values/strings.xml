@@ -18,6 +18,15 @@
     <!-- The explanation dialog's button that closes it without asking for the permission -->
     <string name="notifications_explanation_not_now">Not now</string>
 
+    <!-- Shown once, when Mudlet comes back after Android or a battery saver stopped it in the background -->
+    <string name="engine_stopped_title">Mudlet was stopped</string>
+    <!-- The text of that dialog. "Unrestricted", "Not optimised" and "No restrictions" are what Android's battery settings call the choice on different phones: use the words Android uses in your language. -->
+    <string name="engine_stopped_text">Android or a battery saver stopped Mudlet while you were using other apps, so your game was disconnected. To keep Mudlet running in the background, let it use the battery without restrictions: in Battery settings, choose Unrestricted, or on some phones Not optimised or No restrictions.</string>
+    <!-- The dialog's button that opens Mudlet's page in Android's settings, where its battery use is set -->
+    <string name="engine_stopped_battery_settings">Battery settings</string>
+    <!-- The dialog's button that closes it; it is not shown again -->
+    <string name="engine_stopped_not_now">Not now</string>
+
     <!-- The start screen's title: the list of the player's games (in Mudlet, a profile is a game and its settings) -->
     <string name="profiles_title">Profiles</string>
     <!-- On a wide screen, where a game's editor opens beside the list of games: what that space shows until one is picked -->

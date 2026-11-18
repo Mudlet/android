@@ -120,6 +120,7 @@ class SmokeTestReceiver : BroadcastReceiver() {
             .put("enginePid", c.enginePid)
             .put("attaches", c.attachCount)
             .put("engineLosses", c.engineLosses)
+            .put("engineStoppedInBackground", c.engineStoppedInBackground)
             .put("fgs", c.fgsState)
             .put("notifyCount", c.notifyCount)
             // The engine's statuses and the front profile's, as the self-test screen shows them

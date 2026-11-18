@@ -18,7 +18,8 @@ It installs and launches the app, then drives the UI through the debug build's S
   7. a Geyser mini console a script makes reaches the UI, shown, with the line it cecho()s;
   8. two more profiles open beside the first, on the same game, and the engine's PSS (dumpsys meminfo) with one, two
      and three open goes to <out>/memory.json, to size ControlBridge::maxOpenProfiles by;
-  9. after the :engine process is killed, the UI starts a new engine and attaches to it;
+  9. after the :engine process is killed, the UI starts a new engine, attaches to it and takes the kill for Android
+     stopping the engine in the background (EngineStopped.kt), which it explains;
   10. the profile's password is nowhere in logcat.
 If a process of the app crashes, it stops there and gives the crash from logcat, symbolised with ndk-stack when
 --symbols names the unstripped engine's directory and ANDROID_NDK_ROOT is set.
@@ -397,6 +398,10 @@ def run(dev, apk):
     state = dev.wait("the new engine service in the foreground",
                      lambda s: "foreground=true" in s["fgs"] and f"pid={new_pid}" in s["fgs"], 30)
     ok(f"reattached to the new engine, pid {new_pid}: {state['link']}")
+    # The kill is a signal, which Android records as the engine's exit (ApplicationExitInfo) from Android 11 on; the
+    # UI reads that record to explain a stop in the background (EngineStopped.kt)
+    dev.wait("the UI to take the kill for Android stopping the engine", lambda s: s["engineStoppedInBackground"], 30)
+    ok("the UI explains the stop, as it does when Android stops the engine in the background")
 
     step("the password is nowhere in logcat")
     if PASSWORD in dev.log_text():

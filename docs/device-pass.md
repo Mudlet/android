@@ -139,6 +139,8 @@ Phone makers' battery savers sometimes stop apps overnight. This part finds out 
 3. In the evening, connect to your game, send the command from Part 5 step 2, and leave the phone unplugged overnight,
    screen off.
 4. In the morning, open the app and do Part 5 step 5 again (the same three things to write down).
+   If the app shows "Mudlet was stopped" when you open it, Android or a battery saver stopped it in the night:
+   **write that down**, then tap "Battery settings", which opens the app's page in the phone's Settings.
 5. If the game was not connected in the morning, or there were far fewer ticks than minutes passed, set the app's
    battery setting to "Unrestricted" (or "No restrictions"), and do this part once more the next night. **Write
    down** both results.

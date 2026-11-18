@@ -81,6 +81,20 @@ object EngineClient {
     var lastLossToAttachMs by mutableLongStateOf(-1L)
     var pingResult by mutableStateOf("")
 
+    /**
+     * Whether the engine was started again after Android stopped it in the background ([EngineStopped]): set at a new
+     * engine's first restore status, for the UI to say so and clear.
+     */
+    var engineStoppedInBackground by mutableStateOf(false)
+
+    /** Whether Android stopped the engine before this one; the instrumented tests put their answer here. */
+    @VisibleForTesting
+    internal var stoppedByAndroid: () -> Boolean = { EngineStopped.lastExitByAndroid(app) }
+
+    // Whether the attached engine's restore status has had how the engine before it ended checked: it resends its
+    // statuses at every attach, but that is asked once
+    private var restoreChecked = false
+
     /** The engine's profiles, the last opened first; null until it has listed them. */
     var profiles by mutableStateOf<List<Profile>?>(null)
         private set
@@ -396,6 +410,10 @@ object EngineClient {
     // The engine's status restore tells, in the front profile's console, how bringing the profiles back went
     private fun onEngineStatus(key: String, value: String) {
         if (key == EngineRestore.STATUS_KEY) {
+            if (!restoreChecked) {
+                restoreChecked = true
+                if (stoppedByAndroid()) engineStoppedInBackground = true
+            }
             EngineRestore.marker(engineStatus[key], value)?.let { marker ->
                 val session = frontSession
                 if (session != null) session.addMarker(marker) else heldMarkers.add(marker)
@@ -458,7 +476,10 @@ object EngineClient {
             link.send(Requests.listProfiles(link.newRequestId()))
             main.post {
                 // The engine resends its whole status after hello, so the old instance's values must go first
-                if (!sameInstance) engineStatus.clear()
+                if (!sameInstance) {
+                    engineStatus.clear()
+                    restoreChecked = false
+                }
                 // What it says is in front now stands: it had any setFront sent before
                 requestedFront = null
                 // A profile's socket that went with the engine may be back: no need to wait out the link's retry

@@ -5203,7 +5203,7 @@ def replay_recording():
     m = c.ask({"t": "setReplayRecording", "record": True}, answers=("error",), collect=seen)
     check(m["message"].startswith("setReplayRecording: "), f"a second start is refused: {m}")
     c.send({"t": "send", "text": "echo recorded line"})
-    c.wait_for(lambda m: m["t"] == "line" and "You said: recorded line" in m.get("text", ""), collect=seen)
+    c.wait_for(shown("You said: recorded line"), collect=seen)
     m = recording(False)
     saved = m["file"]
     path = os.path.join(folder, saved)

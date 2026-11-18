@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
-                       clipboard, packages, error_console, key_bindings, scripts_stopped):
+                       clipboard, packages, error_console, key_bindings, scripts_stopped, replay_recording):
             checks()
         checks = secure_offer
         checks(port)
@@ -5006,6 +5006,71 @@ def scripts_stopped():
     check(stops_told(since) == [False], f"a profile that closes is told as no longer stopped: {stops_told(since)}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+def replay_recording():
+    """setReplayRecording, desktop's replay recording button, and replayRecording: refused with no profile, for a record
+    that is not a boolean, and when recording already or not; a recording saved to a new file in the profile's log
+    folder, which holds what the game sent, named for the UI; one the connection's end saved; the state to a UI that
+    attaches, and not recording with no file once the profile closes."""
+    game = fake_telnet.start_in_thread()
+    profile = "Replay Test"
+    folder = os.path.join(CONFIG, "profiles", profile, "log")
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check({"t": "replayRecording", "recording": False, "file": ""} in seen, "a UI that attaches with no profile open is told no replay is recorded")
+    m = c.ask({"t": "setReplayRecording", "record": True}, answers=("error",), collect=seen)
+    check(m["message"] == "setReplayRecording: no profile running", f"setReplayRecording with no profile open is refused: {m}")
+
+    c.send({"t": "connect", "host": "127.0.0.1", "port": game})
+    wait_status(c, "connection", lambda v: v == "connected", seen, timeout=30)
+    for record in ("yes", 1, None):
+        request = {"t": "setReplayRecording"} if record is None else {"t": "setReplayRecording", "record": record}
+        m = c.ask(request, answers=("error",), collect=seen)
+        check(m["message"] == "setReplayRecording: record must be true or false", f"setReplayRecording {record!r} is refused: {m}")
+    m = c.ask({"t": "setReplayRecording", "record": False}, answers=("error",), collect=seen)
+    check(m["message"].startswith("setReplayRecording: ") and len(m["message"]) > len("setReplayRecording: "),
+          f"stopping a recording that is not running is refused with Mudlet's reason: {m}")
+
+    def recording(record):
+        c.send({"t": "setReplayRecording", "record": record})
+        return c.wait_for(lambda m: m["t"] == "replayRecording" and m["recording"] == record, collect=seen)
+
+    m = recording(True)
+    check(m["file"] == "", f"a first recording has no saved file yet: {m}")
+    m = c.ask({"t": "setReplayRecording", "record": True}, answers=("error",), collect=seen)
+    check(m["message"].startswith("setReplayRecording: "), f"a second start is refused: {m}")
+    c.send({"t": "send", "text": "echo recorded line"})
+    c.wait_for(lambda m: m["t"] == "line" and "You said: recorded line" in m.get("text", ""), collect=seen)
+    m = recording(False)
+    saved = m["file"]
+    path = os.path.join(folder, saved)
+    check(saved.endswith(".dat") and os.path.isfile(path), f"the stop names the file it saved in the log folder: {m}")
+    with open(path, "rb") as f:
+        check(b"You said: recorded line" in f.read(), "the recording holds what the game sent")
+
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    check(last_of(seen, "replayRecording") == {"t": "replayRecording", "recording": False, "file": saved},
+          f"a UI that attaches is told the last recording's file: {last_of(seen, 'replayRecording')}")
+
+    m = recording(True)
+    check(m["file"] == saved, f"while recording, the last saved file is still named: {m}")
+    c.send({"t": "send", "text": "quit"})
+    m = c.wait_for(lambda m: m["t"] == "replayRecording" and not m["recording"], timeout=30, collect=seen)
+    check(m["file"] not in ("", saved) and os.path.isfile(os.path.join(folder, m["file"])),
+          f"the connection's end saves the recording, and its file is named: {m}")
+
+    since = len(seen)
+    c.send({"t": "closeProfile", "name": profile})
+    c.wait_for(lambda m: m["t"] == "replayRecording", timeout=30, collect=seen)
+    told = [m for m in seen[since:] if m["t"] == "replayRecording"]
+    check(told == [{"t": "replayRecording", "recording": False, "file": ""}], f"a profile that closes names no file: {told}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
 
 if __name__ == "__main__":
     main()

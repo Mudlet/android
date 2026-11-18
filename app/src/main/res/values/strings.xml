@@ -1361,6 +1361,22 @@
     <!-- Under "Emergency stop" while it is on: the game's scripts do nothing, and commands go to the game as typed, with
          no alias changing them -->
     <string name="game_emergency_stop_on">Scripts are stopped. What you type goes to the game as it is.</string>
+    <!-- The switch on the game sheet's card for the game in front that records what the game sends into a file, as
+         desktop Mudlet's replay recording button does. Use desktop Mudlet's translation of "Record a replay" where your
+         language has one. -->
+    <string name="game_record_replay">Record a replay</string>
+    <!-- Under "Record a replay" while it is off: what turning it on does -->
+    <string name="game_record_replay_off">Save what this game sends to a file that Mudlet can play back</string>
+    <!-- Under "Record a replay" while it is on: turning it off, or the connection ending, saves the file -->
+    <string name="game_record_replay_on">Recording. Turn it off to save the file.</string>
+    <!-- The button under "Record a replay" that offers the last saved replay file to another app -->
+    <string name="game_share_replay">Share the replay</string>
+    <!-- The title of Android's share sheet for a replay file -->
+    <string name="game_share_replay_title">Share the replay with</string>
+    <!-- Shown when the saved replay file could not be read to share it, as when it was deleted -->
+    <string name="game_share_replay_failed">The replay file could not be read</string>
+    <!-- Shown when no app on the device takes a file to share -->
+    <string name="game_share_replay_no_app">No app here takes a file to share</string>
     <!-- What TalkBack says a tap on an open game does: brings it to the front -->
     <string name="game_show">Show this game</string>
     <!-- The close button of an open game in the game sheet, read by TalkBack; %1$s is the game's (profile's) name -->

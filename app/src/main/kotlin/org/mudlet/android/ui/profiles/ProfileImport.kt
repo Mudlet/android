@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +59,7 @@ fun ProfileImport(modifier: Modifier = Modifier) {
         OutlinedButton(
             // Some providers call a .zip only a file of bytes; a file that is not a zip is refused as one
             { launcher.launch(arrayOf(ProfileArchive.MIME_TYPE, "application/x-zip-compressed", "application/octet-stream")) },
-            enabled = state == null || state.ended,
+            enabled = state != null && state.ended,
         ) { Text(stringResource(R.string.profiles_import)) }
         val status = when (state) {
             null, is ImportState.Ready -> null
@@ -106,7 +107,7 @@ private fun ImportDialog(state: ImportState.Ready, onImport: (name: String) -> U
         title = { Text(stringResource(R.string.profile_import_title, archived)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.profile_import_text))
+                Text(stringResource(R.string.profile_import_text), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 OutlinedTextField(
                     name,
                     { name = it },
@@ -191,7 +192,6 @@ internal object Imports {
 
     fun cancel(ready: ImportState.Ready) {
         state = null
-        scope.launch { withContext(Dispatchers.IO) { staging(ready.folder).deleteRecursively() } }
     }
 }
 

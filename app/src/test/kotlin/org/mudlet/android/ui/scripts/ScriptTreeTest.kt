@@ -5,11 +5,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.ScriptItem
 import org.mudlet.android.protocol.ScriptItemDetails
 import org.mudlet.android.protocol.ScriptItemKind
 import org.mudlet.android.protocol.ScriptItemNode
+import org.mudlet.android.protocol.ScriptSearchField
+import org.mudlet.android.protocol.ScriptSearchMatch
 import org.mudlet.android.protocol.TriggerPattern
 import org.mudlet.android.protocol.TriggerPatternType
 
@@ -60,6 +63,30 @@ class ScriptTreeTest {
         assertEquals(listOf("Combat", "Hits"), found[1].folders.map { it.name })
         assertEquals(ScriptItemKind.ALIAS, found[2].kind)
         assertTrue(searchScripts("flee greet", mapOf(ScriptItemKind.TRIGGER to triggers)).isEmpty())
+    }
+
+    private fun place(id: Int, field: ScriptSearchField, index: Int = 0) = ScriptSearchMatch(ScriptItemKind.TRIGGER, id, "", field, index, "send(\"hp\")", 6)
+
+    @Test
+    fun aSearchAddsWhereTheEngineFoundTheTextToTheItemsItFound() {
+        val lists = mapOf(ScriptItemKind.TRIGGER to triggers)
+        val answer = EngineMessage.ScriptSearch("hp", false, false, listOf(place(4, ScriptSearchField.LUA, 2), place(3, ScriptSearchField.NAME), place(4, ScriptSearchField.LUA, 5)), false, 1L)
+        val found = searchScripts("hp", lists, found = answer)
+        assertEquals("in the list's order, not the engine's", listOf("You hit", "Flee"), found.map { it.item.name })
+        assertEquals("a name is on its row already", emptyList<ScriptSearchMatch>(), found[0].places)
+        assertEquals(listOf(2, 5), found[1].places.map { it.index })
+        assertEquals(listOf("Combat"), found[1].folders.map { it.name })
+    }
+
+    @Test
+    fun aSearchByTheEngineIsUsedOnlyForWhatItWasAskedAndTheOptionsLeaveTheNamesToIt() {
+        val lists = mapOf(ScriptItemKind.TRIGGER to triggers)
+        val answer = EngineMessage.ScriptSearch("hp", true, false, listOf(place(4, ScriptSearchField.COMMAND)), false, 1L)
+        assertTrue("not for other text", searchScripts("hpx", lists, SearchOptions(caseSensitive = true), answer).isEmpty())
+        assertTrue("not for other options", searchScripts("hp", lists, SearchOptions(), answer).isEmpty())
+        assertEquals(listOf("Flee"), searchScripts("hp", lists, SearchOptions(caseSensitive = true), answer).map { it.item.name })
+        assertTrue("with an option, only the engine knows what it finds", searchScripts("Greet", lists, SearchOptions(wholeWord = true)).isEmpty())
+        assertEquals(listOf("Greet"), searchScripts("Greet", lists).map { it.item.name })
     }
 
     @Test

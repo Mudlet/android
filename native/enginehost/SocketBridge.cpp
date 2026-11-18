@@ -190,21 +190,85 @@ QString wireName(MapFile::State state)
     return {};
 }
 
+constexpr std::pair<QLatin1StringView, IEngine::ScriptItemKind> scriptItemKinds[]{{QLatin1StringView("trigger"), IEngine::ScriptItemKind::trigger},
+                                                                                  {QLatin1StringView("alias"), IEngine::ScriptItemKind::alias},
+                                                                                  {QLatin1StringView("script"), IEngine::ScriptItemKind::script},
+                                                                                  {QLatin1StringView("timer"), IEngine::ScriptItemKind::timer},
+                                                                                  {QLatin1StringView("key"), IEngine::ScriptItemKind::key},
+                                                                                  {QLatin1StringView("button"), IEngine::ScriptItemKind::button}};
+
 std::optional<IEngine::ScriptItemKind> scriptItemKind(const QJsonObject& message)
 {
-    static constexpr std::pair<QLatin1StringView, IEngine::ScriptItemKind> kinds[]{{QLatin1StringView("trigger"), IEngine::ScriptItemKind::trigger},
-                                                                                   {QLatin1StringView("alias"), IEngine::ScriptItemKind::alias},
-                                                                                   {QLatin1StringView("script"), IEngine::ScriptItemKind::script},
-                                                                                   {QLatin1StringView("timer"), IEngine::ScriptItemKind::timer},
-                                                                                   {QLatin1StringView("key"), IEngine::ScriptItemKind::key},
-                                                                                   {QLatin1StringView("button"), IEngine::ScriptItemKind::button}};
     const QString kind = message.value(QLatin1String("kind")).toString();
-    for (const auto& [name, value] : kinds) {
+    for (const auto& [name, value] : scriptItemKinds) {
         if (kind == name) {
             return value;
         }
     }
     return std::nullopt;
+}
+
+QString wireName(IEngine::ScriptItemKind kind)
+{
+    for (const auto& [name, value] : scriptItemKinds) {
+        if (kind == value) {
+            return name;
+        }
+    }
+    return {};
+}
+
+QString wireName(IEngine::ScriptSearchField field)
+{
+    switch (field) {
+    case IEngine::ScriptSearchField::name:
+        return QStringLiteral("name");
+    case IEngine::ScriptSearchField::command:
+        return QStringLiteral("command");
+    case IEngine::ScriptSearchField::commandDown:
+        return QStringLiteral("commandDown");
+    case IEngine::ScriptSearchField::commandUp:
+        return QStringLiteral("commandUp");
+    case IEngine::ScriptSearchField::pattern:
+        return QStringLiteral("pattern");
+    case IEngine::ScriptSearchField::event:
+        return QStringLiteral("event");
+    case IEngine::ScriptSearchField::css:
+        return QStringLiteral("css");
+    case IEngine::ScriptSearchField::lua:
+        return QStringLiteral("lua");
+    }
+    return {};
+}
+
+// The most matches a scriptSearch carries, and the most of a line it keeps either side of a match: Lua kept on one line,
+// as minified code is, would otherwise fill a frame many times over
+constexpr int maxSearchMatches = 500;
+constexpr int searchContext = 80;
+
+// text cut to searchContext either side of the length characters matched at start, with an ellipsis where it is cut,
+// and where the match starts in what is left
+std::pair<QString, int> searchSnippet(const QString& text, int start, int length)
+{
+    qsizetype from = std::max(0, start - searchContext);
+    qsizetype to = std::min(text.size(), qsizetype(start) + length + searchContext);
+    // A surrogate pair cut in two would be no character
+    if (from > 0 && text.at(from).isLowSurrogate()) {
+        --from;
+    }
+    if (to < text.size() && text.at(to).isLowSurrogate()) {
+        ++to;
+    }
+    QString snippet = text.mid(from, to - from);
+    int moved = start - int(from);
+    if (from > 0) {
+        snippet.prepend(QChar(0x2026));
+        ++moved;
+    }
+    if (to < text.size()) {
+        snippet.append(QChar(0x2026));
+    }
+    return {snippet, moved};
 }
 
 constexpr QLatin1StringView scriptItemKindProblem("kind must be trigger, alias, script, timer, key or button");
@@ -711,6 +775,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         refuse(type, path.isEmpty() ? QStringLiteral("path must not be empty") : mEngine->installPackage(path));
     } else if (type == QLatin1String("uninstallPackage")) {
         uninstallPackage(message);
+    } else if (type == QLatin1String("searchScriptItems")) {
+        searchScriptItems(message);
     } else if (type == QLatin1String("checkLua")) {
         checkLua(message);
     } else if (type == QLatin1String("clearErrorConsole")) {
@@ -1363,6 +1429,44 @@ QString SocketBridge::moveScriptItem(const QJsonObject& message)
         return QStringLiteral("position must be a whole number from 0");
     }
     return mEngine->moveScriptItem(std::get<0>(target).first, std::get<0>(target).second, *parent, *position);
+}
+
+void SocketBridge::searchScriptItems(const QJsonObject& message)
+{
+    const QJsonValue text = message.value(QLatin1String("text"));
+    const QJsonValue caseSensitive = message.value(QLatin1String("caseSensitive"));
+    const QJsonValue wholeWord = message.value(QLatin1String("wholeWord"));
+    if (!text.isString()) {
+        sendError(QStringLiteral("searchScriptItems: text must be a string"));
+        return;
+    }
+    if (!(caseSensitive.isBool() || caseSensitive.isUndefined()) || !(wholeWord.isBool() || wholeWord.isUndefined())) {
+        sendError(QStringLiteral("searchScriptItems: caseSensitive and wholeWord must be true or false"));
+        return;
+    }
+    const std::variant<IEngine::ScriptSearch, QString> found = mEngine->searchScriptItems(text.toString(), caseSensitive.toBool(), wholeWord.toBool(), maxSearchMatches);
+    if (const QString* problem = std::get_if<QString>(&found)) {
+        sendError(QStringLiteral("searchScriptItems: %1").arg(*problem));
+        return;
+    }
+    const IEngine::ScriptSearch& search = std::get<IEngine::ScriptSearch>(found);
+    QJsonArray matches;
+    for (const IEngine::ScriptSearchMatch& match : search.matches) {
+        const auto [snippet, start] = searchSnippet(match.text, match.start, int(text.toString().size()));
+        matches.append(QJsonObject{{QStringLiteral("kind"), wireName(match.kind)},
+                                   {QStringLiteral("item"), match.item},
+                                   {QStringLiteral("name"), match.name},
+                                   {QStringLiteral("field"), wireName(match.field)},
+                                   {QStringLiteral("index"), match.index},
+                                   {QStringLiteral("text"), snippet},
+                                   {QStringLiteral("start"), start}});
+    }
+    sendReply({{QStringLiteral("t"), QStringLiteral("scriptSearch")},
+               {QStringLiteral("text"), text},
+               {QStringLiteral("caseSensitive"), caseSensitive.toBool()},
+               {QStringLiteral("wholeWord"), wholeWord.toBool()},
+               {QStringLiteral("matches"), matches},
+               {QStringLiteral("more"), search.more}});
 }
 
 void SocketBridge::checkLua(const QJsonObject& message)

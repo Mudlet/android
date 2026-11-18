@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import org.mudlet.android.R
@@ -200,7 +201,7 @@ private fun TourCard(index: Int, targets: TourTargets, onStep: (Int) -> Unit, on
         ) {
             Column(Modifier.padding(start = 20.dp, end = 12.dp, top = 20.dp, bottom = 8.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(end = 8.dp).semantics { heading() })
-                Text(body, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp, end = 8.dp))
+                Text(body, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp, end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     stringResource(R.string.tour_progress, index + 1, TourStep.entries.size),
                     style = MaterialTheme.typography.labelMedium,

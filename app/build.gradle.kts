@@ -253,6 +253,21 @@ fun bundledModules(root: ResolvedComponentResult): List<String> {
     }.sorted()
 }
 
+/** Copies docs/release-notes.md into the APK's assets, for About's changelog to show */
+abstract class CopyReleaseNotes : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val notes: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        notes.get().asFile.copyTo(outputDir.get().asFile.resolve("release-notes.md"), overwrite = true)
+    }
+}
+
 androidComponents {
     onVariants { variant ->
         val generate = tasks.register<GenerateGradleLicences>("generate${variant.name.replaceFirstChar { it.uppercase() }}Licences") {
@@ -261,6 +276,10 @@ androidComponents {
             dependencyHandler = project.dependencies
         }
         variant.sources.assets?.addGeneratedSourceDirectory(generate, GenerateGradleLicences::outputDir)
+        val copyNotes = tasks.register<CopyReleaseNotes>("copy${variant.name.replaceFirstChar { it.uppercase() }}ReleaseNotes") {
+            notes.set(rootProject.layout.projectDirectory.file("docs/release-notes.md"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(copyNotes, CopyReleaseNotes::outputDir)
     }
 }
 

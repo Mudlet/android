@@ -49,6 +49,14 @@ profile that loads is given the app's values, over its own, so a script's `getCo
 phone they belong with the player and the device, as TalkBack itself does: kept per profile, every new profile would
 start without the player's choice.
 
+## The changelog
+
+About's "Show changelog" (`ui/about/ChangelogScreen.kt`) lists the app's own release notes
+([`release-notes.md`](release-notes.md)), where desktop Mudlet's Help > "Show changelog" shows Mudlet's, from its
+updater's feed. The app is released apart from Mudlet, and what a player notices in it is mostly the app's own change;
+the engine's Mudlet version and commit are in About. The desktop also shows its changelog once after an update, which
+the app leaves to Google Play's "What's new", the same text.
+
 ## A new game's input line is emptied after a send
 
 A game added in the app starts with "Clear the input line after sending" on, and so does every game that was there

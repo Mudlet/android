@@ -185,6 +185,14 @@
     <string name="help_live_chat">Live help chat</string>
     <!-- About > Help: a link to Mudlet's forum; desktop Mudlet's Help menu says the same -->
     <string name="help_forum">Online forum</string>
+    <!-- About > Help: opens the changelog, what each release of the app said is new; desktop Mudlet's Help menu says the same -->
+    <string name="help_changelog">Show changelog</string>
+    <!-- The title of the changelog screen, which lists what each release of the app said is new -->
+    <string name="changelog_title">Changelog</string>
+    <!-- A heading on the changelog screen above what one release said is new; %1$s is its version, such as 1.0.0 -->
+    <string name="changelog_version">Version %1$s</string>
+    <!-- The changelog screen's text when the build comes before the first stable release, which has the first notes -->
+    <string name="changelog_none">No release notes yet: they start with the first stable release.</string>
     <!-- The script library's title bar button, read by a screen reader, that opens a menu of help pages -->
     <string name="scripts_help">Help</string>
     <!-- Script library > Help: the manual's introduction to triggers, opened in the browser -->

@@ -1734,6 +1734,8 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       download page, and docs/licences.md. A row of the list reads its name, version and licence, and "double tap to
       read its licence"; its screen reads the full licence texts paragraph by paragraph, and Back returns to the list
       where it was.
+    - Help's "Show changelog" opens the changelog: a heading for each stable release in docs/release-notes.md (which
+      the build copies into the APK's assets) with its lines, or, before the first, a line saying there are none yet.
     - Far down the list and far into a licence text, swipe through: every element TalkBack lands on reads its text,
       including a line half scrolled off at the top (the emulator's accessibility check reports one there as
       unlabelled, which `AboutScreenTest` therefore does not check).

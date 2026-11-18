@@ -1719,8 +1719,6 @@
     <string name="scripts_key_meta">Meta</string>
     <!-- A chip on a key binding's page: the key is one of the number pad's -->
     <string name="scripts_key_keypad">Number pad</string>
-    <!-- On a key binding's page, under the keys: the app does not pass a keyboard's keys on to the game's scripts yet -->
-    <string name="scripts_key_note">Key bindings run in Mudlet on a computer. This app does not pass a keyboard\'s keys to them yet.</string>
     <!-- The field of what a key binding sends to the game when the key is pressed -->
     <string name="scripts_key_command">Send to the game</string>
     <!-- A key's name in a key binding -->

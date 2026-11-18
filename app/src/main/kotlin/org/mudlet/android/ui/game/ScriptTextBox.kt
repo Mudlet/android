@@ -118,6 +118,7 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit:
         onDispose {
             client.flushTyping(name)
             client.typing(name, null)
+            if (client.focusedTextBox == name) client.focusedTextBox = null
         }
     }
 
@@ -154,7 +155,14 @@ internal fun ScriptTextBox(placed: PlacedWindow, content: TextBoxContent?, edit:
         BasicTextField(
             value = value,
             onValueChange = { value = it },
-            modifier = Modifier.fillMaxSize().onFocusChanged { if (!it.isFocused) client.flushTyping(name) }.onPreviewKeyEvent { event ->
+            modifier = Modifier.fillMaxSize().onFocusChanged {
+                if (it.isFocused) {
+                    client.focusedTextBox = name
+                } else {
+                    client.flushTyping(name)
+                    if (client.focusedTextBox == name) client.focusedTextBox = null
+                }
+            }.onPreviewKeyEvent { event ->
                 // Both halves of the key are taken, so the field types no tab
                 if (!tabMovesFocus || event.key != Key.Tab) return@onPreviewKeyEvent false
                 if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)

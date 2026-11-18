@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -28,10 +29,14 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
+import androidx.compose.ui.test.withKeyDown
 import androidx.compose.ui.text.TextRange
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,13 +48,17 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.KeyBinding
+import org.mudlet.android.protocol.KeyModifier
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.HISTORY_SHEET_TAG
 
 /**
  * The input line's engine features against a fake engine: the masked field while the game hides input, the engine's
  * history, a command it brings back selected whole or not as the game's "Highlight history" says, a line a script sets,
- * completion, why the engine could not send, and the command sent kept on the line in a game that keeps it. Controls are found by the labels TalkBack reads and activated through their accessibility
- * actions.
+ * completion, why the engine could not send, the command sent kept on the line in a game that keeps it, and a hardware
+ * key the profile's key bindings take going to the engine. Controls are found by the labels TalkBack reads and
+ * activated through their accessibility actions.
  */
 @RunWith(AndroidJUnit4::class)
 class InputLineTest {
@@ -270,6 +279,41 @@ class InputLineTest {
         compose.onNode(input).performTextInput("s")
         compose.onNode(input).assert(editableText("looks"))
         assertTrue("no notice once the player types", compose.onAllNodesWithText(string(R.string.input_no_completion)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun aKeyAKeyBindingTakesGoesToTheEngineAndTheRestToTheLine() {
+        // As tempKey(mudlet.keymodifier.Keypad, mudlet.key["8"], [[send("north")]]) and tempKey(mudlet.key.F1, ...) give them
+        val keypad8 = KeyBinding('8'.code, KeyModifier.KEYPAD.bit)
+        val f1 = KeyBinding(0x01000030, 0)
+        val ctrlR = KeyBinding('R'.code, KeyModifier.CONTROL.bit)
+        val keys = JSONArray(listOf(keypad8, f1, ctrlR).map { JSONObject().put("key", it.key).put("modifiers", it.modifiers) })
+        session.send(JSONObject().put("t", "keyBindings").put("keys", keys))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.keyBindings } == setOf(keypad8, f1, ctrlR) }
+        compose.onNode(input).requestFocus()
+
+        compose.onNode(input).performKeyInput {
+            if (!isNumLockOn) pressKey(Key.NumLock)
+            pressKey(Key.NumPad8)
+        }
+        val north = session.receive("pressKey")
+        assertEquals(listOf('8'.code, KeyModifier.KEYPAD.bit, "8"), listOf(north.getInt("key"), north.getInt("modifiers"), north.getString("text")))
+        compose.onNode(input).performKeyInput { pressKey(Key.F1) }
+        val help = session.receive("pressKey")
+        assertEquals(listOf(0x01000030, 0, ""), listOf(help.getInt("key"), help.getInt("modifiers"), help.getString("text")))
+        compose.onNode(input).assertIsFocused().assert(editableText(""))
+        // A binding beats the app's own Ctrl+R, the history
+        compose.onNode(input).performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.R) } }
+        val bound = session.receive("pressKey")
+        assertEquals(listOf('R'.code, KeyModifier.CONTROL.bit), listOf(bound.getInt("key"), bound.getInt("modifiers")))
+        compose.waitForIdle()
+        compose.onNode(hasTestTag(HISTORY_SHEET_TAG)).assertDoesNotExist()
+
+        // A key no binding takes types as before
+        compose.onNode(input).performKeyInput { pressKey(Key.A) }
+        compose.waitUntil(WAIT_MS) { hasEditableText("a") }
+        session.assertNoRequest("pressKey", 500)
     }
 
     @Test

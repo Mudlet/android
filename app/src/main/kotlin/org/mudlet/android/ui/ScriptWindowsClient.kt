@@ -15,6 +15,8 @@ import androidx.core.net.toUri
 import org.mudlet.android.protocol.AddonCommand
 import org.mudlet.android.protocol.ButtonBar
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.KeyBinding
+import org.mudlet.android.protocol.KeyPressResult
 import org.mudlet.android.protocol.LabelLink
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.MapInfo
@@ -43,6 +45,13 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         private set
     var commands by mutableStateOf(emptyList<AddonCommand>())
         private set
+
+    /** The keys whose press goes to a key binding of the profile, as the engine last sent them (docs/protocol.md, "Key bindings"). */
+    var keyBindings by mutableStateOf(emptySet<KeyBinding>())
+        private set
+
+    /** The script text box the player is typing in, if any: the keys typed there are the box's, not the bindings'. */
+    internal var focusedTextBox: String? = null
 
     /** The map as the engine last drew it (docs/protocol.md, "The map"); null until it first does, for each engine instance. */
     var map by mutableStateOf<MapImage?>(null)
@@ -121,6 +130,14 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
 
             is EngineMessage.Commands -> commands = message.commands
 
+            is EngineMessage.KeyBindings -> keyBindings = message.keys.toSet()
+
+            // Only for a key judged by a list the bindings have since changed from, or whose text hidden input keeps;
+            // the key is then dropped
+            is EngineMessage.KeyPressed -> if (message.result == KeyPressResult.NO_BINDING || message.result == KeyPressResult.KEY_KEPT) {
+                Log.i(TAG, "a key sent to the bindings was not theirs: ${message.result}")
+            }
+
             else -> {
                 // New text may have changed the console's links, so they are asked about again
                 if (message is EngineMessage.WindowText && message.replyTo == null) askedLinks.remove(message.window)
@@ -160,6 +177,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (request == "setMapScale") Log.w(TAG, "the map's scale: ${message.message}")
         // The tabs follow the engine's windows, so they still show the page in front
         if (request == "selectFrameTab") Log.w(TAG, "an MXP frame's tab was refused")
+        // The key is lost, as when the profile closes under it
+        if (request == "pressKey") Log.w(TAG, "a key binding's key was refused")
         // The engine tried the link, the label no longer has it, or it is a prompt: link while the game hides input:
         // following it here would run it twice, or do what the engine refused
         if (request == "followLabelLink") Log.w(TAG, "a label's link was refused")
@@ -209,6 +228,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
             state = ScriptWindows(textBoxesTyped = state.textBoxesTyped, textBoxesTypedOn = state.textBoxesTypedOn)
             buttonBars = emptyList()
             commands = emptyList()
+            keyBindings = emptySet()
             map = null
             mapMover.onFrame(null)
             mapRefusal = null
@@ -317,6 +337,12 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     fun pressButton(button: Int): Boolean {
         flushTyping()
         return session.send(Requests.pressButton(button))
+    }
+
+    /** A press of [key], one of [keyBindings], which typed [text], empty for nothing: its binding runs. False as for [ProfileSession.send]. */
+    fun pressKey(key: KeyBinding, text: String): Boolean {
+        flushTyping()
+        return session.send(Requests.pressKey(key.key, key.modifiers, text, session.newRequestId()))
     }
 
     /** A tap on the command [command] of [commands]: a checkable one is ticked or unticked. False as for [ProfileSession.send]. */

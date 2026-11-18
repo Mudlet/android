@@ -118,7 +118,6 @@ internal fun KeyFields(binding: ScriptItemDetails.Key, onChange: (ScriptItemDeta
             )
         }
     }
-    Note(R.string.scripts_key_note)
     CommandField(R.string.scripts_key_command, binding.command) { onChange(binding.copy(command = it)) }
     if (picking) {
         TitledSheet(stringResource(R.string.scripts_key_sheet), stringResource(R.string.scripts_key_sheet_close), onDismiss = { picking = false }) {

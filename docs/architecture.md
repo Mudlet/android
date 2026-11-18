@@ -701,9 +701,17 @@ kept by `ScriptItemsClient`:
   own folder stays put. The snackbar says where it went once the list after the move has come.
 - Not yet: a colour pattern's picker, moving an item onto another
   to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the
-  Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called). A key
-  binding is edited but does not run here: the app passes no key of a keyboard on to the profile yet, and the key's
-  page says so.
+  Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called).
+- A hardware keyboard's key that the profile's key bindings take (`keyBindings`, by Qt's key code and modifier bits,
+  which `HardwareKeys` makes from Android's, the number pad's by Num Lock as on the desktop) goes to the engine as
+  `pressKey`, from the input line or anywhere on the game screen but a script's text box, which on the desktop offers
+  no key to the bindings either; any other key types as before. A binding beats the app's Ctrl+R and Ctrl+Tab, as
+  desktop's command line claims a bound profile-switching shortcut. Not yet: Input's "Run all matching key
+  bindings" (`runAllKeyMatches`, which no setting the engine takes carries), so the first binding that matches runs.
+- Desktop's main-window shortcuts off macOS (`mudlet.cpp`) beat a key binding, as a QShortcut does there, for the
+  screens the app has: Alt+E the scripts, Alt+P the settings, Alt+M the map, Alt+C the games, Alt+D, Alt+R and Alt+W
+  disconnect, reconnect and close the game. Not yet: the caret key, mute, notepad, packages, modules, multi-view, the
+  input line's toggle and the Ctrl+Alt ones.
 
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the

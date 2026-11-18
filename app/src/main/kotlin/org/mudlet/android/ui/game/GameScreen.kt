@@ -34,8 +34,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -57,6 +59,7 @@ import org.mudlet.android.ui.ConsoleColors
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletTopBar
 import org.mudlet.android.ui.ProfileSession
+import org.mudlet.android.ui.ScriptWindowsClient
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -87,7 +90,8 @@ import kotlin.reflect.KClass
  * front, TalkBack says its name and state and the focus goes to its input line. A swipe on the pill, or Ctrl+Tab and
  * Ctrl+Shift+Tab on a hardware keyboard, brings the next or the previous game, and the console, or the map in front,
  * slides across with it ([GameSwipe]). Each change of the front game's connection is said once, with the game's name
- * first, so Mudlet's retries after a drop are not each read out.
+ * first, so Mudlet's retries after a drop are not each read out. Desktop's Alt shortcuts open the screens they open
+ * there ([desktopShortcut]), and a hardware key a key binding of the profile takes goes to the engine.
  */
 @Composable
 fun GameScreen(onBack: () -> Unit, onOpenSettings: () -> Unit, onOpenScripts: () -> Unit, onMakeTrigger: (String) -> Unit) {
@@ -144,6 +148,7 @@ private fun ProfileGameScreen(
     val passwords = remember { PasswordStore(context) }
     val resources = LocalResources.current
     val hidden = c.hiddenInput
+    val boundKeysDown = remember { HashSet<Int>() }
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }
     // The map behind the text is not there to be moved or picked in: once the map in front closes, not as a rotation
@@ -223,6 +228,22 @@ private fun ProfileGameScreen(
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
+                desktopShortcut(event)?.let { shortcut ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (shortcut) {
+                            DesktopShortcut.SCRIPTS -> onOpenScripts()
+                            DesktopShortcut.SETTINGS -> onOpenSettings()
+                            DesktopShortcut.MAP -> onMapOpen(!mapOpen)
+                            DesktopShortcut.CONNECT -> onBack()
+                            DesktopShortcut.DISCONNECT -> if (c.name.isNotEmpty() && state.canDisconnect) disconnect()
+                            DesktopShortcut.RECONNECT -> if (canReconnect) reconnect()
+                            DesktopShortcut.CLOSE -> if (c.name.isNotEmpty()) close(c.name)
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                // A binding comes next, as desktop's command line claims a bound profile-switching shortcut
+                if (sentToKeyBindings(event, c.windows, boundKeysDown)) return@onPreviewKeyEvent true
                 val ctrlR = event.key == Key.R && event.isCtrlPressed && !hidden
                 val ctrlTab = event.key == Key.Tab && event.isCtrlPressed
                 // Both halves of the press, so the focused field types no "r" and the focus stays where it is
@@ -435,4 +456,47 @@ private fun expiryText(expires: String): String {
     return runCatching {
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault()).format(Instant.parse(expires))
     }.getOrDefault(expires)
+}
+
+/**
+ * Whether [event] is for a key binding of the profile, which is then pressed: a key down whose Qt key the bindings
+ * take, outside a script's text box, and the up of a key whose down was, so the focused field types neither half.
+ * [down] holds the Android key codes whose down went to the bindings.
+ */
+private fun sentToKeyBindings(event: KeyEvent, windows: ScriptWindowsClient, down: MutableSet<Int>): Boolean {
+    val native = event.nativeKeyEvent
+    if (event.type == KeyEventType.KeyUp) return down.remove(native.keyCode)
+    if (event.type != KeyEventType.KeyDown || windows.focusedTextBox != null) return false
+    val shifted = native.getUnicodeChar(native.metaState and android.view.KeyEvent.META_SHIFT_MASK)
+    val key = HardwareKeys.of(native.keyCode, native.metaState, shifted) ?: return false
+    if (key !in windows.keyBindings) return false
+    // Negative for a dead key, which types nothing yet
+    val typed = native.unicodeChar
+    // Unsent, as with no link to the engine, the key types as any other
+    if (!windows.pressKey(key, if (typed > 0) String(Character.toChars(typed)) else "")) return false
+    down += native.keyCode
+    return true
+}
+
+private enum class DesktopShortcut { SCRIPTS, SETTINGS, MAP, CONNECT, DISCONNECT, RECONNECT, CLOSE }
+
+/**
+ * Which of the main window's shortcuts desktop Mudlet gives off macOS (`mudlet.cpp`) [event] is, for the screens the
+ * app has: Alt+E the scripts, Alt+P the settings, Alt+M the map, Alt+C the games, Alt+D, Alt+R and Alt+W disconnect,
+ * reconnect and close the game. As a QShortcut there, it beats a key binding on the same key.
+ */
+private fun desktopShortcut(event: KeyEvent): DesktopShortcut? {
+    // The left Alt alone: the right one is AltGr on most layouts, which types
+    val leftAlt = event.nativeKeyEvent.metaState and android.view.KeyEvent.META_ALT_LEFT_ON != 0
+    if (!leftAlt || event.isCtrlPressed || event.isShiftPressed || event.isMetaPressed) return null
+    return when (event.key) {
+        Key.E -> DesktopShortcut.SCRIPTS
+        Key.P -> DesktopShortcut.SETTINGS
+        Key.M -> DesktopShortcut.MAP
+        Key.C -> DesktopShortcut.CONNECT
+        Key.D -> DesktopShortcut.DISCONNECT
+        Key.R -> DesktopShortcut.RECONNECT
+        Key.W -> DesktopShortcut.CLOSE
+        else -> null
+    }
 }

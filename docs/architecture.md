@@ -321,6 +321,11 @@ opens it, with its stored password. Any other address opens the editor of a new 
 as desktop's `createProfileForUri` names one, and nothing is saved or connected until the player saves it. A link
 never changes a saved profile.
 
+A saved game's editor has "Open offline", desktop's Offline: `EngineClient.openProfileOffline` sends `openProfile`
+with `connect` false and the stored password, so the game's scripts, settings and map can be worked on with no
+connection, and its Connect later logs in. What the player changed in the editor is saved first, as desktop's dialog
+keeps each change. It opens beside the games open, in front, when any are; one open already only comes to the front.
+
 The engine keeps no password, so the app does. `data/PasswordStore.kt` encrypts each with AES-GCM under a key that
 never leaves the Android KeyStore (no user authentication, so a profile opens without a prompt), with the profile's
 name as associated data, so one profile's cannot be moved to another's. The ciphertext is in
@@ -1793,6 +1798,8 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       host:port with your profile name?", TalkBack reads it, and Connect logs in as Connect on the list does; Cancel
       connects nothing. A link to another address opens "New game" filled in from it, with the note to check the
       address; nothing is saved until Save. `telnet://host:0` says it is not a game's address.
+    - In a saved game's editor, tap Open offline: the game screen shows the game not connected, its scripts and
+      settings can be changed, and Connect logs in with the stored password.
     - After a refused save (a name with a `/`, say), TalkBack reads the engine's reason without moving focus.
     - Add your own game with its character name and password, and Connect: Mudlet logs in. Force-stop the app in the
       system's settings, reopen it and Connect: it logs in again. Forget password, then Connect: the game asks for it.

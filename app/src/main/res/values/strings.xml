@@ -128,6 +128,9 @@
     <string name="profile_save">Save</string>
     <!-- The profile editor's button that deletes the game, after a confirmation dialog -->
     <string name="profile_delete">Delete</string>
+    <!-- The profile editor's button that opens the game without connecting to it, to work on its scripts, settings or
+         map offline; Mudlet desktop's "Offline" button -->
+    <string name="profile_open_offline">Open offline</string>
     <!-- The title of the dialog that confirms deleting a profile; %1$s is its name -->
     <string name="profile_delete_title">Delete %1$s?</string>
     <!-- The text of the dialog that confirms deleting a profile -->

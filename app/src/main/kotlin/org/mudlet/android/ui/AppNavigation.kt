@@ -174,7 +174,14 @@ fun AppNavigation(
                     },
                     detailContent = { key ->
                         // The engine's answer can come once another profile's editor has taken this one's place
-                        ProfileEditor(key.ifEmpty { null }, onClose = { if (editing == key) editing = null })
+                        ProfileEditor(
+                            key.ifEmpty { null },
+                            onClose = { if (editing == key) editing = null },
+                            onOpenGame = entry.whileShown {
+                                editing = null
+                                nav.navigate(Routes.GAME) { launchSingleTop = true }
+                            },
+                        )
                     },
                     empty = { DetailPlaceholder(stringResource(R.string.profiles_pick)) },
                 )
@@ -216,7 +223,16 @@ fun AppNavigation(
                 nullable = true
             }
             composable(Routes.PROFILE, listOf(name)) { entry ->
-                ProfileEditor(entry.arguments?.getString("name"), onClose = entry.whileShown { nav.navigateUp() })
+                ProfileEditor(
+                    entry.arguments?.getString("name"),
+                    onClose = entry.whileShown { nav.navigateUp() },
+                    onOpenGame = entry.whileShown {
+                        nav.navigate(Routes.GAME) {
+                            popUpTo(Routes.PROFILES)
+                            launchSingleTop = true
+                        }
+                    },
+                )
             }
             composable(Routes.PROFILE_FROM_LINK, listOf(navArgument("link") { type = NavType.StringType }, name)) { entry ->
                 val link = entry.arguments?.getString("link")?.let(TelnetLink::parse)

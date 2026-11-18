@@ -21,6 +21,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -41,6 +42,7 @@ import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.ui.game.SOUND_BUTTON_TAG
 import org.mudlet.android.ui.scripts.LUA_EDITOR_TAG
+import org.mudlet.android.ui.scripts.SCRIPT_LIBRARY_TAG
 import java.util.Locale
 import kotlin.math.abs
 
@@ -258,6 +260,9 @@ class PseudoLocaleTest(private val locale: String) {
         assertTextFits("a toolbar's page")
         assertAtStart("the toolbar's heading", hasText(string(R.string.scripts_bar_place)))
         activate(hasContentDescription(string(R.string.navigate_back)))
+        // On a small screen en-XA's title takes several lines beside the title bar's buttons, which leaves the
+        // toolbar's button below the fold, not yet composed; TalkBack scrolls to it as well
+        compose.onNode(hasTestTag(SCRIPT_LIBRARY_TAG)).performScrollToNode(hasText("Greet") and hasClickAction())
         activate(hasText("Greet"))
         open("button", JSONObject(button.toString()).put("id", 2).put("parent", 1))
         waitFor(hasText(string(R.string.scripts_button_push_down_hint)))

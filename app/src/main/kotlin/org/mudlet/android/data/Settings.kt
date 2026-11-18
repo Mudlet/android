@@ -97,7 +97,7 @@ object Settings {
     val forceMxpOn = BoolSetting("specialForceMXPProcessorOn", default = false, mudlet = true)
     val lazyTriggerVariables = BoolSetting("lazyCaptureGlobals", default = true, mudlet = true)
 
-    /** Whether a script's errors are also shown in the game's text, as the app has no error console. */
+    /** Whether a script's errors are also shown in the game's text, as well as in the error console. */
     val showScriptErrors = BoolSetting("echoLuaErrors", default = false, mudlet = true)
 
     // The certificate errors a secure connection lets past, under "TLS/SSL secure connection" in desktop Mudlet

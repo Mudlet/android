@@ -183,6 +183,9 @@ class ProfileSession internal constructor(
     /** Its packages, as the package manager shows them; a picked file's copy goes once the engine has installed it. */
     internal val packages = PackagesClient(::newRequestId, ::send) { path -> pickedPackage(app, path)?.deleteRecursively() }
 
+    /** Its error console: the Lua errors its scripts raised, each with the item that raised it. */
+    internal val errors = ErrorConsoleClient(::send)
+
     /** The text sizes the player pinched this profile's script consoles to. */
     internal val consoleZoom = ConsoleZoomClient(name, ::prefs, ::runAppLua)
 
@@ -578,6 +581,7 @@ class ProfileSession internal constructor(
                 links.onAttached(sameInstance, linesAdded)
                 scripts.onAttached(sameInstance)
                 packages.onAttached(sameInstance)
+                errors.onAttached(sameInstance)
             }
         }
 
@@ -699,6 +703,8 @@ class ProfileSession internal constructor(
                 EngineMessage.PackagesChanged -> post { packages.onChanged() }
 
                 is EngineMessage.PackageInstalled -> post { packages.onInstalled(message) }
+
+                is EngineMessage.ErrorConsole -> post { errors.onMessage(message) }
 
                 is EngineMessage.MapDownload -> post { appMap.onMapDownload(message, app.resources, front()) }
 

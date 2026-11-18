@@ -745,6 +745,23 @@ kept by `ScriptItemsClient`:
   disconnect, reconnect and close the game. Not yet: the caret key, mute, notepad, packages, modules, multi-view, the
   input line's toggle and the Ctrl+Alt ones.
 
+### The error console
+The script library's title bar has an Errors button that opens the profile's error console
+(`ui/errors/ErrorConsoleScreen.kt`), kept by `ErrorConsoleClient` from the engine's `errorConsole` (`docs/protocol.md`):
+- Each Lua error, `printError()` and `debugc()` the profile's scripts raised since it loaded or was cleared, the
+  newest at the foot, as desktop Mudlet's editor lists them: whether it is an error or a debug line and when it came,
+  what raised it (the item's name and Lua function, the event whose handler it was, the line of its Lua), and Lua's
+  message. An entry whose item the library shows opens that item's page; the others are not buttons.
+- While the newest entry is in view, the list follows new ones to the top of the newest, as one entry can be taller
+  than the screen; scrolled up, it stays where the player is, as the game's console does.
+- Copy all puts the entries on the clipboard as the screen shows them, only the newest that fit in 100000 characters
+  (a larger clip would pass Binder's limit) with a snackbar that says how many, and Clear sends `clearErrorConsole`.
+- The game's Scripts button and the library's Errors button carry a badge with how many errors, not debug lines, came
+  since the console last showed, which is also in what TalkBack reads for them. While the console shows, TalkBack
+  says each new error once, through the Announcer, and not the entries already there.
+- A reattach to the same engine keeps what was seen; a new engine instance numbers its entries from 1 again, so all
+  of them are new.
+
 ## libmudlet as the engine
 Built with `LIBMUDLET_BUILD_DIR`, the engine is `MudletEngine` (`native/enginehost/MudletEngine.*`), behind the
 same socket protocol: each open profile is a `MudletProfile` (`native/enginehost/MudletProfile.*`) in a

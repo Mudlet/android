@@ -109,6 +109,7 @@ public:
     QString enableScriptItem(ScriptItemKind kind, int item, bool enabled) override;
     QString moveScriptItem(ScriptItemKind kind, int item, int parent, int position) override;
     QString deleteScriptItem(ScriptItemKind kind, int item) override;
+    std::variant<ScriptSearch, QString> searchScriptItems(const QString& text, bool caseSensitive, bool wholeWord, int limit) const override;
     std::optional<LuaProblem> checkLua(const QString& code) const override;
     std::variant<QList<PackageInfo>, QString> packages() const override;
     QString installPackage(const QString& path) override;

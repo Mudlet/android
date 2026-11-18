@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **32**.
+The current version is **33**.
 
 ## Transport
 
@@ -122,6 +122,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `enableScriptItem` | `kind`, `item`, `enabled`, `id`? | Switches the item on or off, as the desktop editor's checkbox does (`THeadlessSession::setScriptItemEnabled()`). Answered by `scriptItem`. |
 | `moveScriptItem` | `kind`, `item`, `parent`, `position` | Moves the item into the folder whose id is `parent`, or to the top level for 0, at `position` among the items shown there, as a drag in the desktop editor does (`THeadlessSession::moveScriptItem()`). |
 | `deleteScriptItem` | `kind`, `item` | Deletes the item, and all in it for a folder, as the desktop editor's delete does (`THeadlessSession::deleteScriptItem()`). |
+| `searchScriptItems` | `text`, `caseSensitive`?, `wholeWord`?, `id`? | Finds `text` in the open profile's triggers, aliases, scripts, buttons, timers and keys, as the desktop script editor's search box does (`THeadlessSession::searchScriptItems()`; "Searching triggers, aliases and scripts" below): whatever its case unless `caseSensitive`, and with `wholeWord` only where it is a word of its own. Answered by `scriptSearch`. |
 | `checkLua` | `code`, `id`? | Compiles `code` as Lua without running it, for a script editor to say what is wrong with it (`THeadlessSession::checkLua()`). Answered by `luaCheck`. Needs no open profile. |
 | `clearErrorConsole` | | Empties the open profile's error console, which an `errorConsole` with `full` true and no `entries` follows. |
 | `getSettings` | `keys`, `id`? | Asks for the open profile's settings named in `keys`, a list of the keys Lua's `getConfig()` takes, answered by `settings` (`THeadlessSession::settings()`, carried in `scripts/mudlet-patches/`). `keys` must be a list of names, not empty. |
@@ -131,7 +132,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `uninstallPackage` | `name`, `id`? | Removes the package `name` as the Package Manager's Remove does (`THeadlessSession::uninstallPackage()`): its items go, `sysUninstall` and `sysUninstallPackage` are raised, and the profile is saved. Answered by `packages`, the packages left. |
 
 Any request may carry `id`. The engine copies it, as it came, into the `re` of every `status` it sends while
-handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `luaCheck`, `packages`, `keyPressed` or `error` that answers it,
+handling that request, of the `profiles`, `openProfiles`, `windowText`, `image`, `rooms`, `room`, `areas`, `settings`, `scriptItems`, `scriptItem`, `scriptSearch`, `luaCheck`, `packages`, `keyPressed` or `error` that answers it,
 and into `pong`.
 Statuses that come later, such as `connection` once a connect succeeds, carry no `re`.
 
@@ -229,6 +230,10 @@ says `failed` and why, as it does for an install sent before the last one has an
 `modifiers` that is not a whole number from 0, a `text` that is not a string, and in libmudlet no profile loaded
 (`no profile running`) and as `THeadlessSession::pressKey()` refuses.
 
+`searchScriptItems` is answered by `scriptSearch`, or by `error` whose `message` is `searchScriptItems`, a colon and
+why: a `text` that is not a string, a `caseSensitive` or `wholeWord` that is not true or false, and in libmudlet no
+profile loaded (`no profile running`). An empty `text` finds nothing.
+
 `checkLua` is answered by `luaCheck`, or by `error` for a `code` that is not a string. Code that does not compile is
 no refusal: `luaCheck` says what is wrong with it.
 
@@ -273,6 +278,7 @@ no refusal: `luaCheck` says what is wrong with it.
 | `room` | `id`, `name`, `areaId`, `area`, `x`, `y`, `z`, `steps`, `exits`: `direction`, `to`, `toName`, `locked`; `symbol`, `env`, `color`, `weight`, `locked`; `re`? | The answer to `roomInfo` and the edits that give a room: the room's `id`, `name`, its area's id and name, its coordinates, `steps` as in `rooms`, and its `exits`: the twelve directions first (`direction` `n`, `ne`, `nw`, `e`, `w`, `s`, `se`, `sw`, `up`, `down`, `in`, `out`), then the special exits by command, each with the id of the room it leads to `to`, that room's name `toName` (empty where it is not in the map) and whether it is `locked`; then what `editRoom` sets: its `symbol`, environment `env` and the colour that draws it `color`, as `#rrggbb`, its `weight` and whether it is `locked`. |
 | `scriptItems` | `kind`, `items`: `id`, `parent`, `name`, `folder`, `enabled`, `active`, `package`, `error`, `summary`; `re`? | The answer to `scriptItems`: the `kind` asked for, and its `items` depth first, each folder before what is in it, in the desktop editor's order; each with its `id`, the id of the folder it is in, `parent` (0 for the top level), its `name`, whether it is a `folder`, `enabled` (switched on, as the editor's checkbox shows it), `active` (switched on, compiled, and in folders that run), the `package` or module it came with (empty for the player's own), `error`, why it cannot run, as plain text, or empty, and `summary`, what a list shows under its name, as plain text: a trigger's patterns and a script's event handlers, one a line, an alias's pattern, a timer's time as `hh:mm:ss.zzz`, a key's name as the desktop writes it (`control + F1`) and the command a button sends, or empty. The temporary items scripts make are left out, as the editor leaves them. |
 | `scriptItem` | `kind`, `fields`, `re`? | The answer to `scriptItem` and the changes that give an item: its `kind` and its `fields`, an object of what `scriptItems` gives of it, `script`, its Lua, and those of its kind: a trigger's `patterns`, each with its `text` and its `type` (`substring`, `regex`, `startOfLine`, `exact`, `lua`, `spacer`, whose text is the number of lines, `color`, whose text is as the profile keeps it, as `ANSI_COLORS_F{1}_B{IGNORE}`, or `prompt`), `command`, `lineDelta` (the lines a trigger's patterns may be spread over, -1 for a trigger of one line), `matchAll`, `filter`, `fireLength` (the lines it stays open for), `sound`, `soundFile`, `highlight`, and `highlightFg` and `highlightBg` as `#rrggbb`, or empty to keep the text's colour; an alias's `pattern` and `command`; a script's `eventHandlers`, a list of event names; a timer's `command`, `time` and `offset`; a key's `command`, `key`, `modifiers` and `keyName`; a button's `commandDown`, `commandUp`, `pushDown`, `location`, `orientation`, `columns` and `css` ("Editing triggers, aliases and scripts" below). |
+| `scriptSearch` | `text`, `caseSensitive`, `wholeWord`, `matches`: `kind`, `item`, `name`, `field`, `index`, `text`, `start`; `more`; `re`? | The answer to `searchScriptItems`: the `text`, `caseSensitive` and `wholeWord` searched for, and its `matches` in the desktop's order, the triggers first, then the aliases, scripts, buttons, timers and keys, each kind depth first; at most 500, with `more` true when there were others. Each has its item's `kind` (as in `scriptItems`), id, `item`, and `name`, the `field` it is in, which pattern, event handler or line of the field it is, `index`, from 0, that field or line as `text`, and `start`, where the match starts in it, from 0, in UTF-16 code units. "Searching triggers, aliases and scripts" below says what each field is. |
 | `luaCheck` | `ok`, `line`?, `message`?; `re`? | The answer to `checkLua`: `ok` when the code compiles; else `line`, the line Lua names, from 1, or 0 where it names none, and `message`, what Lua says is wrong, in English. |
 | `packages` | `packages`: `name`, `title`, `author`, `version`, `description`, `icon`; `re`? | The answer to `packages` and `uninstallPackage`: the profile's packages in the order they were installed, as Lua's `getPackages()` gives them, each with its `name` and the `title`, `author`, `version` and `description` its `config.lua` gave, empty where it gave none, as for a plain `.xml` package. `description` is Markdown, as the Package Manager shows it, with `$packagePath` already standing for the package's folder. `icon` is the icon's file, for `getImage`, or empty when it gave none or the file is missing. |
 | `packagesChanged` | | A package was installed or removed, by the UI, a script or the profile's default packages: a UI that lists them asks with `packages` again. Not sent to a UI that attaches later. |
@@ -602,6 +608,22 @@ checkbox, drag and delete do:
 - What changes is written with the profile's next save, as the desktop editor's changes are: when the app leaves the
   front and when the profile closes.
 
+### Searching triggers, aliases and scripts
+
+`searchScriptItems` finds text where the desktop editor's search box finds it, in the items `scriptItems` lists. A
+match's `field` is one of:
+
+- `name`, `command` (a trigger's, alias's, timer's or key's, or a button's that is not a push-down button), and an
+  alias's `pattern`: one match each, however often the text is in it, as on the desktop;
+- `commandDown` and `commandUp`, a push-down button's commands, one match each;
+- `pattern`, a trigger's pattern `index`, and `event`, a script's event handler `index`: a match for each place the text
+  is in it;
+- `css`, a button's style sheet, and `lua`, the item's Lua: a match for each place in each line, `index` the line, from
+  0.
+
+A line longer than 80 characters either side of its match is cut to them, with an ellipsis (U+2026) where it is cut,
+and `start` counts from the start of what is left, so a minified script kept on one line does not fill the frame.
+
 ### Downloading the map
 
 A game offers its map with GMCP's `Client.Map`, `{"url": "..."}` (the MMP's map location), which the desktop's mapper
@@ -810,7 +832,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 32, which added loading and saving the map as a file (`loadMapFile`, `saveMapFile`,
+As implemented in version 33, which added searching the script items (`searchScriptItems`, `scriptSearch`);
+version 32 added loading and saving the map as a file (`loadMapFile`, `saveMapFile`,
 `cancelMapFile`, `mapFile`); version 31 added the keys the profile's key bindings take and pressing one (`keyBindings`,
 `pressKey`, `keyPressed`); version 30 added the game's offer of a secure port (`secureOffer`, `answerSecureOffer`)
 and the game's certificate a secure connection was refused for (`certificateRefused`); version 29 added the error

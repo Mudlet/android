@@ -32,7 +32,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 32;
+    static constexpr int protocolVersion = 33;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -157,6 +157,7 @@ protected:
     void enableScriptItem(const QJsonObject& message);
     QString moveScriptItem(const QJsonObject& message);
     QString deleteScriptItem(const QJsonObject& message);
+    void searchScriptItems(const QJsonObject& message);
     void checkLua(const QJsonObject& message);
     void pressKey(const QJsonObject& message);
     // The item of message's kind, as the answer to request, or an error naming request

@@ -442,6 +442,48 @@ THeadlessSession::ScriptItemKind sessionKind(const IEngine::ScriptItemKind kind)
     return THeadlessSession::ScriptItemKind::button;
 }
 
+IEngine::ScriptItemKind engineKind(const THeadlessSession::ScriptItemKind kind)
+{
+    switch (kind) {
+    case THeadlessSession::ScriptItemKind::trigger:
+        return IEngine::ScriptItemKind::trigger;
+    case THeadlessSession::ScriptItemKind::alias:
+        return IEngine::ScriptItemKind::alias;
+    case THeadlessSession::ScriptItemKind::script:
+        return IEngine::ScriptItemKind::script;
+    case THeadlessSession::ScriptItemKind::timer:
+        return IEngine::ScriptItemKind::timer;
+    case THeadlessSession::ScriptItemKind::key:
+        return IEngine::ScriptItemKind::key;
+    case THeadlessSession::ScriptItemKind::button:
+        break;
+    }
+    return IEngine::ScriptItemKind::button;
+}
+
+IEngine::ScriptSearchField engineField(const THeadlessSession::ScriptSearchField field)
+{
+    switch (field) {
+    case THeadlessSession::ScriptSearchField::name:
+        return IEngine::ScriptSearchField::name;
+    case THeadlessSession::ScriptSearchField::command:
+        return IEngine::ScriptSearchField::command;
+    case THeadlessSession::ScriptSearchField::commandDown:
+        return IEngine::ScriptSearchField::commandDown;
+    case THeadlessSession::ScriptSearchField::commandUp:
+        return IEngine::ScriptSearchField::commandUp;
+    case THeadlessSession::ScriptSearchField::pattern:
+        return IEngine::ScriptSearchField::pattern;
+    case THeadlessSession::ScriptSearchField::event:
+        return IEngine::ScriptSearchField::event;
+    case THeadlessSession::ScriptSearchField::css:
+        return IEngine::ScriptSearchField::css;
+    case THeadlessSession::ScriptSearchField::lua:
+        break;
+    }
+    return IEngine::ScriptSearchField::lua;
+}
+
 QString cut(const QString& text)
 {
     return text.size() > IEngine::maxErrorConsoleText ? text.left(IEngine::maxErrorConsoleText) + QChar(0x2026) : text;
@@ -2382,6 +2424,18 @@ QString MudletProfile::deleteScriptItem(ScriptItemKind kind, int item)
         return QStringLiteral("no profile running");
     }
     return mSession->deleteScriptItem(sessionKind(kind), item) ? QString() : mSession->errorString();
+}
+
+std::variant<IEngine::ScriptSearch, QString> MudletProfile::searchScriptItems(const QString& text, bool caseSensitive, bool wholeWord, int limit) const
+{
+    if (!loaded()) {
+        return QStringLiteral("no profile running");
+    }
+    ScriptSearch search;
+    for (const THeadlessSession::ScriptSearchMatch& match : mSession->searchScriptItems(text, caseSensitive, wholeWord, limit, search.more)) {
+        search.matches.append({engineKind(match.kind), match.id, match.name, engineField(match.field), match.index, match.text, match.start});
+    }
+    return search;
 }
 
 std::optional<IEngine::LuaProblem> MudletProfile::checkLua(const QString& code) const

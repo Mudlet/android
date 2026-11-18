@@ -3,6 +3,7 @@ package org.mudlet.android.protocol
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -687,6 +688,37 @@ class ProtocolTest {
         assertEquals("checkLua", request.getString("t"))
         assertEquals("if x then\n  send(\"hi\")\nend", request.getString("code"))
         assertEquals(9L, request.getLong("id"))
+    }
+
+    @Test
+    fun aScriptSearchDecodes() {
+        val message = FrameReader.parse(
+            JSONObject(
+                """{"t":"scriptSearch","text":"hp","caseSensitive":false,"wholeWord":true,"more":true,"re":12,"matches":[""" +
+                    """{"kind":"trigger","item":3,"name":"Low hp","field":"name","index":0,"text":"Low hp","start":4},""" +
+                    """{"kind":"button","item":9,"name":"Heal","field":"commandUp","index":0,"text":"stop hp","start":5},""" +
+                    """{"kind":"script","item":2,"name":"Vitals","field":"lua","index":11,"text":"\u2026 hp = gmcp.Char.Vitals.hp","start":2},""" +
+                    """{"kind":"gizmo","item":4,"name":"x","field":"name","index":0,"text":"hp","start":0},""" +
+                    """{"kind":"alias","item":5,"name":"x","field":"comment","index":0,"text":"hp","start":0}]}""",
+            ),
+        ) as EngineMessage.ScriptSearch
+        assertEquals("hp", message.text)
+        assertFalse(message.caseSensitive)
+        assertTrue(message.wholeWord)
+        assertTrue(message.more)
+        assertEquals(12, message.replyTo)
+        assertEquals(
+            listOf(
+                ScriptSearchMatch(ScriptItemKind.TRIGGER, 3, "Low hp", ScriptSearchField.NAME, 0, "Low hp", 4),
+                ScriptSearchMatch(ScriptItemKind.BUTTON, 9, "Heal", ScriptSearchField.COMMAND_UP, 0, "stop hp", 5),
+                ScriptSearchMatch(ScriptItemKind.SCRIPT, 2, "Vitals", ScriptSearchField.LUA, 11, "\u2026 hp = gmcp.Char.Vitals.hp", 2),
+            ),
+            message.matches,
+        )
+        assertEquals(
+            mapOf("t" to "searchScriptItems", "text" to "Hp ", "caseSensitive" to true, "wholeWord" to false, "id" to 13L),
+            Requests.searchScriptItems("Hp ", caseSensitive = true, wholeWord = false, id = 13).toMap(),
+        )
     }
 
     @Test

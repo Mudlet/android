@@ -652,6 +652,10 @@ kept by `ScriptItemsClient`:
   manual's introduction to the kind shown (the page desktop's script editor links to), the Lua functions and the
   manual (`ScriptHelp.kt`, the addresses in `ui/about/Help.kt`). The rules are in `ScriptTree.kt` (`holdsItems`,
   `rowStatus`, `adds`), apart from the screen.
+  - The search also asks the engine where else the text is, as the desktop editor's search box finds it
+    (`searchScriptItems`: commands, patterns, event handlers, a button's style sheet, Lua), and shows under each
+    item the first three places, each with what it is in and the text marked. The desktop's two options, Match case
+    and Whole words, are chips; with either on, only the engine's answer counts.
 - An item's page (`ScriptItemScreen.kt`) edits its name, what its kind has and its Lua: a trigger's patterns, each
   with a type picked from a sheet that says what each matches, moved up and down; Match any or all within some lines;
   Every occurrence, Keep firing, Only pass matches, Highlight with its colours, Sound with its file and what it sends;
@@ -694,7 +698,7 @@ kept by `ScriptItemsClient`:
 - An item's page moves it, last, into a folder picked from a sheet (`moveScriptItem`), each folder with those it is
   in: not where it is, nor into itself, and among the buttons a button only into a toolbar or a menu; a package's
   own folder stays put. The snackbar says where it went once the list after the move has come.
-- Not yet: a search of Lua (`scriptItems` lists none of it), a colour pattern's picker, moving an item onto another
+- Not yet: a colour pattern's picker, moving an item onto another
   to make an offset timer or a trigger's chain, a button's icon and rotation, a key picked by pressing it, and in the
   Lua field colours for Lua's words and what each function does (Mudlet's list has only how each is called). A key
   binding is edited but does not run here: the app passes no key of a keyboard on to the profile yet, and the key's
@@ -745,6 +749,8 @@ again as they change, for a keyboard's key to go to the engine or to the input l
 `0025-headless-key-bindings.patch`; see "Key bindings" in [`protocol.md`](protocol.md)),
 and the map loaded from and saved to a file as the desktop's Map settings do (`loadMapFile()`, `saveMapFile()`,
 `0026-headless-map-files.patch`; see "Map files" in [`protocol.md`](protocol.md)).
+It carries too the items searched as the desktop editor's search box does (`searchScriptItems()`,
+`0027-headless-script-search.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

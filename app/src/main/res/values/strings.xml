@@ -1418,16 +1418,52 @@
     <string name="scripts_buttons">Buttons</string>
     <!-- A script library chip once the items are listed; %1$s is the kind ("Triggers"), %2$d how many items it has -->
     <string name="scripts_kind_count">%1$s %2$d</string>
-    <!-- The script library's search field's placeholder; it searches the items' names, and the patterns, times, keys
-         and commands shown under them -->
-    <string name="scripts_search">Search names and patterns</string>
+    <!-- The script library's search field's placeholder; it searches the items' names, patterns, commands and Lua, as
+         the desktop editor's search box does, and the times and keys shown under them -->
+    <string name="scripts_search">Search names, patterns and Lua</string>
+    <!-- A chip under the script library's search field: when on, only text in the same upper and lower case is found,
+         as the desktop editor's search option "Match case" -->
+    <string name="scripts_search_case">Match case</string>
+    <!-- A chip under the script library's search field: when on, the text is found only as a word of its own, as the
+         desktop editor's search option "Match whole words" -->
+    <string name="scripts_search_whole_word">Whole words</string>
+    <!-- Above the script library's search results when the engine stopped at %d places; typing more finds fewer -->
+    <plurals name="scripts_search_more">
+        <item quantity="one">Only the first %d place is shown. Type more to narrow the search.</item>
+        <item quantity="other">Only the first %d places are shown. Type more to narrow the search.</item>
+    </plurals>
+    <!-- Under a script library search result, after the first places found in it: %d more places are not shown -->
+    <plurals name="scripts_search_more_places">
+        <item quantity="one">%d more place</item>
+        <item quantity="other">%d more places</item>
+    </plurals>
+    <!-- Under a script library search result, what the found text is in: the item's name -->
+    <string name="scripts_place_name">Name</string>
+    <!-- Under a script library search result, what the found text is in: the command the item sends -->
+    <string name="scripts_place_command">Command</string>
+    <!-- Under a script library search result, what the found text is in: a push-down button's command sent when it is
+         pushed down, as the desktop editor names it -->
+    <string name="scripts_place_command_down">Command (down)</string>
+    <!-- Under a script library search result, what the found text is in: a push-down button's command sent when it is
+         let up again, as the desktop editor names it -->
+    <string name="scripts_place_command_up">Command (up)</string>
+    <!-- Under a script library search result, what the found text is in: an alias's pattern -->
+    <string name="scripts_place_pattern">Pattern</string>
+    <!-- Under a script library search result, what the found text is in: a trigger's pattern %d, counted from 1 -->
+    <string name="scripts_place_pattern_number">Pattern %d</string>
+    <!-- Under a script library search result, what the found text is in: a script's event handler %d, counted from 1 -->
+    <string name="scripts_place_event">Event handler %d</string>
+    <!-- Under a script library search result, what the found text is in: line %d of a button's style sheet (CSS) -->
+    <string name="scripts_place_css">Style sheet, line %d</string>
+    <!-- Under a script library search result, what the found text is in: line %d of the item's Lua code -->
+    <string name="scripts_place_lua">Lua, line %d</string>
     <!-- What the script library shows while the engine has not listed the items yet -->
     <string name="scripts_loading">Loading…</string>
     <!-- What the script library shows for a kind with no items at all -->
     <string name="scripts_none">None yet. Add one with the button below.</string>
     <!-- What the script library shows inside a folder with nothing in it -->
     <string name="scripts_folder_empty">This folder is empty.</string>
-    <!-- What the script library's search shows when no name matches; %1$s is what was typed -->
+    <!-- What the script library's search shows when it finds nothing; %1$s is what was typed -->
     <string name="scripts_search_none">Nothing with “%1$s”</string>
     <!-- The script library's breadcrumb's first step, the top level of a kind; %1$s is the kind, such as "Triggers" -->
     <string name="scripts_all">All %1$s</string>

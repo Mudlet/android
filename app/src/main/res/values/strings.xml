@@ -1318,7 +1318,7 @@
     <!-- The movement pad: twelve buttons at the foot of the game screen, below the input line, for walking with one
          thumb, each drawn as an arrow. A tap sends the game the command that walks that way. This one, as a screen
          reader reads it, walks north -->
-    <string name="movement_north">Go north</string>
+    <string name="movement_north">n</string>
     <!-- A button of the movement pad, as a screen reader reads it: it walks north-east -->
     <string name="movement_northeast">Go north-east</string>
     <!-- A button of the movement pad, as a screen reader reads it: it walks east -->

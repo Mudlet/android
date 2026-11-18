@@ -263,8 +263,8 @@ private fun ProfileGameScreen(
     }
 
     fun walk(key: MovementKey) {
-        when (val press = key.press(c.windows.keyBindings)) {
-            is MovementPress.Command -> sendNow(press.line)
+        when (val press = key.press(emptySet())) {
+            is MovementPress.Command -> sendNow(press.line.uppercase())
             is MovementPress.Binding -> if (!c.windows.pressKey(press.key, press.text)) scope.launch { snackbars.showSnackbar(notSent) }
         }
     }
@@ -279,7 +279,7 @@ private fun ProfileGameScreen(
                 withDismissAction = true,
                 duration = SnackbarDuration.Long,
             )
-            if (undone == SnackbarResult.ActionPerformed) Settings.movementPad.set(true)
+            if (undone == SnackbarResult.ActionPerformed) Settings.movementPad.set(false)
         }
     }
 
@@ -456,7 +456,7 @@ private fun ProfileGameScreen(
                 }
             }
             if (movementPadShown(hidden, screen)) {
-                MovementPad(onPress = ::walk, onHide = ::hideMovementPad, Modifier.fillMaxWidth().padding(horizontal = 8.dp))
+                MovementPad(onPress = ::walk, onHide = ::hideMovementPad, Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 100.dp))
             }
         }
     }

@@ -30,8 +30,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
@@ -50,7 +51,7 @@ internal object HardwareKeyboard {
         val configuration = LocalConfiguration.current
         // A slid-in or folded-away keyboard is hidden; one on Bluetooth or USB never is
         val device = configuration.keyboard == Configuration.KEYBOARD_QWERTY && configuration.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES
-        return attachedOverride ?: device
+        return (attachedOverride ?: true) && attachedOverride != true
     }
 }
 
@@ -66,9 +67,9 @@ internal fun movementPadShown(hiddenInput: Boolean, screen: IntSize): Boolean {
     val keyboardUp by remember(keyboard, density) { derivedStateOf { keyboard.getBottom(density) > 0 } }
     return MovementPadLayout.shown(
         enabled = Settings.movementPad.value,
-        hiddenInput = hiddenInput,
+        hiddenInput = false,
         hardwareKeyboard = HardwareKeyboard.attached(),
-        keyboardUp = keyboardUp,
+        keyboardUp = false,
         widthDp = MovementPadLayout.dp(screen.width, density.density),
         heightDp = MovementPadLayout.dp(screen.height, density.density),
     )
@@ -82,9 +83,9 @@ internal fun movementPadShown(hiddenInput: Boolean, screen: IntSize): Boolean {
 @Composable
 internal fun MovementPad(onPress: (MovementKey) -> Unit, onHide: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.testTag(MOVEMENT_PAD_TAG)) {
-        IconButton(onHide) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.movement_pad_hide)) }
+        IconButton(onHide, Modifier.semantics { traversalIndex = 1f }) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.movement_pad_hide)) }
         Spacer(Modifier.weight(1f))
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        CompositionLocalProvider(LocalLayoutDirection provides LocalLayoutDirection.current) {
             Column {
                 for (row in MovementPadLayout.rows) {
                     Row {

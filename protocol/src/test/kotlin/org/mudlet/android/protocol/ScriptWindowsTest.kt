@@ -313,4 +313,26 @@ class ScriptWindowsTest {
         assertNull(state.charWidth)
         assertEquals(300, state.mainArea!!.w)
     }
+
+    @Test
+    fun aConsolesColourKeepsItsAlphaSoATransparentOneShowsWhatIsUnderIt() {
+        val green = window("chat").copy(bg = RUN_RGB or 0x008000)
+        assertEquals(0x00008000, green.copy(bgAlpha = 0).backgroundArgb())
+        assertEquals(0x80008000.toInt(), green.copy(bgAlpha = 128).backgroundArgb())
+        assertEquals(0xFF008000.toInt(), green.copy(bgAlpha = 255).backgroundArgb())
+    }
+
+    @Test
+    fun aWindowWithNoColourHasNoneAndBlackIsAColour() {
+        assertNull(window("chat").backgroundArgb())
+        assertEquals(0x40000000, window("chat").copy(bg = RUN_RGB, bgAlpha = 64).backgroundArgb())
+    }
+
+    @Test
+    fun anAlphaPastTheEndsIsTheEnd() {
+        // Protocol.kt reads bgAlpha as it comes, so a malformed one reaches here
+        val green = window("chat").copy(bg = RUN_RGB or 0x008000)
+        assertEquals(0xFF008000.toInt(), green.copy(bgAlpha = 999).backgroundArgb())
+        assertEquals(0x00008000, green.copy(bgAlpha = -5).backgroundArgb())
+    }
 }

@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 33
+const val PROTOCOL_VERSION = 34
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -791,6 +791,9 @@ sealed interface EngineMessage {
     /** The game's offer of a secure port waits for the player's answer ([Requests.answerSecureOffer]), or no longer does. */
     data class SecureOffer(val offered: Boolean) : EngineMessage
 
+    /** The profile's scripts are stopped by desktop Mudlet's emergency stop ([Requests.setScriptsStopped]), or are not. */
+    data class ScriptsStopped(val stopped: Boolean) : EngineMessage
+
     /** Why the last secure connection ended, when it was the game's [certificate]; null once the next one is tried. */
     data class CertificateRefused(val certificate: RefusedCertificate?) : EngineMessage
 
@@ -1321,6 +1324,13 @@ object Requests {
      */
     fun answerSecureOffer(accept: Boolean): JSONObject = JSONObject().put("t", "answerSecureOffer").put("accept", accept)
 
+    /**
+     * Desktop Mudlet's emergency stop: [stopped] turns off the profile's triggers, aliases, timers and key bindings and
+     * its scripts' events, false turns them on again, as [EngineMessage.ScriptsStopped] follows. Answered only by an
+     * Error, when refused.
+     */
+    fun setScriptsStopped(stopped: Boolean): JSONObject = JSONObject().put("t", "setScriptsStopped").put("stopped", stopped)
+
     /** Loads the map file at the whole [path] in place of the profile's map, as [EngineMessage.MapFile] follows. Answered only by an Error, when refused. */
     fun loadMapFile(path: String): JSONObject = JSONObject().put("t", "loadMapFile").put("path", path)
 
@@ -1437,6 +1447,8 @@ class FrameReader(input: InputStream) {
             "hiddenInput" -> EngineMessage.HiddenInput(o.optBoolean("wanted"))
 
             "secureOffer" -> EngineMessage.SecureOffer(o.optBoolean("offered"))
+
+            "scriptsStopped" -> EngineMessage.ScriptsStopped(o.optBoolean("stopped"))
 
             "certificateRefused" -> EngineMessage.CertificateRefused(
                 if (!o.optBoolean("refused")) {

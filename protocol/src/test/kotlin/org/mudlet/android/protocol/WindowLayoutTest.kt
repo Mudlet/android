@@ -44,6 +44,8 @@ class WindowLayoutTest {
         assertEquals(2.0, layout.scale!!, 1e-9)
         assertEquals(MudletSize(800, 500), layout.mainWindowSize)
         assertEquals(PxRect(200f, 100f, 1200f, 800f), layout.console)
+        // The console and its borders, which setBorderColor() colours
+        assertEquals(PxRect(0f, 0f, 1600f, 1000f), layout.main)
         assertEquals(PxRect(0f, 0f, 480f, 400f), layout.rectOf("chat"))
         assertTrue(layout.pages.isEmpty())
     }
@@ -67,6 +69,7 @@ class WindowLayoutTest {
         assertEquals(listOf("more", "floating"), layout.pages.map { it.name })
         // The main window has what is left, and without mainArea the console fills it
         assertEquals(PxRect(400f, 0f, 800f, 1000f), layout.console)
+        assertEquals(PxRect(400f, 0f, 800f, 1000f), layout.main)
         assertEquals(MudletSize(400, 500), layout.mainWindowSize)
         assertEquals(Placement(0, 50, 200, 450, false), layout.placements["left"])
         assertEquals(Placement(600, 50, 200, 450, false), layout.placements["right"])
@@ -96,6 +99,8 @@ class WindowLayoutTest {
         assertEquals(MudletSize(800, 400), layout.mainWindowSize)
         // The borders at the width's scale, 0.8; the console fills the width between them
         assertEquals(PxRect(0f, 40f, 800f, 1520f), layout.console)
+        // The console and the bands of its borders
+        assertEquals(PxRect(0f, 0f, 800f, 1600f), layout.main)
         assertEquals(PxRect(0f, 0f, 800f, 40f), layout.rectOf("title"))
         assertEquals(PxRect(0f, 1560f, 400f, 40f), layout.rectOf("status"))
         // Over the text at the text's scale, 1 here, from the console's top or bottom, whichever is nearer

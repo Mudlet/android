@@ -11,7 +11,7 @@ How the UI process talks to the engine process, as implemented by:
 the same messages and fields, and that all of them, and the Python client, use the same protocol version. Change
 this file in the same commit as the code.
 
-The current version is **44**.
+The current version is **45**.
 
 ## Transport
 
@@ -289,7 +289,7 @@ names no table (`There is no such table.`), as one gone since it was listed, or 
 | `commandLine` | `text` | A script set the whole input line, as `printCmdLine()`, `appendCmdLine()` and `clearCmdLine()` do, a `prompt:` link that `followLabelLink` followed put its text there, or Mudlet emptied it after a `send` (`commandLineTextRequested`): the UI replaces what is on its line. None comes while the game hides input (`hiddenInput`): Mudlet's desktop then writes a script's text to its hidden-input box, which the engine does not pass on, and the engine refuses a `prompt:` link. Not kept for a UI that attaches later. |
 | `windows` | `full`?, `windows`: `name`, `kind`, `parent`, `parentKind`?, `x`, `y`, `w`, `h`, `visible`, `shown`, `stack`, `bg`?, `bgAlpha`?, `fontFamily`?, `fontSize`?, `inDock`, `autoDock`?, `dockArea`?, `dockFloating`?, `dockTitle`?, `scrolledBackTo`?, `columns`?, `rows`?, `scrollBar`?, `timeStamps`?, `tabs`?, `tabTitles`?, `tabCurrent`?; `removed`?: `name`, `kind` | The windows the profile's scripts made ("Script windows" below). With `full` true, all of them, replacing what the UI has; otherwise those that changed, and in `removed` those gone. |
 | `windowText` | `window`, `lineCount`, `first`, `lines`: `text`, `runs`, `prompt`, `wrapped`; `re`? | Rows of a console: it holds `lineCount`, and `lines` starts at row `first`. Each row is a line after the console's wrap; `wrapped` is true for one that carries on from the row above. Sent with the last 300 rows when they may have changed, and for each console to a UI that attaches; with `re`, the answer to `getWindowText`. |
-| `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. Sent as a profile loads, on each change and to each UI that attaches. |
+| `mainArea` | `w`, `h`, `columns`, `rows`, `textX`, `textY`, `textW`, `textH`, `borderColor` | The main window's area: the size `setMainWindowSize` gave (0 for none), the main console's grid in characters, and the rectangle its text goes in, in Mudlet's pixels, which is the area less the borders scripts set. `borderColor` is the colour a script's `setBorderColor` gives those borders, as a run's colour: black until a script sets one, as on the desktop, and -1 when there is none (as after a `setBorderColor` out of range, which Qt makes no colour of), where the UI draws its own background. Sent as a profile loads, on each change and to each UI that attaches. |
 | `windowCommandLine` | `name`, `text` | A script set the command line `name`, as `printCmdLine()` and the rest do given its name, or Mudlet emptied it after a command: the UI replaces what is on it. Not kept for a UI that attaches later. |
 | `label` | `name`, `text`, `image`, `svg`, `svgTint`?, `svgTintAlpha`?, `svgRotation`?, `svgShearX`?, `svgShearY`?, `movie`, `moviePaused`, `movieFrame`, `movieSpeed`, `movieW`?, `movieH`?, `toolTip`, `clickThrough`, `accessibleName`, `accessibleButton`, `liveRegion`?, `value`?, `valueMin`?, `valueMax`?, `styleSheet` | What the label `name` shows ("Labels" below), after the `windows` that has it, each time it changes, and for each label to a UI that attaches. |
 | `textBox` | `name`, `text`, `readOnly`, `placeholder`, `styleSheet`, `tabMovesFocus`, `typed` | What the text box `name` holds ("Text boxes" below), after the `windows` that has it, each time a script changes it, for each text box to a UI that attaches, and after a refused `setTextBoxText`; `typed` is how many `setTextBoxText` for it the engine had from this UI, since its `hello`, when it sent this. |
@@ -899,7 +899,8 @@ and `EngineLink` then tracks `lastSeq` from those lines.
 
 ## Versioning and compatibility
 
-As implemented in version 44, which added playing a replay (`playReplay`, `setReplayPaused`, `stopReplay`,
+As implemented in version 45, which added the colour of the border around the main console (`borderColor` on `mainArea`);
+version 44 added playing a replay (`playReplay`, `setReplayPaused`, `stopReplay`,
 `changeReplaySpeed`, `replay`);
 version 43 added a script's changes to lines already sent (`lineUpdated`);
 version 42 added each line's time (`time` in `line` and `tail`) and desktop Mudlet's

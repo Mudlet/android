@@ -211,6 +211,10 @@ private fun WindowsArea(textSizeSp: Int, modifier: Modifier, fitted: Boolean, co
         // What the pane covers is not read either
         fun Modifier.coveredBy(rect: PxRect): Modifier = if (pane != null && pane.contains(rect)) clearAndSetSemantics {} else this
 
+        // The borders' colour fills the main window's area, showing where the console leaves room for them, as the
+        // desktop paints its main frame; not under the docks, which are outside that frame there, nor the switcher's
+        // row, which is the app's own and stays black
+        Box(Modifier.placeAt(layout.main, density).background(windowColour(windows.mainArea?.borderColor ?: -1, CONSOLE_BACKGROUND)))
         content(Modifier.placeAt(layout.console, density).coveredBy(layout.console), layout.mapperDrawn)
         // The windows in a scroll box are drawn in it, to scroll with it
         val drawn = remember(layout.windows) { DrawnWindow.of(layout.windows) }

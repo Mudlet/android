@@ -661,7 +661,7 @@ class ProfileSession internal constructor(
 
                 is EngineMessage.ScriptsStopped -> post { scriptsStopped = message.stopped }
 
-                is EngineMessage.ReplayRecording -> post { replayRecording = message }
+                is EngineMessage.ReplayRecording -> {}
 
                 is EngineMessage.CommandLine -> post { onCommandLine(message.text) }
 

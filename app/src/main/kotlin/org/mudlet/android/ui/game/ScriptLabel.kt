@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -75,12 +78,15 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,6 +99,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import kotlinx.coroutines.delay
@@ -268,6 +275,7 @@ internal fun fontPx(style: LabelStyle, window: ScriptWindow): Float = style.font
 /** A label's style sheet, its text if it has any, the scale it is drawn at, and whether its links are followed. */
 private class LabelText(val style: LabelStyle, val rich: RichText?, val scale: Float, val linksFollowable: Boolean) {
     val plain: String = rich?.plain.orEmpty()
+    val images: List<RichText.Image> = rich?.images.orEmpty()
 
     /** The links a screen reader is offered as actions. */
     val links: List<Pair<String, String>> = if (linksFollowable) rich?.links.orEmpty() else emptyList()
@@ -381,18 +389,27 @@ private fun labelReading(
         }
     }
     // A live label keeps one node, blank or not, so its first text is a change TalkBack hears; its links are then
-    // actions, as a named label's are. Blank, it holds no text, so it is not a stop that says nothing
-    if (live != null && accessibleName.isEmpty()) {
+    // actions, as a named label's are. Blank, it holds no text, so it is not a stop that says nothing. One with images
+    // and text is read so too, by its text without the object replacement characters the images are drawn in; one
+    // whose only text is images (and white space, which Mudlet's TLabelModel simplifies away), by its tool tip, as it
+    // reads it, else, where they are links, an image's `alt` or `title`, else its link's target, so its links are
+    // reached
+    val read = when {
+        plain.isBlank() && linkActions.isNotEmpty() -> tooltip.ifEmpty { text.images.firstOrNull { it.alt.isNotEmpty() }?.alt ?: text.links.first().second }
+        plain.isBlank() && text.images.isNotEmpty() -> tooltip
+        else -> plain
+    }
+    if ((live != null || (text.images.isNotEmpty() && read.isNotEmpty())) && accessibleName.isEmpty()) {
         return {
-            if (plain.isNotEmpty()) this.text = AnnotatedString(plain)
+            if (read.isNotEmpty()) this.text = AnnotatedString(read)
             if (linkActions.isNotEmpty()) customActions = linkActions
             liveAs(live)
             inOrder()
         }
     }
     return when {
-        // Its text, links and all, read as the text draws it
-        accessibleName.isEmpty() && plain.isNotEmpty() -> null
+        // Its text, links and all, read as the text draws it; images with only white space between them are no text
+        accessibleName.isEmpty() && plain.isNotEmpty() && (text.images.isEmpty() || plain.isNotBlank()) -> null
 
         accessibleName.isNotEmpty() -> {
             {
@@ -656,7 +673,13 @@ internal fun Modifier.edgePadding(edges: Edges, sx: Float, sy: Float, density: D
     )
 }
 
-/** The engine's image for [request], asked for once of each engine instance; null until it comes, or for no request. */
+/**
+ * The engine's image for [request], asked for once of each engine instance; null until it comes, or for no request.
+ * Or, for a [ImageRequest.decoded] one, the image its `data:` URL holds in base64, as Qt's QTextDocument decodes one
+ * itself, decoded once off the main thread and kept with the engine's images (`ScriptWindowsClient.decodeImage`); null
+ * until then, and for one that does not decode, is no image Android reads (an SVG), or is wider or higher than the
+ * engine sends one.
+ */
 @Composable
 internal fun engineImage(request: ImageRequest?): ImageBitmap? {
     val session = EngineClient.front
@@ -666,8 +689,8 @@ internal fun engineImage(request: ImageRequest?): ImageBitmap? {
         request?.let(client::imageShown)
         onDispose { request?.let(client::imageHidden) }
     }
-    // A new engine instance is asked again
-    LaunchedEffect(request, client, session.attaches) { request?.let(client::requestImage) }
+    // A new engine instance is asked again, and a `data:` URL's image, which it lets go of, decoded again
+    LaunchedEffect(request, client, session.attaches) { request?.let { if (it.decoded) client.decodeImage(it) else client.requestImage(it) } }
     return request?.let { client.images[it] }
 }
 
@@ -764,7 +787,10 @@ private fun LabelSvg(content: LabelContent) {
     }
 }
 
-/** The label's rich text, unwrapped as QLabel draws it, with its links followed when tapped, where they are followed. */
+/**
+ * The label's rich text, unwrapped as QLabel draws it, with its links followed when tapped, where they are followed,
+ * and its images, the engine's files or a `data:` URL's, in the line on its baseline as Qt draws them.
+ */
 @Composable
 private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = Modifier) {
     val rich = text.rich ?: return
@@ -773,6 +799,31 @@ private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = M
     val density = LocalDensity.current
     val scale = text.scale
     val toSp: (Float) -> TextUnit = { px -> with(density) { (px * scale).toSp() } }
+    // Each image is a placeholder of its size, which may be the file's own, so known once the engine sends the file,
+    // or the app has decoded a `data:` URL's in base64, as Qt's QTextDocument decodes one itself (but an SVG, which
+    // Android's BitmapFactory does not read). The engine reads only files: a web URL, which QTextDocument does not
+    // fetch either, is not asked
+    val images = remember(rich) { rich.blocks.flatMap { block -> block.spans.mapNotNull { span -> span.style.image?.let { it to span.style.drawnSizePx } } }.distinct() }
+    val files = images.map { it.first.path }.distinct().filterNot { "://" in it }.associateWith { path ->
+        key(path) { engineImage(ImageRequest(path, decoded = path.startsWith("data:", ignoreCase = true))) }
+    }
+    // An image's span's font in device pixels, whole as Android draws a font's and one at least, whatever size the
+    // script gives it, so a placeholder in ems of it is drawn at its size
+    val imageFontPx = { px: Float -> (px * scale).roundToInt().coerceAtLeast(1) }
+    // Each placeholder named by where the image and its span's size are in [images], so a second of the same is the
+    // same placeholder, and not by the image, whose `data:` URL may be long. In ems of its span's font as drawn, so
+    // exact whatever the font scale, as Compose may not draw a placeholder's sp (Android 14's nonlinear font scaling)
+    val inline = images.withIndex().associate { (i, placed) ->
+        val (image, fontPx) = placed
+        val file = files[image.path]
+        val (w, h) = image.size(file?.width, file?.height) ?: (0f to 0f)
+        val drawnPx = imageFontPx(fontPx)
+        // Under 32767 device pixels a side, past which Compose cannot measure what is in a placeholder
+        val ems = { side: Float -> (minOf(side * scale, 32766f) / drawnPx).em }
+        "$i" to InlineTextContent(Placeholder(ems(w), ems(h), PlaceholderVerticalAlign.AboveBaseline)) {
+            if (file != null) Image(file, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
+        }
+    }
     // Keyed on the whole of what the label's text is drawn from, so a change to any part of it, as to whether its links
     // are followed, redraws it
     val annotated = remember(label, text, density) {
@@ -784,7 +835,11 @@ private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = M
                         val link = if (href != null && text.linksFollowable) LinkAnnotation.Clickable(href, linkInteractionListener = { EngineClient.front.windows.followLabelLink(context, label, href) }) else null
                         if (link != null) pushLink(link)
                         // Drawn as a link whether or not it is followed, as QLabel draws one whatever its text interaction
-                        withStyle(spanStyle(span.style, toSp, link = href != null)) { append(span.text) }
+                        val image = span.style.image
+                        val drawn = spanStyle(span.style, toSp, link = href != null)
+                        withStyle(if (image == null) drawn else drawn.copy(fontSize = with(density) { imageFontPx(span.style.drawnSizePx).toSp() })) {
+                            if (image != null) appendInlineContent("${images.indexOf(image to span.style.drawnSizePx)}", span.text) else append(span.text)
+                        }
                         if (link != null) pop()
                     }
                 }
@@ -799,7 +854,7 @@ private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = M
         fontFamily = style.fontFamily?.let(::fontFamily),
         textAlign = textAlign(style.hAlign),
     )
-    Text(annotated, modifier, style = base, softWrap = false, overflow = TextOverflow.Clip)
+    Text(annotated, modifier, style = base, softWrap = false, overflow = TextOverflow.Clip, inlineContent = inline)
 }
 
 private fun textAlign(align: HAlign?): TextAlign = when (align) {
@@ -817,11 +872,13 @@ private fun spanStyle(style: RichText.Style, toSp: (Float) -> TextUnit, link: Bo
     return SpanStyle(
         color = style.color?.let { Color(it) } ?: if (link) LINK_COLOUR else Color.Unspecified,
         background = style.background?.let { Color(it) } ?: Color.Unspecified,
-        fontSize = toSp(style.sizePx),
+        fontSize = toSp(style.drawnSizePx),
         fontWeight = if (style.bold) FontWeight.Bold else null,
         fontStyle = if (style.italic) FontStyle.Italic else null,
         fontFamily = style.family?.let(::fontFamily),
         textDecoration = if (decorations.isEmpty()) null else TextDecoration.combine(decorations),
+        // Compose shifts by the font's ascent, Qt by its whole height: near enough for a sub- or superscript
+        baselineShift = if (style.raise != 0f) BaselineShift(style.raise) else null,
     )
 }
 

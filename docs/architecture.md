@@ -1476,7 +1476,10 @@ device shows, below the UI's debug hook:
   link, and the link as Qt reads it from the text, a `prompt:` link giving the input line the focus and a `send:` one
   not, and neither sent again nor run by the app on a refusal, a web link opened with an intent and not sent, a
   click-through label's links neither tapped nor actions, also once a label already drawn is made click-through, and
-  both again once it no longer is, and a label's image asked of the engine; the button bars: a bar's buttons
+  both again once it no longer is, a label's image asked of the engine, an image in a label's text asked of it and
+  drawn in the line at its `img`'s size, in its font and in the smallest too, a label of only a linked image read by its
+  `alt` with its link an action and one of only an image by its tool tip, and a heading taller than the label's other
+  text; the button bars: a bar's buttons
   as 48 dp buttons above or beside the console and read
   after the windows, whose taps send `pressButton`, a push-down button as a switch, a folder's menu, an icon button's
   name and icon, a bar's and a button's style sheets drawn, with a sheet's own frame, its padding, border and margin

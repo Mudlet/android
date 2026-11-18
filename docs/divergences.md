@@ -321,6 +321,24 @@ reach whatever server it named, or log in to one of the player's games with its 
   label's rich text black for its text and no change to its background; Qt takes the colour from the widget's palette
   (`docs/phase-f.md`, "Labels"). The app's widgets have no Qt palette, and the desktop's palette, which differs with its
   style and theme, does not reach it.
+- A table in a label's text is drawn a row to a line, with its cells four spaces apart and a cell's paragraphs a space
+  apart; Qt lays the cells out in a grid, each column as wide as its widest cell, so a column's cells line up, and a
+  cell's paragraphs one under another in it. Nor does the app leave the room Qt leaves above and below a heading, a
+  paragraph or a table (`docs/phase-f.md`, "Labels"). A label is drawn as one text, whose lines Compose lays out as a
+  paragraph each, which keeps a label's links, taps and reading in one place; a grid of its own would take a layout of
+  cells the size of a table, for the few labels that hold one.
+- An image in a label's text that the engine cannot read is not drawn; Qt draws a small file icon in its place, 16
+  pixels a side or the size the `img` gives (`docs/phase-f.md`, "Labels"). The app has no such icon of Qt's. Nor is a
+  file drawn that is over 4096 pixels a side, which the engine does not send, nor the image of a `data:` URL that is not
+  in base64, is an SVG or is over 4096 pixels a side, which Qt draws (an SVG where Qt's SVG image plugin is loaded, as
+  Mudlet's builds load it): the app decodes only base64, as scripts write such an image, with Android's own decoder,
+  which reads no SVG, and no image larger than the engine sends. Along a side whose `width` or `height` is no number or
+  a negative one, Qt draws the file's own size but leaves it no room along it: with such a width the text after it is
+  drawn over it, and with such a height, or one worked out from such a width, it hangs below the baseline over the line
+  below. The app leaves it its room, its bottom on the baseline, as a placeholder in the line is as big as what is drawn
+  in it. A label whose only text is linked images and that has no tool tip TalkBack reads by an image's `alt` or
+  `title`, else its link's target, so its links can be reached; Mudlet, which reads a label of only images by its tool
+  tip as the app does, reads it as nothing.
 - A border whose colour the sheet does not name (`border: 2px solid`, or `border-width` and `border-style` alone) is
   drawn in the text's colour, the sheet's `color` or else the app's; Qt draws it black whatever the `color`. One it
   names but Qt reads no colour off (`border: 2px solid none`) is drawn as Qt draws it, in the sheet's `color`, or clear

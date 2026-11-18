@@ -778,6 +778,8 @@ It carries too the items searched as the desktop editor's search box does (`sear
 `0027-headless-script-search.patch`).
 And the log options `getConfig()` and `setConfig()` lacked: timestamps, how a log is named and its name
 (`0028-headless-log-settings.patch`).
+And a script's clipboard, read and written by the app rather than the engine's process (`THeadlessSession::setClipboard()`,
+`0029-headless-clipboard.patch`; see "A script and the clipboard" in [`divergences.md`](divergences.md)).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 

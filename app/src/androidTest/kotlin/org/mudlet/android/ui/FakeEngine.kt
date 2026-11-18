@@ -528,8 +528,8 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         private const val SOCKET_PREFIX = "mudlet-fake-engine-"
 
         // The requests the control socket carries (docs/protocol.md, "Several profiles"), and the messages
-        private val CONTROL_REQUESTS = setOf("listProfiles", "saveProfile", "deleteProfile", "openProfile", "closeProfile", "setFront", "markSeen", "setAppState")
-        private val CONTROL_MESSAGES = setOf("profiles", "openProfiles")
+        private val CONTROL_REQUESTS = setOf("listProfiles", "saveProfile", "deleteProfile", "openProfile", "closeProfile", "setFront", "markSeen", "setAppState", "answerClipboardRead")
+        private val CONTROL_MESSAGES = setOf("profiles", "openProfiles", "clipboardRead", "clipboardWrite")
 
         // How long a session waits for the UI to attach to a profile it opened
         private const val ATTACH_TIMEOUT_MS = 10_000L

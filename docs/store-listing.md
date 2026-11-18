@@ -293,12 +293,13 @@ device ([`roadmap.md`](roadmap.md), U3).
 
 **Crash reports and logs.** The app sends no crash report and no log. It writes to logcat, on the device: the engine's
 state changes and errors (`native/enginehost/MudletEngine.cpp`, `SocketBridge.cpp`), Mudlet's error console lines
-(`MudletEngine.cpp:222`), and the title of a tell it could not post (`EngineNotifications.kt`, `postTell`), never a
-password. About > Report a problem (`app/src/main/kotlin/org/mudlet/android/ui/report/ReportProblemScreen.kt`) shows
-the player the app's recent logcat, the versions and the device, with every saved password and every profile's login
-taken out (`app/src/main/kotlin/org/mudlet/android/report/`), and sends nothing itself: the player passes the text on
-through Android's share sheet, the clipboard or a GitHub issue in the browser, to whomever they choose. Data a user
-moves out of the app by their own action, to a destination they pick, is neither collected nor shared in Play's terms.
+(`MudletProfile.cpp`, "mudlet error console"), which can quote what a failing script was handling. Never a password,
+and none of the app's or the engine's own lines carries what the player typed, the game's text or a tell's.
+About > Report a problem (`app/src/main/kotlin/org/mudlet/android/ui/report/ReportProblemScreen.kt`) shows the
+player the app's recent logcat, the versions and the device, with every saved password and every profile's login taken
+out (`app/src/main/kotlin/org/mudlet/android/report/`), and sends nothing itself: the player passes the text on through
+Android's share sheet, the clipboard or a GitHub issue in the browser, to whomever they choose. Data a user moves out
+of the app by their own action, to a destination they pick, is neither collected nor shared in Play's terms.
 Google Play's Android vitals gathers crashes and ANRs through Android itself, from users who allow it; that is
 Google's, not the app's, and is not declared here. The release AAB carries the symbol tables those reports need
 (`app/build.gradle.kts:68-69`).

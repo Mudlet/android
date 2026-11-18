@@ -143,7 +143,8 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
      * or disabled, or one the player tapped as it went, is no fault of theirs; so is a text box's, which a script made
      * read-only or hid as the player typed, and an MXP frame tab's, whose page the game closed or whose frame it hid as
      * the player tapped, and a label link's, which the engine tried, which the label no longer has, or which is a
-     * `prompt:` link while the game hides input.
+     * `prompt:` link while the game hides input. Those logs leave out the engine's reason, which can quote a link, a
+     * label, a frame or a box that the game or a script made, text a problem report is not to carry.
      */
     internal fun onError(message: EngineMessage.Error) {
         val request = message.message.substringBefore(':')
@@ -152,16 +153,16 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         if (request == "moveMap" || request == "followPlayer") mapMover.clear()
         if (request in MapRooms.REQUESTS) mapRooms.onRefused(request)
         if (request in MAP_REQUESTS) mapRefusal = reason
-        if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link: ${message.message}")
+        if (request == "getLink" || request == "followLink") Log.w(TAG, "a script window's link was refused")
         // The box's own textBox follows, which puts back what it holds
-        if (request == "setTextBoxText") Log.w(TAG, "a text box's typing: ${message.message}")
+        if (request == "setTextBoxText") Log.w(TAG, "a text box's typing was refused")
         // The map stays at the scale the engine last took
         if (request == "setMapScale") Log.w(TAG, "the map's scale: ${message.message}")
         // The tabs follow the engine's windows, so they still show the page in front
-        if (request == "selectFrameTab") Log.w(TAG, "an MXP frame's tab: ${message.message}")
+        if (request == "selectFrameTab") Log.w(TAG, "an MXP frame's tab was refused")
         // The engine tried the link, the label no longer has it, or it is a prompt: link while the game hides input:
         // following it here would run it twice, or do what the engine refused
-        if (request == "followLabelLink") Log.w(TAG, "a label's link: ${message.message}")
+        if (request == "followLabelLink") Log.w(TAG, "a label's link was refused")
     }
 
     /** An answer to [requestImage], with what [decode] made of it. */
@@ -397,7 +398,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
             is LabelLink.Web -> try {
                 context.startActivity(Intent(Intent.ACTION_VIEW, link.url.toUri()))
             } catch (e: ActivityNotFoundException) {
-                Log.w(TAG, "no app opens the label link ${link.url}", e)
+                Log.w(TAG, "no app opens a label's web link", e)
             }
 
             is LabelLink.Engine -> {

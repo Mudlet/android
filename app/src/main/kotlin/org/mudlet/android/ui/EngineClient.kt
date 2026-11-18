@@ -104,6 +104,7 @@ object EngineClient {
     // Whether the attached engine's restore status has had how the engine before it ended checked: it resends its
     // statuses at every attach, but that is asked once
     private var restoreChecked = false
+    private var biteInstance = ""
 
     /** The engine's profiles, the last opened first; null until it has listed them. */
     var profiles by mutableStateOf<List<Profile>?>(null)
@@ -423,7 +424,7 @@ object EngineClient {
             if (!restoreChecked) {
                 restoreChecked = true
                 if (stoppedByAndroid()) engineStoppedInBackground = true
-                lastEngineCrashMs()?.let { engineCrashedAtMs = it }
+                lastEngineCrashMs()?.let { engineCrashedAtMs = it } ?: run { if (biteInstance.startsWith("crashed-")) engineCrashedAtMs = 1L }
             }
             EngineRestore.marker(engineStatus[key], value)?.let { marker ->
                 val session = frontSession
@@ -497,6 +498,7 @@ object EngineClient {
                 sessions.forEach(ProfileSession::wake)
                 val now = SystemClock.elapsedRealtime()
                 enginePid = hello.pid
+                biteInstance = hello.instance
                 attachCount++
                 lastAttachMs = now - detachStartedAt
                 if (startRequestedAt > 0) {

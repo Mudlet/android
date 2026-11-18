@@ -148,7 +148,6 @@ class MainActivity : ComponentActivity() {
 
     private fun crashReportOffered() {
         crashReportOfferedMs = EngineClient.engineCrashedAtMs
-        uiPrefs().edit { putLong(PREF_CRASH_REPORT_OFFERED, crashReportOfferedMs) }
     }
 
     private fun uiPrefs() = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
@@ -189,7 +188,7 @@ private fun CrashReportOffer(onReport: () -> Unit, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(stringResource(R.string.crash_offer_title)) },
-        text = { Text(stringResource(R.string.crash_offer_text)) },
+        text = { Text(stringResource(R.string.crash_offer_text), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
         confirmButton = { TextButton(onClick = onReport) { Text(stringResource(R.string.crash_offer_report)) } },
         dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.crash_offer_not_now)) } },
     )

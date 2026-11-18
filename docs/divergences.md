@@ -220,6 +220,26 @@ console's black. A mini console in the game area shows what is under it, as on t
 a page of the switcher, from a side border, shows black too, as that layout draws no label from those borders and the
 page's pane covers the console.
 
+## A console's scroll bar
+
+A mini console or user window a script gave a scroll bar (`enableScrollBar()`) has a thin thumb drawn over its right
+edge, which takes no width from the text (`docs/phase-f.md`, "Mini consoles and user windows"). On the desktop the bar
+is a widget 15 pixels wide beside the text, with a pixel between them, so the text has 16 pixels less. A script that
+wraps by the window's width leaves that room itself: Geyser's `autoWrap` takes 15 pixels off before it counts the
+columns to wrap at, so in such a console nothing is under the app's thumb. In one wrapped at a width the script chose
+(`setWindowWrap()`), the desktop cuts the columns past the narrower text off, and the app draws them, the last under
+the thumb where it is. Taking the width would make every row's text smaller, as the app sizes a console's
+text to fit the columns the engine reports, and those count the whole width with or without a bar.
+A finger takes the thumb in a strip 24 dp wide, wider than the thumb drawn and than the desktop's bar, which lies over
+the rows' right edge: a link there under the strip goes to the thumb, not the link, until the rows or the thumb move.
+The desktop's bar is beside the text and covers no link. A console too short for the thumb to move in (under about
+48 dp tall) has none, where the desktop's bar is there at any height.
+
+The thumb is also all there is of the bar: no track to tap for a page, and no arrows, as a finger scrolls the rows
+themselves. It tells where the rows in view are among those the app holds, the console's newest, not among every
+line the console has. The main console has no scroll bar in the app, where the desktop's has one unless a script takes
+it off: it scrolls by touch, with a button back to the newest line.
+
 ## Button bars
 
 A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f.md`, "Button bars and commands").

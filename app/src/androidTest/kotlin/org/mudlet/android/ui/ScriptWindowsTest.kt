@@ -24,6 +24,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -65,6 +66,7 @@ import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.RUN_UNDERLINE
 import org.mudlet.android.ui.game.Announcer
+import org.mudlet.android.ui.game.SCROLL_THUMB_TAG
 import kotlin.math.abs
 
 /**
@@ -508,6 +510,124 @@ class ScriptWindowsTest {
         session.assertNoRequest("runLua", QUIET_MS.toInt())
     }
 
+    // The chat window with 60 rows, more than it shows, the last of them in view; [scrollBar] as a script's
+    // enableScrollBar("chat") (true) and disableScrollBar("chat") (false) leave it, null for a console never given one
+    private fun showLongChat(scrollBar: Boolean? = true) {
+        compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
+        session.windows(listOf(chatWithScrollBar(scrollBar)), full = true)
+        sendChatRows(59)
+        waitUntilDisplayed("row 59")
+    }
+
+    private fun chatWithScrollBar(scrollBar: Boolean?) = FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40, fontSize = 8.0).apply {
+        if (scrollBar != null) put("scrollBar", scrollBar)
+    }
+
+    private val scrollThumb = hasTestTag(SCROLL_THUMB_TAG)
+
+    private fun hasScrollThumb() = compose.onAllNodes(scrollThumb).fetchSemanticsNodes().isNotEmpty()
+
+    // A finger takes the thumb and moves it [dy] pixels along its track
+    private fun dragScrollThumb(dy: Float) = compose.onNode(scrollThumb).performTouchInput {
+        down(center)
+        repeat(DRAG_STEPS) { moveBy(Offset(0f, dy / DRAG_STEPS)) }
+        up()
+    }
+
+    // The chat console gets the rows 0 to [last], which it takes whether it shows them or not
+    private fun sendChatRows(last: Int) {
+        session.windowText("chat", (0..last).map { "row $it" })
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.state.text["chat"]?.lines?.size == last + 1 } }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun aMiniConsoleAScriptGaveAScrollBarShowsAThumbWhereItsRowsAre() {
+        showLongChat()
+        compose.waitUntil(WAIT_MS) { hasScrollThumb() }
+        // At the bottom of the right edge, as the newest rows are in view, and under half the window, as far fewer
+        // than half the rows are
+        val chat = bounds(windowNamed("chat"))
+        val thumb = bounds(scrollThumb)
+        assertNear("right", chat.right, thumb.right)
+        assertNear("bottom", chat.bottom, thumb.bottom)
+        assertTrue("not under half the window: $thumb in $chat", thumb.height < chat.height / 2)
+        // TalkBack scrolls the rows and reads them as without the bar, which is nothing to it
+        compose.onNode(hasScrollToIndexAction() and inChat).assertIsDisplayed()
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        // Rows that are all in view leave nothing to scroll
+        session.windowText("chat", listOf("the only row"))
+        compose.waitUntil(WAIT_MS) { !hasScrollThumb() }
+        sendChatRows(59)
+        compose.waitUntil(WAIT_MS) { hasScrollThumb() }
+    }
+
+    @Test
+    fun aMiniConsoleHasNoScrollThumbUnlessAScriptGaveItAScrollBar() {
+        // Never given one: none, though there are rows to scroll
+        showLongChat(scrollBar = null)
+        compose.waitForIdle()
+        assertFalse(hasScrollThumb())
+
+        session.windows(listOf(chatWithScrollBar(true)))
+        compose.waitUntil(WAIT_MS) { hasScrollThumb() }
+        // disableScrollBar(): gone, and the rows are as they were
+        session.windows(listOf(chatWithScrollBar(false)))
+        compose.waitUntil(WAIT_MS) { !hasScrollThumb() }
+        waitUntilDisplayed("row 59")
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun draggingAMiniConsolesScrollThumbScrollsItsRows() {
+        showLongChat()
+        compose.waitUntil(WAIT_MS) { hasScrollThumb() }
+        val chat = bounds(windowNamed("chat"))
+
+        // To the top of its track: the oldest rows, and the thumb at the window's top
+        dragScrollThumb(-chat.height)
+        compose.waitUntil(WAIT_MS) { displayed("row 0") && !displayed("row 59") }
+        assertNear("top", chat.top, bounds(scrollThumb).top)
+
+        // Scrolled back, the console stays put as rows come
+        sendChatRows(60)
+        assertTrue(displayed("row 0"))
+        assertFalse(displayed("row 60"))
+        // Scrolling is the app's own: the engine is told nothing
+        session.assertNoRequest("runLua", QUIET_MS.toInt())
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aMiniConsoleFollowsNewRowsAgainOnceItsScrollThumbIsLetGoAtTheBottom() {
+        showLongChat()
+        compose.waitUntil(WAIT_MS) { hasScrollThumb() }
+        val chat = bounds(windowNamed("chat"))
+
+        // Away from the newest rows and back to them
+        dragScrollThumb(-chat.height)
+        sendChatRows(60)
+        dragScrollThumb(chat.height)
+        waitUntilDisplayed("row 60")
+        assertNear("bottom", chat.bottom, bounds(scrollThumb).bottom)
+        sendChatRows(61)
+        waitUntilDisplayed("row 61")
+
+        // Held at the bottom while rows come, which are not scrolled to under the finger: let go, it follows them too
+        compose.onNode(scrollThumb).performTouchInput {
+            down(center)
+            repeat(2) { moveBy(Offset(0f, viewConfiguration.touchSlop)) }
+        }
+        sendChatRows(62)
+        assertFalse(displayed("row 62"))
+        compose.onNode(scrollThumb).performTouchInput { up() }
+        waitUntilDisplayed("row 62")
+        sendChatRows(63)
+        waitUntilDisplayed("row 63")
+    }
+
     // The size the app's next setFontSize() gives the console [name]
     private fun receiveFontSize(name: String): Int {
         val code = session.receive("runLua").getString("code")
@@ -610,6 +730,9 @@ class ScriptWindowsTest {
         // Well past the Announcer's wait for more lines
         const val QUIET_MS = 1_000L
         const val POLL_MS = 50L
+
+        // The moves a drag of the scroll thumb is made in
+        const val DRAG_STEPS = 10
 
         // As runs' colours: rrggbb
         const val MAROON = 0x800000

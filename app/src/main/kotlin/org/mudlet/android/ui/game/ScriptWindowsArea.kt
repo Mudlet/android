@@ -2,12 +2,18 @@ package org.mudlet.android.ui.game
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,8 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilterChip
@@ -28,8 +36,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,9 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -81,6 +93,7 @@ import org.mudlet.android.protocol.PxRect
 import org.mudlet.android.protocol.RUN_RGB
 import org.mudlet.android.protocol.ScriptWindow
 import org.mudlet.android.protocol.ScriptWindows
+import org.mudlet.android.protocol.ScrollThumb
 import org.mudlet.android.protocol.WindowKey
 import org.mudlet.android.protocol.WindowKind
 import org.mudlet.android.protocol.WindowLayout
@@ -106,6 +119,16 @@ private val SWITCHER_HEIGHT = 56.dp
 
 // How long the size a pinch reached is drawn after the fingers lift, while the engine has not reported a new size
 private const val PINCH_HELD_MS = 2000L
+
+// A console's scroll bar: the thumb as drawn, the strip of it a finger takes, and the shortest it gets
+private val SCROLL_THUMB_WIDTH = 4.dp
+private val SCROLL_THUMB_TOUCH = 24.dp
+private val SCROLL_THUMB_MIN = 48.dp
+
+// As the desktop's handle, white or black ([ScrollThumb.whiteOn]) at an alpha of 200
+private const val SCROLL_THUMB_ALPHA = 200 / 255f
+
+internal const val SCROLL_THUMB_TAG = "window-scroll-thumb"
 
 // Script windows come after the console, the input line and the screen's buttons, which keep the default of 0
 internal const val WINDOWS_TRAVERSAL_INDEX = 1f
@@ -302,6 +325,8 @@ private fun Modifier.windowSemantics(description: String): Modifier = semantics 
  * ([ConsoleZoomClient]): the text is drawn at the size reached while the fingers move, and at the engine's new grid
  * once it reports it. A two-finger double tap, or TalkBack's reset action, gives back the scripts' size.
  *
+ * A console a script gave a scroll bar (`enableScrollBar()`) has one along its right edge ([ConsoleScrollBar]).
+ *
  * Its new rows are not read aloud as the main console's are: a script that wants one read calls `announce()`.
  */
 @Composable
@@ -414,10 +439,12 @@ private fun WindowConsole(
             },
         )
     }
+    val background = window.backgroundArgb()?.let { Color(it) } ?: CONSOLE_BACKGROUND
     Column(
-        modifier.background(window.backgroundArgb()?.let { Color(it) } ?: CONSOLE_BACKGROUND).windowSemantics(description).semantics { customActions = zoomActions },
+        modifier.background(background).windowSemantics(description).semantics { customActions = zoomActions },
     ) {
-        val sideways = if (rowsWidth != null) Modifier.horizontalScroll(rememberScrollState()) else Modifier
+        val sidewaysState = rememberScrollState()
+        val sideways = if (rowsWidth != null) Modifier.horizontalScroll(sidewaysState) else Modifier
         Box(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {
             LazyColumn(if (rowsWidth != null) Modifier.width(rowsWidth).fillMaxSize() else Modifier.fillMaxSize(), state = listState) {
                 // Each row's key is its number in the console, so the rows in view stay put as new ones come
@@ -434,8 +461,79 @@ private fun WindowConsole(
                     ConsoleLine(row, lines[i].text, style, Modifier.fillMaxWidth(), blankLines = blankLines, singleLine = true, links = rowLinks)
                 }
             }
+            if (window.console?.scrollBar == true) {
+                // At the right edge of what shows of rows scrolled sideways, not of the rows; a drag of it is the
+                // player's scroll, so the console follows new rows again only if it ends at the bottom
+                ConsoleScrollBar(listState, background, { if (rowsWidth != null) sidewaysState.value - sidewaysState.maxValue else 0 }) { following = it }
+            }
         }
         if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], Modifier.fillMaxWidth())
+    }
+}
+
+/**
+ * The scroll bar of a console a script gave one: a thumb at the right edge, over the rows' last columns, as long as
+ * the share of the rows in view and where they are among all of them ([ScrollThumb]), in the colour that stands out
+ * from [background]. There is none while every row is in view, nor in a console too short for it to move. [shift] is
+ * its x from the rows' right edge, in pixels: zero, or less to draw it left of that edge.
+ *
+ * Dragging it scrolls the rows, and stops a fling of them. [onFollow] is told false as a drag starts, and as it ends
+ * whether the console follows new rows again: it does if the drag left the rows at their end, though rows have come
+ * since, which are then scrolled to. A thumb that goes while a finger holds it (the script took the bar away, or
+ * every row fits now) ends the drag the same way.
+ *
+ * It is nothing to TalkBack, which scrolls the list with its own actions and reads the rows, as without the bar.
+ */
+@Composable
+private fun BoxScope.ConsoleScrollBar(listState: LazyListState, background: Color, shift: () -> Int, onFollow: (Boolean) -> Unit) {
+    val density = LocalDensity.current
+    val minSize = with(density) { SCROLL_THUMB_MIN.toPx() }
+    val thumb by remember(listState, minSize) {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val rows = info.visibleItemsInfo
+            rows.firstOrNull()?.let { top ->
+                val rowHeight = rows.sumOf { it.size }.toFloat() / rows.size
+                ScrollThumb.of(info.totalItemsCount, top.index, -top.offset, rowHeight, info.viewportSize.height, !listState.canScrollForward, minSize)
+            }
+        }
+    }
+    val shown = thumb ?: return
+    // Null with no finger dragging the thumb, else whether the drag has left the rows at their end
+    val held = remember { mutableStateOf<Boolean?>(null) }
+    val follow by rememberUpdatedState(onFollow)
+
+    // The end of a drag, if there is one: what [held] was
+    fun release(): Boolean? = held.value?.also { atEnd ->
+        held.value = null
+        follow(atEnd || !listState.canScrollForward)
+    }
+    // Leaving the composition, as the thumb does above when it goes, ends no drag by itself
+    DisposableEffect(Unit) { onDispose { release() } }
+    val colour = (if (ScrollThumb.whiteOn(background.luminance())) Color.White else Color.Black).copy(alpha = SCROLL_THUMB_ALPHA)
+    Box(
+        Modifier.align(Alignment.TopEnd)
+            .offset { IntOffset(shift(), shown.offset.roundToInt()) }
+            .size(SCROLL_THUMB_TOUCH, with(density) { shown.size.toDp() })
+            .draggable(
+                // The drag's state calls the lambda of the latest composition, so this is the thumb as it is now
+                rememberDraggableState {
+                    listState.dispatchRawDelta(it * shown.rowsPerPixel)
+                    held.value = !listState.canScrollForward
+                },
+                Orientation.Vertical,
+                onDragStarted = {
+                    held.value = !listState.canScrollForward
+                    follow(false)
+                    listState.stopScroll()
+                },
+                // Rows that came while the thumb was held at the end are below the view: the newest is scrolled to
+                onDragStopped = { if (release() == true) listState.requestScrollToItem(listState.layoutInfo.totalItemsCount - 1) },
+            )
+            .testTag(SCROLL_THUMB_TAG),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Box(Modifier.fillMaxHeight().width(SCROLL_THUMB_WIDTH).background(colour, CircleShape))
     }
 }
 

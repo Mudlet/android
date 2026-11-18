@@ -135,6 +135,26 @@
     <string name="profile_password_not_forgotten">The password could not be forgotten.</string>
     <!-- The profile editor's switch: connect to the game again by itself when the connection drops -->
     <string name="profile_auto_reconnect">Reconnect automatically</string>
+    <!-- The heading of the profile editor's section for a proxy: a server the connection to the game goes through (SOCKS5), as in desktop Mudlet's profile preferences -->
+    <string name="profile_proxy_title">Proxy</string>
+    <!-- The profile editor's switch: connect to the game through the proxy whose details follow -->
+    <string name="profile_proxy_use">Connect through a proxy</string>
+    <!-- The profile editor's field for the proxy server's address (host name or IP address) -->
+    <string name="profile_proxy_host">Proxy address</string>
+    <!-- Shown under the proxy address field while it is empty and the proxy is switched on -->
+    <string name="profile_proxy_host_needed">Needed to connect through the proxy</string>
+    <!-- The profile editor's field for the proxy server's port number -->
+    <string name="profile_proxy_port">Proxy port</string>
+    <!-- The profile editor's field for the user name the proxy server asks for; empty for a proxy that asks for none -->
+    <string name="profile_proxy_user">Proxy user name</string>
+    <!-- The profile editor's field for the password the proxy server asks for (not the game's password) -->
+    <string name="profile_proxy_password">Proxy password</string>
+    <!-- The profile editor's button that deletes the stored proxy password -->
+    <string name="profile_proxy_password_forget">Forget proxy password</string>
+    <!-- Shown when saving a game worked but storing its proxy password on the device did not -->
+    <string name="profile_proxy_password_not_stored">The game was saved, but its proxy password could not be stored.</string>
+    <!-- Shown in the proxy section instead of its fields while the game is not open: Mudlet reads and changes a game's proxy only then -->
+    <string name="profile_proxy_while_open">A game\'s proxy can be set while the game is open.</string>
     <!-- The profile editor's button that saves the game -->
     <string name="profile_save">Save</string>
     <!-- The profile editor's button that deletes the game, after a confirmation dialog -->
@@ -194,7 +214,7 @@
     <string name="profile_copy_settings_unreadable">Only its connection details were copied: the profile\'s saved settings could not be read.</string>
     <!-- Shown after "Copied as …" when the player asked for the stored password to be copied and it could not be -->
     <string name="profile_copy_password_not_copied">Its password could not be copied: type it in again in the new profile\'s editor.</string>
-    <!-- Shown after "Copied as …" when the player left the stored password out of the copy, but a password stored earlier for another profile of the new profile's name could not be removed -->
+    <!-- Shown after "Copied as …" when a password stored earlier for another profile of the new profile's name, the game's or its proxy's, could not be removed -->
     <string name="profile_copy_password_not_cleared">A password stored earlier under this name could not be removed: forget it in the new profile\'s editor.</string>
     <!-- Shown, and read by TalkBack, when the profile could not be copied; %1$s is why, in English -->
     <string name="profile_copy_failed">Could not copy the profile: %1$s</string>

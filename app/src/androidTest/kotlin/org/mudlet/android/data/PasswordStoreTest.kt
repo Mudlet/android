@@ -24,7 +24,10 @@ class PasswordStoreTest {
     @After
     fun forgetTheTestsPasswords() {
         val store = PasswordStore(context)
-        listOf(GAME, OTHER).forEach { store.forget(it) }
+        listOf(GAME, OTHER).forEach {
+            store.forget(it)
+            store.forget(it, PasswordStore.Kind.PROXY)
+        }
     }
 
     @Test
@@ -41,6 +44,30 @@ class PasswordStoreTest {
         val afterForget = PasswordStore(context)
         assertFalse(afterForget.has(GAME))
         assertNull(afterForget.get(GAME))
+    }
+
+    @Test
+    fun aProfilesProxyPasswordIsKeptApartFromItsGamePassword() {
+        val store = PasswordStore(context)
+        assertTrue(store.set(GAME, PASSWORD, PasswordStore.Kind.PROXY))
+        assertFalse("a proxy's password is not the game's", store.has(GAME))
+        assertNull(store.get(GAME))
+        assertTrue(store.set(GAME, "game password"))
+        assertEquals(PASSWORD, PasswordStore(context).get(GAME.uppercase(), PasswordStore.Kind.PROXY))
+        assertEquals("game password", PasswordStore(context).get(GAME))
+        val all = PasswordStore(context).all().orEmpty()
+        assertTrue("a problem report takes both out", all.containsAll(listOf(PASSWORD, "game password")))
+
+        // Sealed for its own key, so the game's ciphertext moved to the proxy's does not open, nor the other way round
+        val file = File(context.filesDir, PasswordStore.FILE)
+        val sealed = JSONObject(file.readText())
+        sealed.put("proxy:" + GAME.lowercase(), sealed.getString(GAME.lowercase()))
+        file.writeText(sealed.toString())
+        assertNull(PasswordStore(context).get(GAME, PasswordStore.Kind.PROXY))
+        assertEquals("game password", PasswordStore(context).get(GAME))
+
+        assertTrue(store.forget(GAME))
+        assertFalse(PasswordStore(context).has(GAME))
     }
 
     @Test

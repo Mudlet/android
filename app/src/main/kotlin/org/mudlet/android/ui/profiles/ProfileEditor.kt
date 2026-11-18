@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
@@ -42,15 +44,17 @@ import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.protocol.ProxySettings
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.MudletScaffold
 
 /**
  * Adds a profile ([name] null) or edits the one named [name], whose name cannot change, as the engine keeps the name a
- * profile was created with. A stored password is never shown again: a new one replaces it, and "Forget password"
- * removes it. [onClose] leaves, as Back does, once the engine has saved or deleted the profile. A new profile can start
- * [fromLink], a telnet:// link's, which the editor says to check. A saved one can be opened without connecting, as
- * desktop's Offline, to work on its scripts: [onOpenGame] then shows it.
+ * profile was created with. A stored password, the game's or the proxy's, is never shown again: a new one replaces
+ * it, and its Forget button removes it. The proxy itself is Mudlet's setting, read and changed only while the game is
+ * open, as desktop's profile preferences are. [onClose] leaves, as Back does, once the engine has saved or deleted the
+ * profile. A new profile can start [fromLink], a telnet:// link's, which the editor says to check. A saved one can be
+ * opened without connecting, as desktop's Offline, to work on its scripts: [onOpenGame] then shows it.
  */
 @Composable
 fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null, onOpenGame: () -> Unit = {}) {
@@ -72,29 +76,93 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
     var confirmDelete by remember { mutableStateOf(false) }
     val passwordNotStored = stringResource(R.string.profile_password_not_stored)
     val passwordNotForgotten = stringResource(R.string.profile_password_not_forgotten)
+    val proxyPasswordNotStored = stringResource(R.string.profile_proxy_password_not_stored)
     val notAttached = stringResource(R.string.profiles_error_not_attached)
+
+    val session = name?.let { EngineClient.session(it) }
+    var proxyUse by rememberSaveable { mutableStateOf(false) }
+    var proxyHost by rememberSaveable { mutableStateOf("") }
+    var proxyPort by rememberSaveable { mutableStateOf("") }
+    var proxyUser by rememberSaveable { mutableStateOf("") }
+    // Kept over a configuration change, so the answer read again then does not replace what the player typed
+    var proxyFilled by rememberSaveable { mutableStateOf(false) }
+    // What Mudlet holds, so that saving changes the proxy only when the player did
+    var proxyHeld by remember { mutableStateOf<ProxySettings?>(null) }
+    var proxyPassword by remember { mutableStateOf("") }
+    var proxyPasswordStored by remember(name) { mutableStateOf(name != null && passwords.has(name, PasswordStore.Kind.PROXY)) }
+    val proxyAvailable = session?.settingsAvailable == true
+    LaunchedEffect(session, proxyAvailable) {
+        if (!proxyAvailable || proxyHeld != null) return@LaunchedEffect
+        val sent = session?.requestProxy(null) { held, refused ->
+            if (held == null) {
+                error = refused
+                return@requestProxy
+            }
+            proxyHeld = held
+            if (!proxyFilled) {
+                proxyUse = held.use
+                proxyHost = held.host
+                proxyPort = if (held.port == 0) "" else held.port.toString()
+                proxyUser = held.user
+                proxyFilled = true
+            }
+        } == true
+        if (!sent) error = notAttached
+    }
+    val proxyShown = proxyAvailable && proxyHeld != null
+    val proxyPortNumber = ProxySettings.portOf(proxyPort)
+    val proxy = ProxySettings.of(proxyUse, proxyHost, proxyPort, proxyUser)
 
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val profileName = name ?: newName.trim()
-    val canSave = !waiting && profileName.isNotEmpty() && host.isNotBlank() && portNumber != null
+    val canSave = !waiting && profileName.isNotEmpty() && host.isNotBlank() && portNumber != null && (!proxyShown || proxy != null)
     val edited = portNumber?.let { Profile(profileName, host.trim(), it, tls, login.trim(), autoReconnect) }
+
+    // Each is stored before either is given, as the engine takes a profile's two passwords together
+    fun storePasswords(saved: String, then: () -> Unit) {
+        waiting = false
+        when {
+            password.isNotEmpty() && !passwords.set(saved, password) -> error = passwordNotStored
+
+            proxyPassword.isNotEmpty() && !passwords.set(saved, proxyPassword, PasswordStore.Kind.PROXY) -> error = proxyPasswordNotStored
+
+            else -> {
+                if (password.isNotEmpty() || proxyPassword.isNotEmpty()) {
+                    EngineClient.givePassword(saved, password.ifEmpty { passwords.get(saved) })
+                }
+                then()
+            }
+        }
+    }
 
     fun save(then: () -> Unit) {
         error = null
         waiting = true
         val profile = edited!!
+        val changedProxy = proxy?.takeIf { proxyShown && it != proxyHeld }
         EngineClient.saveProfile(profile) { refused ->
-            waiting = false
             when {
-                refused != null -> error = refused
+                refused != null -> {
+                    waiting = false
+                    error = refused
+                }
 
-                password.isEmpty() -> then()
-
-                !passwords.set(profile.name, password) -> error = passwordNotStored
+                changedProxy == null -> storePasswords(profile.name, then)
 
                 else -> {
-                    EngineClient.givePassword(profile.name, password)
-                    then()
+                    val sent = session?.requestProxy(changedProxy) { held, proxyRefused ->
+                        if (held == null) {
+                            waiting = false
+                            error = proxyRefused
+                        } else {
+                            proxyHeld = held
+                            storePasswords(profile.name, then)
+                        }
+                    } == true
+                    if (!sent) {
+                        waiting = false
+                        error = notAttached
+                    }
                 }
             }
         }
@@ -180,6 +248,66 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                 }) { Text(stringResource(R.string.profile_password_forget)) }
             }
             SwitchRow(stringResource(R.string.profile_auto_reconnect), autoReconnect) { autoReconnect = it }
+            Text(
+                stringResource(R.string.profile_proxy_title),
+                Modifier.padding(top = 16.dp).semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (proxyShown) {
+                SwitchRow(stringResource(R.string.profile_proxy_use), proxyUse) { proxyUse = it }
+                val hostMissing = proxyUse && proxyHost.isBlank()
+                OutlinedTextField(
+                    proxyHost,
+                    { proxyHost = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.profile_proxy_host)) },
+                    singleLine = true,
+                    isError = hostMissing,
+                    supportingText = if (hostMissing) ({ Text(stringResource(R.string.profile_proxy_host_needed)) }) else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
+                val portWrong = proxyPortNumber == null || (proxyUse && proxyPortNumber == 0)
+                OutlinedTextField(
+                    proxyPort,
+                    { proxyPort = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.profile_proxy_port)) },
+                    singleLine = true,
+                    isError = portWrong,
+                    supportingText = if (portWrong) ({ Text(stringResource(R.string.profile_port_invalid)) }) else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    proxyUser,
+                    { proxyUser = it },
+                    Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.profile_proxy_user)) },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    proxyPassword,
+                    { proxyPassword = it },
+                    // As the game's password field
+                    Modifier.fillMaxWidth().semantics { password() },
+                    label = { Text(stringResource(R.string.profile_proxy_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    supportingText = if (proxyPasswordStored) ({ Text(stringResource(R.string.profile_password_stored)) }) else null,
+                )
+            } else {
+                Text(stringResource(R.string.profile_proxy_while_open), style = MaterialTheme.typography.bodyMedium)
+            }
+            if (proxyPasswordStored && name != null) {
+                TextButton({
+                    if (passwords.forget(name, PasswordStore.Kind.PROXY)) {
+                        proxyPasswordStored = false
+                        EngineClient.givePassword(name, passwords.get(name))
+                    } else {
+                        error = passwordNotForgotten
+                    }
+                }) { Text(stringResource(R.string.profile_proxy_password_forget)) }
+            }
             error?.let {
                 Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
             }
@@ -191,7 +319,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
             }
             if (name != null) {
                 // What is typed is saved first, as desktop's dialog keeps each change, or leaving would lose it
-                val unsaved = edited != existing || password.isNotEmpty()
+                val unsaved = edited != existing || password.isNotEmpty() || proxyPassword.isNotEmpty() || (proxyShown && proxy != proxyHeld)
                 OutlinedButton(
                     { if (unsaved) save { openOffline(name) } else openOffline(name) },
                     enabled = !waiting && (!unsaved || canSave),
@@ -219,7 +347,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                             refused != null -> error = refused
 
                             // Or a new profile of this name would log in with it
-                            !passwords.forget(name) -> error = passwordNotForgotten
+                            !passwords.forget(name) || !passwords.forget(name, PasswordStore.Kind.PROXY) -> error = passwordNotForgotten
 
                             else -> onClose()
                         }

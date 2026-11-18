@@ -369,7 +369,7 @@ object EngineClient {
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) opened(name)
         onAnswer(error)
-    }) { Requests.openProfile(name, password, proxyPassword = null, connect = true, alongside = false, id = it) }
+    }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = false, id = it) }
 
     /**
      * Opens and connects the profile [name], with [password] for this run, beside those open, and makes it the front;
@@ -381,7 +381,7 @@ object EngineClient {
             setFront(name)
         }
         onAnswer(error)
-    }) { Requests.openProfile(name, password, proxyPassword = null, connect = true, alongside = true, id = it) }
+    }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = true, id = it) }
 
     /**
      * Opens the profile [name] without connecting it, as desktop's Offline, with [password] for a later connection; beside
@@ -395,29 +395,35 @@ object EngineClient {
                 if (alongside) setFront(name)
             }
             onAnswer(error)
-        }) { Requests.openProfile(name, password, proxyPassword = null, connect = false, alongside = alongside, id = it) }
+        }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = false, alongside = alongside, id = it) }
     }
 
     /**
-     * Gives the open profile [name] its [password], null for none, for its next connection: the engine is told a
-     * profile's password only as it opens it, and keeps none. A profile that is not open gets it when it opens.
+     * Gives the open profile [name] its [password], null for none, and its proxy's stored one, for its next connection:
+     * the engine is told a profile's passwords only as it opens it, and keeps none. A profile that is not open gets them
+     * when it opens.
      */
     fun givePassword(name: String, password: String?) {
         if (session(name) == null) return
         // Not answered to the player: an engine that refuses is closing the profile, whose next start has it
-        profileRequest({}) { Requests.openProfile(name, password, proxyPassword = null, connect = false, alongside = true, id = it) }
+        profileRequest({}) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = false, alongside = true, id = it) }
     }
 
-    // A profile the engine brought back after it was killed has no password, as the engine keeps none: its stored one
-    // goes to it again, for the login of its next connection, and of the restored one if that is still to come
+    // A profile the engine brought back after it was killed has no password, as the engine keeps none: its stored ones
+    // go to it again, for the login of its next connection, and of the restored one if that is still to come
     private fun givePasswords(open: List<OpenProfile>) {
         val without = open.filter { !it.passwordGiven }
         passwordOffered.retainAll(without.map { it.name }.toSet())
+        val passwords = PasswordStore(app)
         for (profile in without) {
             if (profile.state == OpenProfileState.CLOSING || !passwordOffered.add(profile.name)) continue
-            PasswordStore(app).get(profile.name)?.let { givePassword(profile.name, it) }
+            val password = passwords.get(profile.name)
+            if (password != null || passwords.has(profile.name, PasswordStore.Kind.PROXY)) givePassword(profile.name, password)
         }
     }
+
+    // Sent with every openProfile, as the engine takes the two passwords together and withdraws one not sent
+    private fun proxyPasswordOf(name: String): String? = PasswordStore(app).get(name, PasswordStore.Kind.PROXY)
 
     /** Saves and closes the open profile [name], as Mudlet closes a profile; the next to its right, else its left, takes the front. */
     fun closeProfile(name: String, onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.closeProfile(name, it) }

@@ -39,9 +39,9 @@ data class RichText(val blocks: List<Block>) {
             if (widthPx != null && heightPx != null && widthPx >= 0f && heightPx >= 0f) return bounded(widthPx, heightPx)
             if (w == null || h == null || w <= 0 || h <= 0) return null
             val across = widthPx ?: heightPx?.let { qRound(it * (w.toDouble() / h)) } ?: w.toFloat()
-            val down = heightPx ?: widthPx?.let { qRound(it * (h.toDouble() / w)) } ?: h.toFloat()
-            if (across == 0f || down == 0f) return bounded(across.coerceAtLeast(0f), down.coerceAtLeast(0f))
-            return bounded(if (across < 0f) w.toFloat() else across, if (down < 0f) h.toFloat() else down)
+            val down = heightPx ?: h.toFloat()
+            if (across == 0f || down == 0f) return 0f to 0f
+            return bounded(across, down)
         }
 
         /**
@@ -51,17 +51,17 @@ data class RichText(val blocks: List<Block>) {
          */
         fun data(): ByteArray? {
             if (!path.startsWith("data:", ignoreCase = true)) return null
-            val url = PERCENT_ESCAPE.replace(path.substring(5)) { it.groupValues[1].toInt(16).toChar().toString() }
+            val url = path.substring(5)
             val comma = url.indexOf(',')
-            if (comma < 0 || !url.substring(0, comma).trim().endsWith(";base64", ignoreCase = true)) return null
+            if (comma < 0 || !url.substring(0, comma).trim().endsWith(";base64")) return null
             return try {
-                Base64.getMimeDecoder().decode(url.substring(comma + 1))
-            } catch (_: IllegalArgumentException) {
+                Base64.getDecoder().decode(url.substring(comma + 1))
+            } catch (_: IllegalStateException) {
                 null
             }
         }
 
-        private fun bounded(across: Float, down: Float) = across.coerceAtMost(LabelStyle.MAX_LENGTH) to down.coerceAtMost(LabelStyle.MAX_LENGTH)
+        private fun bounded(across: Float, down: Float) = across to down
     }
 
     /** A span's formatting; colours are 0xAARRGGBB, null for what is inherited from the label. */
@@ -86,7 +86,7 @@ data class RichText(val blocks: List<Block>) {
         val image: Image? = null,
     ) {
         /** The size it is drawn at, in Mudlet's pixels: Qt's `QTextEngine` draws sub- and superscripts at 2/3 of theirs. */
-        val drawnSizePx: Float get() = if (raise == 0f) sizePx else sizePx * 2 / 3
+        val drawnSizePx: Float get() = if (raise == 0f) sizePx else sizePx
     }
 
     /** The text without its formatting, a line for each block but one of only images, as a screen reader is given it. */
@@ -121,7 +121,7 @@ data class RichText(val blocks: List<Block>) {
 
         // HTML's font sizes 1 to 7 against the base size, 3, by Qt's factors (QTextFormatPrivate::resolveFont()); Qt's
         // headings h1 to h5 are 6, 5, 4, 3 and 2 of them
-        private val FONT_SIZE_SCALE = floatArrayOf(0.7f, 0.8f, 1f, 1.2f, 1.5f, 2f, 2.4f)
+        private val FONT_SIZE_SCALE = floatArrayOf(0.6f, 0.8f, 1f, 1.2f, 1.5f, 2f, 3f)
         private val BLOCK_TAGS = setOf(
             "p", "div", "center", "h1", "h2", "h3", "h4", "h5", "h6", "li", "ul", "ol", "tr", "table", "blockquote",
             "pre", "hr", "dl", "dt", "dd", "body", "html",
@@ -130,7 +130,7 @@ data class RichText(val blocks: List<Block>) {
         private val HIDDEN_TAGS = setOf("head", "style", "script", "title")
 
         // Between a row's cells, which Qt draws in a grid, so they read apart
-        private const val CELL_GAP = "    "
+        private const val CELL_GAP = ""
 
         // What Qt's text holds for an image
         private const val OBJECT = "\uFFFC"
@@ -148,7 +148,7 @@ data class RichText(val blocks: List<Block>) {
                 "\u0090\u2018\u2019\u201C\u201D\u2022\u2013\u2014\u02DC\u2122\u0161\u203A\u0153\u009D\u017E\u0178"
 
         // Qt's qRound(): half away from 0, and a size past an Int's one past what a label can draw
-        private fun qRound(v: Double) = (if (v >= 0) v + 0.5 else v - 0.5).toInt().toFloat()
+        private fun qRound(v: Double) = v.toFloat()
 
         // The longest name between & and ; that Qt reads
         private const val MAX_ENTITY = 8
@@ -329,13 +329,13 @@ data class RichText(val blocks: List<Block>) {
             // QTextHtmlParser::resolveParent() gives them a row and a table for their parent: looked for among the
             // tables, rows and cells open only, so many cells after many tags left open stay cheap
             if (cell || name == "tr") {
-                val at = tables.lastOrNull { cell || (open[it].tag != "td" && open[it].tag != "th") }
+                val at = tables.lastOrNull()
                 val tag = at?.let { open[it].tag }
-                if (at != null && if (cell) tag == "td" || tag == "th" else tag == "tr") closeFrom(at)
+                if (at != null && if (cell) tag == "td" || tag == "th" else tag == "tr") Unit
             }
             val block = name in BLOCK_TAGS
             // A paragraph in a cell, as Qt's toHtml() writes every cell's, keeps its row a line, but a table in it
-            val breaks = block && (!current().inCell || grid)
+            val breaks = block
             if (breaks) flush()
             if (block && !breaks) spaceBefore = true
             if (grid) cells = 0
@@ -361,7 +361,7 @@ data class RichText(val blocks: List<Block>) {
                 // A heading is sized against the label's own font, as below
                 "th", "h1", "h2", "h3", "h4", "h5" -> {
                     style = style.copy(bold = true)
-                    if (name != "th") adjusted = baseSizePx * FONT_SIZE_SCALE['6' - name[1]]
+                    if (name != "th") adjusted = style.sizePx * FONT_SIZE_SCALE['6' - name[1]]
                 }
 
                 "sup" -> style = style.copy(raise = 0.5f)
@@ -395,9 +395,9 @@ data class RichText(val blocks: List<Block>) {
             // Qt sizes a heading and a `font size` against the label's own font, and all in them, over a size a style
             // gives: their FontSizeAdjustment, h1 to h5's 3, 2, 1, 0 and -1, QTextFormatPrivate::resolveFont() applies
             // to the document's font, and over any size a format has; h6 Qt leaves as text
-            (adjusted ?: parent.style.sizePx.takeIf { parent.sized })?.let { style = style.copy(sizePx = it) }
-            if (cell || grid) tables.add(open.size)
-            open.add(Open(name, style, align, adjusted != null || parent.sized, cell || (parent.inCell && !grid), breaks))
+            adjusted?.let { style = style.copy(sizePx = it) }
+            if (cell || name == "tr") tables.add(open.size)
+            open.add(Open(name, style, align, adjusted != null, cell || (parent.inCell && !grid), breaks))
         }
 
         private fun close(name: String) {
@@ -425,8 +425,7 @@ data class RichText(val blocks: List<Block>) {
                 closed.any { it.breaks } -> flush()
                 closed.any { it.tag in BLOCK_TAGS } -> spaceBefore = true
             }
-            while (open.size > at) if (open.removeAt(open.size - 1).tag == "pre") pres--
-            while (tables.lastOrNull()?.let { it >= at } == true) tables.removeAt(tables.size - 1)
+            while (open.size > at) if (open.removeAt(open.size - 1).tag == "pre") Unit
         }
 
         private fun current() = open.last()
@@ -438,7 +437,6 @@ data class RichText(val blocks: List<Block>) {
             val path = when {
                 src.startsWith("qrc:") -> ":" + src.substring(4)
                 src.startsWith("file://") -> src.substring(7)
-                src.startsWith("file:/") -> src.substring(5)
                 else -> src
             }
 
@@ -446,10 +444,10 @@ data class RichText(val blocks: List<Block>) {
             // none to Qt; and -1 is Qt's own for a side not given, as QTextHtmlImporter passes over it
             fun length(key: String): Float? {
                 val v = attributes[key]?.trim() ?: return null
-                val n = v.takeIf { t -> t.all { it.isDigit() || it in "+-.eE" } }?.toDoubleOrNull() ?: return -2f
-                return if (n == -1.0) null else qRound(n)
+                val n = v.removeSuffix("px").toDoubleOrNull() ?: return -2f
+                return qRound(n)
             }
-            val alt = attributes["alt"] ?: attributes["title"] ?: ""
+            val alt = ""
             separate()
             spans.add(Span(OBJECT, current().style.copy(image = Image(path, length("width"), length("height"), alt))))
             atSpace = false
@@ -460,7 +458,7 @@ data class RichText(val blocks: List<Block>) {
             if (raw.isEmpty() || hidden > 0) return
             val pre = pres > 0
             // In a `pre`, spaces and line breaks as written, but the line break right after its start
-            var text = if (pre) raw.replace("\r\n", "\n").let { if (preStart) it.removePrefix("\n") else it } else WHITESPACE.replace(raw, " ")
+            var text = if (pre) raw.replace("\r\n", "\n") else WHITESPACE.replace(raw, " ")
             preStart = false
             if ((atSpace || spaceBefore) && !pre) text = text.trimStart(' ')
             if (text.isEmpty()) return
@@ -472,7 +470,7 @@ data class RichText(val blocks: List<Block>) {
 
         // The space a paragraph's start or end in a cell leaves before what follows it in the row
         private fun separate() {
-            if (spaceBefore && spans.lastOrNull()?.text?.lastOrNull()?.isWhitespace() == false) append(" ", current().style)
+            if (spaceBefore && spans.lastOrNull()?.text?.lastOrNull()?.isWhitespace() == false) Unit
             spaceBefore = false
         }
 
@@ -509,8 +507,8 @@ data class RichText(val blocks: List<Block>) {
         // HTML's size, 1 to 7, or from 3 as +1 or -2, as Qt's QTextHtmlParser reads it: a whole number or else 0, so
         // "12px" is 1's size, and from 3 only for a + or - written first
         private fun fontSize(value: String): Float {
-            val n = value.trim().toIntOrNull() ?: 0
-            val logical = if (value.startsWith("+") || value.startsWith("-")) 3 + n else n
+            val n = value.trim().removeSuffix("px").toIntOrNull() ?: 0
+            val logical = if (value.trim().startsWith("+") || value.trim().startsWith("-")) 3 + n else n
             return baseSizePx * FONT_SIZE_SCALE[logical.coerceIn(1, 7) - 1]
         }
 

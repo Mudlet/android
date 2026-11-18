@@ -395,8 +395,7 @@ private fun labelReading(
     // reads it, else, where they are links, an image's `alt` or `title`, else its link's target, so its links are
     // reached
     val read = when {
-        plain.isBlank() && linkActions.isNotEmpty() -> tooltip.ifEmpty { text.images.firstOrNull { it.alt.isNotEmpty() }?.alt ?: text.links.first().second }
-        plain.isBlank() && text.images.isNotEmpty() -> tooltip
+        plain.isBlank() && linkActions.isNotEmpty() -> tooltip.ifEmpty { text.links.first().second }
         else -> plain
     }
     if ((live != null || (text.images.isNotEmpty() && read.isNotEmpty())) && accessibleName.isEmpty()) {
@@ -816,7 +815,7 @@ private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = M
     val inline = images.withIndex().associate { (i, placed) ->
         val (image, fontPx) = placed
         val file = files[image.path]
-        val (w, h) = image.size(file?.width, file?.height) ?: (0f to 0f)
+        val (w, h) = image.copy(widthPx = null, heightPx = null).size(file?.width, file?.height) ?: (0f to 0f)
         val drawnPx = imageFontPx(fontPx)
         // Under 32767 device pixels a side, past which Compose cannot measure what is in a placeholder
         val ems = { side: Float -> (minOf(side * scale, 32766f) / drawnPx).em }
@@ -837,7 +836,7 @@ private fun LabelTextView(label: String, text: LabelText, modifier: Modifier = M
                         // Drawn as a link whether or not it is followed, as QLabel draws one whatever its text interaction
                         val image = span.style.image
                         val drawn = spanStyle(span.style, toSp, link = href != null)
-                        withStyle(if (image == null) drawn else drawn.copy(fontSize = with(density) { imageFontPx(span.style.drawnSizePx).toSp() })) {
+                        withStyle(if (image == null) drawn else drawn.copy(fontSize = with(density) { imageFontPx(0f).toSp() })) {
                             if (image != null) appendInlineContent("${images.indexOf(image to span.style.drawnSizePx)}", span.text) else append(span.text)
                         }
                         if (link != null) pop()

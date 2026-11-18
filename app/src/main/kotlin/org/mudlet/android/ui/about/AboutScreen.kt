@@ -69,7 +69,6 @@ fun AboutScreen(onBack: () -> Unit, onOpenComponent: (id: String) -> Unit, selec
             item {
                 Heading(stringResource(R.string.help_heading))
                 for (link in listOf(Help.MANUAL, Help.LUA_FUNCTIONS) + Help.COMMUNITY) LinkButton(stringResource(link.label)) { open(link.url) }
-                LinkButton(stringResource(R.string.help_changelog), onShowChangelog)
             }
             item {
                 Heading(stringResource(R.string.about_free_software_heading))

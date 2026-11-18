@@ -7,7 +7,7 @@ data class ReleaseNotes(val version: String, val lines: List<String>) {
         const val ASSET = "release-notes.md"
 
         // The heading scripts/release-plan.sh takes a release's notes from; the file's "## x.y.z" example is not one
-        private val heading = Regex("""^## (\d+\.\d+\.\d+)\s*$""")
+        private val heading = Regex("""^## (.+)$""")
 
         /**
          * Each release's section of [text], in the file's order (the newest first): the lines between its heading and

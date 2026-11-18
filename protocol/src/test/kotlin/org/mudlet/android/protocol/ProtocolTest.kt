@@ -42,6 +42,20 @@ class ProtocolTest {
     }
 
     @Test
+    fun lineUpdatedParses() {
+        val edited = FrameReader.parse(JSONObject("""{"t":"lineUpdated","seq":7,"text":"You see a rat.","runs":[[0,3,1,-1,1]],"prompt":false}""")) as EngineMessage.LineUpdated
+        assertEquals(7L, edited.seq)
+        assertEquals("You see a rat.", edited.text)
+        assertArrayEquals(intArrayOf(0, 3, 1, -1, 1, 0), edited.runs)
+        assertFalse(edited.deleted)
+        val deleted = FrameReader.parse(JSONObject("""{"t":"lineUpdated","seq":8,"deleted":true}""")) as EngineMessage.LineUpdated
+        assertEquals(8L, deleted.seq)
+        assertTrue(deleted.deleted)
+        assertEquals("", deleted.text)
+        assertEquals(0, deleted.runs.size)
+    }
+
+    @Test
     fun profilesParseInTheEnginesOrder() {
         val message = FrameReader.parse(
             JSONObject(

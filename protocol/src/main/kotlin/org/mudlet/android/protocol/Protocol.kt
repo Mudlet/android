@@ -12,7 +12,7 @@ import kotlin.math.roundToInt
 
 // Wire format shared with native/enginehost/SocketBridge.cpp, specified in docs/protocol.md: a 4-byte
 // big-endian length, then one UTF-8 JSON object whose "t" field is the message type.
-const val PROTOCOL_VERSION = 42
+const val PROTOCOL_VERSION = 43
 private const val MAX_FRAME_BYTES = 16 * 1024 * 1024
 
 private const val QUOTE = '"'.code.toByte()
@@ -805,6 +805,9 @@ sealed interface EngineMessage {
     data class Line(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val time: Long, val replay: Boolean) : EngineMessage
     data class Tail(val text: String, val runs: IntArray, val prompt: Boolean, val time: Long) : EngineMessage
 
+    /** A script changed the [Line] of [seq] where it stands, or [deleted] it, whereupon the rest are empty. */
+    data class LineUpdated(val seq: Long, val text: String, val runs: IntArray, val prompt: Boolean, val deleted: Boolean) : EngineMessage
+
     /** The engine's console was emptied: drop every line and the tail. */
     data object Clear : EngineMessage
     data class Notify(val title: String, val text: String) : EngineMessage
@@ -1536,6 +1539,14 @@ class FrameReader(input: InputStream) {
             )
 
             "tail" -> EngineMessage.Tail(o.optString("text"), flattenRuns(o.optJSONArray("runs")), o.optBoolean("prompt"), o.optLong("time"))
+
+            "lineUpdated" -> EngineMessage.LineUpdated(
+                o.getLong("seq"),
+                o.optString("text"),
+                flattenRuns(o.optJSONArray("runs")),
+                o.optBoolean("prompt"),
+                o.optBoolean("deleted"),
+            )
 
             "clear" -> EngineMessage.Clear
 

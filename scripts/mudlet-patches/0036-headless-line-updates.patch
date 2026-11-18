@@ -1,0 +1,582 @@
+Let a frontend with no window follow the lines it was shown
+
+lineShown sends each line of the main console once its triggers have run, and never again. A script that later
+changes such a line where it stands (moving the cursor up to it and calling replace(), setFgColor(), setLink() or
+insertText()) or deletes it with deleteLine() changes the GUI's console, which repaints, while a frontend with no
+window keeps showing the line as it was sent.
+
+- TBuffer gives each line an id (lineIdBuffer), which a line keeps while lines around it are deleted or trimmed, and
+  the first of the lines a rewrap splits it into keeps too.
+- TConsoleModelNotifier::linesRemoved tells, before they go, of lines deleteLine() deletes or a shrink trims. Like
+  lineShown, it is sent only when connected, which the GUI never does.
+- lineShown gains a last argument, lineIds: an id for each line of its text, as its line feeds part it.
+- THeadlessSession::linesUpdated sends, once a turn from the event loop, each of those lines a script has since
+  changed (linesChanged) or deleted, as lineShown would send it now, or as deleted. Lines trimmed off the top and
+  lines before a clearWindow() are dropped without one.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (line_updates: a line replace() changed, one setFgColor()
+restyled and one deleteLine() deleted, from runLua and from a trigger on a later line, sent again by seq; the last
+line a timer deletes; and a UI that attaches sent the changes it missed).
+The desktop is unchanged: it never connects linesRemoved or the session's signals, and the line ids only ride along
+in the buffer.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+diff --git a/docs/headless.md b/docs/headless.md
+index 3058402..a7013bc 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -243,15 +243,26 @@ as a line of its own: an `echo()` after `clearWindow()` or a `feedTriggers()`, a
+ `send()`; an `echo()` after `deleteLine()` comes with `continuesLine`, as below. An app that draws the console as the GUI does draws `lineShown`, wrapping each
+ line itself, as for `outputLine`; a line a trigger split with `wrapLine()` comes whole, with the line feeds
+ it held, and if a trigger then deletes its first part, what is left of it comes as the line. A change a later
+-trigger makes to a line already sent, as by moving the cursor up to it, is not sent again, though what it
+-inserts is sent as a line of its own.
++trigger makes to a line already sent, as by moving the cursor up to it, is not sent again by `lineShown`,
++though what it inserts is sent as a line of its own; `linesUpdated` tells of it, as below.
+ 
+ Their fifth argument, `arrivalMSecs`, is when the line arrived, in milliseconds since the epoch: the
+ time the GUI's timestamps show beside it. A line a trigger wrote has the time of the console line it went
+ into, its own when it is a line of its own. It is -1 for a line with none. A handler that takes only the
+-first three, four or five arguments may still be connected. `localText` carries no time of its own: it is sent as
++first three, four, five or six arguments may still be connected. `localText` carries no time of its own: it is sent as
+ it is written, so the time its handler runs is when that text was written.
+ 
++`lineShown`'s last argument, `lineIds`, has an id for each line of its text, as its line feeds part it,
++which no other line of the main console has while that one lasts, and 0 for a line it does not follow.
++While `linesUpdated` is connected, a script that later changes one of those lines where it stands
++(`replace()`, `setFgColor()`, `setLink()` or `insertText()` on a line it moved the cursor up to) or
++deletes it with `deleteLine()` has the line sent again in `linesUpdated`, as a `LineUpdate`: its id, and
++its text, runs and prompt flag as `lineShown` would send them now, or `deleted`. It comes from the event
++loop, once for all the lines a turn changed, those deleted first and then the rest in the order they
++stand. Lines trimmed off the top as the console outgrows its limit, and those before a `clearWindow()`,
++are dropped without one. A change that splits a line, as `wrapLine()` or an `insertText()` of a line feed
++does, updates only its first part, and the change of a link's state is told by `linksChanged`, not here.
++
+ `timeStampsShown()` says whether the main console shows those times beside its lines, as the GUI's
+ timestamp button does, and `setTimeStampsShown()` presses that button: the choice is saved for the
+ profile's next load as the button saves it, and refused where `submit()` is. Where it was made but could
+diff --git a/src/TBuffer.cpp b/src/TBuffer.cpp
+index c3721b2..fcdfe7f 100644
+--- a/src/TBuffer.cpp
++++ b/src/TBuffer.cpp
+@@ -929,6 +929,7 @@ TBuffer::TBuffer(const TBuffer& other)
+ , timeBuffer(other.timeBuffer)
+ , promptBuffer(other.promptBuffer)
+ , wrapGapBuffer(other.wrapGapBuffer)
++, lineIdBuffer(other.lineIdBuffer)
+ , mLinkStore(other.mLinkStore)
+ , mLinesLimit(other.mLinesLimit)
+ , mBatchDeleteSize(other.mBatchDeleteSize)
+@@ -1040,6 +1041,8 @@ TBuffer& TBuffer::operator=(const TBuffer& other)
+         timeBuffer = other.timeBuffer;
+         promptBuffer = other.promptBuffer;
+         wrapGapBuffer = other.wrapGapBuffer;
++        lineIdBuffer = other.lineIdBuffer;
++        mNextLineId = other.mNextLineId;
+         mLinkStore = other.mLinkStore;
+         mLinesLimit = other.mLinesLimit;
+         mBatchDeleteSize = other.mBatchDeleteSize;
+@@ -2995,6 +2998,7 @@ void TBuffer::commitLineData(QString line, TLineFormat chars, const char ch)
+             promptBuffer.append(false);
+         }
+         wrapGapBuffer.append(0);
++        lineIdBuffer.append(mNextLineId++);
+     } else {
+         if (!line.isEmpty()) {
+             // The last line is empty, so this is the whole of it
+@@ -3177,6 +3181,7 @@ void TBuffer::commitLineData(QString line, TLineFormat chars, const char ch)
+         timeBuffer.push_back(csmNoTimeStamp);
+         promptBuffer << false;
+         wrapGapBuffer.append(0);
++        lineIdBuffer.append(mNextLineId++);
+     }
+ 
+     if (static_cast<int>(buffer.size()) > mLinesLimit) {
+@@ -6693,6 +6698,7 @@ void TBuffer::appendEmptyLine()
+     timeBuffer << lineArrivalTime();
+     promptBuffer << false;
+     wrapGapBuffer.append(0);
++    lineIdBuffer.append(mNextLineId++);
+ }
+ 
+ // This was called "insert" but that is commonly used for built in methods and
+@@ -7277,6 +7283,8 @@ int TBuffer::wrapLine(int startLine, int maxWidth, int indentSize, int hangingIn
+         qint64 time;
+         quint16 wrapGap;
+         bool prompt;
++        // 0 for a line split off the source line, which is given an id of its own
++        qint64 id;
+     };
+     // Most calls rewrap a single incoming line into a few, which fit in this array's own inline storage
+     QVarLengthArray<RewrappedLine, 8> rewrapped;
+@@ -7302,7 +7310,7 @@ int TBuffer::wrapLine(int startLine, int maxWidth, int indentSize, int hangingIn
+         // trivial case
+         if (buffer[i].empty()) {
+             keepWholeForHeld(i);
+-            rewrapped.append({std::move(newBufferLine), newLineText, time, wrapGapBuffer.at(i), false});
++            rewrapped.append({std::move(newBufferLine), newLineText, time, wrapGapBuffer.at(i), false, lineIdBuffer.at(i)});
+             continue;
+         }
+ 
+@@ -7323,7 +7331,7 @@ int TBuffer::wrapLine(int startLine, int maxWidth, int indentSize, int hangingIn
+         }
+         if (lineBreaks.isEmpty()) {
+             keepWholeForHeld(i);
+-            rewrapped.append({std::move(buffer[i]), lineText, time, wrapGapBuffer.at(i), isPrompt});
++            rewrapped.append({std::move(buffer[i]), lineText, time, wrapGapBuffer.at(i), isPrompt, lineIdBuffer.at(i)});
+             continue;
+         }
+         if (i == mPreTriggerPassLineNumber) {
+@@ -7383,7 +7391,12 @@ int TBuffer::wrapLine(int startLine, int maxWidth, int indentSize, int hangingIn
+             if (movesHeld) {
+                 heldSpans.append({i, w.firstChar, w.lastChar, firstRewrappedLine + static_cast<int>(rewrapped.size()), addsIndent ? (w.isNewline ? indent : hangingIndent) : 0});
+             }
+-            rewrapped.append({std::move(newBufferLine), std::move(newLineText), segmentTime, static_cast<quint16>(std::min<int>(wrapGap, std::numeric_limits<quint16>::max())), isPrompt});
++            rewrapped.append({std::move(newBufferLine),
++                              std::move(newLineText),
++                              segmentTime,
++                              static_cast<quint16>(std::min<int>(wrapGap, std::numeric_limits<quint16>::max())),
++                              isPrompt,
++                              previousSegmentEnd < 0 ? lineIdBuffer.at(i) : 0});
+             previousSegmentEnd = w.lastChar;
+             newBufferLine.clear();
+             newLineText = QString();
+@@ -7396,6 +7409,7 @@ int TBuffer::wrapLine(int startLine, int maxWidth, int indentSize, int hangingIn
+         timeBuffer.pop_back();
+         promptBuffer.pop_back();
+         wrapGapBuffer.pop_back();
++        lineIdBuffer.pop_back();
+     }
+ 
+     const int rewrappedLines = static_cast<int>(rewrapped.size());
+@@ -7408,12 +7422,16 @@ int TBuffer::wrapLine(int startLine, int maxWidth, int indentSize, int hangingIn
+                 timeBuffer.back() = TBuffer::csmWrappedLineTimeStamp;
+                 wrapGapBuffer.back() = line.wrapGap;
+             }
++            if (line.id) {
++                lineIdBuffer.back() = line.id;
++            }
+         } else {
+             buffer.push_back(std::move(line.chars));
+             lineBuffer.append(std::move(line.text));
+             timeBuffer.append(line.time);
+             promptBuffer.push_back(line.prompt);
+             wrapGapBuffer.append(line.wrapGap);
++            lineIdBuffer.append(line.id ? line.id : mNextLineId++);
+         }
+     }
+ 
+@@ -7863,6 +7881,7 @@ void TBuffer::clear()
+     timeBuffer << csmNoTimeStamp;
+     promptBuffer.push_back(false);
+     wrapGapBuffer.append(0);
++    lineIdBuffer.append(mNextLineId++);
+ }
+ 
+ void TBuffer::clearLinkState(const QSet<int>& stillLiveLinkIds)
+@@ -8046,6 +8065,9 @@ void TBuffer::shrinkBuffer()
+     }
+ 
+     triggerPassLinesRemoved(0, mBatchDeleteSize - 1);
++    if (mpModel && mpModel->mNotifier.linesRemovedConnected()) {
++        emit mpModel->mNotifier.linesRemoved(0, mBatchDeleteSize - 1, true);
++    }
+     for (int i = 0; i < mBatchDeleteSize; ++i) {
+         // The lines going away were written a whole buffer ago, so freeing each
+         // one stalls on a cache miss for its allocator header. Asking for the
+@@ -8062,6 +8084,7 @@ void TBuffer::shrinkBuffer()
+         promptBuffer.pop_front();
+         timeBuffer.pop_front();
+         wrapGapBuffer.pop_front();
++        lineIdBuffer.pop_front();
+         buffer.pop_front();
+         mCursorY--;
+     }
+@@ -8173,16 +8196,21 @@ bool TBuffer::deleteLines(int from, int to)
+             for (int i = to; i >= from; --i) {
+                 if (!wrapsFromPreviousLine(i)) {
+                     timeBuffer[to + 1] = timeBuffer.at(i);
++                    lineIdBuffer[to + 1] = lineIdBuffer.at(i);
+                     break;
+                 }
+             }
+         }
+ 
+         triggerPassLinesRemoved(from, to);
++        if (mpModel && mpModel->mNotifier.linesRemovedConnected()) {
++            emit mpModel->mNotifier.linesRemoved(from, to, false);
++        }
+         lineBuffer.remove(from, delta);
+         timeBuffer.remove(from, delta);
+         promptBuffer.remove(from, delta);
+         wrapGapBuffer.remove(from, delta);
++        lineIdBuffer.remove(from, delta);
+ 
+         buffer.erase(buffer.begin() + from, buffer.begin() + to + 1);
+         if (mpModel) {
+diff --git a/src/TBuffer.h b/src/TBuffer.h
+index 0f4be8e..3fa140f 100644
+--- a/src/TBuffer.h
++++ b/src/TBuffer.h
+@@ -775,6 +775,9 @@ public:
+     // many spaces the break dropped between the two - a copy puts them back;
+     // for the first line of a paragraph, how many columns of wrap indent it carries
+     QList<quint16> wrapGapBuffer;
++    // Each line's id, from 1, which no other line of the buffer is given while it lasts: a line keeps its id when lines
++    // around it are deleted or trimmed, and so does the first of the lines a rewrap splits it into
++    QList<qint64> lineIdBuffer;
+     TLinkStore mLinkStore;
+     int mLinesLimit = 10000;
+     int mBatchDeleteSize = 1000;
+@@ -790,6 +793,7 @@ private:
+     int mLinesUntilLinkSweep = 0;
+     QSet<int> mLinkIdsRemovedSinceSweep;
+     qint64 mLinesRemovedTotal = 0;
++    qint64 mNextLineId = 1;
+     qint64 mLinesTrimmedTotal = 0;
+     QHash<int, qint64> mLinkIdIssuedAtLine;
+     bool linkHoldsState(const int id) const;
+diff --git a/src/TConsoleModel.cpp b/src/TConsoleModel.cpp
+index 1910de8..bd409b9 100644
+--- a/src/TConsoleModel.cpp
++++ b/src/TConsoleModel.cpp
+@@ -452,6 +452,12 @@ bool TConsoleModelNotifier::linkChangedConnected() const
+     return isSignalConnected(linkChangedSignal);
+ }
+ 
++bool TConsoleModelNotifier::linesRemovedConnected() const
++{
++    static const QMetaMethod linesRemovedSignal = QMetaMethod::fromSignal(&TConsoleModelNotifier::linesRemoved);
++    return isSignalConnected(linesRemovedSignal);
++}
++
+ void TConsoleModel::notifyPrinted(const QString& text, const PrintedInto into, const TChar& format, const bool startsLine)
+ {
+     if (text.isEmpty() || !mNotifier.textPrintedConnected()) {
+diff --git a/src/TConsoleModelNotifier.h b/src/TConsoleModelNotifier.h
+index f817d72..fb02e83 100644
+--- a/src/TConsoleModelNotifier.h
++++ b/src/TConsoleModelNotifier.h
+@@ -35,10 +35,11 @@ class TConsoleModelNotifier : public QObject
+ public:
+     using QObject::QObject;
+ 
+-    // isSignalConnected() is protected. The GUI never connects textPrinted or lineShown, so this spares it the work.
++    // isSignalConnected() is protected. The GUI never connects textPrinted, lineShown or linesRemoved, so this spares it the work.
+     bool textPrintedConnected() const;
+     bool lineShownConnected() const;
+     bool linkChangedConnected() const;
++    bool linesRemovedConnected() const;
+ 
+ signals:
+     // The count is of every line in the buffer, not just the new ones.
+@@ -83,6 +84,8 @@ signals:
+     // The buffer's rows changed with none of the signals above sent, as the view showing it repaints only later:
+     // a script's deleteLine() or wrapLine().
+     void contentEdited();
++    // These lines are about to be deleted, or trimmed off the top as the buffer outgrows its limit; read them now.
++    void linesRemoved(int firstLine, int lastLine, bool trimmed);
+ };
+ 
+ #endif // MUDLET_TCONSOLEMODELNOTIFIER_H
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 5acfb35..98c7182 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -749,6 +749,8 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                 mMapOperationCancelable = false;
+                 pNewHost->givePass(password);
+                 mShownLinesOfPasses.clear();
++                mSentLineIds.clear();
++                mEditedLineIds.clear();
+                 pNewHost->mainConsoleModel().mTriggerTextShownElsewhere = [self = QPointer<THeadlessSession>(this)]() {
+                     return self && self->lineShownTaken();
+                 };
+@@ -766,10 +768,22 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                     }
+                     --gSignalsBeingHandedOut;
+                 });
++                connect(&pNewHost->mainConsoleModel().mNotifier, &TConsoleModelNotifier::linesChanged, this, [this, run](const int firstLine, const int lastLine) {
++                    if (run == mRun) {
++                        noteLinesEdited(firstLine, lastLine);
++                    }
++                });
++                connect(&pNewHost->mainConsoleModel().mNotifier, &TConsoleModelNotifier::linesRemoved, this, [this, run](const int firstLine, const int lastLine, const bool trimmed) {
++                    if (run == mRun) {
++                        noteLinesRemoved(firstLine, lastLine, trimmed);
++                    }
++                });
+                 connect(&pNewHost->mainConsoleModel().mNotifier, &TConsoleModelNotifier::bufferCleared, this, [this, model = &pNewHost->mainConsoleModel()]() {
+                     for (QList<ShownLine>& lines : mShownLinesOfPasses) {
+                         lines.clear();
+                     }
++                    mSentLineIds.clear();
++                    mEditedLineIds.clear();
+                     // An app that hears the clear empties the open line, but the CLI's terminal keeps it
+                     if (isSignalConnected(QMetaMethod::fromSignal(&THeadlessSession::mainConsoleCleared))) {
+                         model->forgetPrintedLine();
+@@ -3029,9 +3043,13 @@ THeadlessSession::ShownLine THeadlessSession::wholeLine(const TBuffer& buffer, c
+     const TLineFormat& firstFormat = buffer.buffer.at(first);
+     std::vector<TChar> format(firstFormat.begin() + std::min<qsizetype>(firstPadding, firstFormat.size()), firstFormat.end());
+     format.resize(text.size(), format.empty() ? TChar() : format.back());
++    QList<qint64> lineIds{buffer.lineIdBuffer.at(first)};
+     for (int y = first + 1; y <= last; ++y) {
+         const QString& segment = buffer.lineBuffer.at(y);
+         const bool wrapped = buffer.wrapsFromPreviousLine(y);
++        if (!wrapped) {
++            lineIds.append(buffer.lineIdBuffer.at(y));
++        }
+         const int padding = wrapped ? buffer.wrapIndentWidth(y) : std::min(buffer.wrapGapBefore(y), buffer.wrapIndentWidth(y));
+         const QString joint = wrapped ? QString(buffer.wrapGapBefore(y), QChar::Space) : QString(QChar::LineFeed);
+         text.append(joint);
+@@ -3043,7 +3061,7 @@ THeadlessSession::ShownLine THeadlessSession::wholeLine(const TBuffer& buffer, c
+         format.insert(format.end(), formatFrom, segmentFormat.end());
+         format.resize(text.size(), format.empty() ? TChar() : format.back());
+     }
+-    return {text, buffer.promptBuffer.at(first), textRuns(text, TLineFormat(std::move(format)), mpHost->mFgColor, mpHost->mBgColor), arrivalTime(buffer, first)};
++    return {text, buffer.promptBuffer.at(first), textRuns(text, TLineFormat(std::move(format)), mpHost->mFgColor, mpHost->mBgColor), arrivalTime(buffer, first), false, lineIds};
+ }
+ 
+ bool THeadlessSession::lineShownWanted() const
+@@ -3071,7 +3089,12 @@ QList<THeadlessSession::ShownLine> THeadlessSession::takeTriggerWrites(const boo
+     }
+     const TBuffer& buffer = mpHost->mainConsoleModel().buffer;
+     for (const TConsoleModel::TriggerWrite& write : writes) {
+-        lines.append({write.text, false, textRuns(write.text, TLineFormat(write.format), mpHost->mFgColor, mpHost->mBgColor), arrivalTime(buffer, write.line), write.continuesLine});
++        lines.append({write.text,
++                      false,
++                      textRuns(write.text, TLineFormat(write.format), mpHost->mFgColor, mpHost->mBgColor),
++                      arrivalTime(buffer, write.line),
++                      write.continuesLine,
++                      {shownLineId(buffer, write.line)}});
+     }
+     return lines;
+ }
+@@ -3080,9 +3103,20 @@ bool THeadlessSession::sendShownLines(const QList<ShownLine>& lines)
+ {
+     const QPointer<THeadlessSession> self(this);
+     const QString profile = mProfileName;
++    const bool followed = isSignalConnected(QMetaMethod::fromSignal(&THeadlessSession::linesUpdated));
+     for (const ShownLine& line : lines) {
++        QList<qint64> lineIds = line.lineIds;
++        lineIds.resize(line.text.count(QChar::LineFeed) + 1);
++        for (qint64& lineId : lineIds) {
++            // A trigger's echo onto a line already sent shares its line, which only that one is updated as
++            if (mSentLineIds.contains(lineId)) {
++                lineId = 0;
++            } else if (followed && lineId) {
++                mSentLineIds.insert(lineId);
++            }
++        }
+         ++gSignalsBeingHandedOut;
+-        emit lineShown(profile, line.text, line.isPrompt, line.runs, line.arrivalMSecs, line.continuesLine);
++        emit lineShown(profile, line.text, line.isPrompt, line.runs, line.arrivalMSecs, line.continuesLine, lineIds);
+         --gSignalsBeingHandedOut;
+         if (!self) {
+             return false;
+@@ -3091,6 +3125,125 @@ bool THeadlessSession::sendShownLines(const QList<ShownLine>& lines)
+     return true;
+ }
+ 
++// The id of the line lineShown sent that line is part of: the first line of its paragraph, or of the part of one a
++// line it is wrapped from was sent as
++qint64 THeadlessSession::shownLineId(const TBuffer& buffer, int line) const
++{
++    if (line < 0 || line >= buffer.lineIdBuffer.size()) {
++        return 0;
++    }
++    while (buffer.wrapsFromPreviousLine(line) && !mSentLineIds.contains(buffer.lineIdBuffer.at(line))) {
++        --line;
++    }
++    return buffer.lineIdBuffer.at(line);
++}
++
++void THeadlessSession::noteLinesEdited(const int firstLine, const int lastLine)
++{
++    if (mSentLineIds.isEmpty() || !mpHost) {
++        return;
++    }
++    const TBuffer& buffer = mpHost->mainConsoleModel().buffer;
++    const int last = std::min(lastLine, static_cast<int>(buffer.lineIdBuffer.size()) - 1);
++    bool edited = false;
++    for (int line = std::max(0, firstLine); line <= last; ++line) {
++        const qint64 lineId = shownLineId(buffer, line);
++        if (mSentLineIds.contains(lineId)) {
++            mEditedLineIds.insert(lineId);
++            edited = true;
++        }
++    }
++    if (edited) {
++        queueLineUpdates();
++    }
++}
++
++// Before the lines go. A deleted line's id may live on in the line wrapped from it, so whether it went is only known
++// once they have.
++void THeadlessSession::noteLinesRemoved(const int firstLine, const int lastLine, const bool trimmed)
++{
++    if (mSentLineIds.isEmpty() || !mpHost) {
++        return;
++    }
++    const TBuffer& buffer = mpHost->mainConsoleModel().buffer;
++    const int last = std::min(lastLine, static_cast<int>(buffer.lineIdBuffer.size()) - 1);
++    bool edited = false;
++    for (int line = std::max(0, firstLine); line <= last; ++line) {
++        const qint64 lineId = trimmed ? buffer.lineIdBuffer.at(line) : shownLineId(buffer, line);
++        if (!mSentLineIds.contains(lineId)) {
++            continue;
++        }
++        if (trimmed) {
++            mSentLineIds.remove(lineId);
++            mEditedLineIds.remove(lineId);
++        } else {
++            mEditedLineIds.insert(lineId);
++            edited = true;
++        }
++    }
++    if (edited) {
++        queueLineUpdates();
++    }
++}
++
++void THeadlessSession::queueLineUpdates()
++{
++    const unsigned int run = mRun;
++    if (mLineUpdatesQueuedRun == run) {
++        return;
++    }
++    mLineUpdatesQueuedRun = run;
++    QMetaObject::invokeMethod(
++            this,
++            [this, run]() {
++                if (mLineUpdatesQueuedRun == run) {
++                    mLineUpdatesQueuedRun = 0;
++                }
++                if (run == mRun) {
++                    sendLineUpdates();
++                }
++            },
++            Qt::QueuedConnection);
++}
++
++void THeadlessSession::sendLineUpdates()
++{
++    if (mEditedLineIds.isEmpty() || !mpHost) {
++        return;
++    }
++    const TBuffer& buffer = mpHost->mainConsoleModel().buffer;
++    QList<int> lines;
++    QSet<qint64> missing = mEditedLineIds;
++    mEditedLineIds.clear();
++    for (int line = static_cast<int>(buffer.lineIdBuffer.size()) - 1; line >= 0 && !missing.isEmpty(); --line) {
++        if (missing.remove(buffer.lineIdBuffer.at(line))) {
++            lines.prepend(line);
++        }
++    }
++    QList<LineUpdate> updates;
++    for (const qint64 lineId : std::as_const(missing)) {
++        mSentLineIds.remove(lineId);
++        updates.append({lineId, {}, {}, false, true});
++    }
++    std::sort(updates.begin(), updates.end(), [](const LineUpdate& a, const LineUpdate& b) {
++        return a.lineId < b.lineId;
++    });
++    const int lastLine = static_cast<int>(buffer.lineIdBuffer.size()) - 1;
++    for (const int first : std::as_const(lines)) {
++        int last = first;
++        while (last < lastLine && buffer.wrapsFromPreviousLine(last + 1) && !mSentLineIds.contains(buffer.lineIdBuffer.at(last + 1))) {
++            ++last;
++        }
++        const ShownLine shown = wholeLine(buffer, first, last);
++        updates.append({buffer.lineIdBuffer.at(first), shown.text, shown.runs, shown.isPrompt, false});
++    }
++    if (updates.isEmpty()) {
++        return;
++    }
++    const QString profile = mProfileName;
++    emit linesUpdated(profile, updates);
++}
++
+ // A handler of outputLine, lineShown, mainConsoleCleared, localText, errorConsoleText, debugText, hiddenInputWanted or a ...Requested signal runs in the middle of a write,
+ // which a line it fed would cut into, and a load that runs the event loop has yet to start the profile's scripts
+ bool THeadlessSession::refused(const bool duringLoad)
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index be7ac8b..89437e6 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -140,6 +140,20 @@ public:
+         bool operator==(const TextRun&) const = default;
+     };
+ 
++    // A line lineShown sent, as the main console now holds it, or deleted
++    struct LineUpdate
++    {
++        // One of the lineIds lineShown sent it with
++        qint64 lineId = 0;
++        QString text;
++        QList<TextRun> runs;
++        bool isPrompt = false;
++        // Whereupon text and runs are empty, and the id is not used again
++        bool deleted = false;
++
++        bool operator==(const LineUpdate&) const = default;
++    };
++
+     // invalidName, invalidConnectionDetails: a profile was to be made under a name, or given a host, port or
+     // TLS, that the connection dialog would not take; nothing is stored. poolClosing: the profiles of a
+     // session, this one or another, are still closing, from its shutdown() or, once it is deleted, from the
+@@ -1411,8 +1425,17 @@ signals:
+     // change to it. Sent mid-write, as outputLine is, with the same arguments; a line a trigger wrote has the time
+     // of the console line it went into, which is when it was written for a line of its own. continuesLine is for
+     // text the console draws on the end of the line sent before it, not as a line below: an echo() after
+-    // deleteLine(). A handler that takes fewer arguments may be connected.
+-    void lineShown(const QString& profile, const QString& text, bool isPrompt, const QList<THeadlessSession::TextRun>& runs, qint64 arrivalMSecs, bool continuesLine);
++    // deleteLine(). lineIds has an id for each line of text, as its line feeds part it, which linesUpdated names
++    // the line by, and 0 for one it does not follow. A handler that takes fewer arguments may be connected.
++    void lineShown(const QString& profile, const QString& text, bool isPrompt, const QList<THeadlessSession::TextRun>& runs, qint64 arrivalMSecs, bool continuesLine, const QList<qint64>& lineIds);
++    // Lines lineShown sent while this was connected that a script has since changed where they stand (replace(),
++    // setFgColor(), setLink(), insertText() on a line it moved the cursor to) or deleted, each named by its
++    // lineIds entry: those deleted first, then the others in the order they stand. From the event loop, once for
++    // all a turn changed; not for the line lineShown is still to send, for a line trimmed off the top as the
++    // console outgrows its limit, nor after mainConsoleCleared for the lines before it. A line a script's
++    // wrapLine() or insertText() of a line feed split keeps only the first of its parts, and the change of a
++    // link's state, which linksChanged tells of, is not one.
++    void linesUpdated(const QString& profile, const QList<THeadlessSession::LineUpdate>& updates);
+     // A script emptied the main console, as clearWindow() does; lines from before it that lineShown has yet to
+     // send are dropped. Sent mid-write, as outputLine is, so a handler may neither call the session nor run the
+     // event loop.
+@@ -1679,6 +1702,11 @@ private:
+     QList<ShownLine> takeTriggerWrites(bool taken);
+     // False if a handler deleted the session
+     bool sendShownLines(const QList<ShownLine>& lines);
++    qint64 shownLineId(const TBuffer& buffer, int line) const;
++    void noteLinesEdited(int firstLine, int lastLine);
++    void noteLinesRemoved(int firstLine, int lastLine, bool trimmed);
++    void queueLineUpdates();
++    void sendLineUpdates();
+     void closeDebugConsole();
+     // The relays of how the main console is drawn, in THeadlessSessionOutput.cpp
+     void connectOutputRelays(Host*, unsigned int run);
+@@ -1813,6 +1841,12 @@ private:
+     unsigned int mAddonCommandsQueuedRun = 0;
+     // The same for buttonsChanged
+     unsigned int mButtonsQueuedRun = 0;
++    // The same for linesUpdated
++    unsigned int mLineUpdatesQueuedRun = 0;
++    // The lineIds lineShown sent while linesUpdated was connected, of lines the main console still holds
++    QSet<qint64> mSentLineIds;
++    // Those of them a script changed or deleted since linesUpdated was last sent
++    QSet<qint64> mEditedLineIds;
+     // The run whose keyBindings() checkKeyBindings() compares, from its profileLoaded on; 0 for none
+     unsigned int mKeyBindingsRun = 0;
+     // What it compares first, as the event loop is about to wait each time: the combined key and modifiers of the
+@@ -1841,6 +1875,7 @@ private:
+         QList<TextRun> runs;
+         qint64 arrivalMSecs = -1;
+         bool continuesLine = false;
++        QList<qint64> lineIds;
+     };
+     // For each trigger pass under way, outermost first, the lines that passes nested in it have shown
+     QList<QList<ShownLine>> mShownLinesOfPasses;

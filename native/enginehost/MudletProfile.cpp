@@ -628,8 +628,16 @@ void MudletProfile::connectSession()
         ++(isPrompt ? mPromptsReceived : mLinesReceived);
         markCountersDirty();
     });
-    connect(session, &THeadlessSession::lineShown, this, [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64 arrivalMSecs, bool continuesLine) {
-        onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mEngine.mLinkTop), arrivalMSecs, continuesLine);
+    connect(session,
+            &THeadlessSession::lineShown,
+            this,
+            [this](const QString&, const QString& text, bool isPrompt, const QList<TextRun>& runs, qint64 arrivalMSecs, bool continuesLine, const QList<qint64>& lineIds) {
+                onLineShown(text, isPrompt, colorRuns(runs, mLinkBase, mEngine.mLinkTop), arrivalMSecs, continuesLine, lineIds);
+            });
+    connect(session, &THeadlessSession::linesUpdated, this, [this](const QString&, const QList<THeadlessSession::LineUpdate>& updates) {
+        for (const THeadlessSession::LineUpdate& update : updates) {
+            onLineUpdated(update.lineId, update.text, colorRuns(update.runs, mLinkBase, mEngine.mLinkTop), update.isPrompt, update.deleted);
+        }
     });
     connect(session, &THeadlessSession::localTextStyled, this, [this](const QString&, const QString& text, const QList<TextRun>& runs, bool continuesLine) {
         mLocalLines += text.count(QLatin1Char('\n'));
@@ -2763,10 +2771,10 @@ void MudletProfile::reportConsoleColors(const QColor& foreground, const QColor& 
 
 // A line as the main console shows it once its triggers ran. It stays open, as the tail, until the next line or
 // piece of text that does not continue it, so that one that does can still be put on its end.
-void MudletProfile::onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, qint64 arrivalMSecs, bool continuesLine)
+void MudletProfile::onLineShown(const QString& text, bool isPrompt, const QList<ColorRun>& runs, qint64 arrivalMSecs, bool continuesLine, const QList<qint64>& lineIds)
 {
     if (continuesLine && mOpen.kind != OpenLine::Kind::none) {
-        appendToOpen(text, runs);
+        appendToOpen(text, runs, lineIds);
         mOpen.kind = OpenLine::Kind::shown;
         mOpen.prompt = mOpen.prompt || isPrompt;
     } else {
@@ -2774,9 +2782,66 @@ void MudletProfile::onLineShown(const QString& text, bool isPrompt, const QList<
             mDropLineFeed = true;
         }
         commitOpen();
-        mOpen = {OpenLine::Kind::shown, text, runs, isPrompt, arrivalMSecs >= 0 ? arrivalMSecs : QDateTime::currentMSecsSinceEpoch()};
+        mOpen = {OpenLine::Kind::shown, text, runs, isPrompt, arrivalMSecs >= 0 ? arrivalMSecs : QDateTime::currentMSecsSinceEpoch(), lineIds};
     }
     commitCompleteLines(OpenLine::Kind::shown);
+    scheduleTailSync();
+}
+
+// A line of the open text is still the tail, which the next sync sends as it now is
+void MudletProfile::onLineUpdated(qint64 lineId, const QString& text, const QList<ColorRun>& runs, bool isPrompt, bool deleted)
+{
+    const qsizetype part = lineId ? mOpen.lineIds.indexOf(lineId) : -1;
+    if (part < 0) {
+        mFrontend->lineUpdated(lineId, text, runs, isPrompt, deleted);
+        return;
+    }
+    qsizetype from = 0;
+    for (qsizetype i = 0; i < part; ++i) {
+        from = mOpen.text.indexOf(QLatin1Char('\n'), from) + 1;
+    }
+    qsizetype to = mOpen.text.indexOf(QLatin1Char('\n'), from);
+    if (to < 0) {
+        to = mOpen.text.size();
+    }
+    const int size = int(mOpen.text.size());
+    if (deleted) {
+        if (!mOpen.text.contains(QLatin1Char('\n'))) {
+            mOpen = {};
+            scheduleTailSync();
+            return;
+        }
+        // With the line feed that parts it from the next line, or for the last line, from the one before it
+        if (to < size) {
+            ++to;
+        } else {
+            --from;
+        }
+        QList<ColorRun> kept = sliceRuns(mOpen.runs, 0, int(from));
+        for (ColorRun run : sliceRuns(mOpen.runs, int(to), size)) {
+            run.start += int(from);
+            kept.append(run);
+        }
+        mOpen.text.remove(from, to - from);
+        mOpen.runs = kept;
+        mOpen.lineIds.removeAt(part);
+    } else {
+        QList<ColorRun> edited = sliceRuns(mOpen.runs, 0, int(from));
+        for (ColorRun run : runs) {
+            run.start += int(from);
+            edited.append(run);
+        }
+        const int shift = int(text.size() - (to - from));
+        for (ColorRun run : sliceRuns(mOpen.runs, int(to), size)) {
+            run.start += int(to) + shift;
+            edited.append(run);
+        }
+        mOpen.text.replace(from, to - from, text);
+        mOpen.runs = edited;
+        if (part == mOpen.lineIds.size() - 1) {
+            mOpen.prompt = isPrompt;
+        }
+    }
     scheduleTailSync();
 }
 
@@ -2810,8 +2875,15 @@ void MudletProfile::onMainConsoleCleared()
     mFrontend->cleared();
 }
 
-void MudletProfile::appendToOpen(const QString& text, const QList<ColorRun>& runs)
+void MudletProfile::appendToOpen(const QString& text, const QList<ColorRun>& runs, const QList<qint64>& lineIds)
 {
+    const qsizetype breaks = text.count(QLatin1Char('\n'));
+    if (breaks) {
+        mOpen.lineIds.resize(mOpen.text.count(QLatin1Char('\n')) + 1);
+        for (qsizetype i = 1; i <= breaks; ++i) {
+            mOpen.lineIds.append(lineIds.value(i));
+        }
+    }
     const int offset = int(mOpen.text.size());
     mOpen.text.append(text);
     for (ColorRun run : runs) {
@@ -2827,9 +2899,12 @@ void MudletProfile::commitCompleteLines(OpenLine::Kind remainder)
     qsizetype end;
     while ((end = mOpen.text.indexOf(QLatin1Char('\n'))) >= 0) {
         const int size = int(mOpen.text.size());
-        mFrontend->line(mOpen.text.left(end), sliceRuns(mOpen.runs, 0, int(end)), mOpen.prompt && remainder == OpenLine::Kind::local, mOpen.time);
+        mFrontend->line(mOpen.text.left(end), sliceRuns(mOpen.runs, 0, int(end)), mOpen.prompt && remainder == OpenLine::Kind::local, mOpen.time, mOpen.lineIds.value(0));
         mOpen.runs = sliceRuns(mOpen.runs, int(end) + 1, size);
         mOpen.text.remove(0, end + 1);
+        if (!mOpen.lineIds.isEmpty()) {
+            mOpen.lineIds.removeFirst();
+        }
         if (remainder == OpenLine::Kind::local) {
             mOpen.kind = OpenLine::Kind::local;
             mOpen.prompt = false;
@@ -2845,7 +2920,7 @@ void MudletProfile::commitOpen()
     if (mOpen.kind == OpenLine::Kind::none) {
         return;
     }
-    mFrontend->line(mOpen.text, mOpen.runs, mOpen.prompt, mOpen.time);
+    mFrontend->line(mOpen.text, mOpen.runs, mOpen.prompt, mOpen.time, mOpen.lineIds.value(0));
     mOpen = {};
     // The UI would otherwise show the line twice until the tail is next synced
     if (!mSentTail.text.isEmpty()) {

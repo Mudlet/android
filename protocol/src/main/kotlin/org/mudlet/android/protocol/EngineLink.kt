@@ -146,7 +146,7 @@ class EngineLink(
             try {
                 val w = FrameWriter(t.output)
                 val reader = FrameReader(t.input)
-                w.write(Requests.hello(instance, lastSeq, profileSockets))
+                w.write(Requests.hello(instance, lastSeq, profileSockets, opensUrls = false))
                 val first = reader.read()
                 if (first !is EngineMessage.Hello) {
                     throw IOException("engine answered hello with $first")

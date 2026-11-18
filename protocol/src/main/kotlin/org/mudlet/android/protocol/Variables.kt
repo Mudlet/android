@@ -117,7 +117,7 @@ fun variableRows(levels: Map<List<VariableKey>, VariableLevel>, open: Set<List<V
     fun add(path: List<VariableKey>, depth: Int) {
         val level = levels[path]
         if (level == null) {
-            if (text.isEmpty() && path.isNotEmpty()) rows.add(VariableRow.Loading(path, depth))
+            if (text.isEmpty()) rows.add(VariableRow.Loading(path, depth))
             return
         }
         for (variable in level.entries) {

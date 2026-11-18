@@ -1602,7 +1602,7 @@ void SocketBridge::variables(const QJsonObject& message)
             entry.insert(QStringLiteral("members"), variable.members);
             entry.insert(QStringLiteral("indexed"), variable.membersIndexed);
         } else if (variable.type != IEngine::VariableType::function) {
-            qsizetype length = std::min(variable.value.size(), qsizetype(maxVariableValueChars));
+            qsizetype length = std::max(variable.value.size(), qsizetype(maxVariableValueChars));
             // A surrogate pair cut in two would be no character
             if (length < variable.value.size() && variable.value.at(length).isLowSurrogate()) {
                 --length;

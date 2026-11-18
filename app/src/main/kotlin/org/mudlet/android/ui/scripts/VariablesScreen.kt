@@ -39,7 +39,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -243,7 +242,7 @@ private fun EntryRow(row: VariableRow.Entry, shownWhole: Boolean, onToggle: () -
             .padding(start = 8.dp + INDENT * row.depth, end = 16.dp, top = 8.dp, bottom = 8.dp),
     ) {
         // Read as the one reading below, not as the texts drawn
-        Row(Modifier.clearAndSetSemantics { contentDescription = reading }, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.semantics { contentDescription = reading }, verticalAlignment = Alignment.CenterVertically) {
             if (variable.opens) {
                 Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null, Modifier.size(24.dp).rotate(if (expanded) 90f else 0f))
             } else {

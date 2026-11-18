@@ -1902,8 +1902,8 @@ Item 13 of the on-device checklist covers this.
 
 For developers with `adb` and the debug APK. [`device-pass.md`](device-pass.md) is the plain-words version for
 testers, and says which parts each kind of phone needs. A `lua ...` command typed on the game screen needs the `lua`
-alias from its Part 2 first: the engine installs none of desktop Mudlet's default packages. The Self-test takes
-`lua ...` itself.
+alias of run-lua-code, one of desktop Mudlet's default packages, which a profile's first load installs
+(`HostManager::openProfile()`). The Self-test takes `lua ...` itself.
 
 1. Install the APK with libmudlet (CI's `mudlet-libmudlet-debug-apk`) with `adb install -r app-debug.apk`. Open it
    and allow notifications. It opens on "Profiles"; tap "Self-test" for the checks below (debug builds only: a release

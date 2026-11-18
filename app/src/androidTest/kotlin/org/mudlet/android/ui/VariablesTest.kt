@@ -33,6 +33,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.scripts.VARIABLES_TAG
 
 /**
@@ -69,7 +70,7 @@ class VariablesTest {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(game) }
         activate(hasContentDescription(string(R.string.profile_connect_to, game.name)))
         session.profiles(listOf(game), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         activate(hasContentDescription(string(R.string.scripts_open, game.name)))
         for (kind in listOf("trigger", "alias", "script", "timer", "key", "button")) {
             val asked = received("scriptItems")

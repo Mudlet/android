@@ -1881,7 +1881,7 @@ alias from its Part 2 first: the engine installs none of desktop Mudlet's defaul
       unlabelled, which `AboutScreenTest` therefore does not check).
 18. Text size and the screen size the game is told, connected to a game with the libmudlet APK.
     - Pinch the game's text with two fingers: it grows and shrinks smoothly, and one finger still scrolls. The
-      settings button in the game screen's title bar opens "Settings", whose Appearance page's text size slider, "Smaller text" and
+      Settings item in the game screen's title bar menu opens "Settings", whose Appearance page's text size slider, "Smaller text" and
       "Larger text" buttons change it too; TalkBack reads the slider as "Text size", with its size, and swiping up or
       down on it changes the size.
     - On a game that shows the width it was told (many have a screen-width option), a line of that many characters

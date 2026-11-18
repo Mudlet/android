@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -31,6 +32,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.RefusedCertificate
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * A game's Security page while its last secure connection stands refused for the certificate, in the debug build's
@@ -62,7 +64,7 @@ class RefusedCertificatePseudoLocaleTest(private val locale: String) {
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        waitFor(hasText(string(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         // The game's settings section is in the hub only once the engine has given its settings
         session.status("profile", "Test loaded")
         session.settings(APP_VALUES, session.receive("getSettings").getLong("id"))
@@ -86,7 +88,7 @@ class RefusedCertificatePseudoLocaleTest(private val locale: String) {
         // The dialog is a window of its own, which activate()'s single-root checks do not take
         compose.onNode(hasText(string(R.string.certificate_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isEmpty() }
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_security)))
         activate(hasText(string(R.string.settings_security)))
         waitFor(hasText(string(R.string.settings_refused_certificate_title)))

@@ -439,7 +439,7 @@ class ScreenReaderTest {
     @Test
     fun theScrollbackLengthIsTheGamesBufferSizeAThousandLinesAStep() {
         loaded()
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_display)))
         session.receive("getSettings")
         val more = hasContentDescription(string(R.string.settings_console_buffer_more))
@@ -552,7 +552,7 @@ class ScreenReaderTest {
         // The dialog is a window of its own, which activate()'s single-root checks do not take
         compose.onNode(hasText(string(R.string.certificate_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(question).fetchSemanticsNodes().isEmpty() }
-        activate(hasContentDescription(string(R.string.settings_title)))
+        compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_security)), scroll = true)
         session.receive("getSettings")
 

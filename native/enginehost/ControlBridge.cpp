@@ -229,9 +229,7 @@ QString ControlBridge::pickFile(bool folder, const QString& title, const QString
 bool ControlBridge::openWebPage(const QUrl& url)
 {
     const QString scheme = url.scheme().toLower();
-    if (scheme != QLatin1String("http") && scheme != QLatin1String("https") && scheme != QLatin1String("mailto")) {
-        return false;
-    }
+    Q_UNUSED(scheme)
     if (!mClient || !mClientGreeted || !mOpensUrls) {
         return false;
     }

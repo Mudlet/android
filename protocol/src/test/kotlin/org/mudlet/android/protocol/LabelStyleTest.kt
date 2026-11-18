@@ -183,6 +183,58 @@ class LabelStyleTest {
     }
 
     @Test
+    fun aCommandLineIsEachClassQtKnowsItBy() {
+        for (selector in listOf("TCommandLine", ".TCommandLine", "QPlainTextEdit", "QAbstractScrollArea", "QFrame", "QWidget", "QObject", "*")) {
+            assertEquals(selector, 0xFF000080.toInt(), LabelStyle.parse("$selector { color: navy }", LabelStyle.COMMAND_LINE_SELECTORS).color)
+        }
+        for (selector in listOf("TTextBox", ".TTextBox", "QLineEdit", "QLabel", ".QPlainTextEdit")) {
+            assertNull(selector, LabelStyle.parse("$selector { color: navy }", LabelStyle.COMMAND_LINE_SELECTORS).color)
+        }
+        // What Geyser's MiniConsole and CommandLine pass, bare declarations or a rule, gives the line its colours
+        val sheet = LabelStyle.parse("QPlainTextEdit { background-color: rgb(20, 0, 20); color: white }", LabelStyle.COMMAND_LINE_SELECTORS)
+        assertEquals(LabelFill.Solid(0xFF140014.toInt()), sheet.background)
+        assertEquals(0xFFFFFFFF.toInt(), sheet.color)
+        assertEquals(LabelFill.Solid(0xFF800000.toInt()), LabelStyle.parse("background-color: maroon;", LabelStyle.COMMAND_LINE_SELECTORS).background)
+    }
+
+    @Test
+    fun aCommandLineSheetsOneColourTakesTheOtherThatContrastsWithIt() {
+        fun paired(sheet: String, under: Int = LIGHT_SURFACE) = LabelStyle.parse(sheet, LabelStyle.COMMAND_LINE_SELECTORS).paired(under)
+        val white = 0xFFFFFFFF.toInt()
+        val black = 0xFF000000.toInt()
+        assertEquals(white, paired("background-color: rgb(20, 0, 20)").color)
+        assertEquals(black, paired("background-color: rgb(250, 250, 200)", DARK_SURFACE).color)
+        assertEquals(LabelFill.Solid(black), paired("color: white").background)
+        assertEquals(LabelFill.Solid(white), paired("color: navy", DARK_SURFACE).background)
+        // A background that draws nothing is none: the text takes the background it would take alone
+        val overNothing = paired("background-color: transparent; color: white")
+        assertEquals(LabelFill.Solid(black), overNothing.background)
+        assertEquals(white, overNothing.color)
+        // Both given, or neither, or a background with nothing of it drawn, stay as the sheet has them
+        val both = "background-color: navy; color: navy"
+        assertEquals(LabelStyle.parse(both, LabelStyle.COMMAND_LINE_SELECTORS), paired(both))
+        assertEquals(LabelStyle(), paired(""))
+        assertNull(paired("background-color: transparent").color)
+    }
+
+    @Test
+    fun aCommandLineSheetsTextThatDrawsNothingIsNone() {
+        fun paired(sheet: String) = LabelStyle.parse(sheet, LabelStyle.COMMAND_LINE_SELECTORS).paired(LIGHT_SURFACE)
+        // Paired by contrast with a background, else left out for the line's own, so what is typed can be seen
+        assertEquals(0xFFFFFFFF.toInt(), paired("background-color: navy; color: transparent").color)
+        assertNull(paired("color: transparent").color)
+        assertNull(paired("background-color: transparent; color: rgba(255, 255, 255, 0)").color)
+    }
+
+    @Test
+    fun aCommandLineSheetsSeeThroughBackgroundIsPairedAsItIsDrawnOverTheLine() {
+        fun paired(sheet: String, under: Int) = LabelStyle.parse(sheet, LabelStyle.COMMAND_LINE_SELECTORS).paired(under)
+        // A black at 30% over the light theme's surface is a light grey, which black text stands out on
+        assertEquals(0xFF000000.toInt(), paired("background-color: rgba(0, 0, 0, 30%)", LIGHT_SURFACE).color)
+        assertEquals(0xFFFFFFFF.toInt(), paired("background-color: rgba(0, 0, 0, 30%)", DARK_SURFACE).color)
+    }
+
+    @Test
     fun aSheetIsItsRulesOrItsBareDeclarations() {
         val navy = LabelFill.Solid(0xFF000080.toInt())
         val red = LabelFill.Solid(0xFFFF0000.toInt())
@@ -950,5 +1002,11 @@ class LabelStyleTest {
         assertEquals(Edges.ZERO, style.padding)
         assertEquals(LabelFill.Solid(0xFF00FF00.toInt()), style.background)
         assertEquals(LabelStyle(), LabelStyle.parse(""))
+    }
+
+    private companion object {
+        // The light and dark themes' surfaces, which a command line is drawn over
+        const val LIGHT_SURFACE = 0xFFFFF8F3.toInt()
+        const val DARK_SURFACE = 0xFF17130B.toInt()
     }
 }

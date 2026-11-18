@@ -960,6 +960,8 @@ And the Lua variables, one table at a time, as the desktop editor's Variables vi
 And a replay file played as the GUI's replay button plays it (`playReplay()`, `0037-headless-play-replay.patch`).
 And the colour `setBorderColor()` gives the borders around the main console (`mainBorderColor()`,
 `0039-headless-border-color.patch`).
+And the style sheet `setCmdLineStyleSheet()` gives a command line (`ScriptWindow::styleSheet`,
+`0040-headless-command-line-style-sheet.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -1097,8 +1099,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
   colours; a Geyser `UserWindow` placed by `placeUserWindow`, which raises `sysUserWindowResizeEvent`; the size from
   `setMainWindowSize` before the profile loads, `setBorderLeft()` and `setBorderColor()`, as `mainArea`;
-  `enableCommandLine()` with
-  `printCmdLine()` as `windowCommandLine` and `sendWindowCommandLine` running `setCmdLineAction()`'s function;
+  `enableCommandLine()` with `printCmdLine()` as `windowCommandLine` and `sendWindowCommandLine` running
+  `setCmdLineAction()`'s function, and `setCmdLineStyleSheet()` as the line's `styleSheet`, not the main line's;
   `getWindowText`; hiding, `closeUserWindow`, a `full` `windows` and each console's text to a UI that attaches, and
   `removed`;
 - labels: a Geyser `Label`'s `echo()`, `setStyleSheet()`, `setAccessibleName()`, tool tip and click callback as

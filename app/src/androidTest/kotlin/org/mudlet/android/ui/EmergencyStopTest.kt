@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -75,7 +76,7 @@ class EmergencyStopTest {
     fun theSheetsSwitchAsksTheEngine_andShowsWhatTheEngineSays() {
         activate(pill)
         waitFor(stopSwitch)
-        compose.onNode(stopSwitch).assertIsDisplayed().assert(role(Role.Switch)).assert(toggled(ToggleableState.Off))
+        compose.onNode(stopSwitch).performScrollTo().assertIsDisplayed().assert(role(Role.Switch)).assert(toggled(ToggleableState.Off))
             .assert(hasText(string(R.string.game_emergency_stop)))
         compose.onRoot().tryPerformAccessibilityChecks()
 
@@ -87,7 +88,7 @@ class EmergencyStopTest {
 
         stopped(true)
         waitFor(stopSwitch and toggled(ToggleableState.On))
-        compose.onNode(stopSwitch).assert(hasText(string(R.string.game_emergency_stop_on)))
+        compose.onNode(stopSwitch).performScrollTo().assert(hasText(string(R.string.game_emergency_stop_on)))
         compose.onRoot().tryPerformAccessibilityChecks()
 
         activate(stopSwitch)

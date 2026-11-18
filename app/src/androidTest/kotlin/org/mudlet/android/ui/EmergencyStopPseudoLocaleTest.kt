@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
@@ -75,6 +76,7 @@ class EmergencyStopPseudoLocaleTest(private val locale: String) {
     }
 
     private fun assertFits(vararg ids: Int) {
+        compose.onNode(hasTestTag(EMERGENCY_STOP_TAG)).performScrollTo()
         compose.onRoot().tryPerformAccessibilityChecks()
         for (id in ids) {
             val text = compose.string(id)

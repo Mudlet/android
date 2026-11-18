@@ -12,11 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.mudlet.android.R
 import org.mudlet.android.about.ReleaseNotes
 import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.inBackground
 
 /**
  * What each stable release up to this build said is new, from docs/release-notes.md, as desktop Mudlet's Help >
@@ -28,7 +27,7 @@ fun ChangelogScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     // null while it is read; the APK always has the file (the build copies it)
     val releases by produceState<List<ReleaseNotes>?>(null) {
-        value = withContext(Dispatchers.IO) { ReleaseNotes.parse(readAsset(context, ReleaseNotes.ASSET)) }
+        value = inBackground { ReleaseNotes.parse(readAsset(context, ReleaseNotes.ASSET)) }
     }
     MudletScaffold(stringResource(R.string.changelog_title), onBack = onBack) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {

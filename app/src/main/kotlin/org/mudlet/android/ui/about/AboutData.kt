@@ -9,11 +9,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.mudlet.android.R
 import org.mudlet.android.about.Component
 import org.mudlet.android.about.Licences
+import org.mudlet.android.ui.inBackground
 import org.mudlet.android.engine.R as EngineR
 
 /**
@@ -35,7 +34,7 @@ sealed interface LicenceList {
 fun rememberLicences(): LicenceList? {
     val context = LocalContext.current
     val list by produceState<LicenceList?>(null) {
-        value = withContext(Dispatchers.IO) {
+        value = inBackground {
             try {
                 LicenceList.Loaded(Licences.parse(Licences.FILES.associateWith { readAsset(context, "${Licences.DIR}/$it") }))
             } catch (e: Exception) {

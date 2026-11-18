@@ -14,12 +14,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.mudlet.android.R
 import org.mudlet.android.about.Component
 import org.mudlet.android.about.Licences
 import org.mudlet.android.ui.MudletScaffold
+import org.mudlet.android.ui.inBackground
 
 /**
  * One component of the About screen's list: its version, copyright, links, and the full text of each licence its
@@ -33,7 +32,7 @@ fun LicenceScreen(componentId: String, onBack: () -> Unit) {
     // each text's paragraphs, or null for a text the APK lacks (scripts/check-licences.py checks it has them all)
     val texts by produceState<Map<String, List<String>?>?>(null, component) {
         value = component?.let { c ->
-            withContext(Dispatchers.IO) {
+            inBackground {
                 c.texts.associateWith { id -> runCatching { Licences.paragraphs(readAsset(context, Licences.textPath(id))) }.getOrNull() }
             }
         }

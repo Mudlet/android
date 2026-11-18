@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,14 +44,16 @@ internal fun PtbUpdateNotice(modifier: Modifier = Modifier) {
             // Read out as it appears: the answer from GitHub can come while the list is already being read
             Text(
                 stringResource(R.string.ptb_notice_text),
-                Modifier.padding(end = 8.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                Modifier.padding(end = 8.dp).widthIn(max = 40.dp).semantics { liveRegion = LiveRegionMode.Polite },
                 style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
             FlowRow(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 TextButton(PtbUpdates::dismiss, Modifier.semantics { contentDescription = dismiss }) {
                     Text(stringResource(R.string.ptb_notice_dismiss))
                 }
-                Button({ openLink(uriHandler, context, PtbUpdateCheck.RELEASE_PAGE) }, Modifier.semantics { contentDescription = download }) {
+                Button({ openLink(uriHandler, context, PtbUpdateCheck.RELEASE_API) }, Modifier.semantics { contentDescription = download }) {
                     Text(stringResource(R.string.ptb_notice_download))
                 }
             }

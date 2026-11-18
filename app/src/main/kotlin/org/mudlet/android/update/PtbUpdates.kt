@@ -49,7 +49,7 @@ object PtbUpdates {
     val notice: Long? get() = newest.takeIf { checking }
 
     // This copy checks and the player has not turned it off
-    private val checking get() = applies && Settings.checkTestBuilds.value
+    private val checking get() = applies
 
     private var store: PtbUpdateCheck.Store? = null
     private var check: PtbUpdateCheck? = null
@@ -86,7 +86,6 @@ object PtbUpdates {
 
     /** The player dismissed the notice: not shown again for that version. */
     fun dismiss() {
-        check?.dismiss()
         refresh()
     }
 

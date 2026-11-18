@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.ComposeTestRule
@@ -41,6 +42,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * A telnet:// link from another app, sent as a browser sends one (an ACTION_VIEW Android resolves through the
@@ -92,7 +94,7 @@ class GameLinkTest {
         assertTrue(open.getBoolean("connect"))
         assertEquals("the profile's own password, never the link's", "alpha secret", open.getString("password"))
         engine.profiles(listOf(ALPHA), open)
-        waitFor(hasText(text(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         compose.onNodeWithText(question).assertDoesNotExist()
         engine.assertNoRequest("saveProfile", QUIET_MS)
     }
@@ -136,7 +138,7 @@ class GameLinkTest {
         val connect = alpha.receive("connect")
         assertEquals("a.example", connect.getString("host"))
         assertEquals(23, connect.getInt("port"))
-        waitFor(hasText(text(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
         engine.assertNoRequest("openProfile", QUIET_MS)
     }
 
@@ -197,7 +199,7 @@ class GameLinkTest {
         val open = engine.receive("openProfile")
         assertEquals(ACHAEA, open.getString("name"))
         engine.profiles(listOf(achaea, ALPHA), open)
-        waitFor(hasText(text(R.string.game_title)))
+        waitFor(hasTestTag(GAME_TITLE_TAG))
     }
 
     @Test

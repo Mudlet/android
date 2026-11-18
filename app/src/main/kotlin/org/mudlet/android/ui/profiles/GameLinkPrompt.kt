@@ -22,9 +22,7 @@ import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.ui.EngineClient
-import org.mudlet.android.ui.game.ConnectionAction
 import org.mudlet.android.ui.game.ConnectionState
-import org.mudlet.android.ui.game.action
 
 /**
  * What a `telnet://` link opened from outside the app does, as desktop's handleTelnetUri: the player's profile at its
@@ -83,8 +81,8 @@ private fun LinkQuestion(link: TelnetLink, name: String, game: DefaultGame?, onD
             return
         }
         if (!EngineClient.setFront(session.name)) return answered(notAttached)
-        val action = ConnectionState.of(session).action
-        if (action == ConnectionAction.CONNECT || action == ConnectionAction.RECONNECT || action == ConnectionAction.TRY_AGAIN) {
+        val state = ConnectionState.of(session)
+        if (state == ConnectionState.Disconnected || state == ConnectionState.Lost || state is ConnectionState.Failed) {
             session.forgetAddress()
             if (!session.reconnect()) return answered(notAttached)
         }

@@ -121,7 +121,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, sounds,
-                       clipboard, packages, error_console, key_bindings, scripts_stopped, replay_recording):
+                       clipboard, file_dialog, packages, error_console, key_bindings, scripts_stopped, replay_recording):
             checks()
         checks = secure_offer
         checks(port)
@@ -4602,6 +4602,73 @@ def clipboard():
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
     with open(LOG, errors="replace") as f:
         check(secret not in f.read(), "the clipboard's text is not in the engine's log")
+
+
+def file_dialog():
+    """A script's invokeFileDialog() for a file sends pickFile with its title and the profile's folder, and waits, while
+    the game and other scripts go on, for answerPickFile, whose path it returns; an empty answer is a cancel. A folder,
+    a second pick while one waits, and a pick with no UI attached answer an empty string at once. A UI that attaches
+    while a pick waits is asked again, with the same id."""
+    profile = "File Dialog Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    c.send({"t": "runLua", "code": 'echo("picked:[" .. invokeFileDialog(true, "Choose a map") .. "]\\n")'})
+    pick = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    check(pick.get("title") == "Choose a map" and pick.get("into", "").endswith(f"/profiles/{profile}")
+          and isinstance(pick.get("id"), int), f"a pick asks the UI, for the profile's folder: {pick}")
+    c.send({"t": "ping", "id": 1})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    c.send({"t": "runLua", "code": 'echo("meanwhile\\n")'})
+    c.wait_for(shown("meanwhile"), collect=seen)
+    c.send({"t": "runLua", "code": 'echo("second:[" .. invokeFileDialog(true, "Another") .. "]\\n")'})
+    c.wait_for(shown("second:[]"), collect=seen)
+    path = os.path.join(pick["into"], "chosen.dat")
+    with open(path, "w") as f:
+        f.write("x")
+    c.send({"t": "answerPickFile", "id": pick["id"] + 100, "path": "/elsewhere"})
+    c.send({"t": "answerPickFile", "id": pick["id"], "path": path})
+    c.wait_for(shown(f"picked:[{path}]"), collect=seen)
+    check(len([m for m in seen if m["t"] == "pickFile"]) == 1, "a second pick while one waits asks nothing")
+
+    c.send({"t": "runLua", "code": 'echo("cancel:[" .. invokeFileDialog(true, "Cancel me") .. "]\\n")'})
+    cancel = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    check(cancel["id"] != pick["id"], f"each pick has its own id: {cancel}")
+    c.send({"t": "answerPickFile", "id": cancel["id"], "path": ""})
+    c.wait_for(shown("cancel:[]"), collect=seen)
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": 'echo("folder:[" .. invokeFileDialog(false, "A folder") .. "]\\n")'})
+    c.wait_for(shown("folder:[]"), collect=seen)
+    check(not [m for m in seen[since:] if m["t"] == "pickFile"], "a folder is not asked for")
+
+    c.send({"t": "runLua", "code": 'echo("again:[" .. invokeFileDialog(true, "Come back") .. "]\\n")'})
+    first = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    c.close()
+    c = Client(SOCK)
+    seen = []
+    asked = c.wait_for(lambda m: m["t"] == "pickFile", collect=seen)
+    check(asked == first, f"a UI that attaches while a pick waits is asked again: {asked}")
+    c.send({"t": "answerPickFile", "id": asked["id"], "path": ""})
+    c.wait_for(shown("again:[]"), collect=seen)
+
+    c.send({"t": "runLua", "code": 'tempTimer(1, function() echo("alone:[" .. invokeFileDialog(true, "Nobody") .. "]\\n") end)'})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    c.close()
+    time.sleep(2)
+    c = Client(SOCK)
+    seen = []
+    c.wait_for(shown("alone:[]"), collect=seen)
+    c.send({"t": "ping", "id": 2})
+    c.wait_for(lambda m: m["t"] == "pong", collect=seen)
+    check(not [m for m in seen if m["t"] == "pickFile"], f"with no UI a pick is a cancel at once: {seen}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
 
 def package_file(name, folder, details, icon=None):

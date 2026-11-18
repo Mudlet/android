@@ -8,6 +8,7 @@
 #endif
 
 #include <QDir>
+#include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QLocalSocket>
@@ -85,12 +86,16 @@ void ControlBridge::sendState()
 {
     if (mProfileOutput) {
         SocketBridge::sendState();
-        return;
+    } else {
+        for (auto it = mEngineStatus.cbegin(); it != mEngineStatus.cend(); ++it) {
+            sendFrame({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), it.key()}, {QStringLiteral("value"), it.value()}});
+        }
+        sendFrame(openProfilesMessage());
     }
-    for (auto it = mEngineStatus.cbegin(); it != mEngineStatus.cend(); ++it) {
-        sendFrame({{QStringLiteral("t"), QStringLiteral("status")}, {QStringLiteral("key"), it.key()}, {QStringLiteral("value"), it.value()}});
+    // Android stops the app behind the system's picker, so the UI that comes back may be a new one
+    if (mPick && !mPick->path) {
+        sendFrame(pickFileMessage());
     }
-    sendFrame(openProfilesMessage());
 }
 
 void ControlBridge::engineStatus(const QString& key, const QString& value)
@@ -145,6 +150,14 @@ bool ControlBridge::handleControl(const QString& type, const QJsonObject& messag
         setAppState(message);
     } else if (type == QLatin1String("answerClipboardRead")) {
         // One that came after its script stopped waiting
+    } else if (type == QLatin1String("answerPickFile")) {
+        // A second answer, as from a UI asked again, or one for a pick that ended, is ignored
+        if (mPick && !mPick->path && message.value(QLatin1String("id")) == QJsonValue(double(mPick->id))) {
+            mPick->path = message.value(QLatin1String("path")).toString();
+            if (mPickLoop) {
+                mPickLoop->quit();
+            }
+        }
     } else if (!mProfileOutput) {
         sendError(QStringLiteral("%1: send it on the profile's socket").arg(type));
     } else {
@@ -178,6 +191,29 @@ void ControlBridge::setClipboardText(const QString& text)
     if (mClient && mClientGreeted) {
         sendFrame({{QStringLiteral("t"), QStringLiteral("clipboardWrite")}, {QStringLiteral("text"), text}});
     }
+}
+
+// Android gives an app no path to a folder outside its own storage, so a folder is never asked for. A pick waits, as
+// the desktop's modal dialog does, running the event loop, until the UI answers or the engine quits, which ends it.
+QString ControlBridge::pickFile(bool folder, const QString& title, const QString& location)
+{
+    if (folder || mPick || !mClient || !mClientGreeted) {
+        return {};
+    }
+    mPick = FilePick{++mPickIds, title, location, std::nullopt};
+    sendFrame(pickFileMessage());
+    QEventLoop loop;
+    mPickLoop = &loop;
+    loop.exec();
+    mPickLoop = nullptr;
+    const QString path = mPick->path.value_or(QString());
+    mPick.reset();
+    return path;
+}
+
+QJsonObject ControlBridge::pickFileMessage() const
+{
+    return {{QStringLiteral("t"), QStringLiteral("pickFile")}, {QStringLiteral("id"), double(mPick->id)}, {QStringLiteral("title"), mPick->title}, {QStringLiteral("into"), mPick->into}};
 }
 
 // Checked here rather than taken with defaults, as a profile stored with a wrong field would only fail later, at its connect

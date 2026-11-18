@@ -51,6 +51,17 @@ though the call still returns true. Desktop Mudlet reads and writes its clipboar
 service, which Android does not let read the clipboard, and a script that waited for the app to come back would stall
 the game. From Android 12 the system says so when the app reads what another app put there, as for any app.
 
+## A script asks for a file
+
+A script's `invokeFileDialog()` asking for a file shows a dialog of the app's own with the script's title, as Android's
+file picker shows none, and Choose opens that picker, which needs no storage permission. The file chosen is copied into
+the folder the desktop's dialog would have opened at, the profile's folder or the script's own, beside any file of the
+same name rather than over it, and the copy's path is what the script gets: a file elsewhere on the device has no path
+the engine may open. A folder outside the app's own files takes no copy, and the script gets an empty string, as for a
+cancel. Asking for a folder gives an empty string at once, as does asking with no app attached or while another
+script's request waits: Android's picker lends a folder only as a URI, not as a path a script could open. While the
+dialog and the picker show, the game, its timers and other scripts go on, as they do behind the desktop's dialog.
+
 ## Settings the app keeps for every profile
 
 "Read new text aloud", "Tell games I use a screen reader" and what becomes of blank lines are the app's settings: each

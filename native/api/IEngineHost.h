@@ -30,4 +30,7 @@ public:
     // setClipboardText() writes it
     virtual QString clipboardText() = 0;
     virtual void setClipboardText(const QString& text) = 0;
+    // A script's invokeFileDialog(): the path of the file the player chose, copied into location, or empty for a
+    // cancel. Returns only once the player has answered, running the event loop meanwhile.
+    virtual QString pickFile(bool folder, const QString& title, const QString& location) = 0;
 };

@@ -172,7 +172,7 @@ fun GameScreen(
             // Each keeps the system bars' insets of its own side only, as the list and detail panes do
             Row(Modifier.fillMaxSize()) {
                 val gameScreen = if (beside) Modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.End)).semantics { isTraversalGroup = true } else Modifier
-                Box(Modifier.weight(1f).fillMaxHeight().then(gameScreen)) {
+                Box(Modifier.fillMaxHeight().then(gameScreen)) {
                     kept.SaveableStateProvider(front.name) {
                         ProfileGameScreen(front, switched, place == MapPlace.IN_FRONT, beside, onMapButton, { mapOpen = it }, swipe, onBack, onOpenSettings, onOpenScripts, onOpenPackages, onMakeTrigger)
                     }

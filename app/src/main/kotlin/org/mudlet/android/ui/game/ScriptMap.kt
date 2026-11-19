@@ -543,7 +543,7 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                     IconButton({ below?.let(rooms::showLevel) }, enabled = attached && below != null) {
                         Icon(painterResource(R.drawable.ic_arrow_downward), stringResource(R.string.map_level_down))
                     }
-                    Text(stringResource(R.string.map_level, view.level), Modifier.weight(1f, fill = false).readAt(1f), style = MaterialTheme.typography.labelLarge, maxLines = 2)
+                    Text(stringResource(R.string.map_level, view.level), Modifier.weight(1f, fill = false).readAt(1f), style = MaterialTheme.typography.labelLarge)
                     IconButton({ above?.let(rooms::showLevel) }, Modifier.readAt(2f), enabled = attached && above != null) {
                         Icon(painterResource(R.drawable.ic_arrow_upward), stringResource(R.string.map_level_up))
                     }

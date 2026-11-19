@@ -18,7 +18,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -37,7 +36,6 @@ import org.mudlet.android.ui.EngineMessages.button
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
 import org.mudlet.android.ui.game.HardwareKeyboard
 import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
-import java.io.FileInputStream
 
 /**
  * The order TalkBack moves through the game screen in (docs/architecture.md, "On-device checklist"), against a fake
@@ -55,6 +53,7 @@ class TalkBackOrderTest {
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
+        .around(TabletScreen { it.methodName == ::withTheMapBesideTheTextTheGameScreenThenTheMapThenTheLastAnnouncement.name })
         .around(compose)
 
     private lateinit var session: FakeEngine.Session
@@ -199,7 +198,7 @@ class TalkBackOrderTest {
     }
 
     @Test
-    fun withTheMapBesideTheTextTheGameScreenThenTheMapThenTheLastAnnouncement() = onATablet {
+    fun withTheMapBesideTheTextTheGameScreenThenTheMapThenTheLastAnnouncement() {
         showWindowAndBar()
         session.announce(ANNOUNCEMENT, assertive = false)
         waitFor(hasText(WINDOW_ROW))
@@ -224,25 +223,6 @@ class TalkBackOrderTest {
         )
         reading.assertInOrder(expected)
         reading.assertEveryControlRead()
-    }
-
-    /** A 10-inch tablet on its side, 1280 dp wide, at its own density for the checks, as ScreenshotTest makes it. */
-    private fun onATablet(block: () -> Unit) {
-        // The shell's output must be read for the command to finish
-        fun shell(command: String) = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { pfd ->
-            FileInputStream(pfd.fileDescriptor).readBytes()
-        }
-        try {
-            shell("wm size 2560x1600")
-            shell("wm density 320")
-            compose.waitForIdle()
-            waitFor(hasText(CONSOLE_LINE))
-            block()
-        } finally {
-            shell("wm density reset")
-            shell("wm size reset")
-            compose.waitForIdle()
-        }
     }
 
     // The chat is the top right quarter of Mudlet's 800 by 600 main window; a bar above the console

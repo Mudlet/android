@@ -19,7 +19,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -32,7 +31,6 @@ import org.junit.runners.Parameterized
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
-import java.io.FileInputStream
 
 /**
  * The map beside the text on a tablet (MapBesideTextTest) in the debug build's pseudo-locales, as PseudoLocaleTest
@@ -49,6 +47,7 @@ class TabletsPseudoLocaleTest(private val locale: String) {
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS))
         .around(AppLocaleRule(locale))
+        .around(TabletScreen())
         .around(compose)
 
     private lateinit var session: FakeEngine.Session
@@ -63,20 +62,12 @@ class TabletsPseudoLocaleTest(private val locale: String) {
         session.synced(1)
         session.profiles(listOf(GAME), session.receive("listProfiles"))
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
-        shell("wm size $TABLET")
-        shell("wm density $DENSITY")
-        compose.waitForIdle()
         waitFor(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
     }
 
     @After
     fun defaults() {
-        try {
-            shell("wm density reset")
-            shell("wm size reset")
-        } finally {
-            compose.runOnIdle { Settings.mapBesideText.reset() }
-        }
+        compose.runOnIdle { Settings.mapBesideText.reset() }
     }
 
     @Test
@@ -103,11 +94,6 @@ class TabletsPseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.settings_map_beside_text)))
         compose.onNode(hasText(string(R.string.settings_map_beside_text_hint)), useUnmergedTree = true).performScrollTo()
         assertTextFits("the Appearance page, at the map beside the text")
-    }
-
-    // The shell's output must be read for the command to finish
-    private fun shell(command: String) = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { pfd ->
-        FileInputStream(pfd.fileDescriptor).readBytes()
     }
 
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
@@ -152,10 +138,6 @@ class TabletsPseudoLocaleTest(private val locale: String) {
     companion object {
         val GAME = Profile("Tablet", "127.0.0.1", 4000, false, "", false)
         const val CONSOLE_LINE = "the main console"
-
-        // At 320 dpi, twice Android's baseline: a 10-inch tablet on its side, 1280 dp wide
-        const val DENSITY = 320
-        const val TABLET = "2560x1600"
 
         // Rounding of the bounds to pixels
         private const val SLACK_PX = 1f

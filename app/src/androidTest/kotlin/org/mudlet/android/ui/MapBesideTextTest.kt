@@ -15,6 +15,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -24,7 +25,6 @@ import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.test.withKeyDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -37,23 +37,24 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
-import java.io.FileInputStream
 
 /**
  * On a screen as wide as a tablet's on its side, the app's map stands beside the game's text, as desktop Mudlet's
  * docked mapper (docs/architecture.md, "The map behind the text"): the map button puts it away and brings it back,
  * without the setting or with a script's mapper on the screen the button brings the map to the front as on a phone,
- * and the player's choice outlasts a rotation and a fold. The screen is made a tablet's with the window manager, as
- * ScreenshotTest does, so the accessibility checks run at the screen's own density.
+ * and the player's choice outlasts a rotation and a fold. The screen is a tablet's before the Activity starts
+ * ([TabletScreen]), at its own density for the accessibility checks.
  */
 @RunWith(AndroidJUnit4::class)
 class MapBesideTextTest {
     private val fake = FakeEngineRule()
     private val compose = createAndroidComposeRule<MainActivity>()
+    private val tablet = TabletScreen()
 
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
+        .around(tablet)
         .around(compose)
 
     private lateinit var session: FakeEngine.Session
@@ -80,19 +81,13 @@ class MapBesideTextTest {
         activate(hasContentDescription(string(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
         waitFor("the console", console)
-        screen(TABLET)
     }
 
     @After
     fun defaults() {
-        try {
-            shell("wm density reset")
-            shell("wm size reset")
-        } finally {
-            compose.runOnIdle {
-                ScriptWindowsClient.layoutMode = LayoutMode.AUTO
-                Settings.mapBesideText.reset()
-            }
+        compose.runOnIdle {
+            ScriptWindowsClient.layoutMode = LayoutMode.AUTO
+            Settings.mapBesideText.reset()
         }
     }
 
@@ -146,18 +141,18 @@ class MapBesideTextTest {
         besideTheText()
 
         // Folded, the map goes and the text has the screen; unfolded, the map is back beside it
-        screen(FOLDED)
+        fold()
         textAlone()
-        screen(TABLET)
+        unfold()
         besideTheText()
 
         // Brought to the front on the folded phone, it goes beside the text as it unfolds, and to the front as it folds
-        screen(FOLDED)
+        fold()
         activate(button)
         inFront()
-        screen(TABLET)
+        unfold()
         besideTheText()
-        screen(FOLDED)
+        fold()
         inFront()
     }
 
@@ -200,20 +195,20 @@ class MapBesideTextTest {
         compose.waitForIdle()
     }
 
+    // Each remakes the Activity, as a real fold does: what shows is the new one's once its root is the new width
+    private fun fold() {
+        tablet.fold()
+        compose.waitUntil(WAIT_MS) { rootWidthDp()?.let(tablet::folded) == true }
+    }
+
+    private fun unfold() {
+        tablet.unfold()
+        compose.waitUntil(WAIT_MS) { rootWidthDp()?.let(tablet::unfolded) == true }
+    }
+
+    private fun rootWidthDp() = compose.onAllNodes(isRoot()).fetchSemanticsNodes().singleOrNull()?.let { it.size.width / compose.density.density }
+
     private fun bounds(matcher: SemanticsMatcher): Rect = compose.onNode(matcher).fetchSemanticsNode().boundsInRoot
-
-    /** A screen of [size] at a tablet's density, which recreates the activity as a real resize or fold does. */
-    private fun screen(size: String) {
-        shell("wm size $size")
-        shell("wm density $DENSITY")
-        compose.waitForIdle()
-        waitFor("the console at $size", console)
-    }
-
-    // The shell's output must be read for the command to finish
-    private fun shell(command: String) = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { pfd ->
-        FileInputStream(pfd.fileDescriptor).readBytes()
-    }
 
     private fun waitFor(what: String, matcher: SemanticsMatcher) = try {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
@@ -240,11 +235,6 @@ class MapBesideTextTest {
 
         const val INSTANCE = "fake-beside"
         const val CONSOLE_LINE = "the main console"
-
-        // At 320 dpi, twice Android's baseline: a 10-inch tablet on its side, 1280 dp wide, and a phone folded, 540 dp
-        const val DENSITY = 320
-        const val TABLET = "2560x1600"
-        const val FOLDED = "1080x1600"
 
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L

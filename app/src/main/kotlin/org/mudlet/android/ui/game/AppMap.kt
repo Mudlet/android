@@ -287,14 +287,14 @@ internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit
  * the room picked, then calls [onClose], after the map shrinks with a predictive back gesture, whose progress goes to
  * [onBackProgress]. It takes the touches on what is under it. With [textBehind] the map is drawn with its background cut
  * out ([AppMapClient.overText]), for the console's text to show through faintly ([textBehindMap]); otherwise it covers
- * what is under it. [beside], the map beside the text ([MapBesideText]), leaves the last Back to the game screen.
+ * what is under it. [besideText], the map beside the text ([MapBesideText]), leaves the last Back to the game screen.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgress: (Float) -> Unit, modifier: Modifier = Modifier, beside: Boolean = false) {
+internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgress: (Float) -> Unit, modifier: Modifier = Modifier, besideText: Boolean = false) {
     // How far a predictive back gesture has gone: the map shrinks with it, and closes when it is let go
     var backProgress by remember { mutableFloatStateOf(0f) }
-    PredictiveBackHandler(enabled = !beside) { gesture ->
+    PredictiveBackHandler(enabled = !besideText) { gesture ->
         try {
             gesture.collect {
                 backProgress = it.progress
@@ -342,7 +342,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
             val viewOnly = map?.viewOnly ?: true
             // As the map comes to the front the input line lets its keyboard go (InputLine), which the keyboard says only
             // some frames on: the map would be laid out, and asked for, above the keyboard first. Beside the text the keyboard stays
-            val keyboardGoes by produceState(!beside) {
+            val keyboardGoes by produceState(!besideText) {
                 delay(KEYBOARD_GOES_MS)
                 value = false
             }
@@ -420,7 +420,7 @@ internal fun MapBesideText(modifier: Modifier = Modifier) {
         traversalIndex = BESIDE_TRAVERSAL_INDEX
     }
     Box(content.windowInsetsPadding(WindowInsets.safeDrawing)) {
-        FullScreenMap(onClose = {}, textBehind = false, onBackProgress = {}, Modifier.fillMaxSize(), beside = true)
+        FullScreenMap(onClose = {}, textBehind = false, onBackProgress = {}, Modifier.fillMaxSize(), besideText = true)
     }
 }
 

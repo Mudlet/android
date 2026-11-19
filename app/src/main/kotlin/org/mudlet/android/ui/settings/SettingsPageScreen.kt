@@ -76,6 +76,7 @@ import org.mudlet.android.ui.ListSegment
 import org.mudlet.android.ui.LocalInDetailPane
 import org.mudlet.android.ui.MudletScaffold
 import org.mudlet.android.ui.certificateSwitches
+import org.mudlet.android.ui.profiles.ProfileLogs
 import kotlin.math.roundToInt
 
 internal val MAX_WIDTH = 640.dp
@@ -130,6 +131,7 @@ fun SettingsPageScreen(page: SettingsPage, onBack: () -> Unit) {
                         EntryRows(entry, owner, page.game, if (letsThrough) stringResource(R.string.settings_certificate_lets_through) else null)
                     }
                 }
+                if (page.category == SettingsCategory.LOGGING) page.game?.let { ProfileLogs(it, Modifier.padding(horizontal = 16.dp)) }
                 val reset = when (page.category) {
                     SettingsCategory.COLOURS -> Settings.colours to R.string.settings_colours_reset
                     SettingsCategory.MAP -> Settings.mapColours to R.string.settings_map_colours_reset

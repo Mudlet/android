@@ -199,6 +199,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                 val open = EngineClient.session(name) != null
                 ProfileExport(name, open)
                 ProfileCopy(name, open, passwordStored)
+                ProfileLogs(name)
             }
         }
     }

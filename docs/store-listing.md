@@ -305,6 +305,9 @@ player the app's recent logcat, the versions and the device, with every saved pa
 out (`app/src/main/kotlin/org/mudlet/android/report/`), and sends nothing itself: the player passes the text on through
 Android's share sheet, the clipboard or a GitHub issue in the browser, to whomever they choose. Data a user moves out
 of the app by their own action, to a destination they pick, is neither collected nor shared in Play's terms.
+So is a log of a game the player shares or opens from the profile's editor or Logging page
+(`app/src/main/kotlin/org/mudlet/android/ui/profiles/ProfileLogs.kt`): one file, at their tap, through a read-only
+grant to the app they pick, with no storage permission.
 Google Play's Android vitals gathers crashes and ANRs through Android itself, from users who allow it; that is
 Google's, not the app's, and is not declared here. The release AAB carries the symbol tables those reports need
 (`app/build.gradle.kts:68-69`).

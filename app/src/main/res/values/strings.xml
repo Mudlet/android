@@ -162,6 +162,31 @@
     <string name="profile_exported">Exported.</string>
     <!-- Shown, and read by TalkBack, when the profile could not be written to the file; %1$s is why, in English -->
     <string name="profile_export_failed">Could not export the profile: %1$s</string>
+    <!-- The heading of the part of the profile editor, and of a game's Logging page, that lists the logs Mudlet wrote of the profile's games -->
+    <string name="profile_logs_title">Log files</string>
+    <!-- Under the "Log files" heading: what the list holds and what its two buttons on each log do -->
+    <string name="profile_logs_text">The logs of this profile\'s games, newest first. Share one with another app, or open it in an app that reads it.</string>
+    <!-- Under the "Log files" heading, when the profile has no log yet -->
+    <string name="profile_logs_none">No logs yet.</string>
+    <!-- Under a log's file name in the "Log files" list: %1$s is the date and time it was last written, %2$s its size, such as 12 kB -->
+    <string name="profile_log_facts">%1$s, %2$s</string>
+    <!-- What TalkBack says for the button beside a log that opens it in another app, such as a browser; %1$s is the log's file name -->
+    <string name="profile_log_open">Open %1$s</string>
+    <!-- What TalkBack says for the button beside a log that offers it to Android's share sheet; %1$s is the log's file name -->
+    <string name="profile_log_share">Share %1$s</string>
+    <!-- The title of Android's share sheet for a log file -->
+    <string name="profile_log_share_title">Share the log with</string>
+    <!-- Shown when a log could not be read to share or open it, as when it was deleted -->
+    <string name="profile_log_failed">The log could not be read</string>
+    <!-- Shown when no app on the device opens a log (a web page or a text file); sharing it still works -->
+    <string name="profile_log_no_viewer">No app here opens this log: share it instead</string>
+    <!-- Shown when no app on the device takes a file to share -->
+    <string name="profile_log_no_app">No app here takes a file to share</string>
+    <!-- The button under the newest logs in the "Log files" list that shows the rest; %d is how many logs there are in all -->
+    <plurals name="profile_logs_show_all">
+        <item quantity="one">Show the %d log</item>
+        <item quantity="other">Show all %d logs</item>
+    </plurals>
     <!-- The heading of the profile editor's part that makes a new profile from this one, as the Copy button of desktop Mudlet's connection dialog does -->
     <string name="profile_copy_title">Copy</string>
     <!-- Under the profile editor's Copy heading: what its two buttons do -->

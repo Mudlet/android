@@ -8,11 +8,13 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.os.SystemClock
 import android.system.Os
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import org.qtproject.qt.android.QtServiceBase
+import kotlin.concurrent.thread
 
 /**
  * The engine. Runs in the ":engine" process; QtServiceBase.onCreate() loads the Qt
@@ -103,6 +105,13 @@ class EngineService : QtServiceBase() {
         // Only a stop gets here (stopService, the notification's Quit, or Android stopping it in the background with no
         // game open), never a kill: the next engine restores nothing
         EngineSession.markStopped(this)
+        // QtServiceBase waits with no limit for Qt's thread to return from main(). A script in an endless loop would hold
+        // this process past Android's ANR, and every later start would go to it
+        thread(name = "engine-stop-deadline", isDaemon = true) {
+            SystemClock.sleep(STOP_DEADLINE_MS)
+            Log.w(TAG, "onDestroy: Qt has not stopped in $STOP_DEADLINE_MS ms; ending the process")
+            Process.killProcess(Process.myPid())
+        }
         Log.i(TAG, "onDestroy: QtServiceBase terminates Qt and calls System.exit(0) on this process")
         super.onDestroy()
     }
@@ -146,5 +155,8 @@ class EngineService : QtServiceBase() {
         const val PREFS = "engine"
         const val PREF_PLATFORM = "qpaPlatform"
         private const val REFRESH_GAP_MS = 1_000L
+
+        // MudletEngine waits at exit up to 5 s for a save, then 5 s for each open profile's: room for seven
+        private const val STOP_DEADLINE_MS = 45_000L
     }
 }

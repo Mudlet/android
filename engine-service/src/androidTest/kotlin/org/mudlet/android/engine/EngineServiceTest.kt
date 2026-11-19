@@ -22,7 +22,7 @@ import java.io.File
 /**
  * EngineService on a device, with the engine the APK was built with (libmudlet in CI's emulator job): it runs in its
  * own :engine process, Qt comes up there and answers the socket handshake, it is in the foreground only while a game is
- * open, its notification says whether that game is connected, it files a game's tells under it, a stop is not undone at the next start while a killed engine brings its
+ * open, its notification says whether that game is connected, it files a game's tells under it, a stop is not undone at the next start and ends an engine stuck in a script, while a killed engine brings its
  * profile and connection back (docs/architecture.md, "Restoring the session"), and the TLS backend's libraries load.
  * native/tests/android_instrumented.py runs it.
  */
@@ -161,6 +161,24 @@ class EngineServiceTest {
     }
 
     @Test
+    fun aStopEndsAnEngineStuckInAScript_andTheNextStartAnswers() {
+        startEngine()
+        attach().use { probe ->
+            connectToGame(probe)
+            // Mudlet's Lua has no instruction hook: the loop keeps Qt's thread from its event loop for good. The tell
+            // shows the script has begun
+            probe.send(Requests.runLua("showNotification(\"$STUCK_TITLE\", \"looping\") while true do end", 1))
+            await("the stuck script's tell", probe = probe) { activeNotifications().firstOrNull { it.title() == STUCK_TITLE } }
+        }
+
+        context.stopService(Intent(context, EngineService::class.java))
+        awaitEngineGone()
+
+        startEngine()
+        attach().attached()
+    }
+
+    @Test
     fun aKilledEngineComesBackWithItsProfileAndConnection() {
         startEngine()
         val first = attach()
@@ -266,6 +284,7 @@ class EngineServiceTest {
         // The profile libmudlet opens for a connect with none open (MUDLET_PROFILE)
         const val DEFAULT_PROFILE = "Android"
         const val TELL_TITLE = "A tell for the test"
+        const val STUCK_TITLE = "A script that never ends"
 
         // A new engine, then libmudlet's profile, then the connection
         const val RESTORE_MS = 180_000L

@@ -219,7 +219,7 @@ class ScriptMapCornerTest(private val screen: Screen) {
         assertTrue("$screen: $unread not read, at the panel's top or its end: TalkBack reads ${readings.map { it.read }}", unread.isEmpty())
         readings.first().assertEveryControlRead(readings.drop(1))
 
-        compose.onNode(hide).performScrollTo().performClick()
+        compose.onNode(hide).performClick()
         compose.waitForIdle()
         assertTrue("$screen: the panel still shows once put away", compose.onAllNodes(follow).fetchSemanticsNodes().isEmpty())
         compose.onNode(show).assertIsDisplayed()

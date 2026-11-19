@@ -517,8 +517,8 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                     Modifier.heightIn(min = 48.dp),
                     enabled = attached,
                 ) {
-                    // Two lines, as a map panel is as narrow as three buttons
-                    Text(stringResource(R.string.map_area, view.areaName), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    // As many lines as it takes: a map panel is as narrow as three buttons, and scrolls
+                    Text(stringResource(R.string.map_area, view.areaName), Modifier.weight(1f, fill = false))
                     Icon(painterResource(R.drawable.ic_arrow_drop_down), null)
                 }
                 DropdownMenu(listed, { listed = false }) {

@@ -145,7 +145,7 @@ fun GameScreen(
     // Not the profile's: a switch keeps the map in front (docs/multi-profile.md, "Interactions"), and the map beside the
     // text put away
     var mapOpen by rememberSaveable { mutableStateOf(false) }
-    var besideHidden by rememberSaveable { mutableStateOf(false) }
+    var besideHidden by remember { mutableStateOf(false) }
     val before = remember { Last<String>() }
     val switched = remember(front.name) {
         val was = before.value

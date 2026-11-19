@@ -88,6 +88,8 @@ class CaretKeyTest {
 
     @Test
     fun theCaretKeyMovesBetweenTheInputLineAndTheGamesLines() {
+        // The game's settings are asked for once its profile has loaded
+        session.status("profile", "${GAME.name} loaded")
         session.settings(mapOf(Settings.caretKey.key to "f6"), session.receive("getSettings").getLong("id"))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.setting(Settings.caretKey) } == Settings.CaretKey.F6 }
         // The caret's own Up does not run a binding; a key that types goes to the input line, where X's binding runs

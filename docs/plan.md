@@ -604,7 +604,7 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 | 2 Main console links | release blocker | done | #149, #159 |
 | 3 Profiles: backup, move, copy | release blocker | in flight: export to a .zip desktop opens, import, copy (whole or settings only), and Android backup and device transfer merged; "Open with Mudlet" for a shared .zip next | #151, #158, #215, #212 |
 | 4 Real phones and background | release blocker | in flight: the device pass page and the explanation of a stop in the background merged; the pass itself is run on real phones | #155, #160, #194 |
-| 5 Report a problem | release blocker | done | #156, #164, #184 |
+| 5 Report a problem | release blocker | in flight: About > Report a problem and the offer after a crash merged; automatic crash reports, on by default as the user chose, wait for the user's setup | #156, #164, #184 |
 | 6 Copy, search, timestamps, lag | expected | in flight: copy or share a line, search, timestamps and lag (engine train 5), and the scrollback length (engine train 4) sized to the phone (engine train 6) merged; a selection across lines next | #171, #179, #197, #200, #213, #217 |
 | 7 Hardware keyboards and keys | expected | done | #157, #181, #200, #216 |
 | 8 Display and input settings 2 | expected | in flight: the server encoding and the input line's settings merged, with their Connection and Input pages (engine train 1), and the Colours page, links from the game and blinking text (engine train 5); notify on new text in the background and fonts next | #157, #200 |

@@ -1489,6 +1489,31 @@
     <string name="console_line_copied">Line copied</string>
     <!-- A message when no app on the device can take a shared line of the game's text -->
     <string name="console_line_no_share">No app here can take the line: copy it instead</string>
+    <!-- In the menu a long press on a line of the game's text opens, and TalkBack's action on such a line: starts a selection of whole lines at this line, which taps on other lines extend -->
+    <string name="console_select_from_here">Select from here</string>
+    <!-- TalkBack's action on a line of the game's text while some lines are selected: extends the selection from the line it began on to this line -->
+    <string name="console_select_to_here">Select to here</string>
+    <!-- The bar shown over the game's text while lines are selected, and what TalkBack says each time the selection changes: how many whole lines are selected -->
+    <plurals name="console_selection_count">
+        <item quantity="one">%d line selected</item>
+        <item quantity="other">%d lines selected</item>
+    </plurals>
+    <!-- Under the count in the bar shown while lines of the game's text are selected: how to select more lines -->
+    <string name="console_selection_hint">Tap another line to select up to it</string>
+    <!-- Button in the bar shown while lines of the game's text are selected: puts the selected lines on the clipboard and ends the selection -->
+    <string name="console_selection_copy">Copy</string>
+    <!-- Button in the bar shown while lines of the game's text are selected: offers the selected lines to Android's share sheet and ends the selection -->
+    <string name="console_selection_share">Share</string>
+    <!-- The title of Android's share sheet when sharing the selected lines of the game's text -->
+    <string name="console_selection_share_title">Share lines</string>
+    <!-- TalkBack's label for the close button of the bar shown while lines of the game's text are selected: ends the selection without copying -->
+    <string name="console_selection_close">Stop selecting lines</string>
+    <!-- A short message once the selected lines of the game's text are on the clipboard (before Android 13, which says so itself) -->
+    <string name="console_selection_copied">Lines copied</string>
+    <!-- A message when no app on the device can take the shared lines of the game's text -->
+    <string name="console_selection_no_share">No app here can take the lines: copy them instead</string>
+    <!-- A message when the selected lines of the game's text are too much text for Android to copy or share at once -->
+    <string name="console_selection_too_long">Too much text to copy or share at once: select fewer lines</string>
     <!-- The name the clipboard gives text a game's script put on it (setClipboardText()), which some keyboards and clipboard managers show -->
     <string name="script_clipboard_label">Text from a game script</string>
     <!-- Title of the dialog shown when a game's script asks the player for a file (invokeFileDialog()); the script's own

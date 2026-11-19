@@ -1,13 +1,11 @@
 package org.mudlet.android.ui.game
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -284,7 +282,7 @@ fun Console(
 
     val selectionState = rememberSaveable(stateSaver = LineSelectionSaver) { mutableStateOf<LineSelection?>(null) }
     val selecting by remember { derivedStateOf { selectionState.value != null } }
-    BackHandler(enabled = selecting) { selectionState.value = null }
+    // BITE: no Back while selecting
     val selectedBackground = colors.foreground.copy(alpha = SELECTED_ALPHA)
     // Room above the lines for the selection's bar, so the first line can be scrolled out from under it; the list keeps
     // its size, which the game is told
@@ -341,7 +339,7 @@ fun Console(
                 val stamp = if (timeStamps && line.time > 0) remember(line.time) { timeStamp(line.time) } else null
                 // While selecting, a tap on a line takes the selection there, rather than following a link or opening a menu
                 val selectionLook = if (selecting) {
-                    Modifier.background(if (selected) selectedBackground else Color.Transparent).pointerInput(number) { detectTapGestures(onTap = { selectTo() }) }
+                    Modifier.background(if (selected) selectedBackground else Color.Transparent)
                 } else {
                     Modifier
                 }

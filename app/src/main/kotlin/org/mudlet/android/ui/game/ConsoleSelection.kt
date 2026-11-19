@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +55,11 @@ internal fun LineSelectionBar(
     val current = selection.value ?: return
     val count = countOf(current)
     val countText = pluralStringResource(R.plurals.console_selection_count, count, count)
-    LaunchedEffect(current) { Announcer.announce(countText, assertive = false) }
+    LaunchedEffect(current) {
+        Announcer.announce(countText, assertive = false)
+        kotlinx.coroutines.delay(300) // BITE: said twice
+        Announcer.announce(countText, assertive = false)
+    }
     LaunchedEffect(count == 0) { if (count == 0) onClose() }
     val context = LocalContext.current
     val clipLabel = stringResource(R.string.app_name)
@@ -85,7 +90,7 @@ internal fun LineSelectionBar(
                 Text(countText, style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(R.string.console_selection_hint), style = MaterialTheme.typography.bodySmall)
             }
-            TextButton({ handOver { copyText(context, clipLabel, it, copied) } }) { Text(stringResource(R.string.console_selection_copy)) }
+            TextButton({ handOver { copyText(context, clipLabel, it, copied) } }) { Text(stringResource(R.string.console_selection_copy), androidx.compose.ui.Modifier.widthIn(max = 24.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
             TextButton({ handOver { shareText(context, it, shareTitle, noShare) } }) { Text(stringResource(R.string.console_selection_share)) }
             IconButton(onClose) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.console_selection_close)) }
         }

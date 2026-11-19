@@ -187,7 +187,7 @@ private fun ProfileGameScreen(
     fun leaveCaret(typed: String?) {
         caret = false
         if (typed == null) return
-        if (typed.isEmpty()) c.windows.focusInput = true else typedInCaret = typed
+        if (typed.isEmpty()) c.windows.focusInputLine() else typedInCaret = typed
     }
     // Hidden input closes the history for good: it does not open again when the password field goes
     LaunchedEffect(hidden) { if (hidden) historyOpen = false }

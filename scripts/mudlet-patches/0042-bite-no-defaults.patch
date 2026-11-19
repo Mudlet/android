@@ -1,0 +1,20 @@
+Bite: install no default packages on a first load
+
+Not for merging. The default_packages host test must go red at its first check.
+
+Upstream: not opened yet
+
+diff --git a/src/HostManager.cpp b/src/HostManager.cpp
+index 9f632c4..e4592bc 100644
+--- a/src/HostManager.cpp
++++ b/src/HostManager.cpp
+@@ -268,7 +268,8 @@ Host* HostManager::openProfile(const QString& name, const bool connect, const st
+     // As the GUI's console takes it (mudlet::addConsoleForNewHost()), before any script reads it
+     pHost->applyConsoleBufferSize();
+     // Chosen as the GUI chooses them, from the address the load leaves, before a frontend's own goes over it
+-    const QStringList packages = firstLoad ? defaultPackages(pHost->getUrl().toLower(), name, pHost->mAcceptServerGUI && pHost->mEnableGMCP) : QStringList();
++    const QStringList packages;
++    Q_UNUSED(firstLoad)
+     if (afterLoad) {
+         afterLoad(pHost);
+     }

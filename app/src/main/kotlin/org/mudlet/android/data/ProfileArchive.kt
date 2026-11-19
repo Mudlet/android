@@ -172,9 +172,9 @@ object ProfileArchive {
                     if (target != null && !target.mkdirs() && !target.isDirectory) throw IOException("could not create ${target.path}")
                     continue
                 }
+                files++
                 if (segments.size == 2 && segments[1] in SECRETS) continue
                 if (segments.size >= 3 && segments[1] == "current" && segments.last().endsWith(".xml", ignoreCase = true)) hasSave = true
-                files++
                 val out = target?.let {
                     val parent = it.parentFile!!
                     if (!parent.mkdirs() && !parent.isDirectory) throw IOException("could not create ${parent.path}")

@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -182,7 +181,7 @@ class MainActivity : ComponentActivity() {
         val stream = sharedStream(intent)
         when (OpenWith.of(intent.action, intent.data?.scheme, stream?.scheme)) {
             OpenWith.PROFILE_FILE -> (stream ?: intent.data)?.let { file ->
-                if (!Imports.open(applicationContext, file)) Toast.makeText(this, R.string.profile_file_busy, Toast.LENGTH_LONG).show()
+                Imports.start(applicationContext, file)
             }
 
             OpenWith.GAME_LINK -> {

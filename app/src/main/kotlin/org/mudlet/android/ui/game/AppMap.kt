@@ -406,7 +406,7 @@ internal fun FullScreenMap(onClose: () -> Unit, textBehind: Boolean, onBackProgr
 }
 
 // After the whole game screen, a traversal group of its own, and before the last announcement
-private const val BESIDE_TRAVERSAL_INDEX = 1f
+private const val BESIDE_TRAVERSAL_INDEX = -1f
 
 /**
  * The app's map beside the console's text on an expanded screen, as desktop Mudlet's mapper is docked beside the main

@@ -150,13 +150,14 @@ class BackupRulesTest {
             "file" to "engine-stopped",
             "sharedpref" to "engine.xml",
             "sharedpref" to "ui.xml",
-            "root" to ".",
             "database" to ".",
             "external" to ".",
         )
         for ((name, list) in lists) {
             val excluded = rules(list, "exclude")
             for (rule in leftOut) assertTrue("$name excludes $rule: $excluded", rule in excluded)
+            // The root domain is the whole data folder, files/ and shared_prefs/ in it: excluded, a restore keeps nothing
+            assertFalse("$name excludes the root domain: $excluded", excluded.any { it.first == "root" })
             // An include would leave out all that it does not name, the profiles too, or bring back an excluded file
             assertEquals("$name includes nothing", emptyList<Pair<String, String>>(), rules(list, "include"))
         }

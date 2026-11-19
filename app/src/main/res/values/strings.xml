@@ -799,6 +799,11 @@
     <string name="settings_console_buffer_less">Fewer lines</string>
     <!-- The button, read by a screen reader, that raises the scrollback length to the thousand lines above -->
     <string name="settings_console_buffer_more">More lines</string>
+    <!-- A switch under "Scrollback length", desktop Mudlet's "Use maximum lines possible": on, the game keeps as
+         many lines of its text as this phone or tablet has memory for -->
+    <string name="settings_console_buffer_max">Keep as many lines as this device can</string>
+    <!-- Under "Keep as many lines as this device can", what the switch does -->
+    <string name="settings_console_buffer_max_hint">The scrollback length goes to the most this device has memory for, and back to the length chosen when this is off.</string>
     <!-- A setting on a game's Input page, the heading of three choices: which of the commands sent to the game also
          show in the game's text -->
     <string name="settings_sent_text">Show the commands sent</string>

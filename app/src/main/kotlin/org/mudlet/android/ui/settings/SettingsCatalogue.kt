@@ -197,6 +197,8 @@ sealed class SettingEntry(
         val sample: Boolean = false,
         /** What [less] and [more] change the value by, to the next multiple of it. */
         val step: Int = 1,
+        /** A switch that, while on, holds the value at the range's most, as desktop Mudlet's "Use maximum lines possible". */
+        val heldAtMostBy: Settings.BoolSetting? = null,
     ) : Value(category, label, hint, keywords)
 }
 
@@ -264,6 +266,14 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             less = R.string.settings_console_buffer_less,
             more = R.string.settings_console_buffer_more,
             step = 1000,
+            heldAtMostBy = Settings.useMaxConsoleBufferSize,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.DISPLAY,
+            Settings.useMaxConsoleBufferSize,
+            R.string.settings_console_buffer_max,
+            R.string.settings_console_buffer_max_hint,
+            R.string.settings_console_buffer_keywords,
         ),
         SettingEntry.Switch(
             SettingsCategory.DISPLAY,

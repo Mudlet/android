@@ -348,7 +348,7 @@ private fun ProfileGameScreen(
         Column(
             Modifier.fillMaxSize().onSizeChanged { screen = it }.padding(padding).consumeWindowInsets(padding).imePadding().onPreviewKeyEvent { event ->
                 // First, as desktop's beats the profile-switching shortcuts and a key binding on the same key
-                if (!mapOpen && HardwareKeys.caretKeyMatches(c.setting(Settings.caretKey), qtKey(event.nativeKeyEvent))) {
+                if (!mapOpen && HardwareKeys.caretKeyMatches(Settings.CaretKey.F6, qtKey(event.nativeKeyEvent))) {
                     if (event.type == KeyEventType.KeyDown) if (caret) leaveCaret("") else caret = true
                     return@onPreviewKeyEvent true
                 }
@@ -368,7 +368,7 @@ private fun ProfileGameScreen(
                 }
                 // A binding comes next, as desktop's command line claims a bound profile-switching shortcut
                 // The caret's keys are its own; one that types goes to the input line on the desktop, whose bindings run
-                val typesFromCaret = caret && HardwareKeys.typesFromCaret(event.nativeKeyEvent.metaState, event.nativeKeyEvent.unicodeChar)
+                val typesFromCaret = caret
                 if ((!caret || typesFromCaret || event.type == KeyEventType.KeyUp) && sentToKeyBindings(event, c.windows, boundKeysDown)) {
                     if (typesFromCaret && event.type == KeyEventType.KeyDown) leaveCaret("")
                     return@onPreviewKeyEvent true

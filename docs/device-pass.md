@@ -92,7 +92,10 @@ Multi-Users in Middle-earth (MUME) in the list let you make a character in a few
    button counts the new lines. Tap it: you are back at the newest line.
 7. Turn the phone sideways and back: nothing is lost or shown twice, and a half-typed command stays.
 8. Pinch the game's text with two fingers: it grows and shrinks.
-9. Play for ten minutes as you normally would. **Write down** anything slow, odd or hard to do.
+9. Walk with the arrow buttons below the input line: one tap walks one room that way. **Write down** whether your
+   thumb reaches them, whether they are in the way, and what the game answered if a button did not walk. The close
+   button beside them puts them away; "Movement pad" in the app's settings, under Appearance, brings them back.
+10. Play for ten minutes as you normally would. **Write down** anything slow, odd or hard to do.
 
 ## Part 4. Leave and come back
 
@@ -194,6 +197,7 @@ Only with a Bluetooth or USB keyboard, or a Chromebook's own.
 2. Ctrl+R opens the History; Escape or Back closes it.
 3. Type the start of a word the game sent, then Tab: the word is completed.
 4. With two games open (Part 12), Ctrl+Tab switches between them.
+5. The arrow buttons for walking (Part 3) are away while the keyboard is connected, and back once it is not.
 
 ## Part 11. Look and size
 

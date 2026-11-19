@@ -629,6 +629,9 @@
     <!-- Words a player might search the settings for to find "Colours from my wallpaper", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_wallpaper_colours_keywords">Material You, dynamic colour, color, theme</string>
+    <!-- Words a player might search the settings for to find "Movement pad", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_movement_pad_keywords">walk, walking, directions, arrows, d-pad, dpad, numpad, joystick, north, exits</string>
     <!-- Words a player might search the settings for to find "See-through map and text", besides the words of its
          name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_map_behind_text_keywords">mapper, background, rooms, faint, behind, swap, transparent</string>
@@ -1215,7 +1218,7 @@
          another folder; the name is not taken -->
     <string name="settings_log_file_name_refused">A log name cannot have / or \\ in it.</string>
     <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
-         game's text, the map behind the text). The game's own colours never change with them. -->
+         game's text, the map behind the text, the movement pad). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>
     <!-- Under "Appearance" in the list of settings pages, what that page holds -->
     <string name="settings_appearance_summary">Text size, colours and the map</string>
@@ -1224,6 +1227,11 @@
     <string name="settings_wallpaper_colours">Colours from my wallpaper</string>
     <!-- Under "Colours from my wallpaper", what the switch does -->
     <string name="settings_wallpaper_colours_hint">The app\'s screens take their colours from your wallpaper. Off, they use Mudlet\'s own. The game\'s text keeps the game\'s colours.</string>
+    <!-- A switch on the Appearance page: on, the game screen shows the movement pad, twelve buttons below the input
+         line for walking with one thumb -->
+    <string name="settings_movement_pad">Movement pad</string>
+    <!-- Under "Movement pad", what the switch does -->
+    <string name="settings_movement_pad_hint">Buttons below the game\'s text for walking with one thumb: the eight compass directions, up, down, in and out. They make way for a keyboard, and need a screen tall enough for them.</string>
     <!-- A page of the app's own settings, only in Mudlet PTB (the nightly public test build) when it was installed from
          GitHub rather than Google Play: on looking for a newer test build -->
     <string name="settings_test_builds">Test builds</string>
@@ -1307,6 +1315,42 @@
     <!-- A button below the input line for a command the player pinned, read by a screen reader: it sends the command;
          %1$s is the command -->
     <string name="pinned_command">Pinned: %1$s</string>
+    <!-- The movement pad: twelve buttons at the foot of the game screen, below the input line, for walking with one
+         thumb, each drawn as an arrow. A tap sends the game the command that walks that way. This one, as a screen
+         reader reads it, walks north -->
+    <string name="movement_north">Go north</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks north-east -->
+    <string name="movement_northeast">Go north-east</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks east -->
+    <string name="movement_east">Go east</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks south-east -->
+    <string name="movement_southeast">Go south-east</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks south -->
+    <string name="movement_south">Go south</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks south-west -->
+    <string name="movement_southwest">Go south-west</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks west -->
+    <string name="movement_west">Go west</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks north-west -->
+    <string name="movement_northwest">Go north-west</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks up, by stairs or a ladder, say -->
+    <string name="movement_up">Go up</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks down, by stairs or a ladder, say -->
+    <string name="movement_down">Go down</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks in, the way games call "in": through a
+         door or into a building, say -->
+    <string name="movement_in">Go in</string>
+    <!-- A button of the movement pad, as a screen reader reads it: it walks out, the way games call "out": out of a
+         building, say -->
+    <string name="movement_out">Go out</string>
+    <!-- The button beside the movement pad, as a screen reader reads it: it puts the pad away, until the player turns
+         "Movement pad" on again in the settings -->
+    <string name="movement_pad_hide">Hide the movement pad</string>
+    <!-- Shown briefly at the foot of the game's text once "Hide the movement pad" was tapped: where to turn the pad on
+         again. "Settings" and "Appearance" are the settings screen and its page: use their translations. -->
+    <string name="movement_pad_hidden">Movement pad hidden. Settings, Appearance turns it on again.</string>
+    <!-- The button beside "Movement pad hidden…": it shows the movement pad again -->
+    <string name="movement_pad_undo">Undo</string>
     <!-- The command history: a sheet over the game screen, opened by the input line's History button or Ctrl+R, that searches
          the commands the player sent; each row puts its command on the input line, and has buttons that send, pin
          or unpin, and forget it; %1$s is the command -->

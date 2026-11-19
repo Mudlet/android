@@ -34,6 +34,8 @@ import org.mudlet.android.ui.EngineMessages.appMap
 import org.mudlet.android.ui.EngineMessages.bar
 import org.mudlet.android.ui.EngineMessages.button
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
+import org.mudlet.android.ui.game.HardwareKeyboard
+import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
 
 /**
  * The order TalkBack moves through the game screen in (docs/architecture.md, "On-device checklist"), against a fake
@@ -80,6 +82,7 @@ class TalkBackOrderTest {
         compose.runOnIdle {
             ScriptWindowsClient.layoutMode = LayoutMode.AUTO
             Settings.mapBehindText.reset()
+            HardwareKeyboard.attachedOverride = null
         }
     }
 
@@ -118,6 +121,43 @@ class TalkBackOrderTest {
         val beforeInput = reading.order.subList(places.getValue("the console"), places.getValue("the input line"))
         assertTrue("only the console's lines before the input line: ${reading.read}", beforeInput.all { console in reading.nodes.getValue(it).ancestorIds() })
 
+        reading.assertEveryControlRead()
+    }
+
+    @Test
+    fun theMovementPadIsReadAfterTheInputLineKeyByKeyAndBeforeTheWindows() {
+        // On, as it is from the start: the fake engine's rule turns it off for the tests that are not about it
+        compose.runOnIdle {
+            HardwareKeyboard.attachedOverride = false
+            Settings.movementPad.reset()
+        }
+        showWindowAndBar()
+        waitFor(hasText(WINDOW_ROW))
+        waitFor(hasText("North") and hasClickAction())
+        waitFor(hasTestTag(MOVEMENT_PAD_TAG))
+
+        val reading = TalkBackReading(compose)
+
+        fun key(@StringRes name: Int) = string(name) to (hasContentDescription(string(name)) and hasClickAction())
+        val expected = listOf(
+            "the input line's Send button" to (hasContentDescription(string(R.string.input_send)) and hasClickAction()),
+            key(R.string.movement_pad_hide),
+            key(R.string.movement_in),
+            key(R.string.movement_northwest),
+            key(R.string.movement_north),
+            key(R.string.movement_northeast),
+            key(R.string.movement_up),
+            key(R.string.movement_west),
+            key(R.string.movement_east),
+            key(R.string.movement_out),
+            key(R.string.movement_southwest),
+            key(R.string.movement_south),
+            key(R.string.movement_southeast),
+            key(R.string.movement_down),
+            "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
+            "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
+        )
+        reading.assertInOrder(expected)
         reading.assertEveryControlRead()
     }
 

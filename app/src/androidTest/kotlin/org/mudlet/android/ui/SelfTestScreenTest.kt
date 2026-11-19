@@ -30,6 +30,7 @@ import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.mudlet.android.R
+import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.RUN_BOLD
 import org.mudlet.android.protocol.RUN_ITALIC
 import org.mudlet.android.protocol.RUN_REVERSE
@@ -180,7 +181,8 @@ class SelfTestScreenTest {
 
 /**
  * A [FakeEngine] that EngineClient attaches to instead of the engine, which is never started, with the profiles [open]
- * open from the start.
+ * open from the start. The movement pad is turned off: on, as it is from the start, it takes 144 dp of the game's text,
+ * which the tests that are not about it were laid out without. One that is turns it on again (MovementPadTest).
  */
 class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalResource() {
     lateinit var engine: FakeEngine
@@ -202,12 +204,19 @@ class FakeEngineRule(private val open: List<String> = emptyList()) : ExternalRes
         EngineClient.stoppedByAndroid = { false }
         previousLastEngineCrashMs = EngineClient.lastEngineCrashMs
         EngineClient.lastEngineCrashMs = { null }
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            // Loaded first: MainActivity's own init would otherwise read the stored value over this one
+            Settings.init(instrumentation.targetContext)
+            Settings.movementPad.set(false)
+        }
     }
 
     override fun after() {
         EngineClient.connector = previous
         EngineClient.stoppedByAndroid = previousStoppedByAndroid
         EngineClient.lastEngineCrashMs = previousLastEngineCrashMs
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { Settings.movementPad.reset() }
         engine.close()
     }
 }

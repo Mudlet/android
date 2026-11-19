@@ -641,6 +641,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
         },
         SettingEntry.Switch(
             SettingsCategory.APPEARANCE,
+            Settings.movementPad,
+            R.string.settings_movement_pad,
+            R.string.settings_movement_pad_hint,
+            R.string.settings_movement_pad_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.APPEARANCE,
             Settings.mapBehindText,
             R.string.settings_map_behind_text,
             R.string.settings_map_behind_text_hint,

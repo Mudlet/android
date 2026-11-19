@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -59,6 +60,7 @@ import org.mudlet.android.protocol.RefusedCertificate
 import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.game.Announcer
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
+import org.mudlet.android.ui.game.HardwareKeyboard
 import org.mudlet.android.ui.settings.encodingLabels
 
 /**
@@ -102,6 +104,7 @@ class ScreenReaderTest {
     @After
     fun reset() = compose.runOnIdle {
         Announcer.touchExplorationOverride = null
+        HardwareKeyboard.attachedOverride = null
         for (setting in Settings.mudletSettings + Settings.screenReaderOffered) setting.reset()
         Settings.setAwaitsDefaults(GAME.name, false)
         Settings.setAwaitsInputClear(GAME.name, false)
@@ -191,6 +194,40 @@ class ScreenReaderTest {
         val config = table.fetchSemanticsNode().config
         assertEquals(string(R.string.variables_collapsed), config[SemanticsProperties.StateDescription])
         assertEquals(string(R.string.variables_open), config[SemanticsActions.OnClick].label)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun eachKeyOfTheMovementPadIsAButtonNamedByWhereItGoes() {
+        // On, as it is from the start: the fake engine's rule turns it off for the tests that are not about it
+        compose.runOnIdle {
+            HardwareKeyboard.attachedOverride = false
+            Settings.movementPad.reset()
+        }
+        // Each key's name, and the word it sends, which is what a player types and not a name to read out
+        val keys = listOf(
+            R.string.movement_north to "n",
+            R.string.movement_northeast to "ne",
+            R.string.movement_east to "e",
+            R.string.movement_southeast to "se",
+            R.string.movement_south to "s",
+            R.string.movement_southwest to "sw",
+            R.string.movement_west to "w",
+            R.string.movement_northwest to "nw",
+            R.string.movement_up to "u",
+            R.string.movement_down to "d",
+            R.string.movement_in to "in",
+            R.string.movement_out to "out",
+            R.string.movement_pad_hide to "",
+        )
+        for ((id, word) in keys) {
+            val name = string(id)
+            assertFalse("\"$name\" is a name, not the command \"$word\"", name.equals(word, ignoreCase = true))
+            val key = hasContentDescription(name) and hasClickAction()
+            compose.waitUntil(WAIT_MS) { compose.onAllNodes(key).fetchSemanticsNodes().size == 1 }
+            compose.onNode(key).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        }
+        assertEquals("each has a name of its own", keys.size, keys.map { string(it.first) }.toSet().size)
         compose.onRoot().tryPerformAccessibilityChecks()
     }
 

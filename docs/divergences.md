@@ -453,6 +453,16 @@ The desktop wraps a line in its buffer before it draws it, so each row of a long
 app wraps what the engine sends as one line, so its rows after the first start under the line's text, not under a
 time. The times, their format and colour, and the lag's figures are the desktop's.
 
+## The movement pad
+
+The game screen has a movement pad below its bottom row: a key for each of the eight compass directions and for up,
+down, in and out (`docs/architecture.md`, "The movement pad"). Desktop Mudlet has no such control. Its players walk
+with the keyboard's number pad, which a phone does not have, and typing a direction for every room with the on-screen
+keyboard up is the slowest part of playing on one. The pad adds nothing a script or a game can see: a compass key
+presses the profile's key binding on the number pad key desktop players walk that way with, where the profile has one,
+and otherwise sends the direction's short word as if typed, as the keys with no number pad key always do. It is the
+app's own, shows for every game, and stays away with a hardware keyboard, with which the app walks as the desktop does.
+
 ## The Sound button
 
 The game screen's Sound button, desktop Mudlet's toolbar "Mute all media", is there only once the game has played a

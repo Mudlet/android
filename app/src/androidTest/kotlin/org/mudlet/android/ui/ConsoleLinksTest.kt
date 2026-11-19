@@ -85,7 +85,7 @@ class ConsoleLinksTest {
         session.send(linkMessage("walk north", asked.get("id")))
         val follow = string(R.string.console_link_follow, "walk north")
         val openMenu = string(R.string.console_link_menu, "walk north")
-        compose.waitUntil(WAIT_MS) { actions().map { it.label } == listOf(follow, openMenu, makeTrigger(), copyLine()) }
+        compose.waitUntil(WAIT_MS) { actions().map { it.label } == listOf(follow, openMenu, makeTrigger(), copyLine(), selectFrom()) }
         compose.onRoot().tryPerformAccessibilityChecks()
         // Once asked, it is not asked again as the line is drawn again with the answer
         session.assertNoRequest("getLink", 1_000)
@@ -138,13 +138,13 @@ class ConsoleLinksTest {
         session.assertNoRequest("getLink", 1_000)
         session.send(linksChanged(LINK))
         session.send(linkMessage("run north", askedAbout().get("id"), menu = false))
-        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "run north"), makeTrigger(), copyLine()) }
+        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "run north"), makeTrigger(), copyLine(), selectFrom()) }
 
         // Any link may have changed: asked again. One the engine no longer holds is read by its own text, and not asked again
         session.send(linksChanged())
         val again = askedAbout()
         session.send(JSONObject().put("t", "error").put("message", "getLink: unknown").put("re", again.get("id")))
-        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "north"), makeTrigger(), copyLine()) }
+        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, "north"), makeTrigger(), copyLine(), selectFrom()) }
         session.assertNoRequest("getLink", 1_000)
         assertFalse("no menu without an answer", labels().contains(string(R.string.console_link_menu, "north")))
     }
@@ -159,7 +159,7 @@ class ConsoleLinksTest {
         compose.waitUntil(WAIT_MS) { displayed(string(R.string.marker_new_engine, "$INSTANCE-2")) }
         compose.waitForIdle()
         session.assertNoRequest("getLink", 1_000)
-        assertEquals("only the line's own actions", listOf(makeTrigger(), copyLine()), labels())
+        assertEquals("only the line's own actions", listOf(makeTrigger(), copyLine(), selectFrom()), labels())
         compose.onNode(row).performTouchInput { click(onLink) }
         session.assertNoRequest("followLink", 1_000)
 
@@ -175,7 +175,7 @@ class ConsoleLinksTest {
         val purple = RUN_RGB or 0x800080
         session.send(linkMessage("walk north", askedAbout().get("id"), menu = false, fg = purple, visited = true, selected = true))
         val named = string(R.string.console_link_selected, string(R.string.console_link_visited, "walk north"))
-        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, named), makeTrigger(), copyLine()) }
+        compose.waitUntil(WAIT_MS) { labels() == listOf(string(R.string.console_link_follow, named), makeTrigger(), copyLine(), selectFrom()) }
         assertEquals(Color(0xFF800080), colourAt(6))
         assertFalse("the text before the link keeps its own look", colourAt(1) == Color(0xFF800080))
         compose.onRoot().tryPerformAccessibilityChecks()
@@ -189,7 +189,7 @@ class ConsoleLinksTest {
         assertEquals(Color.Transparent, colourAt(6, blanked))
         assertEquals(
             "only the line's own actions",
-            listOf(makeTrigger(), copyLine()),
+            listOf(makeTrigger(), copyLine(), selectFrom()),
             compose.onNode(blanked).fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label },
         )
         compose.onNode(blanked).performTouchInput { click(onLink) }
@@ -247,6 +247,8 @@ class ConsoleLinksTest {
     private fun makeTrigger() = string(R.string.console_make_trigger)
 
     private fun copyLine() = string(R.string.console_copy_line)
+
+    private fun selectFrom() = string(R.string.console_select_from_here)
 
     // TalkBack's action [label]: found from the test thread, as a semantics lookup waits for idle, and run on the main one
     private fun runAction(label: String) {

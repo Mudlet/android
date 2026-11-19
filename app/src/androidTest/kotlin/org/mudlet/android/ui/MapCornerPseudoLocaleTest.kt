@@ -36,7 +36,7 @@ import java.io.ByteArrayOutputStream
 import java.util.Base64
 
 /**
- * The panel beside a script's small mapper (ScriptMapCornerTest), as narrow as four buttons, in the debug build's
+ * The panel beside a script's small mapper (ScriptMapCornerTest), as narrow as three buttons, in the debug build's
  * pseudo-locales, as PseudoLocaleTest checks the screens: none of its text is cut short.
  */
 @RunWith(Parameterized::class)
@@ -73,6 +73,7 @@ class MapCornerPseudoLocaleTest(private val locale: String) {
             JSONObject().put("t", "map").put("png", Base64.getEncoder().encodeToString(out.toByteArray())).put("w", MAP_W).put("h", MAP_H)
                 .put("viewOnly", true).put("view", mapView(MAP_W, MAP_H, following = false, levels = listOf(0, 1))),
         )
+        activate(hasContentDescription(compose.string(R.string.map_controls_show)))
         waitFor(hasContentDescription(compose.string(R.string.map_follow)) and hasClickAction())
     }
 

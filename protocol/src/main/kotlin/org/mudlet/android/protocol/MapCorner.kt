@@ -27,8 +27,8 @@ data class MapCorner(val map: PxRect, val panel: PxRect, val below: Boolean, val
         /** A row of 48 dp buttons with 4 dp round it: the least of the panel's height. */
         const val ROW_DP = 56f
 
-        /** The least of the panel's width: four 48 dp buttons with 4 dp round them. */
-        const val PANEL_WIDTH_DP = 200f
+        /** The least of the panel's width: three 48 dp buttons with 4 dp round them, so it is about a phone's map's width. */
+        const val PANEL_WIDTH_DP = 152f
 
         // Steps of the search for how far the map grows before it reaches another window
         private const val SEARCH_STEPS = 24

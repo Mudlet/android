@@ -96,6 +96,8 @@ class AppMapCornerPseudoLocaleTest(private val locale: String) {
         } else {
             assertEquals("$locale: the map $drawn is at the right of $console", console.right, drawn.right, 1f)
         }
+        activate(hasContentDescription(compose.activity.getString(R.string.map_controls_show)))
+        waitFor(hasText(compose.activity.getString(R.string.map_area, AREA)))
         assertFits(compose.activity.getString(R.string.map_area, AREA))
 
         activate(hasContentDescription(compose.activity.getString(R.string.app_map_corner_hide)))

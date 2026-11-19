@@ -16,9 +16,9 @@ class MapCornerTest {
         assertRect(PxRect(460f, 20f, 320f, 320f), corner.map)
         assertTrue(corner.below)
         assertTrue(corner.right)
-        // As wide as four buttons, against the map's right edge, and as high as the map
-        assertRect(PxRect(380f, 340f, 400f, 320f), corner.panel)
-        assertRect(PxRect(380f, 20f, 400f, 640f), corner.bounds)
+        // As wide as the map, wider than three buttons, against its right edge, and as high as the map
+        assertRect(PxRect(460f, 340f, 320f, 320f), corner.panel)
+        assertRect(PxRect(460f, 20f, 320f, 640f), corner.bounds)
     }
 
     @Test
@@ -51,12 +51,12 @@ class MapCornerTest {
         assertRect(PxRect(10f, 390f, 160f, 160f), corner.map)
         assertFalse(corner.below)
         assertFalse(corner.right)
-        assertRect(PxRect(10f, 230f, 200f, 160f), corner.panel)
-        assertRect(PxRect(10f, 230f, 200f, 320f), corner.bounds)
+        assertRect(PxRect(10f, 230f, 160f, 160f), corner.panel)
+        assertRect(PxRect(10f, 230f, 160f, 320f), corner.bounds)
         // Near the top, the panel is as high as the room over the map
         val high = MapCorner.of(PxRect(10f, 100f, 50f, 50f), PxRect(0f, 0f, 400f, 200f), emptyList(), 1f)!!
         assertRect(PxRect(10f, 56f, 94f, 94f), high.map)
-        assertRect(PxRect(10f, 0f, 200f, 56f), high.panel)
+        assertRect(PxRect(10f, 0f, 152f, 56f), high.panel)
     }
 
     @Test
@@ -99,11 +99,11 @@ class MapCornerTest {
         val beside = PxRect(300f, 0f, 20f, 20f)
         val touching = MapCorner.of(window, area, listOf(beside), 1f)!!
         assertRect(PxRect(320f, 0f, 80f, 80f), touching.map)
-        assertRect(PxRect(200f, 80f, 200f, 80f), touching.panel)
+        assertRect(PxRect(248f, 80f, 152f, 80f), touching.panel)
         // A small one stops short of a window under it, and its panel goes over that
         val under = MapCorner.of(window, area, listOf(PxRect(200f, 100f, 200f, 20f)), 1f)!!
         assertRect(PxRect(300f, 0f, 100f, 100f), under.map)
-        assertRect(PxRect(200f, 100f, 200f, 100f), under.panel)
+        assertRect(PxRect(248f, 100f, 152f, 100f), under.panel)
     }
 
     @Test
@@ -148,10 +148,11 @@ class MapCornerTest {
 
     @Test
     fun theAppsMapGrowsFromASquareAtTheConsolesTopRightAsASmallMapperDoes() {
-        // A phone's console, 360 by 500 dp: 0.4 of its width across and down, its panel under it, four buttons wide
+        // A phone's console, 360 by 500 dp: 0.4 of its width across and down, its panel under it, three buttons wide,
+        // little wider than the map
         val phone = MapCorner.ofAppMap(PxRect(0f, 0f, 360f, 500f), emptyList(), 1f)!!
         assertRect(PxRect(216f, 0f, 144f, 144f), phone.map)
-        assertRect(PxRect(160f, 144f, 200f, 144f), phone.panel)
+        assertRect(PxRect(208f, 144f, 152f, 144f), phone.panel)
         assertTrue(phone.right && phone.below)
         // A tablet's, at 2 pixels to the dp, below the title bar: 0.4 of its height, the shorter way
         val tablet = MapCorner.ofAppMap(PxRect(0f, 100f, 1600f, 1000f), emptyList(), 2f)!!

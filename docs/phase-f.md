@@ -68,8 +68,9 @@ Checked against the same commit; each has a prompt under "Upstream gaps" below.
 2. **Gauge values.** A gauge's value lives in Lua (`Geyser.Gauge:setValue()` sets `self.value`); no label carries
    it, so the app cannot give TalkBack a progress value. `setLabelAccessibleRole()` takes only `button`, `text` or
    `''`.
-3. **A label's live region.** `setLabelLiveRegion()` (`polite`, `assertive`, `off`) is stored on the label, but
-   `LabelContent` does not carry it, and setting it alone does not name the label in `scriptWindowsChanged`.
+3. **A label's live region.** `setLabelLiveRegion()` (`polite`, `assertive`, `off`) is stored on the label, and
+   since Mudlet/Mudlet#12937 setting it alone names the label in `scriptWindowsChanged`, but `LabelContent` does not
+   carry it.
 4. **Text boxes.** `createTextEdit()` windows are listed (kind `textBox`), but neither their text, read-only flag
    and placeholder nor a way to pass the player's typing back exists in the session.
 5. **MXP frame tabs.** Only `shown` tells which page is in front; titles and bringing a page forward are missing, as
@@ -573,13 +574,15 @@ which labels do not have yet; the app reads that text as the gauge's state as be
 
 > In `src/headless/THeadlessSession.h`, add the label's live region (`setLabelLiveRegion()`: off, polite or
 > assertive, from `TLabelModel`) to `THeadlessSession::LabelContent`, filled where `accessibleName` is in
-> `THeadlessSessionWindows.cpp`, so a change names the label in `scriptWindowsChanged`. Test it in the headless
+> `THeadlessSessionWindows.cpp`; a change already names the label in `scriptWindowsChanged`. Test it in the headless
 > session's tests and document it in `docs/headless.md`'s list of `labelContent()` fields. PR title: "Headless: give
 > a label's live region". PR text: a frontend that draws labels itself needs it to announce a label's changes as the
 > desktop's screen reader support does.
 
 Interim: replaced. The app carries this as `scripts/mudlet-patches/0004-headless-label-live-region.patch` until
 Mudlet merges it; the engine sends it as the `label`'s `liveRegion` (`protocol.md`, "Labels").
+Mudlet/Mudlet#12937 made `TLabelModel::setLiveRegion()` tell the view of a change, so the patch carries only
+`LabelContent`'s field, its test, its line in `docs/headless.md` and a comment.
 
 ### 4. Text boxes
 

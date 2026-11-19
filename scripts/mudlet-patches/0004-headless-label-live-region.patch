@@ -2,12 +2,11 @@ Headless: give a label's live region
 
 A frontend that draws labels itself needs a label's live region (setLabelLiveRegion(): off, polite or assertive) to
 announce the label's changes as the desktop's screen reader support does. THeadlessSession::LabelContent did not carry
-it, and setting it told no one: the model kept it for the widget to read as the label's text next changed.
+it. TLabelModel::setLiveRegion() already tells the view of a real change (AccessibilityChange::LiveRegion, from
+Mudlet/Mudlet#12937), which TNullConsoleFrontend passes on, so a change names the label in scriptWindowsChanged.
 
-This adds liveRegion to LabelContent, filled where accessibleName is, and has TLabelModel::setLiveRegion() tell the
-view of a real change (AccessibilityChange::LiveRegion), so a change names the label in scriptWindowsChanged. TLabel
-ignores that change, as it did: it reads the live region as the text next changes. Tested in
-HeadlessSessionWindowsTest, and listed among labelContent()'s fields in docs/headless.md.
+This adds liveRegion to LabelContent, filled where accessibleName is, so a frontend reads it with the label's other
+content. Tested in HeadlessSessionWindowsTest, and listed among labelContent()'s fields in docs/headless.md.
 
 Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
 Upstream: not opened yet
@@ -26,64 +25,6 @@ index ce752c2..4cf61d8 100644
  - `styleSheet`, as `setLabelStyleSheet()` gave it. Mudlet does not interpret it for the app: drawing what
    it says is the app's to do, or not.
  
-diff --git a/src/TLabel.cpp b/src/TLabel.cpp
-index b368c94..039039b 100644
---- a/src/TLabel.cpp
-+++ b/src/TLabel.cpp
-@@ -358,6 +358,10 @@ void TLabel::accessibilityChanged(TLabelModel::AccessibilityChange change)
-         }
-         return;
-     }
-+    // Heard only as the text next changes (announceTextChange())
-+    if (change == TLabelModel::AccessibilityChange::LiveRegion) {
-+        return;
-+    }
-     updateKeyboardAccess();
-     if (change == TLabelModel::AccessibilityChange::KeyboardAccess) {
-         return;
-diff --git a/src/TLabelModel.cpp b/src/TLabelModel.cpp
-index f9abdb2..75f972c 100644
---- a/src/TLabelModel.cpp
-+++ b/src/TLabelModel.cpp
-@@ -563,6 +563,15 @@ void TLabelModel::setAccessibleButton(std::optional<bool> button)
-     accessibilityChanged(AccessibilityChange::Role);
- }
- 
-+void TLabelModel::setLiveRegion(TLabelLiveRegion liveRegion)
-+{
-+    if (mLiveRegion == liveRegion) {
-+        return;
-+    }
-+    mLiveRegion = liveRegion;
-+    accessibilityChanged(AccessibilityChange::LiveRegion);
-+}
-+
- void TLabelModel::setClickThrough(bool clickThrough)
- {
-     if (mClickThrough == clickThrough) {
-diff --git a/src/TLabelModel.h b/src/TLabelModel.h
-index ad98142..0a78863 100644
---- a/src/TLabelModel.h
-+++ b/src/TLabelModel.h
-@@ -67,14 +67,14 @@ struct TLabelModel
-     void setAccessibleName(const QString& name);
-     void setAccessibleButton(std::optional<bool> button);
-     void setClickThrough(bool clickThrough);
--    // Nothing to tell the view: a live region is heard only when the text next changes
--    void setLiveRegion(TLabelLiveRegion liveRegion) { mLiveRegion = liveRegion; }
-+    void setLiveRegion(TLabelLiveRegion liveRegion);
-     // The view's copies of what the label shows, which name it unless a script named it
-     void setText(const QString& text);
-     void setToolTip(const QString& toolTip);
- 
--    // KeyboardAccess: the profile's accessibleLabels setting changed
--    enum class AccessibilityChange { Name, Role, KeyboardAccess };
-+    // KeyboardAccess: the profile's accessibleLabels setting changed. LiveRegion: how a change of its text is
-+    // announced, which a widget needs only as the text next changes, and a frontend without one reads as content
-+    enum class AccessibilityChange { Name, Role, KeyboardAccess, LiveRegion };
-     // Set by the widget, if there is one, to update its focus policy and tell assistive technology of a change
-     std::function<void(AccessibilityChange)> mAccessibilityChanged;
-     void accessibilityChanged(AccessibilityChange change) const;
 diff --git a/src/TNullConsoleFrontend.cpp b/src/TNullConsoleFrontend.cpp
 index 6d9d801..290e144 100644
 --- a/src/TNullConsoleFrontend.cpp

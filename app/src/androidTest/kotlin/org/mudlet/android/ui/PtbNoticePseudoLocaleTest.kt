@@ -75,13 +75,18 @@ class PtbNoticePseudoLocaleTest(private val locale: String) {
         waitFor(hasText(string(R.string.ptb_notice_text)))
         compose.onRoot().tryPerformAccessibilityChecks()
         assertFits(R.string.ptb_notice_text, R.string.ptb_notice_dismiss, R.string.ptb_notice_download)
-        val dismiss = compose.onNode(hasText(string(R.string.ptb_notice_dismiss)), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val download = compose.onNode(hasText(string(R.string.ptb_notice_download)), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        if (locale == "ar-XB") {
-            assertTrue("$locale: Download is not at the row's end", download.right <= dismiss.left)
+        // The buttons' bounds, not their texts': the two kinds of button pad their text differently
+        val dismiss = compose.onNode(hasContentDescription(string(R.string.ptb_notice_dismiss_description)) and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val download = compose.onNode(hasContentDescription(string(R.string.ptb_notice_download_description)) and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        // On a narrow screen, as CI's emulator has, en-XA's longer buttons do not fit one line: the FlowRow puts
+        // Download on the next, at its end, under Dismiss
+        val sameLine = download.top < dismiss.bottom
+        val atTheEnd = if (locale == "ar-XB") {
+            if (sameLine) download.right <= dismiss.left else download.left <= dismiss.left + 1f
         } else {
-            assertTrue("$locale: Download is not at the row's end", download.left >= dismiss.right)
+            if (sameLine) download.left >= dismiss.right else download.right >= dismiss.right - 1f
         }
+        assertTrue("$locale: Download is not at the row's end", atTheEnd)
     }
 
     @Test

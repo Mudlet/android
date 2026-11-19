@@ -58,5 +58,16 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/replay_files" />
         </provider>
+
+        <!-- Hands a log copied into the cache (LogShare, in ProfileLogs.kt) to the app the player shares or opens it with -->
+        <provider
+            android:name="org.mudlet.android.ui.profiles.LogFileProvider"
+            android:authorities="${applicationId}.logs"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/log_files" />
+        </provider>
     </application>
 </manifest>

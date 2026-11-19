@@ -61,6 +61,10 @@ You can export a profile to a file yourself, from the profile's editor: it goes 
 picker, and Mudlet leaves your passwords out of it. Who can read it then depends on where you put it. Importing one
 reads only the file you pick, and leaves out any password in it.
 
+You can share a log of your games, or open it in another app, yourself, from the profile's editor or the game's Logging
+page: Mudlet hands that one log, and nothing else, only to the app you choose when you tap, and asks for no permission
+to your files. Who can read it then depends on that app and where you send it.
+
 ## Reporting a problem
 
 About > Report a problem shows you a report to send the Mudlet team when something goes wrong: Mudlet's recent

@@ -236,6 +236,7 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   on the desktop, with the extension HTML gives it after it. A name with a folder separator, which Mudlet refuses,
   says so under the field and is not sent (`LogNaming.kt`). The folder logs go in is not among them
   ([`divergences.md`](divergences.md), "Log options").
+  Under them, a game's page lists its log files, as the profile's editor does ("Log files" below).
 - Mudlet reads some settings only as a game connects (`Settings.readAsItConnects`: the protocols, compression, the
   go-ahead signal, the version in the terminal type, the certificate errors let past and the offer of a secure
   connection), so one changed while the game is connected waits for its next connection. The switch turns all the
@@ -331,6 +332,19 @@ faster and stop, each sending its request and showing only what the engine then 
 libmudlet tells no change of it, and asking for it every second would wake the engine all through a replay.
 `ReplayPlaybackTest` tries the bar, the button and the copy against the fake engine, and `replay_playback` in the host
 test the engine against Mudlet.
+
+### Log files
+Mudlet writes a profile's logs in its `log` folder, where desktop Mudlet's own definition of a log is a `.html` or
+`.txt` file beside its replays (`.dat`). The profile's editor, and its game's Logging page while the game is open, list
+them newest first with the date each was last written and its size (`ProfileLogs.kt`, from `LogFiles.kt`), leaving out
+an empty file, as Mudlet opens an `errors.txt` in every profile; the ten newest show until "Show all". Each has two
+buttons, which TalkBack reads with the log's name: one opens it in an app that views a web page or text, or says no
+app here does, and one offers it to Android's share sheet. Either first copies the log into the cache (`LogShare`), so
+the other app gets the log as it was at the tap while the game may still be writing it, and hands that copy on through
+a `content:` URI of the app's own FileProvider (`res/xml/log_files.xml`, which serves only those copies) with a read
+grant for that one file: the app needs no storage permission, and the URI does not name the profile. Nothing logs a
+log's name, path, contents or URI. `ShareLogTest` checks the list and both intents without starting the share sheet or
+a viewer, `ShareLogPseudoLocaleTest` the layout in en-XA and ar-XB, and `LogFilesTest` (JVM) the listing and the copy.
 
 ### Timestamps and the lag
 Desktop Mudlet's timestamp button is a switch under "Play a replay" on the game sheet's card (`GameSheet.kt`). A

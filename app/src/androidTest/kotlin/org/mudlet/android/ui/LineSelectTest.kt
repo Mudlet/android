@@ -104,6 +104,7 @@ class LineSelectTest {
         assertTrue("no line offers \"$selectTo\" before a selection", actionsOf(line(1)).none { it == selectTo })
         perform(line(3), string(R.string.console_select_from_here))
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { Announcer.current?.text }?.endsWith(count(1)) == true }
+        quiet()
         val first = compose.runOnIdle { Announcer.current!!.serial }
 
         // While selecting, a line's actions are the selection's, not its menu's
@@ -111,10 +112,7 @@ class LineSelectTest {
         assertTrue(actionsOf(line(1)).none { it == string(R.string.console_copy_line) })
         perform(line(1), selectTo)
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { Announcer.current?.text }?.endsWith(count(3)) == true }
-        // Past the Announcer's merging of announcements close together, on the device's clock, and past any delay in
-        // an effect, on the test's, so a second one would show
-        SystemClock.sleep(QUIET_MS)
-        compose.mainClock.advanceTimeBy(QUIET_MS)
+        quiet()
         val said = compose.runOnIdle { Announcer.current!! }
         assertTrue("said once: ${said.text}", said.text.endsWith(count(3)) && said.text.indexOf(count(3)) == said.text.lastIndexOf(count(3)))
         assertTrue("one announcement for the change", said.serial <= first + 1)
@@ -156,6 +154,13 @@ class LineSelectTest {
         checkAccessibility()
         val action = compose.onNode(node).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == label }
         compose.runOnIdle { action.action() }
+    }
+
+    // Past the Announcer's merging of announcements close together, on the device's clock, and past any delay in an
+    // effect, on the test's, so that a second announcement shows as one, not merged into the one before or after it
+    private fun quiet() {
+        SystemClock.sleep(QUIET_MS)
+        compose.mainClock.advanceTimeBy(QUIET_MS)
     }
 
     private fun clipboard(): String? {

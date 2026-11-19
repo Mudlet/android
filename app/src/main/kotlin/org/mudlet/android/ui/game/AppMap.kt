@@ -220,10 +220,10 @@ internal fun MapButton(open: Boolean, onOpen: (Boolean) -> Unit) {
 /**
  * The app's map small in the console's corner (docs/architecture.md, "The map in the corner"), where [corner] puts it
  * in [console]: the frame drawn for the map behind the text ([BackgroundMap]) cut down to it, as large as it is drawn
- * there, the player, whom it follows, in its middle ([MapFit.centred]), and beside it, as beside a script's
- * small mapper, its [MapPanel], without the switch to editing it and with a button that hides it, [onHide]. A tap on the
- * map calls [onOpen], to bring the map to the front. One group for TalkBack where a script's mapper would be read, the
- * map, read as where the player is, before its panel; [modifier] goes on the group.
+ * there, the player, whom it follows, in its middle ([MapFit.centred]), and beside it on request, as beside a script's
+ * small mapper ([CornerMap]), its [MapPanel], without the switch to editing it and with a button that hides it, [onHide].
+ * A tap on the map calls [onOpen], to bring the map to the front. One group for TalkBack where a script's mapper would
+ * be read, the map, read as where the player is, before its panel; [modifier] goes on the group.
  */
 @Composable
 internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit, onHide: () -> Unit, modifier: Modifier = Modifier) {
@@ -231,8 +231,7 @@ internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit
     val appMap = EngineClient.front.appMap
     val map = appMap.map
     val frame = map?.bitmap
-    val bounds = corner.bounds
-    val mapRect = corner.map.from(bounds)
+    val mapRect = corner.map.from(corner.bounds)
     val fit = remember(map?.w, map?.h, console, mapRect) { MapFit.centred(map?.w ?: 0, map?.h ?: 0, console, PxRect(0f, 0f, mapRect.w, mapRect.h)) }
     val view = appMap.mover.view
     val room = view?.rooms?.firstOrNull { it.id == view.player }?.name?.ifEmpty { null }
@@ -246,41 +245,34 @@ internal fun AppMapCorner(corner: MapCorner, console: PxRect, onOpen: () -> Unit
         isTraversalGroup = true
         traversalIndex = WINDOWS_TRAVERSAL_INDEX
     }
-    // Touches between the map and the panel, and on the panel's room it leaves empty, reach the console under them
-    Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
-        Canvas(
-            Modifier.placeAt(mapRect, density).background(CONSOLE_BACKGROUND).border(1.dp, MaterialTheme.colorScheme.outline).clipToBounds()
-                .readAsOne(0f)
-                .clearAndSetSemantics {
-                    contentDescription = label
-                    role = Role.Button
-                    onClick(openLabel) {
-                        onOpen()
-                        true
+    CornerMap(
+        corner,
+        density,
+        modifier.then(group),
+        map = { placedMap ->
+            Canvas(
+                placedMap.background(CONSOLE_BACKGROUND).border(1.dp, MaterialTheme.colorScheme.outline).clipToBounds()
+                    .clearAndSetSemantics {
+                        contentDescription = label
+                        role = Role.Button
+                        onClick(openLabel) {
+                            onOpen()
+                            true
+                        }
                     }
-                }
-                .clickable(onClickLabel = openLabel, onClick = onOpen),
-        ) {
-            if (frame != null) drawFrame(frame, fit, shift = appMap.mover.shift)
-        }
-        Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
-            MapPanel(
-                appMap,
-                frame,
-                fit,
-                map?.viewOnly ?: true,
-                map != null,
-                info = null,
-                infoHeight = 0.dp,
-                Modifier.align(corner.panelAlignment).readAsOne(1f),
-                edit = false,
+                    .clickable(onClickLabel = openLabel, onClick = onOpen),
             ) {
+                if (frame != null) drawFrame(frame, fit, shift = appMap.mover.shift)
+            }
+        },
+        panel = { aligned ->
+            MapPanel(appMap, frame, fit, map?.viewOnly ?: true, map != null, info = null, infoHeight = 0.dp, aligned, edit = false) {
                 IconButton(onHide) {
-                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.app_map_corner_hide))
+                    Icon(painterResource(R.drawable.ic_visibility_off), stringResource(R.string.app_map_corner_hide))
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 /**

@@ -28,7 +28,8 @@ import org.mudlet.android.ui.EngineMessages.mapView
 /**
  * The app's map in the console's corner on the phone, where the screen's size changes none of it: none while a
  * script's mapper, the map in front or the map behind the text shows, a script's window is where it would be, or the
- * game has no rooms; hidden and shown again, which is kept; and a tap on it bringing the map to the front.
+ * game has no rooms; hidden and shown again from its panel, which is kept; and a tap on it bringing the map to the front,
+ * but none on the button over it that shows its panel.
  */
 class AppMapCornerOnThePhoneTest : AppMapCornerFixture(AppMapCornerFixture.PHONE) {
     @Test
@@ -73,6 +74,7 @@ class AppMapCornerOnThePhoneTest : AppMapCornerFixture(AppMapCornerFixture.PHONE
         session.send(appMap(FRAME_W, FRAME_H, view = mapView(FRAME_W, FRAME_H)))
         waitFor(corner)
 
+        openControls()
         activate(button(R.string.app_map_corner_hide))
         waitForNone(corner)
         compose.runOnIdle { assertFalse(Settings.mapInCorner.value) }
@@ -84,6 +86,7 @@ class AppMapCornerOnThePhoneTest : AppMapCornerFixture(AppMapCornerFixture.PHONE
         assertTrue("shown is kept", prefs.getBoolean(MAP_IN_CORNER, false))
 
         // Hidden again, the settings' switch shows it
+        openControls()
         activate(button(R.string.app_map_corner_hide))
         waitForNone(corner)
         compose.pickFromGameMenu(string(R.string.settings_title))
@@ -109,6 +112,10 @@ class AppMapCornerOnThePhoneTest : AppMapCornerFixture(AppMapCornerFixture.PHONE
         val drawn = compose.onNode(corner).captureToImage().toPixelMap()
         assertEquals(Color.White, drawn[drawn.width / 2, drawn.height / 2])
 
+        // The button over the map shows its panel, not the map in front
+        compose.onNode(button(R.string.map_controls_show)).performClick()
+        waitFor(button(R.string.map_zoom_in))
+        assertTrue("the controls' button brought the map to the front", compose.onAllNodes(mapInFront).fetchSemanticsNodes().isEmpty())
         compose.onNode(button(R.string.map_zoom_in)).performClick()
         compose.waitForIdle()
         assertTrue("a zoom button brought the map to the front", compose.onAllNodes(mapInFront).fetchSemanticsNodes().isEmpty())

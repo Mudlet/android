@@ -675,12 +675,17 @@ The game screen draws `map` in the mapper window (`ui/game/ScriptMap.kt`, fitted
   room for a row of buttons under the window, or over it for one in the area's bottom half. A window smaller than two
   fifths of the game area's width and height, within 120 and 320 dp, is drawn that large, its shape kept, from its
   corner nearest the area's, as a desktop's mapper is a few dp across on a phone; it grows over the console's text
-  but stops short of another window it was clear of. The panel is as wide as four buttons or the map, at most as high
+  but stops short of another window it was clear of. The panel is as wide as three buttons or the map, at most as high
   as the map, scrolls, and goes over what is under it, but for a map that did not grow it goes only where it covers no
   other window. Otherwise, and on a page or in a scroll box, the panel is a strip at the window's top, at most three
   fifths of it, and the map fills the rest, cut where the window is cut. TalkBack reads the map, then the panel.
   It reads the panel's parts in the order they show, however far it has scrolled, as Compose would otherwise read
   one scrolled out of sight first; the button that centres the map goes under the others in a strip narrower than four.
+- A map `MapCorner` places shows its panel only on request (`CornerMap`; desktop's shows it until the button between
+  the two hides it, docs/divergences.md): over the map's top corner on the side it is drawn against is a small button, drawn 32 dp and touched within 48, "Show the
+  map's controls", which shows the panel and then, as "Hide the map's controls", hides it again, as Back does and a
+  touch anywhere else in the game area, which goes no further, as one outside a menu. TalkBack reads the map, the
+  button, then the panel; the map's own actions zoom, pan, change level and centre it without the panel.
 - The frame is drawn only while it is the window's size, as the engine draws one at each new size; scaled alike both
   ways to fit and centred, so a touch maps back to the frame's pixel under it.
 - The engine is asked (`setMapScale`) to draw it at the scale it is shown at, `MapFit.renderScale`, as Mudlet's pixels
@@ -886,10 +891,12 @@ script's small mapper would be (`AppMapCorner` in `ui/game/AppMap.kt`):
   button that hides it, which turns the setting off and says so with Undo; no edit switch and no map info, which the
   map in front has. A tap on the map brings the map to the front; touches between the map and the panel reach the
   console.
+  The panel shows only on request, from the button over the map's top corner, as a script's small mapper's does.
 - TalkBack reads the map as one button, "Small map of" its area and the player's room (the area alone, or "of the
   game", where the frame says less), which brings the map to the front, then the panel's controls. The group is read
   where the windows are, after the console, the input line and the quick bar, where a script's mapper it stands in for
   is read, so the order is the same whichever map shows.
+  Between the map and the panel's controls, which show only on request, it reads the button that shows them.
 
 ### Downloading the map
 A game can offer its map, as GMCP's `Client.Map` (docs/protocol.md, "Downloading the map"; a carried Mudlet patch),
@@ -1487,6 +1494,10 @@ device shows, below the UI's debug hook:
   mapper, the map in front or the map behind the text shows, a script's label is where it would be, or with no rooms;
   hidden, undone and shown again from the settings, which is kept; a tap on it, not on its buttons, bringing the map to
   the front; at the top end in en-XA and ar-XB with its text whole (`AppMapCornerPseudoLocaleTest`).
+  A small map's panel shows only once the button over the map's top corner is pressed, TalkBack's actions on the map
+  without it, and goes away with the button, Back or a touch on the console (`ScriptMapCornerTest`, and the app's map's
+  in `AppMapCornerTest`); the button at the map's top corner on the screen's side in en-XA and ar-XB, and the panel it
+  shows on the screen, off the map and little wider than it (`MapControlsPseudoLocaleTest`).
   Each Compose test rule has the Accessibility Test Framework's checks on (`enableAccessibilityChecks()`), which fail a
   test on a control with no label or a touch target under 48 dp; the library needs API 34, so they run on the API 36
   emulator only. `ScriptLibraryTest` and `PseudoLocaleTest` turn them on through `AccessibilityChecks.kt`, which

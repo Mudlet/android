@@ -1,5 +1,6 @@
 package org.mudlet.android.ui.game
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.VectorConverter
@@ -7,6 +8,7 @@ import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -24,7 +26,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
@@ -47,9 +51,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -70,6 +76,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -127,6 +134,11 @@ private const val CONTROLS_ALPHA = 0.85f
 
 // The space round the area and level bar's backing, and inside a map panel's (MapCorner.ROW_DP)
 private val CONTROLS_PADDING = 4.dp
+
+// The button over a map in a corner that shows its controls: drawn this large, its icon this large, touched within this
+private val CONTROLS_BUTTON_SIZE = 32.dp
+private val CONTROLS_ICON_SIZE = 20.dp
+private val CONTROLS_BUTTON_TOUCH = 48.dp
 
 // A second tap further than this from the first is a tap of its own, as Android's and Qt's double-tap slop has it
 private val DOUBLE_TAP_SLOP = 100.dp
@@ -208,8 +220,9 @@ private object MapperWindow : MapSource {
  * The mapper window (docs/architecture.md, "The map") shown at [placed]'s rect: the engine's last `map`, while it is the
  * window's size, drawn as [MapView] draws it, which the engine is asked to draw at the scale it is shown at, and its
  * [MapPanel], which covers none of it. With room beside the window for the panel, the two are where [corner] says, a
- * window small for the game area drawn larger; without, the map fills the window's rect below its panel. One group for
- * TalkBack, the map before its panel, after the game screen's own controls; [modifier] goes on the group.
+ * window small for the game area drawn larger, and the panel shows on request ([CornerMap]); without, the map fills the
+ * window's rect below its panel. One group for TalkBack, the map before its panel, after the game screen's own
+ * controls; [modifier] goes on the group.
  */
 @Composable
 internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Density, modifier: Modifier = Modifier) {
@@ -224,36 +237,86 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
         isTraversalGroup = true
         traversalIndex = WINDOWS_TRAVERSAL_INDEX
     }
-    val mapModifier = Modifier.background(CONSOLE_BACKGROUND).readAsOne(0f)
-    val panelModifier = Modifier.readAsOne(1f)
-
     if (corner != null) {
-        val bounds = corner.bounds
-        val mapRect = corner.map.from(bounds)
+        val mapRect = corner.map.from(corner.bounds)
         val fit = remember(window.w, window.h, placed, mapRect) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, mapRect.w, mapRect.h))) }
         // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred
         LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
-        // Touches between the map and the panel, and on the panel's room it leaves empty, reach what is under them
-        Box(Modifier.placeAt(bounds, density).then(modifier).then(group)) {
-            MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.placeAt(mapRect, density).then(mapModifier), panel = true)
-            Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
-                val infoHeight = with(density) { (corner.map.h * INFO_FRACTION).toDp() }
-                MapPanel(MapperWindow, frame, fit, viewOnly, drawn, info, infoHeight, Modifier.align(corner.panelAlignment).then(panelModifier))
-            }
-        }
+        val infoHeight = with(density) { (corner.map.h * INFO_FRACTION).toDp() }
+        CornerMap(
+            corner,
+            density,
+            modifier.then(group),
+            map = { placedMap -> MapView(MapperWindow, frame, fit, viewOnly, drawn, placedMap.background(CONSOLE_BACKGROUND), panel = true) },
+            panel = { aligned -> MapPanel(MapperWindow, frame, fit, viewOnly, drawn, info, infoHeight, aligned) },
+        )
     } else {
         val rect = placed.rect
         val height = with(density) { rect.h.toDp() }
         // The buttons zoom about the frame's middle, whichever box it is fitted to
         val whole = remember(window.w, window.h, placed) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, rect.w, rect.h))) }
         Column(Modifier.placeAt(rect, density).then(modifier).background(CONSOLE_BACKGROUND).then(group)) {
-            MapPanel(MapperWindow, frame, whole, viewOnly, drawn, info, height * INFO_FRACTION, Modifier.fillMaxWidth().heightIn(max = height * PANEL_FRACTION).then(panelModifier))
+            MapPanel(MapperWindow, frame, whole, viewOnly, drawn, info, height * INFO_FRACTION, Modifier.fillMaxWidth().heightIn(max = height * PANEL_FRACTION).readAsOne(1f))
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val box = PxRect(0f, 0f, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
                 val fit = remember(window.w, window.h, placed, box) { MapFit(window.w, window.h, placed.wholeIn(box)) }
                 LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
-                MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.fillMaxSize().then(mapModifier), panel = true)
+                MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.fillMaxSize().background(CONSOLE_BACKGROUND).readAsOne(0f), panel = true)
             }
+        }
+    }
+}
+
+/**
+ * A map in [corner], its controls shown only on request (docs/divergences.md, "A script's small mapper"): [map], given
+ * what places it at the corner's map, and over its top corner on the side it is drawn against a small button that shows
+ * [panel], given what aligns it where the corner puts it, and hides it again. Back, or a touch anywhere else in the game
+ * area, hides it too; that touch goes no further, as one outside a menu does. TalkBack reads the map, the button, then
+ * the panel, so the map's own actions need no panel; [modifier] goes on what holds the three.
+ */
+@Composable
+internal fun CornerMap(corner: MapCorner, density: Density, modifier: Modifier, map: @Composable (Modifier) -> Unit, panel: @Composable (Modifier) -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = open) { open = false }
+    val bounds = corner.bounds
+    val mapRect = corner.map.from(bounds)
+    Box(Modifier.fillMaxSize()) {
+        if (open) {
+            Box(
+                Modifier.fillMaxSize().pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown().consume()
+                        open = false
+                    }
+                },
+            )
+        }
+        // No touch handler here, so that touches between the map and the panel, and on the room the panel leaves empty,
+        // are touches elsewhere
+        Box(Modifier.placeAt(bounds, density).then(modifier)) {
+            map(Modifier.placeAt(mapRect, density).readAsOne(0f))
+            Box(Modifier.placeAt(mapRect, density)) {
+                MapControlsButton(open, { open = !open }, Modifier.align(if (corner.right) Alignment.TopEnd else Alignment.TopStart).readAt(1f))
+            }
+            if (open) {
+                Box(Modifier.placeAt(corner.panel.from(bounds), density)) {
+                    panel(Modifier.align(corner.panelAlignment).readAsOne(2f))
+                }
+            }
+        }
+    }
+}
+
+// The small button over a map in a corner that shows its controls while not [open], and hides them while they are
+@Composable
+private fun MapControlsButton(open: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val label = stringResource(if (open) R.string.map_controls_hide else R.string.map_controls_show)
+    Box(
+        modifier.size(CONTROLS_BUTTON_TOUCH).clip(CircleShape).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(CONTROLS_BUTTON_SIZE).background(MaterialTheme.colorScheme.surface.copy(alpha = CONTROLS_ALPHA), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(painterResource(if (open) R.drawable.ic_close else R.drawable.ic_tune), null, Modifier.size(CONTROLS_ICON_SIZE), tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -454,7 +517,7 @@ private fun MapPlaceBar(view: MapViewInfo, rooms: MapRooms, above: Int?, below: 
                     Modifier.heightIn(min = 48.dp),
                     enabled = attached,
                 ) {
-                    // Two lines, as a map panel is as narrow as four buttons
+                    // Two lines, as a map panel is as narrow as three buttons
                     Text(stringResource(R.string.map_area, view.areaName), maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     Icon(painterResource(R.drawable.ic_arrow_drop_down), null)
                 }

@@ -121,8 +121,8 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
-                       clipboard, file_dialog, web_pages, packages, error_console, key_bindings, scripts_stopped, replay_recording, time_stamps,
-                       line_updates, replay_playback):
+                       clipboard, file_dialog, web_pages, packages, error_console, default_packages, key_bindings, scripts_stopped,
+                       replay_recording, time_stamps, line_updates, replay_playback):
             checks()
         checks = secure_offer
         checks(port)
@@ -5346,6 +5346,46 @@ def key_bindings():
     msgs = []
     c.wait_for(lambda m: m["t"] == "synced", collect=msgs)
     check(last_of(msgs, "keyBindings") == keys, "a UI that attaches gets the key bindings as they are")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def default_packages():
+    """Desktop's default packages, as HostManager::openProfile() installs them: a profile's first load gets those of
+    every game (mpkg too, unless MUDLET_TEST_MODE is set), the generic mapper and the starter UI for a game with neither
+    the IRE mapper nor a UI of its own, so a typed lua command runs as on the desktop; a profile with a save gets none
+    again, as a player who removed one keeps it removed."""
+    profile = "Defaults Test"
+
+    def opened():
+        proc, c = start_engine()
+        seen = []
+        c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+        c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+        c.send({"t": "openProfile", "name": profile, "connect": False})
+        wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+        names = [p["name"] for p in c.ask({"t": "packages"}, answers=("packages", "error"), collect=seen).get("packages", [])]
+        return proc, c, seen, names
+
+    proc, c, seen, names = opened()
+    wanted = ["run-lua-code", "echo", "deleteOldProfiles", "enable-accessibility", "gui-drop", "generic_mapper", "mudlet-base-ui"]
+    check(all(n in names for n in wanted) and "mudlet-mapper" not in names,
+          f"a profile's first load installs desktop's default packages: {names}")
+    since = len(seen)
+    c.send({"t": "send", "text": "lua 1 + 1"})
+    seen_or_next(c, shown("2"), seen, since, what="2 shown")
+    check(True, "so a typed lua command runs, through run-lua-code's alias")
+    m = c.ask({"t": "uninstallPackage", "name": "run-lua-code"}, answers=("packages", "error"), collect=seen)
+    check("run-lua-code" not in [p["name"] for p in m.get("packages", [])], f"one removed: {m}")
+    c.send({"t": "setAppState", "active": False, "minimized": True})
+    m = wait_status(c, "save", lambda v: True, seen)
+    check(m["value"] == "saved", f"and the profile saved: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    proc, c, seen, names = opened()
+    check("run-lua-code" not in names and "echo" in names, f"a profile with a save gets none again: {names}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

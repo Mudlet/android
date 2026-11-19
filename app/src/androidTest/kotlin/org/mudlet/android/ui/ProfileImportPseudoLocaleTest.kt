@@ -19,6 +19,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.filters.SdkSuppress
 import androidx.test.rule.GrantPermissionRule
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -29,6 +30,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import org.mudlet.android.R
+import org.mudlet.android.ui.profiles.ImportState
 import org.mudlet.android.ui.profiles.Imports
 import java.io.File
 import java.util.Locale
@@ -58,6 +60,15 @@ class ProfileImportPseudoLocaleTest(private val locale: String) {
         session.clear()
         session.synced(0)
         session.profiles(emptyList(), session.receive("listProfiles"))
+    }
+
+    // Imports outlives the Activity: an import a failed run leaves open would show over the next test's profile list
+    @After
+    fun cleanUp() {
+        compose.runOnUiThread {
+            (Imports.state as? ImportState.Ready)?.let(Imports::cancel)
+            Imports.forgetEnded()
+        }
     }
 
     @Test

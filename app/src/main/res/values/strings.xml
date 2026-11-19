@@ -1176,16 +1176,16 @@
     <string name="settings_log_name_format_keywords">file name, log name, daily, monthly, one file, append</string>
     <!-- A choice under "Log format": a log file for each time logging starts, named by its date and time. Keep the
          example as it is: it is the name's pattern, a year, month, day, # and the time. -->
-    <string name="settings_log_name_date_and_time">A file each time, by date and time (1970-01-01#00-00-00)</string>
+    <string name="settings_log_name_date_and_time" tools:ignore="TypographyDashes">A file each time, by date and time (1970-01-01#00-00-00)</string>
     <!-- A choice under "Log format", as the one before it with a T between the date and the time, as some programs
          read dates. Keep the example as it is. -->
-    <string name="settings_log_name_date_t_time">A file each time, by date and time (1970-01-01T00-00-00)</string>
+    <string name="settings_log_name_date_t_time" tools:ignore="TypographyDashes">A file each time, by date and time (1970-01-01T00-00-00)</string>
     <!-- A choice under "Log format": a day's logs gathered in one file, named by the day. Keep the example as it
          is. -->
-    <string name="settings_log_name_day">A file a day (1970-01-01)</string>
+    <string name="settings_log_name_day" tools:ignore="TypographyDashes">A file a day (1970-01-01)</string>
     <!-- A choice under "Log format": a month's logs gathered in one file, named by the month. Keep the example as it
          is. -->
-    <string name="settings_log_name_month">A file a month (1970-01)</string>
+    <string name="settings_log_name_month" tools:ignore="TypographyDashes">A file a month (1970-01)</string>
     <!-- A choice under "Log format", desktop Mudlet's "Named file": every log gathered in one file of the name the
          player gives under "Log name" -->
     <string name="settings_log_name_named">Named file, every log in one</string>

@@ -5,7 +5,7 @@
 > in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
 > change both together.
 
-**Effective date:** 2026-11-18; the file's
+**Effective date:** 2026-11-19; the file's
 [history](https://github.com/Mudlet/android/commits/main/docs/privacy-policy.md) shows every earlier version.
 
 This policy covers Mudlet for Android and Mudlet PTB, its nightly test build, made by the Mudlet team, a group of

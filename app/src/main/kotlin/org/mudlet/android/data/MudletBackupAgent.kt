@@ -38,7 +38,7 @@ class MudletBackupAgent : BackupAgent() {
             .onEnter { !Files.isSymbolicLink(it.toPath()) }
             .onFail { _, e -> Log.w(TAG, "a folder of the app's files could not be read for the backup", e) }
             .filter { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
-            .filter { BackupScope.takes(it.relativeTo(files).invariantSeparatorsPath, to, latestIn) }
+            .filter { BackupScope.takes(it.relativeTo(files).invariantSeparatorsPath, BackupScope.Destination.NEW_PHONE, latestIn) }
             .forEach { fullBackupFile(it, data) }
         preferencesDir().listFiles().orEmpty()
             .filter { it.isFile && BackupScope.takesPreferences(it.name) }

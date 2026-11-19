@@ -14,11 +14,12 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
@@ -41,6 +42,7 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.KeyBinding
 import org.mudlet.android.protocol.Profile
+import org.mudlet.android.ui.game.GAME_TITLE_TAG
 
 /**
  * Desktop Mudlet's caret mode against a fake engine: the game's Accessibility key ("Switch between input line and main
@@ -69,12 +71,15 @@ class CaretKeyTest {
         // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
         if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
         session = fake.engine.nextSession()
+        // EngineClient lives as long as the process, so an earlier test's lines would still be there
+        session.clear()
+        session.synced(0)
         session.profiles(listOf(GAME), session.receive("listProfiles"))
         compose.waitUntil(WAIT_MS) { EngineClient.profiles == listOf(GAME) }
         activate(hasContentDescription(compose.activity.getString(R.string.profile_connect_to, GAME.name)))
         session.profiles(listOf(GAME), session.receive("openProfile"))
-        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText(string(R.string.game_title))).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(string(R.string.game_title)).assertIsDisplayed()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasTestTag(GAME_TITLE_TAG)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(GAME_TITLE_TAG).assertIsDisplayed()
     }
 
     // EngineClient lives as long as the process, and with it a game's settings

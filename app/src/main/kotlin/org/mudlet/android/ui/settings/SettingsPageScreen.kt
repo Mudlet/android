@@ -193,7 +193,7 @@ internal fun SwitchRow(entry: SettingEntry.Switch, owner: SettingsOwner, overlin
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             if (overline != null) Overline(overline)
             Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
-            entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            entry.hint?.let { Text(stringResource(it), maxLines = 1, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         Switch(checked, onCheckedChange = null)
     }

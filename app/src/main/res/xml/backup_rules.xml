@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and earlier: data_extraction_rules.xml's rules, in the one list this format has. Its exclude takes no
+     requireFlags, so it cannot tell a cloud backup from a transfer to a new phone; MudletBackupAgent tells them apart
+     by the transport's flags, and backs up nothing to a cloud that does not encrypt with the screen lock. -->
+<full-backup-content>
+    <exclude domain="file" path="passwords/" />
+    <exclude domain="file" path="settings/" />
+    <exclude domain="file" path="engine-session.json" />
+    <exclude domain="file" path="engine-stopped" />
+    <exclude domain="sharedpref" path="engine.xml" />
+    <exclude domain="sharedpref" path="ui.xml" />
+    <exclude domain="database" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

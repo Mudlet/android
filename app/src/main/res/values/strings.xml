@@ -1150,12 +1150,12 @@
          written and named -->
     <string name="settings_logging">Logging</string>
     <!-- Under "Logging" in the list of settings pages, what that page holds -->
-    <string name="settings_logging_summary">How the game's logs are written and named</string>
+    <string name="settings_logging_summary">How the game\'s logs are written and named</string>
     <!-- A switch on a game's Logging page, as desktop Mudlet's preferences have it: a new log of the game's text is a
          web page (HTML) rather than plain text -->
     <string name="settings_log_html">Save log files in HTML format</string>
     <!-- Under "Save log files in HTML format", what the switch does, as desktop Mudlet's description says -->
-    <string name="settings_log_html_hint">A log keeps the game's colours and styles. Off, it is plain text. A log already being written keeps its format until logging starts again.</string>
+    <string name="settings_log_html_hint">A log keeps the game\'s colours and styles. Off, it is plain text. A log already being written keeps its format until logging starts again.</string>
     <!-- Words a player might search the settings for to find "Save log files in HTML format", besides the words of
          its name and description, separated by commas. Use the words a player of your language would search for. -->
     <string name="settings_log_html_keywords">transcript, record, plain text, web page, colours, colors</string>

@@ -31,6 +31,7 @@ import org.mudlet.android.ui.game.ScriptWebPages
 import org.mudlet.android.ui.profiles.GameLinkRefused
 import org.mudlet.android.ui.profiles.TelnetLink
 import org.mudlet.android.ui.theme.MudletTheme
+import org.mudlet.android.update.PtbUpdates
 
 class MainActivity : ComponentActivity() {
     // The engine's startForeground() usually runs before the user answers, and its notification is dropped
@@ -73,6 +74,7 @@ class MainActivity : ComponentActivity() {
         }
         EngineClient.init(this)
         Settings.init(this)
+        PtbUpdates.init(this)
         Announcer.init(this)
         explainNotifications = shouldAskForNotifications()
         engineStoppedAnswered = uiPrefs().getBoolean(PREF_ENGINE_STOPPED_ANSWERED, false)
@@ -143,6 +145,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         ScriptWebPages.resumed()
+        PtbUpdates.checkIfDue()
     }
 
     override fun onNewIntent(intent: Intent) {

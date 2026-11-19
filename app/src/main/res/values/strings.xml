@@ -45,6 +45,17 @@
     <string name="profiles_empty">No games of your own yet. Pick one below, or add one with its address.</string>
     <!-- The profile list's button that opens the editor for a new game -->
     <string name="profiles_add">Add a game</string>
+    <!-- A notice at the top of the profile list in Mudlet PTB (the nightly public test build) installed from GitHub,
+         when GitHub has a newer test build than the one installed -->
+    <string name="ptb_notice_text">A newer test build is available</string>
+    <!-- The notice's button, which opens the test build's download page on GitHub in the browser -->
+    <string name="ptb_notice_download">Download</string>
+    <!-- What TalkBack reads for the Download button: keep the button's word, "Download", in it -->
+    <string name="ptb_notice_download_description">Download the newer test build</string>
+    <!-- The notice's button that hides it until a still newer test build comes out -->
+    <string name="ptb_notice_dismiss">Dismiss</string>
+    <!-- What TalkBack reads for the Dismiss button: keep the button's word, "Dismiss", in it -->
+    <string name="ptb_notice_dismiss_description">Dismiss the newer test build\'s notice</string>
     <!-- What TalkBack reads for a profile in the list: its name, then its address as host:port -->
     <string name="profile_description">%1$s, %2$s:%3$d</string>
     <!-- A game's address in the profile list: %1$s is its host name, %2$d its port number -->
@@ -1156,6 +1167,19 @@
     <string name="settings_wallpaper_colours">Colours from my wallpaper</string>
     <!-- Under "Colours from my wallpaper", what the switch does -->
     <string name="settings_wallpaper_colours_hint">The app\'s screens take their colours from your wallpaper. Off, they use Mudlet\'s own. The game\'s text keeps the game\'s colours.</string>
+    <!-- A page of the app's own settings, only in Mudlet PTB (the nightly public test build) when it was installed from
+         GitHub rather than Google Play: on looking for a newer test build -->
+    <string name="settings_test_builds">Test builds</string>
+    <!-- Under "Test builds" in the list of settings pages, what that page holds -->
+    <string name="settings_test_builds_summary">Looking for a newer test build</string>
+    <!-- A switch on the "Test builds" page: on, the app asks GitHub (a website, keep its name) once a day whether a
+         newer test build is out, and says so on the list of games -->
+    <string name="settings_check_test_builds">Check for new test builds</string>
+    <!-- Under "Check for new test builds", what the switch does -->
+    <string name="settings_check_test_builds_hint">Once a day, the app asks GitHub for the newest test build\'s number and tells you when there is a newer one. It sends nothing about you.</string>
+    <!-- Words a player might search the settings for to find "Check for new test builds", besides the words of its
+         name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_check_test_builds_keywords">update, upgrade, PTB, nightly, version, download, APK</string>
 
     <!-- Asked once, the first time the app runs with TalkBack on -->
     <string name="screen_reader_offer_title">Tell games you use a screen reader?</string>

@@ -8,6 +8,7 @@ import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.theme.wallpaperColoursAvailable
+import org.mudlet.android.update.PtbUpdates
 
 /** Whose values a settings page shows and changes: one open game's, or the app's own. */
 sealed interface SettingsOwner {
@@ -53,6 +54,7 @@ data object AppSettings : SettingsOwner {
 /**
  * A page of the settings: [forGame] ones hold each game's own settings, the others the app's. Those [sharedByGames]
  * Mudlet keeps for every profile at once, so a game added has none of its own to start with ("New games" lacks them).
+ * One not [offered] is not listed: its settings mean nothing in this copy of the app.
  */
 enum class SettingsCategory(
     val forGame: Boolean,
@@ -60,6 +62,7 @@ enum class SettingsCategory(
     @StringRes val summary: Int,
     @DrawableRes val icon: Int,
     val sharedByGames: Boolean = false,
+    val offered: () -> Boolean = { true },
 ) {
     DISPLAY(true, R.string.settings_display, R.string.settings_display_summary, R.drawable.ic_text_fields),
     COLOURS(true, R.string.settings_colours, R.string.settings_colours_summary, R.drawable.ic_invert_colors),
@@ -71,6 +74,7 @@ enum class SettingsCategory(
     SECURITY(true, R.string.settings_security, R.string.settings_security_summary, R.drawable.ic_security),
     ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
+    TEST_BUILDS(false, R.string.settings_test_builds, R.string.settings_test_builds_summary, R.drawable.ic_system_update, offered = { PtbUpdates.applies }),
 }
 
 /**
@@ -590,6 +594,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_map_in_corner,
             R.string.settings_map_in_corner_hint,
             R.string.settings_map_in_corner_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.TEST_BUILDS,
+            Settings.checkTestBuilds,
+            R.string.settings_check_test_builds,
+            R.string.settings_check_test_builds_hint,
+            R.string.settings_check_test_builds_keywords,
         ),
     ).also { entries ->
         // A game's page changes the game's settings in Mudlet, which only Mudlet's own settings can be

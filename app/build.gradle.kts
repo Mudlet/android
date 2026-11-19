@@ -61,6 +61,8 @@ android {
             resValue("string", "app_name", "Mudlet")
         }
         buildConfigField("String", "SOURCE_COMMIT", "\"$sourceCommit\"")
+        // The PTB's check for a newer build from GitHub (docs/ptb.md); a constant, so R8 drops it from the stable app
+        buildConfigField("boolean", "PTB_UPDATE_CHECK", (releaseChannel == "ptb").toString())
         // The instrumented tests in src/androidTest; native/tests/android_instrumented.py runs them on a device
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -130,7 +132,8 @@ android {
 
     buildFeatures {
         compose = true
-        // BuildConfig.DEBUG keeps the self-test out of release builds; SOURCE_COMMIT is for the About screen
+        // BuildConfig.DEBUG keeps the self-test out of release builds; SOURCE_COMMIT is for the About screen;
+        // PTB_UPDATE_CHECK keeps the check for a newer test build out of the stable app
         buildConfig = true
     }
 

@@ -240,6 +240,11 @@ functionality.
   app's own files (`app/src/main/kotlin/org/mudlet/android/ui/EngineClient.kt:361-364`), and the engine drops any
   peer that is not the app's own user id (`native/enginehost/SocketBridge.cpp:42-50`). `INTERNET` and
   `ACCESS_NETWORK_STATE` are declared only for the engine service (`engine-service/src/main/AndroidManifest.xml:4-5`).
+- The one exception is Mudlet PTB installed from GitHub, which no Play listing distributes: once a day it asks GitHub's
+  API for the `ptb` pre-release, anonymously, with a User-Agent the same for every copy, to tell the player of a newer
+  build (`app/src/main/kotlin/org/mudlet/android/update/PtbUpdates.kt`, [`ptb.md`](ptb.md#a-newer-build-from-github)).
+  It sends no user data, and the answer stays on the device. The stable app has no such code (R8 drops it), and a PTB
+  that Google Play installed never asks, so neither listing's copies make the request.
 - The app's libraries are AndroidX, Compose, `org.json` and Qt (`gradle/libs.versions.toml:29-47`): no analytics,
   advertising, crash reporting or Firebase SDK.
 - The engine connects to the host and port of the profile the player opens (`MudletEngine::start`,

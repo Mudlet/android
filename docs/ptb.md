@@ -231,6 +231,35 @@ sent for review automatically; with Publishing overview's "Managed publishing" o
 Either way it installs beside Mudlet, as "Mudlet PTB", with its own profiles. Report problems as issues here.
 [`device-pass.md`](device-pass.md) is what to try on a real phone, and its report form.
 
+## A newer build from GitHub
+
+Play updates its own installs; nothing updates one from GitHub. So a PTB that Google Play did not install tells its
+player when a newer one is out (`app/src/main/kotlin/org/mudlet/android/update/`):
+
+- **Which copies.** Only the PTB has the check: `BuildConfig.PTB_UPDATE_CHECK` is true only with
+  `-PreleaseChannel=ptb`, and as a constant it lets R8 drop the network code from the stable app. Within the PTB, a
+  copy checks unless Android names Google Play (`com.android.vending`) as its installer (`getInstallSourceInfo` on
+  Android 11 and later, `getInstallerPackageName` before). An APK opened from a browser or file manager, installed by
+  adb, or by another store counts as from GitHub: Android names the package installer, the shell or nothing for
+  those, and every one of them leaves the copy with no other way to hear of a newer build. Play's own copies never
+  ask, as Play's policy allows an app no way to update but Play.
+- **When.** At most once a day, when the app comes to the front, it asks
+  `https://api.github.com/repos/Mudlet/android/releases/tags/ptb` without signing in, and reads the
+  `<!-- versionCode: N -->` line that the github-release job writes in the pre-release's notes. The time is kept
+  before it asks (`ptbLastCheck` in the `ui` SharedPreferences), so a failed or odd answer (no network, a rate limit,
+  the pre-release deleted while a run replaces it) does nothing and is not asked again until the next day.
+- **What it sends.** A plain GET with the User-Agent `Mudlet-PTB`, the same for every copy, in place of Android's,
+  which names the device's model; nothing about the player, their games or the device. The answer is never logged:
+  only its HTTP status, the error's type, or that it held no versionCode.
+- **What the player sees.** A versionCode above the installed one shows "A newer test build is available" at the top
+  of the profile list, with Download, which opens the pre-release's page in the browser, and Dismiss, after which
+  that build is not offered again (`ptbDismissedVersion`); a newer one is. The app never installs anything itself and
+  does not ask for `REQUEST_INSTALL_PACKAGES`.
+- **Turning it off.** Settings, "Test builds", "Check for new test builds" (`checkTestBuilds`, on by default): while
+  it is off the app asks nothing and shows no notice. The page is there only in a copy that checks.
+
+A rollback's rebuild (below) gets a higher versionCode, so it is offered as well.
+
 ## Rolling back
 
 Android never installs an older versionCode over a newer one, so a bad PTB is replaced by a newer build of good code:

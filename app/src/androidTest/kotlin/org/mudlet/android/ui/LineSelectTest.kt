@@ -111,8 +111,10 @@ class LineSelectTest {
         assertTrue(actionsOf(line(1)).none { it == string(R.string.console_copy_line) })
         perform(line(1), selectTo)
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { Announcer.current?.text }?.endsWith(count(3)) == true }
-        // Past the Announcer's merging of announcements close together, so a second one would show
+        // Past the Announcer's merging of announcements close together, on the device's clock, and past any delay in
+        // an effect, on the test's, so a second one would show
         SystemClock.sleep(QUIET_MS)
+        compose.mainClock.advanceTimeBy(QUIET_MS)
         val said = compose.runOnIdle { Announcer.current!! }
         assertTrue("said once: ${said.text}", said.text.endsWith(count(3)) && said.text.indexOf(count(3)) == said.text.lastIndexOf(count(3)))
         assertTrue("one announcement for the change", said.serial <= first + 1)

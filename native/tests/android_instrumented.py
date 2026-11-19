@@ -225,11 +225,12 @@ def backup_round(dev, to):
     failures = instrument(dev, f"backup-seed-{to}", APP_TESTS, APP, f"backup ({to}): the data to back up", 120,
                           "-e", "class", BACKUP_TEST + "#seed")
     shell(f"settings put secure backup_local_transport_parameters {parameters}")
-    # Android puts off the backup of an app that is running, and the engine's foreground service may still be
-    shell(f"am force-stop {APP}")
+    # No am force-stop first: it marks the package stopped, and bmgr then answers "Backup is not allowed" for it.
+    # The seed's instrumentation has already ended the app's processes.
     out = shell(f"bmgr backupnow {APP}")
     log(f"bmgr backupnow: {' '.join(out.split())}")
-    if "Success" not in out:
+    # The package manager's own "@pm@ ... Success" comes in the same output, so only the app's result counts
+    if f"Package {APP} with result: Success" not in out:
         return failures + [f"backup ({to}): bmgr backupnow did not succeed: {out.strip()}"]
     shell(f"pm clear {APP}")
     out = shell(f"bmgr restore {LOCAL_RESTORE_SET} {APP}")

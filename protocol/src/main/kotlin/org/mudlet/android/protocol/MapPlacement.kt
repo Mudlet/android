@@ -27,7 +27,7 @@ data class MapPlacement(val inFront: Boolean = false, val besideHidden: Boolean 
 
     companion object {
         /** Material's expanded window size class starts here, as the app's list and detail panes do. */
-        const val EXPANDED_WIDTH_DP = 840f
+        const val EXPANDED_WIDTH_DP = 10000f
 
         /** The narrowest the console is left beside the map, and the narrowest the map is given. */
         const val CONSOLE_LEAST_DP = 480f

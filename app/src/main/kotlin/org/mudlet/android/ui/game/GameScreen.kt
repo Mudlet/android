@@ -160,7 +160,7 @@ fun GameScreen(
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val widthDp = maxWidth.value
             val placement = MapPlacement(mapOpen, besideHidden)
-            val fits = MapPlacement.fitsBeside(widthDp, Settings.mapBesideText.value, MapPlacement.scriptMapperShown(front.windows.state.windows))
+            val fits = MapPlacement.fitsBeside(widthDp, Settings.mapBesideText.value, false)
             val place = placement.place(fits)
             val beside = place == MapPlace.BESIDE
             val onMapButton = {

@@ -35,6 +35,25 @@
                 <data android:scheme="telnet" />
                 <data android:scheme="telnets" />
             </intent-filter>
+            <!-- A profile's .zip opened with Mudlet from another app, or shared with it: MainActivity shows what it holds and
+                 imports it only once the player confirms. The types are ProfileArchive.MIME_TYPES -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-zip" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-zip" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
         </activity>
 
         <!-- Hands a shared map file, from the cache's map-files folder alone, to the app the player shares it with -->

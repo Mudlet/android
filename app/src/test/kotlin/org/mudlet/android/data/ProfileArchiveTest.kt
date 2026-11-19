@@ -125,6 +125,25 @@ class ProfileArchiveTest {
     }
 
     @Test
+    fun checksAnArchiveWithoutWritingAndSaysWhatUnpackingItWouldAdd() {
+        val bytes = zip(
+            "Desk/current/a.xml" to "save",
+            "Desk/map/m.dat" to "a map",
+            "Desk/password" to "hunter2",
+            "__MACOSX/Desk/._a.xml" to "fork",
+        )
+        val before = root.walk().toList()
+        val checked = ProfileArchive.check(ByteArrayInputStream(bytes)) as ProfileArchive.Checked.Profile
+        assertEquals("nothing written", before, root.walk().toList())
+        assertEquals(ProfileArchive.Contents("Desk", 2, "save".length + "a map".length.toLong()), checked.contents)
+
+        val unpacked = unpack(bytes) as ProfileArchive.Unpacked.Folder
+        val files = unpacked.folder.walk().filter { it.isFile }.toList()
+        assertEquals(checked.contents.files, files.size)
+        assertEquals(checked.contents.bytes, files.sumOf { it.length() })
+    }
+
+    @Test
     fun refusesAPathThatLeavesTheFolder() {
         for (name in listOf("Evil/../../outside.txt", "/etc/evil", "Evil/./a", "Evil//a", "Evil\\..\\a", "Evil/a\u0000b")) {
             assertRefused(ProfileArchive.Refusal.UNSAFE_PATH, zip("Evil/current/a.xml" to "x", name to "bad"), name)
@@ -135,8 +154,8 @@ class ProfileArchiveTest {
     @Test
     fun saysAPathAndroidRefusesLeavesTheFolderRatherThanThatItIsNotAZip() {
         // What ZipInputStream throws from API 34 at a name with a `..` segment
-        assertRefused(ProfileArchive.Refusal.UNSAFE_PATH, failingAfterAnEntry("Invalid zip entry path: Evil/../../a"))
-        assertRefused(ProfileArchive.Refusal.NOT_A_ZIP, failingAfterAnEntry("invalid entry compressed size"))
+        assertRefused(ProfileArchive.Refusal.UNSAFE_PATH, { failingAfterAnEntry("Invalid zip entry path: Evil/../../a") })
+        assertRefused(ProfileArchive.Refusal.NOT_A_ZIP, { failingAfterAnEntry("invalid entry compressed size") })
     }
 
     @Test
@@ -234,18 +253,21 @@ class ProfileArchiveTest {
         message: String = refusal.name,
         maxBytes: Long = ProfileArchive.MAX_BYTES,
         maxEntries: Int = ProfileArchive.MAX_ENTRIES,
-    ) = assertRefused(refusal, ByteArrayInputStream(bytes), message, maxBytes, maxEntries)
+    ) = assertRefused(refusal, { ByteArrayInputStream(bytes) }, message, maxBytes, maxEntries)
 
+    // Refused by unpack, and by check for the same reason, as a file opened from another app is checked before it is unpacked
     private fun assertRefused(
         refusal: ProfileArchive.Refusal,
-        input: InputStream,
+        input: () -> InputStream,
         message: String = refusal.name,
         maxBytes: Long = ProfileArchive.MAX_BYTES,
         maxEntries: Int = ProfileArchive.MAX_ENTRIES,
     ) {
-        val result = ProfileArchive.unpack(input, staging, maxBytes, maxEntries)
+        val result = ProfileArchive.unpack(input(), staging, maxBytes, maxEntries)
         assertTrue("$message: $result", result is ProfileArchive.Unpacked.Refused && result.refusal == refusal)
         assertFalse("$message left files in staging", staging.exists() && staging.list()!!.isNotEmpty())
+        val checked = ProfileArchive.check(input(), maxBytes, maxEntries)
+        assertTrue("$message, checked: $checked", checked is ProfileArchive.Unpacked.Refused && checked.refusal == refusal)
     }
 
     /** A zip whose first entry is written, after which reading throws a ZipException saying [why]. */

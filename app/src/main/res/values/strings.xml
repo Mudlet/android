@@ -200,7 +200,7 @@
     <string name="profile_copy_failed">Could not copy the profile: %1$s</string>
     <!-- The profile list's button that adds a profile from a .zip file (one exported here, or desktop Mudlet's profile folder zipped), picked in Android's file picker -->
     <string name="profiles_import">Import a profile</string>
-    <!-- Shown while the picked .zip file is unpacked and checked, before the player names the profile -->
+    <!-- Shown while a .zip file, picked or opened with Mudlet from another app, is read and checked, before the player names the profile -->
     <string name="profile_import_unpacking">Reading the file…</string>
     <!-- Shown while the unpacked profile is added -->
     <string name="profile_importing">Importing…</string>
@@ -218,8 +218,21 @@
     <string name="profile_import_name_rules">Use only the letters A to Z, digits, spaces and . _ ( ) - # &amp;, with no space at either end and no two dots together.</string>
     <!-- The import dialog's button that adds the profile under the name typed -->
     <string name="profile_import">Import</string>
-    <!-- The import dialog's button that drops the unpacked profile without adding it -->
+    <!-- The import dialog's button that drops the profile in the file without adding it -->
     <string name="profile_import_cancel">Cancel</string>
+    <!-- Shown when importing a profile failed because Android no longer lets Mudlet read the file, as when the app it came from has ended -->
+    <string name="profile_import_no_access">Mudlet may no longer read the file. Open it again.</string>
+    <!-- The title of the dialogs shown when another app opens a .zip file with Mudlet or shares one with it: while it is read and checked, and once its import has ended -->
+    <string name="profile_file_title">Import a profile</string>
+    <!-- In the import dialog for a .zip file another app opened with Mudlet, under what an import adds: how many files it adds; %2$s is their size, such as 2.5 MB -->
+    <plurals name="profile_file_contents">
+        <item quantity="one">%1$d file, %2$s</item>
+        <item quantity="other">%1$d files, %2$s</item>
+    </plurals>
+    <!-- The button that closes the dialog saying how importing a .zip file another app opened with Mudlet ended -->
+    <string name="profile_file_ok">OK</string>
+    <!-- Shown briefly when another app opens a .zip file with Mudlet while an import is still being read or written; nothing is done with the new file -->
+    <string name="profile_file_busy">Another profile is being imported. Open the file again once that has ended.</string>
     <!-- Why a picked file was not imported: it cannot be read as a .zip -->
     <string name="profile_import_not_a_zip">This is not a .zip file, or it is damaged or empty.</string>
     <!-- Why a picked .zip was not imported: the tool that made it wrote a file name in an encoding it does not name (not UTF-8), as some do for names with accented letters -->

@@ -464,6 +464,18 @@ the settings of its newest save. The copy is made in the cache and moved among t
 a folder it did not make only then. A password goes to the copy only if the player turns that on in the dialog that
 names it, where it is stored again under the copy's name (`docs/divergences.md`, "A copy of a profile").
 
+The profile list's Import (`ui/profiles/ProfileImport.kt`) unpacks a picked `.zip` in the cache with
+`ProfileArchive.unpack`'s checks (one folder, no path out of it, a `current/` save, at most 2 GiB and 50000 files, the
+password files left out), asks for a name no profile has, and moves the folder among the profiles whole
+(`ProfileArchive.install`). Another app can also open a `.zip` with Mudlet or share one with it (`MainActivity`'s
+VIEW and SEND filters, by `ProfileArchive.MIME_TYPES`; `ui/profiles/OpenWith.kt` tells a file from a `telnet://`
+link). As any app can send one unasked, nothing of it is written until the player confirms: `ProfileArchive.check`
+reads it through with the same checks and writes nothing, the dialog (`OpenedProfileFile`) shows the profile's name,
+its files and their size and asks for the name, and only then is it unpacked, checked again, and installed. A file
+opened in another app's task is passed on to the app's own with the grant to read it. Neither the file's URI nor its
+contents are logged: a refusal logs only its kind. `OpenZipTest` sends both as a file manager does and
+`OpenZipPseudoLocaleTest` checks the dialogs in en-XA and ar-XB.
+
 The self-test's Connect saves and opens the profile `Self-test` at the address typed. `openProfile` connects a running
 profile only while it is not connected, so to connect it elsewhere, disconnect it first. `SmokeTestReceiver`'s
 `connect` stores a password and opens a profile as the profile list does.
@@ -2047,6 +2059,9 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       host:port with your profile name?", TalkBack reads it, and Connect logs in as Connect on the list does; Cancel
       connects nothing. A link to another address opens "New game" filled in from it, with the note to check the
       address; nothing is saved until Save. `telnet://host:0` says it is not a game's address.
+    - Export a profile, then open the `.zip` with Mudlet from a file manager, and share it with Mudlet from another
+      app: the app shows "Import <name>" with how many files and how large, TalkBack reads it, and nothing is added
+      until Import; Cancel adds nothing. A file that is not a profile's `.zip` says why it was not imported.
     - In a saved game's editor, tap Open offline: the game screen shows the game not connected, its scripts and
       settings can be changed, and Connect logs in with the stored password.
     - After a refused save (a name with a `/`, say), TalkBack reads the engine's reason without moving focus.

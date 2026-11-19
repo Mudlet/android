@@ -1,11 +1,13 @@
 package org.mudlet.android.ui.game
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,7 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -73,7 +77,10 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.protocol.EngineMessage
+import org.mudlet.android.protocol.LineSelection
+import org.mudlet.android.protocol.LinkSpan
 import org.mudlet.android.protocol.concealLinks
+import org.mudlet.android.protocol.copiedLines
 import org.mudlet.android.protocol.linkRuns
 import org.mudlet.android.protocol.linkSpans
 import org.mudlet.android.protocol.matchStarts
@@ -89,6 +96,9 @@ private const val TAIL_KEY = "tail"
 // Desktop Mudlet's timestamps' colour, QColor(200, 150, 0), on the console's background
 private val TIME_STAMP_COLOR = Color(0xFFC89600)
 private val CONSOLE_SIDE_PADDING = 4.dp
+
+// A selected line's background: the text's own colour, faint enough that the line's colours still read over it
+private const val SELECTED_ALPHA = 0.3f
 
 // The keyboard and a pinch resize the console in many small steps: only where it comes to rest goes to the game
 private const val SCREEN_SIZE_SETTLE_MS = 200L
@@ -111,6 +121,11 @@ private const val CELLS_MEASURED = 100
  *
  * A long press on a line, but on a link with a menu, which opens that, offers to copy or share the line as it reads,
  * and to hand its text to [onMakeTrigger], to make a trigger from; TalkBack has actions to copy it and make the trigger.
+ *
+ * That menu, and TalkBack's action "Select from here", also start a selection of whole lines at the line; while one is
+ * open a tap on a line, or TalkBack's action "Select to here", takes it to that line, and [LineSelectionBar] copies or
+ * shares the lines, joined as desktop's copy joins them. Each line reads whether it is selected for itself, so a change
+ * draws again only the lines it changes.
  *
  * Each match of [searchQuery] is drawn as desktop's search draws it, and the list goes to [searchFound], the number of
  * the line a search found, each time a search finds one.
@@ -213,8 +228,11 @@ fun Console(
     // The caret's line by its number, firstLine plus its index; -1 until it moves, for the last line as lines come
     var caretAt by remember { mutableLongStateOf(-1L) }
     val lastIndex = (itemCount - 1).coerceAtLeast(0)
+    val lineAt = { i: Int -> if (i < lineCount) lines.getOrNull(i) else tail }
+    // A line from before a new engine instance names links that instance does not hold; the tail is its own
+    val linksOf = { i: Int -> links?.takeIf { i >= lineCount || firstLine + i >= it.firstLine } }
     // A line a script deleted is not drawn, so it has no node to take the focus
-    val notDrawn = { i: Int -> (if (i < lineCount) lines.getOrNull(i) else tail)?.deleted != false }
+    val notDrawn = { i: Int -> lineAt(i)?.deleted != false }
     val caretFrom = if (caretAt < 0) lastIndex else (caretAt - firstLine).coerceIn(0L, lastIndex.toLong()).toInt()
     val caretIndex = HardwareKeys.caretStop(caretFrom, caretFrom, lastIndex, notDrawn)
     val caretFocus = remember { FocusRequester() }
@@ -264,6 +282,15 @@ fun Console(
         true
     }
 
+    val selectionState = rememberSaveable(stateSaver = LineSelectionSaver) { mutableStateOf<LineSelection?>(null) }
+    val selecting by remember { derivedStateOf { selectionState.value != null } }
+    BackHandler(enabled = selecting) { selectionState.value = null }
+    val selectedBackground = colors.foreground.copy(alpha = SELECTED_ALPHA)
+    // Room above the lines for the selection's bar, so the first line can be scrolled out from under it; the list keeps
+    // its size, which the game is told
+    var selectionBarHeight by remember { mutableIntStateOf(0) }
+    val selectionBarRoom = if (selecting) with(density) { selectionBarHeight.toDp() } else 0.dp
+
     Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
         behindText()
         LazyColumn(
@@ -278,15 +305,19 @@ fun Console(
                 }
             },
             state = listState,
-            contentPadding = PaddingValues(horizontal = CONSOLE_SIDE_PADDING),
+            contentPadding = PaddingValues(start = CONSOLE_SIDE_PADDING, top = selectionBarRoom, end = CONSOLE_SIDE_PADDING),
         ) {
             // Each line's key is its number, so the lines in view stay put as the oldest are dropped
             items(itemCount, key = { i -> if (i < lineCount) firstLine + i else TAIL_KEY }) { i ->
                 val line = if (i < lineCount) lines.getOrNull(i) ?: return@items else tail ?: return@items
                 if (line.deleted) return@items
+                // The tail is numbered as the line after the last
+                val number = firstLine + i
+                val selected by remember(number) { derivedStateOf { selectionState.value?.contains(number) == true } }
+                val selectFrom = remember(number) { { selectionState.value = LineSelection(number, number) } }
+                val selectTo = remember(number) { { selectionState.value = selectionState.value?.extendTo(number) } }
                 val spans = remember(line) { linkSpans(line.runs, line.text.length) }
-                // A line from before a new engine instance names links that instance does not hold; the tail is its own
-                val held = links?.takeIf { spans.isNotEmpty() && (i >= lineCount || firstLine + i >= it.firstLine) }
+                val held = linksOf(i)?.takeIf { spans.isNotEmpty() }
                 // Read here, so a new answer draws the line again in the link's new look
                 val answers = held?.let { l -> spans.map { l.info(it.link) } }.orEmpty()
                 val painted = remember(line, answers) { held?.let { line.paintedAs(it::info) } ?: line }
@@ -298,7 +329,7 @@ fun Console(
                 } else {
                     remember(painted, colors, searchQuery) { ansiText(painted, colors).withMatches(line.text, searchQuery) }
                 }
-                val plain = remember(line, answers) { held?.let { concealLinks(line.text, spans, it::info) } ?: line.text }
+                val plain = remember(line, answers) { line.readAs(spans, held) }
                 val lineLinks = held?.let { l ->
                     val changes = l.changes
                     LaunchedEffect(spans, changes) { for (span in spans) l.request(span.link) }
@@ -308,6 +339,12 @@ fun Console(
                 // The app's own markers are not the game's text: no trigger sees them
                 val makeTrigger = remember(line, onMakeTrigger) { onMakeTrigger?.takeUnless { line.marker }?.let { make -> { make(line.text) } } }
                 val stamp = if (timeStamps && line.time > 0) remember(line.time) { timeStamp(line.time) } else null
+                // While selecting, a tap on a line takes the selection there, rather than following a link or opening a menu
+                val selectionLook = if (selecting) {
+                    Modifier.background(if (selected) selectedBackground else Color.Transparent).pointerInput(number) { detectTapGestures(onTap = { selectTo() }) }
+                } else {
+                    Modifier
+                }
                 val caretHere = if (caret && i == caretIndex) {
                     // One node for TalkBack with the line's text and actions, which sit on a child of a line with a menu
                     Modifier.focusRequester(caretFocus).focusable().semantics(mergeDescendants = true) {}.border(1.dp, colors.foreground)
@@ -315,18 +352,44 @@ fun Console(
                     Modifier
                 }
                 val consoleLine = @Composable { m: Modifier ->
-                    ConsoleLine(text, plain, style, m, color = colors.foreground, links = lineLinks, onMakeTrigger = makeTrigger, copyable = true, readingPrefix = stamp.orEmpty())
+                    ConsoleLine(
+                        text,
+                        plain,
+                        style,
+                        m,
+                        color = colors.foreground,
+                        links = lineLinks.takeUnless { selecting },
+                        onMakeTrigger = makeTrigger.takeUnless { selecting },
+                        copyable = !selecting,
+                        readingPrefix = stamp.orEmpty(),
+                        selected = selected,
+                        onSelectFrom = selectFrom.takeUnless { selecting },
+                        onSelectTo = selectTo.takeIf { selecting },
+                    )
                 }
                 if (stamp == null) {
-                    consoleLine(Modifier.fillMaxWidth().then(caretHere))
+                    consoleLine(Modifier.fillMaxWidth().then(caretHere).then(selectionLook))
                 } else {
-                    Row(Modifier.fillMaxWidth().then(caretHere)) {
+                    Row(Modifier.fillMaxWidth().then(caretHere).then(selectionLook)) {
                         // Read as the start of the line's own node, so TalkBack does not stop on the time apart
                         Text(stamp, Modifier.clearAndSetSemantics {}, color = TIME_STAMP_COLOR, style = style, softWrap = false)
                         consoleLine(Modifier.weight(1f))
                     }
                 }
             }
+        }
+        if (selecting) {
+            LineSelectionBar(
+                selectionState,
+                countOf = { s -> s.indicesIn(firstLine, itemCount).count { !notDrawn(it) } },
+                textOf = { s ->
+                    copiedLines(s, firstLine, itemCount) { i ->
+                        lineAt(i)?.takeUnless { it.deleted }?.let { it.readAs(linkSpans(it.runs, it.text.length), linksOf(i)) }
+                    }
+                },
+                onClose = { selectionState.value = null },
+                Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { selectionBarHeight = it.height },
+            )
         }
         if (!following) {
             val newLines = (linesAdded - seenUpTo).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
@@ -351,6 +414,9 @@ private fun AnnotatedString.withMatches(plain: String, query: String): Annotated
     if (starts.isEmpty()) return this
     return AnnotatedString.Builder(this).apply { for (start in starts) addStyle(SEARCH_MATCH, start, start + query.length) }.toAnnotatedString()
 }
+
+// The line as it reads with the links [held] knows of: a concealed one as blanks
+private fun UiLine.readAs(spans: List<LinkSpan>, held: ConsoleLinksClient?): String = held?.let { concealLinks(text, spans, it::info) } ?: text
 
 // The line with its links painted as the engine last said they are
 private fun UiLine.paintedAs(info: (Int) -> EngineMessage.Link?): UiLine {

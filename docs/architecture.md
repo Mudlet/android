@@ -574,6 +574,19 @@ line" and the trigger (`ConsoleLine`, `copyable`); TalkBack has "Copy line" as t
 it reads, a concealed link as blanks; a blank line offers neither. Copying goes through `copyText()` and sharing
 through `shareText()` (`ui/ShareText.kt`), as the problem report's buttons do. Script windows offer neither yet.
 
+The same menu's "Select from here", also TalkBack's action on each line with text, starts a selection of whole lines
+there; while it is open a tap on another line, or TalkBack's "Select to here" on it, takes the selection from the first
+line to that one; a tap on a link then does not follow it. The selected lines are drawn on a faint wash of the
+text's colour, and TalkBack reads each as selected. A bar over the top of the console counts them, which TalkBack says
+once each time the selection changes, and has Copy, Share and a close button; Copy and Share end the selection, as
+Back does. The lines are copied as desktop's `TTextEdit::getSelectedText()` joins them for its copy: as each reads, a
+line feed between two and none after the last, without timestamps, and a line a script deleted left out
+(`LineSelection` and `copiedLines()` in `:protocol`, tested on the JVM). Text over `MOST_COPIED_CHARS` is neither
+copied nor shared, and a message asks for fewer lines: Android hands it over in one binder transaction, which a longer
+text would overflow, crashing the app. The selection is kept by line number, so it
+stays on its lines as new ones come, and closes once the scrollback has dropped all of them. Each line reads whether it
+is selected through a `derivedStateOf` of its own, so a change composes again only the lines whose state it changes.
+
 ### Lines a script changes
 A script's `replace()`, `setFgColor()`, `setLink()` or `deleteLine()` on a main console line already shown comes as a
 `lineUpdated` of its `seq`, which `ProfileSession` applies where the line stands (`applyLineUpdates` in `:protocol`,

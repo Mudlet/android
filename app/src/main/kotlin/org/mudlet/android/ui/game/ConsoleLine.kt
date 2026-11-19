@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
@@ -74,6 +75,9 @@ internal class LineLinks(
  * as it reads, and TalkBack offers making the trigger and copying the line as actions.
  *
  * TalkBack reads [readingPrefix], drawn beside the line by its caller, before [plain]; a copy leaves it out.
+ *
+ * With [onSelectFrom], that menu also offers to start a selection of lines at this one, as TalkBack's action "Select from
+ * here" does; [onSelectTo] is TalkBack's action that takes a selection to this line. A [selected] line says so.
  */
 @Composable
 internal fun ConsoleLine(
@@ -88,6 +92,9 @@ internal fun ConsoleLine(
     onMakeTrigger: (() -> Unit)? = null,
     copyable: Boolean = false,
     readingPrefix: String = "",
+    selected: Boolean = false,
+    onSelectFrom: (() -> Unit)? = null,
+    onSelectTo: (() -> Unit)? = null,
 ) {
     val space = stringResource(R.string.console_blank_line_space)
 
@@ -104,6 +111,7 @@ internal fun ConsoleLine(
             else -> hideFromAccessibility()
         }
         if (actions.isNotEmpty()) customActions = actions
+        if (selected) this.selected = true
     }
 
     val spans = links?.spans.orEmpty()
@@ -111,9 +119,18 @@ internal fun ConsoleLine(
     val makeTrigger by rememberUpdatedState(onMakeTrigger?.takeIf { plain.isNotBlank() })
     val offersTrigger = makeTrigger != null
     val offersCopy = copyable && plain.isNotBlank()
-    val offersLineMenu = offersTrigger || offersCopy
+    val selectFrom by rememberUpdatedState(onSelectFrom?.takeIf { plain.isNotBlank() })
+    val offersSelect = selectFrom != null
+    val offersLineMenu = offersTrigger || offersCopy || offersSelect
+    val selectToLabel = stringResource(R.string.console_select_to_here)
+    val selectToAction = onSelectTo?.takeIf { plain.isNotBlank() }?.let { selectTo ->
+        CustomAccessibilityAction(selectToLabel) {
+            selectTo()
+            true
+        }
+    }
     if (spans.isEmpty() && !offersLineMenu) {
-        LineText(text, modifier.then(read(emptyList())), color, style, singleLine)
+        LineText(text, modifier.then(read(listOfNotNull(selectToAction))), color, style, singleLine)
         return
     }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -148,6 +165,11 @@ internal fun ConsoleLine(
         copyLine()
         true
     }.takeIf { offersCopy }
+    val selectFromLabel = stringResource(R.string.console_select_from_here)
+    val selectFromAction = CustomAccessibilityAction(selectFromLabel) {
+        selectFrom?.invoke()
+        true
+    }.takeIf { offersSelect }
 
     fun spanAt(position: Offset): LinkSpan? {
         val character = layout?.characterAt(position, plain.length) ?: return null
@@ -174,7 +196,7 @@ internal fun ConsoleLine(
     val openInfo = open?.let { links?.info(it.link) }?.takeIf { it.menu }
     if (open != null && (openSpan == null || openInfo == null)) SideEffect { menu = null }
     Box(modifier) {
-        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction, copyAction))), color, style, singleLine) { layout = it }
+        LineText(text, Modifier.fillMaxWidth().then(touches).then(read(linkActions + listOfNotNull(triggerAction, copyAction, selectFromAction, selectToAction))), color, style, singleLine) { layout = it }
         if (open != null && openSpan != null && openInfo != null) {
             LinkMenuView(openInfo, open.x, linkLabel(openInfo, plain.substring(openSpan.start, openSpan.end)), ::follow) { menu = null }
         }
@@ -193,6 +215,15 @@ internal fun ConsoleLine(
                         onClick = {
                             lineMenuAt = null
                             shareLine()
+                        },
+                    )
+                }
+                if (offersSelect) {
+                    DropdownMenuItem(
+                        text = { Text(selectFromLabel) },
+                        onClick = {
+                            lineMenuAt = null
+                            selectFrom?.invoke()
                         },
                     )
                 }

@@ -56,9 +56,8 @@ internal fun LineSelectionBar(
     val count = countOf(current)
     val countText = pluralStringResource(R.plurals.console_selection_count, count, count)
     LaunchedEffect(current) {
-        Announcer.announce(countText, assertive = false)
-        kotlinx.coroutines.delay(300) // BITE: said twice
-        Announcer.announce(countText, assertive = false)
+        // BITE: said twice
+        repeat(2) { Announcer.announce(countText, assertive = false) }
     }
     LaunchedEffect(count == 0) { if (count == 0) onClose() }
     val context = LocalContext.current

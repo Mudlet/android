@@ -316,7 +316,7 @@ internal fun unpackProfile(context: Context, uri: Uri): ImportState = try {
 /** Reads the file at [uri] through, making the import's checks, and offers what it holds; nothing is written. */
 internal fun checkProfile(context: Context, uri: Uri): ImportState = try {
     val folders = ProfileArchive.profilesDir(context.filesDir).list().orEmpty().asList()
-    val input = openFile(context, uri)
+    val input = File(stagingRoot(context).apply { mkdirs() }, "opened.zip").also { copy -> openFile(context, uri).use { from -> copy.outputStream().use { from.copyTo(it) } } }.inputStream()
     when (val checked = input.use { ProfileArchive.check(it) }) {
         is ProfileArchive.Checked.Profile -> ImportState.Offered(uri, checked.contents, folders)
         is ProfileArchive.Unpacked.Refused -> refused(checked)

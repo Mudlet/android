@@ -1679,6 +1679,11 @@
     <string name="map_zoom_in">Zoom in on the map</string>
     <!-- The map's button, read by a screen reader, that zooms out -->
     <string name="map_zoom_out">Zoom out of the map</string>
+    <!-- A small button in a corner of a small map, read by a screen reader, that shows the map's controls (zoom, area,
+         level and more) under or over the map -->
+    <string name="map_controls_show">Show the map\'s controls</string>
+    <!-- The same small button while the map's controls show, read by a screen reader: it puts them away again -->
+    <string name="map_controls_hide">Hide the map\'s controls</string>
     <!-- The map's state, read by a screen reader, while the player has moved the map away from their character, so it no
          longer follows them as they walk; %1$s is the state otherwise read, Viewing or Editing -->
     <string name="map_not_following">%1$s, not following you</string>
@@ -1895,7 +1900,7 @@
     <string name="app_map_corner_room">Small map of %1$s, you are in %2$s</string>
     <!-- What a screen reader says a double tap on the small map in the corner does: it brings the map to the front -->
     <string name="app_map_corner_open">Open the map</string>
-    <!-- The button beside the small map in the corner, read by a screen reader, that hides it -->
+    <!-- The button among the small map in the corner's controls, read by a screen reader, that hides the small map -->
     <string name="app_map_corner_hide">Hide the small map</string>
     <!-- Shown for a few seconds at the bottom of the game screen once the player hid the small map in the corner, with
          a button that shows it again; %1$s is the name of the switch in the settings that shows it again, "Map in the

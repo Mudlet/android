@@ -182,6 +182,7 @@ class ScriptMapTest {
     fun theZoomButtonsZoomAboutTheMiddleAndAPinchAboutTheFingersWithinTheEnginesBounds() {
         showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
+        openControls()
         val zoomIn = hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()
         val zoomOut = hasContentDescription(string(R.string.map_zoom_out)) and hasClickAction()
         val min = with(compose.density) { 48.dp.toPx() }
@@ -225,6 +226,7 @@ class ScriptMapTest {
     fun aDragPansTheMapUntilTheButtonCentresItOnThePlayerAgain() {
         showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
+        openControls()
         val scale = shownScale(bounds(map))
         val read = session.received.size
         // Slowly, and still before it is let go, so it does not glide on
@@ -268,6 +270,7 @@ class ScriptMapTest {
     fun theMapInfoIsTextUnderTheButtonsThatTalkBackReadsAsOneAndCoversNoneOfTheMap() {
         showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
+        openControls()
         val colour = """"bold":false,"italic":false,"color":"#000080""""
         val parts = """[{"text":"Great Hall / 7 (Castle)\n",$colour},{"text":" \n",$colour},{"text":"HP 12","bold":true,"italic":true,"color":"#800000"}]"""
 
@@ -334,6 +337,7 @@ class ScriptMapTest {
     fun talkBackScrollsTheMapAndCentresItOnThePlayerAndARefusalIsShownWithIt() {
         showMap(mapView(MAP_W, MAP_H))
         val map = drawnMap()
+        openControls()
         fun actions() = compose.onNode(map).fetchSemanticsNode().config[SemanticsActions.CustomActions]
 
         // Found off the main thread, which may not wait for the screen to settle, and run on it
@@ -366,6 +370,7 @@ class ScriptMapTest {
     fun theSwitchEditsTheMapAndReadsWhatTheEngineSaysItIs() {
         showMap()
         val map = drawnMap()
+        openControls()
         val edit = hasContentDescription(string(R.string.map_edit)) and hasClickAction()
         compose.onNode(edit).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
         val touch = touchBounds(edit)
@@ -440,6 +445,7 @@ class ScriptMapTest {
         session.windows(listOf(mapper()), full = true)
         val undrawn = hasContentDescription(string(R.string.map_not_drawn))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(undrawn).fetchSemanticsNodes().isNotEmpty() }
+        openControls()
         compose.onNode(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()).assertIsNotEnabled()
         compose.onNode(hasContentDescription(string(R.string.map_edit)) and hasClickAction()).assertIsNotEnabled()
         compose.onRoot().tryPerformAccessibilityChecks()
@@ -955,6 +961,13 @@ class ScriptMapTest {
         .apply { if (view != null) put("view", view) }
 
     private fun followButton() = hasContentDescription(string(R.string.map_follow)) and hasClickAction()
+
+    // The map's panel, which a map drawn in a corner shows only once its button is pressed
+    private fun openControls() {
+        val show = hasContentDescription(string(R.string.map_controls_show)) and hasClickAction()
+        if (compose.onAllNodes(show).fetchSemanticsNodes().isNotEmpty()) activate(show)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasContentDescription(string(R.string.map_zoom_in)) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+    }
 
     // The screen's pixels to each of the frame's, in the map's node of [bounds]
     private fun shownScale(bounds: Rect): Double = min(bounds.width / MAP_W, bounds.height / MAP_H).toDouble()

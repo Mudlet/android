@@ -144,6 +144,12 @@ abstract class AppMapCornerFixture(protected val screen: Screen) {
 
     protected fun button(@StringRes label: Int) = hasContentDescription(string(label)) and hasClickAction()
 
+    /** The map's panel, which shows only once the small button over the map is pressed. */
+    protected fun openControls() {
+        activate(button(R.string.map_controls_show))
+        waitFor(button(R.string.map_controls_hide))
+    }
+
     /** Where the one-line text [text] is drawn, not the console's whole width its line takes. */
     protected fun drawnText(text: String): Rect {
         val node = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes()
@@ -209,8 +215,9 @@ abstract class AppMapCornerFixture(protected val screen: Screen) {
 /**
  * The app's own map in the console's corner (docs/architecture.md, "The map in the corner") on the screens of [screen],
  * against a fake engine: where the console has room, the map at its top right, grown as a script's small mapper is,
- * none of its panel over it, each button touched within 48 dp, TalkBack reading it after the console, then its panel,
- * and the text of the console's newest line clear of the map and its panel; none while a script's mapper, the map in
+ * its panel shown once the small button at the map's top right is pressed, none of it over the map, each button
+ * touched within 48 dp, TalkBack reading the map after the console, then the button, then the panel, and the text of
+ * the console's newest line clear of the map and its panel; none while a script's mapper, the map in
  * front or the map behind the text shows, a script's window is where it would be, or the game has no rooms; hidden and
  * shown again, which is kept; and a tap on it bringing the map to the front, which the screen's size does not change
  * and [AppMapCornerOnThePhoneTest] tests.
@@ -242,6 +249,14 @@ class AppMapCornerTest(screen: AppMapCornerFixture.Screen) : AppMapCornerFixture
         assertEquals("$screen: the map $drawn is at the top of $console", console.top, drawn.top, 1f)
         assertEquals("$screen: the map $drawn is at the right of $console", console.right, drawn.right, 1f)
 
+        val reach = 48 * dp - 1
+        val toggle = compose.onNode(button(R.string.map_controls_show)).fetchSemanticsNode().touchBoundsInRoot
+        assertTrue("$screen: the controls' button is touched within $toggle", toggle.width >= reach && toggle.height >= reach)
+        assertEquals("$screen: the controls' button $toggle is not at the top of the map $drawn", drawn.top, toggle.top, 1f)
+        assertEquals("$screen: the controls' button $toggle is not at the right of the map $drawn", drawn.right, toggle.right, 1f)
+        assertTrue("$screen: the panel shows before it is asked for", compose.onAllNodes(button(R.string.map_zoom_out)).fetchSemanticsNodes().isEmpty())
+        openControls()
+
         val panel = listOf(
             "zoom out" to button(R.string.map_zoom_out),
             "zoom in" to button(R.string.map_zoom_in),
@@ -250,7 +265,6 @@ class AppMapCornerTest(screen: AppMapCornerFixture.Screen) : AppMapCornerFixture
             "area" to (hasText(string(R.string.map_area, AREA)) and hasClickAction()),
         )
         assertTrue("$screen: the map in the corner is not edited", compose.onAllNodes(button(R.string.map_edit)).fetchSemanticsNodes().isEmpty())
-        val reach = 48 * dp - 1
         val covering = ArrayList<Rect>()
         for ((name, button) in panel) {
             compose.onNode(button).performScrollTo()
@@ -259,15 +273,17 @@ class AppMapCornerTest(screen: AppMapCornerFixture.Screen) : AppMapCornerFixture
             assertTrue("$screen: $name is touched within $touch", touch.width >= reach && touch.height >= reach)
             covering.add(touch)
         }
-        // What of the panel shows, as it scrolls
-        covering.add(compose.onAllNodes(hasScrollAction() and hasAnyDescendant(button(R.string.map_zoom_out))).fetchSemanticsNodes().minBy { it.size.width * it.size.height }.boundsInRoot)
+        // What of the panel shows, as it scrolls: as wide as the map, or as three buttons where the map is narrower
+        val shown = compose.onAllNodes(hasScrollAction() and hasAnyDescendant(button(R.string.map_zoom_out))).fetchSemanticsNodes().minBy { it.size.width * it.size.height }.boundsInRoot
+        assertTrue("$screen: the panel $shown is wider than the map $drawn", shown.width <= maxOf(drawn.width, MapCorner.PANEL_WIDTH_DP * dp) + 1)
+        covering.add(shown)
         compose.onNode(hasText(NEWEST_LINE)).assertIsDisplayed()
         val newest = drawnText(NEWEST_LINE)
         for (rect in covering + drawn) assertFalse("$screen: the newest line $newest is under $rect", newest.overlaps(rect))
 
-        // Where a script's mapper would be read: after the console, then its panel. A panel taller than its room
+        // Where a script's mapper would be read: after the console, then its button and its panel. A panel taller than its room
         // scrolls, and TalkBack scrolls it to reach the rest: read at its top, then its end
-        val expected = listOf("the title bar's map button" to button(R.string.app_map_show), "the newest line" to hasText(NEWEST_LINE), "the map in the corner" to corner) + panel
+        val expected = listOf("the title bar's map button" to button(R.string.app_map_show), "the newest line" to hasText(NEWEST_LINE), "the map in the corner" to corner, "the controls' button" to button(R.string.map_controls_hide)) + panel
         val readings = listOf(panel.first().second, panel.last().second).map { end ->
             compose.onNode(end).performScrollTo()
             val reading = TalkBackReading(compose)

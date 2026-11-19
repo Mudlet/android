@@ -1,6 +1,5 @@
 package org.mudlet.android.ui.game
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.VectorConverter
@@ -53,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -277,26 +277,15 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
 @Composable
 internal fun CornerMap(corner: MapCorner, density: Density, modifier: Modifier, map: @Composable (Modifier) -> Unit, panel: @Composable (Modifier) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = open) { open = false }
     val bounds = corner.bounds
     val mapRect = corner.map.from(bounds)
     Box(Modifier.fillMaxSize()) {
-        if (open) {
-            Box(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown().consume()
-                        open = false
-                    }
-                },
-            )
-        }
         // No touch handler here, so that touches between the map and the panel, and on the room the panel leaves empty,
         // are touches elsewhere
         Box(Modifier.placeAt(bounds, density).then(modifier)) {
             map(Modifier.placeAt(mapRect, density).readAsOne(0f))
             Box(Modifier.placeAt(mapRect, density)) {
-                MapControlsButton(open, { open = !open }, Modifier.align(if (corner.right) Alignment.TopEnd else Alignment.TopStart).readAt(1f))
+                MapControlsButton(open, { open = true }, Modifier.align(if (corner.right) AbsoluteAlignment.TopRight else AbsoluteAlignment.TopLeft).readAt(1f))
             }
             if (open) {
                 Box(Modifier.placeAt(corner.panel.from(bounds), density)) {

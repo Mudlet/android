@@ -35,6 +35,8 @@ TRIGGERS = [r"^You (\w+) (?:a|an|the) (\w+)", r"(\w+) tells you", r"\bfireball\b
             r"^Exits: (.+)", r"is DEAD!", r"You feel (\w+)", r"flees? (\w+)", r"^(\w+) arrives", r"grazing your (\w+)",
             r"^You (?:dodge|parry|block)"] * 2
 COLOURED = r"critical damage"
+# What the fake game was asked and sent, for a spam that never ends
+GAME = {"commands": [], "sent": 0}
 
 
 def combat_line(rng, k):
@@ -63,6 +65,7 @@ def game(conn):
         while b"\n" in buf:
             line, buf = buf.split(b"\n", 1)
             words = line.strip().split()
+            GAME["commands"].append(line[-40:])
             if len(words) == 3 and words[0] == b"spam":
                 spam(conn, rng, int(words[1]), int(words[2]))
 
@@ -80,6 +83,7 @@ def spam(conn, rng, n, rate):
             chunk += bytes([IAC, GA]) if prompt else b"\r\n"
             k += 1
         conn.sendall(chunk)
+        GAME["sent"] = k
         if rate:
             delay = start + k / rate - time.perf_counter()
             if delay > 0:
@@ -135,7 +139,7 @@ class Engine:
 
     def spam(self, lines, rate):
         """Delays in microseconds of the lines read, and the lines the engine skipped as gaps."""
-        delays, skipped = [], 0
+        delays, skipped, frames, texts = [], 0, {}, []
         cpu = cpu_seconds(self.proc.pid)
         start = time.perf_counter()
         self.client.send({"t": "send", "text": f"spam {lines} {rate}"})
@@ -143,14 +147,21 @@ class Engine:
         deadline = time.monotonic() + allowed
         while True:
             if time.monotonic() > deadline:
-                raise TimeoutError(f"SPAM DONE did not come within {allowed:.0f} s")
+                raise TimeoutError(f"SPAM DONE did not come within {allowed:.0f} s{self.seen(frames, texts)}")
             raw = self.client.next_raw(30)
             if raw is None:
-                raise TimeoutError("the spam stopped")
+                raise TimeoutError(f"the spam stopped{self.seen(frames, texts)}")
             now = time.monotonic_ns()
             if b'"t":"line"' not in raw and b'"t":"gap"' not in raw:
+                kind = raw[raw.find(b'"t":"') + 5:][:20].split(b'"', 1)[0].decode("utf-8", "replace")
+                frames[kind] = frames.get(kind, 0) + 1
+                if kind in ("tail", "status", "error"):
+                    texts = (texts + [raw[:200].decode("utf-8", "replace")])[-6:]
                 continue
             m = json.loads(raw)
+            frames[m["t"]] = frames.get(m["t"], 0) + 1
+            if m["t"] == "line":
+                texts = (texts + [m["text"][:120]])[-6:]
             if m["t"] == "gap":
                 skipped += m["skipped"]
             elif m["text"] == "SPAM DONE":
@@ -160,6 +171,12 @@ class Engine:
                 delays.append((now - int(m["text"].rsplit(" ~", 1)[1])) / 1000)
         return dict(seconds=time.perf_counter() - start, cpu=cpu_seconds(self.proc.pid) - cpu, delays=delays,
                     skipped=skipped)
+
+    def seen(self, frames, texts):
+        with open(os.path.join(self.dir, "engine.log"), "rb") as f:
+            log = f.read()[-3000:].decode("utf-8", "replace")
+        return (f"\nframes: {frames}\nlast: {texts}\ngame asked {GAME['commands'][-3:]}, sent {GAME['sent']} lines"
+                f"\nengine running: {self.proc.poll() is None}\nengine.log ends:\n{log}")
 
     def stop(self):
         self.client.close()

@@ -260,6 +260,5 @@ private fun copyAppState(context: Context, source: String, name: String, withPas
         if (passwords.forget(name)) null else PasswordTrouble.NOT_CLEARED
     }
     // A proxy's password never goes to a copy, as on desktop, nor stays from a profile of the copy's name
-    val proxyCleared = passwords.forget(name, PasswordStore.Kind.PROXY)
-    return trouble ?: if (proxyCleared) null else PasswordTrouble.NOT_CLEARED
+    return trouble
 }

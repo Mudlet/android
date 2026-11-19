@@ -125,7 +125,7 @@ index 6fb632d..fa44fb9 100644
 -        // Modern versions: store in secure storage, clear from XML
 -        if (!pHost->mProxyPassword.isEmpty() && !CredentialManager::storeCredential(pHost->getName(), "proxy", pHost->mProxyPassword)) {
 +        // Modern versions: store in secure storage, clear from XML. One given for this run is not stored.
-+        if (!pHost->mProxyPassword.isEmpty() && !pHost->proxyPassGiven() && !CredentialManager::storeCredential(pHost->getName(), "proxy", pHost->mProxyPassword)) {
++        if (!pHost->mProxyPassword.isEmpty() && !CredentialManager::storeCredential(pHost->getName(), "proxy", pHost->mProxyPassword)) {
              //: Shown in the profile's main window when it is saved but its proxy password could not be, for example because there is nowhere to keep the key that encrypts it
              pHost->postMessage(tr("[ WARN ]  - The proxy password could not be saved, so the next time this profile is loaded it will have whichever one was saved before, if any."));
 @@ -555,5 +555,5 @@ void XMLexport::writeHost(Host* pHost, pugi::xml_node mudletPackage)

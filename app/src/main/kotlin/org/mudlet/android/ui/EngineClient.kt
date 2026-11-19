@@ -369,7 +369,7 @@ object EngineClient {
     fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
         if (error == null) opened(name)
         onAnswer(error)
-    }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = false, id = it) }
+    }) { Requests.openProfile(name, password, proxyPassword = null, connect = true, alongside = false, id = it) }
 
     /**
      * Opens and connects the profile [name], with [password] for this run, beside those open, and makes it the front;
@@ -381,7 +381,7 @@ object EngineClient {
             setFront(name)
         }
         onAnswer(error)
-    }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = true, id = it) }
+    }) { Requests.openProfile(name, password, proxyPassword = null, connect = true, alongside = true, id = it) }
 
     /**
      * Opens the profile [name] without connecting it, as desktop's Offline, with [password] for a later connection; beside
@@ -417,8 +417,7 @@ object EngineClient {
         val passwords = PasswordStore(app)
         for (profile in without) {
             if (profile.state == OpenProfileState.CLOSING || !passwordOffered.add(profile.name)) continue
-            val password = passwords.get(profile.name)
-            if (password != null || passwords.has(profile.name, PasswordStore.Kind.PROXY)) givePassword(profile.name, password)
+            passwords.get(profile.name)?.let { givePassword(profile.name, it) }
         }
     }
 
@@ -430,6 +429,7 @@ object EngineClient {
 
     // The engine opened [name], connected to its own address: Reconnect goes there, and opens it again once none is open
     private fun opened(name: String) {
+        session(name)?.openedHere = true
         lastProfile = name
         prefs().edit { putString(PREF_LAST_PROFILE, name) }
         session(name)?.forgetAddress() ?: ProfileSession.forgetAddress(prefs(), name)

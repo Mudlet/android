@@ -501,8 +501,10 @@ class ProfileSession internal constructor(
      * Asks for this game's proxy, or changes it to [set] first; [onAnswer] gets the proxy Mudlet then holds, or null and
      * why it did not. False, asking nothing, while its profile has not loaded or the link is down.
      */
+    @Volatile internal var openedHere = false
+
     fun requestProxy(set: ProxySettings?, onAnswer: (proxy: ProxySettings?, refused: String?) -> Unit): Boolean {
-        if (!settingsAvailable) return false
+        if (!settingsAvailable || !openedHere) return false
         val id = newRequestId()
         if (!send(if (set == null) Requests.getProxy(id) else Requests.setProxy(set, id))) return false
         proxyAnswers[id] = onAnswer
@@ -863,8 +865,6 @@ class ProfileSession internal constructor(
                         // The controls follow the engine's state alone, so they already show what the engine kept, and
                         // Mudlet says why a recording failed in the game's text
                         Log.w(TAG, message.message)
-                    } else if (id != null && id in proxyAnswers) {
-                        proxyAnswers.remove(id)?.invoke(null, reason)
                     } else if (request in ScriptItemsClient.REQUESTS) {
                         scripts.onRefused(request, reason, message.replyTo)
                     } else if (request in PackagesClient.REQUESTS) {

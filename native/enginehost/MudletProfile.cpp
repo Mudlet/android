@@ -1436,9 +1436,6 @@ void MudletProfile::applyPasswords()
     } else {
         qWarning("MudletEngine: %s did not take the password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
     }
-    if (!mSession->setProxyPassword(passwords.proxy)) {
-        qWarning("MudletEngine: %s did not take the proxy password given it: %s", qPrintable(mProfile), qPrintable(mSession->errorString()));
-    }
 }
 
 void MudletProfile::close(bool forSwitch)

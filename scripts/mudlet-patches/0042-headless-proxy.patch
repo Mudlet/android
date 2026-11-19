@@ -132,7 +132,7 @@ index 6fb632d..fa44fb9 100644
      } else {
          // Legacy versions: maintain plaintext password in XML for backward compatibility
 -        host.append_attribute("mProxyPassword") = pHost->mProxyPassword.toUtf8().constData();
-+        host.append_attribute("mProxyPassword") = pHost->proxyPassGiven() ? "" : pHost->mProxyPassword.toUtf8().constData();
++        host.append_attribute("mProxyPassword") = pHost->mProxyPassword.toUtf8().constData();
      }
      host.append_attribute("mSslTsl") = pHost->mSslTsl ? "yes" : "no";
 diff --git a/src/XMLimport.cpp b/src/XMLimport.cpp

@@ -34,7 +34,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
@@ -115,7 +114,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
 
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val profileName = name ?: newName.trim()
-    val canSave = !waiting && profileName.isNotEmpty() && host.isNotBlank() && portNumber != null && (!proxyShown || proxy != null)
+    val canSave = !waiting && profileName.isNotEmpty() && host.isNotBlank() && portNumber != null
     val edited = portNumber?.let { Profile(profileName, host.trim(), it, tls, login.trim(), autoReconnect) }
 
     // Each is stored before either is given, as the engine takes a profile's two passwords together
@@ -250,7 +249,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
             SwitchRow(stringResource(R.string.profile_auto_reconnect), autoReconnect) { autoReconnect = it }
             Text(
                 stringResource(R.string.profile_proxy_title),
-                Modifier.padding(top = 16.dp).semantics { heading() },
+                Modifier.align(Alignment.End).padding(top = 16.dp),
                 style = MaterialTheme.typography.titleMedium,
             )
             if (proxyShown) {
@@ -298,11 +297,11 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
             } else {
                 Text(stringResource(R.string.profile_proxy_while_open), style = MaterialTheme.typography.bodyMedium)
             }
-            if (proxyPasswordStored && name != null) {
+            if (proxyShown && proxyPasswordStored && name != null) {
                 TextButton({
                     if (passwords.forget(name, PasswordStore.Kind.PROXY)) {
                         proxyPasswordStored = false
-                        EngineClient.givePassword(name, passwords.get(name))
+                        EngineClient.givePassword(name, null)
                     } else {
                         error = passwordNotForgotten
                     }
@@ -347,7 +346,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                             refused != null -> error = refused
 
                             // Or a new profile of this name would log in with it
-                            !passwords.forget(name) || !passwords.forget(name, PasswordStore.Kind.PROXY) -> error = passwordNotForgotten
+                            !passwords.forget(name) -> error = passwordNotForgotten
 
                             else -> onClose()
                         }

@@ -53,7 +53,7 @@ class PasswordStore(context: Context) {
             val bytes = Base64.decode(sealed, Base64.NO_WRAP)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, bytes, 0, IV_BYTES))
-            cipher.updateAAD(name.toByteArray())
+            cipher.updateAAD(profile.lowercase(Locale.ROOT).toByteArray())
             String(cipher.doFinal(bytes, IV_BYTES, bytes.size - IV_BYTES), Charsets.UTF_8)
         } catch (e: AEADBadTagException) {
             forgetUnreadable(all, name, e)
@@ -85,7 +85,7 @@ class PasswordStore(context: Context) {
         val sealed = try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, secretKey())
-            cipher.updateAAD(name.toByteArray())
+            cipher.updateAAD(profile.lowercase(Locale.ROOT).toByteArray())
             cipher.iv + cipher.doFinal(password.toByteArray(Charsets.UTF_8))
         } catch (e: GeneralSecurityException) {
             Log.w(TAG, "a password could not be encrypted", e)

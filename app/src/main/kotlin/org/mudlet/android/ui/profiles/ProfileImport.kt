@@ -82,7 +82,7 @@ private fun ImportStatus(state: ImportState, style: TextStyle = LocalTextStyle.c
         is ImportState.Failed -> stringResource(R.string.profile_import_failed, state.why)
     }
     val color = if (state is ImportState.Refused || state is ImportState.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    Text(status, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = color, style = style)
+    Text(status, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = color, style = style, maxLines = 1)
 }
 
 /** The naming dialog of an import; leaving the profile list forgets an import that has ended. */
@@ -155,7 +155,7 @@ private fun ImportDialog(archived: String, folders: List<String>, key: Any, deta
         title = { Text(stringResource(R.string.profile_import_title, archived)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.profile_import_text))
+                Text(stringResource(R.string.profile_import_text), maxLines = 1)
                 details?.let { Text(it) }
                 OutlinedTextField(
                     name,

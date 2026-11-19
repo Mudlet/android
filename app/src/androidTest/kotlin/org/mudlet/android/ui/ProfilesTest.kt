@@ -25,7 +25,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -91,8 +90,8 @@ class ProfilesTest {
 
     @Before
     fun attach() {
-        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        // A copy's dialog opens over the editor scrolled to its buttons, with an empty field just above the page
+        compose.enableAccessibilityChecksOfWhatShows()
         passwords = PasswordStore(compose.activity)
         forgetPasswords()
         engine = fake.engine.nextSession()

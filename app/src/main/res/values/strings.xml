@@ -1157,6 +1157,63 @@
          line by it. The double quotes around it keep Android from joining the spaces. %1$s is Mudlet's reason, in
          English. -->
     <string name="settings_clear_media_failed">"[ WARN ]  - Could not clear the stored media: %1$s."</string>
+    <!-- A page of each game's own settings, desktop Mudlet's "Log options": how the logs of the game's text are
+         written and named -->
+    <string name="settings_logging">Logging</string>
+    <!-- Under "Logging" in the list of settings pages, what that page holds -->
+    <string name="settings_logging_summary">How the game\'s logs are written and named</string>
+    <!-- A switch on a game's Logging page, as desktop Mudlet's preferences have it: a new log of the game's text is a
+         web page (HTML) rather than plain text -->
+    <string name="settings_log_html">Save log files in HTML format</string>
+    <!-- Under "Save log files in HTML format", what the switch does, as desktop Mudlet's description says -->
+    <string name="settings_log_html_hint">A log keeps the game\'s colours and styles. Off, it is plain text. A log already being written keeps its format until logging starts again.</string>
+    <!-- Words a player might search the settings for to find "Save log files in HTML format", besides the words of
+         its name and description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_log_html_keywords">transcript, record, plain text, web page, colours, colors</string>
+    <!-- A switch on a game's Logging page, as desktop Mudlet's preferences have it: each line of a log starts with
+         the time it came -->
+    <string name="settings_log_timestamps">Add timestamps at the beginning of log lines</string>
+    <!-- Under "Add timestamps at the beginning of log lines" -->
+    <string name="settings_log_timestamps_hint">Each line logged starts with the time it came, to the thousandth of a second.</string>
+    <!-- Words a player might search the settings for to find "Add timestamps at the beginning of log lines", besides
+         the words of its name and description, separated by commas. Use the words a player of your language would
+         search for. -->
+    <string name="settings_log_timestamps_keywords">time, date, clock, transcript</string>
+    <!-- A choice on a game's Logging page, desktop Mudlet's "Log format": how a new log's file is named, which also
+         decides whether logs are gathered in one file -->
+    <string name="settings_log_name_format">Log format</string>
+    <!-- Words a player might search the settings for to find "Log format", besides the words of its name and
+         choices, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_log_name_format_keywords">file name, log name, daily, monthly, one file, append</string>
+    <!-- A choice under "Log format": a log file for each time logging starts, named by its date and time. Keep the
+         example as it is: it is the name's pattern, a year, month, day, # and the time. -->
+    <string name="settings_log_name_date_and_time" tools:ignore="TypographyDashes">A file each time, by date and time (1970-01-01#00-00-00)</string>
+    <!-- A choice under "Log format", as the one before it with a T between the date and the time, as some programs
+         read dates. Keep the example as it is. -->
+    <string name="settings_log_name_date_t_time" tools:ignore="TypographyDashes">A file each time, by date and time (1970-01-01T00-00-00)</string>
+    <!-- A choice under "Log format": a day's logs gathered in one file, named by the day. Keep the example as it
+         is. -->
+    <string name="settings_log_name_day" tools:ignore="TypographyDashes">A file a day (1970-01-01)</string>
+    <!-- A choice under "Log format": a month's logs gathered in one file, named by the month. Keep the example as it
+         is. -->
+    <string name="settings_log_name_month" tools:ignore="TypographyDashes">A file a month (1970-01)</string>
+    <!-- A choice under "Log format", desktop Mudlet's "Named file": every log gathered in one file of the name the
+         player gives under "Log name" -->
+    <string name="settings_log_name_named">Named file, every log in one</string>
+    <!-- A text field on a game's Logging page, desktop Mudlet's "Log name:", shown for "Named file": the name of the
+         file every log goes in, without its ending (.txt or .html, shown after the field) -->
+    <string name="settings_log_file_name">Log name</string>
+    <!-- Under "Log name" -->
+    <string name="settings_log_file_name_hint">New logs are added to the end of this file.</string>
+    <!-- Words a player might search the settings for to find "Log name", besides the words of its name and
+         description, separated by commas. Use the words a player of your language would search for. -->
+    <string name="settings_log_file_name_keywords">file name, named file, transcript</string>
+    <!-- Shown in the empty "Log name" field: the name Mudlet gives the file when the player gives none. As desktop
+         Mudlet's: it must be a name a file can have, and translated the same as there. -->
+    <string name="settings_log_file_name_default">logfile</string>
+    <!-- Under "Log name" in place of its description, when the name typed has a / or \, which would put the log in
+         another folder; the name is not taken -->
+    <string name="settings_log_file_name_refused">A log name cannot have / or \\ in it.</string>
     <!-- A page of the app's own settings, the same for every game: on how the app looks (its colours, the size of the
          game's text, the map behind the text). The game's own colours never change with them. -->
     <string name="settings_appearance">Appearance</string>

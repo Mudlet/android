@@ -243,24 +243,32 @@ private fun ChoiceRows(entry: SettingEntry.Choice<*>, owner: SettingsOwner) {
     }
 }
 
-/** A field for the text, which changes the setting as it loses the focus, as Done is pressed or as the page closes. */
+/**
+ * A field for the text, which changes the setting as it loses the focus, as Done is pressed or as the page closes. A
+ * text the entry refuses says why under the field and is not sent.
+ */
 @Composable
 private fun TypedRow(entry: SettingEntry.Typed, owner: SettingsOwner) {
     val value = owner.value(entry.setting)
     // Not sent on each key: the engine's answer to one change could land between two keys and undo the second
     var draft by rememberSaveable(value) { mutableStateOf(value) }
+    val refusal = entry.refusal(draft)
     val focusManager = LocalFocusManager.current
     // The value read as it is done with: the focus going and the page closing can both come before a recomposition
     val done by rememberUpdatedState {
-        if (draft != owner.value(entry.setting)) owner.change(entry.setting, draft)
+        if (refusal == null && draft != owner.value(entry.setting)) owner.change(entry.setting, draft)
     }
     DisposableEffect(Unit) { onDispose { done() } }
+    val supporting = refusal ?: entry.hint
     OutlinedTextField(
         draft,
         { draft = it },
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).onFocusChanged { if (!it.isFocused) done() },
         label = { Text(stringResource(entry.label)) },
-        supportingText = entry.hint?.let { { Text(stringResource(it)) } },
+        placeholder = entry.placeholder?.let { { Text(stringResource(it)) } },
+        suffix = entry.suffix?.let { suffix -> { Text(suffix(owner)) } },
+        supportingText = supporting?.let { { Text(stringResource(it)) } },
+        isError = refusal != null,
         singleLine = true,
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),

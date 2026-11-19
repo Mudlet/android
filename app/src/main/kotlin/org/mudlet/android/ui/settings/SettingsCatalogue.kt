@@ -4,7 +4,10 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import org.mudlet.android.R
+import org.mudlet.android.data.LogNameFormat
 import org.mudlet.android.data.Settings
+import org.mudlet.android.data.logFileExtension
+import org.mudlet.android.data.logFileNameRefused
 import org.mudlet.android.protocol.ServerEncodings
 import org.mudlet.android.ui.EngineClient
 import org.mudlet.android.ui.theme.wallpaperColoursAvailable
@@ -72,6 +75,7 @@ enum class SettingsCategory(
     CONNECTION(true, R.string.settings_connection, R.string.settings_connection_summary, R.drawable.ic_lan),
     SOUND(true, R.string.settings_sound, R.string.settings_sound_summary, R.drawable.ic_volume_up, sharedByGames = true),
     SECURITY(true, R.string.settings_security, R.string.settings_security_summary, R.drawable.ic_security),
+    LOGGING(true, R.string.settings_logging, R.string.settings_logging_summary, R.drawable.ic_description),
     ADVANCED(true, R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_tune),
     APPEARANCE(false, R.string.settings_appearance, R.string.settings_appearance_summary, R.drawable.ic_palette),
     TEST_BUILDS(false, R.string.settings_test_builds, R.string.settings_test_builds_summary, R.drawable.ic_system_update, offered = { PtbUpdates.applies }),
@@ -92,6 +96,9 @@ sealed class SettingEntry(
 
     /** Whether a page of [game]'s, or of "New games" for null, has it. */
     fun shownFor(game: String?) = game != null || this !is Action
+
+    /** Whether it shows with [owner]'s values of the others: desktop Mudlet hides some until another asks for them. */
+    open fun shownWith(owner: SettingsOwner) = true
 
     /** A row that changes [setting]. */
     sealed class Value(category: SettingsCategory, label: Int, hint: Int?, keywords: Int) : SettingEntry(category, label, hint, keywords) {
@@ -133,8 +140,24 @@ sealed class SettingEntry(
         fun choose(owner: SettingsOwner, index: Int) = owner.change(setting, setting.entries[index])
     }
 
-    /** Some text typed in, such as the command separator, which changes as the field is left or its Done key pressed. */
-    class Typed(category: SettingsCategory, override val setting: Settings.TextSetting, label: Int, hint: Int, keywords: Int) : Value(category, label, hint, keywords)
+    /**
+     * Some text typed in, such as the command separator, which changes as the field is left or its Done key pressed.
+     * [placeholder] shows in an empty field, [suffix] after the text, and [refusal] is why a text cannot be taken, or
+     * null; one refused is not sent. It shows only while [shownWhen].
+     */
+    class Typed(
+        category: SettingsCategory,
+        override val setting: Settings.TextSetting,
+        label: Int,
+        hint: Int,
+        keywords: Int,
+        @StringRes val placeholder: Int? = null,
+        val suffix: ((SettingsOwner) -> String)? = null,
+        val refusal: (String) -> Int? = { null },
+        private val shownWhen: (SettingsOwner) -> Boolean = { true },
+    ) : Value(category, label, hint, keywords) {
+        override fun shownWith(owner: SettingsOwner) = shownWhen(owner)
+    }
 
     /** A colour: its swatch and "#rrggbb" in a row, which opens a dialog to change it. */
     class Colour(
@@ -558,6 +581,41 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_clear_media_keywords,
             R.string.settings_clear_media_button,
         ) { game -> EngineClient.session(game)?.clearStoredMedia() },
+        SettingEntry.Switch(
+            SettingsCategory.LOGGING,
+            Settings.logInHtml,
+            R.string.settings_log_html,
+            R.string.settings_log_html_hint,
+            R.string.settings_log_html_keywords,
+        ),
+        SettingEntry.Switch(
+            SettingsCategory.LOGGING,
+            Settings.logTimestamps,
+            R.string.settings_log_timestamps,
+            R.string.settings_log_timestamps_hint,
+            R.string.settings_log_timestamps_keywords,
+        ),
+        SettingEntry.Choice(SettingsCategory.LOGGING, Settings.logNameFormat, R.string.settings_log_name_format, R.string.settings_log_name_format_keywords) {
+            when (it) {
+                LogNameFormat.DATE_AND_TIME -> R.string.settings_log_name_date_and_time
+                LogNameFormat.DATE_T_TIME -> R.string.settings_log_name_date_t_time
+                LogNameFormat.DAY -> R.string.settings_log_name_day
+                LogNameFormat.MONTH -> R.string.settings_log_name_month
+                LogNameFormat.NAMED -> R.string.settings_log_name_named
+            }
+        },
+        // As desktop's "Log name:", only for a named file
+        SettingEntry.Typed(
+            SettingsCategory.LOGGING,
+            Settings.logFileName,
+            R.string.settings_log_file_name,
+            R.string.settings_log_file_name_hint,
+            R.string.settings_log_file_name_keywords,
+            placeholder = R.string.settings_log_file_name_default,
+            suffix = { owner -> logFileExtension(owner.value(Settings.logInHtml)) },
+            refusal = { name -> if (logFileNameRefused(name)) R.string.settings_log_file_name_refused else null },
+            shownWhen = { owner -> owner.value(Settings.logNameFormat) == LogNameFormat.NAMED },
+        ),
         SettingEntry.Number(
             SettingsCategory.APPEARANCE,
             Settings.textSize,
@@ -616,7 +674,7 @@ val settingsCatalogue: List<SettingEntry> by lazy {
 data class SettingsPage(val category: SettingsCategory, val game: String?, val highlight: String? = null) {
     val owner: SettingsOwner get() = game?.let(::GameSettings) ?: AppSettings
 
-    val entries get() = settingsCatalogue.filter { it.category == category && it.shownFor(game) }
+    val entries get() = settingsCatalogue.filter { it.category == category && it.shownFor(game) && it.shownWith(owner) }
 
     /** As a navigation argument, and for rememberSaveable. */
     fun encode(): String = listOf(category.name, highlight.orEmpty(), game?.let { GAME_PREFIX + it } ?: NO_GAME).joinToString(SEPARATOR)

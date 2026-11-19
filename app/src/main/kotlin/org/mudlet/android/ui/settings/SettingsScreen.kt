@@ -202,6 +202,7 @@ private class SearchResult(val section: HubSection, val entry: SettingEntry) {
 private fun LazyListScope.searchResults(query: String, sections: List<HubSection>, resources: Resources, onOpen: (SettingsPage) -> Unit) {
     val results = sections.flatMap { section ->
         settingsCatalogue.filter { section.holds(it.category) && it.shownFor(section.game) }
+            .filter { it.shownWith(SettingsPage(it.category, section.game).owner) }
             .filter { searchMatches(query, it.searchTexts(resources) + section.place(resources)) }
             .map { SearchResult(section, it) }
     }

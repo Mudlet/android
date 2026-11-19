@@ -117,6 +117,14 @@ object Settings {
     /** Whether a script's errors are also shown in the game's text, as well as in the error console. */
     val showScriptErrors = BoolSetting("echoLuaErrors", default = false, mudlet = true)
 
+    // Desktop Mudlet's "Log options": what a new log of the game is written as and named
+    val logInHtml = BoolSetting("logInHTML", default = false, mudlet = true)
+    val logTimestamps = BoolSetting("logTimestamps", default = false, mudlet = true)
+    val logNameFormat = EnumSetting("logFileNameFormat", LogNameFormat.DATE_AND_TIME, LogNameFormat.entries, mudlet = true) { it.mudletValue }
+
+    /** The log's name for [LogNameFormat.NAMED], without its extension; none is Mudlet's "logfile". */
+    val logFileName = TextSetting("logFileName", default = "", mudlet = true, blankAllowed = true)
+
     // The certificate errors a secure connection lets past, under "TLS/SSL secure connection" in desktop Mudlet
     val acceptExpiredCertificate = BoolSetting("sslIgnoreExpired", default = false, mudlet = true)
     val acceptSelfSignedCertificate = BoolSetting("sslIgnoreSelfSigned", default = false, mudlet = true)
@@ -255,6 +263,10 @@ object Settings {
         forceMxpOn,
         lazyTriggerVariables,
         showScriptErrors,
+        logInHtml,
+        logTimestamps,
+        logNameFormat,
+        logFileName,
         acceptExpiredCertificate,
         acceptSelfSignedCertificate,
         acceptAnyCertificate,

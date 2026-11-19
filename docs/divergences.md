@@ -371,6 +371,13 @@ no time or way to the item. Unbounded, the list the engine gives each UI that at
 frame; on a phone, scrolling to the item by hand from a name in a message is slow with a finger and slower with
 TalkBack.
 
+## Log options
+
+A game's Logging page has desktop Mudlet's log options but "Save log files in:": a game's logs always go in its
+profile's `log` folder (`docs/architecture.md`, "Settings"). On the desktop a player can pick any folder for them.
+On Android the folders a player can pick are the system's documents, which Mudlet's files cannot write to by a path,
+and a folder of the profile's goes with it when the profile is backed up or deleted.
+
 ## Button bars
 
 A bar and its buttons draw the touch subset of their style sheets (`docs/phase-f.md`, "Button bars and commands").

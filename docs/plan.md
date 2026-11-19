@@ -593,30 +593,30 @@ Status is "not started", "in flight", "waiting for the user" or "done". Pull req
 |---|---|---|---|
 | IF1 Script editor slices 4-5 | expected | done | #142, #148 |
 | IF2 Map frame cost part 5 | expected | done | #144 |
-| IF3 Scripted UI | expected | in flight | |
-| IF4 Package manager | release blocker | in flight: the engine side merged; the screen next | #145, #163 |
-| IF5 Connection security (TLS, secure port, proxy) | release blocker | in flight: the secure-port and refused-certificate questions merged (#147, carried by engine train 1); the Security page next | #157, #178 |
-| IF6 Error console and logging | release blocker | in flight: the engine lists Lua errors and takes desktop's log options (engine train 2); the error console screen next, then the Logging page | #150, #182, #170 |
+| IF3 Scripted UI | expected | in flight: a label's style sheet, a console's colour with its alpha and its scroll bar, scroll boxes, the border and command line colours (engine train 5) and a script's small mapper in the corner merged; label rich text next | #177, #186, #195, #196, #200, #206, #205 |
+| IF4 Package manager | release blocker | in flight: the engine side and the screen merged, and a new game's default packages checked against desktop's; modules and the package repository browser next | #145, #163, #218 |
+| IF5 Connection security (TLS, secure port, proxy) | release blocker | in flight: the secure-port and refused-certificate questions merged (#147, carried by engine train 1), and the refused certificate on the Security page; a proxy, if small, next | #157, #178 |
+| IF6 Error console and logging | release blocker | in flight: the engine lists Lua errors and takes desktop's log options (engine train 2); the error console screen, its count on the script library's Errors button, and the Logging page merged; sharing a log file next | #150, #182, #170, #203, #211 |
 | IF7 Mute game sounds | expected | done | #143, #152 |
 | IF8 Script editor design pick | - | waiting for the user | |
 | IF9 Upstream PRs to Mudlet/Mudlet | - | waiting for the user | Mudlet/Mudlet#12962, Mudlet/Mudlet#12963, Mudlet/Mudlet#12964, Mudlet/Mudlet#12965, Mudlet/Mudlet#12967 |
-| 1 Stable release on Play | release blocker | waiting for the user: the release workflow and the store listing merged; the Play forms, signing secrets and the first tag are the user's | #153, #166, #167 |
+| 1 Stable release on Play | release blocker | waiting for the user: the release workflow, the store listing, the PTB's GitHub pre-release published even when Play refuses the upload, and the newer test build notice for a PTB from GitHub merged; the Play forms, signing secrets and the first tag are the user's | #153, #166, #167, #193, #210 |
 | 2 Main console links | release blocker | done | #149, #159 |
-| 3 Profiles: backup, move, copy | release blocker | in flight: export to a .zip desktop opens merged; import next, then copy | #151, #158 |
-| 4 Real phones and background | release blocker | in flight: the device pass page and the explanation of a stop in the background merged; the pass itself is run on real phones | #155, #160 |
-| 5 Report a problem | release blocker | in flight: About > Report a problem, with game and script text kept out of logcat; the offer after a crash next | #156, #164 |
-| 6 Copy, search, timestamps, lag | expected | in flight: copy or share a line; search next | #171 |
-| 7 Hardware keyboards and keys | expected | in flight: a hardware keyboard runs the profile's key bindings, in the engine (engine train 1) and the app; the caret key next | #157, #181 |
-| 8 Display and input settings 2 | expected | in flight: the server encoding and the input line's settings merged, with their Connection and Input pages (engine train 1); the colours and display slice next | #157 |
-| 9 Sound, music, TTS | expected | in flight: desktop's "Clear stored media" merged; text to speech behind TalkBack and sound attributes next | #176 |
-| 10 Map files, settings, areas | expected | in flight: the engine side merged (engine train 1); the screen next | #157 |
-| 11 Editor beyond items | expected | in flight: move to a folder and search (engine train 2) merged; the colour pattern picker next | #165, #182 |
-| 12 Lua functions needing the app | expected | not started | |
-| 13 Emergency stop and replays | expected / nice later | not started | |
-| 14 Telnet links, profile extras | expected | not started | |
+| 3 Profiles: backup, move, copy | release blocker | in flight: export to a .zip desktop opens, import, copy (whole or settings only), and Android backup and device transfer merged; "Open with Mudlet" for a shared .zip next | #151, #158, #215, #212 |
+| 4 Real phones and background | release blocker | in flight: the device pass page and the explanation of a stop in the background merged; the pass itself is run on real phones | #155, #160, #194 |
+| 5 Report a problem | release blocker | in flight: About > Report a problem and the offer after a crash merged; automatic crash reports, on by default as the user chose, wait for the user's setup | #156, #164, #184 |
+| 6 Copy, search, timestamps, lag | expected | in flight: copy or share a line, search, timestamps and lag (engine train 5), and the scrollback length (engine train 4) sized to the phone (engine train 6) merged; a selection across lines next | #171, #179, #197, #200, #213, #217 |
+| 7 Hardware keyboards and keys | expected | done | #157, #181, #200, #216 |
+| 8 Display and input settings 2 | expected | in flight: the server encoding and the input line's settings merged, with their Connection and Input pages (engine train 1), and the Colours page, links from the game and blinking text (engine train 5); notify on new text in the background and fonts next | #157, #200 |
+| 9 Sound, music, TTS | expected | in flight: desktop's "Clear stored media", a smoke test that a script's sound plays on the media stream with the screen off, and the first speech while text to speech starts (engine train 4) merged; text to speech behind TalkBack and audio focus next | #176, #188, #197 |
+| 10 Map files, settings, areas | expected | in flight: the engine side (engine trains 1 and 3), map files with progress and Cancel, the Map settings page (engine train 5) and the app's map in a corner of the text merged; backups, deleting and copying the map in the app, then areas, next | #157, #191, #180, #200, #209 |
+| 11 Editor beyond items | expected | in flight: move to a folder, search (engine train 2), the colour pattern picker and the Variables view, read only (engine train 4), merged; export and import, then editing variables, next | #165, #182, #172, #197 |
+| 12 Lua functions needing the app | expected | done | #191, #197 |
+| 13 Emergency stop and replays | expected / nice later | done | #200 |
+| 14 Telnet links, profile extras | expected | in flight: telnet:// links and Open offline merged; rename a closed profile and the profile icon next | #189, #190 |
 | 15 Tablets and Chromebooks | expected | not started | |
-| 16 Slow phones | expected | not started | |
+| 16 Slow phones | expected | in flight: a manual benchmark of a game's spam through the engine and faster line frames (engine train 6) merged; the measurements on a low-end phone next | #213 |
 | 17 Translations live | expected | not started | |
-| 18 Help and first steps | nice later | in flight: Help in About and the script library, and Show changelog, merged; the game screen's first-run tour next; function descriptions wait on a source for them | #168, #183 |
-| 19 Lines changed after shown | expected | not started | |
-| 20 Movement pad | nice later | not started | |
+| 18 Help and first steps | nice later | in flight: Help in About and the script library, Show changelog, and the game screen's first-run tour merged; function descriptions wait on a source for them | #168, #183, #169 |
+| 19 Lines changed after shown | expected | in flight: the patch, protocol and console merged (engine train 5); the patch's upstream pull request next | #200 |
+| 20 Movement pad | nice later | done | #214 |

@@ -8,7 +8,9 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -192,6 +194,7 @@ class MapBesideTextTest {
 
     private fun pressed(state: ToggleableState) = compose.onNode(button).assert(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, state))
 
+    @OptIn(ExperimentalTestApi::class)
     private fun altM() {
         compose.onNode(hasSetTextAction() and hasText(string(R.string.input_label))).requestFocus().performKeyInput { withKeyDown(Key.AltLeft) { pressKey(Key.M) } }
         compose.waitForIdle()

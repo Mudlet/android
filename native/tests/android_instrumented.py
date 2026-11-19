@@ -222,7 +222,7 @@ def backup_round(dev, to):
     or a transfer to a new phone ("phone"), then the app cleared and restored: BackupRestoreTest writes the data before
     and says what came back after. Returns the failures, as text."""
     parameters = "is_encrypted=true" if to == "cloud" else "is_device_transfer=true"
-    failures = instrument(dev, f"backup-seed-{to}", APP_TESTS, APP, f"backup ({to}): the data to back up", 300,
+    failures = instrument(dev, f"backup-seed-{to}", APP_TESTS, APP, f"backup ({to}): the data to back up", 120,
                           "-e", "class", BACKUP_TEST + "#seed")
     shell(f"settings put secure backup_local_transport_parameters {parameters}")
     # Android puts off the backup of an app that is running, and the engine's foreground service may still be
@@ -235,7 +235,7 @@ def backup_round(dev, to):
     out = shell(f"bmgr restore {LOCAL_RESTORE_SET} {APP}")
     log(f"bmgr restore: {' '.join(out.split())}")
     return failures + instrument(dev, f"backup-check-{to}", APP_TESTS, APP, f"backup ({to}): what the restore brought",
-                                 300, "-e", "class", BACKUP_TEST + "#check", "-e", "backupTo", to)
+                                 120, "-e", "class", BACKUP_TEST + "#check", "-e", "backupTo", to)
 
 
 def backup_rounds(dev):

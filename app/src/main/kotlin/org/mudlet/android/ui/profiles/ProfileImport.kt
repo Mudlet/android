@@ -106,7 +106,7 @@ private fun ImportDialog(state: ImportState.Ready, onImport: (name: String) -> U
         title = { Text(stringResource(R.string.profile_import_title, archived)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.profile_import_text))
+                Text(stringResource(R.string.profile_import_text), maxLines = 1)
                 OutlinedTextField(
                     name,
                     { name = it },

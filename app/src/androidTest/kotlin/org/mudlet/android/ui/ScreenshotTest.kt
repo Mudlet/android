@@ -2,6 +2,7 @@ package org.mudlet.android.ui
 
 import android.Manifest
 import android.app.UiModeManager
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -347,16 +348,24 @@ class ScreenshotTest {
         fun shell(command: String) = instrumentation.uiAutomation.executeShellCommand(command).use { pfd ->
             FileInputStream(pfd.fileDescriptor).readBytes()
         }
+        val before = Configuration(compose.activity.resources.configuration)
         try {
             shell("wm size 2560x1600")
-            shell("wm density 320")
-            compose.waitForIdle()
+            shell("wm density $TABLET_DPI")
+            awaitActivity("a tablet's density") { it.densityDpi == TABLET_DPI }
             block()
         } finally {
             shell("wm density reset")
             shell("wm size reset")
-            compose.waitForIdle()
+            awaitActivity("the screen as it was") { it.densityDpi == before.densityDpi && it.screenWidthDp == before.screenWidthDp }
         }
+    }
+
+    // waitForIdle does not wait for a recreation Android has yet to deliver: the test would go on with the activity it
+    // replaces, and a menu opened there closes as it goes
+    private fun awaitActivity(what: String, recreated: (Configuration) -> Boolean) {
+        compose.waitUntil(what, WAIT_MS) { recreated(compose.activity.resources.configuration) }
+        compose.waitForIdle()
     }
 
     /** The whole screen, system bars included, once the app has drawn what it last composed. */
@@ -489,6 +498,7 @@ class ScreenshotTest {
         """.trimIndent()
 
         const val WAIT_MS = 10_000L
+        const val TABLET_DPI = 320
 
         // Longer than a snackbar with an action stays
         const val SNACKBAR_MS = 15_000L

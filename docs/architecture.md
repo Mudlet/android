@@ -1579,6 +1579,10 @@ that attaches later is told too. The UI shows it as a marker line.
       then `QtNative.startApplication`.
     - `onBind` returns `QtNative.onBind`.
     - `onDestroy` calls `terminateQtNativeApplication` and then **`System.exit(0)`**.
+    - `terminateQtNativeApplication` waits with no limit for native `main()` to
+      return. `EngineService.onDestroy` ends the process itself if Qt has not
+      stopped in 45 s (`STOP_DEADLINE_MS`): a script in an endless loop would
+      otherwise hold `:engine`, and every later start, past Android's ANR.
   - It would break if the class is renamed or made final, or if the order of
     `onCreate` changes, which would invalidate my "start foreground first" call
     before `super.onCreate()`.

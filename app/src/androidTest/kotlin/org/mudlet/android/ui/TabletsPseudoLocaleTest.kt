@@ -76,7 +76,8 @@ class TabletsPseudoLocaleTest(private val locale: String) {
         session.profiles(listOf(GAME), session.receive("openProfile"))
         val search = hasSetTextAction() and hasText(string(R.string.app_map_search))
         waitFor(hasText(CONSOLE_LINE))
-        waitFor(search)
+        // Merged: the field's label is a node of its own in the unmerged tree, apart from the field's SetText action
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(search).fetchSemanticsNodes().isNotEmpty() }
 
         val text = compose.onNode(hasText(CONSOLE_LINE), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val map = compose.onNode(search).fetchSemanticsNode().boundsInRoot

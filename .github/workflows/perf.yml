@@ -23,7 +23,7 @@ defaults:
     shell: bash
 
 env:
-  MUDLET_REF: ${{ inputs.mudlet-ref }}
+  MUDLET_REF: ${{ inputs.mudlet-ref || 'development' }}
 
 jobs:
   benchmark:
@@ -133,7 +133,7 @@ jobs:
             done
             echo
             grep -h '^# run' results/*.txt | sort -u | sed 's/^# /- /'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
           exit "$failed"
 
       - uses: actions/upload-artifact@v7

@@ -716,6 +716,24 @@
     <string name="settings_blank_lines_hide">Hide them</string>
     <!-- One of the choices for blank lines from the game: show a line with a single space instead -->
     <string name="settings_blank_lines_space">Replace them with a space</string>
+    <!-- A setting on a game's Accessibility page, desktop Mudlet's of that name, the heading of its choices: the key on
+         a hardware keyboard that moves from the input line to the game's text, to read it line by line with the arrow
+         keys, and back -->
+    <string name="settings_caret_key">Switch between input line and main window using</string>
+    <!-- One of the choices for the key that switches between the input line and the game's text: none -->
+    <string name="settings_caret_key_none">No key</string>
+    <!-- One of the choices for the key that switches between the input line and the game's text: the Tab key, as
+         printed on most keyboards -->
+    <string name="settings_caret_key_tab">Tab</string>
+    <!-- One of the choices for the key that switches between the input line and the game's text: Tab held with Ctrl,
+         as the keys are printed on most keyboards -->
+    <string name="settings_caret_key_ctrl_tab">Ctrl+Tab</string>
+    <!-- One of the choices for the key that switches between the input line and the game's text: the F6 function key -->
+    <string name="settings_caret_key_f6">F6</string>
+    <!-- Words a player might search the settings for to find "Switch between input line and main window using",
+         besides the words of its name and choices, separated by commas. Use the words a player of your language would
+         search for. -->
+    <string name="settings_caret_key_keywords">caret, keyboard, read the text, arrow keys, screen reader, focus</string>
     <!-- A page of each game's own settings: on the commands the player sends, and how they are sent -->
     <string name="settings_input">Input</string>
     <!-- Under "Input" in the list of settings pages, what that page holds -->

@@ -1013,8 +1013,15 @@ kept by `ScriptItemsClient`:
   desktop's command line claims a bound profile-switching shortcut.
 - Desktop's main-window shortcuts off macOS (`mudlet.cpp`) beat a key binding, as a QShortcut does there, for the
   screens the app has: Alt+E the scripts, Alt+P the settings, Alt+M the map, Alt+C the games, Alt+D, Alt+R and Alt+W
-  disconnect, reconnect and close the game. Not yet: the caret key, mute, notepad, packages, modules, multi-view, the
+  disconnect, reconnect and close the game. Not yet: mute, notepad, packages, modules, multi-view, the
   input line's toggle and the Ctrl+Alt ones.
+- Accessibility's caret key (`caretShortcut`: no key, Tab, Ctrl+Tab or F6, `Host::caretShortcutMatches`'s keys) beats
+  the shortcuts and the bindings, as on the desktop, and moves the keyboard's focus between the input line and the
+  main console's lines (`Console`'s `caret`): the line it is on, the last at first, is a node TalkBack reads. Up and Down
+  move it a line, Page Up and Page Down a screen, Ctrl+Home and Ctrl+End to the first and the last, and the key
+  again, or a key that types, goes back to the input line with what it typed, or to its binding if it has one. The
+  caret's own keys run no binding. Not yet: desktop's caret within a line, its links (Ctrl+] and Ctrl+[, Return) and
+  its selection.
 
 ### The error console
 The script library's title bar has an Errors button that opens the profile's error console

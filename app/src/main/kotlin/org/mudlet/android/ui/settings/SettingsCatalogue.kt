@@ -402,6 +402,14 @@ val settingsCatalogue: List<SettingEntry> by lazy {
                 Settings.BlankLines.SPACE -> R.string.settings_blank_lines_space
             }
         },
+        SettingEntry.Choice(SettingsCategory.ACCESSIBILITY, Settings.caretKey, R.string.settings_caret_key, R.string.settings_caret_key_keywords) {
+            when (it) {
+                Settings.CaretKey.NONE -> R.string.settings_caret_key_none
+                Settings.CaretKey.TAB -> R.string.settings_caret_key_tab
+                Settings.CaretKey.CTRL_TAB -> R.string.settings_caret_key_ctrl_tab
+                Settings.CaretKey.F6 -> R.string.settings_caret_key_f6
+            }
+        },
         SettingEntry.Switch(
             SettingsCategory.ACCESSIBILITY,
             Settings.closedCaptions,

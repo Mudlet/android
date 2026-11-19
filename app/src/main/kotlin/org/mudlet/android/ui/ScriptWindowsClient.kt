@@ -74,7 +74,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         session.send(it)
     }
 
-    /** A `prompt:` link in a label was sent to the engine to follow: the input line is to take the focus and call [inputFocusTaken]. */
+    /**
+     * A `prompt:` link in a label was sent to the engine to follow, or the caret key left the game's lines
+     * ([focusInputLine]): the input line is to take the focus and call [inputFocusTaken].
+     */
     var focusInput by mutableStateOf(false)
         private set
 
@@ -300,6 +303,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
 
     fun inputFocusTaken() {
         focusInput = false
+    }
+
+    fun focusInputLine() {
+        focusInput = true
     }
 
     /** The text box [name] has [text] typed in it that the engine has not been sent, or nothing for null, which [flushTyping] sends. */

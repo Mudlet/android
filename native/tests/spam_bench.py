@@ -48,7 +48,7 @@ def combat_line(rng, k):
 
 
 def serve(listener):
-    """One game at a time: `spam <lines> <lines per second, 0 for flat out>` sends a fight, then SPAM DONE."""
+    """One game at a time: `spam <lines> <lines per second, 0 for flat out> <id>` sends a fight, then SPAM DONE <id>."""
     while True:
         conn, _ = listener.accept()
         threading.Thread(target=game, args=(conn,), daemon=True).start()
@@ -67,11 +67,11 @@ def game(conn):
             line, buf = buf.split(b"\n", 1)
             words = line.strip().split()
             GAME["commands"].append(line[-40:])
-            if len(words) == 3 and words[0] == b"spam":
-                spam(conn, rng, int(words[1]), int(words[2]))
+            if len(words) == 4 and words[0] == b"spam":
+                spam(conn, rng, int(words[1]), int(words[2]), words[3])
 
 
-def spam(conn, rng, n, rate):
+def spam(conn, rng, n, rate, spam_id):
     # 5 ms ticks when paced; each line carries when it was sent, for the client's delay
     per_tick = max(1, rate // 200) if rate else 256
     start = time.perf_counter()
@@ -89,7 +89,7 @@ def spam(conn, rng, n, rate):
             delay = start + k / rate - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)
-    conn.sendall(b"\r\nSPAM DONE\r\n")
+    conn.sendall(b"\r\nSPAM DONE " + spam_id + b"\r\n")
 
 
 def cpu_seconds(pid):
@@ -106,6 +106,7 @@ def memory_kb(pid, key):
 class Engine:
     def __init__(self, binary, extra_env=None):
         self.dir = tempfile.mkdtemp(prefix="mudlet-spam-bench-")
+        self.spams = 0
         home = os.path.join(self.dir, "home")
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen", MUDLET_CONFIG_DIR=os.path.join(self.dir, "config"),
                    MUDLET_PROFILE="Spam Bench", HOME=home, XDG_CONFIG_HOME=os.path.join(home, ".config"),
@@ -144,7 +145,9 @@ class Engine:
         timed = set()
         cpu = cpu_seconds(self.proc.pid)
         start = time.perf_counter()
-        self.client.send({"t": "send", "text": f"spam {lines} {rate}"})
+        self.spams += 1
+        done = f"SPAM DONE {self.spams}"
+        self.client.send({"t": "send", "text": f"spam {lines} {rate} {self.spams}"})
         allowed = max(120, lines / 500)
         deadline = time.monotonic() + allowed
         while True:
@@ -162,8 +165,9 @@ class Engine:
                 skipped += m["skipped"]
                 continue
             last = (last + [f"{m['t']}: {m['text'][:100]}"])[-6:]
-            # The console's last line stays the open tail until the game starts another
-            if m["text"] == "SPAM DONE":
+            # The console's last line stays the open tail until the game starts another, so the last spam's end
+            # comes again as a line once this one starts
+            if m["text"] == done:
                 break
             # A line's delay is to its first frame, as the tail or as a line, once its stamp has come whole; a
             # prompt is the tail until the next line starts, so its delay is the game's, not the engine's

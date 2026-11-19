@@ -5,8 +5,9 @@ the game can send it, and a flood past the most lines the main console keeps, so
 
 Prints one `METRIC <name> <value>` per line, as Mudlet's PipelineBenchmark does, for the CI job "Engine benchmark"
 (.github/workflows/perf.yml) to set beside it. A line's delay is from the game sending it to this client parsing its
-`line` frame; the engine's CPU comes from /proc, so this runs on Linux only. The client is Python, slower than the
-app's: at a flood's rate it falls behind, and the engine sends it a `gap` (docs/protocol.md) rather than wait.
+first frame, as the open `tail` or as a `line`; the engine's CPU comes from /proc, so this runs on Linux only. The
+client is Python, slower than the app's: at a flood's rate it falls behind, and the engine sends it a `gap`
+(docs/protocol.md) rather than wait.
 
 usage: spam_bench.py <path-to-engine-binary> [--quick]
 """
@@ -139,7 +140,8 @@ class Engine:
 
     def spam(self, lines, rate):
         """Delays in microseconds of the lines read, and the lines the engine skipped as gaps."""
-        delays, skipped, frames, texts = [], 0, {}, []
+        delays, skipped, frames, last = [], 0, {}, []
+        timed = set()
         cpu = cpu_seconds(self.proc.pid)
         start = time.perf_counter()
         self.client.send({"t": "send", "text": f"spam {lines} {rate}"})
@@ -147,35 +149,36 @@ class Engine:
         deadline = time.monotonic() + allowed
         while True:
             if time.monotonic() > deadline:
-                raise TimeoutError(f"SPAM DONE did not come within {allowed:.0f} s{self.seen(frames, texts)}")
+                raise TimeoutError(f"SPAM DONE did not come within {allowed:.0f} s{self.seen(frames, last)}")
             raw = self.client.next_raw(30)
             if raw is None:
-                raise TimeoutError(f"the spam stopped{self.seen(frames, texts)}")
+                raise TimeoutError(f"the spam stopped{self.seen(frames, last)}")
             now = time.monotonic_ns()
-            if b'"t":"line"' not in raw and b'"t":"gap"' not in raw:
-                kind = raw[raw.find(b'"t":"') + 5:][:20].split(b'"', 1)[0].decode("utf-8", "replace")
-                frames[kind] = frames.get(kind, 0) + 1
-                if kind in ("tail", "status", "error"):
-                    texts = (texts + [raw[:200].decode("utf-8", "replace")])[-6:]
+            if b'"t":"line"' not in raw and b'"t":"tail"' not in raw and b'"t":"gap"' not in raw:
                 continue
             m = json.loads(raw)
             frames[m["t"]] = frames.get(m["t"], 0) + 1
-            if m["t"] == "line":
-                texts = (texts + [m["text"][:120]])[-6:]
             if m["t"] == "gap":
                 skipped += m["skipped"]
-            elif m["text"] == "SPAM DONE":
+                continue
+            last = (last + [f"{m['t']}: {m['text'][:100]}"])[-6:]
+            # The console's last line stays the open tail until the game starts another
+            if m["text"] == "SPAM DONE":
                 break
-            # A prompt is a line only once the next one starts, so its delay is the game's, not the engine's
-            elif " ~" in m["text"] and not m.get("replay") and not m["prompt"]:
-                delays.append((now - int(m["text"].rsplit(" ~", 1)[1])) / 1000)
+            # A line's delay is to its first frame, as the tail or as a line, once its stamp has come whole; a
+            # prompt is the tail until the next line starts, so its delay is the game's, not the engine's
+            if " ~" in m["text"] and not m.get("replay") and not m["prompt"]:
+                stamp = m["text"].rsplit(" ~", 1)[1]
+                if stamp.isdigit() and len(stamp) == len(str(now)) and stamp not in timed:
+                    timed.add(stamp)
+                    delays.append((now - int(stamp)) / 1000)
         return dict(seconds=time.perf_counter() - start, cpu=cpu_seconds(self.proc.pid) - cpu, delays=delays,
                     skipped=skipped)
 
-    def seen(self, frames, texts):
+    def seen(self, frames, last):
         with open(os.path.join(self.dir, "engine.log"), "rb") as f:
             log = f.read()[-3000:].decode("utf-8", "replace")
-        return (f"\nframes: {frames}\nlast: {texts}\ngame asked {GAME['commands'][-3:]}, sent {GAME['sent']} lines"
+        return (f"\nframes: {frames}\nlast: {last}\ngame asked {GAME['commands'][-3:]}, sent {GAME['sent']} lines"
                 f"\nengine running: {self.proc.poll() is None}\nengine.log ends:\n{log}")
 
     def stop(self):

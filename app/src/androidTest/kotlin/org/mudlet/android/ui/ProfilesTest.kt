@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -23,7 +25,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -51,13 +52,18 @@ import org.junit.runner.RunWith
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
 import org.mudlet.android.data.ProfileArchive
+import org.mudlet.android.data.ProfileFolderCopy
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.ui.game.GAME_TITLE_TAG
+import org.mudlet.android.ui.profiles.Copies
+import org.mudlet.android.ui.profiles.CopyKind
+import org.mudlet.android.ui.profiles.CopyState
 import org.mudlet.android.ui.profiles.DefaultGame
 import org.mudlet.android.ui.profiles.DefaultGames
 import org.mudlet.android.ui.profiles.Exports
 import org.mudlet.android.ui.profiles.Imports
+import org.mudlet.android.ui.profiles.copyProfile
 import org.mudlet.android.ui.profiles.exportProfile
 import java.io.File
 import java.util.zip.ZipEntry
@@ -84,8 +90,8 @@ class ProfilesTest {
 
     @Before
     fun attach() {
-        // enableAccessibilityChecks() needs API 34: the API 36 emulator runs the checks, API 28 does not
-        if (Build.VERSION.SDK_INT >= 34) compose.enableAccessibilityChecks()
+        // A copy's dialog opens over the editor scrolled to its buttons, with an empty field just above the page
+        compose.enableAccessibilityChecksOfWhatShows()
         passwords = PasswordStore(compose.activity)
         forgetPasswords()
         engine = fake.engine.nextSession()
@@ -307,6 +313,242 @@ class ProfilesTest {
         } finally {
             folder.deleteRecursively()
             target.delete()
+        }
+    }
+
+    @Test
+    fun offersTheTwoCopiesDesktopMakesOfAProfile() {
+        listed(ALPHA)
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        scrollIntoView(hasText(string(R.string.profile_copy_settings)) and hasClickAction())
+        compose.onNodeWithText(string(R.string.profile_copy_text)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profile_copy)) and hasClickAction()).assertIsDisplayed().assertIsEnabled()
+        compose.onNode(hasText(string(R.string.profile_copy_settings)) and hasClickAction()).assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithText(string(R.string.profile_copy_close_first)).assertDoesNotExist()
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun anOpenGameIsCopiedOnlyOnceItHasClosed() {
+        listed(ALPHA)
+        fake.engine.openAlongside("Alpha")
+        engine.openProfiles()
+        compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
+        activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        scrollIntoView(hasText(string(R.string.profile_copy_settings)) and hasClickAction())
+        compose.onNodeWithText(string(R.string.profile_copy_close_first)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.profile_copy)) and hasClickAction()).assertIsNotEnabled()
+        compose.onNode(hasText(string(R.string.profile_copy_settings)) and hasClickAction()).assertIsNotEnabled()
+        compose.onRoot().tryPerformAccessibilityChecks()
+        // Nor by a tap that was already on its way as the game opened
+        compose.runOnIdle {
+            Copies.start(compose.activity.applicationContext, "Alpha", COPY, CopyKind.WHOLE, false)
+            assertNull(Copies["Alpha"])
+        }
+    }
+
+    @Test
+    fun copiesAProfileUnderTheNameConfirmedAndListsIt() {
+        val context = compose.activity
+        val source = ProfileArchive.folder(context.filesDir, COPIED)
+        val copy = ProfileArchive.folder(context.filesDir, COPY)
+        // A folder the engine has not listed is taken all the same
+        val unlisted = ProfileArchive.folder(context.filesDir, "${COPIED}1")
+        try {
+            File(source, "current").mkdirs()
+            File(source, "current/save.xml").writeText("<MudletPackage/>")
+            File(source, "password").writeText("hunter2")
+            unlisted.mkdirs()
+            compose.runOnIdle {
+                Settings.setAwaitsDefaults(COPIED, true)
+                Settings.setAwaitsInputClear(COPIED, true)
+            }
+            listed(COPIED_PROFILE)
+            activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            activate(hasText(string(R.string.profile_copy)))
+            compose.onNodeWithText(string(R.string.profile_copy_whole_title, COPIED)).assertIsDisplayed()
+            compose.onNodeWithText(string(R.string.profile_copy_whole_text)).assertIsDisplayed()
+            // The profile and the unlisted folder have the first two of desktop's names for a copy
+            compose.onNode(hasSetTextAction() and hasText("${COPIED}2")).assertIsDisplayed()
+            compose.onNodeWithText(string(R.string.profile_copy_password)).assertDoesNotExist()
+            val confirm = hasText(string(R.string.profile_copy)) and hasClickAction() and hasAnyAncestor(isDialog())
+
+            type(R.string.profile_name, COPIED.lowercase())
+            compose.onNodeWithText(string(R.string.profile_copy_taken, COPIED)).assertIsDisplayed()
+            compose.onNode(confirm).assertIsNotEnabled()
+            type(R.string.profile_name, "bad/name")
+            compose.onNodeWithText(string(R.string.profile_import_name_rules)).assertIsDisplayed()
+            compose.onNode(confirm).assertIsNotEnabled()
+            type(R.string.profile_name, COPY)
+            checkAccessibility()
+
+            activate(confirm)
+            engine.profiles(listOf(COPIED_PROFILE, COPIED_PROFILE.copy(name = COPY)), engine.receive("listProfiles"))
+            waitFor(hasText(string(R.string.profile_copied, COPY)))
+            compose.onNodeWithText(string(R.string.profile_copied, COPY)).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+            compose.onNode(isDialog()).assertDoesNotExist()
+            assertEquals("<MudletPackage/>", File(copy, "current/save.xml").readText())
+            assertFalse("its password file is not copied", File(copy, "password").exists())
+            assertTrue("the profile copied is as it was", File(source, "password").isFile)
+            assertFalse("only under the name confirmed", ProfileArchive.folder(context.filesDir, "${COPIED}2").exists())
+            assertEquals("the unlisted folder is as it was", 0, unlisted.list()!!.size)
+            assertTrue("a copy's staging folder is gone", File(context.cacheDir, "profile-copy").listFiles().isNullOrEmpty())
+            compose.runOnIdle {
+                assertFalse("no password is stored for it", passwords.has(COPY))
+                assertTrue("like the profile copied, it is yet to be given the app's settings", Settings.awaitsDefaults(COPY))
+                assertTrue("and the app's clearing of its input line", Settings.awaitsInputClear(COPY))
+            }
+            compose.onNode(hasText(string(R.string.profile_copy)) and hasClickAction()).assertIsEnabled()
+        } finally {
+            forgetCopies()
+            source.deleteRecursively()
+            copy.deleteRecursively()
+            unlisted.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aCopyOfTheSettingsHasTheConnectionDetailsAndTheNewestSavesSettingsAlone() {
+        val context = compose.activity
+        val source = ProfileArchive.folder(context.filesDir, COPIED)
+        val copy = ProfileArchive.folder(context.filesDir, COPY)
+        val second = ProfileArchive.folder(context.filesDir, SECOND_COPY)
+        try {
+            File(source, "current").mkdirs()
+            File(source, "url").writeText("c.example")
+            File(source, "password").writeText("hunter2")
+            File(source, "current/save.xml").writeText(
+                """<?xml version="1.0" encoding="UTF-8"?>
+                    |<!DOCTYPE MudletPackage>
+                    |<MudletPackage version="1.001">
+                    |    <TriggerPackage><Trigger><name>mine</name></Trigger></TriggerPackage>
+                    |    <HostPackage>
+                    |        <Host autoClearCommandLineAfterSend="yes">
+                    |            <name>$COPIED</name>
+                    |            <mInstalledPackages><string>a-package</string></mInstalledPackages>
+                    |            <url>c.example</url>
+                    |        </Host>
+                    |    </HostPackage>
+                    |</MudletPackage>
+                """.trimMargin(),
+            )
+            listed(COPIED_PROFILE)
+            activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            activate(hasText(string(R.string.profile_copy_settings)))
+            compose.onNodeWithText(string(R.string.profile_copy_settings_title, COPIED)).assertIsDisplayed()
+            compose.onNodeWithText(string(R.string.profile_copy_settings_text)).assertIsDisplayed()
+            type(R.string.profile_name, COPY)
+            checkAccessibility()
+            activate(hasText(string(R.string.profile_copy)) and hasAnyAncestor(isDialog()))
+            engine.profiles(listOf(COPIED_PROFILE, COPIED_PROFILE.copy(name = COPY)), engine.receive("listProfiles"))
+            waitFor(hasText(string(R.string.profile_copied, COPY)))
+
+            assertEquals(listOf("current", "url"), copy.list()!!.sorted())
+            assertEquals("c.example", File(copy, "url").readText())
+            assertEquals(listOf(ProfileFolderCopy.SETTINGS_SAVE), File(copy, "current").list()!!.toList())
+            // As this device's XML parser reads the save, which the JVM's test of the same does not show
+            assertEquals(
+                """<?xml version="1.0" encoding="UTF-8"?>
+                    |<!DOCTYPE MudletPackage>
+                    |<MudletPackage version="1.001">
+                    |${"\t"}<HostPackage>
+                    |${"\t\t"}<Host autoClearCommandLineAfterSend="yes">
+                    |${"\t\t\t"}<name>$COPIED</name>
+                    |${"\t\t\t"}<url>c.example</url>
+                    |${"\t\t"}</Host>
+                    |${"\t"}</HostPackage>
+                    |</MudletPackage>
+                    |
+                """.trimMargin(),
+                File(copy, "current/${ProfileFolderCopy.SETTINGS_SAVE}").readText(),
+            )
+
+            // A save that is not one: the copy is made, and says what it lacks
+            File(source, "current/save.xml").writeText("<MudletPackage><HostPackage><Host>")
+            activate(hasText(string(R.string.profile_copy_settings)))
+            type(R.string.profile_name, SECOND_COPY)
+            activate(hasText(string(R.string.profile_copy)) and hasAnyAncestor(isDialog()))
+            engine.profiles(listOf(COPIED_PROFILE, COPIED_PROFILE.copy(name = SECOND_COPY)), engine.receive("listProfiles"))
+            waitFor(hasText(string(R.string.profile_copy_settings_unreadable), substring = true))
+            compose.onNode(hasText(string(R.string.profile_copied, SECOND_COPY), substring = true)).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+            assertEquals("no part of the save is left to load", listOf("url"), second.list()!!.toList())
+        } finally {
+            forgetCopies()
+            source.deleteRecursively()
+            copy.deleteRecursively()
+            second.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aCopyHasTheStoredPasswordOnlyOnceThePlayerTurnsThatOn() {
+        val context = compose.activity
+        val source = ProfileArchive.folder(context.filesDir, COPIED)
+        val copies = listOf(COPY, SECOND_COPY).map { ProfileArchive.folder(context.filesDir, it) }
+        try {
+            File(source, "current").mkdirs()
+            assertTrue(passwords.set(COPIED, "copied secret"))
+            // One a profile of the copy's name left behind
+            assertTrue(passwords.set(COPY, "stale secret"))
+            listed(COPIED_PROFILE)
+            activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            val switch = hasText(string(R.string.profile_copy_password)) and hasAnyAncestor(isDialog())
+            val confirm = hasText(string(R.string.profile_copy)) and hasAnyAncestor(isDialog())
+
+            activate(hasText(string(R.string.profile_copy)))
+            compose.onNode(switch).assertIsDisplayed().assertIsOff()
+            type(R.string.profile_name, COPY)
+            checkAccessibility()
+            activate(confirm)
+            engine.profiles(listOf(COPIED_PROFILE, COPIED_PROFILE.copy(name = COPY)), engine.receive("listProfiles"))
+            waitFor(hasText(string(R.string.profile_copied, COPY)))
+            compose.runOnIdle { assertFalse("off, no password is stored for the copy", passwords.has(COPY)) }
+
+            activate(hasText(string(R.string.profile_copy_settings)))
+            compose.onNode(switch).assertIsOff()
+            activate(switch)
+            compose.onNode(switch).assertIsOn()
+            type(R.string.profile_name, SECOND_COPY)
+            activate(confirm)
+            engine.profiles(listOf(COPIED_PROFILE, COPIED_PROFILE.copy(name = SECOND_COPY)), engine.receive("listProfiles"))
+            waitFor(hasText(string(R.string.profile_copied, SECOND_COPY)))
+            compose.runOnIdle {
+                assertEquals("on, the copy logs in as the profile copied does", "copied secret", passwords.get(SECOND_COPY))
+                assertEquals("which keeps its own", "copied secret", passwords.get(COPIED))
+            }
+        } finally {
+            forgetCopies()
+            source.deleteRecursively()
+            copies.forEach { it.deleteRecursively() }
+        }
+    }
+
+    @Test
+    fun aCopyThatCannotBeMadeSaysWhyAndLeavesNothing() {
+        val context = compose.activity
+        val copy = ProfileArchive.folder(context.filesDir, COPY)
+        try {
+            // The engine lists a profile whose folder is gone
+            listed(COPIED_PROFILE)
+            activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            activate(hasText(string(R.string.profile_copy)))
+            type(R.string.profile_name, COPY)
+            activate(hasText(string(R.string.profile_copy)) and hasAnyAncestor(isDialog()))
+            waitFor(hasText(string(R.string.profile_copy_failed, ""), substring = true))
+            compose.onNode(hasText(string(R.string.profile_copy_failed, ""), substring = true)).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
+            assertFalse(copy.exists())
+            assertTrue("a copy's staging folder is gone", File(context.cacheDir, "profile-copy").listFiles().isNullOrEmpty())
+            engine.assertNoRequest("listProfiles", 1000)
+            compose.onNode(hasText(string(R.string.profile_copy)) and hasClickAction()).assertIsEnabled()
+
+            assertEquals(
+                "a name with a path in it is refused whatever asks",
+                CopyState.Failed(string(R.string.profile_import_name_rules)),
+                copyProfile(context, COPIED, "../$COPY", CopyKind.WHOLE),
+            )
+        } finally {
+            forgetCopies()
+            copy.deleteRecursively()
         }
     }
 
@@ -552,6 +794,16 @@ class ProfilesTest {
         engine.assertNoRequest("openProfile", 1000)
     }
 
+    // What a copy test left the app holding for its profiles
+    private fun forgetCopies() = compose.runOnIdle {
+        for (name in listOf(COPIED, COPY, SECOND_COPY)) {
+            passwords.forget(name)
+            Settings.setAwaitsDefaults(name, false)
+            Settings.setAwaitsInputClear(name, false)
+            Copies.forgetEnded(name)
+        }
+    }
+
     // A .zip in the app's cache, of empty files at these paths
     private fun archive(name: String, vararg paths: String) = File(compose.activity.cacheDir, name).also { file ->
         ZipOutputStream(file.outputStream()).use { zip ->
@@ -651,6 +903,12 @@ class ProfilesTest {
 
         // A profile folder the fake engine knows nothing of, made and removed by the export test
         const val EXPORTED = "Export Test"
+
+        // A profile folder a copy test makes for the fake engine to list, and the names it copies it under
+        const val COPIED = "Copy Test"
+        val COPIED_PROFILE = Profile(COPIED, "c.example", 23, false, "", false)
+        const val COPY = "Copy Test Twin"
+        const val SECOND_COPY = "Copy Test Triplet"
 
         // The name an import test adds a profile under, and removes it from
         const val IMPORTED = "Import Test"

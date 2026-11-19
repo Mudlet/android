@@ -486,7 +486,7 @@ added later travels only once it is named there:
 | `profiles/<name>/password`, `irc_password` | no | no | desktop's plain secret files; the engine does not write them here, and import and export drop them |
 | `files/engine-session.json`, `files/engine-stopped` | no | no | this device's engine runs: restored, a new phone would reopen and reconnect games at its first start, or keep the engine stopped |
 | SharedPreferences `engine` | no | no | `qpaPlatform` is the self-test's choice of platform for this device; `lastProfile` and `lastHost:` and the rest are where this device last went, and the profile list's own address stands in for them |
-| SharedPreferences `ui` | no | no | whether this device asked for the notification permission: carried over, a new phone where it is not granted would never ask |
+| SharedPreferences `ui` | no | no | what this device asked and showed once: the notification permission (carried over, a new phone where it is not granted would never ask), the UI tour, an engine Android stopped, a crash report |
 | the `root`, `database` and `external` domains, and the rest of `files/` | no | no | nothing of the player's is there |
 
 A cloud backup is made only when the transport encrypts it with the screen lock (`FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED`);

@@ -357,7 +357,7 @@ jobs:
     needs: emulator-build
     runs-on: ubuntu-24.04
     # android_instrumented.py stops a hung suite itself, with its threads' stacks, within its suites' limits (up to
-    # 70 minutes together); this is above them, so its report is not lost to a cancel
+    # 78 minutes together); this is above them, so its report is not lost to a cancel
     timeout-minutes: 90
     strategy:
       fail-fast: false

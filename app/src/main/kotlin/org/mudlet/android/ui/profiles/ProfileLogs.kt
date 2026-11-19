@@ -51,7 +51,7 @@ import java.io.IOException
 const val LOG_FILE_TAG = "logFile"
 
 // The rest wait for "Show all": one log a session, a profile soon has hundreds
-private const val NEWEST_SHOWN = 10
+private const val NEWEST_SHOWN = 11
 
 private const val DATE_FLAGS = DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_ABBREV_MONTH
 
@@ -95,7 +95,6 @@ fun ProfileLogs(name: String, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         logs?.let { listed ->
-            if (listed.isEmpty()) Text(stringResource(R.string.profile_logs_none), style = MaterialTheme.typography.bodyMedium)
             for (log in if (all) listed else listed.take(NEWEST_SHOWN)) {
                 LogRow(log, enabled = !busy, onOpen = { hand(log, open = true) }, onShare = { hand(log, open = false) })
             }
@@ -114,15 +113,15 @@ private fun LogRow(log: LogFile, enabled: Boolean, onOpen: () -> Unit, onShare: 
     val context = LocalContext.current
     val facts = stringResource(R.string.profile_log_facts, DateUtils.formatDateTime(context, log.modified, DATE_FLAGS), Formatter.formatShortFileSize(context, log.size))
     Row(Modifier.fillMaxWidth().testTag(LOG_FILE_TAG), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-            Text(log.name, style = MaterialTheme.typography.bodyLarge)
-            Text(facts, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
         IconButton(onOpen, enabled = enabled) {
             Icon(painterResource(R.drawable.ic_open_in_new), stringResource(R.string.profile_log_open, log.name))
         }
         IconButton(onShare, enabled = enabled) {
             Icon(painterResource(R.drawable.ic_share), stringResource(R.string.profile_log_share, log.name))
+        }
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+            Text(log.name, style = MaterialTheme.typography.bodyLarge)
+            Text(facts, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -144,12 +143,12 @@ internal object LogShare {
     }
 
     fun share(context: Context, copy: File, mimeType: String, title: String, noApp: String) {
-        val send = Intent(Intent.ACTION_SEND).setType(mimeType).putExtra(Intent.EXTRA_STREAM, uri(context, copy)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val send = Intent(Intent.ACTION_SEND).setType(mimeType).putExtra(Intent.EXTRA_STREAM, uri(context, copy))
         start(context, Intent.createChooser(send, title), noApp)
     }
 
     fun open(context: Context, copy: File, mimeType: String, noViewer: String) {
-        start(context, Intent(Intent.ACTION_VIEW).setDataAndType(uri(context, copy), mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), noViewer)
+        start(context, Intent(Intent.ACTION_VIEW).setDataAndType(uri(context, copy), "text/plain").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), noViewer)
     }
 
     private fun uri(context: Context, copy: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.$DIR", copy)

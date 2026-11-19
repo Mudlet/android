@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +22,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.IntentCompat
 import androidx.core.content.edit
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
@@ -29,6 +32,9 @@ import org.mudlet.android.ui.game.CommandSuggestions
 import org.mudlet.android.ui.game.ScriptFileRequest
 import org.mudlet.android.ui.game.ScriptWebPages
 import org.mudlet.android.ui.profiles.GameLinkRefused
+import org.mudlet.android.ui.profiles.Imports
+import org.mudlet.android.ui.profiles.OpenWith
+import org.mudlet.android.ui.profiles.OpenedProfileFile
 import org.mudlet.android.ui.profiles.TelnetLink
 import org.mudlet.android.ui.theme.MudletTheme
 import org.mudlet.android.update.PtbUpdates
@@ -62,13 +68,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // A link opened in another app starts the Activity in that app's task: it goes to the app's own, so that one
-        // Activity talks to the engine
-        if (savedInstanceState == null && !isTaskRoot && intent.action == Intent.ACTION_VIEW) {
-            startActivity(
-                Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(intent.data)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            )
+        // A link or file opened in another app starts the Activity in that app's task: it goes to the app's own, so
+        // that one Activity talks to the engine. The other app's grant to read a file ends with this Activity, so it
+        // is passed on
+        if (savedInstanceState == null && !isTaskRoot && (intent.action == Intent.ACTION_VIEW || intent.action == Intent.ACTION_SEND)) {
+            val file = profileFile(intent)
+            val forward = Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(file ?: intent.data)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            if (file != null) forward.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (file != null || intent.action == Intent.ACTION_VIEW) startActivity(forward)
             finish()
             return
         }
@@ -84,7 +92,7 @@ class MainActivity : ComponentActivity() {
         // A recreated Activity has shown its intent's game already
         if (savedInstanceState == null) {
             showProfileOf(intent)
-            takeGameLink(intent)
+            takeOpened(intent)
         } else {
             gameLink = savedInstanceState.getString(STATE_GAME_LINK)?.let(TelnetLink::parse)
         }
@@ -101,6 +109,7 @@ class MainActivity : ComponentActivity() {
                     onGameLinkDone = { gameLink = null },
                 )
                 ScriptFileRequest()
+                OpenedProfileFile()
                 if (gameLinkRefused) {
                     GameLinkRefused(onDismiss = { gameLinkRefused = false })
                 } else if (explainNotifications) {
@@ -151,7 +160,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         showProfileOf(intent)
-        takeGameLink(intent)
+        takeOpened(intent)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -167,13 +176,33 @@ class MainActivity : ComponentActivity() {
         EngineClient.showProfile(profile) { gamesShown++ }
     }
 
-    // Recents starts the Activity again with the link it last had, which the player has already answered
-    private fun takeGameLink(intent: Intent) {
-        if (intent.action != Intent.ACTION_VIEW || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
-        val link = intent.dataString?.let(TelnetLink::parse)
-        gameLink = link
-        gameLinkRefused = link == null
+    // Recents starts the Activity again with the link or file it last had, which the player has already answered
+    private fun takeOpened(intent: Intent) {
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val stream = sharedStream(intent)
+        when (OpenWith.of(intent.action, intent.data?.scheme, stream?.scheme)) {
+            OpenWith.PROFILE_FILE -> (stream ?: intent.data)?.let { file ->
+                if (!Imports.open(applicationContext, file)) Toast.makeText(this, R.string.profile_file_busy, Toast.LENGTH_LONG).show()
+            }
+
+            OpenWith.GAME_LINK -> {
+                val link = intent.dataString?.let(TelnetLink::parse)
+                gameLink = link
+                gameLinkRefused = link == null
+            }
+
+            OpenWith.NOTHING -> Unit
+        }
     }
+
+    // The file a VIEW or SEND from another app hands over to import as a profile; null for anything else
+    private fun profileFile(intent: Intent): Uri? {
+        val stream = sharedStream(intent)
+        if (OpenWith.of(intent.action, intent.data?.scheme, stream?.scheme) != OpenWith.PROFILE_FILE) return null
+        return stream ?: intent.data
+    }
+
+    private fun sharedStream(intent: Intent): Uri? = if (intent.action == Intent.ACTION_SEND) IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) else null
 
     override fun onStop() {
         // The process may be killed in the background: keep what the suggestions learned

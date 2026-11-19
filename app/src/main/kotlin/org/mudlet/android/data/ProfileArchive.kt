@@ -23,6 +23,12 @@ object ProfileArchive {
     const val MIME_TYPE = "application/zip"
 
     /**
+     * The types a `.zip` comes as: some providers and file managers call one only a file of bytes, and a file that is
+     * not a zip is refused as one. The manifest's filters for a shared or opened file list the same.
+     */
+    val MIME_TYPES = listOf(MIME_TYPE, "application/x-zip-compressed", "application/x-zip", "application/octet-stream")
+
+    /**
      * The profile's data items that hold a secret (desktop's `MudletApp::profileDataItemHoldsSecret()`), which an
      * export leaves out. Mudlet's credential store is outside the profile's folder, so nothing of it is in one.
      */
@@ -76,7 +82,16 @@ object ProfileArchive {
         /** The profile's folder, unpacked in the staging folder, under the name the archive gave it. */
         data class Folder(val folder: File) : Unpacked
 
-        data class Refused(val refusal: Refusal, val detail: String) : Unpacked
+        data class Refused(val refusal: Refusal, val detail: String) :
+            Unpacked,
+            Checked
+    }
+
+    /** What an archive holds, as [check] finds it: the profile folder's [name], and the [files] and [bytes] it unpacks to. */
+    data class Contents(val name: String, val files: Int, val bytes: Long)
+
+    sealed interface Checked {
+        data class Profile(val contents: Contents) : Checked
     }
 
     /** The most an import unpacks, against a zip bomb: counted in the bytes written, not the sizes the entries claim. */
@@ -94,32 +109,42 @@ object ProfileArchive {
      */
     fun unpack(input: InputStream, staging: File, maxBytes: Long = MAX_BYTES, maxEntries: Int = MAX_ENTRIES): Unpacked {
         if (!staging.mkdirs() && !staging.isDirectory) throw IOException("could not create ${staging.path}")
-        try {
-            val refused = unpackInto(input, staging, maxBytes, maxEntries)
-            if (refused != null) {
-                staging.deleteRecursively()
-                return refused
-            }
-        } catch (e: ZipException) {
-            staging.deleteRecursively()
-            // From API 34 (ZipPathValidator) ZipInputStream itself throws at a name with a `..` segment or a leading `/`
-            val refusal = if (e.message.orEmpty().startsWith(PLATFORM_UNSAFE_PATH)) Refusal.UNSAFE_PATH else Refusal.NOT_A_ZIP
-            return Unpacked.Refused(refusal, e.message.orEmpty())
-        } catch (e: IllegalArgumentException) {
-            // ZipInputStream's answer to an entry name that is not UTF-8 and does not say which encoding it is in
-            staging.deleteRecursively()
-            return Unpacked.Refused(Refusal.UNREADABLE_NAME, e.message.orEmpty())
+        val read = try {
+            read(input, staging, maxBytes, maxEntries)
         } catch (e: IOException) {
             staging.deleteRecursively()
             throw e
         }
-        return Unpacked.Folder(staging.listFiles()!!.single())
+        return when (read) {
+            is Unpacked.Refused -> {
+                staging.deleteRecursively()
+                read
+            }
+
+            is Checked.Profile -> Unpacked.Folder(staging.listFiles()!!.single())
+        }
     }
 
-    private fun unpackInto(input: InputStream, staging: File, maxBytes: Long, maxEntries: Int): Unpacked.Refused? {
-        val root = staging.canonicalFile
+    /** Reads [input] through, making each of [unpack]'s checks, and says what it holds, writing nothing. */
+    fun check(input: InputStream, maxBytes: Long = MAX_BYTES, maxEntries: Int = MAX_ENTRIES): Checked = read(input, null, maxBytes, maxEntries)
+
+    private fun read(input: InputStream, staging: File?, maxBytes: Long, maxEntries: Int): Checked = try {
+        walk(input, staging, maxBytes, maxEntries)
+    } catch (e: ZipException) {
+        // From API 34 (ZipPathValidator) ZipInputStream itself throws at a name with a `..` segment or a leading `/`
+        val refusal = if (e.message.orEmpty().startsWith(PLATFORM_UNSAFE_PATH)) Refusal.UNSAFE_PATH else Refusal.NOT_A_ZIP
+        Unpacked.Refused(refusal, e.message.orEmpty())
+    } catch (e: IllegalArgumentException) {
+        // ZipInputStream's answer to an entry name that is not UTF-8 and does not say which encoding it is in
+        Unpacked.Refused(Refusal.UNREADABLE_NAME, e.message.orEmpty())
+    }
+
+    // Writes the entries into [staging], or only reads them while it is null
+    private fun walk(input: InputStream, staging: File?, maxBytes: Long, maxEntries: Int): Checked {
+        val root = staging?.canonicalFile
         var top: String? = null
         var entries = 0
+        var files = 0
         var bytes = 0L
         var hasSave = false
         val seen = HashSet<String>()
@@ -138,32 +163,40 @@ object ProfileArchive {
                 if (segments.first() != top || (segments.size == 1 && !entry.isDirectory)) {
                     return Unpacked.Refused(Refusal.NOT_ONE_FOLDER, entry.name)
                 }
-                val target = File(staging, segments.joinToString("/")).canonicalFile
-                if (!target.path.startsWith(root.path + File.separator)) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
-                if (!seen.add(segments.joinToString("/"))) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
+                val path = segments.joinToString("/")
+                val target = root?.let { r ->
+                    File(r, path).canonicalFile.takeIf { it.path.startsWith(r.path + File.separator) } ?: return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
+                }
+                if (!seen.add(path)) return Unpacked.Refused(Refusal.UNSAFE_PATH, entry.name)
                 if (entry.isDirectory) {
-                    if (!target.mkdirs() && !target.isDirectory) throw IOException("could not create ${target.path}")
+                    if (target != null && !target.mkdirs() && !target.isDirectory) throw IOException("could not create ${target.path}")
                     continue
                 }
                 if (segments.size == 2 && segments[1] in SECRETS) continue
                 if (segments.size >= 3 && segments[1] == "current" && segments.last().endsWith(".xml", ignoreCase = true)) hasSave = true
-                val parent = target.parentFile!!
-                if (!parent.mkdirs() && !parent.isDirectory) throw IOException("could not create ${parent.path}")
-                target.outputStream().use { out ->
+                files++
+                val out = target?.let {
+                    val parent = it.parentFile!!
+                    if (!parent.mkdirs() && !parent.isDirectory) throw IOException("could not create ${parent.path}")
+                    it.outputStream()
+                }
+                try {
                     while (true) {
                         val read = zip.read(buffer)
                         if (read < 0) break
                         bytes += read
                         if (bytes > maxBytes) return Unpacked.Refused(Refusal.TOO_LARGE, "more than $maxBytes bytes")
-                        out.write(buffer, 0, read)
+                        out?.write(buffer, 0, read)
                     }
+                } finally {
+                    out?.close()
                 }
             }
         }
         return when {
             top == null -> Unpacked.Refused(Refusal.NOT_A_ZIP, "no files in it")
             !hasSave -> Unpacked.Refused(Refusal.NO_SAVE, "$top/current/")
-            else -> null
+            else -> Checked.Profile(Contents(top, files, bytes))
         }
     }
 

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -51,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.mudlet.android.R
 import org.mudlet.android.data.PasswordStore
@@ -194,14 +196,11 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
         }
     }
 
-    var loginOpen by rememberSaveable { mutableStateOf(!fromLink?.login.isNullOrEmpty()) }
+    var loginOpen by remember { mutableStateOf(!fromLink?.login.isNullOrEmpty()) }
     var advancedOpen by rememberSaveable { mutableStateOf(false) }
     var manageOpen by rememberSaveable { mutableStateOf(false) }
     val proxySummary = ProxySummary.of(shown = proxyShown, use = proxyUse, valid = proxy != null, passwordStored = proxyPasswordStored)
     // Save waits for the proxy to be put right, so its fields are not left folded away
-    LaunchedEffect(proxySummary == ProxySummary.NEEDS_FIX) {
-        if (proxySummary == ProxySummary.NEEDS_FIX) advancedOpen = true
-    }
 
     MudletScaffold(name ?: stringResource(R.string.profile_new_title), onBack = onClose) { padding ->
         Column(
@@ -354,11 +353,20 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
             error?.let {
                 Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
             }
-            Button({ save(onClose) }, Modifier.fillMaxWidth().padding(top = 8.dp), enabled = canSave) { Text(stringResource(R.string.profile_save)) }
+            Button({
+                if (!loginOpen) password = ""
+                save(onClose)
+            }, Modifier.fillMaxWidth().padding(top = 8.dp), enabled = canSave) { Text(stringResource(R.string.profile_save)) }
 
             if (name != null) {
                 Spacer(Modifier.height(8.dp))
                 FoldedSection(stringResource(R.string.profile_manage_section), stringResource(R.string.profile_manage_summary), manageOpen, { manageOpen = !manageOpen }) {
+                    OutlinedButton(
+                        { confirmDelete = true },
+                        Modifier.padding(top = 8.dp),
+                        enabled = !waiting,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text(stringResource(R.string.profile_delete)) }
                     // What is typed is saved first, as desktop's dialog keeps each change, or leaving would lose it
                     val unsaved = edited != existing || password.isNotEmpty() || proxyPassword.isNotEmpty() || (proxyShown && proxy != proxyHeld)
                     OutlinedButton(
@@ -370,12 +378,6 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                     ProfileCopy(name, open, passwordStored)
                     ProfileLogs(name)
                     HorizontalDivider(Modifier.padding(top = 16.dp))
-                    OutlinedButton(
-                        { confirmDelete = true },
-                        Modifier.padding(top = 8.dp),
-                        enabled = !waiting,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text(stringResource(R.string.profile_delete)) }
                 }
             }
         }
@@ -415,11 +417,11 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
  */
 @Composable
 private fun FoldedSection(title: String, summary: String, open: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
-    val state = stringResource(if (open) R.string.profile_section_expanded else R.string.profile_section_collapsed)
+    val state = stringResource(R.string.profile_section_collapsed)
     val action = stringResource(if (open) R.string.profile_section_hide else R.string.profile_section_show)
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
-            .clickable(onClickLabel = action, role = Role.Button, onClick = onToggle)
+            .clickable(onClickLabel = action, onClick = onToggle)
             .semantics {
                 heading()
                 stateDescription = state
@@ -430,7 +432,7 @@ private fun FoldedSection(title: String, summary: String, open: Boolean, onToggl
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             if (!open) {
-                Text(summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(summary, Modifier.widthIn(max = 160.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         // A triangle, not a chevron, as it means the same either way round in a right-to-left layout

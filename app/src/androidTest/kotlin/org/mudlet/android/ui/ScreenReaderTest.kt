@@ -745,6 +745,7 @@ class ScreenReaderTest {
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(compose.activity.getString(R.string.profile_edit, GAME.name)))
         session.proxy(true, "socks.example", 1080, "proxy-user", session.receive("getProxy").get("id"))
+        activate(hasText(string(R.string.profile_advanced_section)), scroll = true)
         val host = hasSetTextAction() and hasText(string(R.string.profile_proxy_host))
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(host).fetchSemanticsNodes().isNotEmpty() }
 

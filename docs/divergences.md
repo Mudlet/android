@@ -392,6 +392,66 @@ themselves. It tells where the rows in view are among those the app holds, the c
 line the console has. The main console has no scroll bar in the app, where the desktop's has one unless a script takes
 it off: it scrolls by touch, with a button back to the newest line.
 
+## A console's font
+
+A mini console, user window or MXP frame is drawn in the device's monospace, sans serif, serif or cursive font,
+whichever the name of the font family the engine reports for it (`fontFamily`, which a script's `setFont()` sets)
+points to, and in monospace for a name that points to none (`docs/phase-f.md`, "Mini consoles and user windows"). The
+desktop draws the family itself. The app draws in Compose's four generic families and bundles no fonts of its own:
+Android gives an app the device's fonts by the generic names in its font list, not by a font's own family name, so
+drawing the named font would mean finding it by the names inside each of the device's font files, and carrying
+Mudlet's bundled fonts (Bitstream Vera and Ubuntu), which are in the engine's resources, in the app a second time. On
+Android's own fonts the serif is Noto Serif, the sans serif Roboto and the monospace a font much like Mudlet's console
+fonts; Mudlet's Bitstream Vera Sans and Serif are drawn in those, and its Ubuntu, a sans serif, in the sans serif. The
+few device fonts with a generic name of their own besides the four, such as Coming Soon (`casual`), Carrois Gothic SC
+(`sans-serif-smallcaps`) and Cutive Mono (`serif-monospace`), are not drawn by that name either: the app maps a name
+by its words to the four families only, so Coming Soon is drawn in cursive, Cutive Mono in monospace, and Carrois
+Gothic SC, with none of the words, in monospace, though AOSP's font list has that very font. Those generic names are
+AOSP's, which a device maker's font list need not keep, so a console drawn by them could change its font from one
+device to the next, where the four names always give a font: the first three are on every device, and on one whose list
+has no cursive Android gives the sans serif in its place, which the size is then measured in too, so the rows still
+fit. The engine takes only a family it has, as the desktop does: a script's `setFont()` with one it lacks fails, and
+the console keeps its font.
+
+The desktop keeps a console's grid in any family: `TTextEdit` draws each character centred in a cell of the font's
+average width (`QFontMetrics::averageCharWidth()`), so a proportional font's letters stand in columns, unevenly spaced,
+and a row of the console's columns is as wide as the console. The engine counts those columns by the same average. The
+app draws the text at the size those columns give in the window, by the average width of the device font it draws in,
+its printable ASCII characters', where Qt's average, under FreeType as in the engine, is the font's own OS/2 figure, of
+all its glyphs or, in an older font, of its lowercase letters weighted by use, which Android's text measuring does not
+give short of reading the font's file. The two differ by as much as a fifth either way even in the very font the script
+named (Bitstream Vera Serif's is 0.51 em to its ASCII 0.62, as is DejaVu Serif's), and further when the device font
+stands in for another, as cursive does for Coming Soon, so a console in a proportional family can be drawn a little
+smaller or larger than on the desktop. A CJK font's average, of glyphs mostly a full em wide, is nearly an em, so the
+engine gives a console in one about half the columns the app's ASCII average would, and the app draws it much larger
+than the desktop does, though its rows still fit. The app lays each row out in the family's own widths, not a letter to
+a cell. So text a game or script lines up in columns does not line up, a row of narrow letters ends short of the right
+edge, and a row whose first columns would run past the width it has, as a full row of capitals does, is squeezed
+sideways to it rather than cut off; what a row has past the console's columns, which a console does not wrap at unless a
+script says so, is cut off at the edge, as on the desktop, though where its first columns end short of the edge some of
+it shows before the edge, where the desktop's columns reach it: cutting the row at its columns instead would leave blank
+a width the console has, for text the player could read. The columns are counted as the desktop counts its cells, a
+grapheme at a time, two for a wide East Asian character or an emoji and none for a combining mark, but an East Asian
+ambiguous character always takes one, where a profile set to draw those wide gives it two; the graphemes and the marks
+are found by the device's Unicode data, older on an older Android than the Qt the desktop is built with, rather than by
+Unicode's grapheme and category tables carried in the app beside the device's (the wide characters are the desktop's own
+table's). Drawing each letter in a cell would need each letter's own width measured and the letter spaced out to the
+cell, by a span for every letter of every row, which splits the row into as many runs of text as it has letters, each
+measured and drawn on its own, as each row scrolls into view, where the app's row has a run only where its style
+changes; and a letter wider than its cell would be drawn over its neighbours, as on the desktop, where the app squeezes
+the row so no letter covers another. Drawing a row a letter at a time would also leave it no longer the one line of text
+that links are found in under a finger and that TalkBack reads.
+
+A console's own command line (`enableCommandLine()`) is drawn in the same font as its rows, monospace by default, as
+the desktop gives it the console's font when it is made and on `setFont()`, but at the theme's size, the input
+field's, which the field and a finger are sized for, a console's text being as small as 9 sp, where the desktop's takes
+the font's size as well. A command line a script made in the console (`createCommandLine()`) keeps the theme's font,
+where the desktop's follows the main console's font, not the console it is in (`TConsole::setFont()`): the app's input
+line, the main console's own here, is in the theme's font, so the script's line stays like it, as on the desktop. A
+line's style sheet (`setCmdLineStyleSheet()`) with a `font-family` that maps to one of the four families gives any
+command line that family, a script's on the main window too, as a style sheet's font wins over `setFont()` on the
+desktop.
+
 ## A scroll box
 
 A scroll box draws no frame and no scroll bars (`docs/phase-f.md`, "Scroll boxes"). On the desktop it is a `QScrollArea`

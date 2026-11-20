@@ -428,6 +428,14 @@ last one's stored password, as on an engine started again after the notification
 have libmudlet make a profile named `MUDLET_PROFILE` with that address, a copy of the player's. A profile's name cannot
 change, as the engine keeps the name a profile was created with.
 
+The editor shows first only what connecting needs: the name of a new game, the address with a hint of its form, the
+port (23 to start), TLS and Save. The rest is folded under headings (`FoldedSection` in `ProfileEditor.kt`), each a
+button TalkBack reads with its state, that say while folded what they hold (`ProfileEditorSections.kt`), never a
+password: "Log in automatically" (the character name and password; open from the start for a link that names a user),
+"Advanced" (Reconnect automatically and the proxy) and, for a saved game, "Manage profile" (Open offline, Export, Copy,
+the log files and, apart and last, Delete). "Advanced" opens by itself when a proxy Save waits for needs putting right.
+What is open lasts through a rotation, and a folded field is saved as a shown one is.
+
 Below the profiles, under "More games", the list offers the games of Mudlet's connection dialog
 (`ui/profiles/DefaultGames.kt`, from `assets/games/games.json` and its logos, which `scripts/sync-mudlet-games.py`
 copies from Mudlet's `src/TGameDetails.h` at a pinned commit), each with its logo, name and the first paragraph of its
@@ -1446,6 +1454,9 @@ device shows, below the UI's debug hook:
   field, which TalkBack does not read aloud; `PasswordStore`
   (`PasswordStoreTest`), whose passwords outlast a new store, go with Forget, are never in the clear, and are excluded
   from backups;
+  the editor's folded sections (`ProfileEditorLayoutTest`): only what connecting needs shown at first, each heading a
+  button with its state and what it holds, opening and folding, opening by itself for a proxy to put right, the same
+  after a rotation, and what is folded saved, and in en-XA and ar-XB (`ProfileEditorPseudoLocaleTest`) whole;
   a proxy's password kept apart from the game's; an open game's proxy read into the editor, changed only when the
   player changed it, refused with Mudlet's reason, and said to be set while open for a closed game, and the proxy's
   password stored, sent as `proxyPassword` with every `openProfile`, forgotten, and given alone to a game brought back
@@ -2112,6 +2123,8 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
     - In the editor, each field reads its label. Typing in the password field, TalkBack says "dot" or nothing, never
       the letters, and the field reads as a password field, without the text. The switches read their labels and
       their state, and a double tap anywhere on a switch's row toggles it.
+    - "Log in automatically", "Advanced" and, in a saved game's editor, "Manage profile" read as headings and buttons,
+      with "Collapsed" or "Expanded" and, folded, what they hold, never a password; a double tap opens or folds them.
     - "Delete" opens a dialog that TalkBack moves into and reads; Cancel returns to the editor with the game kept.
     - Tap a `telnet://` link to one of your games' addresses in a browser or a message: the app asks "Connect to
       host:port with your profile name?", TalkBack reads it, and Connect logs in as Connect on the list does; Cancel

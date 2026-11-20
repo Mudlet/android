@@ -115,12 +115,33 @@
     <string name="profile_name">Name</string>
     <!-- The profile editor's field for the game's server address (host name), such as mud.example.com -->
     <string name="profile_host">Host</string>
+    <!-- Under the profile editor's host field: what to type there, for a player who has not set up a game before -->
+    <string name="profile_host_help">The game\'s address, like game.example.com</string>
     <!-- The profile editor's field for the game's port number -->
     <string name="profile_port">Port</string>
     <!-- Shown under the port field while what is typed there is not a valid port number -->
     <string name="profile_port_invalid">A port from 1 to 65535</string>
     <!-- The profile editor's switch: connect to the game over an encrypted connection (TLS is the protocol's name) -->
     <string name="profile_tls">Secure connection (TLS)</string>
+    <!-- What a screen reader says of a folded heading of the profile editor (Log in automatically, Advanced, Manage
+         profile) while what it holds shows -->
+    <string name="profile_section_expanded">Expanded</string>
+    <!-- What a screen reader says of a folded heading of the profile editor while what it holds is hidden -->
+    <string name="profile_section_collapsed">Collapsed</string>
+    <!-- What a tap on a folded heading of the profile editor does, read by a screen reader as "Double-tap to …" -->
+    <string name="profile_section_show">show this section</string>
+    <!-- What a tap on an open heading of the profile editor does, read by a screen reader as "Double-tap to …" -->
+    <string name="profile_section_hide">hide this section</string>
+    <!-- The heading of the profile editor's folded section with the character name and password the app logs in with -->
+    <string name="profile_login_section">Log in automatically</string>
+    <!-- Under the folded "Log in automatically" heading: no character name and no password set -->
+    <string name="profile_login_not_set">Not set</string>
+    <!-- Under the folded "Log in automatically" heading: %1$s is the character name; no password is set -->
+    <string name="profile_login_as">As %1$s</string>
+    <!-- Under the folded "Log in automatically" heading: %1$s is the character name; a password is set (never shown) -->
+    <string name="profile_login_as_password">As %1$s, with a password</string>
+    <!-- Under the folded "Log in automatically" heading: a password is set (never shown), but no character name -->
+    <string name="profile_login_password_only">A password, with no character name</string>
     <!-- The profile editor's field for the name of the player's character, which the game asks for on logging in -->
     <string name="profile_login">Character name</string>
     <!-- The profile editor's field for the character's password, which the game asks for on logging in -->
@@ -135,6 +156,24 @@
     <string name="profile_password_not_forgotten">The password could not be forgotten.</string>
     <!-- The profile editor's switch: connect to the game again by itself when the connection drops -->
     <string name="profile_auto_reconnect">Reconnect automatically</string>
+    <!-- The heading of the profile editor's folded section with Reconnect automatically and the proxy, which most
+         players leave as they are -->
+    <string name="profile_advanced_section">Advanced</string>
+    <!-- Under the folded "Advanced" heading: Reconnect automatically is on -->
+    <string name="profile_advanced_reconnect_on">Reconnects automatically</string>
+    <!-- Under the folded "Advanced" heading: Reconnect automatically is off -->
+    <string name="profile_advanced_reconnect_off">Does not reconnect automatically</string>
+    <!-- Under the folded "Advanced" heading: the game connects through its proxy -->
+    <string name="profile_advanced_proxy_on">Proxy on</string>
+    <!-- Under the folded "Advanced" heading: the game connects without its proxy -->
+    <string name="profile_advanced_proxy_off">Proxy off</string>
+    <!-- Under the folded "Advanced" heading: what is typed for the proxy has a mistake, so the game cannot be saved -->
+    <string name="profile_advanced_proxy_fix">The proxy needs fixing</string>
+    <!-- Under the folded "Advanced" heading, while the game is not open (its proxy is not known then): a proxy
+         password is stored -->
+    <string name="profile_advanced_proxy_password">Proxy password stored</string>
+    <!-- Under the folded "Advanced" heading: two of the lines above, %1$s about reconnecting and %2$s about the proxy -->
+    <string name="profile_advanced_summary">%1$s · %2$s</string>
     <!-- The heading of the profile editor's section for a proxy: a server the connection to the game goes through (SOCKS5), as in desktop Mudlet's profile preferences -->
     <string name="profile_proxy_title">Proxy</string>
     <!-- The profile editor's switch: connect to the game through the proxy whose details follow -->
@@ -162,6 +201,11 @@
     <!-- The profile editor's button that opens the game without connecting to it, to work on its scripts, settings or
          map offline; Mudlet desktop's "Offline" button -->
     <string name="profile_open_offline">Open offline</string>
+    <!-- The heading of the profile editor's folded section, for a saved game, with Open offline, Export, Copy, the log
+         files and Delete -->
+    <string name="profile_manage_section">Manage profile</string>
+    <!-- Under the folded "Manage profile" heading: what it holds -->
+    <string name="profile_manage_summary">Open offline, export, copy, logs or delete</string>
     <!-- The title of the dialog that confirms deleting a profile; %1$s is its name -->
     <string name="profile_delete_title">Delete %1$s?</string>
     <!-- The text of the dialog that confirms deleting a profile -->

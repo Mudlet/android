@@ -200,6 +200,7 @@ class ShareLogTest {
 
     private fun openTheEditor(rowsExpected: Boolean = true) {
         activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        activate(hasText(string(R.string.profile_manage_section)))
         waitFor(hasText(string(R.string.profile_logs_title)))
         if (rowsExpected) {
             waitFor(hasTestTag(LOG_FILE_TAG))

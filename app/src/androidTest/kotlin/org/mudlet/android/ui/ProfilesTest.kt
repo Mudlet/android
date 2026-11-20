@@ -142,8 +142,10 @@ class ProfilesTest {
         type(R.string.profile_port, "4242")
         compose.onNodeWithText(string(R.string.profile_port_invalid)).assertDoesNotExist()
         activate(hasText(string(R.string.profile_tls)))
+        unfold(R.string.profile_login_section)
         type(R.string.profile_login, "hero")
         type(R.string.profile_password, "gamma secret")
+        unfold(R.string.profile_advanced_section)
         activate(hasText(string(R.string.profile_auto_reconnect)))
         // A password field, which TalkBack does not read aloud
         field(R.string.profile_password).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
@@ -168,6 +170,8 @@ class ProfilesTest {
         assertTrue(passwords.set("Alpha", "alpha secret"))
         listed(ALPHA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        compose.onNode(hasText(string(R.string.profile_login_password_only))).assertIsDisplayed()
+        unfold(R.string.profile_login_section)
         compose.onNodeWithText(string(R.string.profile_password_stored)).assertIsDisplayed()
         assertEquals("no name field", 0, compose.onAllNodes(hasSetTextAction() and hasText(string(R.string.profile_name))).fetchSemanticsNodes().size)
         field(R.string.profile_host).assert(hasText("a.example"))
@@ -190,6 +194,7 @@ class ProfilesTest {
         assertTrue(passwords.set("Alpha", "alpha secret"))
         listed(ALPHA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_login_section)
         activate(hasText(string(R.string.profile_password_forget)))
         compose.onNodeWithText(string(R.string.profile_password_stored)).assertDoesNotExist()
         compose.runOnIdle { assertFalse(passwords.has("Alpha")) }
@@ -203,6 +208,7 @@ class ProfilesTest {
         compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
 
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_login_section)
         type(R.string.profile_password, "alpha secret")
         activate(hasText(string(R.string.profile_save)))
         engine.profiles(listOf(ALPHA), engine.receive("saveProfile"))
@@ -215,6 +221,7 @@ class ProfilesTest {
 
         waitFor(hasContentDescription(string(R.string.profile_edit, "Alpha")))
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_login_section)
         activate(hasText(string(R.string.profile_password_forget)))
         val withdrawn = engine.receive("openProfile")
         assertEquals("Alpha", withdrawn.getString("name"))
@@ -229,6 +236,7 @@ class ProfilesTest {
         val alpha = openLoaded(ALPHA)
         editOpenGame("Alpha")
         alpha.proxy(false, "", 0, "", alpha.receive("getProxy").get("id"))
+        unfold(R.string.profile_advanced_section)
         waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
         compose.onNodeWithText(string(R.string.profile_proxy_while_open)).assertDoesNotExist()
 
@@ -279,6 +287,7 @@ class ProfilesTest {
         val alpha = openLoaded(ALPHA)
         editOpenGame("Alpha")
         alpha.proxy(true, "socks.example", 1080, "proxy-user", alpha.receive("getProxy").get("id"))
+        unfold(R.string.profile_advanced_section)
         waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
         field(R.string.profile_proxy_host).assert(hasText("socks.example"))
         field(R.string.profile_proxy_port).assert(hasText("1080"))
@@ -304,6 +313,7 @@ class ProfilesTest {
         val alpha = openLoaded(ALPHA)
         editOpenGame("Alpha")
         alpha.proxy(false, "", 0, "", alpha.receive("getProxy").get("id"))
+        unfold(R.string.profile_advanced_section)
         waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
         toPageEnd()
         type(R.string.profile_proxy_host, "bad host")
@@ -324,6 +334,7 @@ class ProfilesTest {
         val alpha = openedByTheEngine(ALPHA)
         editOpenGame("Alpha")
         alpha.proxy(true, "socks.example", 1080, "proxy-user", alpha.receive("getProxy").get("id"))
+        unfold(R.string.profile_advanced_section)
         waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
         field(R.string.profile_proxy_host).assert(hasText("socks.example"))
         field(R.string.profile_proxy_port).assert(hasText("1080"))
@@ -336,6 +347,9 @@ class ProfilesTest {
         assertTrue(passwords.set("Alpha", "proxy secret", PasswordStore.Kind.PROXY))
         listed(ALPHA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        compose.onNode(hasText(string(R.string.profile_advanced_summary, string(R.string.profile_advanced_reconnect_off), string(R.string.profile_advanced_proxy_password))))
+            .assertIsDisplayed()
+        unfold(R.string.profile_advanced_section)
         compose.onNodeWithText(string(R.string.profile_proxy_while_open)).assertIsDisplayed()
         assertEquals("no proxy fields", 0, compose.onAllNodes(hasSetTextAction() and hasText(string(R.string.profile_proxy_host))).fetchSemanticsNodes().size)
         compose.onRoot().tryPerformAccessibilityChecks()
@@ -393,6 +407,7 @@ class ProfilesTest {
     fun offersToExportAProfileSayingItsPasswordsAreLeftOut() {
         listed(ALPHA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_manage_section)
         scrollIntoView(hasText(string(R.string.profile_export)) and hasClickAction())
         compose.onNodeWithText(string(R.string.profile_export_text)).assertIsDisplayed()
         compose.onNode(hasText(string(R.string.profile_export)) and hasClickAction()).assertIsDisplayed().assertIsEnabled()
@@ -407,6 +422,7 @@ class ProfilesTest {
         engine.openProfiles()
         compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_manage_section)
         scrollIntoView(hasText(string(R.string.profile_export)) and hasClickAction())
         compose.onNodeWithText(string(R.string.profile_export_close_first)).assertIsDisplayed()
         compose.onNode(hasText(string(R.string.profile_export)) and hasClickAction()).assertIsNotEnabled()
@@ -444,6 +460,7 @@ class ProfilesTest {
             File(folder, "current/save.xml").writeText("<MudletPackage/>")
             listed(Profile(EXPORTED, "e.example", 23, false, "", false))
             activate(hasContentDescription(string(R.string.profile_edit, EXPORTED)))
+            unfold(R.string.profile_manage_section)
             compose.runOnUiThread { Exports.start(context.applicationContext, EXPORTED, Uri.fromFile(target)) }
             waitFor(hasText(string(R.string.profile_exported)))
             compose.onNodeWithText(string(R.string.profile_exported)).assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))
@@ -463,6 +480,7 @@ class ProfilesTest {
     fun offersTheTwoCopiesDesktopMakesOfAProfile() {
         listed(ALPHA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_manage_section)
         scrollIntoView(hasText(string(R.string.profile_copy_settings)) and hasClickAction())
         compose.onNodeWithText(string(R.string.profile_copy_text)).assertIsDisplayed()
         compose.onNode(hasText(string(R.string.profile_copy)) and hasClickAction()).assertIsDisplayed().assertIsEnabled()
@@ -478,6 +496,7 @@ class ProfilesTest {
         engine.openProfiles()
         compose.waitUntil(10_000) { EngineClient.sessions.size == 1 }
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_manage_section)
         scrollIntoView(hasText(string(R.string.profile_copy_settings)) and hasClickAction())
         compose.onNodeWithText(string(R.string.profile_copy_close_first)).assertIsDisplayed()
         compose.onNode(hasText(string(R.string.profile_copy)) and hasClickAction()).assertIsNotEnabled()
@@ -508,6 +527,7 @@ class ProfilesTest {
             }
             listed(COPIED_PROFILE)
             activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            unfold(R.string.profile_manage_section)
             activate(hasText(string(R.string.profile_copy)))
             compose.onNodeWithText(string(R.string.profile_copy_whole_title, COPIED)).assertIsDisplayed()
             compose.onNodeWithText(string(R.string.profile_copy_whole_text)).assertIsDisplayed()
@@ -577,6 +597,7 @@ class ProfilesTest {
             )
             listed(COPIED_PROFILE)
             activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            unfold(R.string.profile_manage_section)
             activate(hasText(string(R.string.profile_copy_settings)))
             compose.onNodeWithText(string(R.string.profile_copy_settings_title, COPIED)).assertIsDisplayed()
             compose.onNodeWithText(string(R.string.profile_copy_settings_text)).assertIsDisplayed()
@@ -637,6 +658,7 @@ class ProfilesTest {
             assertTrue(passwords.set(COPY, "stale proxy secret", PasswordStore.Kind.PROXY))
             listed(COPIED_PROFILE)
             activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            unfold(R.string.profile_manage_section)
             val switch = hasText(string(R.string.profile_copy_password)) and hasAnyAncestor(isDialog())
             val confirm = hasText(string(R.string.profile_copy)) and hasAnyAncestor(isDialog())
 
@@ -680,6 +702,7 @@ class ProfilesTest {
             // The engine lists a profile whose folder is gone
             listed(COPIED_PROFILE)
             activate(hasContentDescription(string(R.string.profile_edit, COPIED)))
+            unfold(R.string.profile_manage_section)
             activate(hasText(string(R.string.profile_copy)))
             type(R.string.profile_name, COPY)
             activate(hasText(string(R.string.profile_copy)) and hasAnyAncestor(isDialog()))
@@ -802,6 +825,7 @@ class ProfilesTest {
         }
         listed(ALPHA, BETA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_manage_section)
 
         activate(hasText(string(R.string.profile_delete)))
         compose.onNodeWithText(string(R.string.profile_delete_title, "Alpha")).assertIsDisplayed()
@@ -829,6 +853,7 @@ class ProfilesTest {
     fun showsTheEnginesRefusalAndStaysInTheEditor() {
         listed(ALPHA)
         activate(hasContentDescription(string(R.string.profile_edit, "Alpha")))
+        unfold(R.string.profile_manage_section)
         activate(hasText(string(R.string.profile_delete)))
         activate(hasText(string(R.string.profile_delete)) and hasAnyAncestor(isDialog()))
         engine.refuse(engine.receive("deleteProfile"), "\"Alpha\" is running")
@@ -1078,10 +1103,12 @@ class ProfilesTest {
         compose.onNode(control).assertIsDisplayed().performSemanticsAction(SemanticsActions.OnClick)
     }
 
-    // To the editor's end, whose last sections are taller than the screen and have no field, so that the proxy's come
-    // into view from below, whole: an empty field whose top alone shows at the foot is an edit box with no name
-    // (docs/roadmap.md, "A known gap, the toolkit's"). By the scroll action itself, as performScrollTo() runs the
-    // checks first, on the page as it is
+    /** Opens the editor's folded [section] by its heading, as TalkBack would. */
+    private fun unfold(@StringRes section: Int) = activate(hasText(string(section)))
+
+    // To the editor's end, where no field is cut by the screen's foot: an empty field whose top alone shows there is an
+    // edit box with no name (docs/roadmap.md, "A known gap, the toolkit's"). By the scroll action itself, as
+    // performScrollTo() runs the checks first, on the page as it is
     private fun toPageEnd() {
         compose.onNode(hasScrollAction() and hasAnyDescendant(hasText(string(R.string.profile_proxy_title))))
             .performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }

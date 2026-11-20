@@ -23,12 +23,12 @@ import kotlin.math.abs
 /**
  * Turns on the accessibility checks before every action of a test, where they can run: they need API 34, so the API 36
  * emulator runs them and API 28 does not. Of a page that scrolls, they check what shows: see [ScrolledOutOfSight],
- * [CutByTheTop], [UnderWhatFloats] and [OverWhatScrolled].
+ * [CutByTheTop], [CutByTheBottom], [UnderWhatFloats] and [OverWhatScrolled].
  */
 internal fun <R : TestRule, A : ComponentActivity> AndroidComposeTestRule<R, A>.enableAccessibilityChecksOfWhatShows() {
     if (Build.VERSION.SDK_INT >= 34) {
         enableAccessibilityChecks(
-            AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, CutByTheTop, UnderWhatFloats, OverWhatScrolled)),
+            AccessibilityValidator().setRunChecksFromRootView(true).setSuppressingResultMatcher(anyOf(ScrolledOutOfSight, CutByTheTop, CutByTheBottom, UnderWhatFloats, OverWhatScrolled)),
         )
     }
 }
@@ -67,6 +67,25 @@ private object CutByTheTop : TypeSafeMatcher<AccessibilityViewCheckResult>() {
 
     override fun describeTo(description: Description) {
         description.appendText("a missing label on a row its scrolling area's top cuts to less than half a touch target")
+    }
+}
+
+/**
+ * [CutByTheTop] at the bottom of the scrolling area: Compose hands accessibility the row to 24 dp below the cut, without
+ * its children. The CI emulator's profile editor, its area ending at the 24 dp navigation bar, leaves 20 px of a field.
+ */
+private object CutByTheBottom : TypeSafeMatcher<AccessibilityViewCheckResult>() {
+    override fun matchesSafely(result: AccessibilityViewCheckResult): Boolean {
+        if (result.sourceCheckClass != SpeakableTextPresentCheck::class.java) return false
+        val element = result.accessibilityHierarchyCheckResult.element ?: return false
+        val area = element.ancestors().firstOrNull { it.isScrollable == true }?.boundsInScreen ?: return false
+        val rest = element.boundsInScreen
+        val half = 24 * Resources.getSystem().displayMetrics.density
+        return rest.bottom > area.bottom && area.bottom - rest.top < half
+    }
+
+    override fun describeTo(description: Description) {
+        description.appendText("a missing label on a row its scrolling area's bottom cuts to less than half a touch target")
     }
 }
 

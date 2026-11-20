@@ -62,6 +62,8 @@ class ProxyPseudoLocaleTest(private val locale: String) {
 
         // Closed, the section says when its proxy can be set
         activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        compose.onNode(hasText(string(R.string.profile_advanced_section)) and hasClickAction()).performScrollTo()
+        activate(hasText(string(R.string.profile_advanced_section)))
         val note = hasText(string(R.string.profile_proxy_while_open))
         waitFor(note)
         compose.onNode(note).performScrollTo().assertIsDisplayed()
@@ -75,14 +77,13 @@ class ProxyPseudoLocaleTest(private val locale: String) {
         compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.settingsAvailable } }
         activate(hasContentDescription(string(R.string.navigate_back)))
         activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
-        // Switched on with no address or port, so the hints under both fields show
+        // Switched on with no address or port, so the hints under both fields show, and the section opens by itself
         session.proxy(true, "", 0, "", session.receive("getProxy").get("id"))
         val title = hasText(string(R.string.profile_proxy_title))
         waitFor(hasSetTextAction() and hasText(string(R.string.profile_proxy_host)))
-        // From the page's end, whose last sections are taller than the screen and have no field, so that the section
-        // comes into view from below, whole: an empty field whose top alone shows at the foot is an edit box with no
-        // name (docs/roadmap.md, "A known gap, the toolkit's"). By the scroll action itself, as performScrollTo() runs
-        // the checks first, on the page as it is
+        // From the page's end, where no field is cut by the screen's foot: an empty field whose top alone shows there
+        // is an edit box with no name (docs/roadmap.md, "A known gap, the toolkit's"). By the scroll action itself, as
+        // performScrollTo() runs the checks first, on the page as it is
         compose.onNode(hasScrollAction() and hasAnyDescendant(title)).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, PAGE_END_PX) }
         compose.onNode(title).performScrollTo()
         compose.onNode(hasText(string(R.string.profile_proxy_host_needed))).assertIsDisplayed()

@@ -131,6 +131,8 @@ class PseudoLocaleTest(private val locale: String) {
         assertAtStart("a profile", hasContentDescription(string(R.string.profile_description, GAME.name, GAME.host, GAME.port)))
 
         activate(hasContentDescription(string(R.string.profile_edit, GAME.name)))
+        compose.onNode(hasText(string(R.string.profile_manage_section)) and hasClickAction()).performScrollTo()
+        activate(hasText(string(R.string.profile_manage_section)))
         waitFor(hasText(string(R.string.profile_export_text)))
         compose.onNodeWithText(string(R.string.profile_export_text)).performScrollTo()
         assertTextFits("a profile's editor, at its Export")

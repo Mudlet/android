@@ -1,19 +1,27 @@
 package org.mudlet.android.ui.profiles
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -30,7 +38,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -38,6 +48,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.password
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -54,7 +65,8 @@ import org.mudlet.android.ui.MudletScaffold
  * it, and its Forget button removes it. The proxy itself is Mudlet's setting, read and changed only while the game is
  * open, as desktop's profile preferences are. [onClose] leaves, as Back does, once the engine has saved or deleted the
  * profile. A new profile can start [fromLink], a telnet:// link's, which the editor says to check. A saved one can be
- * opened without connecting, as desktop's Offline, to work on its scripts: [onOpenGame] then shows it.
+ * opened without connecting, as desktop's Offline, to work on its scripts: [onOpenGame] then shows it. Only what
+ * connecting needs shows at first; the rest is folded under headings that say what they hold ([FoldedSection]).
  */
 @Composable
 fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null, onOpenGame: () -> Unit = {}) {
@@ -182,6 +194,15 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
         }
     }
 
+    var loginOpen by rememberSaveable { mutableStateOf(!fromLink?.login.isNullOrEmpty()) }
+    var advancedOpen by rememberSaveable { mutableStateOf(false) }
+    var manageOpen by rememberSaveable { mutableStateOf(false) }
+    val proxySummary = ProxySummary.of(shown = proxyShown, use = proxyUse, valid = proxy != null, passwordStored = proxyPasswordStored)
+    // Save waits for the proxy to be put right, so its fields are not left folded away
+    LaunchedEffect(proxySummary == ProxySummary.NEEDS_FIX) {
+        if (proxySummary == ProxySummary.NEEDS_FIX) advancedOpen = true
+    }
+
     MudletScaffold(name ?: stringResource(R.string.profile_new_title), onBack = onClose) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding().verticalScroll(rememberScrollState())
@@ -206,6 +227,7 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                 Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.profile_host)) },
                 singleLine = true,
+                supportingText = { Text(stringResource(R.string.profile_host_help)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
             OutlinedTextField(
@@ -219,115 +241,142 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
             SwitchRow(stringResource(R.string.profile_tls), tls) { tls = it }
-            OutlinedTextField(
-                login,
-                { login = it },
-                Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.profile_login)) },
-                singleLine = true,
-            )
-            OutlinedTextField(
-                password,
-                { password = it },
-                // PasswordVisualTransformation marks it too; said here as well, as TalkBack must not read it out
-                Modifier.fillMaxWidth().semantics { password() },
-                label = { Text(stringResource(R.string.profile_password)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                supportingText = if (passwordStored) ({ Text(stringResource(R.string.profile_password_stored)) }) else null,
-            )
-            if (passwordStored && name != null) {
-                TextButton({
-                    if (passwords.forget(name)) {
-                        passwordStored = false
-                        EngineClient.givePassword(name, null)
-                    } else {
-                        error = passwordNotForgotten
-                    }
-                }) { Text(stringResource(R.string.profile_password_forget)) }
+
+            val loginSummary = when (val summary = LoginSummary.of(login, passwordStored || password.isNotEmpty())) {
+                LoginSummary.NotSet -> stringResource(R.string.profile_login_not_set)
+                LoginSummary.PasswordOnly -> stringResource(R.string.profile_login_password_only)
+                is LoginSummary.As -> stringResource(if (summary.password) R.string.profile_login_as_password else R.string.profile_login_as, summary.login)
             }
-            SwitchRow(stringResource(R.string.profile_auto_reconnect), autoReconnect) { autoReconnect = it }
-            Text(
-                stringResource(R.string.profile_proxy_title),
-                Modifier.padding(top = 16.dp).semantics { heading() },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (proxyShown) {
-                SwitchRow(stringResource(R.string.profile_proxy_use), proxyUse) { proxyUse = it }
-                val hostMissing = proxyUse && proxyHost.isBlank()
+            FoldedSection(stringResource(R.string.profile_login_section), loginSummary, loginOpen, { loginOpen = !loginOpen }) {
                 OutlinedTextField(
-                    proxyHost,
-                    { proxyHost = it },
+                    login,
+                    { login = it },
                     Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.profile_proxy_host)) },
-                    singleLine = true,
-                    isError = hostMissing,
-                    supportingText = if (hostMissing) ({ Text(stringResource(R.string.profile_proxy_host_needed)) }) else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                )
-                val portWrong = proxyPortNumber == null || (proxyUse && proxyPortNumber == 0)
-                OutlinedTextField(
-                    proxyPort,
-                    { proxyPort = it },
-                    Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.profile_proxy_port)) },
-                    singleLine = true,
-                    isError = portWrong,
-                    supportingText = if (portWrong) ({ Text(stringResource(R.string.profile_port_invalid)) }) else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    proxyUser,
-                    { proxyUser = it },
-                    Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.profile_proxy_user)) },
+                    label = { Text(stringResource(R.string.profile_login)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
-                    proxyPassword,
-                    { proxyPassword = it },
-                    // As the game's password field
+                    password,
+                    { password = it },
+                    // PasswordVisualTransformation marks it too; said here as well, as TalkBack must not read it out
                     Modifier.fillMaxWidth().semantics { password() },
-                    label = { Text(stringResource(R.string.profile_proxy_password)) },
+                    label = { Text(stringResource(R.string.profile_password)) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    supportingText = if (proxyPasswordStored) ({ Text(stringResource(R.string.profile_password_stored)) }) else null,
+                    supportingText = if (passwordStored) ({ Text(stringResource(R.string.profile_password_stored)) }) else null,
                 )
-            } else {
-                Text(stringResource(R.string.profile_proxy_while_open), style = MaterialTheme.typography.bodyMedium)
+                if (passwordStored && name != null) {
+                    TextButton({
+                        if (passwords.forget(name)) {
+                            passwordStored = false
+                            EngineClient.givePassword(name, null)
+                        } else {
+                            error = passwordNotForgotten
+                        }
+                    }) { Text(stringResource(R.string.profile_password_forget)) }
+                }
             }
-            if (proxyPasswordStored && name != null) {
-                TextButton({
-                    if (passwords.forget(name, PasswordStore.Kind.PROXY)) {
-                        proxyPasswordStored = false
-                        EngineClient.givePassword(name, passwords.get(name))
-                    } else {
-                        error = passwordNotForgotten
-                    }
-                }) { Text(stringResource(R.string.profile_proxy_password_forget)) }
+
+            val reconnectSummary = stringResource(if (autoReconnect) R.string.profile_advanced_reconnect_on else R.string.profile_advanced_reconnect_off)
+            val proxyLine = when (proxySummary) {
+                ProxySummary.OFF -> R.string.profile_advanced_proxy_off
+                ProxySummary.ON -> R.string.profile_advanced_proxy_on
+                ProxySummary.NEEDS_FIX -> R.string.profile_advanced_proxy_fix
+                ProxySummary.PASSWORD_STORED -> R.string.profile_advanced_proxy_password
+                ProxySummary.UNKNOWN -> null
             }
+            val advancedSummary = proxyLine?.let { stringResource(R.string.profile_advanced_summary, reconnectSummary, stringResource(it)) } ?: reconnectSummary
+            FoldedSection(stringResource(R.string.profile_advanced_section), advancedSummary, advancedOpen, { advancedOpen = !advancedOpen }) {
+                SwitchRow(stringResource(R.string.profile_auto_reconnect), autoReconnect) { autoReconnect = it }
+                Text(
+                    stringResource(R.string.profile_proxy_title),
+                    Modifier.padding(top = 8.dp).semantics { heading() },
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                if (proxyShown) {
+                    SwitchRow(stringResource(R.string.profile_proxy_use), proxyUse) { proxyUse = it }
+                    val hostMissing = proxyUse && proxyHost.isBlank()
+                    OutlinedTextField(
+                        proxyHost,
+                        { proxyHost = it },
+                        Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.profile_proxy_host)) },
+                        singleLine = true,
+                        isError = hostMissing,
+                        supportingText = if (hostMissing) ({ Text(stringResource(R.string.profile_proxy_host_needed)) }) else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    )
+                    val portWrong = proxyPortNumber == null || (proxyUse && proxyPortNumber == 0)
+                    OutlinedTextField(
+                        proxyPort,
+                        { proxyPort = it },
+                        Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.profile_proxy_port)) },
+                        singleLine = true,
+                        isError = portWrong,
+                        supportingText = if (portWrong) ({ Text(stringResource(R.string.profile_port_invalid)) }) else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    OutlinedTextField(
+                        proxyUser,
+                        { proxyUser = it },
+                        Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.profile_proxy_user)) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        proxyPassword,
+                        { proxyPassword = it },
+                        // As the game's password field
+                        Modifier.fillMaxWidth().semantics { password() },
+                        label = { Text(stringResource(R.string.profile_proxy_password)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        supportingText = if (proxyPasswordStored) ({ Text(stringResource(R.string.profile_password_stored)) }) else null,
+                    )
+                } else {
+                    Text(stringResource(R.string.profile_proxy_while_open), style = MaterialTheme.typography.bodyMedium)
+                }
+                if (proxyPasswordStored && name != null) {
+                    TextButton({
+                        if (passwords.forget(name, PasswordStore.Kind.PROXY)) {
+                            proxyPasswordStored = false
+                            EngineClient.givePassword(name, passwords.get(name))
+                        } else {
+                            error = passwordNotForgotten
+                        }
+                    }) { Text(stringResource(R.string.profile_proxy_password_forget)) }
+                }
+            }
+
             error?.let {
                 Text(it, Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button({ save(onClose) }, enabled = canSave) { Text(stringResource(R.string.profile_save)) }
-                if (name != null) {
-                    OutlinedButton({ confirmDelete = true }, enabled = !waiting) { Text(stringResource(R.string.profile_delete)) }
-                }
-            }
+            Button({ save(onClose) }, Modifier.fillMaxWidth().padding(top = 8.dp), enabled = canSave) { Text(stringResource(R.string.profile_save)) }
+
             if (name != null) {
-                // What is typed is saved first, as desktop's dialog keeps each change, or leaving would lose it
-                val unsaved = edited != existing || password.isNotEmpty() || proxyPassword.isNotEmpty() || (proxyShown && proxy != proxyHeld)
-                OutlinedButton(
-                    { if (unsaved) save { openOffline(name) } else openOffline(name) },
-                    enabled = !waiting && (!unsaved || canSave),
-                ) { Text(stringResource(R.string.profile_open_offline)) }
-                val open = EngineClient.session(name) != null
-                ProfileExport(name, open)
-                ProfileCopy(name, open, passwordStored)
-                ProfileLogs(name)
+                Spacer(Modifier.height(8.dp))
+                FoldedSection(stringResource(R.string.profile_manage_section), stringResource(R.string.profile_manage_summary), manageOpen, { manageOpen = !manageOpen }) {
+                    // What is typed is saved first, as desktop's dialog keeps each change, or leaving would lose it
+                    val unsaved = edited != existing || password.isNotEmpty() || proxyPassword.isNotEmpty() || (proxyShown && proxy != proxyHeld)
+                    OutlinedButton(
+                        { if (unsaved) save { openOffline(name) } else openOffline(name) },
+                        enabled = !waiting && (!unsaved || canSave),
+                    ) { Text(stringResource(R.string.profile_open_offline)) }
+                    val open = EngineClient.session(name) != null
+                    ProfileExport(name, open)
+                    ProfileCopy(name, open, passwordStored)
+                    ProfileLogs(name)
+                    HorizontalDivider(Modifier.padding(top = 16.dp))
+                    OutlinedButton(
+                        { confirmDelete = true },
+                        Modifier.padding(top = 8.dp),
+                        enabled = !waiting,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text(stringResource(R.string.profile_delete)) }
+                }
             }
         }
     }
@@ -358,6 +407,36 @@ fun ProfileEditor(name: String?, onClose: () -> Unit, fromLink: Profile? = null,
             dismissButton = { TextButton({ confirmDelete = false }) { Text(stringResource(R.string.profile_delete_cancel)) } },
         )
     }
+}
+
+/**
+ * A heading that folds away what it holds ([content]), with a line, [summary], that says what that is while it is
+ * folded. TalkBack reads it as one heading button with its state, as the Variables screen reads a table's row.
+ */
+@Composable
+private fun FoldedSection(title: String, summary: String, open: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+    val state = stringResource(if (open) R.string.profile_section_expanded else R.string.profile_section_collapsed)
+    val action = stringResource(if (open) R.string.profile_section_hide else R.string.profile_section_show)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .clickable(onClickLabel = action, role = Role.Button, onClick = onToggle)
+            .semantics {
+                heading()
+                stateDescription = state
+            }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (!open) {
+                Text(summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        // A triangle, not a chevron, as it means the same either way round in a right-to-left layout
+        Icon(painterResource(R.drawable.ic_arrow_drop_down), contentDescription = null, Modifier.size(24.dp).rotate(if (open) 180f else 0f))
+    }
+    if (open) content()
 }
 
 // One control with its label, so TalkBack reads the label with the switch and a tap on the words toggles it

@@ -109,9 +109,10 @@ class ProfileOfflineTest {
         listed(ALPHA, BETA)
         activate(hasContentDescription(text(R.string.profile_edit, ALPHA.name)))
         compose.onNode(hasSetTextAction() and hasText(text(R.string.profile_host))).performTextReplacement("a2.example")
-        // As a player does before going down to the button. Left up, it ends where the empty Password field begins, and
+        // As a player does before going down to the button. Left up, it can end where an empty field begins, and
         // Compose hands accessibility a sliver of the field without its label: see ScrolledOutOfSight
         hideKeyboard()
+        activate(hasText(text(R.string.profile_manage_section)))
         activate(hasText(text(R.string.profile_open_offline)))
         val save = engine.receive("saveProfile")
         val edited = ALPHA.copy(host = "a2.example")
@@ -136,6 +137,7 @@ class ProfileOfflineTest {
 
     private fun openOffline(name: String) {
         activate(hasContentDescription(text(R.string.profile_edit, name)))
+        activate(hasText(text(R.string.profile_manage_section)))
         activate(hasText(text(R.string.profile_open_offline)))
     }
 

@@ -679,6 +679,13 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_map_in_corner_keywords,
         ),
         SettingEntry.Switch(
+            SettingsCategory.APPEARANCE,
+            Settings.mapBesideText,
+            R.string.settings_map_beside_text,
+            R.string.settings_map_beside_text_hint,
+            R.string.settings_map_beside_text_keywords,
+        ),
+        SettingEntry.Switch(
             SettingsCategory.TEST_BUILDS,
             Settings.checkTestBuilds,
             R.string.settings_check_test_builds,

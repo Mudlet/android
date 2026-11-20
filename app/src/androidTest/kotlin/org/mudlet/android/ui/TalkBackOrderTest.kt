@@ -42,7 +42,8 @@ import org.mudlet.android.ui.game.MOVEMENT_PAD_TAG
  * engine, over a screen with a mini console, a button bar and the map behind the text: the game title, then the rest
  * of the title bar, the console, the input line and its buttons, then the script windows, then the button bars, and
  * last the last announcement; with the map in front, the title bar, the map and the input line, and nothing the map
- * covers. The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
+ * covers; with the map beside the text on a tablet, the whole game screen, then the map, then the last announcement.
+ * The order is the one Compose hands TalkBack, each node's traversalBefore, not one worked out here.
  */
 @RunWith(AndroidJUnit4::class)
 class TalkBackOrderTest {
@@ -52,6 +53,7 @@ class TalkBackOrderTest {
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(MainThreadTimeout(TIMEOUT_MS)).around(fake)
         .around(if (Build.VERSION.SDK_INT >= 33) GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS) else RuleChain.emptyRuleChain())
+        .around(TabletScreen { it.methodName == ::withTheMapBesideTheTextTheGameScreenThenTheMapThenTheLastAnnouncement.name })
         .around(compose)
 
     private lateinit var session: FakeEngine.Session
@@ -192,6 +194,34 @@ class TalkBackOrderTest {
         for ((name, matcher) in covered) {
             assertTrue("$name is not read: TalkBack reads ${reading.read}", compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty())
         }
+        reading.assertEveryControlRead()
+    }
+
+    @Test
+    fun withTheMapBesideTheTextTheGameScreenThenTheMapThenTheLastAnnouncement() {
+        showWindowAndBar()
+        session.announce(ANNOUNCEMENT, assertive = false)
+        waitFor(hasText(WINDOW_ROW))
+        waitFor(hasText("North") and hasClickAction())
+        waitFor(hasContentDescription(ANNOUNCEMENT))
+        val map = hasContentDescription(string(R.string.map_description)) or hasContentDescription(string(R.string.map_not_drawn))
+        waitFor(map)
+        compose.onRoot().tryPerformAccessibilityChecks()
+
+        val reading = TalkBackReading(compose)
+        val expected = listOf(
+            "the game title" to hasTestTag(GAME_TITLE_TAG),
+            "the title bar's map button" to (hasContentDescription(string(R.string.app_map_show)) and hasClickAction()),
+            "the console" to hasText(CONSOLE_LINE),
+            "the input line" to (hasSetTextAction() and hasText(string(R.string.input_label))),
+            "its Send button" to (hasContentDescription(string(R.string.input_send)) and hasClickAction()),
+            "the mini console" to hasContentDescription(string(R.string.window_description, "chat")),
+            "the button bar" to hasContentDescription(string(R.string.bar_description, "Moves")),
+            "the room search" to (hasSetTextAction() and hasText(string(R.string.app_map_search))),
+            "the map" to map,
+            "the last announcement" to hasContentDescription(ANNOUNCEMENT),
+        )
+        reading.assertInOrder(expected)
         reading.assertEveryControlRead()
     }
 

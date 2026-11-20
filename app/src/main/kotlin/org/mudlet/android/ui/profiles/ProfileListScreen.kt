@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -212,7 +213,9 @@ private fun ProfileItem(profile: Profile, index: Int, count: Int, selected: Bool
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onEdit) {
+            // 48 dp laid out, not 40 with its touch area grown to 48: at a density such as a tablet's 0.625 that growth
+            // splits into half pixels, and the button can come out a pixel short of 48 dp
+            IconButton(onEdit, Modifier.size(48.dp)) {
                 Icon(painterResource(R.drawable.ic_edit), contentDescription = stringResource(R.string.profile_edit, profile.name))
             }
             Button(onConnect, Modifier.semantics { contentDescription = connectLabel }) { Text(stringResource(R.string.profile_connect)) }

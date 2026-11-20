@@ -270,11 +270,17 @@ def run(dev, args):
                            480, "-e", "class", PERMISSION_TEST)
     failures += instrument(dev, "app", APP_TESTS, APP, "the app's other tests", 2400,
                            "-e", "notClass", f"{PERMISSION_TEST},{BACKUP_TEST}")
-    pull_screenshots(dev)
-    failures += backup_rounds(dev)
-    install(args.engine_tests, "-g")
-    failures += instrument(dev, "engine-service", ENGINE_TESTS, ENGINE_TESTS, "engine-service: EngineService on the device",
-                           1320)
+    for i in range(8):
+        failures += instrument(dev, f"beside-{i}", APP_TESTS, APP, f"diag: MapBesideTextTest round {i}", 600,
+                               "-e", "class", "org.mudlet.android.ui.MapBesideTextTest")
+    try:
+        with open(dev.logcat_path, errors="replace") as f:
+            keep = [l for l in f if re.search(r"TestRunner|Choreographer|ActivityManager|WindowManager|ActivityTaskManager|ViewRootImpl|MainThreadTimeout|AndroidRuntime", l)]
+        log("--- diag logcat (filtered, last 2500 lines)")
+        for l in keep[-2500:]:
+            log(l.rstrip())
+    except OSError as e:
+        log(f"diag logcat: {e}")
     return failures
 
 

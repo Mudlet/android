@@ -1,6 +1,7 @@
 package org.mudlet.android.ui
 
 import android.os.Looper
+import android.util.StringBuilderPrinter
 import org.junit.rules.TestRule
 import org.junit.rules.Timeout
 import org.junit.runner.Description
@@ -24,7 +25,11 @@ class MainThreadTimeout(ms: Long) : TestRule {
                     timed.evaluate()
                 } catch (e: TestTimedOutException) {
                     val main = Looper.getMainLooper().thread.stackTrace.joinToString("\n") { "\tat $it" }
-                    throw AssertionError("${e.message}; the main thread is at:\n$main", e)
+                    val queue = StringBuilder().also { Looper.getMainLooper().dump(StringBuilderPrinter(it), "\t") }
+                    val others = Thread.getAllStackTraces().filterKeys { it != Looper.getMainLooper().thread }
+                        .filterValues { stack -> stack.any { it.className.startsWith("org.mudlet") } }
+                        .entries.joinToString("\n") { (thread, stack) -> "\"${thread.name}\":\n" + stack.joinToString("\n") { "\tat $it" } }
+                    throw AssertionError("${e.message}; the main thread is at:\n$main\nits queue:\n$queue\nthe test's threads:\n$others", e)
                 }
             }
         }

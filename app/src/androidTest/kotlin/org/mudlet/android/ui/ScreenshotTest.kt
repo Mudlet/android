@@ -340,7 +340,7 @@ class ScreenshotTest {
 
     private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 
-    /** [block] on a screen the size of a 10-inch tablet's, on its side; the activity is recreated each way, as on a real resize. */
+    /** [block] on a screen the size of a 10-inch tablet's, on its side; the density's change recreates the activity each way. */
     private fun onATablet(block: () -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
 

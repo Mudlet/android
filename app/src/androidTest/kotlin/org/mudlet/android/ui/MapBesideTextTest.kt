@@ -27,6 +27,7 @@ import androidx.compose.ui.test.withKeyDown
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.After
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -37,13 +38,15 @@ import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.LayoutMode
 import org.mudlet.android.protocol.Profile
+import java.util.concurrent.CompletableFuture
 
 /**
  * On a screen as wide as a tablet's on its side, the app's map stands beside the game's text, as desktop Mudlet's
  * docked mapper (docs/architecture.md, "The map behind the text"): the map button puts it away and brings it back,
  * without the setting or with a script's mapper on the screen the button brings the map to the front as on a phone,
  * and the player's choice outlasts a rotation and a fold. The screen is a tablet's before the Activity starts
- * ([TabletScreen]), at its own density for the accessibility checks.
+ * ([TabletScreen]), at its own density for the accessibility checks, and a fold lays it out again without remaking the
+ * Activity.
  */
 @RunWith(AndroidJUnit4::class)
 class MapBesideTextTest {
@@ -156,6 +159,17 @@ class MapBesideTextTest {
         inFront()
     }
 
+    @Test
+    fun aFoldLaysTheScreenOutAgainWithoutRemakingTheActivity() {
+        val activity = compose.activity
+        repeat(FOLDS) {
+            fold()
+            unfold()
+        }
+        assertSame("the Activity the screen started with", activity, compose.activity)
+        besideTheText()
+    }
+
     // The map beside the console, at its end side, both read by TalkBack
     private fun besideTheText() {
         waitFor("the map beside the text", map)
@@ -195,15 +209,16 @@ class MapBesideTextTest {
         compose.waitForIdle()
     }
 
-    // Each remakes the Activity, as a real fold does: what shows is the new one's once its root is the new width
-    private fun fold() {
-        tablet.fold()
-        compose.waitUntil(WAIT_MS) { rootWidthDp()?.let(tablet::folded) == true }
-    }
+    private fun fold() = whileReading(tablet::fold, tablet::folded)
 
-    private fun unfold() {
-        tablet.unfold()
-        compose.waitUntil(WAIT_MS) { rootWidthDp()?.let(tablet::unfolded) == true }
+    private fun unfold() = whileReading(tablet::unfold, tablet::unfolded)
+
+    // The Activity takes the new width in place, read all the while: a remade Activity's window would go mid-frame,
+    // and Compose's wait for the next frame, which has no deadline, would wait on it for ever
+    private fun whileReading(change: () -> Unit, done: (Float) -> Boolean) {
+        val changing = CompletableFuture.runAsync(change)
+        compose.waitUntil(WAIT_MS) { rootWidthDp()?.let(done) == true }
+        changing.join()
     }
 
     private fun rootWidthDp() = compose.onAllNodes(isRoot()).fetchSemanticsNodes().singleOrNull()?.let { it.size.width / compose.density.density }
@@ -236,6 +251,7 @@ class MapBesideTextTest {
         const val INSTANCE = "fake-beside"
         const val CONSOLE_LINE = "the main console"
 
+        const val FOLDS = 3
         const val WAIT_MS = 10_000L
         const val TIMEOUT_MS = 240_000L
     }

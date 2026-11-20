@@ -1751,6 +1751,14 @@ that attaches later is told too. The UI shows it as a marker line.
     test reproduces the bug and fails without the fix.
   - Killing the UI process instead gives a new UI the full 2000-line ring plus a
     `gap` marker, in 44 ms on the host.
+- **Screen resized** (a foldable folding, split screen, the system's own change of size).
+  - *Verified on the emulator (`MapBesideTextTest`).*
+  - The manifest takes `screenSize`, `smallestScreenSize` and `screenLayout`
+    changes itself, so the Activity is not remade: Compose lays the screen out
+    again and the link stays up. A remade Activity's window would go mid-frame,
+    and Compose's test wait for the next frame, which has no deadline, would
+    wait on it for ever (API 28 remakes it without keeping the window). A
+    rotation or a density change still remakes it.
 - **Service stopped** (the "Stop engine" button, or the notification's Quit action).
   - *Expected.*
   - `stopService` leads to `QtServiceBase.onDestroy`: Qt terminates and then

@@ -12,9 +12,9 @@ import java.io.FileInputStream
  * A tablet's screen, 1024 dp wide at the screen's own density for the accessibility checks, set before the Activity
  * starts, for the tests [applies] picks. CI's emulator has a 320 by 640 px display, which Android forces to at most
  * twice that, so it is 640 by 1280 px at 100 dpi. It stays upright: turned, the API 28 emulator's home screen holds it
- * upright until an Activity is shown. Set once the Activity is up, each change would remake it, and each remade Activity
- * attaches to the engine again: the test's session would be one of theirs. [fold] and [unfold] change the screen's
- * width alone, which remakes the Activity once.
+ * upright until an Activity is shown. Set once the Activity is up, the density's change would remake it, and each remade
+ * Activity attaches to the engine again: the test's session would be one of theirs. [fold] and [unfold] change the
+ * screen's width alone, which the Activity takes in place (docs/architecture.md, "Lifecycle").
  */
 internal class TabletScreen(private val applies: (Description) -> Boolean = { true }) : TestRule {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()

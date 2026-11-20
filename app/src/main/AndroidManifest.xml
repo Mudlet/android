@@ -18,8 +18,12 @@
         android:supportsRtl="true"
         tools:targetApi="33">
 
+        <!-- A fold, a split screen's resize or the system's own change of size lays the screen out again in place: a
+             remade Activity would stop its link to the engine and take its window away mid-frame. A rotation still
+             remakes it -->
         <activity
             android:name=".ui.MainActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout"
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">

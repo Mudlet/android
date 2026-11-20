@@ -80,12 +80,16 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextGeometricTransform
+import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -96,6 +100,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
+import org.mudlet.android.protocol.ConsoleCells
 import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.DrawnWindow
 import org.mudlet.android.protocol.EngineMessage
@@ -123,6 +128,12 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 private const val CHAR_SAMPLE = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
+
+// The printable ASCII characters, whose average width a console in a proportional family is fitted by
+private val AVERAGE_SAMPLE = (' '..'~').joinToString("")
+
+// What a row squeezed to its width leaves spare, for the rounding of its width
+private const val SQUEEZE_SPARE_PX = 1f
 
 // Script windows' text is never drawn smaller than this; a window that would need it smaller scrolls sideways
 private const val MIN_WINDOW_FONT_SP = 9f
@@ -154,10 +165,42 @@ private val WindowKeySaver = listSaver<WindowKey?, String>(
 )
 
 /**
- * The width of a character of the main console in pixels, and of a script window's glyph per sp of its size; the main
- * console's text size, which sets the scale Mudlet's windows are drawn at.
+ * The width of a character of the main console in pixels, and of a script window's monospace glyph per sp of its
+ * size; the main console's text size, which sets the scale Mudlet's windows are drawn at. [widthPerSp] gives a
+ * console's character width per sp in any family, measured by [measurer] in [style], the main console's, at that size,
+ * as the glyph is.
  */
-private class ConsoleMetrics(val charWidth: Float, val glyphWidthPerSp: Float, val fontSp: Float)
+private class ConsoleMetrics(
+    val charWidth: Float,
+    val glyphWidthPerSp: Float,
+    val fontSp: Float,
+    val measurer: TextMeasurer,
+    private val style: TextStyle,
+) {
+    // A plain map, filled only during composition, on the main thread, with values that depend on nothing but its key
+    private val averages = HashMap<FontFamily, Float>()
+
+    /**
+     * The width of a character of a console in [family] per sp of its size, in pixels: monospace's glyph, or another
+     * family's average, its printable ASCII characters', measured once a family. Measured at the main console's size,
+     * as the glyph is, so a font scale that grows small sizes more than large ones, as Android 14's does, skews both
+     * alike.
+     * It stands in for the average the engine counts a console's columns by, Qt's `QFontMetricsF::averageCharWidth()`
+     * of the font the script named, that font's OS/2 average, of all its glyphs or, in an older font, of its lowercase
+     * letters weighted by use: as much as a fifth off either way even when [family] is that very font, further when it
+     * stands in for another, so such a console can be drawn a little smaller or larger than on the desktop. A CJK
+     * font's average, of glyphs mostly a full em wide, is nearly an em, so the engine counts about half the columns
+     * this average would, and such a console is drawn larger than on the desktop, though its rows still fit.
+     */
+    fun widthPerSp(family: FontFamily): Float = if (family == FontFamily.Monospace) {
+        glyphWidthPerSp
+    } else {
+        averages.getOrPut(family) {
+            val sample = measurer.measure(AVERAGE_SAMPLE, style.merge(TextStyle(fontFamily = family, letterSpacing = 0.sp)))
+            sample.size.width / AVERAGE_SAMPLE.length.toFloat() / fontSp
+        }
+    }
+}
 
 /**
  * The game area: the main console, drawn by [content] with the modifier it is given and whether a script's mapper
@@ -311,7 +354,7 @@ private fun rememberConsoleMetrics(textSizeSp: Int): ConsoleMetrics {
     return remember(measurer, style) {
         val chars = measurer.measure(CHAR_SAMPLE, style).size.width / CHAR_SAMPLE.length.toFloat()
         val glyphs = measurer.measure(CHAR_SAMPLE, style.merge(TextStyle(letterSpacing = 0.sp))).size.width / CHAR_SAMPLE.length.toFloat()
-        ConsoleMetrics(chars, glyphs / textSizeSp, textSizeSp.toFloat())
+        ConsoleMetrics(chars, glyphs / textSizeSp, textSizeSp.toFloat(), measurer, style)
     }
 }
 
@@ -440,6 +483,15 @@ private fun Modifier.windowSemantics(description: String): Modifier = semantics 
  * window's columns in its width, and read as it reads them, with its [links] as [ConsoleLine] offers them. It follows
  * new rows unless the player or a script scrolled it back. Its own command line, when shown, goes along its bottom.
  *
+ * Its rows are drawn in the family a script gave it (`setFont()`), mapped to the device's fonts as a label's is
+ * ([fontFamily]), and in monospace for a family that maps to none. The size is the one that fits the columns in the
+ * width by the family's average character width ([ConsoleMetrics.widthPerSp]: monospace's cell, or another family's
+ * average), as the engine counted them, each row laid out in the family's own widths; a row of a proportional family
+ * whose first columns would run past the width it has, as a full row of capitals does, its letters being wider than
+ * that average, is squeezed sideways to it ([squeezed]), so none of those columns' letters is cut off. The console's
+ * own command line is drawn in the same font as its rows unless its style sheet names one, at the theme's size
+ * (docs/divergences.md, "A console's font").
+ *
  * A two-finger pinch, or TalkBack's actions, set the console's font size, in the points scripts give `setFontSize()`
  * ([ConsoleZoomClient]): the text is drawn at the size reached while the fingers move, and at the engine's new grid
  * once it reports it. A two-finger double tap, or TalkBack's reset action, gives back the scripts' size.
@@ -477,12 +529,16 @@ private fun WindowConsole(
     }
     val columns = window.console?.columns ?: 0
     val scale = pinched?.takeIf { reported > 0 }?.let { it.toFloat() / reported } ?: 1f
-    val wantedSp = (if (columns > 0) placed.full.w / columns / metrics.glyphWidthPerSp else metrics.fontSp) * scale
+    val family = window.fontFamily?.let(::fontFamily) ?: FontFamily.Monospace
+    val proportional = family != FontFamily.Monospace
+    // Monospace's is the cell measured once for every console, so a console in monospace draws its rows as ever
+    val widthPerSp = metrics.widthPerSp(family)
+    val wantedSp = (if (columns > 0) placed.full.w / columns / widthPerSp else metrics.fontSp) * scale
     val fontSp = wantedSp.coerceIn(MIN_WINDOW_FONT_SP, MAX_WINDOW_FONT_SP)
     // Too small to read at its own width: drawn at the smallest size, as wide as its rows need, and scrolled sideways
-    val rowsWidth = if (wantedSp < MIN_WINDOW_FONT_SP) with(density) { (columns * metrics.glyphWidthPerSp * fontSp).toDp() } else null
+    val rowsWidth = if (wantedSp < MIN_WINDOW_FONT_SP) with(density) { (columns * widthPerSp * fontSp).toDp() } else null
     val style = LocalTextStyle.current.merge(
-        TextStyle(color = CONSOLE_FOREGROUND, fontFamily = FontFamily.Monospace, fontSize = fontSp.sp, lineHeight = 1.2.em, letterSpacing = 0.sp),
+        TextStyle(color = CONSOLE_FOREGROUND, fontFamily = family, fontSize = fontSp.sp, lineHeight = 1.2.em, letterSpacing = 0.sp),
     )
     val first = text?.first ?: 0
     val lines = remember(text) { text?.lines.orEmpty().map { UiLine(it.text, it.runs, it.prompt) } }
@@ -564,11 +620,15 @@ private fun WindowConsole(
     ) {
         val sidewaysState = rememberScrollState()
         val sideways = if (rowsWidth != null) Modifier.horizontalScroll(sidewaysState) else Modifier
-        Box(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {
+            // The width each row has: the window's, or the rows' own while they scroll sideways
+            val available = rowsWidth?.let { with(density) { it.roundToPx() } } ?: constraints.maxWidth
             LazyColumn(if (rowsWidth != null) Modifier.width(rowsWidth).fillMaxSize() else Modifier.fillMaxSize(), state = listState) {
                 // Each row's key is its number in the console, so the rows in view stay put as new ones come
                 items(lines.size, key = { first + it }) { i ->
                     val row = remember(lines[i]) { ansiText(lines[i]) }
+                    // Monospace's rows fit their columns as they are, so only a proportional family's are measured
+                    val rowStyle = if (proportional) remember(metrics, row, style, available, columns) { squeezed(metrics.measurer, row, style, available, columns) } else style
                     val rowSpans = spans[i]
                     val rowLinks = if (rowSpans.isEmpty()) {
                         null
@@ -577,7 +637,7 @@ private fun WindowConsole(
                         LaunchedEffect(text, rowSpans) { for (span in rowSpans) EngineClient.front.windows.requestLink(window.name, span.link) }
                         LineLinks(rowSpans, links::get) { link, item -> EngineClient.front.windows.followLink(window.name, link, item) }
                     }
-                    ConsoleLine(row, lines[i].text, style, Modifier.fillMaxWidth(), blankLines = blankLines, singleLine = true, links = rowLinks)
+                    ConsoleLine(row, lines[i].text, rowStyle, Modifier.fillMaxWidth(), blankLines = blankLines, singleLine = true, links = rowLinks)
                 }
             }
             if (window.console?.scrollBar == true) {
@@ -586,8 +646,30 @@ private fun WindowConsole(
                 ConsoleScrollBar(listState, background, { if (rowsWidth != null) sidewaysState.value - sidewaysState.maxValue else 0 }) { following = it }
             }
         }
-        if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], commandLine.styleSheet, Modifier.fillMaxWidth())
+        if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], commandLine.styleSheet, Modifier.fillMaxWidth(), family = family)
     }
+}
+
+/**
+ * [style] for a console's row [text] in a proportional family, squeezed sideways to [available] pixels where its
+ * letters, on the whole wider than the family's average the size was fitted by, would run past them; else [style]. Only
+ * its first [columns] count, in the desktop's cells, two for a wide East Asian character and none for a combining mark
+ * ([ConsoleCells]), as a row a console does not wrap can be longer, and what is past them is cut off at the edge, as in
+ * monospace and on the desktop, though where the first columns end short of the edge some of it shows before it, the
+ * row being drawn whole, not cut at its columns, which would leave that width blank; spaces at its end, which show no
+ * letter, count for nothing, a background they have then cut off with the rest. A console with no grid yet is not
+ * squeezed: its rows are cut off. A squeezed row is laid out in [TextMotion.Animated], whose letters' widths are not
+ * rounded to whole pixels, so the squeezed row is as wide as the scale makes it.
+ */
+private fun squeezed(measurer: TextMeasurer, text: AnnotatedString, style: TextStyle, available: Int, columns: Int): TextStyle {
+    if (columns <= 0 || available <= SQUEEZE_SPARE_PX || available == Constraints.Infinity) return style
+    val shown = text.subSequence(0, text.text.take(ConsoleCells.end(text.text, columns)).trimEnd().length)
+    fun widthIn(rowStyle: TextStyle) = measurer.measure(shown, rowStyle, softWrap = false, maxLines = 1).multiParagraph.intrinsics.maxIntrinsicWidth
+    if (widthIn(style) <= available) return style
+    val linear = style.merge(TextStyle(textMotion = TextMotion.Animated))
+    val unrounded = widthIn(linear)
+    val scaleX = ((available - SQUEEZE_SPARE_PX) / unrounded).coerceAtMost(1f)
+    return linear.merge(TextStyle(textGeometricTransform = TextGeometricTransform(scaleX = scaleX)))
 }
 
 /**
@@ -663,10 +745,14 @@ private fun BoxScope.ConsoleScrollBar(listState: LazyListState, background: Colo
  * selected whole, as desktop Mudlet's does.
  *
  * It is drawn in the colours of a script's [styleSheet], over the theme's surface: a see-through sheet shows that
- * surface here, where on the desktop it shows what is under the console or window the line is in.
+ * surface here, where on the desktop it shows what is under the console or window the line is in. A console's own
+ * line is drawn in the console's [family], as the desktop gives it the console's font when it is made and on
+ * `setFont()`, at the theme's size, which is the input field's; a line a script made (`createCommandLine()`), with no
+ * [family], in the theme's font. A [styleSheet]'s `font-family` that maps to one of the device's fonts wins over
+ * both, as a style sheet's font wins over `setFont()` on the desktop.
  */
 @Composable
-private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: String, modifier: Modifier = Modifier) {
+private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: String, modifier: Modifier = Modifier, family: FontFamily? = null) {
     var text by rememberSaveable(name, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var notSent by remember { mutableStateOf(false) }
     var awaitingClear by remember { mutableStateOf(false) }
@@ -718,6 +804,7 @@ private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: Str
             },
             isError = notSent,
             singleLine = true,
+            textStyle = LocalTextStyle.current.merge(TextStyle(fontFamily = style.fontFamily?.let(::fontFamily) ?: family)),
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { submit() }),
             colors = OutlinedTextFieldDefaults.colors(

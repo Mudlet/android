@@ -882,14 +882,20 @@ private fun spanStyle(style: RichText.Style, toSp: (Float) -> TextUnit, link: Bo
     )
 }
 
-// The nearest of the device's fonts to a family a script names; null for its default
+/**
+ * The nearest of the device's fonts to a family a script names, by words in the name; null for none like it, the
+ * caller's default then. Mono comes before sans, so Mudlet's own Bitstream Vera Sans Mono is monospace, and serif
+ * (and slab) before Roboto and Ubuntu, so Roboto Serif and Roboto Slab are serif, and Roboto, the device's own, and
+ * Ubuntu, a proportional font Mudlet bundles, sans serif.
+ */
 internal fun fontFamily(name: String): FontFamily? {
     val n = name.lowercase()
     return when {
         "mono" in n || "courier" in n || "consol" in n || "fixed" in n -> FontFamily.Monospace
         "sans" in n -> FontFamily.SansSerif
-        "serif" in n || "times" in n || "georgia" in n -> FontFamily.Serif
-        "cursive" in n || "comic" in n -> FontFamily.Cursive
+        "serif" in n || "slab" in n || "times" in n || "georgia" in n -> FontFamily.Serif
+        "roboto" in n || "ubuntu" in n -> FontFamily.SansSerif
+        "cursive" in n || "comic" in n || "script" in n || "dancing" in n || "coming soon" in n -> FontFamily.Cursive
         else -> null
     }
 }

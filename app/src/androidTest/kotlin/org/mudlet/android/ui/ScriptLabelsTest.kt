@@ -73,8 +73,9 @@ import kotlin.math.abs
  * one as its new text said, a live label as one live node, a link followed by the engine, by its action or a tap, with
  * its href as Qt reads it, a `prompt:` one giving the input line the focus, but a web link opened in the browser, a
  * click-through label's links neither tapped nor actions, also once a label already drawn is made click-through, and
- * both again once it no longer is, a label's own colour drawn only where its sheet draws no box of its own, and the
- * images the engine is asked for.
+ * both again once it no longer is, a label's own colour drawn only where its sheet draws no box of its own, the
+ * images the engine is asked for, an image and a heading in a label's text, and a label of only a linked image read
+ * by its alt, and one of only images, white space between them or not, by its tool tip.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -586,6 +587,71 @@ class ScriptLabelsTest {
         compose.onRoot().tryPerformAccessibilityChecks()
     }
 
+    @Test
+    fun aLabelsTextDrawsItsImagesAndHeadings() {
+        // Below the main console's line, on black, so only the text and the image are drawn in a colour
+        val sheet = "QLabel { background-color: black; color: white; font-size: 10pt }"
+        val labels = listOf(label("Heading", 0, 300, 300, 100), label("Body", 400, 300, 300, 100), label("Pictured", 0, 450, 300, 100), label("Small", 400, 450, 300, 100))
+        session.windows(labels, full = true)
+        session.label("Heading", text = "<h1>HH</h1>", accessibleName = "Heading", styleSheet = sheet)
+        session.label("Body", text = "HH", accessibleName = "Body", styleSheet = sheet)
+        session.label("Pictured", text = "a<img src=\"/data/dot.png\" width=\"40\" height=\"20\">b", styleSheet = sheet)
+        // The same image in the smallest font size, as Qt reads a `font size` with a unit: drawn at the same size
+        session.label("Small", text = "c<font size=\"0px\"><img src=\"/data/dot.png\" width=\"40\" height=\"20\"></font>d", styleSheet = sheet)
+        // Each read as its text without the image; the test's clock recomposes only while the test waits on Compose, so
+        // the labels are drawn, and ask for their image, first
+        compose.waitUntil(WAIT_MS) { listOf("ab", "cd").all { compose.onAllNodes(hasText(it)).fetchSemanticsNodes().isNotEmpty() } }
+        // The image is asked of the engine at its own size
+        val request = session.receive("getImage")
+        assertEquals("/data/dot.png", request.getString("path"))
+        assertFalse(request.toString(), request.has("w") || request.has("frame"))
+        session.image("/data/dot.png", png(4, 2, android.graphics.Color.RED), 4, 2, request.get("id"))
+        compose.waitUntil(WAIT_MS) { EngineClient.front.windows.images[ScriptWindowsClient.ImageRequest("/data/dot.png")] != null }
+        compose.waitForIdle()
+
+        // Drawn in the line at the size its attributes give, 40 by 20 of the label's 300 by 100 pixels, in both fonts
+        for (shown in listOf("ab", "cd")) {
+            val pictured = compose.onNode(hasText(shown)).captureToImage().toPixelMap()
+            val red = (0 until pictured.height).flatMap { y -> (0 until pictured.width).map { x -> x to y } }.filter { (x, y) ->
+                val c = pictured[x, y]
+                c.red > 0.8f && c.green < 0.2f && c.blue < 0.2f
+            }
+            assertTrue("$shown: no image drawn", red.isNotEmpty())
+            // Scaled as the label's text is, by the less of its window's two scales
+            val scale = minOf(pictured.width / 300f, pictured.height / 100f)
+            assertNear("$shown: image width", 40 * scale, (red.maxOf { it.first } - red.minOf { it.first } + 1).toFloat())
+            assertNear("$shown: image height", 20 * scale, (red.maxOf { it.second } - red.minOf { it.second } + 1).toFloat())
+        }
+
+        // A heading's text is taller than the same text in the body, as Qt draws an h1 at twice the label's size
+        fun inkRows(name: String): Int {
+            val pixels = compose.onNode(hasContentDescription(name)).captureToImage().toPixelMap()
+            return (0 until pixels.height).count { y -> (0 until pixels.width).any { x -> pixels[x, y].red > 0.5f } }
+        }
+        val heading = inkRows("Heading")
+        val body = inkRows("Body")
+        assertTrue("heading $heading rows, body $body", body > 0 && heading > body * 3 / 2)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aLabelOfOnlyALinkedImageIsReadByItsAltWithItsLinkAnAction() {
+        session.windows(listOf(label("eye", w = 100, h = 40), label("lid", y = 50, w = 100, h = 40)), full = true)
+        session.label("eye", text = """<a href="send:look"><img src="/data/eye.png" alt="Look"></a>""")
+        // Not left out as decoration: read by the image's alt, its link an action that has the engine follow it
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Look")).fetchSemanticsNodes().isNotEmpty() }
+        val follow = string(R.string.label_follow_link, "send:look")
+        val action = compose.onNode(hasText("Look")).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == follow }
+        compose.runOnIdle { action.action() }
+        assertEquals("send:look", session.receive("followLabelLink").getString("href"))
+        // One of only an image that is no link, read by its tool tip, as Mudlet reads it, not left out as decoration
+        session.label("lid", text = """<img src="/data/eye.png">""", toolTip = "Peek")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Peek")).fetchSemanticsNodes().isNotEmpty() }
+        // So too with white space between its images, which Mudlet simplifies away before it reads the text
+        session.label("lid", text = """<img src="/data/eye.png"> <img src="/data/eye.png">""", toolTip = "Both")
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("Both")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     // The pointer events of one tap, up to its release
     private fun tap(): List<JSONObject> {
         val events = ArrayList<JSONObject>()
@@ -606,9 +672,9 @@ class ScriptLabelsTest {
 
     private fun label(name: String, x: Int = 0, y: Int = 0, w: Int, h: Int) = FakeEngine.window(name, kind = "label", x = x, y = y, w = w, h = h)
 
-    private fun png(w: Int, h: Int): ByteArray {
+    private fun png(w: Int, h: Int, colour: Int = 0): ByteArray {
         val out = ByteArrayOutputStream()
-        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, out)
+        Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(colour) }.compress(Bitmap.CompressFormat.PNG, 100, out)
         return out.toByteArray()
     }
 

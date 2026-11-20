@@ -891,10 +891,10 @@ private fun spanStyle(style: RichText.Style, toSp: (Float) -> TextUnit, link: Bo
 internal fun fontFamily(name: String): FontFamily? {
     val n = name.lowercase()
     return when {
-        "mono" in n || "courier" in n || "consol" in n || "fixed" in n -> FontFamily.Monospace
         "sans" in n -> FontFamily.SansSerif
-        "serif" in n || "slab" in n || "times" in n || "georgia" in n -> FontFamily.Serif
-        "roboto" in n || "ubuntu" in n -> FontFamily.SansSerif
+        "mono" in n || "courier" in n || "consol" in n || "fixed" in n -> FontFamily.Monospace
+        "serif" in n || "times" in n || "georgia" in n -> FontFamily.Serif
+        "roboto" in n -> FontFamily.SansSerif
         "cursive" in n || "comic" in n || "script" in n || "dancing" in n || "coming soon" in n -> FontFamily.Cursive
         else -> null
     }

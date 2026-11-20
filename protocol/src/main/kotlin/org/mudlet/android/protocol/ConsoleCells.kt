@@ -33,18 +33,16 @@ object ConsoleCells {
      */
     fun end(text: CharSequence, columns: Int): Int {
         val row = text.toString()
-        val graphemes = BreakIterator.getCharacterInstance()
-        graphemes.setText(row)
         var cells = 0
         var start = 0
-        var next = graphemes.next()
+        var next = if (row.isEmpty()) BreakIterator.DONE else Character.charCount(row.codePointAt(0))
         while (next != BreakIterator.DONE) {
             val base = row.codePointAt(start)
             val width = if (base == '\t'.code) TAB_STOP - cells % TAB_STOP else withPresentation(row, start, next, base)
             if (cells + width > columns) return start
             cells += width
             start = next
-            next = graphemes.next()
+            next = if (start == row.length) BreakIterator.DONE else start + Character.charCount(row.codePointAt(start))
         }
         return row.length
     }

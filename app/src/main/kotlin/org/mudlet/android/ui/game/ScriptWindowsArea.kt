@@ -100,7 +100,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
-import org.mudlet.android.protocol.ConsoleCells
 import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.DrawnWindow
 import org.mudlet.android.protocol.EngineMessage
@@ -529,10 +528,10 @@ private fun WindowConsole(
     }
     val columns = window.console?.columns ?: 0
     val scale = pinched?.takeIf { reported > 0 }?.let { it.toFloat() / reported } ?: 1f
-    val family = window.fontFamily?.let(::fontFamily) ?: FontFamily.Monospace
+    val family = window.fontFamily?.let { fontFamily(it) ?: FontFamily.SansSerif } ?: FontFamily.Monospace
     val proportional = family != FontFamily.Monospace
     // Monospace's is the cell measured once for every console, so a console in monospace draws its rows as ever
-    val widthPerSp = metrics.widthPerSp(family)
+    val widthPerSp = metrics.glyphWidthPerSp
     val wantedSp = (if (columns > 0) placed.full.w / columns / widthPerSp else metrics.fontSp) * scale
     val fontSp = wantedSp.coerceIn(MIN_WINDOW_FONT_SP, MAX_WINDOW_FONT_SP)
     // Too small to read at its own width: drawn at the smallest size, as wide as its rows need, and scrolled sideways
@@ -646,7 +645,7 @@ private fun WindowConsole(
                 ConsoleScrollBar(listState, background, { if (rowsWidth != null) sidewaysState.value - sidewaysState.maxValue else 0 }) { following = it }
             }
         }
-        if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], commandLine.styleSheet, Modifier.fillMaxWidth(), family = family)
+        if (commandLine != null) WindowCommandLine(commandLine.name, commandLines[commandLine.name], commandLine.styleSheet, Modifier.fillMaxWidth())
     }
 }
 
@@ -663,12 +662,12 @@ private fun WindowConsole(
  */
 private fun squeezed(measurer: TextMeasurer, text: AnnotatedString, style: TextStyle, available: Int, columns: Int): TextStyle {
     if (columns <= 0 || available <= SQUEEZE_SPARE_PX || available == Constraints.Infinity) return style
-    val shown = text.subSequence(0, text.text.take(ConsoleCells.end(text.text, columns)).trimEnd().length)
+    val shown = text.subSequence(0, text.text.take(columns).trimEnd().length)
     fun widthIn(rowStyle: TextStyle) = measurer.measure(shown, rowStyle, softWrap = false, maxLines = 1).multiParagraph.intrinsics.maxIntrinsicWidth
     if (widthIn(style) <= available) return style
     val linear = style.merge(TextStyle(textMotion = TextMotion.Animated))
-    val unrounded = widthIn(linear)
-    val scaleX = ((available - SQUEEZE_SPARE_PX) / unrounded).coerceAtMost(1f)
+    val unrounded = measurer.measure(text.subSequence(0, text.text.trimEnd().length), linear, softWrap = false, maxLines = 1).multiParagraph.intrinsics.maxIntrinsicWidth
+    val scaleX = ((available * 1.1f - SQUEEZE_SPARE_PX) / unrounded).coerceAtMost(1f)
     return linear.merge(TextStyle(textGeometricTransform = TextGeometricTransform(scaleX = scaleX)))
 }
 
@@ -804,7 +803,7 @@ private fun WindowCommandLine(name: String, scriptText: String?, styleSheet: Str
             },
             isError = notSent,
             singleLine = true,
-            textStyle = LocalTextStyle.current.merge(TextStyle(fontFamily = style.fontFamily?.let(::fontFamily) ?: family)),
+            textStyle = LocalTextStyle.current.merge(TextStyle(fontFamily = family)),
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { submit() }),
             colors = OutlinedTextFieldDefaults.colors(

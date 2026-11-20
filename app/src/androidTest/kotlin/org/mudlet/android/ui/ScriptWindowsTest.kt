@@ -45,6 +45,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -519,6 +520,98 @@ class ScriptWindowsTest {
         assertTrue("touch bounds ${touch.width} px wide, under 24 dp ($half px)", touch.width >= half)
     }
 
+    @Test
+    fun aMiniConsoleDrawsItsRowsInTheFamilyAScriptGaveItAtTheSizeItsColumnsFitInItsAverageWidth() {
+        val mono = showChatRow()
+        assertEquals("a monospace family", FontFamily.Monospace, mono.layoutInput.style.fontFamily)
+        val monoSp = mono.layoutInput.style.fontSize.value
+
+        // setFont("chat", "Noto Serif"): the device's serif, whose average letter is narrower than monospace's, so the
+        // same columns fit the width at a larger size; its narrow letters still end this row well short of monospace's,
+        // which fits, so is not squeezed
+        val serif = chatRowIn("Noto Serif")
+        assertEquals("a serif family", FontFamily.Serif, serif.layoutInput.style.fontFamily)
+        val serifSp = serif.layoutInput.style.fontSize.value
+        assertTrue("the serif console at $serifSp sp, not larger than the monospace one's $monoSp sp", serifSp > monoSp * LARGER)
+        assertEquals("a row that fits, not squeezed", 1f, serif.scaleX, 0f)
+        val monoRight = mono.getLineRight(0)
+        val serifRight = serif.getLineRight(0)
+        assertTrue("the serif row ends at $serifRight px, not well short of the monospace row's $monoRight px", serifRight < monoRight * NARROWER)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aRowWiderInItsFamilyThanTheWindowIsSqueezedToItsWidthNotCutOff() {
+        showChatRow(WIDE_ROW)
+        // A whole row of the console's columns in capital Ws, far wider in Noto Serif than its average letter
+        val serif = chatRowIn("Noto Serif", WIDE_ROW)
+        assertEquals("a serif family", FontFamily.Serif, serif.layoutInput.style.fontFamily)
+        assertTrue("squeezed by ${serif.scaleX}", serif.scaleX < 1f)
+        val right = serif.getLineRight(0)
+        val width = serif.size.width
+        assertTrue("the row ends at $right px, past its $width px", right <= width)
+        assertFalse("the row cut off", serif.didOverflowWidth)
+        assertTrue("the row ends at $right px, squeezed well short of its $width px", right >= width * FILLS)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aRowLongerThanItsConsolesColumnsIsSqueezedOnlyAsItsFirstColumnsNeedAndCutOffPastThem() {
+        // A console does not wrap at its columns unless a script says so, so a row can run past them: here twice them
+        assertSqueezedAsItsFirstColumnsNeed("Noto Serif", FontFamily.Serif, WIDE_ROW, WIDE_ROW + WIDE_ROW)
+    }
+
+    @Test
+    fun aRowOfWideCharactersIsCutOffPastTheCellsOfItsColumnsNotSqueezedWhole() {
+        // A CJK character takes two of a console's columns, as on the desktop: 20 fill the chat's 40, and 30 run past
+        assertSqueezedAsItsFirstColumnsNeed("Noto Sans CJK SC", FontFamily.SansSerif, WIDE_CHARACTER.repeat(20), WIDE_CHARACTER.repeat(30))
+    }
+
+    @Test
+    fun aMiniConsoleInMudletsOwnFontWhoseNameSaysSansTooIsMonospace() {
+        // The font every console no script gave one has
+        assertDrawnAsMonospace("Bitstream Vera Sans Mono")
+    }
+
+    @Test
+    fun aMiniConsoleInADeviceFamilyWhoseNameMatchesNoneStaysMonospace() {
+        // One of the device's own fonts, which the engine's setFont() takes, with none of the words in its name
+        assertDrawnAsMonospace("Carrois Gothic SC")
+        // Read as before, by its plain text
+        compose.onNode(hasText(NARROW_ROW) and inChat).assertIsDisplayed()
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aMiniConsolesCommandLineTakesTheConsolesFamilyAtTheThemesSize() {
+        chatCommandLine(family = "Ubuntu Mono")
+        val mono = chatCommandLineLayout()
+        assertEquals("a monospace family", FontFamily.Monospace, mono.layoutInput.style.fontFamily)
+
+        // setFont("chat", "Noto Serif") gives the console's command line the family too, as on the desktop
+        setChatFont(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300), "Noto Serif")
+        val serif = chatCommandLineLayout()
+        assertEquals("a serif family", FontFamily.Serif, serif.layoutInput.style.fontFamily)
+        assertEquals("the theme's size, whatever the family", mono.layoutInput.style.fontSize, serif.layoutInput.style.fontSize)
+        // Material's bodyLarge, the input field's: the app gives Material no type scale of its own
+        assertEquals("the theme's size", 16.sp, serif.layoutInput.style.fontSize)
+        compose.onRoot().tryPerformAccessibilityChecks()
+    }
+
+    @Test
+    fun aCommandLinesStyleSheetFontFamilyWinsOverItsConsoles() {
+        // As a style sheet's font wins over setFont() on the desktop
+        chatCommandLine(styleSheet = "font-family: 'Noto Serif';", family = "Ubuntu Mono")
+        assertEquals("the sheet's serif family", FontFamily.Serif, chatCommandLineLayout().layoutInput.style.fontFamily)
+    }
+
+    @Test
+    fun theCommandLineOfAConsoleNoScriptGaveAFontIsMonospace() {
+        // No fontFamily: a console in Mudlet's default font, whose rows are monospace
+        chatCommandLine()
+        assertEquals("a monospace family", FontFamily.Monospace, chatCommandLineLayout().layoutInput.style.fontFamily)
+    }
+
     private fun isShown(node: SemanticsMatcher) = try {
         compose.onNode(node).assertIsDisplayed()
         true
@@ -529,8 +622,63 @@ class ScriptWindowsTest {
     private fun showChat() {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
         session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
-        // With a size in points, so the window takes a pinch beside its links' taps
-        session.windows(listOf(FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40, fontSize = 8.0)), full = true)
+        session.windows(listOf(chatWindow()), full = true)
+    }
+
+    // The chat window of [showChat]: with a size in points, so it takes a pinch beside its links' taps, and so in the
+    // Ubuntu Mono [FakeEngine.window] gives a window with a size
+    private fun chatWindow() = FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300, columns = 40, fontSize = 8.0)
+
+    /** The chat window of [showChat] showing the one [row], in Ubuntu Mono: the row's layout. */
+    private fun showChatRow(row: String = NARROW_ROW): TextLayoutResult {
+        showChat()
+        session.windowText("chat", listOf(row))
+        waitUntilDisplayed(row)
+        return layoutOf(hasText(row) and inChat)
+    }
+
+    /**
+     * The chat window of [showChat] in the font [family], as a script's `setFont()` gives it: the layout of its [row],
+     * [NARROW_ROW] unless said, once the app has the family.
+     */
+    private fun chatRowIn(family: String, row: String = NARROW_ROW): TextLayoutResult {
+        setChatFont(chatWindow(), family)
+        return layoutOf(hasText(row) and inChat)
+    }
+
+    /**
+     * The chat window of [showChat] in the font [family], drawn in [drawnIn], showing [fills], a row of its columns,
+     * and [past], one that runs past them: [past] is squeezed as [fills] is, as only its first columns need, and cut
+     * off.
+     */
+    private fun assertSqueezedAsItsFirstColumnsNeed(family: String, drawnIn: FontFamily, fills: String, past: String) {
+        showChat()
+        session.windowText("chat", listOf(fills, past))
+        waitUntilDisplayed(past)
+        val columns = chatRowIn(family, fills)
+        val longer = layoutOf(hasText(past) and inChat)
+        assertEquals("the family it is drawn in", drawnIn, longer.layoutInput.style.fontFamily)
+        assertEquals("the longer row squeezed as its first columns need, not to fit whole", columns.scaleX, longer.scaleX, 0.001f)
+        assertTrue("the longer row cut off past the console's columns", longer.didOverflowWidth)
+    }
+
+    // The chat window of [showChat] in the font [family], as a script's `setFont()` gives it, draws its row as in
+    // monospace: in monospace, at the same size, ending where it does
+    private fun assertDrawnAsMonospace(family: String) {
+        val mono = showChatRow()
+        val row = chatRowIn(family)
+        assertEquals("$family drawn in monospace", FontFamily.Monospace, row.layoutInput.style.fontFamily)
+        assertEquals("the size the columns fit", mono.layoutInput.style.fontSize, row.layoutInput.style.fontSize)
+        assertNear("where the row ends", mono.getLineRight(0), row.getLineRight(0))
+    }
+
+    // How much a row is squeezed sideways: 1 for a row that is not
+    private val TextLayoutResult.scaleX get() = layoutInput.style.textGeometricTransform?.scaleX ?: 1f
+
+    // The chat window [console] in the font [family], as a script's `setFont()` gives it, once the app has the family
+    private fun setChatFont(console: JSONObject, family: String) {
+        session.windows(listOf(console.put("fontFamily", family)))
+        compose.waitUntil(WAIT_MS) { compose.runOnIdle { EngineClient.front.windows.state.windows.firstOrNull { it.name == "chat" }?.fontFamily == family } }
     }
 
     // In the chat window, and left out of what TalkBack reads
@@ -797,10 +945,16 @@ class ScriptWindowsTest {
     }
 
     // Where the character [index] of the line [node] is drawn, in the line's own pixels
-    private fun characterCentre(node: SemanticsMatcher, index: Int): Offset {
+    private fun characterCentre(node: SemanticsMatcher, index: Int): Offset = layoutOf(node).getBoundingBox(index).center
+
+    // How the text typed in the chat window's command line is laid out: the field's own, not its label's
+    private fun chatCommandLineLayout() = layoutOf(hasSetTextAction() and inChat, useUnmergedTree = true)
+
+    // How the text of [node] is laid out
+    private fun layoutOf(node: SemanticsMatcher, useUnmergedTree: Boolean = false): TextLayoutResult {
         val layouts = mutableListOf<TextLayoutResult>()
-        compose.onNode(node).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-        return layouts.single().getBoundingBox(index).center
+        compose.onNode(node, useUnmergedTree).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        return layouts.single()
     }
 
     private fun announced() = compose.runOnIdle { Announcer.current?.serial ?: 0L }
@@ -808,12 +962,14 @@ class ScriptWindowsTest {
     private fun string(@StringRes id: Int, vararg args: Any) = compose.activity.getString(id, *args)
 
     /**
-     * A mini console in the lower half with a command line of the style sheet [styleSheet] if any: the line's field.
+     * A mini console in the lower half, in the font [family] if any, with a command line of the style sheet
+     * [styleSheet] if any: the line's field.
      */
-    private fun chatCommandLine(styleSheet: String? = null): SemanticsMatcher {
+    private fun chatCommandLine(styleSheet: String? = null, family: String? = null): SemanticsMatcher {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.FITTED }
         session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600)
         val console = FakeEngine.window("chat", x = 0, y = 300, w = 800, h = 300)
+        if (family != null) console.put("fontFamily", family)
         val line = FakeEngine.window("chat", kind = "commandLine", w = 0, h = 0, parent = "chat", parentKind = "miniConsole")
         if (styleSheet != null) line.put("styleSheet", styleSheet)
         session.windows(listOf(console, line), full = true)
@@ -889,6 +1045,26 @@ class ScriptWindowsTest {
         const val INSTANCE = "fake-windows"
         const val MUDLET_COLUMNS = 100
         const val MUDLET_TEXT_WIDTH = 800
+
+        // A row of letters far narrower in a proportional font than monospace's cell, about half of it in Noto Serif,
+        // and the most of the monospace row's width the serif row may take, at the serif console's larger size
+        const val NARROW_ROW = "illicit lilies fill little tills"
+        const val NARROWER = 0.8f
+
+        // How much larger a console in Noto Serif is drawn than in monospace, at least: about 1.1 with unrounded
+        // widths, its printable ASCII averaging about 0.55 em to monospace's 0.6, but where 14 px rounds the monospace
+        // cell down to 8 px and the serif letters to whole pixels as well, as at 14 sp on a 160-dpi screen, 1.04, or
+        // 1.02 where the autohinter hints an unhinted Noto Serif; so only larger at all, the sizes being equal if not
+        // by family
+        const val LARGER = 1.005f
+
+        // A whole row of the chat window's 40 columns of a letter wider in a proportional font than its average, and
+        // the least of its width the row squeezed to it takes
+        val WIDE_ROW = "W".repeat(40)
+        const val FILLS = 0.9f
+
+        // A CJK character (U+4E2D), two columns wide in a console
+        const val WIDE_CHARACTER = "\u4E2D"
 
         // Rounding to whole pixels, here and in Mudlet's sizes
         const val PIXELS = 2f

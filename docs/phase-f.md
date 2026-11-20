@@ -228,6 +228,30 @@ have moved. A thumb that goes while it is dragged, as the script takes the bar a
 drag. TalkBack is told nothing of it: the list's own scroll actions and the rows read as without it, so the thumb is no
 stop of its own.
 
+A console draws its rows in the font family a script gave it (`fontFamily`: `setFont()`), in whichever of the device's
+monospace, sans serif, serif and cursive fonts its name points to, by words in the name as a label's `font-family` is
+read (`fontFamily()` in `ScriptLabel.kt`): monospace for one with mono, courier, consol or fixed in it, then sans serif
+for sans, serif for serif, slab, times or georgia, sans serif for Roboto, the device's own, or Ubuntu, a proportional
+font Mudlet bundles, and cursive for cursive, comic, script, dancing or coming soon. So Mudlet's own console fonts,
+Bitstream Vera Sans Mono and Ubuntu Mono, are monospace, and so is a name with none of the words, as every console was
+before. The size fits the console's `columns` in its width by the family's average character width, as the engine counts
+them: monospace's cell, or for another family its printable ASCII characters' average, measured once a family at the
+main console's text size, as the cell is, which can differ from Qt's `averageCharWidth()`, the font's OS/2 average, by
+as much as a fifth either way even when the device font is the one the script named, and far more for a CJK font, whose
+average is nearly an em, so such a console is drawn larger than on the desktop, though it still fits; the sideways
+scroll of a console too narrow for 9 sp and a pinch's scale go by it too. Each row is laid out in the family's own
+widths, so a row of narrow letters ends short of the right edge, and one whose first `columns` cells are too wide for
+the width it has, the window's or, scrolled sideways, the rows', such as one of capitals, is squeezed sideways to fit
+them, links still tapped where they are drawn; the cells are counted as the desktop counts them (`ConsoleCells`), a
+grapheme at a time, split by Unicode's rules (`java.text.BreakIterator`) as the desktop's `QTextBoundaryFinder` splits
+it: two for a wide East Asian character or an emoji, none for a combining mark, a tab to the next stop of 8. What a row
+has past its `columns`, as a console does not wrap at them unless a script says so, is cut off at the edge, as in
+monospace, though some of it shows before the edge where its first `columns` end short of it, and a console with no grid
+yet is not squeezed. The console's own command line is drawn in the same of those fonts as its rows, monospace for a
+name with none of the words, at the theme's size; a `font-family` in any command line's style sheet that points to one
+wins over that and the theme's font. TalkBack reads the rows as in any family (`docs/divergences.md`, "A console's
+font").
+
 ### Scroll boxes
 
 A `Geyser.ScrollBox` is a `TScrollBox` on the desktop (`src/TScrollBox.cpp`): a `QScrollArea`, framed, with Qt's

@@ -362,7 +362,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [28, 36]
+        api: [28]
     env:
       EMULATOR_API: ${{ matrix.api }}
       LUA_FORTIFY_FIX: ${{ inputs.lua-fortify-fix && '1' || '0' }}

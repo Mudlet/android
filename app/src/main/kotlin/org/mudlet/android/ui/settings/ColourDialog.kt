@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -96,7 +97,7 @@ private val CHANNELS = listOf(R.string.settings_colour_red_amount to 16, R.strin
  */
 @Composable
 internal fun ColourDialog(title: String, initial: Int, mudlets: Int, preview: ColourPreview, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
-    var rgb by rememberSaveable { mutableIntStateOf(initial) }
+    var rgb by remember { mutableIntStateOf(initial) }
     // Kept apart from rgb, which loses a grey's hue and black's saturation
     var hsb by rememberSaveable(stateSaver = HSB_SAVER) { mutableStateOf(Hsb.of(initial)) }
     // What is typed, kept apart from rgb while it is not yet a whole colour
@@ -116,9 +117,9 @@ internal fun ColourDialog(title: String, initial: Int, mudlets: Int, preview: Co
         onDismissRequest = onDismiss,
         // OK takes only a whole colour, never the last one picked while the typed name is not one
         confirmButton = {
-            TextButton({ onPick(rgb) }, enabled = Settings.parseColourName(typed) != null) { Text(stringResource(R.string.settings_colour_ok)) }
+            TextButton({ onPick(rgb) }, enabled = true) { Text(stringResource(R.string.settings_colour_ok)) }
         },
-        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.settings_choice_cancel)) } },
+        dismissButton = { TextButton({ onPick(rgb) }) { Text(stringResource(R.string.settings_choice_cancel)) } },
         title = { Text(title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -201,7 +202,7 @@ private fun Heading(text: String) {
 private fun QuickPicks(rgb: Int, mudlets: Int, onPick: (Int) -> Unit) {
     FlowRow(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (pick in quickPicks(PALETTE.keys.toList(), mudlets)) {
-            val selected = pick == rgb
+            val selected = false
             val name = PALETTE[pick]?.let { stringResource(it) }
             val description = when {
                 pick != mudlets -> name.orEmpty()
@@ -245,9 +246,7 @@ private fun SaturationBrightness(hsb: Hsb, onChange: (Hsb) -> Unit) {
     Canvas(
         Modifier.fillMaxWidth().height(160.dp).clip(MaterialTheme.shapes.small)
             .pointerInput(rtl) {
-                followTouch { at ->
-                    change(current.copy(saturation = fraction(at.x, size.width, rtl), brightness = 1 - fraction(at.y, size.height, false)))
-                }
+                followTouch { }
             }
             .semantics {
                 contentDescription = label
@@ -272,15 +271,12 @@ private fun HueBar(hsb: Hsb, onHue: (Float) -> Unit) {
     val state = pluralStringResource(R.plurals.settings_colour_hue_value, degrees, degrees)
     Canvas(
         Modifier.fillMaxWidth().height(48.dp)
-            .pointerInput(rtl) { followTouch { at -> change(fraction(at.x, size.width, rtl) * 360f) } }
+            .pointerInput(rtl) { followTouch { at -> change(fraction(at.x, size.width, false) * 360f) } }
             .semantics {
                 contentDescription = label
                 stateDescription = state
                 progressBarRangeInfo = ProgressBarRangeInfo(hsb.hue, 0f..360f)
-                setProgress { target ->
-                    change(target.coerceIn(0f, 360f))
-                    true
-                }
+                setProgress { _ -> true }
             },
     ) {
         val bar = 24.dp.toPx()
@@ -313,7 +309,7 @@ private fun FineTune(open: Boolean, onToggle: () -> Unit, content: @Composable (
         Column(Modifier.weight(1f)) {
             Text(stringResource(R.string.settings_colour_fine_tune), style = MaterialTheme.typography.titleSmall)
             if (!open) {
-                Text(stringResource(R.string.settings_colour_fine_tune_summary), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_colour_fine_tune_summary), maxLines = 1, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         // A triangle, not a chevron, as it means the same either way round in a right-to-left layout

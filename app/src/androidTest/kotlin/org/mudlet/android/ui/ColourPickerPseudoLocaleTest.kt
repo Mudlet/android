@@ -101,7 +101,8 @@ class ColourPickerPseudoLocaleTest(private val locale: String) {
 
     private fun string(@StringRes id: Int) = compose.activity.getString(id)
 
-    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+    // The merged tree, where a row's click action and its text are on one node
+    private fun waitFor(matcher: SemanticsMatcher) = compose.waitUntil(WAIT_MS) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
 
     private fun activate(label: SemanticsMatcher) {
         compose.onRoot().tryPerformAccessibilityChecks()

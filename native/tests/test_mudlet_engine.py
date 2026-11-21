@@ -123,7 +123,7 @@ def main():
         for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, starter_ui_welcome,
                        links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
-                       map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
+                       map_layout, map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
                        clipboard, file_dialog, web_pages, packages, error_console, default_packages, key_bindings, scripts_stopped,
                        replay_recording, time_stamps, line_updates, replay_playback):
             checks()
@@ -1231,6 +1231,9 @@ def bridge_refusals():
             ({"t": "setMapScale", "scale": 0.5}, "scale must be a number from 1 to 8"),
             ({"t": "setMapScale", "scale": 8.5}, "scale must be a number from 1 to 8"),
             ({"t": "setMapScale", "scale": "2"}, "scale must be a number from 1 to 8"),
+            ({"t": "setMapScale", "scale": 2, "density": 0.5}, "density must be a number from 1 to 4"),
+            ({"t": "setMapScale", "scale": 2, "density": 4.5}, "density must be a number from 1 to 4"),
+            ({"t": "setMapScale", "scale": 2, "density": "2"}, "density must be a number from 1 to 4"),
             ({"t": "editRoom", "room": 1, "weight": "2"}, "weight must be a whole number"),
             ({"t": "editRoom", "room": 1, "x": 1, "y": 2}, "x, y and z go together"),
             ({"t": "editRoom", "room": 1, "locked": 1}, "locked must be true or false"),
@@ -2952,6 +2955,14 @@ def map_writers_png(data):
 
 def png_pixel(data, x, y):
     """The (r, g, b, a) of a pixel of an 8-bit RGB or RGBA PNG with no interlace, as Qt saves one."""
+    rows, channels = png_rows(data, y + 1)
+    pixel = tuple(rows[y][x * channels:(x + 1) * channels])
+    return pixel if channels == 4 else pixel + (255,)
+
+
+def png_rows(data, count=None):
+    """The first count rows (all by default) of an 8-bit RGB or RGBA PNG with no interlace, unfiltered, and its
+    channels a pixel."""
     width, height = png_size(data)
     chunks = png_chunks(data)
     depth, colour, interlace = chunks[b"IHDR"][0][8], chunks[b"IHDR"][0][9], chunks[b"IHDR"][0][12]
@@ -2959,10 +2970,10 @@ def png_pixel(data, x, y):
         raise ValueError(f"a PNG of depth {depth}, colour type {colour}, interlace {interlace}")
     channels = 4 if colour == 6 else 3
     raw, stride = zlib.decompress(b"".join(chunks[b"IDAT"])), width * channels
-    previous = bytearray(stride)
-    for row in range(y + 1):
+    previous, rows = bytearray(stride), []
+    for row in range(height if count is None else count):
         kind, line = raw[row * (stride + 1)], bytearray(raw[row * (stride + 1) + 1:(row + 1) * (stride + 1)])
-        for i in range(stride):
+        for i in range(stride if kind else 0):
             left = line[i - channels] if i >= channels else 0
             up, corner = previous[i], previous[i - channels] if i >= channels else 0
             if kind == 1:
@@ -2975,9 +2986,9 @@ def png_pixel(data, x, y):
                 guess = left + up - corner
                 nearest = min((abs(guess - left), 0, left), (abs(guess - up), 1, up), (abs(guess - corner), 2, corner))[2]
                 line[i] = (line[i] + nearest) & 0xFF
+        rows.append(line)
         previous = line
-    pixel = tuple(previous[x * channels:(x + 1) * channels])
-    return pixel if channels == 4 else pixel + (255,)
+    return rows, channels
 
 
 def map_view():
@@ -3141,6 +3152,112 @@ def map_view():
     c.send({"t": "runLua", "code": "testMapper:show()"})
     seen_or_next(c, lambda m: m["t"] == "map" and (m["w"], m["h"]) == (400, 300), seen, since)
     check(True, "shown again, it sends the map again")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def map_layout():
+    """A small mapper shown enlarged drawn as the app's own map is: setMapScale with a density lays the map out in the
+    UI's own units, so the room the app's map draws at 400 by 400 at a scale of 1 is drawn alike in a 100 by 100 mapper
+    at a scale of 4 and a density of 1, its view, a press, a drag and a pinch still in the window's pixels; with no
+    density, laid out in the window's pixels, it is not."""
+    profile = "Map Layout Test"
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "setMainWindowSize", "w": 1000, "h": 800})
+    m = c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+               "autoReconnect": False}, collect=seen)
+    check(m["t"] == "profiles", f"the map layout's profile is made: {m}")
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    # As in map_view(), rooms 1 and 2 two apart, the player in 1, at a zoom of 10: 40 of the app's pixels a room both on
+    # the app's map and laid out in the mapper, so room 2 is 80 to the right of the middle of each PNG, and 20 of the
+    # mapper's 100 pixels to the right of its middle
+    room2, window_room2 = (280, 200), (70, 50)
+    since = len(seen)
+    c.send({"t": "setAppMapSize", "w": 400, "h": 400, "scale": 1})
+    c.send({"t": "setMapScale", "scale": 4, "density": 1})
+    c.send({"t": "runLua", "code": "\n".join([
+        'local area = addAreaName("Map Layout Area")',
+        "setCustomEnvColor(301, 200, 30, 30, 255)",
+        "for id, x in pairs({[1] = 0, [2] = 2}) do",
+        "  addRoom(id)",
+        "  setRoomArea(id, area)",
+        "  setRoomCoordinates(id, x, 0, 0)",
+        "end",
+        "setRoomEnv(2, 301)",
+        'setExit(1, 2, "e")',
+        'setExit(2, 1, "w")',
+        'testMapper = Geyser.Mapper:new({name = "map", x = 0, y = 0, width = 100, height = 100})',
+        "setMapZoom(10, area)",
+        "centerview(1)",
+        "function selected() local rooms = getMapSelection().rooms or {} table.sort(rooms) echo(\"selected \" .. table.concat(rooms, \",\") .. \"\\n\") end",
+    ])})
+
+    def drawn(kind, w, h):
+        def test(m):
+            if m["t"] != kind or (m["w"], m["h"]) != (w, h):
+                return False
+            png = base64.b64decode(m["png"])
+            return png_size(png) == (400, 400) and png_pixel(png, *room2)[:3] == (200, 30, 30)
+        return test
+
+    def box(m):
+        """The pixels of room 2 and the box around it, outline and exit in it, of a frame's PNG."""
+        rows, channels = png_rows(base64.b64decode(m["png"]), 221)
+        return [tuple(rows[y][x * channels:(x + 1) * channels]) for y in range(180, 221) for x in range(260, 301)]
+
+    def differing(a, b):
+        return sum(1 for p, q in zip(box(a), box(b)) if max(abs(i - j) for i, j in zip(p, q)) > 8)
+
+    def places(m):
+        return {r["id"]: (round(r["x"]), round(r["y"])) for r in m.get("view", {}).get("rooms", [])}
+
+    try:
+        mapper = seen_or_next(c, drawn("map", 100, 100), seen, since, timeout=15)
+        app = seen_or_next(c, drawn("appMap", 400, 400), seen, since, timeout=15)
+    except TimeoutError as e:
+        check(False, f"the 100 by 100 mapper at a scale of 4 and the app's map at 400 by 400 draw room 2 at 280, 200: {e}")
+        stop_engine(proc)
+        return
+    view = mapper.get("view", {})
+    check(abs(view.get("roomSize", 0) - 10) < 0.01 and places(mapper).get(2) == window_room2,
+          f"the mapper's view is in its window's pixels, rooms 10 of them and room 2 at 70, 50: {view}")
+    count = differing(mapper, app)
+    check(count <= 2 * 41 * 41 // 100,
+          f"room 2, its outline and its exit are drawn in the mapper as on the app's map: {count} of {41 * 41} pixels differ")
+
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "press", "x": window_room2[0], "y": window_room2[1], "button": 1})
+    c.send({"t": "runLua", "code": "selected()"})
+    got = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("selected "), seen, since)["text"]
+    check(got == "selected 2", f"a press at room 2's point of the window selects it: {got}")
+
+    # Without a density, as an engine before it, the map is laid out in the window's pixels: tiny rooms, magnified
+    since = len(seen)
+    c.send({"t": "setMapScale", "scale": 4})
+    try:
+        m = seen_or_next(c, lambda m: m["t"] == "map" and m["png"] != mapper["png"] and drawn("map", 100, 100)(m), seen, since)
+        count = differing(m, app)
+        check(count > 10 * 41 * 41 // 100,
+              f"with no density the mapper is laid out in its own pixels, unlike the app's map: {count} of {41 * 41} pixels differ")
+    except TimeoutError as e:
+        check(False, f"setMapScale with no density draws the mapper again, laid out in its own pixels: {e}")
+
+    # A drag and a pinch in the window's pixels: room 2 20 to the left, then twice the size about room 1
+    c.send({"t": "setMapScale", "scale": 4, "density": 1})
+    for seq, move, want in ((1, {"dx": -20, "dy": 0, "zoom": 1, "x": 50, "y": 50}, {1: (30, 50), 2: (50, 50)}),
+                            (2, {"dx": 0, "dy": 0, "zoom": 2, "x": 30, "y": 50}, {1: (30, 50), 2: (70, 50)})):
+        since = len(seen)
+        c.send({"t": "moveMap", "map": "mapper", "seq": seq, **move})
+        try:
+            m = seen_or_next(c, lambda m: m["t"] == "map" and m.get("view", {}).get("moved") == seq, seen, since)
+            got = places(m)
+            check(got == want, f"moveMap {move} moves the laid out map by the window's pixels: {got}")
+        except TimeoutError as e:
+            check(False, f"moveMap {move} draws the mapper again: {e}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

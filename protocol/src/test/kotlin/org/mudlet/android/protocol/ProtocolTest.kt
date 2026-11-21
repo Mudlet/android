@@ -1105,7 +1105,7 @@ class ProtocolTest {
 
     @Test
     fun theMapScaleRequestCarriesWhatTheEngineReads() {
-        assertEquals(mapOf("t" to "setMapScale", "scale" to 2.75), Requests.setMapScale(2.75).toMap())
+        assertEquals(mapOf("t" to "setMapScale", "scale" to 2.75, "density" to 2.625), Requests.setMapScale(2.75, 2.625).toMap())
     }
 
     @Test

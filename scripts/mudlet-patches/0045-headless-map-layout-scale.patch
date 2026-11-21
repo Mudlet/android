@@ -1,0 +1,244 @@
+Let a frontend with no window lay a small map window out at the size it shows it
+
+T2DMap's outlines, line weights and the room size below which a room's border fades (12 pixels) and then goes (4)
+are in pixels. An app that draws a small mapper window onto a much larger part of its screen, as a page of the
+starter UI's dock is on a phone, so lays its rooms out tiny and magnifies them: the levels above and below become
+filled dots, the rooms lose their borders and the exits grow thin, unlike the app's own map of the same area.
+
+- THeadlessSession::renderMap() takes a layoutScale, from 1 to 16 and 1 by default: the map is laid out at the size
+  times that, its rooms as large in those units as they are shown, and drawn scaled down to the size, so it looks as
+  a map laid out at that larger size does. Cosmetic pens stay their width in device pixels either way.
+- TNullMapView keeps the size and scale of the last render(): mapPointer(), moveMapView(), mapView() and the rooms it
+  lists stay in the size's pixels, and are carried to the layout's for TMapPainter.
+- The zoom, the rooms across the narrow side, is the area's as before.
+- docs/headless.md describes it.
+
+Tested by Mudlet/android's native/tests/test_mudlet_engine.py (map_layout: a 100 by 100 mapper shown four times as
+large drawn as the app's 400 by 400 map of the same rooms, its view and a press on a room still in the window's
+pixels, and laid out in its own pixels again without it). The desktop is unchanged.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index 37fbfa520..18ca792e6 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -1159,6 +1159,15 @@ As the GUI's does, a draw that moves to another area raises `sysMapAreaChanged`.
+ the profile's Lua, so the call is refused where `submit()` is, from a handler of `outputLine` and the
+ other signals sent in the middle of a write.
+ 
++The map's outlines, line weights and the room size below which a room's border fades and then goes are
++in pixels, so a small window an app shows enlarged would have its rooms drawn as tiny rooms magnified:
++filled dots for the levels above and below, rooms without borders, thinner exits. Such an app passes
++`renderMap()` a `layoutScale`, how many of the units it lays its own maps out in make one of the
++window's pixels, from 1 to 16: the map is laid out at the size times that and drawn scaled down to the
++size, so its rooms look as on a map laid out at that larger size. The zoom, the rooms across the narrow
++side, is the area's as before, and `mapPointer()`, `moveMapView()` and `mapView()` keep to the size's
++pixels.
++
+ `mapRepaintRequested` says when the GUI would draw the map again: a script opened the map, showed it
+ again or replaced it with an embedded mapper, the player moved or a script centred the map, the map
+ loaded or changed, or its zoom, colours, settings or info box did. It comes once a turn
+diff --git a/src/TNullMapView.cpp b/src/TNullMapView.cpp
+index 1052ccc5c..ef9ee2680 100644
+--- a/src/TNullMapView.cpp
++++ b/src/TNullMapView.cpp
+@@ -227,10 +227,10 @@ bool TNullMapView::move(const QPointF& pan, const qreal zoom, const QPointF& abo
+     const qreal side = qMin(mView.mSize.width(), mView.mSize.height());
+     PendingZoom pending = mPendingZoom.value_or(PendingZoom{mView.xyzoom, mView.mMapCenterX, mView.mMapCenterY});
+     const qreal roomSize = side / pending.xyzoom;
+-    pending.centreX -= pan.x() / roomSize;
+-    pending.centreY -= pan.y() / roomSize;
++    pending.centreX -= laidOut(pan).x() / roomSize;
++    pending.centreY -= laidOut(pan).y() / roomSize;
+     const qreal newZoom = qBound(TMap::scmMinXYZoom, pending.xyzoom / zoom, maxZoom());
+-    const QPointF fromMiddle = about - QPointF(mView.mSize.width() / 2.0, mView.mSize.height() / 2.0);
++    const QPointF fromMiddle = laidOut(about - QPointF(mRenderedSize.width() / 2.0, mRenderedSize.height() / 2.0));
+     const bool zoomed = !qFuzzyCompare(newZoom, pending.xyzoom);
+     if (zoomed) {
+         const qreal newRoomSize = side / newZoom;
+@@ -274,13 +274,13 @@ void TNullMapView::collectDrawnRooms()
+         }
+         const QPointF position(pRoom->x() * mView.mRoomWidth + fx, -pRoom->y() * mView.mRoomHeight + fy);
+         if (frame.contains(position)) {
+-            mDrawnRooms.append(DrawnRoom{.id = roomId, .position = position, .name = pRoom->name});
++            mDrawnRooms.append(DrawnRoom{.id = roomId, .position = position / mLayoutScale, .name = pRoom->name});
+         }
+     }
+     if (mDrawnRooms.size() <= maxDrawnRooms) {
+         return;
+     }
+-    const QPointF middle(mView.mSize.width() / 2.0, mView.mSize.height() / 2.0);
++    const QPointF middle(mRenderedSize.width() / 2.0, mRenderedSize.height() / 2.0);
+     const auto fromMiddle = [&middle](const DrawnRoom& room) {
+         const QPointF offset = room.position - middle;
+         return QPointF::dotProduct(offset, offset);
+@@ -307,16 +307,17 @@ void TNullMapView::raiseAreaChanged(const int areaId, const int lastViewedAreaId
+ }
+ 
+ // With the settings T2DMap::init() and dlgMapper take from the profile and the main window
+-void TNullMapView::render(QPainter& painter, const QSize& size)
++void TNullMapView::render(QPainter& painter, const QSize& size, const qreal layoutScale)
+ {
+     // The repaint a player's move asks for can come before the paint() it schedules, and TMapPainter would then
+     // centre on the player itself, leaving paint() nothing to follow
+     paint();
+     TMap* pMap = mpHost->mpMap.data();
++    const qreal scale = qIsFinite(layoutScale) ? qBound(1.0, layoutScale, 16.0) : 1.0;
+     TMapPainter::View view = mView;
+     view.mpMap = pMap;
+     view.mpHost = mpHost;
+-    view.mSize = size;
++    view.mSize = (QSizeF(size) * scale).toSize();
+     view.eSize = mpHost->mLineSize;
+     view.mBSize = mpHost->mRoomBorderSize;
+     view.rSize = mpHost->mRoomSize;
+@@ -341,11 +342,16 @@ void TNullMapView::render(QPainter& painter, const QSize& size)
+     // Set again only by a frame that lays the rooms out
+     view.mRoomWidth = 0.0f;
+     TMapPainter::PaintResult result;
++    painter.save();
++    painter.scale(1.0 / scale, 1.0 / scale);
+     // A map info contributor's Lua reads the area shown, as getMapZoom() does, so finds the one this frame shows
+     mPainter.paintView(painter, view, result, [this](const TMapPainter::View& frame) {
+         mView = frame;
+     });
++    painter.restore();
+     mView = result.view;
++    mRenderedSize = size;
++    mLayoutScale = scale;
+     mMapInfo = result.mapInfo;
+     mLaidOut = mView.mRoomWidth > 0.0f;
+     collectDrawnRooms();
+@@ -501,8 +507,8 @@ void TNullMapView::press(const QPoint& position, const Qt::MouseButton button, c
+                 mView.mMultiSelectionSet.clear();
+             }
+             bool multiSelection = false;
+-            TMapPainter::addRoomsToSelection(
+-                    mpHost->mpMap.data(), mView.mMultiSelectionSet, multiSelection, mView.mMultiSelectionHighlightRoomId, TMapPainter::roomsAtPoint(mView, *pArea, position), modifiers);
++            const QList<int> rooms = TMapPainter::roomsAtPoint(mView, *pArea, laidOut(position).toPoint());
++            TMapPainter::addRoomsToSelection(mpHost->mpMap.data(), mView.mMultiSelectionSet, multiSelection, mView.mMultiSelectionHighlightRoomId, rooms, modifiers);
+         }
+     }
+     if (mRaisesEvents) {
+@@ -517,7 +523,7 @@ void TNullMapView::doubleClick(const QPoint& position)
+ {
+     TMapPainter::View view = mView;
+     view.mIsSecondaryView = true;
+-    view.mPHighlight = position;
++    view.mPHighlight = laidOut(position).toPoint();
+     view.mPick = true;
+     view.mStartSpeedWalk = true;
+     view.mKeepZoom = mLaidOut;
+@@ -543,7 +549,7 @@ bool TNullMapView::wheel(const QPointF& position, const QPoint& angleDelta, cons
+     // The main window reads this once at its start; with none, it is read where it is used
+     const bool invertZoom = MudletApp::getQSettings()->value(qsl("invertMapZoom"), false).toBool();
+     PendingZoom pending = mPendingZoom.value_or(PendingZoom{mView.xyzoom, mView.mMapCenterX, mView.mMapCenterY});
+-    const std::optional<bool> zoomed = TMapPainter::zoomAtPoint(*pArea, pending.xyzoom, pending.centreX, pending.centreY, mView.mSize, position, angleDelta, modifiers, invertZoom);
++    const std::optional<bool> zoomed = TMapPainter::zoomAtPoint(*pArea, pending.xyzoom, pending.centreX, pending.centreY, mView.mSize, laidOut(position), angleDelta, modifiers, invertZoom);
+     if (!zoomed) {
+         return false;
+     }
+@@ -551,7 +557,7 @@ bool TNullMapView::wheel(const QPointF& position, const QPoint& angleDelta, cons
+     if (*zoomed) {
+         // zoomAtPoint() keeps the point under the pointer, so a turn off the middle leaves the player, unless the
+         // player's move has asked for a centring the next render() does
+-        if (!mRecentre && position != QPointF(mView.mSize.width() / 2.0, mView.mSize.height() / 2.0)) {
++        if (!mRecentre && position != QPointF(mRenderedSize.width() / 2.0, mRenderedSize.height() / 2.0)) {
+             mFollowing = false;
+         }
+         mPendingZoom = pending;
+diff --git a/src/TNullMapView.h b/src/TNullMapView.h
+index aef0f275c..73bdfb2b9 100644
+--- a/src/TNullMapView.h
++++ b/src/TNullMapView.h
+@@ -43,8 +43,11 @@ public:
+     explicit TNullMapView(Host* pHost, QObject* parent = nullptr, bool raisesEvents = true);
+     // A hidden mapper does not paint
+     void setShown(bool shown);
+-    // What T2DMap would draw at that size, whether or not the mapper is shown, raising sysMapAreaChanged as it does
+-    void render(QPainter&, const QSize&);
++    // What T2DMap would draw at that size, whether or not the mapper is shown, raising sysMapAreaChanged as it does.
++    // T2DMap's line weights, outlines and the room size below which it fades or leaves out borders are in pixels, so
++    // a window shown enlarged is laid out at size times layoutScale, from 1 to 16, and drawn scaled down to size; the
++    // positions given to and taken from this view stay in size's pixels
++    void render(QPainter&, const QSize&, qreal layoutScale = 1.0);
+     // What a mouse press, the second press of a double-click and a wheel turn at that point of the last render() do
+     // to T2DMap, menus and dragging aside
+     // Cleared for an app that shows the map info box itself: render() then leaves the box out and mapInfo() holds
+@@ -53,7 +56,7 @@ public:
+     // The map info box the last render() left out, a contributor's part each; empty where it painted the box
+     const QList<TMapPainter::MapInfoLine>& mapInfo() const { return mMapInfo; }
+     bool rendered() const { return !mView.mSize.isEmpty(); }
+-    QSize renderedSize() const { return mView.mSize; }
++    QSize renderedSize() const { return mRenderedSize; }
+     // Whether the last render() laid out an area's rooms, which a press and a wheel turn act on
+     bool showsArea() const;
+     void press(const QPoint&, Qt::MouseButton, Qt::KeyboardModifiers);
+@@ -103,7 +106,7 @@ public:
+     // The levels of the area the last render() laid out that have rooms, lowest first
+     QList<int> drawnLevels() const;
+     qreal drawnZoom() const { return mView.xyzoom; }
+-    qreal drawnRoomSize() const { return mView.mRoomWidth; }
++    qreal drawnRoomSize() const { return mView.mRoomWidth / mLayoutScale; }
+     // The room the map takes as the player's: paint() and TMapPainter take the first room where the player's is gone
+     int playerRoomId() const;
+     // As T2DMap::slot_toggleMapViewOnly(), which raises mapModeChangeEvent
+@@ -150,6 +153,8 @@ private:
+     // What paint() does once the player is in another room, or follow() asks: the next render() centres on it
+     void followRoom(int roomId, int areaId);
+     void collectDrawnRooms();
++    // A point of the last render(), in its size's pixels, where its layout has it
++    QPointF laidOut(const QPointF& point) const { return point * mLayoutScale; }
+     int centredRoomId() const { return mRecentre ? mFollowedRoomId : mView.mRoomID; }
+ 
+     Host* mpHost = nullptr;
+@@ -159,6 +164,9 @@ private:
+     // What T2DMap keeps between frames: the view last drawn, as the pointer and the selection have changed it since,
+     // and the area last raised for
+     TMapPainter::View mView;
++    // What the last render() was given: mView.mSize is that size times the layout scale
++    QSize mRenderedSize;
++    qreal mLayoutScale = 1.0;
+     // paint() followed the player to this room and area, which the next render() centres on as T2DMap would, and
+     // for a small area may centre on the area
+     bool mRecentre = false;
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index b57db0613..44dae104e 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -795,7 +795,10 @@ public:
+     // a draw that moves to another area raises sysMapAreaChanged. A script opens the map first, as with
+     // openMapWidget(). The map info box runs the profile's Lua, so this is refused where submit() is. False, with
+     // errorString() saying why, with no map open, a painter that is not active or a size under 10 by 10 pixels.
+-    bool renderMap(QPainter& painter, const QSize& size);
++    // A layoutScale above 1 lays it out at size times that, drawn scaled down to size, for a window shown enlarged, as
++    // the outlines, line weights and border fading are in pixels; mapPointer(), moveMapView() and mapView() keep to
++    // size's pixels.
++    bool renderMap(QPainter& painter, const QSize& size, qreal layoutScale = 1.0);
+     // The pointer, at a position in what renderMap() last drew
+     struct MapPointerEvent
+     {
+diff --git a/src/headless/THeadlessSessionMap.cpp b/src/headless/THeadlessSessionMap.cpp
+index 3a30bd6b4..802c3ce4c 100644
+--- a/src/headless/THeadlessSessionMap.cpp
++++ b/src/headless/THeadlessSessionMap.cpp
+@@ -82,7 +82,7 @@ QHash<int, int> stepsFrom(TRoomDB* pRoomDB, const int fromId)
+ 
+ } // namespace
+ 
+-bool THeadlessSession::renderMap(QPainter& painter, const QSize& size)
++bool THeadlessSession::renderMap(QPainter& painter, const QSize& size, const qreal layoutScale)
+ {
+     if (!usable()) {
+         return false;
+@@ -105,7 +105,7 @@ bool THeadlessSession::renderMap(QPainter& painter, const QSize& size)
+         return false;
+     }
+     pView->setMapInfoPainted(mMapInfoPainted);
+-    pView->render(painter, size);
++    pView->render(painter, size, layoutScale);
+     return true;
+ }
+ 

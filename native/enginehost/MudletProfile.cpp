@@ -1029,6 +1029,7 @@ void MudletProfile::start(const QString& host, quint16 port, bool connect, std::
     mScreenSize = ui.screen;
     mMainWindowSize = ui.mainWindow;
     mMapScale = ui.mapScale;
+    mMapDensity = ui.mapDensity;
     mAppMapSize = ui.appMap;
     mAppMapScale = ui.appMapScale;
     // The new profile counts its links from 1 again
@@ -1694,7 +1695,9 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
         qWarning("MudletEngine: the mapper, %dx%d, is larger than %d pixels a side, so the map is not drawn", size.width(), size.height(), PngImage::maxSide);
         return std::nullopt;
     }
-    // Drawn in the window's pixels onto an image of the device's, so the lines and names are as sharp as the screen
+    // Drawn in the window's pixels onto an image of the device's, so the lines and names are as sharp as the screen,
+    // and laid out in the UI's own map's units where it shows the window larger than those, so the rooms look as there;
+    // by the scale the image is drawn at, so the layout, which a double-click paints, is never larger than the image
     const double scale = std::max(1.0, std::min({mMapScale, double(PngImage::maxSide) / size.width(), double(PngImage::maxSide) / size.height()}));
     QImage image(size * scale, QImage::Format_ARGB32_Premultiplied);
     if (image.isNull()) {
@@ -1704,7 +1707,7 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
     image.setDevicePixelRatio(scale);
     image.fill(Qt::transparent);
     QPainter painter(&image);
-    const bool drawn = mSession->renderMap(painter, size);
+    const bool drawn = mSession->renderMap(painter, size, std::max(1.0, scale / mMapDensity));
     painter.end();
     if (!drawn) {
         qWarning("MudletEngine: the map was not drawn: %s", qPrintable(mSession->errorString()));
@@ -2026,13 +2029,15 @@ QString MudletProfile::setMapViewOnly(bool viewOnly)
     return mSession->setMapViewOnly(viewOnly) ? QString() : mSession->errorString();
 }
 
-QString MudletProfile::setMapScale(double scale)
+QString MudletProfile::setMapScale(double scale, double density)
 {
     mEngine.mUi.mapScale = scale;
-    if (scale == mMapScale) {
+    mEngine.mUi.mapDensity = density;
+    if (scale == mMapScale && density == mMapDensity) {
         return {};
     }
     mMapScale = scale;
+    mMapDensity = density;
     if (mMapSize && loaded()) {
         pushMap(mMapSize);
     }

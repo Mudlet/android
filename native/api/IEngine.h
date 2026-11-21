@@ -109,9 +109,11 @@ public:
     virtual QString setMapViewOnly(bool viewOnly) = 0;
     // The mapper window's map drawn from now on at scale device pixels to each of the window's, so that it is as
     // sharp as the UI shows it, though never more than PngImage::maxSide a side; 1 again when the UI goes, as
-    // SocketBridge asks. Scale is from 1 to maxMapScale.
+    // SocketBridge asks. Scale is from 1 to maxMapScale. Density is the device pixels to each of the units the UI lays
+    // its own map out in, from 1 to maxAppMapScale: a scale above it lays the map out in those units, so its rooms
+    // are drawn as on that map; one at or above scale lays it out in the window's pixels.
     static constexpr double maxMapScale = 8.0;
-    virtual QString setMapScale(double scale) = 0;
+    virtual QString setMapScale(double scale, double density) = 0;
     // The app's own map, apart from the mapper window, drawn for IFrontend::appMap() at size, in the map's pixels, with
     // scale device pixels to each, from now on and for the next profile too; an empty size stops it, as SocketBridge
     // asks when the UI goes. Scale is from 1 to maxAppMapScale.

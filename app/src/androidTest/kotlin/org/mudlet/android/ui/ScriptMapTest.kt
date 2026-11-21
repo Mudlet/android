@@ -987,13 +987,19 @@ class ScriptMapTest {
         return Offset(left + (x * scale).toFloat(), top + (y * scale).toFloat())
     }
 
-    /** The engine was last asked to draw the map at the scale a [w] by [h] frame is shown at in [bounds], at most the engine's 8. */
+    /**
+     * The engine was last asked to draw the map at the scale a [w] by [h] frame is shown at in [bounds], at most the
+     * engine's 8, laid out at the screen's density, as the app's own map is.
+     */
     private fun assertScaleAsked(bounds: Rect, w: Int, h: Int) {
         val shown = min(bounds.width / w, bounds.height / h).toDouble()
         assertTrue("the map is shown at $shown, not larger than Mudlet's pixels", shown > 1.1)
-        val asked = session.receiveLast("setMapScale", readPast = true).getDouble("scale")
+        val request = session.receiveLast("setMapScale", readPast = true)
+        val asked = request.getDouble("scale")
         // Hundredths, down, of a box that rounds to the screen's pixels
         assertEquals("the map shown at $shown is asked for at $asked", shown.coerceAtMost(8.0), asked, 0.02)
+        val density = compose.activity.resources.displayMetrics.density.toDouble().coerceIn(1.0, 4.0)
+        assertEquals("the map is laid out at the screen's density: $request", density, request.optDouble("density"), 0.001)
     }
 
     private fun assertPoint(x: Double, y: Double, event: JSONObject, within: Double = POINTS) {

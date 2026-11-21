@@ -465,7 +465,8 @@ rules and bare declarations apply, are read as a label's ("Labels"). What else i
 `map` is an `Image` at the `mapper` window's place. Taps go back as `mapPointer` presses, a double tap speedwalks, and
 pinch and zoom buttons send wheel turns. The image is laid out at the window's size in Mudlet's pixels, so the
 pointer lands where `renderMap()` drew, and drawn at the scale the app shows it at (`setMapScale`), so it is as sharp
-as the screen.
+as the screen. Shown larger than the app's own map's dp, it is laid out in those and scaled down to the window, so its
+rooms look as on that map.
 
 ## Touch and TalkBack
 

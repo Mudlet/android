@@ -124,13 +124,16 @@
     <!-- The profile editor's switch: connect to the game over an encrypted connection (TLS is the protocol's name) -->
     <string name="profile_tls">Secure connection (TLS)</string>
     <!-- What a screen reader says of a folded heading of the profile editor (Log in automatically, Advanced, Manage
-         profile) while what it holds shows -->
+         profile), or of "Fine-tune" in the dialog that changes a colour, while what it holds shows -->
     <string name="profile_section_expanded">Expanded</string>
-    <!-- What a screen reader says of a folded heading of the profile editor while what it holds is hidden -->
+    <!-- What a screen reader says of a folded heading of the profile editor, or of "Fine-tune" in the dialog that
+         changes a colour, while what it holds is hidden -->
     <string name="profile_section_collapsed">Collapsed</string>
-    <!-- What a tap on a folded heading of the profile editor does, read by a screen reader as "Double-tap to …" -->
+    <!-- What a tap on a folded heading of the profile editor, or on "Fine-tune" in the dialog that changes a colour,
+         does, read by a screen reader as "Double-tap to …" -->
     <string name="profile_section_show">show this section</string>
-    <!-- What a tap on an open heading of the profile editor does, read by a screen reader as "Double-tap to …" -->
+    <!-- What a tap on an open heading of the profile editor, or on "Fine-tune" in the dialog that changes a colour,
+         does, read by a screen reader as "Double-tap to …" -->
     <string name="profile_section_hide">hide this section</string>
     <!-- The heading of the profile editor's folded section with the character name and password the app logs in with -->
     <string name="profile_login_section">Log in automatically</string>
@@ -615,6 +618,48 @@
     <string name="settings_colour_name">Hex colour</string>
     <!-- Under the hex colour field: how to type it. Keep "#rrggbb" as it is -->
     <string name="settings_colour_name_hint">As #rrggbb, such as #ff8000</string>
+    <!-- A heading in the dialog that changes a colour, above colours to tap -->
+    <string name="settings_colour_quick_picks">Quick picks</string>
+    <!-- One of the colours to tap in the dialog that changes a colour, read by a screen reader: a grey between black
+         and the ANSI "Light black" -->
+    <string name="settings_colour_dark_grey">Dark grey</string>
+    <!-- One of the colours to tap in the dialog that changes a colour, read by a screen reader: a grey between the ANSI
+         "White" and "Light white" -->
+    <string name="settings_colour_light_grey">Light grey</string>
+    <!-- One of the colours to tap in the dialog that changes a colour, read by a screen reader: the one Mudlet starts a
+         profile with, where it has no name of its own -->
+    <string name="settings_colour_mudlets">Mudlet\'s default</string>
+    <!-- One of the colours to tap in the dialog that changes a colour, read by a screen reader: the one Mudlet starts a
+         profile with. %1$s is its name, such as "Red" -->
+    <string name="settings_colour_mudlets_named">%1$s, Mudlet\'s default</string>
+    <!-- A heading in the dialog that changes a colour, above a square and a bar that pick any colour by touch -->
+    <string name="settings_colour_custom">Any colour</string>
+    <!-- What a screen reader reads for the square in the dialog that changes a colour: across it the colour goes from
+         grey to full (saturation), and down it from light to black (brightness) -->
+    <string name="settings_colour_saturation_brightness">Saturation and brightness</string>
+    <!-- What a screen reader reads as the state of the saturation and brightness square: %1$d and %2$d are whole numbers
+         from 0 to 100, and %% the percent sign -->
+    <string name="settings_colour_saturation_brightness_value">Saturation %1$d%%, brightness %2$d%%</string>
+    <!-- A screen reader action on the saturation and brightness square: a step of 5% towards the full colour -->
+    <string name="settings_colour_more_saturated">More saturated</string>
+    <!-- A screen reader action on the saturation and brightness square: a step of 5% towards grey -->
+    <string name="settings_colour_less_saturated">Less saturated</string>
+    <!-- A screen reader action on the saturation and brightness square: a step of 5% towards light -->
+    <string name="settings_colour_brighter">Brighter</string>
+    <!-- A screen reader action on the saturation and brightness square: a step of 5% towards black -->
+    <string name="settings_colour_darker">Darker</string>
+    <!-- What a screen reader reads for the bar, in the dialog that changes a colour, that goes through every hue: from
+         red by yellow, green, cyan, blue and magenta back to red -->
+    <string name="settings_colour_hue">Hue</string>
+    <!-- What a screen reader reads as the state of the hue bar: %1$d is a whole number of degrees from 0 to 360 -->
+    <plurals name="settings_colour_hue_value">
+        <item quantity="one">%1$d°</item>
+        <item quantity="other">%1$d°</item>
+    </plurals>
+    <!-- A heading in the dialog that changes a colour, which folds away a slider each for its red, green and blue -->
+    <string name="settings_colour_fine_tune">Fine-tune</string>
+    <!-- Under "Fine-tune" in the dialog that changes a colour while it is folded: what it holds -->
+    <string name="settings_colour_fine_tune_summary">Red, green and blue, each from 0 to 255</string>
     <!-- The button that takes the colour chosen in the dialog that changes one -->
     <string name="settings_colour_ok">OK</string>
     <!-- The button at the foot of the Colours page that puts every colour back to Mudlet's own -->
@@ -793,7 +838,8 @@
     <string name="settings_text_smaller">Smaller text</string>
     <!-- The button, read by a screen reader, that makes the game's text larger -->
     <string name="settings_text_larger">Larger text</string>
-    <!-- A line of the kind a game sends, to show the text size -->
+    <!-- A line of the kind a game sends, to show the text size, and a colour with the background or text it is seen
+         with in the dialog that changes a colour -->
     <string name="settings_text_size_sample">You see a brass lantern here.</string>
     <!-- A switch on a game's Accessibility page: have the screen reader read new game text as it arrives -->
     <string name="settings_read_new_text">Read new text aloud</string>

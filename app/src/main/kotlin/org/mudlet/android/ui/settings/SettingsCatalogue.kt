@@ -219,7 +219,7 @@ sealed class SettingEntry(
 const val CLEAR_MEDIA_KEY = "clearStoredMedia"
 
 // The names of the sixteen ANSI colours, in the order of [Settings.ansiColours]
-private val ANSI_COLOUR_LABELS = listOf(
+internal val ANSI_COLOUR_LABELS = listOf(
     R.string.settings_colour_black,
     R.string.settings_colour_red,
     R.string.settings_colour_green,

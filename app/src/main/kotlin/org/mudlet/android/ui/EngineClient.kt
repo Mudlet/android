@@ -31,10 +31,12 @@ import org.mudlet.android.engine.EngineSocket
 import org.mudlet.android.protocol.EngineLink
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.EngineRestore
+import org.mudlet.android.protocol.MudletSize
 import org.mudlet.android.protocol.OpenProfile
 import org.mudlet.android.protocol.OpenProfileState
 import org.mudlet.android.protocol.Profile
 import org.mudlet.android.protocol.Requests
+import org.mudlet.android.protocol.StartSizes
 import org.mudlet.android.protocol.Transport
 import org.mudlet.android.ui.game.ScriptWebPages
 import java.io.IOException
@@ -65,6 +67,7 @@ object EngineClient {
     private const val RESTART_AFTER_FAILED_ATTEMPTS = 6
 
     private const val PREF_LAST_PROFILE = "lastProfile"
+    private const val PREF_START_SIZES = "startSizes"
 
     private const val TAG = "EngineClient"
 
@@ -187,7 +190,12 @@ object EngineClient {
     var screenSize: Pair<Int, Int>? = null
         private set
 
+    /** The size of the window the app is drawn in, as `WxH` in dp; MainActivity keeps it. */
+    @Volatile
+    var window = ""
+
     // Main thread only
+    private var startSizes: StartSizes? = null
     private var startRequestedAt = 0L
     private var detachStartedAt = 0L
     private var lostAt = 0L
@@ -203,6 +211,7 @@ object EngineClient {
         if (::app.isInitialized) return
         app = context.applicationContext
         lastProfile = prefs().getString(PREF_LAST_PROFILE, null)
+        startSizes = StartSizes.decode(prefs().getString(PREF_START_SIZES, null))
     }
 
     fun startEngine() {
@@ -336,6 +345,12 @@ object EngineClient {
         sessions.forEach { it.changeSetting(setting, value) }
     }
 
+    /** The game screen's console size: [setScreenSize], and the one the next profile opened starts with. */
+    fun setGameConsoleSize(columns: Int, rows: Int) {
+        keepStartSizes(StartSizes.withScreen(startSizes, startWindow(), columns, rows))
+        setScreenSize(columns, rows)
+    }
+
     /** The console's size, which every open profile is given: all of them would show on this screen. */
     fun setScreenSize(columns: Int, rows: Int) {
         val size = columns to rows
@@ -365,23 +380,46 @@ object EngineClient {
     /** Asks the engine to list its profiles again, as it does not see one added beside it, as an import adds one. */
     fun refreshProfiles(onAnswer: (error: String?) -> Unit) = profileRequest(onAnswer) { Requests.listProfiles(it) }
 
+    /** The main window's [size] the game screen gives a profile that has no windows yet, which the next profile opened starts with. */
+    fun setStartMainWindowSize(size: MudletSize) = keepStartSizes(StartSizes.withMainWindow(startSizes, startWindow(), size))
+
+    // What decides the sizes besides the window: the app's text size and layout
+    private fun startWindow() = "$window ${Settings.textSize.value} ${ScriptWindowsClient.layoutMode}"
+
+    private fun keepStartSizes(sizes: StartSizes) {
+        if (sizes == startSizes) return
+        startSizes = sizes
+        prefs().edit { putString(PREF_START_SIZES, sizes.encode()) }
+    }
+
+    // Before the profile's own socket exists to give them, so its scripts read them from their first line
+    private fun sendStartSizes() {
+        startSizes?.requestsFor(startWindow())?.forEach(::send)
+    }
+
     /** Opens and connects the profile [name], closing those open; Reconnect then goes to its address, or opens it again once none is. */
-    fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
-        if (error == null) opened(name)
-        onAnswer(error)
-    }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = false, id = it) }
+    fun openProfile(name: String, password: String?, onAnswer: (error: String?) -> Unit) {
+        sendStartSizes()
+        profileRequest({ error ->
+            if (error == null) opened(name)
+            onAnswer(error)
+        }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = false, id = it) }
+    }
 
     /**
      * Opens and connects the profile [name], with [password] for this run, beside those open, and makes it the front;
      * one already open stays as it is, and comes to the front.
      */
-    fun openProfileAlongside(name: String, password: String?, onAnswer: (error: String?) -> Unit) = profileRequest({ error ->
-        if (error == null) {
-            opened(name)
-            setFront(name)
-        }
-        onAnswer(error)
-    }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = true, id = it) }
+    fun openProfileAlongside(name: String, password: String?, onAnswer: (error: String?) -> Unit) {
+        sendStartSizes()
+        profileRequest({ error ->
+            if (error == null) {
+                opened(name)
+                setFront(name)
+            }
+            onAnswer(error)
+        }) { Requests.openProfile(name, password, proxyPassword = proxyPasswordOf(name), connect = true, alongside = true, id = it) }
+    }
 
     /**
      * Opens the profile [name] without connecting it, as desktop's Offline, with [password] for a later connection; beside
@@ -389,6 +427,7 @@ object EngineClient {
      */
     fun openProfileOffline(name: String, password: String?, onAnswer: (error: String?) -> Unit) {
         val alongside = sessions.isNotEmpty()
+        sendStartSizes()
         profileRequest({ error ->
             if (error == null) {
                 opened(name)
@@ -559,6 +598,8 @@ object EngineClient {
                 }
                 // What it says is in front now stands: it had any setFront sent before
                 requestedFront = null
+                // For the profiles a restore opens after this, as for those the player opens
+                sendStartSizes()
                 // A profile's socket that went with the engine may be back: no need to wait out the link's retry
                 sessions.forEach(ProfileSession::wake)
                 val now = SystemClock.elapsedRealtime()

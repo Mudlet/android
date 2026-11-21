@@ -241,6 +241,9 @@ class FakeEngine(open: List<String> = emptyList()) : AutoCloseable {
         /** Every request [receive] has read from the profile's socket, the skipped ones included. */
         val received: List<JSONObject> get() = game().received
 
+        /** Every request [receive] has read from the control socket, the skipped ones included. */
+        val controlReceived: List<JSONObject> get() = control.received
+
         /** The UI's hello on the profile's socket: "instance" and "lastSeq" when it was attached to an engine before. */
         val hello: JSONObject get() = game().hello
 

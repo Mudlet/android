@@ -40,6 +40,8 @@ public:
     IEngine* defaultSession() override;
     bool restorePending() const override;
     void setFront(const QString& name) override;
+    void setStartScreenSize(int columns, int rows) override { mUi.screen = QSize(columns, rows); }
+    void setStartMainWindowSize(int width, int height) override { mUi.mainWindow = QSize(width, height); }
 
 private:
     friend class MudletProfile;

@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QSize>
 #include <QStringList>
 #include <deque>
 #include <optional>
@@ -33,7 +34,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 47;
+    static constexpr int protocolVersion = 48;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -144,6 +145,11 @@ protected:
     void refuse(const QString& request, const QString& problem);
     void complete(const QJsonObject& message);
     void setScreenSize(const QJsonObject& message);
+    // A setScreenSize's columns and rows, or none after sending why not
+    std::optional<QSize> screenSizeOf(const QJsonObject& message);
+    // A setMainWindowSize's w and h, or none when they are not whole numbers above 0
+    static std::optional<QSize> mainWindowSizeOf(const QJsonObject& message);
+    static QString mainWindowSizeProblem() { return QStringLiteral("w and h must be whole numbers above 0"); }
     void getLink(const QJsonObject& message);
     void followLink(const QJsonObject& message);
     QString setMainWindowSize(const QJsonObject& message);

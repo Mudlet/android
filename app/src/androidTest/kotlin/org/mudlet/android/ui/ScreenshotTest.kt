@@ -167,7 +167,7 @@ class ScreenshotTest {
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_display)))
         activate(hasText(string(R.string.settings_display)))
-        waitFor(hasText(string(R.string.settings_undo_wrap_width)))
+        waitFor(hasText(string(R.string.settings_undo_wrap)))
         save("settings-display-$mode")
         activate(hasContentDescription(string(R.string.navigate_back)))
         compose.scrollSettingsHubTo(hasText(string(R.string.settings_security)))

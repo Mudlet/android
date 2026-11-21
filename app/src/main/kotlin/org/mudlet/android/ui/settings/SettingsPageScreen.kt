@@ -181,7 +181,10 @@ private fun EntryRows(entry: SettingEntry, owner: SettingsOwner, game: String?, 
     }
 }
 
-/** A switch the whole row turns, which TalkBack reads as its [overline] (where search found it), label, then hint. */
+/**
+ * A switch the whole row turns, which TalkBack reads as its [overline] (where search found it), label, whether it is
+ * experimental, then hint.
+ */
 @Composable
 internal fun SwitchRow(entry: SettingEntry.Switch, owner: SettingsOwner, overline: String? = null) {
     val checked = owner.value(entry.setting)
@@ -193,6 +196,9 @@ internal fun SwitchRow(entry: SettingEntry.Switch, owner: SettingsOwner, overlin
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
             if (overline != null) Overline(overline)
             Text(stringResource(entry.label), style = MaterialTheme.typography.bodyLarge)
+            if (entry.experimental) {
+                Text(stringResource(R.string.settings_experimental), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+            }
             entry.hint?.let { Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         Switch(checked, onCheckedChange = null)

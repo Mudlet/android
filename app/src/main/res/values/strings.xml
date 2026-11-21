@@ -546,9 +546,10 @@
     <string name="settings_for_app">For the app and every game.</string>
     <!-- A page of each game's own settings: how the game's text is shown -->
     <string name="settings_display">Display &amp; text</string>
-    <!-- Under "Display & text" in the list of settings pages, what that page holds: undoing the wrapping a game does
-         itself, and the links a game puts in its text -->
-    <string name="settings_display_summary">Lines the game wraps itself, and its links</string>
+    <!-- Under "Display & text" in the list of settings pages, what that page holds, in its order: how many lines the
+         game's text keeps to scroll back through, the links a game puts in its text, and undoing the wrapping a game
+         does itself -->
+    <string name="settings_display_summary">Scrollback, the game\'s links and its own wrapping</string>
     <!-- A page of each game's own settings: the colours the game's text is shown in, as desktop Mudlet's "Color view" -->
     <string name="settings_colours">Colours</string>
     <!-- Under "Colours" in the list of settings pages, what that page holds -->
@@ -881,7 +882,10 @@
          so the player's triggers see each line whole -->
     <string name="settings_undo_wrap">Undo the game\'s own wrapping</string>
     <!-- Under "Undo the game's own wrapping", what the switch does -->
-    <string name="settings_undo_wrap_hint">For games that wrap their lines and cannot be told not to: the lines are joined again, so triggers see them whole and the text fits your screen. Experimental.</string>
+    <string name="settings_undo_wrap_hint">For games that wrap their lines and cannot be told not to: the lines are joined again, so triggers see them whole and the text fits your screen.</string>
+    <!-- A short label under the name of a setting still being tried out, such as "Undo the game's own wrapping": it
+         may join or leave split the odd line it should not, and may change -->
+    <string name="settings_experimental">Experimental</string>
     <!-- Words a player might search the settings for to find "Undo the game's own wrapping" and the width it is
          undone at, besides the words of their names and descriptions, separated by commas. Use the words a player of
          your language would search for. -->

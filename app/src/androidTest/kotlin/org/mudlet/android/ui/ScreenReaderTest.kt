@@ -531,10 +531,12 @@ class ScreenReaderTest {
         loaded()
         compose.pickFromGameMenu(string(R.string.settings_title))
         activate(hasText(string(R.string.settings_display)))
-        session.receive("getSettings")
+        // The width shows only while its game undoes the wrapping
+        session.settings(mapOf("undoServerWrap" to true), session.receive("getSettings").getLong("id"))
         // As on desktop Mudlet, what becomes of blank lines is on the Accessibility page
         compose.onNode(hasText(string(R.string.settings_blank_lines))).assertDoesNotExist()
         val width = hasContentDescription(string(R.string.settings_undo_wrap_width)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(width).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(width).performScrollTo().performTouchInput { swipeRight(startX = centerX, endX = (centerX + right) / 2, durationMillis = 500) }
         val slid = values(session.receive("setSettings"))["undoServerWrapWidth"] as Int
         assertTrue("slid to $slid", slid > 80)

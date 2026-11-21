@@ -411,7 +411,7 @@ object EngineClient {
      * one already open stays as it is, and comes to the front.
      */
     fun openProfileAlongside(name: String, password: String?, onAnswer: (error: String?) -> Unit) {
-        sendStartSizes()
+        // bite: sendStartSizes()
         profileRequest({ error ->
             if (error == null) {
                 opened(name)

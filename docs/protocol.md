@@ -89,7 +89,7 @@ message, in backquotes, with `?` after an optional one, and the fields of the ob
 | `activateCommand` | `command` | A click on the command of `commands` whose `id` is `command`, a whole number (`THeadlessSession::activateAddonCommand()`): a checkable command is ticked or unticked, then the event `sysCommandClicked` is raised with its id. Refused for a disabled command. |
 | `mapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | What the UI's pointer did on the map at `x`, `y`, in the pixels of the last `map` from its top left (`THeadlessSession::mapPointer()`, "The map" below). `type` is `press`, `doubleClick` or `wheel`; `button`, `modifiers` and `wheelY` are as for `pointer`, and 0 when absent. |
 | `setMapViewOnly` | `viewOnly` | `true` to only view the map, `false` to edit it, as the GUI's mapper menu does (`THeadlessSession::setMapViewOnly()`): the event `mapModeChangeEvent` is raised with `viewing` or `editing`. |
-| `setMapScale` | `scale` | Draws `map` from now on with `scale` device pixels to each of the mapper window's, a number from 1 to 8, so that it is as sharp as the UI shows it ("The map" below). libmudlet keeps it until the UI that asked goes, and draws at most 4096 pixels a side, at a smaller scale where that one would be larger. |
+| `setMapScale` | `scale`, `density`? | Draws `map` from now on with `scale` device pixels to each of the mapper window's, a number from 1 to 8, so that it is as sharp as the UI shows it ("The map" below). `density` is the device pixels to each of the units the UI lays its own map out in, as `setAppMapSize`'s `scale`, a number from 1 to 4: a `scale` above it lays the map out in those units, so its rooms are drawn as on that map; absent, the map is laid out in the window's pixels, as an engine without it does, so it needs no new version. libmudlet keeps both until the UI that asked goes, and draws at most 4096 pixels a side, at a smaller scale where that one would be larger. |
 | `setAppMapSize` | `w`, `h`, `scale` | Asks for the app's own map, drawn at `w` by `h` of the map's pixels with `scale` device pixels to each, and sent as `appMap` whenever it changes ("The app's map" below); `w` and `h` 0 stop it. `w` and `h` are whole numbers, both above 0 or both 0; `scale` a number from 1 to 4. libmudlet keeps it for each profile that loads later, until the UI that asked goes, and refuses a map of more than 4096 device pixels a side. |
 | `appMapPointer` | `type`, `x`, `y`, `button`?, `modifiers`?, `wheelY`? | As `mapPointer`, at `x`, `y` in the map's pixels of the last `appMap` (`THeadlessSession::appMapPointer()`). |
 | `findRooms` | `text`, `id`? | Looks for the rooms of the map whose name holds `text`, ignoring case, as `searchRoom()` matches, and the room whose id `text` is (`THeadlessSession::findRooms()`), answered by `rooms`, best first. `text` must not be blank. |
@@ -179,7 +179,8 @@ and the app's map is not open (no `setAppMapSize` above 0 by 0 since the profile
 gone since), and `mapPointer` as `THeadlessSession::mapPointer()` does: before the map has been drawn, for a
 double-click of another button than the left, and for a wheel turn of less than half a notch or with no area to zoom.
 
-`setMapScale` is answered only when refused, for a `scale` that is not a number from 1 to 8.
+`setMapScale` is answered only when refused, for a `scale` that is not a number from 1 to 8, or a `density` that is not a
+number from 1 to 4.
 
 `setAppMapSize`, `appMapPointer` and `showRoom` too are answered only when refused, and `findRooms` by `rooms` or
 `error`, as above. libmudlet refuses all but `setAppMapSize` while no profile is open, `appMapPointer` before the
@@ -539,6 +540,13 @@ map is the same point of that window, so the UI draws the PNG over it, and sends
   Mudlet's main window's scaled to the screen, and a mapper that is a page fills its pane. A scale that would make
   the PNG larger than 4096 pixels a side is lowered to fit. A mapper smaller than 10 pixels a side or larger than
   4096, or a map too large for a frame, gives none.
+- Mudlet's outlines, line weights and the room size below which a room's border fades and then goes are in pixels, so
+  a small mapper shown enlarged, as a page of the starter UI's dock is, laid out in its own pixels has tiny rooms
+  magnified: filled dots for the levels above and below, rooms without borders, thinner exits. With a `density` below
+  the `scale`, the map is laid out instead at the window's size times `scale` over `density`, in the units the app
+  lays its own map out in, and drawn scaled down to the window (libmudlet's `layoutScale` of `renderMap()`, a Mudlet
+  patch the app carries until Mudlet has it), so a room as large on the screen as on `appMap` is drawn as there. The
+  zoom is still the area's, rooms across the narrow side, and `w`, `h`, `view` and the points still the window's.
 
 ### The app's map
 

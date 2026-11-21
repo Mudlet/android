@@ -462,7 +462,7 @@ void SocketBridge::forgetClient()
 {
     if (mEngine && mProfileOutput) {
         mEngine->setAppMapSize(QSize(0, 0), 1);
-        mEngine->setMapScale(1);
+        mEngine->setMapScale(1, 1);
     }
     mAppMap = {};
 }
@@ -794,9 +794,7 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         const QJsonValue viewOnly = message.value(QLatin1String("viewOnly"));
         refuse(type, viewOnly.isBool() ? mEngine->setMapViewOnly(viewOnly.toBool()) : QStringLiteral("viewOnly must be true or false"));
     } else if (type == QLatin1String("setMapScale")) {
-        const QJsonValue scale = message.value(QLatin1String("scale"));
-        const bool valid = scale.isDouble() && scale.toDouble() >= 1 && scale.toDouble() <= IEngine::maxMapScale;
-        refuse(type, valid ? mEngine->setMapScale(scale.toDouble()) : QStringLiteral("scale must be a number from 1 to %1").arg(IEngine::maxMapScale));
+        refuse(type, setMapScale(message));
     } else if (type == QLatin1String("setAppMapSize")) {
         refuse(type, setAppMapSize(message));
     } else if (type == QLatin1String("appMapPointer")) {
@@ -1144,6 +1142,22 @@ QString SocketBridge::moveMap(const QJsonObject& message)
         return QStringLiteral("seq must be a whole number from 1");
     }
     return mEngine->moveMap(*map, QPointF(numbers[0].toDouble(), numbers[1].toDouble()), numbers[2].toDouble(), QPointF(numbers[3].toDouble(), numbers[4].toDouble()), *seq);
+}
+
+QString SocketBridge::setMapScale(const QJsonObject& message)
+{
+    const QJsonValue scale = message.value(QLatin1String("scale"));
+    if (!scale.isDouble() || scale.toDouble() < 1 || scale.toDouble() > IEngine::maxMapScale) {
+        return QStringLiteral("scale must be a number from 1 to %1").arg(IEngine::maxMapScale);
+    }
+    const QJsonValue density = message.value(QLatin1String("density"));
+    if (density.isUndefined()) {
+        return mEngine->setMapScale(scale.toDouble(), scale.toDouble());
+    }
+    if (!density.isDouble() || density.toDouble() < 1 || density.toDouble() > IEngine::maxAppMapScale) {
+        return QStringLiteral("density must be a number from 1 to %1").arg(IEngine::maxAppMapScale);
+    }
+    return mEngine->setMapScale(scale.toDouble(), density.toDouble());
 }
 
 QString SocketBridge::setAppMapSize(const QJsonObject& message)

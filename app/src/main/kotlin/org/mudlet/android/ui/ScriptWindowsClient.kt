@@ -90,10 +90,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     private var wantedSize: MudletSize? = null
     private var sentSize: MudletSize? = null
 
-    // The scale the mapper window's map is shown at, and the one the engine draws it at since the UI attached: 1 until
-    // asked, as the engine goes back to 1 when a UI goes; null when it could not be sent
-    private var wantedMapScale = 1.0
-    private var sentMapScale: Double? = 1.0
+    // The scale and density the mapper window's map is shown at, and those the engine draws it at since the UI attached:
+    // 1 until asked, as the engine goes back to 1 when a UI goes; null when they could not be sent
+    private var wantedMapScale = MapScale(1.0, 1.0)
+    private var sentMapScale: MapScale? = MapScale(1.0, 1.0)
 
     // Where this engine instance was last told each user window is
     private val sentPlacements = HashMap<String, Placement>()
@@ -287,7 +287,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         // Also a size that could not be sent while the link was down
         wantedSize?.let(::setMainWindowSize)
         mapRooms.onAttached(sameInstance)
-        sentMapScale = 1.0
+        sentMapScale = MapScale(1.0, 1.0)
         setMapScale(wantedMapScale)
         session.appMap.onAttached(sameInstance)
     }
@@ -299,12 +299,19 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         sentSize = if (session.send(Requests.setMainWindowSize(size.w, size.h))) size else null
     }
 
-    /** Has the engine draw [map] at [scale] device pixels to each of the mapper window's, unless it does already. */
-    fun setMapScale(scale: Double) {
-        wantedMapScale = scale
-        if (scale == sentMapScale) return
-        sentMapScale = if (session.send(Requests.setMapScale(scale))) scale else null
+    /**
+     * Has the engine draw [map] at [scale] device pixels to each of the mapper window's, laid out as the app's own map
+     * is at [density] device pixels to the dp, unless it does already.
+     */
+    fun setMapScale(scale: Double, density: Float) = setMapScale(MapScale(scale, density.toDouble().coerceIn(1.0, AppMapClient.MAX_SCALE)))
+
+    private fun setMapScale(wanted: MapScale) {
+        wantedMapScale = wanted
+        if (wanted == sentMapScale) return
+        sentMapScale = if (session.send(Requests.setMapScale(wanted.scale, wanted.density))) wanted else null
     }
+
+    private data class MapScale(val scale: Double, val density: Double)
 
     /** Tells the engine where the user window [name] is, unless it was told already. */
     fun placeUserWindow(name: String, placement: Placement) {

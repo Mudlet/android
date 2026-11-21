@@ -240,8 +240,9 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
     if (corner != null) {
         val mapRect = corner.map.from(corner.bounds)
         val fit = remember(window.w, window.h, placed, mapRect) { MapFit(window.w, window.h, placed.wholeIn(PxRect(0f, 0f, mapRect.w, mapRect.h))) }
-        // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred
-        LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
+        // Drawn at the window's pixels and scaled up to the screen's, the map would be blurred, and laid out in them its
+        // rooms would be tiny ones magnified, not drawn as the app's own map draws them
+        LaunchedEffect(fit.renderScale, density.density) { EngineClient.front.windows.setMapScale(fit.renderScale, density.density) }
         val infoHeight = with(density) { (corner.map.h * INFO_FRACTION).toDp() }
         CornerMap(
             corner,
@@ -260,7 +261,7 @@ internal fun ScriptMap(placed: PlacedWindow, corner: MapCorner?, density: Densit
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val box = PxRect(0f, 0f, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
                 val fit = remember(window.w, window.h, placed, box) { MapFit(window.w, window.h, placed.wholeIn(box)) }
-                LaunchedEffect(fit.renderScale) { EngineClient.front.windows.setMapScale(fit.renderScale) }
+                LaunchedEffect(fit.renderScale, density.density) { EngineClient.front.windows.setMapScale(fit.renderScale, density.density) }
                 MapView(MapperWindow, frame, fit, viewOnly, drawn, Modifier.fillMaxSize().background(CONSOLE_BACKGROUND).readAsOne(0f), panel = true)
             }
         }

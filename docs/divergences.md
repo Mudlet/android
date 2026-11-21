@@ -33,6 +33,9 @@ panel beside it rather than over it (`docs/architecture.md`, "The map"). The win
 the engine draws the map at, stay what the script set. A desktop's mapper is laid out for a screen many times a
 phone's: scaled to fit, a 200 pixel mapper is a few dp across, too small to read a room or touch one, and controls
 drawn over it hide most of it.
+Its map is laid out in the dp it is shown at, as the app's own map is, and drawn scaled down to the window's pixels
+(`setMapScale`'s `density`): laid out in those and magnified, its rooms would get the outlines, exits and levels above
+and below desktop draws for a room a few pixels across, not those of a room the size the player sees.
 The panel shows only once a small button over the map's top corner is pressed, and Back or a touch elsewhere hides it
 again. Desktop's mapper shows its panel until the player hides it with the thin button between the two; beside a map
 that small on a phone, a panel left showing covers the game's text, so it shows only while the player wants it.

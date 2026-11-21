@@ -52,6 +52,7 @@ private:
         QSize screen;
         QSize mainWindow{0, 0};
         double mapScale = 1;
+        double mapDensity = 1;
         QSize appMap{0, 0};
         double appMapScale = 1;
     };

@@ -268,8 +268,14 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
 - A further game category, Colours (desktop Mudlet's Color view), holds the profile's palette, which is Mudlet's: the
   engine paints each run in the exact colour it resolved as it decoded the text, so a colour changed (`ColourSetting`,
   sent as `#rrggbb` by the keys of Mudlet's `color_table`, such as `ansiRed`) reaches text the game sends after it, and
-  the background reaches the console through `consoleColors`. A colour's dialog has a slider each for red, green and
-  blue and the colour as hex to type, and changes the game's as OK is pressed. "Reset to Mudlet's colours" sends all
+  the background reaches the console through `consoleColors`. A colour's dialog (`ColourDialog`) has Mudlet's
+  sixteen ANSI colours, two greys and the setting's own Mudlet colour to tap, a saturation and brightness square and
+  a hue bar (`Hsb`, in `ColourPicking.kt`), the colour as hex to type and, folded under "Fine-tune", a slider each
+  for red, green and blue, as desktop Mudlet's colour dialog has basic colours, a hue and saturation field and RGB.
+  Its preview shows the colour with the one it is seen with (text on a background, a background under text, a map
+  colour on the map's background), and it changes the game's as OK is pressed. TalkBack reads each colour to tap by
+  name, steps the square 5% at a time by actions and moves the hue bar as a slider. Neither Android nor Material 3
+  for Compose has a colour picker to use instead. "Reset to Mudlet's colours" sends all
   twenty of Mudlet's in one request (`SettingsOwner.resetToMudlets`), as desktop Mudlet's reset button puts them back.
   Desktop Mudlet's input line colours are not among them, as the app's input line follows the app's theme.
 - A further game category, Map (desktop Mudlet's Mapper and Mapper colors tabs), holds how the engine draws the
@@ -2249,7 +2255,9 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
     - On the game's Colours page change Red to `#ff8000` by its hex field and press OK, then send
       `lua feedTriggers("\27[31morange\n")`: the new line is orange, and red lines from before keep their red.
       Change Background: the console's background follows at once. With TalkBack on, each slider reads its colour's
-      name and amount. "Reset to Mudlet's colours" puts Red back to `#800000`.
+      name and amount, each colour to tap its name, "Hue" its degrees, and the square its saturation and brightness,
+      with actions to change each. In the dialog, drag across the square and along the hue bar: the preview and the
+      hex field follow, and the dialog stays put. "Reset to Mudlet's colours" puts Red back to `#800000`.
     - Disconnect, then send a command: "Not sent: ..." shows over the foot of the console, above the keyboard, and
       TalkBack reads it without moving focus.
 17. About and licences, with TalkBack on.

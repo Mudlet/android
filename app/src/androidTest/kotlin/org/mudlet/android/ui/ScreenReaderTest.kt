@@ -496,6 +496,8 @@ class ScreenReaderTest {
         activate(red)
 
         compose.onNode(isRoot() and hasAnyDescendant(hasText(string(R.string.settings_colour_ok)))).tryPerformAccessibilityChecks()
+        val fineTune = hasText(string(R.string.settings_colour_fine_tune)) and hasClickAction()
+        compose.onNode(fineTune).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         val redAmount = hasContentDescription(string(R.string.settings_colour_red_amount)) and SemanticsMatcher.keyIsDefined(SemanticsActions.SetProgress)
         compose.onNode(redAmount).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "170"))
         val hex = hasSetTextAction() and hasAnyAncestor(isDialog())
@@ -513,6 +515,7 @@ class ScreenReaderTest {
 
         // A slide changes the colour; Cancel leaves the game's as it was
         activate(red)
+        compose.onNode(fineTune).performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
         compose.onNode(redAmount).performSemanticsAction(SemanticsActions.SetProgress) { it(255f) }
         compose.onNode(hex).assert(hasText("#ffab34"))
         compose.onNode(hasText(string(R.string.settings_choice_cancel)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)

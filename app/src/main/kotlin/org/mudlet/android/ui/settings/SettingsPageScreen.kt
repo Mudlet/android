@@ -1,7 +1,6 @@
 package org.mudlet.android.ui.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +38,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -47,9 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -61,7 +57,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -293,72 +288,23 @@ private fun ColourRow(entry: SettingEntry.Colour, owner: SettingsOwner) {
         Swatch(rgb)
     }
     if (changing) {
-        ColourDialog(stringResource(entry.label), rgb, onDismiss = { changing = false }) {
+        val (other, isBackground) = seenWith(entry.setting)
+        ColourDialog(stringResource(entry.label), rgb, entry.setting.mudletDefault, ColourPreview(owner.value(other), isBackground), onDismiss = { changing = false }) {
             changing = false
             owner.change(entry.setting, it)
         }
     }
 }
 
-@Composable
-private fun Swatch(rgb: Int, size: Dp = 32.dp) {
-    Box(
-        Modifier.size(size).clip(MaterialTheme.shapes.small).background(Color(0xFF000000 or rgb.toLong()))
-            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small),
-    )
-}
-
-/** A slider for each of red, green and blue, and the colour as "#rrggbb" to type, which [onPick] takes as OK is pressed. */
-@Composable
-private fun ColourDialog(title: String, initial: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
-    var rgb by rememberSaveable { mutableIntStateOf(initial) }
-    // What is typed, kept apart from rgb while it is not yet a whole colour
-    var typed by rememberSaveable { mutableStateOf(Settings.colourName(initial)) }
-    val channels = listOf(R.string.settings_colour_red_amount to 16, R.string.settings_colour_green_amount to 8, R.string.settings_colour_blue_amount to 0)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        // OK takes only a whole colour, never the last one the sliders left while the typed name is not one
-        confirmButton = {
-            TextButton({ onPick(rgb) }, enabled = Settings.parseColourName(typed) != null) { Text(stringResource(R.string.settings_colour_ok)) }
-        },
-        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.settings_choice_cancel)) } },
-        title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Swatch(rgb, 48.dp)
-                channels.forEach { (name, shift) ->
-                    val amount = (rgb shr shift) and 0xFF
-                    val label = stringResource(name)
-                    Text(stringResource(R.string.settings_colour_amount, label, amount), style = MaterialTheme.typography.bodyMedium)
-                    Slider(
-                        value = amount.toFloat(),
-                        onValueChange = {
-                            rgb = (rgb and (0xFF shl shift).inv()) or (it.roundToInt() shl shift)
-                            typed = Settings.colourName(rgb)
-                        },
-                        modifier = Modifier.semantics {
-                            contentDescription = label
-                            stateDescription = amount.toString()
-                        },
-                        valueRange = 0f..255f,
-                    )
-                }
-                OutlinedTextField(
-                    typed,
-                    { text ->
-                        typed = text
-                        Settings.parseColourName(text)?.let { rgb = it }
-                    },
-                    Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.settings_colour_name)) },
-                    isError = Settings.parseColourName(typed) == null,
-                    supportingText = { Text(stringResource(R.string.settings_colour_name_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done),
-                )
-            }
-        },
-    )
+/** The colour [setting]'s is seen with, and whether that is text drawn on it ([setting] being a background) or the background it is drawn on. */
+private fun seenWith(setting: Settings.ColourSetting): Pair<Settings.ColourSetting, Boolean> = when (setting) {
+    Settings.backgroundColour -> Settings.foregroundColour to true
+    Settings.commandBackgroundColour -> Settings.commandForegroundColour to true
+    Settings.commandForegroundColour -> Settings.commandBackgroundColour to false
+    Settings.mapBackgroundColour -> Settings.mapLinkColour to true
+    Settings.playerRoomOuterColour, Settings.playerRoomInnerColour -> Settings.mapBackgroundColour to false
+    in Settings.mapColours -> Settings.mapBackgroundColour to false
+    else -> Settings.backgroundColour to false
 }
 
 /** A choice's label, or the choice itself for one the app has no label for, such as a name a newer Mudlet added. */

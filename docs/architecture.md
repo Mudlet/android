@@ -1189,6 +1189,8 @@ as the game's is (`proxy()`, `setProxy()`, `setProxyPassword()`, `0042-headless-
 [`protocol.md`](protocol.md)).
 And the main window's size, or the console's columns and rows, given with the start, so a profile's scripts read it from
 their first line (`THeadlessSession::Options::mainWindowSize` and `screenSize`, `0043-headless-main-window-size-at-start.patch`).
+And the starter UI's chat welcome printed again at its window's width when the window grows, while it is all the chat
+window holds (`BaseUI.fitDock()`, `0044-starter-ui-chat-welcome-refit.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -1326,6 +1328,8 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the sizes given before a profile opens, on its own socket or on the control socket: its scripts read them from their
   first line, so a Geyser `MiniConsole` with `autoWrap` that echoes as the profile loads wraps at the console's
   columns; the control socket refusing a size as a profile's socket does, and leaving an open profile its own;
+- the starter UI's chat window built in a narrow main window that then widens: its welcome printed again at the new
+  width, and chat in it keeping its lines through a resize;
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
   colours; a Geyser `UserWindow` placed by `placeUserWindow`, which raises `sysUserWindowResizeEvent`; the size from
   `setMainWindowSize` before the profile loads, `setBorderLeft()` and `setBorderColor()`, as `mainArea`;
@@ -2320,6 +2324,8 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
     - A window's text is readable, its newest line in view; scrolled back, it stays put.
     - A window that wraps to its width, such as the starter UI's chat window in a game with no GUI of its own, has its
       first lines wrapped at its full width, also in the profile opened first after the app starts.
+    - With the starter UI, turn a tablet or unfold a phone so the game area widens: the chat window's welcome line
+      fills its new width, while chat the game sent there keeps the lines it arrived on.
     - A console a script gave a scroll bar (`lua enableScrollBar("<name>")`) with more rows than fit has a thumb at
       its right edge, which moves as the rows scroll and scrolls them when dragged; `disableScrollBar` takes it away.
     - With TalkBack on: swiping goes from the console to the input line, then the pinned commands, then

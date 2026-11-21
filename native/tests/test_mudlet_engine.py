@@ -120,7 +120,8 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, links, app_state, script_windows, window_links,
+        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, starter_ui_welcome,
+                       links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
                        clipboard, file_dialog, web_pages, packages, error_console, default_packages, key_bindings, scripts_stopped,
@@ -1619,6 +1620,58 @@ def start_sizes():
     ctl.ask({"t": "listProfiles"}, collect=control)
     size = main_window_size(p, frames, "kept")
     check(size == "1400x700", f"a size the control socket is given leaves the open profile's as it was: {size}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def starter_ui_welcome():
+    """The starter UI's chat window, built in a narrow main window that then widens, as the game screen gives its size
+    once it has measured itself: the welcome line is printed again at the window's new width, and chat the game sent
+    there keeps the lines it arrived on through a resize."""
+    profile = "Starter UI Test"
+    pane = "BaseUI_chat_all"
+    welcome = "Tells, says and channel chat from the game will be collected here."
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "setMainWindowSize", "w": 800, "h": 600})
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    def rows():
+        m = c.ask({"t": "getWindowText", "window": pane, "first": 0, "count": 50}, answers=("windowText", "error"), collect=seen)
+        return [line["text"] for line in m.get("lines", []) if line["text"]]
+
+    def resized(width, wider_than=None, narrower_than=None):
+        since = len(seen)
+        c.send({"t": "setMainWindowSize", "w": width, "h": 600})
+        seen_or_next(c, windows_with(pane, "miniConsole", lambda w: (wider_than is None or w["columns"] > wider_than)
+                                     and (narrower_than is None or w["columns"] < narrower_than)), seen, since, what=f"{pane} resized")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "BaseUI.build()"})
+    seen_or_next(c, windows_with(pane, "miniConsole", lambda w: w.get("columns", 0) > 0), seen, since, timeout=15,
+                 what=f"{pane} built")
+    narrow_columns = window_of(seen, pane, "miniConsole")["columns"]
+    narrow = rows()
+    check("".join(narrow).replace(" ", "") == welcome.replace(" ", "") and len(narrow) > 1,
+          f"the starter UI's chat window opens on its welcome, wrapped at its {narrow_columns} columns: {narrow}")
+
+    resized(1600, wider_than=narrow_columns)
+    wide_columns = window_of(seen, pane, "miniConsole")["columns"]
+    wide = rows()
+    check("".join(wide).replace(" ", "") == welcome.replace(" ", "") and len(wide) < len(narrow) and len(wide[0]) > narrow_columns,
+          f"widened to {wide_columns} columns, the welcome is printed again at that width: {wide}")
+
+    c.send({"t": "runLua", "code": "BaseUI.chats.all:echo(\"Ana tells you, 'meet me at the fountain when the bells ring for "
+                                   "the third time today'\\n\")"})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    before = rows()
+    resized(800, narrower_than=wide_columns)
+    after = rows()
+    check(after == before and len(before) > len(wide), f"chat the game sent keeps its lines through a resize: {before} then {after}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 

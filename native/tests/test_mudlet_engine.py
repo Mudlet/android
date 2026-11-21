@@ -3229,12 +3229,6 @@ def map_layout():
     check(count <= 2 * 41 * 41 // 100,
           f"room 2, its outline and its exit are drawn in the mapper as on the app's map: {count} of {41 * 41} pixels differ")
 
-    since = len(seen)
-    c.send({"t": "mapPointer", "type": "press", "x": window_room2[0], "y": window_room2[1], "button": 1})
-    c.send({"t": "runLua", "code": "selected()"})
-    got = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("selected "), seen, since)["text"]
-    check(got == "selected 2", f"a press at room 2's point of the window selects it: {got}")
-
     # Without a density, as an engine before it, the map is laid out in the window's pixels: tiny rooms, magnified
     since = len(seen)
     c.send({"t": "setMapScale", "scale": 4})
@@ -3246,8 +3240,15 @@ def map_layout():
     except TimeoutError as e:
         check(False, f"setMapScale with no density draws the mapper again, laid out in its own pixels: {e}")
 
-    # A drag and a pinch in the window's pixels: room 2 20 to the left, then twice the size about room 1
+    # Selecting it tints room 2, so after the comparisons
     c.send({"t": "setMapScale", "scale": 4, "density": 1})
+    since = len(seen)
+    c.send({"t": "mapPointer", "type": "press", "x": window_room2[0], "y": window_room2[1], "button": 1})
+    c.send({"t": "runLua", "code": "selected()"})
+    got = seen_or_next(c, lambda m: m["t"] in ("line", "tail") and m["text"].startswith("selected "), seen, since)["text"]
+    check(got == "selected 2", f"a press at room 2's point of the window selects it: {got}")
+
+    # A drag and a pinch in the window's pixels: room 2 20 to the left, then twice the size about room 1
     for seq, move, want in ((1, {"dx": -20, "dy": 0, "zoom": 1, "x": 50, "y": 50}, {1: (30, 50), 2: (50, 50)}),
                             (2, {"dx": 0, "dy": 0, "zoom": 2, "x": 30, "y": 50}, {1: (30, 50), 2: (70, 50)})):
         since = len(seen)

@@ -1707,7 +1707,7 @@ std::optional<MapFrame> MudletProfile::drawMap(const QSize& size)
     image.setDevicePixelRatio(scale);
     image.fill(Qt::transparent);
     QPainter painter(&image);
-    const bool drawn = mSession->renderMap(painter, size, std::max(1.0, scale / mMapDensity));
+    const bool drawn = mSession->renderMap(painter, size);
     painter.end();
     if (!drawn) {
         qWarning("MudletEngine: the map was not drawn: %s", qPrintable(mSession->errorString()));

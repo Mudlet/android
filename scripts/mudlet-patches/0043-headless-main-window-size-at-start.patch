@@ -1,0 +1,182 @@
+Headless apps give the main window's size before scripts load
+
+THeadlessSession takes the main window's size, setMainWindowSize() in pixels or setScreenSize() in characters,
+only once a profile has loaded. Every script that runs as the profile loads reads the default of 90 by 25
+characters instead, and a package that fits its windows to the main window then, as the starter UI fits its dock,
+lays them out for a size the app never shows. A console with autoWrap keeps the wrap each line had as it arrived,
+so a line echoed then stays wrapped at that width after the window grows.
+
+- THeadlessSession::Options takes mainWindowSize (pixels) or else screenSize (characters). The area is laid out
+  with the font and borders the save left before the first script runs, which reads that size and is sent no
+  sysWindowResizeEvent for it. The same size given again after the load changes nothing.
+- A screen size of more than 65535 either way is refused, as setScreenSize() refuses it. A main window that
+  holds no character of the profile's font is not taken, and setMainWindowSize() refuses it once loaded.
+- The GUI and the headless runner are unchanged.
+
+Tested by HeadlessSessionTest (test_aMainWindowGivenAtStartIsWhatTheFirstScriptReads,
+test_aScreenSizeGivenAtStartIsWhatTheFirstScriptReads) and by Mudlet/android's native/tests/test_mudlet_engine.py.
+
+Carried by Mudlet/android's scripts/apply-mudlet-patches.sh until Mudlet/Mudlet has it.
+Upstream: not opened yet
+
+diff --git a/docs/headless.md b/docs/headless.md
+index a1ff07e13..d6de93416 100644
+--- a/docs/headless.md
++++ b/docs/headless.md
+@@ -934,6 +934,14 @@ There are two ways to give the area, and the later of the two holds:
+ - `setMainWindowSize(QSize(width, height))` gives it in pixels, for an app that draws the main console
+   itself. A font change keeps the area and fits the new font's characters into it, so the grid changes.
+ 
++An app that knows the size before it opens the profile gives it to `start()` as well, in
++`options.mainWindowSize` (pixels) or else `options.screenSize` (characters): the area is laid out with
++the font and borders the save left before the first script runs, so a script that fits its windows to
++the main window as it loads reads the size the app shows, and is sent no `sysWindowResizeEvent` for it.
++Given again once the profile has loaded, the same size changes nothing. A screen size of more than 65535
++either way is refused; a main window that holds no character of the profile's font, or more than 65535,
++is not taken, and `setMainWindowSize()` refuses it once the profile has loaded.
++
+ Either raises `sysWindowResizeEvent` with the text's width and height in pixels, as a resize of the main
+ window does in the GUI, and nothing when the size is the one already given; a border change raises it
+ too. Both are refused where `submit()` is, and for a size of no character, or more than 65535, either
+diff --git a/src/Host.cpp b/src/Host.cpp
+index cd012ea85..e5b1bb7f2 100644
+--- a/src/Host.cpp
++++ b/src/Host.cpp
+@@ -903,7 +903,7 @@ void Host::startProfileScripts()
+ {
+     // enable script compilation (which is off by default)
+     mBlockScriptCompile = false;
+-    if (!hasConsoleView() && !mBorders.isNull()) {
++    if (!hasConsoleView() && (!mBorders.isNull() || mMainAreaCells || mMainAreaPixels)) {
+         layOutMainAreaWithNoView(MainAreaChange::load);
+     }
+     // This uses the external LuaGlobal.lua file to load all the other external
+diff --git a/src/headless/THeadlessSession.cpp b/src/headless/THeadlessSession.cpp
+index 1a8c80a8e..33265468d 100644
+--- a/src/headless/THeadlessSession.cpp
++++ b/src/headless/THeadlessSession.cpp
+@@ -43,6 +43,7 @@
+ #include <QEventLoop>
+ #include <QFile>
+ #include <QFileInfo>
++#include <QFontMetrics>
+ #include <QKeyEvent>
+ #include <QMetaMethod>
+ #include <QScopeGuard>
+@@ -536,6 +537,11 @@ std::optional<THeadlessSession::StartResult> THeadlessSession::prepareStart(Opti
+         mErrorString = tr("The profiles closed earlier are still closing; try again once they have.");
+         return StartResult::poolClosing;
+     }
++    if (options.screenSize.width() > 65535 || options.screenSize.height() > 65535) {
++        //: Error from a frontend with no window given a screen size that cannot be sent to the game; %1 is the number of columns asked for, %2 the number of rows
++        mErrorString = tr("A screen of %1 columns by %2 rows cannot be sent to the game: each must be from 1 to 65535.").arg(options.screenSize.width()).arg(options.screenSize.height());
++        return StartResult::notOpened;
++    }
+     // Before the pool is made, as a handler of that end may call shutdown() or start()
+     if (!mpPool && !finishOpenProgress()) {
+         return StartResult::notOpened;
+@@ -1064,6 +1070,18 @@ THeadlessSession::StartResult THeadlessSession::finishStart(const Options& optio
+                 if (options.port > 0) {
+                     pNewHost->setPort(options.port);
+                 }
++                // Laid out by startProfileScripts(), with the font and borders the save left
++                if (const QSize pixels = options.mainWindowSize; !pixels.isEmpty()) {
++                    const QFontMetrics metrics(pNewHost->displayFontWithNoView());
++                    const qint64 columns = pixels.width() / std::max(1, metrics.averageCharWidth());
++                    const qint64 rows = pixels.height() / std::max(1, metrics.height());
++                    if (columns >= 1 && columns <= 65535 && rows >= 1 && rows <= 65535) {
++                        pNewHost->setMainAreaPixels(pixels);
++                    }
++                } else if (const QSize cells = options.screenSize; !cells.isEmpty()) {
++                    // The GUI's main console never reports itself narrower
++                    pNewHost->setMainAreaCells(QSize(std::max(40, cells.width()), cells.height()));
++                }
+             });
+     // The GUI connects a profile whose save failed too, but there the player sees why it has no scripts. Unless
+     // a script that did load ran the event loop for long enough, the address is still being looked up.
+diff --git a/src/headless/THeadlessSession.h b/src/headless/THeadlessSession.h
+index 23f4bc9a6..0b0361ca1 100644
+--- a/src/headless/THeadlessSession.h
++++ b/src/headless/THeadlessSession.h
+@@ -93,6 +93,13 @@ public:
+         // asks for it with transportDialRequested, and never uses its own. Only for the session's profile, not
+         // ones its scripts open. See "The game connection" in docs/headless.md
+         bool supplyTransport = false;
++        // The main window's area as setMainWindowSize() gives it in pixels, or else as setScreenSize() gives it in
++        // characters, taken once the save has loaded and laid out with its font and borders before the first script
++        // runs, which then reads that size and is sent no sysWindowResizeEvent for it. Empty for none. A screen
++        // size of more than 65535 either way is refused; a main window that holds no character of the profile's
++        // font, or more than 65535, is not taken, and setMainWindowSize() refuses it once the profile has loaded.
++        QSize mainWindowSize;
++        QSize screenSize;
+     };
+ 
+     // How the game asked for a run of a line to be shown. Reverse is not applied to the colours: the GUI
+diff --git a/test/functional_tests/HeadlessSessionTest.cpp b/test/functional_tests/HeadlessSessionTest.cpp
+index d22596eaa..c47d17d54 100644
+--- a/test/functional_tests/HeadlessSessionTest.cpp
++++ b/test/functional_tests/HeadlessSessionTest.cpp
+@@ -160,6 +160,17 @@ private:
+                                     .toUtf8());
+     }
+ 
++    // Reads the main window as it loads, and counts what it is told of a resize
++    static QString scriptReadingTheMainWindow()
++    {
++        return qsl(R"lua(local w, h = getMainWindowSize()
++headlessAtStart = w .. "x" .. h .. " " .. getColumnCount() .. "x" .. getRowCount()
++headlessResizes = 0
++registerAnonymousEventHandler("sysWindowResizeEvent", function()
++  headlessResizes = headlessResizes + 1
++end))lua");
++    }
++
+     // Opened binary so Windows writes no \r
+     static QString recordingScript(const QString& recordPath)
+     {
+@@ -5056,6 +5067,45 @@ headlessGrid = getColumnCount() .. "x" .. getRowCount())lua")));
+         QVERIFY(session.shutdown(false));
+     }
+ 
++    // A frontend that knows its main window before the profile opens gives it to start(), so a script that fits a
++    // window to it as it loads reads that size from its first line, laid out with the save's font and borders
++    void test_aMainWindowGivenAtStartIsWhatTheFirstScriptReads()
++    {
++        const QString name = qsl("Headless Main Window At Start");
++        QVERIFY(writeProfile(name, scriptReadingTheMainWindow(), qsl("<borderLeftWidth>100</borderLeftWidth>")));
++        THeadlessSession session;
++        QCOMPARE(session.start({.profile = name, .connect = false, .mainWindowSize = QSize(800, 600)}), THeadlessSession::StartResult::started);
++        QVERIFY(session.runLua(qsl("cellWidth, cellHeight = calcFontSize()")));
++        const int cellWidth = luaGlobalString(session.host(), "cellWidth").toInt();
++        const int cellHeight = luaGlobalString(session.host(), "cellHeight").toInt();
++        QVERIFY(cellWidth > 0 && cellHeight > 0);
++        QCOMPARE(luaGlobalString(session.host(), "headlessAtStart"), qsl("800x600 %1x%2").arg(std::max(40, 700 / cellWidth)).arg(600 / cellHeight));
++        // As a frontend gives it again once the profile has loaded, which tells scripts nothing for the size they have
++        QVERIFY(session.setMainWindowSize(QSize(800, 600)));
++        QCOMPARE(luaGlobalString(session.host(), "headlessResizes"), qsl("0"));
++        QVERIFY(session.shutdown(false));
++    }
++
++    void test_aScreenSizeGivenAtStartIsWhatTheFirstScriptReads()
++    {
++        const QString name = qsl("Headless Screen Size At Start");
++        QVERIFY(writeProfile(name, scriptReadingTheMainWindow(), qsl("<borderLeftWidth>100</borderLeftWidth>")));
++        THeadlessSession session;
++        QCOMPARE(session.start({.profile = name, .connect = false, .screenSize = QSize(65536, 20)}), THeadlessSession::StartResult::notOpened);
++        QVERIFY2(session.errorString().contains(qsl("from 1 to 65535")), qPrintable(session.errorString()));
++        QVERIFY(!session.host());
++
++        QCOMPARE(session.start({.profile = name, .connect = false, .screenSize = QSize(70, 20)}), THeadlessSession::StartResult::started);
++        QVERIFY(session.runLua(qsl("cellWidth, cellHeight = calcFontSize()")));
++        const int cellWidth = luaGlobalString(session.host(), "cellWidth").toInt();
++        const int cellHeight = luaGlobalString(session.host(), "cellHeight").toInt();
++        QVERIFY(cellWidth > 0 && cellHeight > 0);
++        QCOMPARE(luaGlobalString(session.host(), "headlessAtStart"), qsl("%1x%2 %3x20").arg(70 * cellWidth).arg(20 * cellHeight).arg(std::max(40, (70 * cellWidth - 100) / cellWidth)));
++        QVERIFY(session.setScreenSize(70, 20));
++        QCOMPARE(luaGlobalString(session.host(), "headlessResizes"), qsl("0"));
++        QVERIFY(session.shutdown(false));
++    }
++
+     void test_aResizeHandlerThatClosesTheProfile_data()
+     {
+         QTest::addColumn<bool>("deleteSession");

@@ -61,8 +61,8 @@ Procedures too long for this file are in `.agents/skills/<name>/SKILL.md` (Claud
 - Stored names are the player's data: renaming one alone orphans what players already have. Rename one only with a
   migration that runs before the first read, and a test that reads the old name. They are:
   - the application id `org.mudlet.mudlet` (`.ptb` for the PTB);
-  - the SharedPreferences `settings` (the keys in `data/Settings.kt`), `engine` (`qpaPlatform`, `lastProfile`, and
-    `lastHost:`, `lastPort:` and `lastTls:` before a profile's name) and `ui`;
+  - the SharedPreferences `settings` (the keys in `data/Settings.kt`), `engine` (`qpaPlatform`, `lastProfile`,
+    `startSizes`, and `lastHost:`, `lastPort:` and `lastTls:` before a profile's name) and `ui`;
   - `PasswordStore`'s file `passwords/profiles.json`, its keys (the lowercased profile name, and `proxy:` before it
     for the proxy's password) and KeyStore alias `profile-passwords`;
   - the engine's files: `files/mudlet/` (`profiles/<name>/`, `profile-order.json`, and what Mudlet keeps under the

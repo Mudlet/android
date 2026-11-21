@@ -276,6 +276,30 @@ class GameSwitcherTest {
     }
 
     @Test
+    fun aGameOpenedBesideStartsWithTheSizeTheGameScreenGaveTheLast() {
+        showFromTheList(ALPHA.name)
+        beta.receive("setFront")
+        waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
+        // Mudlet's font, which the first mainArea tells the game screen, which then gives the main window its size
+        alpha.mainArea(800, 600, 100, 40, 0, 0, 800, 600)
+        // The test's clock recomposes only while the test waits on it, not while it reads a socket
+        compose.waitUntil(WAIT_MS) { EngineClient.session(ALPHA.name)?.windows?.state?.charWidth != null }
+        compose.waitForIdle()
+        val given = alpha.receiveLast("setMainWindowSize", readPast = true)
+
+        openTheSheet()
+        compose.onNode(hasText(string(R.string.game_open_another)) and hasClickAction()).performScrollTo()
+        activate(hasText(string(R.string.game_open_another)))
+        activate(hasContentDescription(string(R.string.profile_connect_to, GAMMA.name)))
+        beta.receive("openProfile")
+        // On the control socket, before it: the new profile's own socket exists only once it has opened
+        val frames = beta.controlReceived
+        val before = frames.subList((frames.size - 3).coerceAtLeast(0), frames.size - 1)
+        assertEquals(listOf("setScreenSize", "setMainWindowSize"), before.map { it.optString("t") })
+        assertEquals(given.getInt("w") to given.getInt("h"), before[1].getInt("w") to before[1].getInt("h"))
+    }
+
+    @Test
     fun openAnotherGameOpensOneBesideThoseOpen_untilAsManyAsCanBeAre() {
         showFromTheList(ALPHA.name)
         beta.receive("setFront")

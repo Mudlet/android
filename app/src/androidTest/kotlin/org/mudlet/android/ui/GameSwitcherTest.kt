@@ -282,7 +282,20 @@ class GameSwitcherTest {
         waitFor(titleReading(ALPHA.name, R.string.connection_connected, 1, 2))
         // Mudlet's font, which the first mainArea tells the game screen, which then gives the main window its size
         alpha.mainArea(800, 600, 100, 40, 0, 0, 800, 600)
-        val given = alpha.receiveLast("setMainWindowSize", readPast = true)
+        val first = runCatching { alpha.receiveLast("setMainWindowSize", readPast = true) }
+        fun probe() = compose.runOnIdle {
+            val s = EngineClient.session(ALPHA.name)
+            "front=${EngineClient.front.name} alphaCharWidth=${s?.windows?.state?.charWidth} alphaMainArea=${s?.windows?.state?.mainArea} link=${s?.linkState} attaches=${s?.attaches} window=${EngineClient.window} mode=${ScriptWindowsClient.layoutMode} sessions=${EngineClient.sessions.map { it.name + ":" + it.windows.state.charWidth }}"
+        }
+        if (first.isFailure) {
+            val before = probe()
+            alpha.windows(listOf(FakeEngine.window("chat", x = 400, y = 0, w = 400, h = 300, columns = 50)), full = true)
+            alpha.windowText("chat", listOf("hello from chat"))
+            val shown = runCatching { compose.waitUntil(WAIT_MS) { compose.onAllNodes(hasText("hello from chat")).fetchSemanticsNodes().isNotEmpty() } }
+            val second = runCatching { alpha.receiveLast("setMainWindowSize", readPast = true) }
+            throw AssertionError("PROBE before: $before | shown=${shown.isSuccess} second=${second.getOrNull() ?: second.exceptionOrNull()} | after: ${probe()} | alphaReceived=${alpha.received.map { it.optString("t") }}")
+        }
+        val given = first.getOrThrow()
 
         openTheSheet()
         compose.onNode(hasText(string(R.string.game_open_another)) and hasClickAction()).performScrollTo()

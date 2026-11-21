@@ -161,6 +161,16 @@ bool ControlBridge::handleControl(const QString& type, const QJsonObject& messag
                 mPickLoop->quit();
             }
         }
+    } else if (!mProfileOutput && type == QLatin1String("setScreenSize")) {
+        if (const std::optional<QSize> size = screenSizeOf(message)) {
+            mEngineControl->setStartScreenSize(size->width(), size->height());
+        }
+    } else if (!mProfileOutput && type == QLatin1String("setMainWindowSize")) {
+        if (const std::optional<QSize> size = mainWindowSizeOf(message)) {
+            mEngineControl->setStartMainWindowSize(size->width(), size->height());
+        } else {
+            refuse(type, mainWindowSizeProblem());
+        }
     } else if (!mProfileOutput) {
         sendError(QStringLiteral("%1: send it on the profile's socket").arg(type));
     } else {

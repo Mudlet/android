@@ -256,6 +256,11 @@ private fun WindowsArea(
         // A new engine instance has none of what the last was told
         val attaches = EngineClient.front.attaches
         LaunchedEffect(layout.mainWindowSize, attaches) { layout.mainWindowSize?.let(client::setMainWindowSize) }
+        // What a profile with no windows yet is given here, for the next one opened before this screen has measured it
+        val startSize = remember(windows.charWidth, w, h, fitted, metrics, headerHeight) {
+            WindowLayout.of(ScriptWindows(charWidth = windows.charWidth), WindowLayout.Area(w, h, fitted, metrics.charWidth, headerHeight, null)).mainWindowSize
+        }
+        LaunchedEffect(startSize) { startSize?.let(EngineClient::setStartMainWindowSize) }
         LaunchedEffect(layout.placements, attaches) {
             for ((name, placement) in layout.placements) client.placeUserWindow(name, placement)
         }

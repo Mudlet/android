@@ -1187,6 +1187,8 @@ And the style sheet `setCmdLineStyleSheet()` gives a command line (`ScriptWindow
 And a profile's SOCKS5 proxy as the desktop's Connection preferences hold it, with its password given for the run
 as the game's is (`proxy()`, `setProxy()`, `setProxyPassword()`, `0042-headless-proxy.patch`; see `getProxy` in
 [`protocol.md`](protocol.md)).
+And the main window's size, or the console's columns and rows, given with the start, so a profile's scripts read it from
+their first line (`THeadlessSession::Options::mainWindowSize` and `screenSize`, `0043-headless-main-window-size-at-start.patch`).
 [`c-device.md`](decisions/hosting-results/c-device.md) has the emulator run of the earlier build, which read Mudlet's console model
 and needed a patch.
 
@@ -1223,8 +1225,8 @@ keeps the profiles' passwords in the KeyStore.
 | `commandLineTextRequested` (`printCmdLine()` and the like) | `commandLine` |
 | `scriptWindows()`, read at `profileLoaded`, then at each `scriptWindowsChanged` | `windows`, only the windows that changed and those `removed`; all of them, with `full`, to a UI that attaches. A close sends an empty list |
 | `windowLines()`, the last 300 rows, at `profileLoaded` and at each `windowTextChanged` | `windowText`; any rows on request with `getWindowText` |
-| `setMainWindowSize()`, then `mainConsoleGrid()`, `mainConsoleTextRect()` and `mainBorderColor()` at `profileLoaded` and at each `mainConsoleAreaChanged` and `mainBorderColorChanged` | `setMainWindowSize`, kept and given again to each profile as it loads; `mainArea` |
-| `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()` (carried), at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given again to each profile as it loads |
+| `Options::mainWindowSize` at the start (carried) and `setMainWindowSize()`, then `mainConsoleGrid()`, `mainConsoleTextRect()` and `mainBorderColor()` at `profileLoaded` and at each `mainConsoleAreaChanged` and `mainBorderColorChanged` | `setMainWindowSize`, kept and given to each profile as it starts, before its first script, and again as it loads; on the control socket, only kept, for the profiles opened after it; `mainArea` |
+| `Options::screenSize` at the start while it has no main window's size, `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()` (carried), at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given to each profile as it starts and again as it loads; on the control socket, only kept, for the profiles opened after it |
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
@@ -1321,6 +1323,9 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
   size and the game is told the console's columns and rows (below 40 as 40), not that size's grid, also after a new
   main window's size; given both before the profile loads, the same for `getMainWindowSize()` and the game; and with
   a main window's size the loading profile refuses, `setScreenSize` sizing the main window and reaching the game;
+- the sizes given before a profile opens, on its own socket or on the control socket: its scripts read them from their
+  first line, so a Geyser `MiniConsole` with `autoWrap` that echoes as the profile loads wraps at the console's
+  columns; the control socket refusing a size as a profile's socket does, and leaving an open profile its own;
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its
   colours; a Geyser `UserWindow` placed by `placeUserWindow`, which raises `sysUserWindowResizeEvent`; the size from
   `setMainWindowSize` before the profile loads, `setBorderLeft()` and `setBorderColor()`, as `mainArea`;
@@ -2313,6 +2318,8 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       grid). Narrower, the borders become bands above and below the console, and the side windows and docks become
       tabs below it; a tab opens its window over the console, its back button or the system's Back closes it.
     - A window's text is readable, its newest line in view; scrolled back, it stays put.
+    - A window that wraps to its width, such as the starter UI's chat window in a game with no GUI of its own, has its
+      first lines wrapped at its full width, also in the profile opened first after the app starts.
     - A console a script gave a scroll bar (`lua enableScrollBar("<name>")`) with more rows than fit has a thumb at
       its right edge, which moves as the rows scroll and scrolls them when dragged; `disableScrollBar` takes it away.
     - With TalkBack on: swiping goes from the console to the input line, then the pinned commands, then
@@ -2443,6 +2450,7 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
     - Pinch the window with two fingers: its text grows or shrinks as the fingers move, the main console's does not,
       and once they lift `win <size>` shows on the main console and `lua echo(getFontSize("win"))` gives that size. New
       text in the window wraps to its new width. One finger still scrolls it, and a tap on a link in it still follows.
+      Text already in the window keeps the rows it had, as on the desktop.
     - `lua win:setFontSize(8)` changes nothing that stays: the window goes back to the pinched size. Close and reopen the
       profile, or kill the app and start it again: the window comes back at the pinched size.
     - Tap the window twice with two fingers: it goes back to 8 (the size its script last gave it), and a later

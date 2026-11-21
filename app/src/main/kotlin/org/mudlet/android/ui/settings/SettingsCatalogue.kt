@@ -296,7 +296,6 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             valueText = R.plurals.settings_undo_wrap_width_value,
             less = R.string.settings_undo_wrap_width_less,
             more = R.string.settings_undo_wrap_width_more,
-            shownWhen = { owner -> owner.value(Settings.undoWrap) },
         ),
         SettingEntry.Switch(
             SettingsCategory.COLOURS,

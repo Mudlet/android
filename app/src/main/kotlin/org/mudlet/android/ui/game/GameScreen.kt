@@ -467,7 +467,7 @@ private fun ProfileGameScreen(
                             textSizeSp = textSizeSp,
                             colors = colors,
                             onTextSize = Settings.textSize::set,
-                            onScreenSize = EngineClient::setScreenSize,
+                            onScreenSize = EngineClient::setGameConsoleSize,
                             consoleModifier.tourTarget(TourTarget.CONSOLE),
                             links = c.links,
                             onMakeTrigger = onMakeTrigger,

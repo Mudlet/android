@@ -1070,6 +1070,13 @@ void MudletProfile::beginLoad()
     options.password = passwords.game;
     options.proxyPassword = passwords.proxy;
     options.configDir = mEngine.mConfigDir;
+    // So the profile's scripts read the UI's size from their first line, not 90 by 25 until profileLoaded; the screen
+    // size stands in for the main window only while the UI has given it none, as in applyScreenSize()
+    if (!mMainWindowSize.isEmpty()) {
+        options.mainWindowSize = mMainWindowSize;
+    } else {
+        options.screenSize = mScreenSize;
+    }
     // Kept until the start, and a session that joins the pool takes the pool's instead
     mSession->setApplicationActive(mEngine.mAppActive);
     mSession->setWindowMinimized(mEngine.mMinimized);

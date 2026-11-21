@@ -83,6 +83,7 @@ New on the control socket:
 | `closeProfile` | UI→E | `name`, `id`? | Saves and closes that profile, with its `sysExitEvent`; its socket closes. Answered by `openProfiles` or `error`. |
 | `setFront` | UI→E | `name` | The profile the player is looking at: raises `sysProfileFocusChangeEvent`, as a desktop tab change does. |
 | `markSeen` | UI→E | `name`, `seq` | The player has seen that profile's lines up to `seq`: clears `attention`, and `unread` counts from there. |
+| `setScreenSize`, `setMainWindowSize` | UI→E | as on a profile's socket | Kept, and given to each profile opened after them as it starts, so its first script reads them; no profile open now takes them (version 48). |
 | `openProfiles` | E→UI | `profiles`: `name`, `slot`, `socket`, `state`, `connection`, `lastSeq`, `unread`, `attention`, `front`; `re`? | Every open profile, in the order opened. `state` is `starting`, `loaded`, `closing` or `restoring`. `attention` is set by `alert()`, the bell or new data while minimized, until seen. Sent on attach and on every change (line counts coalesced to every 500 ms), and as the answer to `openProfile` and `closeProfile`. |
 
 The profile opened last becomes the front; when the front closes, the next one to the right takes over, else the one to

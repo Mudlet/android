@@ -24,6 +24,7 @@ import threading
 import time
 import zipfile
 import zlib
+from xml.sax.saxutils import escape as xml_escape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fake_socks5  # noqa: E402
@@ -119,7 +120,8 @@ def main():
     try:
         for checks in (engine_basics, tls_checks, profile_requests):
             checks(port)
-        for checks in (bridge_refusals, input_line, console, screen_and_main_window, links, app_state, script_windows, window_links,
+        for checks in (bridge_refusals, input_line, console, screen_and_main_window, start_sizes, starter_ui_welcome,
+                       links, app_state, script_windows, window_links,
                        script_labels, label_links, script_text_boxes, frame_tabs, button_bars, map_view, app_map,
                        map_info, map_moves, map_rooms, map_edits, map_download, map_files, profile_settings, script_items, variables, sounds,
                        clipboard, file_dialog, web_pages, packages, error_console, default_packages, key_bindings, scripts_stopped,
@@ -1528,6 +1530,148 @@ def screen_and_main_window():
     m = c.wait_for(lambda m: m["t"] == "mainArea" and m["columns"] == 72, collect=msgs)
     check(area_grid(m) == (0, 72, 20), f"a later setScreenSize sizes the main window: {m}")
     check(wait_naws((72, 20)), f"and reaches the game: {fake_telnet.NAWS_SIZES}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def start_sizes():
+    """The sizes a UI gives before a profile opens are what its scripts read from their first line: on the profile's
+    own socket, as version 14's UI and a UI that attaches again send them, and on the control socket, which keeps them
+    for each profile opened after them and gives them to none open now. A MiniConsole that wraps to its width and
+    echoes as the profile loads wraps at that width, not at that of the main window the profile had before the UI's."""
+    profile = "Start Size Test"
+    folder = os.path.join(TMP, "start-size")
+    os.makedirs(folder, exist_ok=True)
+    path = package_file("Early Wrap", folder, {"title": "Wraps as it loads"}, script="\n".join([
+        'local w, h = getMainWindowSize()',
+        'earlyWindow = string.format("%dx%d", w, h)',
+        'earlyWrap = Geyser.MiniConsole:new({name = "earlyWrap", x = 0, y = 0, width = "100%", height = "50%", autoWrap = true})',
+        'earlyWrap:echo(string.rep("x", 300) .. "\\n")',
+    ]))
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    since = len(seen)
+    c.send({"t": "installPackage", "path": path})
+    m = seen_or_next(c, lambda m: m["t"] == "packageInstalled", seen, since, timeout=15)
+    check(m.get("result") == "installed", f"a package whose script wraps a console as it loads installs: {m}")
+    c.send({"t": "setAppState", "active": False, "minimized": True})
+    m = wait_status(c, "save", lambda v: True, seen)
+    check(m["value"] == "saved", f"and the profile saved: {m}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    def loaded_at(client, frames, size, how):
+        client.send({"t": "runLua", "code": 'echo("early window " .. tostring(earlyWindow) .. "\\n")'})
+        m = client.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("early window "), collect=frames)
+        check(m["text"] == f"early window {size}", f"the profile's script read the main window's size {how} as it loaded: {m['text']}")
+        seen_or_next(client, windows_with("earlyWrap", "miniConsole", lambda w: w.get("columns", 0) > 0), frames, 0)
+        client.send({"t": "runLua", "code": 'echo("early wrap " .. getWindowWrap("earlyWrap") .. "\\n")'})
+        wrap = int(client.wait_for(lambda m: m["t"] in ("line", "tail") and m["text"].startswith("early wrap "),
+                                   collect=frames)["text"].split()[-1])
+        m = client.ask({"t": "getWindowText", "window": "earlyWrap", "first": 0, "count": 50}, answers=("windowText", "error"),
+                       collect=frames)
+        rows = [line["text"] for line in m.get("lines", []) if line["text"]]
+        check(rows and "".join(rows) == "x" * 300 and abs(len(rows[0]) - wrap) <= 1,
+              f"so the line it echoed then wraps where the console wraps now, at {wrap}: {[len(row) for row in rows]}")
+
+    # As version 14's UI, or one that attaches again, sends them
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.send({"t": "setScreenSize", "columns": 60, "rows": 40})
+    c.send({"t": "setMainWindowSize", "w": 1600, "h": 800})
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+    loaded_at(c, seen, "1600x800", "given on its socket before it opened")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+    proc, c = start_engine(profile)
+    c.close()
+    ctl = Client(SOCK, profile_sockets=True)
+    control = []
+    ctl.wait_for(lambda m: m["t"] == "synced", collect=control)
+    ctl.send({"t": "setMainWindowSize", "w": 0, "h": 800})
+    m = ctl.wait_for(lambda m: m["t"] == "error", collect=control)
+    check(m["message"] == "setMainWindowSize: w and h must be whole numbers above 0",
+          f"the control socket refuses a main window's size as a profile's socket does: {m}")
+    ctl.send({"t": "setScreenSize", "columns": 0, "rows": 40})
+    m = ctl.wait_for(lambda m: m["t"] == "error", collect=control)
+    check(m["message"] == "setScreenSize: columns and rows must be whole numbers from 1 to 65535",
+          f"and a screen size: {m}")
+    ctl.send({"t": "setScreenSize", "columns": 60, "rows": 40})
+    ctl.send({"t": "setMainWindowSize", "w": 1400, "h": 700})
+    since = len(control)
+    m = ctl.ask({"t": "openProfile", "name": profile, "connect": False}, timeout=30, collect=control,
+                answers=("openProfiles", "error"))
+    check(m["t"] == "openProfiles", f"openProfile after them answers: {m}")
+    opened = seen_or_next(ctl, lambda m: m["t"] == "openProfiles" and [(p["name"], p["state"]) for p in m["profiles"]]
+                          == [(profile, "loaded")], control, since, timeout=30)["profiles"]
+    p = Client(opened[0]["socket"])
+    frames = []
+    p.wait_for(lambda m: m["t"] == "synced", collect=frames)
+    loaded_at(p, frames, "1400x700", "given on the control socket before it opened")
+    ctl.send({"t": "setMainWindowSize", "w": 1200, "h": 800})
+    ctl.ask({"t": "listProfiles"}, collect=control)
+    size = main_window_size(p, frames, "kept")
+    check(size == "1400x700", f"a size the control socket is given leaves the open profile's as it was: {size}")
+    code = stop_engine(proc)
+    check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
+
+
+def starter_ui_welcome():
+    """The starter UI's chat window, built in a narrow main window that then widens, as the game screen gives its size
+    once it has measured itself: the welcome line is printed again at the window's new width, and chat the game sent
+    there keeps the lines it arrived on through a resize."""
+    profile = "Starter UI Test"
+    pane = "BaseUI_chat_all"
+    welcome = "Tells, says and channel chat from the game will be collected here."
+    proc, c = start_engine(profile)
+    seen = []
+    c.wait_for(lambda m: m["t"] == "synced", collect=seen)
+    c.ask({"t": "saveProfile", "name": profile, "host": "127.0.0.1", "port": 23, "tls": False, "login": "",
+           "autoReconnect": False}, collect=seen)
+    c.send({"t": "setMainWindowSize", "w": 800, "h": 600})
+    c.send({"t": "openProfile", "name": profile, "connect": False})
+    wait_status(c, "profile", lambda v: v == f"{profile} loaded", seen)
+
+    def rows():
+        m = c.ask({"t": "getWindowText", "window": pane, "first": 0, "count": 50}, answers=("windowText", "error"), collect=seen)
+        return [line["text"] for line in m.get("lines", []) if line["text"]]
+
+    def resized(width, wider_than=None, narrower_than=None):
+        since = len(seen)
+        c.send({"t": "setMainWindowSize", "w": width, "h": 600})
+        seen_or_next(c, windows_with(pane, "miniConsole", lambda w: (wider_than is None or w["columns"] > wider_than)
+                                     and (narrower_than is None or w["columns"] < narrower_than)), seen, since, what=f"{pane} resized")
+
+    since = len(seen)
+    c.send({"t": "runLua", "code": "BaseUI.build()"})
+    seen_or_next(c, windows_with(pane, "miniConsole", lambda w: w.get("columns", 0) > 0), seen, since, timeout=15,
+                 what=f"{pane} built")
+    narrow_columns = window_of(seen, pane, "miniConsole")["columns"]
+    narrow = rows()
+    check("".join(narrow).replace(" ", "") == welcome.replace(" ", "") and len(narrow) > 1,
+          f"the starter UI's chat window opens on its welcome, wrapped at its {narrow_columns} columns: {narrow}")
+
+    resized(1600, wider_than=narrow_columns)
+    wide_columns = window_of(seen, pane, "miniConsole")["columns"]
+    wide = rows()
+    check("".join(wide).replace(" ", "") == welcome.replace(" ", "") and len(wide) < len(narrow) and len(wide[0]) > narrow_columns,
+          f"widened to {wide_columns} columns, the welcome is printed again at that width: {wide}")
+
+    c.send({"t": "runLua", "code": "BaseUI.chats.all:echo(\"Ana tells you, 'meet me at the fountain when the bells ring for "
+                                   "the third time today'\\n\")"})
+    wait_status(c, "luaResult", lambda v: True, seen)
+    before = rows()
+    resized(800, narrower_than=wide_columns)
+    after = rows()
+    check(after == before and len(before) > len(wide), f"chat the game sent keeps its lines through a resize: {before} then {after}")
     code = stop_engine(proc)
     check(code == 0, f"the engine exits cleanly on SIGTERM: {code}")
 
@@ -5180,14 +5324,15 @@ def web_pages():
         check(secret not in f.read(), "the URL is not in the engine's log")
 
 
-def package_file(name, folder, details, icon=None):
+def package_file(name, folder, details, icon=None, script=None):
     """A Mudlet package as the desktop's exporter makes one: a zip of its config.lua, its XML with a script, and its icon
-    in .mudlet/Icon."""
+    in .mudlet/Icon. Its script is the Lua given, or one that sets _G["<name> loaded"]."""
     path = os.path.join(folder, f"{name}.mpackage")
     config = "".join(f'{key} = [[{value}]]\n' for key, value in dict(mpackage=name, **details).items())
+    code = xml_escape(script) if script else f'_G["{name} loaded"] = true'
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE MudletPackage>\n<MudletPackage version="1.001"><ScriptPackage>'
            f'<Script isActive="yes" isFolder="no"><name>{name} script</name><packageName>{name}</packageName>'
-           f'<script>_G["{name} loaded"] = true</script><eventHandlerList/></Script></ScriptPackage></MudletPackage>\n')
+           f'<script>{code}</script><eventHandlerList/></Script></ScriptPackage></MudletPackage>\n')
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("config.lua", config)
         z.writestr(f"{name}.xml", xml)

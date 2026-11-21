@@ -961,6 +961,13 @@ void SocketBridge::complete(const QJsonObject& message)
 
 void SocketBridge::setScreenSize(const QJsonObject& message)
 {
+    if (const std::optional<QSize> size = screenSizeOf(message)) {
+        mEngine->setScreenSize(size->width(), size->height());
+    }
+}
+
+std::optional<QSize> SocketBridge::screenSizeOf(const QJsonObject& message)
+{
     const double columns = message.value(QLatin1String("columns")).toDouble(-1);
     const double rows = message.value(QLatin1String("rows")).toDouble(-1);
     // NAWS carries each in 16 bits
@@ -969,9 +976,9 @@ void SocketBridge::setScreenSize(const QJsonObject& message)
     };
     if (!fits(columns) || !fits(rows)) {
         sendError(QStringLiteral("setScreenSize: columns and rows must be whole numbers from 1 to 65535"));
-        return;
+        return std::nullopt;
     }
-    mEngine->setScreenSize(int(columns), int(rows));
+    return QSize(int(columns), int(rows));
 }
 
 void SocketBridge::getLink(const QJsonObject& message)
@@ -1047,12 +1054,21 @@ void SocketBridge::followLink(const QJsonObject& message)
 
 QString SocketBridge::setMainWindowSize(const QJsonObject& message)
 {
-    const std::optional<int> width = wholeNumber(message.value(QLatin1String("w")));
-    const std::optional<int> height = wholeNumber(message.value(QLatin1String("h")));
-    if (!width || !height || *width < 1 || *height < 1) {
-        return QStringLiteral("w and h must be whole numbers above 0");
+    const std::optional<QSize> size = mainWindowSizeOf(message);
+    if (!size) {
+        return mainWindowSizeProblem();
     }
-    return mEngine->setMainWindowSize(*width, *height);
+    return mEngine->setMainWindowSize(size->width(), size->height());
+}
+
+std::optional<QSize> SocketBridge::mainWindowSizeOf(const QJsonObject& message)
+{
+    const std::optional<int> width = wholeNumber(message.value(QLatin1String("w")), 1);
+    const std::optional<int> height = wholeNumber(message.value(QLatin1String("h")), 1);
+    if (!width || !height) {
+        return std::nullopt;
+    }
+    return QSize(*width, *height);
 }
 
 void SocketBridge::getWindowText(const QJsonObject& message)

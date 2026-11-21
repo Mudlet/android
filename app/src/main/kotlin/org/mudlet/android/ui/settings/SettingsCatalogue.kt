@@ -83,13 +83,14 @@ enum class SettingsCategory(
 
 /**
  * One row of a settings page. Search finds it by its [label], [hint], [keywords] (words a player might search for
- * that the label does not have) and, for a choice, its choices' labels.
+ * that the label does not have) and, for a choice, its choices' labels. It shows only while [shownWhen].
  */
 sealed class SettingEntry(
     val category: SettingsCategory,
     @StringRes val label: Int,
     @StringRes val hint: Int?,
     @StringRes val keywords: Int,
+    private val shownWhen: (SettingsOwner) -> Boolean = { true },
 ) {
     /** What names it on its page, which search opens at. */
     abstract val key: String
@@ -97,18 +98,31 @@ sealed class SettingEntry(
     /** Whether a page of [game]'s, or of "New games" for null, has it. */
     fun shownFor(game: String?) = game != null || this !is Action
 
-    /** Whether it shows with [owner]'s values of the others: desktop Mudlet hides some until another asks for them. */
-    open fun shownWith(owner: SettingsOwner) = true
+    /** Whether it shows with [owner]'s values of the others: some mean nothing until another asks for them. */
+    fun shownWith(owner: SettingsOwner) = shownWhen(owner)
 
     /** A row that changes [setting]. */
-    sealed class Value(category: SettingsCategory, label: Int, hint: Int?, keywords: Int) : SettingEntry(category, label, hint, keywords) {
+    sealed class Value(
+        category: SettingsCategory,
+        label: Int,
+        hint: Int?,
+        keywords: Int,
+        shownWhen: (SettingsOwner) -> Boolean = { true },
+    ) : SettingEntry(category, label, hint, keywords, shownWhen) {
         abstract val setting: Settings.Setting<*>
 
         override val key get() = setting.key
     }
 
-    /** A switch, which turns where search finds it too. */
-    class Switch(category: SettingsCategory, override val setting: Settings.BoolSetting, label: Int, hint: Int, keywords: Int) : Value(category, label, hint, keywords)
+    /** A switch, which turns where search finds it too; an [experimental] one says so under its label. */
+    class Switch(
+        category: SettingsCategory,
+        override val setting: Settings.BoolSetting,
+        label: Int,
+        hint: Int,
+        keywords: Int,
+        val experimental: Boolean = false,
+    ) : Value(category, label, hint, keywords)
 
     /**
      * Something done to an open game at once, by [button], which works where search finds it too. Only a game's page
@@ -143,7 +157,7 @@ sealed class SettingEntry(
     /**
      * Some text typed in, such as the command separator, which changes as the field is left or its Done key pressed.
      * [placeholder] shows in an empty field, [suffix] after the text, and [refusal] is why a text cannot be taken, or
-     * null; one refused is not sent. It shows only while [shownWhen].
+     * null; one refused is not sent.
      */
     class Typed(
         category: SettingsCategory,
@@ -154,10 +168,8 @@ sealed class SettingEntry(
         @StringRes val placeholder: Int? = null,
         val suffix: ((SettingsOwner) -> String)? = null,
         val refusal: (String) -> Int? = { null },
-        private val shownWhen: (SettingsOwner) -> Boolean = { true },
-    ) : Value(category, label, hint, keywords) {
-        override fun shownWith(owner: SettingsOwner) = shownWhen(owner)
-    }
+        shownWhen: (SettingsOwner) -> Boolean = { true },
+    ) : Value(category, label, hint, keywords, shownWhen)
 
     /** A colour: its swatch and "#rrggbb" in a row, which opens a dialog to change it. */
     class Colour(
@@ -199,7 +211,8 @@ sealed class SettingEntry(
         val step: Int = 1,
         /** A switch that, while on, holds the value at the range's most, as desktop Mudlet's "Use maximum lines possible". */
         val heldAtMostBy: Settings.BoolSetting? = null,
-    ) : Value(category, label, hint, keywords)
+        shownWhen: (SettingsOwner) -> Boolean = { true },
+    ) : Value(category, label, hint, keywords, shownWhen)
 }
 
 /** The key of desktop Mudlet's "Clear stored media", which is no setting's. */
@@ -239,23 +252,6 @@ private val MAP_COLOUR_LABELS = listOf(
 /** Every setting the settings screen has, in the order its pages show them. A game category's are each game's own. */
 val settingsCatalogue: List<SettingEntry> by lazy {
     listOfNotNull(
-        SettingEntry.Switch(
-            SettingsCategory.DISPLAY,
-            Settings.undoWrap,
-            R.string.settings_undo_wrap,
-            R.string.settings_undo_wrap_hint,
-            R.string.settings_undo_wrap_keywords,
-        ),
-        SettingEntry.Number(
-            SettingsCategory.DISPLAY,
-            Settings.undoWrapWidth,
-            R.string.settings_undo_wrap_width,
-            R.string.settings_undo_wrap_width_hint,
-            R.string.settings_undo_wrap_keywords,
-            valueText = R.plurals.settings_undo_wrap_width_value,
-            less = R.string.settings_undo_wrap_width_less,
-            more = R.string.settings_undo_wrap_width_more,
-        ),
         SettingEntry.Number(
             SettingsCategory.DISPLAY,
             Settings.consoleBufferSize,
@@ -281,6 +277,26 @@ val settingsCatalogue: List<SettingEntry> by lazy {
             R.string.settings_game_links,
             R.string.settings_game_links_hint,
             R.string.settings_game_links_keywords,
+        ),
+        // Experimental, so last on its page; the width is read only while the switch is on, as on desktop Mudlet
+        SettingEntry.Switch(
+            SettingsCategory.DISPLAY,
+            Settings.undoWrap,
+            R.string.settings_undo_wrap,
+            R.string.settings_undo_wrap_hint,
+            R.string.settings_undo_wrap_keywords,
+            experimental = true,
+        ),
+        SettingEntry.Number(
+            SettingsCategory.DISPLAY,
+            Settings.undoWrapWidth,
+            R.string.settings_undo_wrap_width,
+            R.string.settings_undo_wrap_width_hint,
+            R.string.settings_undo_wrap_keywords,
+            valueText = R.plurals.settings_undo_wrap_width_value,
+            less = R.string.settings_undo_wrap_width_less,
+            more = R.string.settings_undo_wrap_width_more,
+            shownWhen = { owner -> owner.value(Settings.undoWrap) },
         ),
         SettingEntry.Switch(
             SettingsCategory.COLOURS,

@@ -212,6 +212,9 @@ page whose changes apply at once. `SettingsCatalogue.kt` lists every setting wit
   [`divergences.md`](divergences.md)), and its buttons step to the next thousand.
   It goes up to the most lines the device keeps (`EngineScrollback`), where "Keep as many lines as this device can",
   desktop Mudlet's "Use maximum lines possible" (`useMaxConsoleBufferSize`), holds it while on.
+- Display's "Undo the game's own wrapping" (`undoServerWrap`) is last on its page and says it is experimental, as
+  desktop Mudlet's checkbox does. "The game wraps at" (`undoServerWrapWidth`) shows under it only while it is on (an
+  entry's `shownWhen`), where desktop Mudlet greys its box out, so a search lists the width only then too.
 - The game categories are Display (undoing the game's own wrapping and the width it wraps at), Accessibility (with
   what becomes of blank lines, and captions for sounds, as on desktop Mudlet's Accessibility page), Input (the
   commands the console shows, Unix line endings, the command separator, highlighting a command brought back from the

@@ -158,6 +158,11 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
   `setMainWindowSize(areaPx / s)`, where `areaPx` is the game screen's area above the input line. Mudlet's grid is
   then the columns and rows the app's console shows, and a border a script sets takes the same
   share of the screen as of Mudlet's window. A font size change or rotation sends the size again.
+  The app also sends the last size, and the console's columns and rows, on the control socket before `openProfile`
+  and as it attaches, for the profiles a restore opens (protocol 48), so the profile opened next reads them from its
+  first script line rather than after it has loaded.
+  They are kept between runs (`StartSizes`, `startSizes` in the `engine` preferences) with the window's size, the text
+  size and the layout they were measured in, as the profile list comes before any game screen has measured itself.
 - **Fitted**, when the game area is at least 600 dp wide (landscape, tablets, an unfolded phone): the main window's
   area is drawn as on the desktop, scaled by `s`: the console in `mainArea`'s text rectangle, the windows of the main
   area over it by `stack`. Docked user windows take a column on their `dockArea`'s side, a quarter of the width

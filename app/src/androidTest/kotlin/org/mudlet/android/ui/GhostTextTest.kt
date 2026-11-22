@@ -152,6 +152,11 @@ class GhostTextTest {
         assertEquals("op", session.receive("complete").getString("text"))
         compose.onNode(input).assert(editableText("op"))
 
+        // Bite: the tap aimed while the keyboard is still up, and made once it has gone
+        compose.waitUntil(WAIT_MS) { keyboardShown() }
+        val up = compose.onNode(input).fetchSemanticsNode().boundsInWindow
+        val aimed = Offset(up.left + textX(ghostMiddle()), up.center.y)
+
         // A view of the test's own: in touch mode no button of the app's takes the focus, and the line keeps it
         compose.runOnUiThread {
             val content = compose.activity.findViewById<ViewGroup>(android.R.id.content)
@@ -166,7 +171,9 @@ class GhostTextTest {
         compose.waitUntil(WAIT_MS) { compose.onAllNodes(input and SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes().isEmpty() }
         waitForTheKeyboardToGo()
         waitFor(ghost("open door"))
-        compose.onNode(input).performTouchInput { click(Offset(textX(ghostMiddle()), center.y)) }
+        val down = compose.onNode(input).fetchSemanticsNode().boundsInWindow
+        assertTrue("the line moved as the keyboard went: from $up to $down", up != down)
+        compose.onNode(input).performTouchInput { click(aimed - down.topLeft) }
         compose.onNode(input).assertIsFocused().assert(editableText("op"))
     }
 

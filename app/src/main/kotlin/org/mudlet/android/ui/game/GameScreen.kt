@@ -235,7 +235,7 @@ private fun ProfileGameScreen(
     // The map in front covers the text, which no keyboard focus then reaches
     LaunchedEffect(mapOpen) { if (mapOpen) caret = false }
     // The map behind the text is not there to be moved or picked in: once the map in front or beside the text closes, not
-    // as a rotation remakes it, it shows no room and follows the player again
+    // on a rotation, it shows no room and follows the player again
     LaunchedEffect(mapOpen || mapBeside) {
         if (!mapOpen && !mapBeside) {
             c.appMap.rooms.close()

@@ -174,8 +174,8 @@ internal sealed interface CopyState {
 
 /**
  * The copy under way and those just ended, by the profile copied, in the app's process rather than the editor's
- * composition: a rotation recreates the activity, and Back can leave the editor, while a large profile is still being
- * copied.
+ * composition: a language or density change recreates the activity, and Back can leave the editor, while a large
+ * profile is still being copied.
  */
 internal object Copies {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

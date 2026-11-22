@@ -82,7 +82,8 @@ internal sealed interface ExportState {
 
 /**
  * The exports under way and just ended, by profile, in the app's process rather than the editor's composition: a
- * rotation recreates the activity, and Back can leave the editor, while a large profile is still being written.
+ * language or density change recreates the activity, and Back can leave the editor, while a large profile is still
+ * being written.
  */
 internal object Exports {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

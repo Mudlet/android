@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
@@ -35,8 +36,10 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -75,7 +78,8 @@ import kotlin.math.abs
  * click-through label's links neither tapped nor actions, also once a label already drawn is made click-through, and
  * both again once it no longer is, a label's own colour drawn only where its sheet draws no box of its own, the
  * images the engine is asked for, an image and a heading in a label's text, and a label of only a linked image read
- * by its alt, and one of only images, white space between them or not, by its tool tip.
+ * by its alt, and one of only images, white space between them or not, by its tool tip. A mouse is sent as itself,
+ * and shows the tool tip as it rests on the label.
  */
 @RunWith(AndroidJUnit4::class)
 class ScriptLabelsTest {
@@ -178,6 +182,49 @@ class ScriptLabelsTest {
             assertTrue("x ${event.getDouble("x")}", event.getDouble("x") in 0.0..9.0)
             assertTrue("y ${event.getDouble("y")}", event.getDouble("y") in 0.0..9.0)
         }
+    }
+
+    @Test
+    fun aMouseIsSentAsItselfAndShowsTheToolTipWhileItRestsOnTheLabel() {
+        session.windows(listOf(label("menu", w = 200, h = 100)), full = true)
+        session.label("menu", toolTip = "Open the menu", accessibleButton = true, styleSheet = "background-color: navy")
+        val button = hasContentDescription("Open the menu") and hasClickAction()
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(button).fetchSemanticsNodes().isNotEmpty() }
+        val tip = hasText("Open the menu")
+
+        // Resting on it enters it and shows its tool tip; moving with no button held is sent as a move
+        compose.onNode(button).performMouseInput { moveTo(center) }
+        assertEquals("enter", session.receive("pointer").getString("type"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tip).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(button).performMouseInput { moveTo(center + Offset(4f, 0f)) }
+        val move = session.receive("pointer")
+        assertEquals("move", move.getString("type"))
+        assertEquals(0, move.optInt("buttons"))
+
+        // Its right button is the right button's press and release, and the left one held still is no long press
+        compose.onNode(button).performMouseInput { rightClick(center) }
+        val right = tap()
+        assertEquals(listOf("press", "release"), right.map { it.getString("type") }.filter { it == "press" || it == "release" })
+        assertEquals(POINTER_RIGHT, right.first { it.getString("type") == "press" }.getInt("button"))
+        compose.onNode(button).performMouseInput {
+            press(MouseButton.Primary)
+            advanceEventTime(2_000)
+            release(MouseButton.Primary)
+        }
+        val held = tap()
+        assertEquals(POINTER_LEFT, held.first { it.getString("type") == "press" }.getInt("button"))
+        assertEquals(POINTER_LEFT, held.last().getInt("button"))
+
+        // Going off it leaves it, and takes the tool tip away
+        compose.onNode(button).performMouseInput { moveTo(Offset(-width.toFloat(), -height.toFloat())) }
+        var event = session.receive("pointer")
+        while (event.getString("type") == "move") event = session.receive("pointer")
+        assertEquals("leave", event.getString("type"))
+        compose.waitUntil(WAIT_MS) { compose.onAllNodes(tip).fetchSemanticsNodes().isEmpty() }
+
+        // Coming back enters it again
+        compose.onNode(button).performMouseInput { moveTo(center) }
+        assertEquals("enter", session.receive("pointer").getString("type"))
     }
 
     @Test

@@ -15,7 +15,7 @@ parts matter most on your kind of phone. A part you skip is fine; say so in your
 | An older or low-cost phone (Android 9 or 10, 3 GB of memory or less) | 1 to 7, and 12 | Is it fast enough, and does Android close the app when memory is short? |
 | A Samsung, Xiaomi, Redmi, Poco, OnePlus, Oppo, Vivo, Realme, Huawei or Honor phone | 1 to 8 | These makers add their own battery savers, which may stop the app (parts 5 and 6 matter most). |
 | A Google Pixel, ideally on Android 16 | All parts, 1 to 14 | The plain Android every other phone starts from. |
-| A tablet, a foldable or a Chromebook | 1 to 4, 10, 11, 13, 14 and 15 | Bigger screens show windows side by side, and often have a keyboard. |
+| A tablet, a foldable or a Chromebook | 1 to 4, 10, 11, 13 to 17 | Bigger screens show windows side by side, and often have a keyboard, a mouse or a touchpad. |
 
 Your Android version is in the phone's Settings, under "About phone" (on some phones "Software information").
 
@@ -243,6 +243,38 @@ On a tablet, an unfolded foldable, or a Chromebook:
 3. If your game has its own screen layout with chat windows or gauges (many do), they show where the game put them,
    beside the text.
 4. Fold and unfold a foldable while a game is connected: the game stays connected and nothing is shown twice.
+
+## Part 16. A mouse and a touchpad
+
+On a Chromebook, or a tablet or phone with a mouse or a touchpad (a keyboard cover's counts), with a game connected.
+The app should take the mouse as desktop Mudlet does.
+
+1. Roll the mouse wheel over the game's text: it scrolls three lines a notch, one line with Shift held, and half the
+   screen with Ctrl held. Scroll back to the bottom: new lines are followed again. A touchpad's two-finger scroll moves
+   it smoothly.
+2. Rest the pointer on a link in the game's text (words the game underlines): the pointer becomes a hand, and if the
+   game gave the link a hint, it shows below the pointer and goes when you move off the link.
+3. Right-click a link that offers a menu (a long press on it opens one): the menu opens. Right-click the text away from
+   links: the line's menu opens (Copy line, Share line). Neither follows the link, and the screen does not go back.
+4. If your game's screen layout has chat windows, do steps 1 and 3 in one of them too.
+5. Open the map (part 14). Roll the wheel over it: it zooms about the pointer, faster with Ctrl held. A touchpad's pinch
+   zooms it too. Right-click a room: it is picked and its card shows. Right-click empty space: nothing changes.
+6. If your game's screen layout has buttons or gauges, rest the pointer on one: a hint shows if the game gave it one.
+   Right-click one that has a right-click menu on desktop Mudlet: the same menu opens.
+7. Turn TalkBack on (part 9) with the mouse still plugged in: TalkBack reads the screen as before.
+
+## Part 17. A window you resize
+
+On a Chromebook, or a tablet with Android's desktop windowing (on Android 16 and later: open the app's handle at the
+top of the screen and pick the desktop view), with a game connected:
+
+1. The app fills its window, with no black bars at the sides, maximised or not.
+2. Drag the window's edge to make it narrow, then wide, then tall, then wide again. The game's text fits each new size,
+   the game stays connected, what you typed in the input line stays, and the screen does not start again.
+3. On a wide window, the map stands beside the text; on a narrow one, the map button brings it to the front.
+4. Unplug or fold away the keyboard, and plug it back in: the screen does not start again, and the input line keeps
+   what you typed.
+5. Snap the window to half the screen, then maximise it again: the same as step 2.
 
 ## Sending your report
 

@@ -54,7 +54,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -76,6 +79,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.mudlet.android.R
+import org.mudlet.android.protocol.ConsoleWheel
 import org.mudlet.android.protocol.EngineMessage
 import org.mudlet.android.protocol.LineSelection
 import org.mudlet.android.protocol.LinkSpan
@@ -129,6 +133,8 @@ private const val CELLS_MEASURED = 100
  *
  * Each match of [searchQuery] is drawn as desktop's search draws it, and the list goes to [searchFound], the number of
  * the line a search found, each time a search finds one.
+ *
+ * A mouse wheel scrolls it as far as desktop's console scrolls ([ConsoleWheel]).
  *
  * A two-finger pinch hands [onTextSize] a new size. [onScreenSize] gets the columns and rows that fit, once they have
  * held for a moment. [behindText] draws between the background and the text: the map, when it is behind the text.
@@ -291,7 +297,10 @@ fun Console(
     var selectionBarHeight by remember { mutableIntStateOf(0) }
     val selectionBarRoom = if (selecting) with(density) { selectionBarHeight.toDp() } else 0.dp
 
-    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) })) {
+    val wheelScroll = Modifier.wheelScroll(cell, { cell.fit(consoleSize, sidePaddingPx)?.second }) { rows ->
+        listState.dispatchRawDelta(rows * cell.height.toFloat())
+    }
+    Box(modifier.background(colors.background).pinchToZoom({ latestTextSize }, { latestOnTextSize(it) }).then(wheelScroll)) {
         behindText()
         LazyColumn(
             Modifier.fillMaxSize().onSizeChanged { consoleSize = it }.then(caretKeys).onFocusChanged {
@@ -435,6 +444,27 @@ private data class CellSize(val width: Float, val height: Int) {
         if (console == IntSize.Zero || width <= 0f || height <= 0) return null
         val columns = ((console.width - sidePaddingPx) / width).toInt()
         return columns.coerceIn(1, 65535) to (console.height / height).coerceIn(1, 65535)
+    }
+}
+
+/**
+ * A mouse wheel's turns on a console [screenRows] rows high, each handed to [onRows] as the rows desktop's console
+ * scrolls by ([ConsoleWheel]), and kept from the list, whose own scroll goes by the platform's distance.
+ */
+internal fun Modifier.wheelScroll(key: Any, screenRows: () -> Int?, onRows: (Int) -> Unit) = pointerInput(key) {
+    val wheel = ConsoleWheel()
+    awaitPointerEventScope {
+        while (true) {
+            // Before the list
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            if (event.type != PointerEventType.Scroll) continue
+            val change = event.changes.firstOrNull() ?: continue
+            if (change.scrollDelta.y == 0f) continue
+            change.consume()
+            val rows = screenRows() ?: continue
+            val scrolled = wheel.rows(change.scrollDelta.y, event.keyboardModifiers.isShiftPressed, event.keyboardModifiers.isCtrlPressed, rows)
+            if (scrolled != 0) onRows(scrolled)
+        }
     }
 }
 

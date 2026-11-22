@@ -50,11 +50,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -98,9 +100,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.mudlet.android.R
 import org.mudlet.android.data.Settings
 import org.mudlet.android.protocol.ConsoleCells
+import org.mudlet.android.protocol.ConsoleWheel
 import org.mudlet.android.protocol.ConsoleZoom
 import org.mudlet.android.protocol.DrawnWindow
 import org.mudlet.android.protocol.EngineMessage
@@ -490,7 +494,8 @@ private fun Modifier.windowSemantics(description: String): Modifier = semantics 
 /**
  * A mini console, user window or MXP frame: its rows as the main console draws its lines, at the size that fits the
  * window's columns in its width, and read as it reads them, with its [links] as [ConsoleLine] offers them. It follows
- * new rows unless the player or a script scrolled it back. Its own command line, when shown, goes along its bottom.
+ * new rows unless the player or a script scrolled it back; a mouse wheel scrolls it as far as the main console's does
+ * ([ConsoleWheel]). Its own command line, when shown, goes along its bottom.
  *
  * Its rows are drawn in the family a script gave it (`setFont()`), mapped to the device's fonts as a label's is
  * ([fontFamily]), and in monospace for a family that maps to none. The size is the one that fits the columns in the
@@ -576,6 +581,19 @@ private fun WindowConsole(
         }
     }
 
+    val wheelScope = rememberCoroutineScope()
+    fun rowPx() = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.takeIf { it > 0 }
+    val wheelScroll = Modifier.wheelScroll(listState, { rowPx()?.let { listState.layoutInfo.viewportSize.height / it } }) { rows ->
+        val px = rowPx() ?: return@wheelScroll
+        wheelScope.launch {
+            listState.scroll {
+                scrollBy(rows * px.toFloat())
+                // Held over a frame, so the follow above sees it as the player's scroll
+                withFrameNanos {}
+            }
+        }
+    }
+
     val description = stringResource(R.string.window_description, title(window))
     val current = pinched ?: reported
     val larger = ConsoleZoom.clamp(current + 1, current)
@@ -629,7 +647,7 @@ private fun WindowConsole(
     ) {
         val sidewaysState = rememberScrollState()
         val sideways = if (rowsWidth != null) Modifier.horizontalScroll(sidewaysState) else Modifier
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(pinch).then(sideways)) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().then(pinch).then(wheelScroll).then(sideways)) {
             // The width each row has: the window's, or the rows' own while they scroll sideways
             val available = rowsWidth?.let { with(density) { it.roundToPx() } } ?: constraints.maxWidth
             LazyColumn(if (rowsWidth != null) Modifier.width(rowsWidth).fillMaxSize() else Modifier.fillMaxSize(), state = listState) {

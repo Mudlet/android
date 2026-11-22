@@ -136,7 +136,7 @@ internal class PackagesClient(
     fun onRefused(request: String, reason: String, replyTo: Any?) {
         val id = (replyTo as? Number)?.toLong()
         pending.remove(id)
-        takeReplacing(id)?.let(finished)
+        takeReplacing(id)?.let(::install)
         // A refused install carries no id: it is the oldest still waiting, as the engine answers in order
         if (request == "installPackage") sent.removeFirstOrNull()?.let(finished)
         tell(PackageNotice.Refused(request, reason))

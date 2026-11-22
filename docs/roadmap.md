@@ -41,7 +41,7 @@ repository uses. What Phase E needs, and where it stands:
 | Notifications | `notificationRequested` | `notify`, posted by the engine |
 | Reconnect | The profile's own "Reconnect automatically"; `connecting`, `connected`, `disconnected` | Status `connection`; restore after a kill |
 | GMCP, MSDP, triggers, aliases, timers, Lua | Run inside the profile as on the desktop | `runLua`, `send` |
-| Packages | `installPackageAsync()`, `installedPackages()`, `uninstallPackage()`, `packagesChanged`, with a Mudlet patch until merged | `packages`, `installPackage`, `uninstallPackage`, `packagesChanged`, `packageInstalled` (version 28). The package manager, from the game's title bar, lists, installs from a file or a URL, and removes |
+| Packages | `installPackageAsync()`, `installedPackages()`, `uninstallPackage()`, `packagesChanged`, with a Mudlet patch until merged | `packages`, `installPackage`, `uninstallPackage`, `packagesChanged`, `packageInstalled` (version 28). The package manager, from the game's title bar, lists, installs from a file or a URL, and removes; it browses, installs and updates from Mudlet's package repository in the app (`PackageRepositoryClient`), over the same requests |
 | Lua results | `runLua()` answers only whether the chunk ran | Status `luaResult`: `ran` or `refused: ...` |
 
 ## Features

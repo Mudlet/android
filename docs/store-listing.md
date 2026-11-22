@@ -240,11 +240,17 @@ functionality.
   app's own files (`app/src/main/kotlin/org/mudlet/android/ui/EngineClient.kt:361-364`), and the engine drops any
   peer that is not the app's own user id (`native/enginehost/SocketBridge.cpp:42-50`). `INTERNET` and
   `ACCESS_NETWORK_STATE` are declared only for the engine service (`engine-service/src/main/AndroidManifest.xml:4-5`).
-- The one exception is Mudlet PTB installed from GitHub, which no Play listing distributes: once a day it asks GitHub's
+- One exception is Mudlet PTB installed from GitHub, which no Play listing distributes: once a day it asks GitHub's
   API for the `ptb` pre-release, anonymously, with a User-Agent the same for every copy, to tell the player of a newer
   build (`app/src/main/kotlin/org/mudlet/android/update/PtbUpdates.kt`, [`ptb.md`](ptb.md#a-newer-build-from-github)).
   It sends no user data, and the answer stays on the device. The stable app has no such code (R8 drops it), and a PTB
   that Google Play installed never asks, so neither listing's copies make the request.
+- The other is the package manager's view of Mudlet's package repository: when the player opens it with no index kept
+  that it can read, or taps Refresh, Install or Update, it downloads the repository's index, the icons it shows and the
+  package chosen from `raw.githubusercontent.com` and `github.com` only, over HTTPS, with a User-Agent the same for
+  every copy and no other header of its own (`app/src/main/kotlin/org/mudlet/android/data/PackageRepository.kt`,
+  `HTTPS`). The requests carry no user data; what comes back stays on the device, the index in the profile's folder
+  where Mudlet's own mpkg package keeps it.
 - The app's libraries are AndroidX, Compose, `org.json` and Qt (`gradle/libs.versions.toml:29-47`): no analytics,
   advertising, crash reporting or Firebase SDK.
 - The engine connects to the host and port of the profile the player opens (`MudletEngine::start`,
@@ -258,7 +264,7 @@ functionality.
   - Sentry crash reporting needs the desktop GUI
     ([`src/CMakeLists.txt:1204-1211`](https://github.com/Mudlet/Mudlet/blob/bfc932d9e76004d9624b6925b5e0278c17fdae2a/src/CMakeLists.txt#L1204-L1211)),
     which this build turns off (`-DUSE_GUI=OFF`, `scripts/build-libmudlet.sh:62-72`);
-  - the package manager, which lists packages from Mudlet's package repository on GitHub, the connection dialog
+  - the desktop's package manager, which lists packages from Mudlet's package repository on GitHub, the connection dialog
     with its list of games, and the About dialog's links are GUI code (`dlgPackageManager.cpp`,
     `dlgConnectionProfiles.cpp`, `mudlet.cpp` are in `mudlet_app_SRCS`,
     [`src/CMakeLists.txt:224-278`](https://github.com/Mudlet/Mudlet/blob/bfc932d9e76004d9624b6925b5e0278c17fdae2a/src/CMakeLists.txt#L224-L278)).

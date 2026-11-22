@@ -5,7 +5,7 @@
 > in [`store-listing.md`](store-listing.md#data-safety), which give the evidence in the code for each statement here;
 > change both together.
 
-**Effective date:** 2026-11-19; the file's
+**Effective date:** 2026-11-22; the file's
 [history](https://github.com/Mudlet/android/commits/main/docs/privacy-policy.md) shows every earlier version.
 
 This policy covers Mudlet for Android and Mudlet PTB, its nightly test build, made by the Mudlet team, a group of
@@ -31,9 +31,15 @@ Mudlet is a client for text-based online games (MUDs). Those games are run by ot
   there is a newer one. It sends nothing about you, your games or your device; GitHub sees the request come from your
   internet address, as any website would, and GitHub's privacy statement covers that. You can turn it off in Settings,
   Test builds. Mudlet itself, and Mudlet PTB installed from Google Play, never ask.
+- **GitHub, from the package manager.** When you open a game's package manager, Mudlet downloads the list of packages
+  in Mudlet's package repository from GitHub, where it is kept, if it has no copy it can read, its copy lacks a
+  package you ask for, or you tap Refresh; then the icons of the packages its Explore and Updates views show, and a
+  package when you tap Install or Update. These requests name only the file they ask for and send nothing about you,
+  your games or your device; GitHub sees them come from your internet address, as any website would, and GitHub's
+  privacy statement covers that.
 - **No one else.** Mudlet does not contact the Mudlet team, check for updates (but for the test build's check above),
   show ads, measure how you use it or send crash reports. On Android, Mudlet's desktop features that contact other
-  services, such as the updater, Discord status and the package repository, are not built in.
+  services, such as the updater and Discord status, are not built in.
 
 ## What Mudlet keeps on your device
 

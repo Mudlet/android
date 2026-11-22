@@ -1019,7 +1019,31 @@ The game screen's title bar menu, More options, has a Packages item that opens t
 - Remove asks first, then sends `uninstallPackage`, whose answer is the list without it.
 - What the engine refuses shows in a snackbar with its reason, in English as Mudlet gives it. The list is asked for
   again on `packagesChanged` and after a reattach.
-- Not yet: modules, and the package repository's browser.
+- Desktop's three views are chips above the list: Installed, Explore and Updates, which counts the updates once the
+  index is read, as desktop's "Updates (%1)". A search field filters the view shown by name, title, description or
+  author, whatever the case, and is emptied on a change of view, as on desktop.
+- Explore and Updates show Mudlet's package repository, kept by `ui/PackageRepositoryClient.kt` over
+  `data/PackageRepository.kt`, which follow `dlgPackageManager`: the index `mpkg.packages.json`, read from the profile's
+  folder (`files/mudlet/profiles/<name>/`, where desktop and the mpkg package keep it) each time the screen opens, as
+  desktop reads it, so what mpkg downloaded since shows, and downloaded from `raw.githubusercontent.com` when there is
+  none to show, or on Refresh. A download is kept, written whole through a temporary file as desktop's `QSaveFile`
+  writes it, only when it is a JSON object with a `packages` array, so a captive portal's page never replaces it; mpkg
+  reads the same file, and installs and removes through Mudlet's own `installPackage` and `uninstallPackage`, so the two
+  always agree. Without a network the kept index shows with a snackbar; with none kept, a message says the repository is
+  not available.
+- Each repository row has its icon (downloaded once it is shown, decoded to the row's size), its title, name, version
+  and author and its description. An installed package is the repository's when its name and author are the same, as
+  desktop's `matchesRepositoryPackage` asks, and has an update when the repository's version is the later as Qt's
+  `QVersionNumber` compares them; the row reads "Installed" or "Update available". Install and Update download the
+  package's file into a folder of its own in the cache's `packages/`, as a picked file is copied, and send
+  `installPackage`; an installed package of the same name is first removed with `uninstallPackage`, and the file
+  installed once the engine's answer comes, as desktop does. A package the index names no file for is "not in the
+  package repository", and the index is downloaded again.
+- The requests (`PackageRepository.HTTPS`) go only to `raw.githubusercontent.com` and `github.com`, which redirects a
+  file there, over HTTPS, each redirect checked before it is followed, with the User-Agent `Mudlet` and nothing of
+  the player's; desktop's timeouts (20 s for the index, 30 s for a package, 10 s for an icon), and a size cap on each.
+  Nothing of an answer is logged. The app's tests replace `PackageRepositoryClient.fetch`, so they never reach GitHub.
+- Not yet: modules.
 
 ### The script library
 The game screen's title bar has a Scripts button, before the map's, that opens the front profile's script library
@@ -2564,6 +2588,16 @@ alias of run-lua-code, one of desktop Mudlet's default packages, which a profile
       from the script library.
     - With TalkBack on: the title bar menu's item reads "Packages of" and the game's name; a row reads its title, details
       and description, and whether its description is cut short; Remove reads "Remove" and the package's name.
+    - Tap Explore: the repository's packages are listed with their icons, those installed reading "Installed". Type
+      `map` in the search: only packages with it in their name, title, description or author show. Tap Install on one:
+      "Downloading", then "Installing", then "Installed", and it reads "Installed"; it is in the Installed view, and
+      `mpkg list` on the input line lists it too. Turn on aeroplane mode and tap Refresh: the list stays, and a
+      snackbar says it could not be downloaded.
+    - Install an older version of a repository package from a file, then tap Updates: it is counted on the chip and
+      listed with both versions; tap Update: the old one goes, the new one is installed, and Updates says all packages
+      are up to date.
+    - With TalkBack on: Explore's rows read "Installed" or "Update available"; Install and Update read with the
+      package's name; Refresh reads "Refresh the repository".
 
 33. How the app looks, on Android 12 or later, in light and in dark mode.
     - The screens take the wallpaper's colours; turning "Colours from my wallpaper" off in the settings gives

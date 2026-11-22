@@ -24,14 +24,17 @@ internal class PackagesClient(
 ) {
     private var listed by mutableStateOf<List<InstalledPackage>?>(null)
     private val sent = mutableStateListOf<String>()
+
+    // The files to install once the package they replace is removed, by the id of that uninstallPackage
+    private val replacing = mutableStateListOf<Pair<Long, String>>()
     private val queued = mutableStateListOf<PackageNotice>()
     private val pending = HashSet<Long>()
 
     /** The packages in the order installed, as the engine last listed them; null until it first does. */
     val packages: List<InstalledPackage>? get() = listed
 
-    /** The files sent to be installed whose answer has not come. */
-    val installing: List<String> get() = sent
+    /** The files sent to be installed whose answer has not come, and those waiting for the package they replace to go. */
+    val installing: List<String> get() = replacing.map { it.second } + sent
 
     /** What the screen is to tell the player, the oldest first; each is taken off once [shown]. */
     val notices: List<PackageNotice> get() = queued
@@ -66,6 +69,22 @@ internal class PackagesClient(
         return true
     }
 
+    /**
+     * Installs the package file at [path] in place of the installed package [name], as desktop's Package Manager updates
+     * one from the repository: [name] is removed first, and [path] installed only once the engine has removed it.
+     */
+    fun replace(name: String, path: String): Boolean {
+        val id = newId()
+        if (!send(Requests.uninstallPackage(name, id))) {
+            tell(PackageNotice.NotSent)
+            finished(path)
+            return false
+        }
+        pending.add(id)
+        replacing.add(id to path)
+        return true
+    }
+
     /** Removes the package [name]; the answer is the list without it. */
     fun uninstall(name: String): Boolean = request { Requests.uninstallPackage(name, it) }
 
@@ -84,15 +103,20 @@ internal class PackagesClient(
         return true
     }
 
-    // The screen shows the first notice until it is taken off, so one that equals the one before it would never show
-    private fun tell(notice: PackageNotice) {
+    /**
+     * Adds [notice] to [notices], unless it equals the last: the screen shows the first notice until it is taken off, so
+     * one that equals the one before it would never show.
+     */
+    fun tell(notice: PackageNotice) {
         if (queued.lastOrNull() != notice) queued.add(notice)
     }
 
     /** The engine's answer to [ask] or [uninstall]: false when this did not ask it. */
     fun onPackages(message: EngineMessage.Packages): Boolean {
-        if (!pending.remove((message.replyTo as? Number)?.toLong())) return false
+        val id = (message.replyTo as? Number)?.toLong()
+        if (!pending.remove(id)) return false
         listed = message.packages
+        takeReplacing(id)?.let(::install)
         return true
     }
 
@@ -110,7 +134,9 @@ internal class PackagesClient(
 
     /** An `error` for [request], one of [REQUESTS], answering [replyTo]: [notices] has the engine's [reason]. */
     fun onRefused(request: String, reason: String, replyTo: Any?) {
-        pending.remove((replyTo as? Number)?.toLong())
+        val id = (replyTo as? Number)?.toLong()
+        pending.remove(id)
+        takeReplacing(id)?.let(finished)
         // A refused install carries no id: it is the oldest still waiting, as the engine answers in order
         if (request == "installPackage") sent.removeFirstOrNull()?.let(finished)
         tell(PackageNotice.Refused(request, reason))
@@ -121,8 +147,15 @@ internal class PackagesClient(
         pending.clear()
         sent.toList().forEach(finished)
         sent.clear()
+        replacing.forEach { finished(it.second) }
+        replacing.clear()
         if (!sameInstance) listed = null
         attaches++
+    }
+
+    private fun takeReplacing(id: Long?): String? {
+        val at = replacing.indexOfFirst { it.first == id }
+        return if (at < 0) null else replacing.removeAt(at).second
     }
 
     companion object {
@@ -148,4 +181,13 @@ internal sealed interface PackageNotice {
 
     /** A request could not be sent, as there was no engine to send it to. */
     data object NotSent : PackageNotice
+
+    /** The repository's index could not be downloaded; [cached] when the one downloaded before is still shown. */
+    data class IndexFailed(val cached: Boolean) : PackageNotice
+
+    /** The package [name] could not be downloaded from the repository. */
+    data class DownloadFailed(val name: String) : PackageNotice
+
+    /** The index names no file for the package [name]. */
+    data class NotInRepository(val name: String) : PackageNotice
 }

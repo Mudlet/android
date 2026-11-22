@@ -255,6 +255,11 @@ empty `path` or `name`, and `uninstallPackage` as `THeadlessSession::uninstallPa
 not installed and while the profile is being saved. A file that cannot be installed is no refusal: `packageInstalled`
 says `failed` and why, as it does for an install sent before the last one has answered.
 
+The package repository's views have no request of their own: the app downloads the index and a package's file itself
+(`docs/architecture.md`, "The package manager") and installs the file with `installPackage`. An update, or an install
+over a package of the same name, is `uninstallPackage` of the installed one and, once its `packages` answer comes,
+`installPackage` of the downloaded file, as desktop's Package Manager removes one before it installs.
+
 `pressKey` is answered by `keyPressed`, or by `error` whose `message` is the request's name, a colon and why: a `key` or
 `modifiers` that is not a whole number from 0, a `text` that is not a string, and in libmudlet no profile loaded
 (`no profile running`) and as `THeadlessSession::pressKey()` refuses.

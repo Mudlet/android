@@ -6,6 +6,7 @@
 #include <QString>
 
 class IEngine;
+struct MainWindowDevice;
 
 // What the host asks of the whole engine, apart from any one profile: its profiles, and the app's state. A profile it
 // starts is told to IEngineHost, with the IEngine that runs it.
@@ -34,8 +35,9 @@ public:
     virtual bool restorePending() const = 0;
     // The open profile the player now looks at, as a desktop tab brought forward
     virtual void setFront(const QString& name) = 0;
-    // The UI's console in characters and Mudlet's main window in pixels, as each profile opened later starts with them
-    // until its own socket gives its own: kept, not given to the profiles open now
+    // The UI's console in characters, Mudlet's main window in pixels and what it is drawn on, as each profile opened
+    // later starts with them until its own socket gives its own: kept, not given to the profiles open now
     virtual void setStartScreenSize(int columns, int rows) = 0;
     virtual void setStartMainWindowSize(int width, int height) = 0;
+    virtual void setStartMainWindowDevice(const MainWindowDevice& device) = 0;
 };

@@ -764,6 +764,8 @@ void SocketBridge::handleMessage(const QJsonObject& message)
         followLink(message);
     } else if (type == QLatin1String("setMainWindowSize")) {
         refuse(type, setMainWindowSize(message));
+    } else if (type == QLatin1String("setMainWindowDevice")) {
+        refuse(type, setMainWindowDevice(message));
     } else if (type == QLatin1String("getWindowText")) {
         getWindowText(message);
     } else if (type == QLatin1String("placeUserWindow")) {
@@ -1068,6 +1070,31 @@ std::optional<QSize> SocketBridge::mainWindowSizeOf(const QJsonObject& message)
         return std::nullopt;
     }
     return QSize(*width, *height);
+}
+
+QString SocketBridge::setMainWindowDevice(const QJsonObject& message)
+{
+    const std::optional<MainWindowDevice> device = mainWindowDeviceOf(message);
+    if (!device) {
+        return mainWindowDeviceProblem();
+    }
+    return mEngine->setMainWindowDevice(*device);
+}
+
+std::optional<MainWindowDevice> SocketBridge::mainWindowDeviceOf(const QJsonObject& message)
+{
+    const QJsonValue pointer = message.value(QLatin1String("pointer"));
+    const QJsonValue hover = message.value(QLatin1String("hover"));
+    const QJsonValue ratio = message.value(QLatin1String("dpr"));
+    const QJsonValue scale = message.value(QLatin1String("pixelScale"));
+    const auto positive = [](const QJsonValue& value) {
+        return value.isDouble() && value.toDouble() > 0;
+    };
+    const bool coarse = pointer == QJsonValue(QStringLiteral("coarse"));
+    if ((!coarse && pointer != QJsonValue(QStringLiteral("fine"))) || !hover.isBool() || !positive(ratio) || !positive(scale)) {
+        return std::nullopt;
+    }
+    return MainWindowDevice{coarse, hover.toBool(), ratio.toDouble(), scale.toDouble()};
 }
 
 void SocketBridge::getWindowText(const QJsonObject& message)
@@ -2183,7 +2210,8 @@ QJsonObject SocketBridge::mainAreaMessage(const MainArea& area)
             {QStringLiteral("textY"), area.textRect.y()},
             {QStringLiteral("textW"), area.textRect.width()},
             {QStringLiteral("textH"), area.textRect.height()},
-            {QStringLiteral("borderColor"), area.borderColor}};
+            {QStringLiteral("borderColor"), area.borderColor},
+            {QStringLiteral("adaptive"), area.adaptive}};
 }
 
 void SocketBridge::sendFrame(const QJsonObject& message)

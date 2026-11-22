@@ -110,7 +110,7 @@ private const val MAX_ROW_SHARE = 0.25f
 fun ScriptButtonBars(modifier: Modifier = Modifier, content: @Composable (Modifier, fitted: Boolean) -> Unit) {
     val bars = EngineClient.front.windows.buttonBars
     BoxWithConstraints(modifier) {
-        val fitted = WindowLayout.fitted(ScriptWindowsClient.layoutMode, maxWidth.value)
+        val fitted = WindowLayout.fitted(ScriptWindowsClient.layoutMode, maxWidth.value, EngineClient.front.windows.state.mainArea?.adaptive == true)
         val sides = remember(bars, fitted) { ButtonBarLayout.of(bars, fitted).groupBy { it.side } }
         val maxRowHeight = maxHeight * MAX_ROW_SHARE
         // No button is bigger than the game area, so that what a sheet's lengths or a long name ask of a bar's layout

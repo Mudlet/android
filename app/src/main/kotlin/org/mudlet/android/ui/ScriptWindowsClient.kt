@@ -23,6 +23,7 @@ import org.mudlet.android.protocol.KeyPressResult
 import org.mudlet.android.protocol.LabelLink
 import org.mudlet.android.protocol.LabelStyle
 import org.mudlet.android.protocol.LayoutMode
+import org.mudlet.android.protocol.MainWindowDevice
 import org.mudlet.android.protocol.MapInfo
 import org.mudlet.android.protocol.MapPoint
 import org.mudlet.android.protocol.MapPointerType
@@ -89,6 +90,10 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
     // The size the game screen wants Mudlet's main window to be, and the one this engine instance last got
     private var wantedSize: MudletSize? = null
     private var sentSize: MudletSize? = null
+
+    // The same for what the main window is drawn on
+    private var wantedDevice: MainWindowDevice? = null
+    private var sentDevice: MainWindowDevice? = null
 
     // The scale and density the mapper window's map is shown at, and those the engine draws it at since the UI attached:
     // 1 until asked, as the engine goes back to 1 when a UI goes; null when they could not be sent
@@ -271,6 +276,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
             mapMover.onFrame(null)
             mapRefusal = null
             sentSize = null
+            sentDevice = null
             sentPlacements.clear()
             touchedLabel = null
             // Its files may not be the last one's
@@ -289,6 +295,7 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         askedImages.retainAll(images.keys)
         // Also a size that could not be sent while the link was down
         wantedSize?.let(::setMainWindowSize)
+        wantedDevice?.let(::setMainWindowDevice)
         mapRooms.onAttached(sameInstance)
         sentMapScale = MapScale(1.0, 1.0)
         setMapScale(wantedMapScale)
@@ -300,6 +307,13 @@ class ScriptWindowsClient internal constructor(private val session: ProfileSessi
         wantedSize = size
         if (size == sentSize) return
         sentSize = if (session.send(Requests.setMainWindowSize(size.w, size.h))) size else null
+    }
+
+    /** Tells Mudlet what its main window is drawn on, unless this engine instance has it already; again to a new one. */
+    fun setMainWindowDevice(device: MainWindowDevice) {
+        wantedDevice = device
+        if (device == sentDevice) return
+        sentDevice = if (session.send(Requests.setMainWindowDevice(device))) device else null
     }
 
     /**

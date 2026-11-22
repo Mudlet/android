@@ -61,6 +61,7 @@ public:
     QString link(const QString& window, int id, Link& link) const override;
     QString followLink(const QString& window, int id, std::optional<int> item) override;
     QString setMainWindowSize(int width, int height) override;
+    QString setMainWindowDevice(const MainWindowDevice& device) override;
     std::optional<WindowText> windowText(const QString& window, int first, int count) const override;
     QString placeUserWindow(const QString& name, const QRect& geometry, bool floating) override;
     QString closeUserWindow(const QString& name) override;
@@ -167,6 +168,8 @@ public:
     // Not to be brought back by a restart of the engine, as the UI opened another in its place
     void dropRestore();
     void setWindowMinimized(bool minimized);
+    // Mudlet raises sysMainWindowClassChangeEvent only where a class changed, so the same device again tells scripts nothing
+    void applyMainWindowDevice();
     THeadlessSession& session() { return *mSession; }
     // The close waited for the pool's save, which has ended
     void continueClose();
@@ -297,6 +300,7 @@ private:
     // The main window's size the UI gave, which the profile takes as it loads; empty for none, or once the profile
     // refused it. While it is set, applyScreenSize() tells the game the UI's console without resizing the main window
     QSize mMainWindowSize{0, 0};
+    std::optional<MainWindowDevice> mMainWindowDevice;
     // The size of the mapper window as pushMap() last had it: none while it did not show
     std::optional<QSize> mMapSize;
     // Device pixels to each of the mapper window's, and to each of the UI's own map's units, as setMapScale() asked

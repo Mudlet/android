@@ -22,6 +22,19 @@ class StartSizesTest {
     }
 
     @Test
+    fun theDeviceGoesOutAfterTheSizesAndIsKeptWithThem() {
+        val device = MainWindowDevice(coarsePointer = true, hover = false, dpr = 2.625, pixelScale = 1.312)
+        val sizes = StartSizes.withDevice(StartSizes.withMainWindow(null, portrait, MudletSize(1693, 795)), portrait, device)
+        assertEquals(listOf(Requests.setMainWindowSize(1693, 795).toString(), Requests.setMainWindowDevice(device).toString()), requests(sizes, portrait))
+        assertTrue(requests(sizes, landscape).isEmpty())
+        assertEquals(sizes, StartSizes.decode(sizes.encode()))
+        // One another window measured replaces it
+        assertEquals(StartSizes(landscape, screen = 88 to 20), StartSizes.withScreen(sizes, landscape, 88, 20))
+        // A device no version wrote is none
+        assertEquals(StartSizes(portrait), StartSizes.decode("""{"window":"$portrait","device":{"pointer":"coarse","hover":false,"dpr":0,"pixelScale":1.3}}"""))
+    }
+
+    @Test
     fun noneGoOutForAnotherWindowOrOtherSettings() {
         val sizes = StartSizes.withMainWindow(StartSizes.withScreen(null, portrait, 31, 52), portrait, MudletSize(1693, 795))
         assertTrue(requests(sizes, landscape).isEmpty())

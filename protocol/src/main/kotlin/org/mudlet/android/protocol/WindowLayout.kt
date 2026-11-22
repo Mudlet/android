@@ -50,6 +50,12 @@ fun layoutSize(w: Float, h: Float): Pair<Int, Int> {
 /** A size in Mudlet's pixels. */
 data class MudletSize(val w: Int, val h: Int)
 
+/**
+ * What `setMainWindowDevice` tells the engine of where Mudlet's main window is drawn, which scripts read with
+ * `getMainWindowInfo()`: whether the pointer is a finger and can hover, the screen's density, and Mudlet's pixels per dp.
+ */
+data class MainWindowDevice(val coarsePointer: Boolean, val hover: Boolean, val dpr: Double, val pixelScale: Double)
+
 /** Where the app put a user window, in Mudlet's pixels from the game area's top left: `placeUserWindow`'s fields. */
 data class Placement(val x: Int, val y: Int, val w: Int, val h: Int, val floating: Boolean)
 
@@ -160,6 +166,22 @@ data class WindowLayout(
      */
     val mapperDrawn: Boolean get() = (windows.asSequence() + paneWindows).any { it.window.kind == WindowKind.MAPPER }
 
+    /**
+     * What `setMainWindowDevice` gives at [density] pixels per dp, by which Mudlet divides [mainWindowSize] for scripts:
+     * stacked, the landscape window it is given, not the area's shape. A [mouse] (or touchpad) makes the pointer fine
+     * and able to hover. Null while [scale] is.
+     */
+    fun device(density: Float, mouse: Boolean): MainWindowDevice? {
+        val scale = scale?.takeIf { density > 0f } ?: return null
+        return MainWindowDevice(
+            coarsePointer = !mouse,
+            hover = mouse,
+            dpr = density.toDouble(),
+            // Rounded, as the console's measured character width wavers and each change of it would be a new device
+            pixelScale = ((density / scale) * PIXEL_SCALE_STEPS).roundToInt().coerceAtLeast(1) / PIXEL_SCALE_STEPS,
+        )
+    }
+
     /** The size of the game area, in pixels, and what the layout depends on from the app. */
     data class Area(
         val w: Float,
@@ -176,6 +198,8 @@ data class WindowLayout(
         /** The narrowest game area, in dp, that [LayoutMode.AUTO] draws fitted. */
         const val FITTED_MIN_WIDTH_DP = 600
 
+        private const val PIXEL_SCALE_STEPS = 1000.0
+
         /** Docks take up to this share of the area's width (left and right) or height (top and bottom). */
         private const val DOCK_SHARE = 0.25f
         private const val MAX_DOCKS_PER_AXIS = 2
@@ -186,11 +210,14 @@ data class WindowLayout(
         // The height of an MXP frame's tab header in Mudlet's pixels, which its pages' geometry is below
         private const val FRAME_TABS_HEIGHT = 30f
 
-        /** Whether [mode] draws a game area [widthDp] wide fitted. */
-        fun fitted(mode: LayoutMode, widthDp: Float): Boolean = when (mode) {
+        /**
+         * Whether [mode] draws a game area [widthDp] wide fitted. AUTO draws an [adaptive] profile, one whose scripts lay
+         * out for a main window of any shape, fitted at any width, as it needs no landscape window to keep its layout.
+         */
+        fun fitted(mode: LayoutMode, widthDp: Float, adaptive: Boolean = false): Boolean = when (mode) {
             LayoutMode.FITTED -> true
             LayoutMode.STACKED -> false
-            LayoutMode.AUTO -> widthDp >= FITTED_MIN_WIDTH_DP
+            LayoutMode.AUTO -> adaptive || widthDp >= FITTED_MIN_WIDTH_DP
         }
 
         fun of(state: ScriptWindows, area: Area): WindowLayout {

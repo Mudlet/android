@@ -176,6 +176,17 @@ everything at one scale `s` (screen pixels per Mudlet pixel):
   (`setScreenSize`), not the landscape grid, so it wraps its lines for the narrower console: a setting picks fitted or
   stacked for the player who prefers the true layout. (Mudlet never makes the grid narrower than 40 columns, so a
   fitted portrait phone with a wide border would have its console cut off.)
+- A profile whose scripts lay out for any shape (`setAdaptiveLayout()`, which the starter UI calls while it is shown;
+  `adaptive` on `mainArea`) is drawn fitted in the automatic layout at any width, as the stacked layout's landscape
+  size would hide the shape it lays out for. The player's choice of stacked still stands.
+- Scripts read the main window with `getMainWindowInfo()` (Mudlet's, carried as patch 0047): the window
+  `getMainWindowSize()` measures, divided by the `pixelScale` the app sends in `setMainWindowDevice` on the profile's
+  socket, so in dp. Stacked, that is the landscape window Mudlet is given, as its scripts are drawn into it; fitted,
+  the profile's own. `pointer` is fine and `hover` true while a mouse or touchpad is connected (`InputManager`),
+  `dpr` is the density and `pixelScale` is Mudlet's pixels per dp (the density over `s`, rounded to three places, as
+  the measured character width wavers). The device is kept with the start sizes, so the profile opened next reads it
+  from its first line, and size classes, orientation and `sysMainWindowClassChangeEvent` come from Mudlet, as on the
+  desktop.
 - In either, the borders are drawn in the colour `setBorderColor()` gave them (`borderColor`) where no window covers
   them, as the desktop paints its main frame; black, as there, until a script sets one. Only the main window's area,
   the console and its borders, takes it: the docks and the switcher's row are on black, as the desktop's docks are

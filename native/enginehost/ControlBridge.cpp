@@ -171,6 +171,12 @@ bool ControlBridge::handleControl(const QString& type, const QJsonObject& messag
         } else {
             refuse(type, mainWindowSizeProblem());
         }
+    } else if (!mProfileOutput && type == QLatin1String("setMainWindowDevice")) {
+        if (const std::optional<MainWindowDevice> device = mainWindowDeviceOf(message)) {
+            mEngineControl->setStartMainWindowDevice(*device);
+        } else {
+            refuse(type, mainWindowDeviceProblem());
+        }
     } else if (!mProfileOutput) {
         sendError(QStringLiteral("%1: send it on the profile's socket").arg(type));
     } else {

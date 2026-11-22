@@ -86,6 +86,7 @@ class ProtocolSpecTest {
                         Boolean::class.javaPrimitiveType -> true
                         Profile::class.java -> Profile("x", "x", 1, true, "x", true)
                         ProxySettings::class.java -> ProxySettings(true, "x", 1, "x")
+                        MainWindowDevice::class.java -> MainWindowDevice(true, true, 1.0, 1.0)
                         PointerType::class.java -> PointerType.PRESS
                         MapPointerType::class.java -> MapPointerType.PRESS
                         MapTarget::class.java -> MapTarget.APP

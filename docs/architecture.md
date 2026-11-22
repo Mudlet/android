@@ -1252,6 +1252,7 @@ keeps the profiles' passwords in the KeyStore.
 | `windowLines()`, the last 300 rows, at `profileLoaded` and at each `windowTextChanged` | `windowText`; any rows on request with `getWindowText` |
 | `Options::mainWindowSize` at the start (carried) and `setMainWindowSize()`, then `mainConsoleGrid()`, `mainConsoleTextRect()` and `mainBorderColor()` at `profileLoaded` and at each `mainConsoleAreaChanged` and `mainBorderColorChanged` | `setMainWindowSize`, kept and given to each profile as it starts, before its first script, and again as it loads; on the control socket, only kept, for the profiles opened after it; `mainArea` |
 | `Options::screenSize` at the start while it has no main window's size, `setScreenSize()` until the profile has the main window's size, then `setGameScreenSize()` (carried), at `profileLoaded`, at the start's end and at each change | `setScreenSize`, kept and given to each profile as it starts and again as it loads; on the control socket, only kept, for the profiles opened after it |
+| `setMainWindowDevice()` (carried patch 0047), as a profile begins loading, and while it runs once no profile of the pool is loading; `adaptiveLayout()` with `mainArea`'s other fields and at each `adaptiveLayoutChanged` | `setMainWindowDevice`, kept and given to each profile as it starts; on the control socket, only kept, for the profiles opened after it; `adaptive` in `mainArea` |
 | `setUserWindowGeometry()`, `closeUserWindow()` | `placeUserWindow`, `closeUserWindow` |
 | `submitWindowCommandLine()`; `windowCommandLineTextChanged` | `sendWindowCommandLine`; `windowCommandLine` |
 | `labelContent()` of each label, read with `scriptWindows()` | `label` after the `windows`, for each label whose content changed; every label to a UI that attaches |
@@ -1306,6 +1307,9 @@ new session beside them, up to `ControlBridge::maxOpenProfiles`.
   background without warning; `minimized` goes to every profile. `EngineService.onTrimMemory()` saves them too,
   through `EngineNative.nativeSave()`. A switch or close asked during a save waits for it, as Mudlet refuses to close
   then.
+- A `setMainWindowDevice` that comes while a profile of the pool loads waits for the loads to end, as `THeadlessSession`
+  refuses it then; a profile opened later takes it as it begins loading, so its scripts read it with
+  `getMainWindowInfo()` from their first line.
 - On Android this depends on QtServiceBase ending the event loop when the service is destroyed.
   That has not been tried on a device.
 
@@ -1339,7 +1343,7 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - several profiles: a second opened `alongside` the first, on a game of its own, with its own socket; a trigger in the
   profile behind whose `raiseGlobalEvent()` reaches the other's script; `setFront` raising
   `sysProfileFocusChangeEvent` in both; `setAppState` raising `sysApplicationFocusChangeEvent` once in each, with
-  one save; and each closed while the other runs on;
+  one save; `setMainWindowDevice` on each socket that profile's alone; and each closed while the other runs on;
 - the input line: a game's `WILL ECHO` gives `hiddenInput`, `sendHidden` reaches the game and no frame or log,
   `dismissHidden`, `history` to a UI that attaches and after a restart, `complete` of a word the game sent and from the
   history, and `printCmdLine()` as `commandLine`;
@@ -1351,6 +1355,11 @@ Android options (`scripts/build-libmudlet-desktop.sh`) to run it. It checks:
 - the sizes given before a profile opens, on its own socket or on the control socket: its scripts read them from their
   first line, so a Geyser `MiniConsole` with `autoWrap` that echoes as the profile loads wraps at the console's
   columns; the control socket refusing a size as a profile's socket does, and leaving an open profile its own;
+- the main window's info: `setMainWindowDevice` refused with a field out of place, kept from before a profile opens
+  and read back by `getMainWindowInfo()` in dp, the landscape window given to a profile that is not adaptive and the
+  upright one given to the starter UI read as such, `sysMainWindowClassChangeEvent` raised for each change of class
+  and not for one within a class, the starter UI's dock along the bottom of a narrow main window and at the side of a
+  short one, and `adaptive` in `mainArea` while the starter UI is shown or a script has `setAdaptiveLayout()` on;
 - the starter UI's chat window built in a narrow main window that then widens: its welcome printed again at the new
   width, and chat in it keeping its lines through a resize;
 - script windows: a Geyser `MiniConsole` as `windows` with its geometry, and its `cecho()` as `windowText` with its

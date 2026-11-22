@@ -42,6 +42,7 @@ public:
     void setFront(const QString& name) override;
     void setStartScreenSize(int columns, int rows) override { mUi.screen = QSize(columns, rows); }
     void setStartMainWindowSize(int width, int height) override { mUi.mainWindow = QSize(width, height); }
+    void setStartMainWindowDevice(const MainWindowDevice& device) override { mUi.mainWindowDevice = device; }
 
 private:
     friend class MudletProfile;
@@ -55,6 +56,7 @@ private:
         double mapDensity = 1;
         QSize appMap{0, 0};
         double appMapScale = 1;
+        std::optional<MainWindowDevice> mainWindowDevice;
     };
 
     void takeRestore();
@@ -73,6 +75,7 @@ private:
     void reportFont();
     void onHeartbeat();
     void applyAppActive();
+    void applyMainWindowDevices();
     // setActiveProfile() for the front profile, which raises sysProfileFocusChangeEvent, once it has started
     void applyFront();
     bool anyLoading() const;

@@ -18,6 +18,7 @@
 
 class ControlBridge;
 class IEngine;
+struct MainWindowDevice;
 class QLocalServer;
 class QLocalSocket;
 
@@ -34,7 +35,7 @@ class SocketBridge : public QObject, public IFrontend
     Q_OBJECT
 
 public:
-    static constexpr int protocolVersion = 49;
+    static constexpr int protocolVersion = 50;
     static constexpr quint32 maxFrameBytes = 16 * 1024 * 1024;
     static constexpr qsizetype scrollbackLines = 2000;
     static constexpr qint64 highWaterBytes = 4 * 1024 * 1024;
@@ -150,9 +151,13 @@ protected:
     // A setMainWindowSize's w and h, or none when they are not whole numbers above 0
     static std::optional<QSize> mainWindowSizeOf(const QJsonObject& message);
     static QString mainWindowSizeProblem() { return QStringLiteral("w and h must be whole numbers above 0"); }
+    // A setMainWindowDevice's fields, or none when one is not what mainWindowDeviceProblem() asks
+    static std::optional<MainWindowDevice> mainWindowDeviceOf(const QJsonObject& message);
+    static QString mainWindowDeviceProblem() { return QStringLiteral("pointer must be fine or coarse, hover true or false, and dpr and pixelScale numbers above 0"); }
     void getLink(const QJsonObject& message);
     void followLink(const QJsonObject& message);
     QString setMainWindowSize(const QJsonObject& message);
+    QString setMainWindowDevice(const QJsonObject& message);
     void getWindowText(const QJsonObject& message);
     QString placeUserWindow(const QJsonObject& message);
     QString pointer(const QJsonObject& message);

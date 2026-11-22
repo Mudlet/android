@@ -206,6 +206,30 @@ class ScriptWindowsTest {
     }
 
     @Test
+    fun autoDrawsAnAdaptiveProfileFittedOnAnUprightPhoneAndGivesItsScriptsTheWindowInDp() {
+        // The emulator's upright phone, on which automatic draws any other profile stacked
+        session.mainArea(800, 600, MUDLET_COLUMNS, 40, 0, 0, MUDLET_TEXT_WIDTH, 600, adaptive = true)
+        waitUntilDisplayed("the main console")
+
+        val area = bounds(console)
+        val size = session.receiveLast("setMainWindowSize", readPast = true)
+        val scale = appCharWidth() / mudletCharWidth()
+        assertNear("Mudlet's width", area.width / scale, size.getInt("w").toFloat(), area.width / scale * TOLERANCE)
+        assertNear("Mudlet's height", area.height / scale, size.getInt("h").toFloat(), area.height / scale * TOLERANCE)
+
+        // Scripts read the size over pixelScale: the upright window as drawn, in dp
+        val device = session.receiveLast("setMainWindowDevice", readPast = true)
+        val density = compose.density.density
+        val pixelScale = device.getDouble("pixelScale").toFloat()
+        assertEquals("Mudlet's pixels per dp", density / scale, pixelScale, density / scale * TOLERANCE)
+        assertNear("width in dp", area.width / density, size.getInt("w") / pixelScale, area.width / density * TOLERANCE)
+        assertNear("height in dp", area.height / density, size.getInt("h") / pixelScale, area.height / density * TOLERANCE)
+        // Whether the emulator has a mouse is its own; a mouse both points finely and hovers
+        assertEquals("hover with a fine pointer", device.getString("pointer") == "fine", device.getBoolean("hover"))
+        assertEquals("physical pixels per dp", density.toDouble(), device.getDouble("dpr"), 0.001)
+    }
+
+    @Test
     fun aDockIsATabWhenStackedThatOpensItOverTheConsoleWhereItsCloseButtonClosesIt() {
         compose.runOnIdle { ScriptWindowsClient.layoutMode = LayoutMode.STACKED }
         session.mainArea(800, 400, MUDLET_COLUMNS, 30, 0, 0, MUDLET_TEXT_WIDTH, 400)

@@ -248,7 +248,7 @@ object EngineClient {
      */
     fun detach(leaving: Boolean = true) {
         if (!attached) return
-        if (leaving) link.send(Requests.setAppState(active = false, minimized = true))
+        if (leaving) link.send(Requests.setAppState(active = true, minimized = false))
         attached = false
         openProfilesKnown = false
         profilesKnown = false

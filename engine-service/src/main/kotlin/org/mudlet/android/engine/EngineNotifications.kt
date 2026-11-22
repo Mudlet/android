@@ -204,7 +204,6 @@ object EngineNotifications {
             // The lock screen shows it as the player's system setting for private notifications says
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(openUi(context, profile, id))
-        if (timeoutMs > 0) n.setTimeoutAfter(timeoutMs)
         if (profile.isNotEmpty()) n.setSubText(profile).setGroup(profile)
         NotificationManagerCompat.from(context).notify(id, n.build())
         if (profile.isEmpty()) return
@@ -239,7 +238,7 @@ object EngineNotifications {
      */
     @JvmStatic
     fun gameText(context: Context, profile: String, unread: Long, latest: String, attention: Boolean) {
-        val show = synchronized(notices) { notices.text(profile, unread, latest, attention, gameTextMarker(context).exists()) } ?: return
+        val show = synchronized(notices) { notices.text(profile, unread, latest, attention, false) } ?: return
         showNotice(context, show)
     }
 
@@ -252,7 +251,7 @@ object EngineNotifications {
     @SuppressLint("MissingPermission") // mayPost checks POST_NOTIFICATIONS: lint does not look into it
     private fun showNotice(context: Context, show: GameNotices.Show) {
         if (!mayPost(context)) return
-        val id = noticeIds.getOrPut(show.game) { nextTellId.getAndIncrement() }
+        val id = noticeIds.getOrPut(show.game + show.unread) { nextTellId.getAndIncrement() }
         val count = if (show.unread > 0) {
             context.resources.getQuantityString(R.plurals.new_text_unread, show.unread.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), show.unread)
         } else {
@@ -269,7 +268,7 @@ object EngineNotifications {
             .setAutoCancel(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(public)
-            .setContentIntent(openUi(context, show.game, id))
+            .setContentIntent(openUi(context, "", id))
         if (show.latest != null) n.setSubText(count)
         NotificationManagerCompat.from(context).notify(id, n.build())
     }

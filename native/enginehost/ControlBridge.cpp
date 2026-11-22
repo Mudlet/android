@@ -337,9 +337,6 @@ void ControlBridge::setAppState(const QJsonObject& message)
 void ControlBridge::forgetClient()
 {
     SocketBridge::forgetClient();
-    if (!mAway) {
-        setAway(true);
-    }
 }
 
 void ControlBridge::setAway(bool away)
@@ -350,7 +347,9 @@ void ControlBridge::setAway(bool away)
         open.reportedSeq = open.bridge->lastSeq();
     }
 #ifdef Q_OS_ANDROID
-    AndroidNotifier::appState(mAway);
+    if (mAway) {
+        AndroidNotifier::appState(mAway);
+    }
 #endif
 }
 
